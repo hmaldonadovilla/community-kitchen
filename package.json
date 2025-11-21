@@ -1,0 +1,20 @@
+{
+  "name": "community-kitchen-forms",
+  "version": "1.0.0",
+  "description": "Google Apps Script for Community Kitchen Forms",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --outfile=dist/Code.js --format=iife --global-name=CommunityKitchen && echo '\\nfunction setup() { CommunityKitchen.setup(); }\\nfunction createAllForms() { CommunityKitchen.createAllForms(); }\\nfunction translateAllResponses() { CommunityKitchen.translateAllResponses(); }\\nfunction onOpen() { CommunityKitchen.onOpen(); }' >> dist/Code.js",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/google-apps-script": "^1.0.64",
+    "@types/jest": "^30.0.0",
+    "esbuild": "^0.27.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.5",
+    "typescript": "^5.3.3"
+  }
+}
