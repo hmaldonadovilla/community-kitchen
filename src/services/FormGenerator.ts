@@ -18,7 +18,8 @@ export class FormGenerator {
 
   public setup(): void {
     // Dashboard is created in constructor if needed
-    // Create example sheets
+    
+    // 1. Create the default example if it doesn't exist (this ensures the dashboard has at least one entry if empty)
     const exampleRows = [
       ['DATE', 'Date', 'Date Activité', 'Datum', true, '', '', '', 'Active'],
       ['TEXT', 'Recorded By', 'Enregistré par', 'Opgenomen door', true, '', '', '', 'Active'],
@@ -26,6 +27,14 @@ export class FormGenerator {
       ['CHOICE', 'Cleanliness Status', 'État de propreté', 'Schoonmaakstatus', true, 'Clean, Needs Attention', 'Propre, Nécessite attention', 'Schoon, Aandacht nodig', 'Active']
     ];
     ConfigSheet.setupExample(this.ss, 'Config: Example', exampleRows);
+
+    // 2. Scan the dashboard for any other manually added forms and create their config sheets
+    const forms = this.dashboard.getForms();
+    forms.forEach(form => {
+      // We use the same example rows as a template for new sheets
+      // ConfigSheet.setupExample checks if sheet exists, so it won't overwrite
+      ConfigSheet.setupExample(this.ss, form.configSheet, exampleRows);
+    });
   }
 
   public createAllForms(): string[] {

@@ -54,7 +54,7 @@ export function installTriggers(): void {
 export function onOpen(): void {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Community Kitchen')
-    .addItem('Setup Example', 'setup')
+    .addItem('Setup Forms', 'setup')
     .addItem('Install Triggers (Required for Options)', 'installTriggers')
     .addItem('Create/Update All Forms', 'createAllForms')
     .addItem('Update & Translate Responses to English', 'translateAllResponses')

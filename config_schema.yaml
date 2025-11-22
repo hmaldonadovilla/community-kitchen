@@ -1,0 +1,72 @@
+openapi: 3.0.0
+info:
+  title: Community Kitchen Config Sheet Schema
+  version: 1.0.0
+  description: Schema definition for the Configuration Sheet used to generate forms.
+paths: {}
+components:
+  schemas:
+    QuestionConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the question (e.g., Q123). Generated automatically if missing.
+        type:
+          type: string
+          enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX]
+          description: The type of the input field.
+        qEn:
+          type: string
+          description: Question text in English.
+        qFr:
+          type: string
+          description: Question text in French.
+        qNl:
+          type: string
+          description: Question text in Dutch.
+        required:
+          type: boolean
+          description: Whether the question is mandatory.
+        options:
+          type: string
+          description: |
+            Defines the options for CHOICE/CHECKBOX questions. 
+            Must be a reference string in the format `REF:SheetName` pointing to a separate sheet.
+            The referenced sheet must contain three columns: Options (EN), Options (FR), Options (NL).
+        status:
+          type: string
+          enum: [Active, Archived]
+          description: Status of the question. Archived questions are ignored during form generation.
+      required:
+        - id
+        - type
+        - qEn
+        - qFr
+        - qNl
+        - required
+        - status
+    
+    OptionsSheet:
+      type: array
+      description: |
+        Structure of the separate sheet referenced by `REF:SheetName`.
+        Contains three columns defining options in each language.
+      items:
+        type: object
+        properties:
+          optionEn:
+            type: string
+            description: Option text in English (Column A).
+          optionFr:
+            type: string
+            description: Option text in French (Column B).
+          optionNl:
+            type: string
+            description: Option text in Dutch (Column C).
+    
+    ConfigSheet:
+      type: array
+      description: A collection of question configurations defining a form.
+      items:
+        $ref: '#/components/schemas/QuestionConfig'
