@@ -72,6 +72,10 @@ export class FormBuilder {
     let currentIndex = section.getIndex() + 1;
     
     for (const q of activeQuestions) {
+      if (q.type === 'LINE_ITEM_GROUP' || q.type === 'FILE_UPLOAD') {
+        // Not supported by Google Forms; will be handled by custom web app generator
+        continue;
+      }
       // Get language-specific options
       const options = language === 'EN' ? q.options : language === 'FR' ? q.optionsFr : q.optionsNl;
       const title = language === 'EN' ? q.qEn : language === 'FR' ? q.qFr : q.qNl;
@@ -154,6 +158,12 @@ export class FormBuilder {
         if (options.length) checkItem.setChoiceValues(options);
         checkItem.setRequired(required);
         item = checkItem as unknown as GoogleAppsScript.Forms.Item;
+        break;
+      case 'FILE_UPLOAD':
+      case 'LINE_ITEM_GROUP':
+        const fallbackItem = this.form.addParagraphTextItem();
+        fallbackItem.setRequired(required);
+        item = fallbackItem as unknown as GoogleAppsScript.Forms.Item;
         break;
       default: 
         const defItem = this.form.addTextItem();

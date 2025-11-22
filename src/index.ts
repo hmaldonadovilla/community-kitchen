@@ -1,5 +1,6 @@
 import { FormGenerator } from './services/FormGenerator';
 import { ConfigSheet } from './config/ConfigSheet';
+import { WebFormService } from './services/WebFormService';
 
 export function setup(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -32,6 +33,19 @@ export function translateAllResponses(): void {
 export function onConfigEdit(e: GoogleAppsScript.Events.SheetsOnEdit): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ConfigSheet.handleOptionEdit(ss, e);
+}
+
+export function doGet(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  const formKey = e?.parameter?.form;
+  return service.renderForm(formKey);
+}
+
+export function submitWebForm(formObject: any): { success: boolean; message: string } {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.submitWebForm(formObject);
 }
 
 export function installTriggers(): void {

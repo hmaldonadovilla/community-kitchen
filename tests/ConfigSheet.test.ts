@@ -13,9 +13,9 @@ describe('ConfigSheet', () => {
     const sheet = mockSS.insertSheet('Config: Test');
     // Mock data with IDs (new format with 11 columns)
     const exampleRows = [
-      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit'],
-      ['Q1', 'TEXT', 'Name', 'Nom', 'Naam', true, '', '', '', 'Active', false],
-      ['Q2', 'DATE', 'Date', 'Date', 'Datum', false, '', '', '', 'Active', false]
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit', 'Config'],
+      ['Q1', 'TEXT', 'Name', 'Nom', 'Naam', true, '', '', '', 'Active', false, ''],
+      ['Q2', 'DATE', 'Date', 'Date', 'Datum', false, '', '', '', 'Active', false, '']
     ];
     (sheet as any).setMockData(exampleRows);
 
@@ -31,8 +31,8 @@ describe('ConfigSheet', () => {
   test('getQuestions parses REF: syntax', () => {
     const configSheet = mockSS.insertSheet('Config: Ref');
     const exampleRows = [
-      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit'],
-      ['Q3', 'CHOICE', 'Color', 'Couleur', 'Kleur', true, 'REF:Options_Q3', '', '', 'Active', false]
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit', 'Config'],
+      ['Q3', 'CHOICE', 'Color', 'Couleur', 'Kleur', true, 'REF:Options_Q3', '', '', 'Active', false, '']
     ];
     (configSheet as any).setMockData(exampleRows);
 
@@ -55,8 +55,8 @@ describe('ConfigSheet', () => {
   test('handleOptionEdit creates sheet and updates config', () => {
     const configSheet = mockSS.insertSheet('Config: Edit');
     const exampleRows = [
-      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit'],
-      ['Q4', 'CHOICE', 'Size', 'Taille', 'Maat', true, '', '', '', 'Active', 'Edit'] // Selected 'Edit'
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit', 'Config'],
+      ['Q4', 'CHOICE', 'Size', 'Taille', 'Maat', true, '', '', '', 'Active', 'Edit', ''] // Selected 'Edit'
     ];
     (configSheet as any).setMockData(exampleRows);
 
@@ -113,8 +113,8 @@ describe('ConfigSheet', () => {
   test('handleOptionEdit restricts option tabs to CHOICE/CHECKBOX', () => {
     const configSheet = mockSS.insertSheet('Config: TypeCheck');
     const exampleRows = [
-      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit'],
-      ['Q5', 'TEXT', 'Name', 'Nom', 'Naam', true, '', '', '', 'Active', 'Edit'] // TEXT type
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit', 'Config'],
+      ['Q5', 'TEXT', 'Name', 'Nom', 'Naam', true, '', '', '', 'Active', 'Edit', ''] // TEXT type
     ];
     (configSheet as any).setMockData(exampleRows);
 
@@ -162,5 +162,42 @@ describe('ConfigSheet', () => {
       expect.stringContaining('only available for CHOICE and CHECKBOX'),
       expect.any(String)
     );
+  });
+
+  test('getQuestions parses line item config from referenced sheet', () => {
+    const configSheet = mockSS.insertSheet('Config: Line');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit', 'Config'],
+      ['Q6', 'LINE_ITEM_GROUP', 'Items', 'Articles', 'Artikelen', true, '', '', '', 'Active', '', 'REF:LineItems_Q6']
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const lineSheet = mockSS.insertSheet('LineItems_Q6');
+    const lineRows = [
+      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
+      ['LI1', 'TEXT', 'Item', 'Article', 'Artikel', true, '', '', ''],
+      ['LI2', 'CHOICE', 'Unit', 'Unité', 'Eenheid', false, 'Kg,Litre', 'Kg, Litre', 'Kg, Litre']
+    ];
+    (lineSheet as any).setMockData(lineRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: Line');
+    expect(questions[0].lineItemConfig).toBeDefined();
+    expect(questions[0].lineItemConfig!.fields.length).toBe(2);
+    expect(questions[0].lineItemConfig!.fields[1].options).toEqual(['Kg', 'Litre']);
+  });
+
+  test('getQuestions parses upload config JSON', () => {
+    const configSheet = mockSS.insertSheet('Config: Upload');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Edit', 'Config'],
+      ['Q7', 'FILE_UPLOAD', 'Photo', 'Photo', 'Foto', true, '', '', '', 'Active', '', '{"maxFiles":2,"allowedExtensions":["jpg","png"],"destinationFolderId":"abc"}']
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: Upload');
+    expect(questions[0].uploadConfig).toBeDefined();
+    expect(questions[0].uploadConfig!.maxFiles).toBe(2);
+    expect(questions[0].uploadConfig!.allowedExtensions).toEqual(['jpg', 'png']);
+    expect(questions[0].uploadConfig!.destinationFolderId).toBe('abc');
   });
 });

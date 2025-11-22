@@ -38,28 +38,45 @@ export class MockSheet {
   setName(n: string) { this.name = n; }
   getSheetId() { return 0; }
   
-  getRange(row: number, col: number, numRows: number = 1, numCols: number = 1) {
+  getRange(row: any, col?: number, numRows: number = 1, numCols: number = 1) {
+    if (typeof row === 'string') {
+      const rangeObj: any = {
+        getValues: () => [[]],
+        setValue: () => rangeObj,
+        setValues: () => rangeObj,
+        setFontWeight: () => rangeObj,
+        setBackground: () => rangeObj,
+        setFontSize: () => rangeObj,
+        setDataValidation: () => rangeObj,
+        setFormula: () => rangeObj,
+        setNumberFormat: () => rangeObj
+      };
+      return rangeObj;
+    }
+    const colIndex = col ?? 1;
     // Return plain object with all methods to avoid binding issues
     // IMPORTANT: Chaining methods must return the range object, NOT 'this' (the Sheet)
     const rangeObj: any = {
       getValues: () => {
         if (this.data.length === 0) return [[]];
-        // Slice the data based on the requested range
-        // row/col are 1-indexed
         const startRow = row - 1;
         const endRow = startRow + numRows;
-        const startCol = col - 1;
+        const startCol = colIndex - 1;
         const endCol = startCol + numCols;
-        
         return this.data.slice(startRow, endRow).map(r => r.slice(startCol, endCol));
       },
-      setValue: (val: any) => rangeObj,
+      setValue: (val: any) => {
+        this.ensureSize(row + numRows - 1, colIndex + numCols - 1);
+        this.data[row - 1][colIndex - 1] = val;
+        return rangeObj;
+      },
       setValues: (vals: any[][]) => { 
-        // For simple mocking, we might not want to update the whole sheet data 
-        // if we are just setting a range, but for now let's leave it or improve it if needed.
-        // The current tests mostly use setMockData to setup state.
-        // If we want to support writing back to specific ranges, we'd need complex logic.
-        // For now, let's just return the object.
+        this.ensureSize(row + vals.length - 1, colIndex + (vals[0]?.length || 1) - 1);
+        vals.forEach((r, rIdx) => {
+          r.forEach((c, cIdx) => {
+            this.data[row - 1 + rIdx][colIndex - 1 + cIdx] = c;
+          });
+        });
         return rangeObj; 
       },
       setFontWeight: (w: string) => rangeObj,
@@ -80,6 +97,16 @@ export class MockSheet {
   hideSheet() { }
   hideColumns(col: number, num: number) { }
   activate() { return this; }
+  appendRow(row: any[]) { this.data.push(row); }
+  private ensureSize(targetRow: number, targetCol: number) {
+    while (this.data.length < targetRow) {
+      this.data.push([]);
+    }
+    this.data = this.data.map(r => {
+      while (r.length < targetCol) r.push('');
+      return r;
+    });
+  }
   
   setMockData(data: any[][]) { this.data = data; }
 }
@@ -148,6 +175,22 @@ export class MockForm {
   addCheckboxItem() { const i = new MockFormItem(); this.items.push(i); return i; }
 }
 
+export class MockFolder {
+  createFile(blob: any) { 
+    return { getUrl: () => 'http://file-url', getName: () => (blob?.getName ? blob.getName() : 'file') }; 
+  }
+}
+
+export class MockFile {
+  getParents() {
+    let used = false;
+    return {
+      hasNext: () => !used,
+      next: () => { used = true; return new MockFolder(); }
+    };
+  }
+}
+
 // Mock Globals
 (global as any).SpreadsheetApp = {
   getActiveSpreadsheet: () => {
@@ -196,6 +239,12 @@ export class MockForm {
 
 (global as any).HtmlService = {
   createHtmlOutput: () => ({ setWidth: () => ({ setHeight: () => {} }) })
+};
+
+(global as any).DriveApp = {
+  getFolderById: () => new MockFolder(),
+  getFileById: () => new MockFile(),
+  getRootFolder: () => new MockFolder()
 };
 
 (global as any).Utilities = {

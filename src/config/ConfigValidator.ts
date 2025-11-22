@@ -16,6 +16,7 @@ export class ConfigValidator {
     
     // Check for matching option counts
     errors.push(...this.validateOptionCounts(questions));
+    errors.push(...this.validateLineItemOptionCounts(questions));
     
     return errors;
   }
@@ -141,6 +142,34 @@ export class ConfigValidator {
       }
     });
     
+    return errors;
+  }
+
+  private static validateLineItemOptionCounts(questions: QuestionConfig[]): string[] {
+    const errors: string[] = [];
+
+    questions.forEach((q, parentIdx) => {
+      if (!q.lineItemConfig || !q.lineItemConfig.fields || q.lineItemConfig.fields.length === 0) return;
+
+      q.lineItemConfig.fields.forEach((field, fieldIdx) => {
+        if (field.type !== 'CHOICE' && field.type !== 'CHECKBOX') return;
+
+        const enCount = field.options.length;
+        const frCount = field.optionsFr.length;
+        const nlCount = field.optionsNl.length;
+
+        if (enCount !== frCount || enCount !== nlCount || frCount !== nlCount) {
+          let error = `━━━ MISMATCHED OPTION COUNTS (Line Item ${fieldIdx + 1} in Row ${parentIdx + 2}) ━━━\n\n`;
+          error += `❌ Line Item: "${field.labelEn || field.id}" in question "${q.qEn}"\n\n`;
+          error += `   English:  ${enCount} option${enCount !== 1 ? 's' : ''} (${field.options.join(', ') || 'none'})\n`;
+          error += `   French:   ${frCount} option${frCount !== 1 ? 's' : ''} (${field.optionsFr.join(', ') || 'none'})\n`;
+          error += `   Dutch:    ${nlCount} option${nlCount !== 1 ? 's' : ''} (${field.optionsNl.join(', ') || 'none'})\n\n`;
+          error += '✓ Solution: All languages must have the same number of options for line item fields.';
+          errors.push(error);
+        }
+      });
+    });
+
     return errors;
   }
 }

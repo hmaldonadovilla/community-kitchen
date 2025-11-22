@@ -1,4 +1,4 @@
-import { QuestionConfig, QuestionType } from '../types';
+import { FileUploadConfig, LineItemFieldConfig, LineItemGroupConfig, QuestionConfig, QuestionType, BaseQuestionType } from '../types';
 
 export class ConfigSheet {
   public static setupExample(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, name: string, exampleRows: any[]): void {
@@ -6,21 +6,21 @@ export class ConfigSheet {
     
     const sheet = ss.insertSheet(name);
     const headers = [
-      ['ID', 'Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Status (Active/Archived)', 'Edit Options']
+      ['ID', 'Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Status (Active/Archived)', 'Edit Options', 'Config (JSON/REF)']
     ];
     
-    sheet.getRange(1, 1, 1, 11).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
+    sheet.getRange(1, 1, 1, 12).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
     
     // Add IDs to example rows if missing
     const rowsWithIds = exampleRows.map(row => {
       const id = 'Q' + Math.random().toString(36).substr(2, 9).toUpperCase();
-      // Ensure row has 11 columns (add empty for Edit Options)
+      // Ensure row has 12 columns (add empty for Edit Options + Config)
       const newRow = [id, ...row];
-      while (newRow.length < 11) newRow.push('');
+      while (newRow.length < 12) newRow.push('');
       return newRow;
     });
 
-    sheet.getRange(2, 1, rowsWithIds.length, 11).setValues(rowsWithIds);
+    sheet.getRange(2, 1, rowsWithIds.length, 12).setValues(rowsWithIds);
     
     sheet.setColumnWidth(1, 100); // ID
     sheet.setColumnWidth(2, 100); // Type
@@ -29,11 +29,12 @@ export class ConfigSheet {
     sheet.setColumnWidth(5, 200);
     sheet.setColumnWidth(8, 100);
     sheet.setColumnWidth(11, 100); // Edit Options
+    sheet.setColumnWidth(12, 200); // Config JSON/REF
     
     // Data validation for Type column
     const typeRange = sheet.getRange(2, 2, 100, 1);
     const typeRule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(['DATE', 'TEXT', 'PARAGRAPH', 'NUMBER', 'CHOICE', 'CHECKBOX'])
+      .requireValueInList(['DATE', 'TEXT', 'PARAGRAPH', 'NUMBER', 'CHOICE', 'CHECKBOX', 'FILE_UPLOAD', 'LINE_ITEM_GROUP'])
       .setAllowInvalid(false)
       .build();
     typeRange.setDataValidation(typeRule);
@@ -71,37 +72,20 @@ export class ConfigSheet {
 
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) return []; // No questions
-    
-    const range = sheet.getRange(2, 1, lastRow - 1, 11);
+    const lastColumn = Math.max(12, sheet.getLastColumn());
+    const range = sheet.getRange(2, 1, lastRow - 1, lastColumn);
     const data = range.getValues();
     
     return data.map(row => {
-      const rawOptionsEn = row[6] ? row[6].toString().trim() : '';
-      let options: string[] = [];
-      let optionsFr: string[] = [];
-      let optionsNl: string[] = [];
-
-      if (rawOptionsEn.startsWith('REF:')) {
-        const refSheetName = rawOptionsEn.substring(4).trim();
-        const refSheet = ss.getSheetByName(refSheetName);
-        if (refSheet) {
-          const lastRefRow = refSheet.getLastRow();
-          if (lastRefRow > 1) {
-            const refData = refSheet.getRange(2, 1, lastRefRow - 1, 3).getValues();
-            options = refData.map(r => r[0].toString()).filter(s => s);
-            optionsFr = refData.map(r => r[1].toString()).filter(s => s);
-            optionsNl = refData.map(r => r[2].toString()).filter(s => s);
-          }
-        }
-      } else {
-        options = rawOptionsEn ? rawOptionsEn.split(',').map((s: string) => s.trim()) : [];
-        optionsFr = row[7] ? row[7].toString().split(',').map((s: string) => s.trim()) : [];
-        optionsNl = row[8] ? row[8].toString().split(',').map((s: string) => s.trim()) : [];
-      }
+      const type = row[1] ? row[1].toString().toUpperCase() as QuestionType : 'TEXT';
+      const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
+      const rawConfig = row[11] ? row[11].toString().trim() : '';
+      const lineItemConfig = type === 'LINE_ITEM_GROUP' ? this.parseLineItemConfig(ss, rawConfig || row[6]) : undefined;
+      const uploadConfig = type === 'FILE_UPLOAD' ? this.parseUploadConfig(rawConfig || row[6]) : undefined;
 
       return {
-        id: row[0].toString(),
-        type: row[1].toString().toUpperCase() as QuestionType,
+        id: row[0] ? row[0].toString() : '',
+        type,
         qEn: row[2],
         qFr: row[3],
         qNl: row[4],
@@ -109,7 +93,9 @@ export class ConfigSheet {
         options,
         optionsFr,
         optionsNl,
-        status: row[9] ? row[9].toString() as 'Active' | 'Archived' : 'Active'
+        status: row[9] ? row[9].toString() as 'Active' | 'Archived' : 'Active',
+        uploadConfig,
+        lineItemConfig
       };
     });
   }
@@ -189,5 +175,146 @@ export class ConfigSheet {
     if (hasChanges) {
       idRange.setValues(newIds);
     }
+  }
+
+  private static parseOptions(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, rawEn: any, rawFr: any, rawNl: any): { options: string[]; optionsFr: string[]; optionsNl: string[] } {
+    const rawOptionsEn = rawEn ? rawEn.toString().trim() : '';
+    if (rawOptionsEn.startsWith('REF:')) {
+      const refSheetName = rawOptionsEn.substring(4).trim();
+      const refSheet = ss.getSheetByName(refSheetName);
+      if (refSheet) {
+        const lastRefRow = refSheet.getLastRow();
+        if (lastRefRow > 1) {
+          const refData = refSheet.getRange(2, 1, lastRefRow - 1, 3).getValues();
+          return {
+            options: refData.map(r => r[0].toString()).filter(s => s),
+            optionsFr: refData.map(r => r[1].toString()).filter(s => s),
+            optionsNl: refData.map(r => r[2].toString()).filter(s => s)
+          };
+        }
+      }
+    }
+
+    return {
+      options: rawOptionsEn ? rawOptionsEn.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+      optionsFr: rawFr ? rawFr.toString().split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+      optionsNl: rawNl ? rawNl.toString().split(',').map((s: string) => s.trim()).filter(Boolean) : []
+    };
+  }
+
+  private static parseUploadConfig(rawConfig: string): FileUploadConfig | undefined {
+    if (!rawConfig) return undefined;
+    const config: FileUploadConfig = {};
+
+    try {
+      const parsed = JSON.parse(rawConfig);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.destinationFolderId) config.destinationFolderId = parsed.destinationFolderId;
+        if (parsed.maxFiles) config.maxFiles = Number(parsed.maxFiles);
+        if (parsed.maxFileSizeMb) config.maxFileSizeMb = Number(parsed.maxFileSizeMb);
+        if (parsed.allowedExtensions) config.allowedExtensions = parsed.allowedExtensions;
+      }
+    } catch (_) {
+      // Fallback to key=value;key=value syntax
+      const parts = rawConfig.split(/[,;\n]/).map(p => p.trim()).filter(Boolean);
+      parts.forEach(part => {
+        const [key, value] = part.split('=').map(p => p.trim());
+        if (!key || !value) return;
+        switch (key.toLowerCase()) {
+          case 'folder':
+          case 'destination':
+          case 'folderid':
+            config.destinationFolderId = value;
+            break;
+          case 'maxfiles':
+            config.maxFiles = Number(value);
+            break;
+          case 'maxsizemb':
+          case 'maxsize':
+            config.maxFileSizeMb = Number(value);
+            break;
+          case 'extensions':
+          case 'allowedextensions':
+            config.allowedExtensions = value.split('|').map(v => v.trim()).filter(Boolean);
+            break;
+        }
+      });
+    }
+
+    return Object.keys(config).length ? config : undefined;
+  }
+
+  private static parseLineItemConfig(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    rawConfig: string
+  ): LineItemGroupConfig | undefined {
+    if (!rawConfig) return { fields: [] };
+
+    if (rawConfig.startsWith('REF:')) {
+      const refSheetName = rawConfig.substring(4).trim();
+      return this.parseLineItemSheet(ss, refSheetName);
+    }
+
+    try {
+      const parsed = JSON.parse(rawConfig);
+      if (parsed && typeof parsed === 'object') {
+        const fields: LineItemFieldConfig[] = Array.isArray(parsed.fields)
+          ? parsed.fields.map((f: any, idx: number) => this.normalizeLineItemField(f, idx))
+          : [];
+        return {
+          minRows: parsed.minRows ? Number(parsed.minRows) : undefined,
+          maxRows: parsed.maxRows ? Number(parsed.maxRows) : undefined,
+          addButtonLabel: parsed.addButtonLabel,
+          fields
+        };
+      }
+    } catch (_) {
+      // Ignore JSON errors; fall back to empty
+    }
+
+    // If nothing parsed, return empty definition so downstream code can still render a table
+    return { fields: [] };
+  }
+
+  private static parseLineItemSheet(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, sheetName: string): LineItemGroupConfig | undefined {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return { fields: [] };
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { fields: [] };
+
+    const lastColumn = Math.max(9, sheet.getLastColumn());
+    const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+    const fields: LineItemFieldConfig[] = rows.map((row, idx) => {
+      const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
+      return {
+        id: row[0] ? row[0].toString() : `LI${idx + 1}`,
+        type: (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as BaseQuestionType,
+        labelEn: row[2] || '',
+        labelFr: row[3] || '',
+        labelNl: row[4] || '',
+        required: !!row[5],
+        options,
+        optionsFr,
+        optionsNl
+      };
+    }).filter(f => f.labelEn || f.labelFr || f.labelNl);
+
+    return { fields };
+  }
+
+  private static normalizeLineItemField(field: any, idx: number): LineItemFieldConfig {
+    const baseType = (field?.type ? field.type.toString().toUpperCase() : 'TEXT') as BaseQuestionType;
+    return {
+      id: field?.id || `LI${idx + 1}`,
+      type: baseType,
+      labelEn: field?.labelEn || '',
+      labelFr: field?.labelFr || '',
+      labelNl: field?.labelNl || '',
+      required: !!field?.required,
+      options: Array.isArray(field?.options) ? field.options : [],
+      optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],
+      optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : []
+    };
   }
 }

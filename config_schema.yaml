@@ -14,7 +14,7 @@ components:
           description: Unique identifier for the question (e.g., Q123). Generated automatically if missing.
         type:
           type: string
-          enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX]
+          enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD, LINE_ITEM_GROUP]
           description: The type of the input field.
         qEn:
           type: string
@@ -34,6 +34,12 @@ components:
             Defines the options for CHOICE/CHECKBOX questions. 
             Must be a reference string in the format `REF:SheetName` pointing to a separate sheet.
             The referenced sheet must contain three columns: Options (EN), Options (FR), Options (NL).
+        uploadConfig:
+          $ref: '#/components/schemas/FileUploadConfig'
+          description: Additional settings for FILE_UPLOAD questions. Can be provided as JSON in the `Config (JSON/REF)` column.
+        lineItemConfig:
+          $ref: '#/components/schemas/LineItemGroupConfig'
+          description: Settings for LINE_ITEM_GROUP questions. Can be provided as JSON or `REF:SheetName` in the `Config (JSON/REF)` column.
         status:
           type: string
           enum: [Active, Archived]
@@ -46,6 +52,80 @@ components:
         - qNl
         - required
         - status
+
+    FileUploadConfig:
+      type: object
+      properties:
+        destinationFolderId:
+          type: string
+          description: Optional Drive folder ID where uploaded files should be stored.
+        maxFiles:
+          type: integer
+          description: Maximum number of files allowed for this upload question.
+        maxFileSizeMb:
+          type: number
+          description: Maximum file size in MB. Files larger than this are ignored.
+        allowedExtensions:
+          type: array
+          items:
+            type: string
+          description: List of allowed file extensions (e.g., ['jpg', 'png', 'pdf']).
+
+    LineItemFieldConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Internal identifier for the line item field.
+        type:
+          type: string
+          enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX]
+        labelEn:
+          type: string
+        labelFr:
+          type: string
+        labelNl:
+          type: string
+        required:
+          type: boolean
+        options:
+          type: array
+          items:
+            type: string
+        optionsFr:
+          type: array
+          items:
+            type: string
+        optionsNl:
+          type: array
+          items:
+            type: string
+
+    LineItemGroupConfig:
+      type: object
+      properties:
+        minRows:
+          type: integer
+          description: Minimum number of line item rows required.
+        maxRows:
+          type: integer
+          description: Maximum number of line item rows allowed.
+        addButtonLabel:
+          type: object
+          properties:
+            en:
+              type: string
+            fr:
+              type: string
+            nl:
+              type: string
+          description: Custom labels for the "Add line" button in each language.
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemFieldConfig'
+      required:
+        - fields
     
     OptionsSheet:
       type: array

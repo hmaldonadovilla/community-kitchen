@@ -37,8 +37,12 @@ This project uses TypeScript. You need to build the script before using it in Go
    - **Description**: Form description.
    - **Form ID / URLs**: Leave these blank. The script will fill them in.
 2. **Config Sheets**: Create new sheets (tabs) for each form.
-   - Copy the header row from an example sheet.
+   - Copy the header row from an example sheet (includes `Config (JSON/REF)` for line items or file upload settings).
    - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
+
+3. **Web App (Custom UI)**
+   - Publish a **Web app** deployment pointing to `doGet`.
+   - Share the deployment URL with volunteers; submissions will be written directly to the destination tab and support line items + file uploads.
 
 ## 7. Generate All Forms
 1. Click **Community Kitchen** > **2. Generate All Forms**.

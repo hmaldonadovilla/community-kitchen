@@ -215,4 +215,39 @@ describe('ConfigValidator', () => {
     expect(errors.some((e: string) => e.includes('DUPLICATE'))).toBe(true);
     expect(errors.some((e: string) => e.includes('MISMATCHED'))).toBe(true);
   });
+
+  test('detects mismatched option counts inside line item groups', () => {
+    const questions: QuestionConfig[] = [
+      {
+        id: 'Q9',
+        type: 'LINE_ITEM_GROUP',
+        qEn: 'Items',
+        qFr: 'Articles',
+        qNl: 'Artikelen',
+        required: true,
+        options: [],
+        optionsFr: [],
+        optionsNl: [],
+        status: 'Active',
+        lineItemConfig: {
+          fields: [
+            {
+              id: 'unit',
+              type: 'CHOICE',
+              labelEn: 'Unit',
+              labelFr: 'Unité',
+              labelNl: 'Eenheid',
+              required: true,
+              options: ['Kg', 'Litre'],
+              optionsFr: ['Kg'],
+              optionsNl: ['Kg', 'Litre']
+            }
+          ]
+        }
+      }
+    ];
+
+    const errors = ConfigValidator.validate(questions, 'Config: Test');
+    expect(errors.some((e: string) => e.includes('Line Item'))).toBe(true);
+  });
 });
