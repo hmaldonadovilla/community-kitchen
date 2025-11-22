@@ -31,15 +31,17 @@ components:
         options:
           type: string
           description: |
-            Defines the options for CHOICE/CHECKBOX questions. 
+            Defines the options for CHOICE/CHECKBOX questions.
             Must be a reference string in the format `REF:SheetName` pointing to a separate sheet.
             The referenced sheet must contain three columns: Options (EN), Options (FR), Options (NL).
+            Inline comma-separated lists are also supported for quick setup.
+            Ignored for FILE_UPLOAD and LINE_ITEM_GROUP.
         uploadConfig:
           $ref: '#/components/schemas/FileUploadConfig'
-          description: Additional settings for FILE_UPLOAD questions. Can be provided as JSON in the `Config (JSON/REF)` column.
+          description: Additional settings for FILE_UPLOAD questions. Provide as JSON in the `Config (JSON/REF)` column.
         lineItemConfig:
           $ref: '#/components/schemas/LineItemGroupConfig'
-          description: Settings for LINE_ITEM_GROUP questions. Can be provided as JSON or `REF:SheetName` in the `Config (JSON/REF)` column.
+          description: Settings for LINE_ITEM_GROUP questions. Provide as JSON or `REF:SheetName` in the `Config (JSON/REF)` column.
         status:
           type: string
           enum: [Active, Archived]
@@ -126,7 +128,37 @@ components:
             $ref: '#/components/schemas/LineItemFieldConfig'
       required:
         - fields
-    
+
+    LineItemSheet:
+      type: array
+      description: |
+        Structure of the separate sheet referenced by `REF:SheetName` for LINE_ITEM_GROUP questions.
+        Columns should be: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL).
+        Type must be one of DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+          type:
+            type: string
+            enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX]
+          labelEn:
+            type: string
+          labelFr:
+            type: string
+          labelNl:
+            type: string
+          required:
+            type: boolean
+          options:
+            type: string
+            description: Option values for CHOICE/CHECKBOX in English, or REF:Options_sheet.
+          optionsFr:
+            type: string
+          optionsNl:
+            type: string
+
     OptionsSheet:
       type: array
       description: |
@@ -144,7 +176,7 @@ components:
           optionNl:
             type: string
             description: Option text in Dutch (Column C).
-    
+
     ConfigSheet:
       type: array
       description: A collection of question configurations defining a form.

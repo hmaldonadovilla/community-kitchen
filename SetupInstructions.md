@@ -39,10 +39,13 @@ This project uses TypeScript. You need to build the script before using it in Go
 2. **Config Sheets**: Create new sheets (tabs) for each form.
    - Copy the header row from an example sheet (includes `Config (JSON/REF)` for line items or file upload settings).
    - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
+   - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN/FR/NL, Required?, Options EN/FR/NL). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
+   - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`.
 
 3. **Web App (Custom UI)**
    - Publish a **Web app** deployment pointing to `doGet`.
    - Share the deployment URL with volunteers; submissions will be written directly to the destination tab and support line items + file uploads.
+   - Optional: add `?form=ConfigSheetName` to target a specific form (defaults to the first dashboard entry).
 
 ## 7. Generate All Forms
 1. Click **Community Kitchen** > **2. Generate All Forms**.

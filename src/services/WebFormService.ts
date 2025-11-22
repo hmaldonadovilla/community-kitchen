@@ -206,7 +206,7 @@ export class WebFormService {
       body {
         margin: 0;
         font-family: "Manrope", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 17px;
+        font-size: clamp(26px, 4.2vw, 29px);
         background: radial-gradient(circle at 20% 20%, rgba(14,165,233,0.08), transparent 40%),
                     radial-gradient(circle at 80% 0%, rgba(37,99,235,0.08), transparent 35%),
                     var(--bg);
@@ -218,53 +218,61 @@ export class WebFormService {
 
       .page {
         width: 100%;
-        max-width: 960px;
-        padding: 18px 16px 28px;
+        max-width: 1100px;
+        padding: 12px 10px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 100vh;
       }
 
       .topbar {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
-        margin-bottom: 12px;
+        margin-bottom: 8px;
       }
 
-      .title-block h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.3px; }
-      .title-block p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
+      .title-block h1 { margin: 0 0 4px; font-size: clamp(38px, 5.8vw, 43px); letter-spacing: -0.3px; }
+      .title-block p { margin: 0; color: var(--muted); font-size: clamp(24px, 4.1vw, 26px); line-height: 1.7; }
 
       .control {
         background: var(--card);
         border: 1px solid var(--stroke);
-        border-radius: 12px;
-        padding: 10px 12px;
+        border-radius: 16px;
+        padding: 12px 16px;
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
         box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+        min-width: 180px;
+        justify-content: space-between;
       }
 
-      .control label { font-weight: 700; font-size: 14px; color: var(--muted); margin: 0; }
+      .control label { font-weight: 800; font-size: 24px; color: var(--muted); margin: 0; }
 
       select#lang-select {
         border: none;
         background: transparent;
-        font-size: 16px;
-        font-weight: 700;
+        font-size: 26px;
+        font-weight: 800;
         color: var(--text);
-        padding: 6px 4px;
+        padding: 10px 10px;
         outline: none;
+        min-width: 120px;
       }
 
       .card {
         background: var(--card);
         border: 1px solid var(--stroke);
-        border-radius: 16px;
-        padding: 16px;
+        border-radius: 18px;
+        padding: 12px;
         box-shadow: 0 18px 45px rgba(15,23,42,0.08);
+        width: 100%;
       }
 
-      form { display: flex; flex-direction: column; gap: 12px; }
+      form { display: flex; flex-direction: column; gap: 14px; }
 
       .field {
         padding: 12px;
@@ -275,27 +283,31 @@ export class WebFormService {
 
       .field label {
         font-weight: 800;
-        font-size: 17px;
+        font-size: 26px;
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
       }
 
       .badge { background: rgba(37,99,235,0.08); color: var(--accent); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
 
       input[type="text"], input[type="date"], input[type="number"], select, textarea, input[type="file"] {
         width: 100%;
-        padding: 14px;
+        padding: 18px;
         border: 1px solid var(--stroke);
-        border-radius: 12px;
-        font-size: 17px;
+        border-radius: 14px;
+        font-size: 26px;
         background: #ffffff;
         transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        -webkit-appearance: none;
+        appearance: none;
       }
 
+      input[type="date"] { font-size: 26px; min-height: 72px; }
+
       input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); outline: none; }
-      textarea { min-height: 110px; resize: vertical; font-size: 17px; }
+      textarea { min-height: 170px; resize: vertical; font-size: 26px; }
 
       .inline { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
@@ -303,13 +315,13 @@ export class WebFormService {
       .line-item-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: end; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-      .chips label { border: 1px solid var(--stroke); padding: 10px 12px; border-radius: 10px; background: #fff; font-weight: 700; font-size: 16px; }
+      .chips label { border: 1px solid var(--stroke); padding: 14px 16px; border-radius: 12px; background: #fff; font-weight: 800; font-size: 25px; }
 
       button { font-weight: 800; letter-spacing: 0.2px; cursor: pointer; }
-      button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; padding: 15px 16px; border-radius: 14px; width: 100%; font-size: 17px; box-shadow: 0 12px 30px rgba(37,99,235,0.25); }
-      button.secondary { background: #eef2ff; color: var(--accent); border: none; padding: 11px 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(37,99,235,0.12); font-size: 16px; }
+      button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; padding: 22px 18px; border-radius: 14px; width: 100%; font-size: 26px; box-shadow: 0 12px 30px rgba(37,99,235,0.25); }
+      button.secondary { background: #eef2ff; color: var(--accent); border: none; padding: 16px 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(37,99,235,0.12); font-size: 25px; }
 
-      .actions { position: sticky; bottom: 0; background: linear-gradient(180deg, transparent, var(--bg) 30%); padding: 12px 0 4px; }
+      .actions { position: sticky; bottom: 0; background: linear-gradient(180deg, transparent, var(--bg) 30%); padding: 10px 0 4px; }
       .status { display: block; margin-top: 8px; font-size: 14px; color: var(--muted); }
       .error { color: #b91c1c; }
       .success { color: #15803d; }
@@ -394,7 +406,7 @@ export class WebFormService {
 
       function unlockViewport() {
         if (viewportMeta) {
-          setTimeout(() => viewportMeta.setAttribute('content', originalViewport), 120);
+          setTimeout(() => viewportMeta.setAttribute('content', lockedViewport), 120);
         }
       }
 

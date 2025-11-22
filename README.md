@@ -25,14 +25,17 @@ The project is refactored into modular components:
 ## Setup
 
 1. **Install Dependencies**:
+
    ```bash
    npm install
    ```
 
 2. **Build**:
+
    ```bash
    npm run build
    ```
+
    This generates `dist/Code.js`.
 
 3. **Deploy**:
@@ -46,9 +49,16 @@ The project is refactored into modular components:
    - Set the entry point to `doGet`.
    - Deploy and use the generated URL as your custom form link (supports line items and uploads).
 
+## Config Notes (LINE_ITEM_GROUP / FILE_UPLOAD)
+
+- **New column**: `Config (JSON/REF)` in each Config sheet. Use it to store JSON or `REF:SheetName` for line items and upload settings.
+- **Line items**: Set `Type` to `LINE_ITEM_GROUP` and provide a `lineItemConfig` via JSON or `REF:SheetName` pointing to a sheet with columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN/FR/NL). Types inside a line item can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
+- **File uploads**: Set `Type` to `FILE_UPLOAD` and provide `uploadConfig` in the Config column (JSON). Supported keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`.
+
 ## Testing
 
 Run unit tests with:
+
 ```bash
 npm test
 ```
