@@ -36,14 +36,32 @@ export class MockSheet {
   
   getName() { return this.name; }
   setName(n: string) { this.name = n; }
+  getSheetId() { return 0; }
   
   getRange(row: number, col: number, numRows: number = 1, numCols: number = 1) {
     // Return plain object with all methods to avoid binding issues
     // IMPORTANT: Chaining methods must return the range object, NOT 'this' (the Sheet)
     const rangeObj: any = {
-      getValues: () => this.data.length > 0 ? this.data : [[]],
+      getValues: () => {
+        if (this.data.length === 0) return [[]];
+        // Slice the data based on the requested range
+        // row/col are 1-indexed
+        const startRow = row - 1;
+        const endRow = startRow + numRows;
+        const startCol = col - 1;
+        const endCol = startCol + numCols;
+        
+        return this.data.slice(startRow, endRow).map(r => r.slice(startCol, endCol));
+      },
       setValue: (val: any) => rangeObj,
-      setValues: (vals: any[][]) => { this.data = vals; return rangeObj; },
+      setValues: (vals: any[][]) => { 
+        // For simple mocking, we might not want to update the whole sheet data 
+        // if we are just setting a range, but for now let's leave it or improve it if needed.
+        // The current tests mostly use setMockData to setup state.
+        // If we want to support writing back to specific ranges, we'd need complex logic.
+        // For now, let's just return the object.
+        return rangeObj; 
+      },
       setFontWeight: (w: string) => rangeObj,
       setBackground: (c: string) => rangeObj,
       setFontSize: (s: number) => rangeObj,
@@ -60,6 +78,8 @@ export class MockSheet {
   setColumnWidth(c: number, w: number) { }
   clear() { }
   hideSheet() { }
+  hideColumns(col: number, num: number) { }
+  activate() { return this; }
   
   setMockData(data: any[][]) { this.data = data; }
 }
@@ -130,8 +150,20 @@ export class MockForm {
 
 // Mock Globals
 (global as any).SpreadsheetApp = {
-  getActiveSpreadsheet: () => new MockSpreadsheet(),
-  newDataValidation: () => ({ requireValueInList: () => ({ build: () => {} }) }),
+  getActiveSpreadsheet: () => {
+    const ss = new MockSpreadsheet();
+    (ss as any).toast = jest.fn(); // Add toast mock
+    return ss;
+  },
+  newDataValidation: () => {
+    const builder = {
+      requireValueInList: () => builder,
+      requireCheckbox: () => builder,
+      setAllowInvalid: () => builder,
+      build: () => {}
+    };
+    return builder;
+  },
   getUi: () => ({ 
     alert: jest.fn(), 
     showModalDialog: jest.fn(),

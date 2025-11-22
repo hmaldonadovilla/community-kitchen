@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Google Apps Script for Community Kitchen Forms",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --outfile=dist/Code.js --format=iife --global-name=CommunityKitchen && echo '\\nfunction setup() { CommunityKitchen.setup(); }\\nfunction createAllForms() { CommunityKitchen.createAllForms(); }\\nfunction translateAllResponses() { CommunityKitchen.translateAllResponses(); }\\nfunction onOpen() { CommunityKitchen.onOpen(); }' >> dist/Code.js",
+    "build": "esbuild src/index.ts --bundle --outfile=dist/Code.js --format=iife --global-name=CommunityKitchen && echo '\\nfunction setup() { CommunityKitchen.setup(); }\\nfunction createAllForms() { CommunityKitchen.createAllForms(); }\\nfunction translateAllResponses() { CommunityKitchen.translateAllResponses(); }\\nfunction onOpen() { CommunityKitchen.onOpen(); }\\nfunction installTriggers() { CommunityKitchen.installTriggers(); }\\nfunction onConfigEdit(e) { CommunityKitchen.onConfigEdit(e); }' >> dist/Code.js",
     "test": "jest"
   },
   "keywords": [],

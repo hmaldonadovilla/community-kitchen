@@ -1,4 +1,5 @@
 import { FormGenerator } from './services/FormGenerator';
+import { ConfigSheet } from './config/ConfigSheet';
 
 export function setup(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -28,10 +29,33 @@ export function translateAllResponses(): void {
   Browser.msgBox('Translation Complete', results.join('\n\n'), Browser.Buttons.OK);
 }
 
+export function onConfigEdit(e: GoogleAppsScript.Events.SheetsOnEdit): void {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ConfigSheet.handleOptionEdit(ss, e);
+}
+
+export function installTriggers(): void {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // Check if trigger already exists to avoid duplicates
+  const triggers = ScriptApp.getProjectTriggers();
+  const existing = triggers.find(t => t.getHandlerFunction() === 'onConfigEdit');
+  
+  if (!existing) {
+    ScriptApp.newTrigger('onConfigEdit')
+      .forSpreadsheet(ss)
+      .onEdit()
+      .create();
+    Browser.msgBox('Trigger installed! You can now use the "Edit Options" checkboxes.');
+  } else {
+    Browser.msgBox('Trigger already installed.');
+  }
+}
+
 export function onOpen(): void {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Community Kitchen')
     .addItem('Setup Example', 'setup')
+    .addItem('Install Triggers (Required for Options)', 'installTriggers')
     .addItem('Create/Update All Forms', 'createAllForms')
     .addItem('Update & Translate Responses to English', 'translateAllResponses')
     .addToUi();

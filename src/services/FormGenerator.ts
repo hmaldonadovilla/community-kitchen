@@ -49,6 +49,14 @@ export class FormGenerator {
     const forms = this.dashboard.getForms();
     const results: string[] = [];
 
+    // Hide all Options_ sheets to keep the spreadsheet clean
+    const allSheets = this.ss.getSheets();
+    allSheets.forEach(sheet => {
+      if (sheet.getName().startsWith('Options_')) {
+        sheet.hideSheet();
+      }
+    });
+
     forms.forEach(config => {
       try {
         const questions = ConfigSheet.getQuestions(this.ss, config.configSheet);
