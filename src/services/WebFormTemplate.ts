@@ -139,6 +139,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       .chips { display: flex; flex-wrap: wrap; gap: 8px; }
       .chips label { border: 1px solid var(--stroke); padding: 14px 16px; border-radius: 12px; background: #fff; font-weight: 800; font-size: 25px; }
 
+      input[type="checkbox"] {
+        width: 26px;
+        height: 26px;
+        accent-color: var(--accent);
+        flex-shrink: 0;
+      }
+
       button { font-weight: 800; letter-spacing: 0.2px; cursor: pointer; }
       button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; padding: 22px 18px; border-radius: 14px; width: 100%; font-size: 26px; box-shadow: 0 12px 30px rgba(37,99,235,0.25); }
       button.secondary { background: #eef2ff; color: var(--accent); border: none; padding: 16px 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(37,99,235,0.12); font-size: 25px; }
@@ -612,7 +619,9 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       function applyAllFilters(scopeRow) {
         definition.questions.forEach(q => {
           if ((q.type === 'CHOICE' || q.type === 'CHECKBOX') && q.optionFilter) {
-            const target = formEl.querySelector('[name="' + q.id + '"]');
+            const target = q.type === 'CHECKBOX'
+              ? formEl.querySelector('[data-field-name="' + q.id + '"]') || formEl.querySelector('[name="' + q.id + '"]')
+              : formEl.querySelector('[name="' + q.id + '"]');
             if (target) applyFilter(target, q.optionFilter, q.options || { en: [], fr: [], nl: [] });
           }
 
@@ -624,11 +633,48 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
               (q.lineItemConfig?.fields || []).forEach(field => {
                 if (!field.optionFilter) return;
                 const name = q.id + '__' + field.id;
-                const el = row.querySelector('[name="' + name + '"]');
+                const el = field.type === 'CHECKBOX'
+                  ? row.querySelector('[data-field-name="' + name + '"]') || row.querySelector('[name="' + name + '"]')
+                  : row.querySelector('[name="' + name + '"]');
                 if (el) applyFilter(el, field.optionFilter, { en: field.options || [], fr: field.optionsFr || [], nl: field.optionsNl || [] }, row, q.id);
               });
             });
           }
+        });
+
+        // Safety net: if for any reason checkbox inputs were removed by filters, rebuild them from original options
+        document.querySelectorAll('[data-field-name]').forEach(wrapper => {
+          if (wrapper.querySelector('input[type="checkbox"]')) return;
+          const optsJson = wrapper.dataset.originalOptions || '';
+          let opts;
+          try { opts = JSON.parse(optsJson); } catch (_) { opts = { en: [], fr: [], nl: [] }; }
+          const langKey = state.language.toLowerCase();
+          const labels = opts[langKey] || opts.en || [];
+          const baseOpts = opts.en || labels;
+          const nameAttr = wrapper.dataset.fieldName || wrapper.getAttribute('name') || '';
+          wrapper.innerHTML = '';
+          labels.forEach((label, idx) => {
+            const base = baseOpts[idx] || label;
+            const id = nameAttr + '_' + idx + '_' + Math.random().toString(16).slice(2);
+            const l = document.createElement('label');
+            l.className = 'inline';
+            l.style.fontWeight = '400';
+            l.htmlFor = id;
+            l.dataset.enLabel = base;
+            l.dataset.frLabel = opts.fr?.[idx] || base;
+            l.dataset.nlLabel = opts.nl?.[idx] || base;
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.name = nameAttr;
+            cb.id = id;
+            cb.value = base;
+            const span = document.createElement('span');
+            span.className = 'option-label';
+            span.textContent = label;
+            l.appendChild(cb);
+            l.appendChild(span);
+            wrapper.appendChild(l);
+          });
         });
       }
 
