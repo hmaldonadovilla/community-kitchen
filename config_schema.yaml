@@ -38,7 +38,7 @@ components:
             Ignored for FILE_UPLOAD and LINE_ITEM_GROUP.
         optionFilter:
           $ref: '#/components/schemas/OptionFilter'
-          description: Optional dependency to filter options based on another field's value.
+          description: Optional dependency to filter options based on other field value(s).
         validationRules:
           type: array
           items:
@@ -112,7 +112,7 @@ components:
             type: string
         optionFilter:
           $ref: '#/components/schemas/OptionFilter'
-          description: Optional dependency to filter options based on another line item field's value.
+          description: Optional dependency to filter options based on another line item field or a top-level field value.
         validationRules:
           type: array
           items:
@@ -160,20 +160,27 @@ components:
       type: object
       properties:
         dependsOn:
-          type: string
-          description: ID of the field whose value determines allowed options.
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: |
+            ID(s) of the field(s) whose value determines allowed options. Accepts a single ID or an ordered array for composite dependencies. When used inside line items, IDs can point to either sibling line-item fields or top-level fields.
         optionMap:
           type: object
           additionalProperties:
             type: array
             items:
               type: string
-          description: Mapping of parent value -> allowed options for this field.
+          description: |
+            Mapping of parent value(s) -> allowed options for this field. For multiple dependencies, join values with `||` in the order listed in `dependsOn` (e.g., `"Carrots||Local"`). Use `"*"` as a fallback key.
       example:
-        dependsOn: Product
+        dependsOn: [Product, Supplier]
         optionMap:
-          Carrots: [Crates]
-          '*': [Bags, Crates]
+          "Carrots||Local": [Crates]
+          Carrots: [Bags, Crates]
+          "*": [Bags]
 
     ValidationRule:
       type: object

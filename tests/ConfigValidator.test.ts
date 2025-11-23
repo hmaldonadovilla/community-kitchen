@@ -22,7 +22,7 @@ describe('ConfigValidator', () => {
         type: 'CHOICE',
         qEn: 'Status',
         qFr: 'Statut',
-        qNl: 'Toestand', // Changed from 'Status' to avoid duplicate
+        qNl: 'Toestand',
         required: false,
         options: ['Clean', 'Dirty'],
         optionsFr: ['Propre', 'Sale'],
@@ -33,30 +33,6 @@ describe('ConfigValidator', () => {
 
     const errors = ConfigValidator.validate(questions, 'Config: Test');
     expect(errors).toEqual([]);
-  });
-
-  test('detects duplicate names within a single question', () => {
-    const questions: QuestionConfig[] = [
-      {
-        id: 'Q1',
-        type: 'CHOICE',
-        qEn: 'Weather',
-        qFr: 'Weather', // Duplicate!
-        qNl: 'Weather NL',
-        required: true,
-        options: ['Sunny', 'Rainy'],
-        optionsFr: ['Ensoleillé', 'Pluvieux'],
-        optionsNl: ['Zonnig', 'Regenachtig'],
-        status: 'Active'
-      }
-    ];
-
-    const errors = ConfigValidator.validate(questions, 'Config: Test');
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0]).toContain('DUPLICATE NAME IN QUESTION');
-    expect(errors[0]).toContain('"Weather"');
-    expect(errors[0]).toContain('English');
-    expect(errors[0]).toContain('French');
   });
 
   test('detects duplicate English names across questions', () => {
@@ -133,7 +109,7 @@ describe('ConfigValidator', () => {
         type: 'CHOICE',
         qEn: 'Status',
         qFr: 'Statut',
-        qNl: 'Toestand', // Changed from 'Status' to avoid within-question duplicate
+        qNl: 'Toestand',
         required: false,
         options: ['Clean', 'Dirty'], // 2 options
         optionsFr: ['Propre'], // 1 option - mismatch!

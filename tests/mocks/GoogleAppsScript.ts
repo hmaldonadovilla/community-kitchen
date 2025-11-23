@@ -98,6 +98,7 @@ export class MockSheet {
   hideColumns(col: number, num: number) { }
   activate() { return this; }
   appendRow(row: any[]) { this.data.push(row); }
+  getValues() { return this.data; }
   private ensureSize(targetRow: number, targetCol: number) {
     while (this.data.length < targetRow) {
       this.data.push([]);

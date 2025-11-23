@@ -9,8 +9,8 @@ export interface FileUploadConfig {
 }
 
 export interface OptionFilter {
-  dependsOn: string; // question/field ID to watch
-  optionMap: Record<string, string[]>; // value -> allowed options
+  dependsOn: string | string[]; // question/field ID(s) to watch (supports array for composite filters)
+  optionMap: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
 }
 
 export type LocalizedString = string | {

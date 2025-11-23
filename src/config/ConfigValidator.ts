@@ -7,51 +7,13 @@ export class ConfigValidator {
    */
   static validate(questions: QuestionConfig[], sheetName: string): string[] {
     const errors: string[] = [];
-    
-    // Check that within each question, all 3 language names are different
-    errors.push(...this.validateUniqueNamesWithinQuestion(questions));
-    
+
     // Check for duplicate question names across questions
     errors.push(...this.validateUniqueNamesAcrossQuestions(questions));
     
     // Check for matching option counts
     errors.push(...this.validateOptionCounts(questions));
     errors.push(...this.validateLineItemOptionCounts(questions));
-    
-    return errors;
-  }
-  
-  private static validateUniqueNamesWithinQuestion(questions: QuestionConfig[]): string[] {
-    const errors: string[] = [];
-    
-    questions.forEach((q, idx) => {
-      const names = [
-        { lang: 'English', name: q.qEn.trim() },
-        { lang: 'French', name: q.qFr.trim() },
-        { lang: 'Dutch', name: q.qNl.trim() }
-      ];
-      
-      // Check if any two names are the same
-      for (let i = 0; i < names.length; i++) {
-        for (let j = i + 1; j < names.length; j++) {
-          if (names[i].name && names[j].name && names[i].name === names[j].name) {
-            let error = `━━━ DUPLICATE NAME IN QUESTION (Row ${idx + 2}) ━━━\n\n`;
-            error += `❌ The name "${names[i].name}" appears in both:\n`;
-            error += `   • ${names[i].lang}\n`;
-            error += `   • ${names[j].lang}\n\n`;
-            error += `⚠️  This will create duplicate columns in the form responses.\n\n`;
-            error += `✓ Solution: Use different names for each language.\n`;
-            error += `   Example: "Weather" | "Météo" | "Weer"`;
-            
-            errors.push(error);
-            break; // Only report once per question
-          }
-        }
-        if (errors.length > 0 && errors[errors.length - 1].includes(`Row ${idx + 2}`)) {
-          break; // Already reported this question
-        }
-      }
-    });
     
     return errors;
   }

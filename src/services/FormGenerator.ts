@@ -38,7 +38,7 @@ export class FormGenerator {
   public createAllForms(): string[] {
     const forms = this.dashboard.getForms();
     const results: string[] = [];
-    const baseAppUrl = ScriptApp.getService().getUrl() || '';
+    const baseAppUrl = this.dashboard.getWebAppUrl() || '';
 
     forms.forEach(config => {
       try {

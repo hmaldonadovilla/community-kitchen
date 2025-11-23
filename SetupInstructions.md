@@ -69,6 +69,18 @@ This project uses TypeScript. You need to build the script before using it in Go
        { "optionFilter": { "dependsOn": "Supplier", "optionMap": { "VDS": ["Fresh vegetables", "Dairy"], "*": ["Other"] } } }
        ```
 
+      - Composite filters and cross-scope dependencies:
+        - `dependsOn` can be a single ID or an array (for multi-field filters). When you provide an array, join dependency values with `||` in `optionMap` keys, plus `*` as a fallback.
+        - Line-item filters can depend on top-level fields; reference the parent field ID directly.
+
+        ```json
+        { "optionFilter": { "dependsOn": ["Supplier", "Delivery type"], "optionMap": { "VDS||Fresh vegetables": ["Chilled"], "VDS": ["Dry"], "*": ["Dry", "Chilled"] } } }
+        ```
+
+        ```json
+        { "optionFilter": { "dependsOn": "Delivery type", "optionMap": { "Frozen": ["Freezer"], "*": ["Fridge", "Freezer"] } } }
+        ```
+
      - Example (main form validation):
 
        ```json
@@ -103,7 +115,6 @@ This project uses TypeScript. You need to build the script before using it in Go
      - Example (line-item filter): put this in the line-item config JSON or line-item ref sheet Config column:
 
        ```json
-
        { "optionFilter": { "dependsOn": "LI1", "optionMap": { "Tomatoes": ["Box", "Tray"], "Potatoes": ["Bag"], "*": ["Box"] } } }
        ```
 

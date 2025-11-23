@@ -17,9 +17,7 @@ export class Dashboard {
     const sheet = ss.insertSheet(DASHBOARD_SHEET_NAME);
     sheet.getRange('A1').setValue('Forms Dashboard').setFontSize(14).setFontWeight('bold');
 
-    const baseUrl = (typeof ScriptApp !== 'undefined' && ScriptApp.getService().getUrl())
-      ? ScriptApp.getService().getUrl()
-      : 'https://script.google.com/.../exec';
+    const baseUrl = this.getWebAppUrl() || 'https://script.google.com/.../exec';
     const headers = [
       [
         'Form Title',
@@ -106,6 +104,36 @@ export class Dashboard {
     const appUrlCol = headers.findIndex(h => h.startsWith('web app url')) + 1; // 1-based
     if (appUrlCol > 0) {
       this.sheet.getRange(rowIndex, appUrlCol).setValue(appUrl);
+    }
+  }
+
+  public getWebAppUrl(): string {
+    const propUrl = this.readWebAppUrlFromProps();
+    if (propUrl) return propUrl;
+    return this.resolveWebAppUrl();
+  }
+
+  private resolveWebAppUrl(): string {
+    try {
+      const service = (typeof ScriptApp !== 'undefined' && ScriptApp.getService) ? ScriptApp.getService() : undefined;
+      const rawUrl = service?.getUrl ? service.getUrl() : '';
+      if (!rawUrl) return '';
+      // Prefer exec URL over dev when available
+      return rawUrl.replace(/\/dev(\b|$)/, '/exec');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  private readWebAppUrlFromProps(): string {
+    try {
+      const props = (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties)
+        ? PropertiesService.getScriptProperties()
+        : undefined;
+      const url = props?.getProperty('WEB_APP_URL') || props?.getProperty('WEBAPP_URL');
+      return url || '';
+    } catch (_) {
+      return '';
     }
   }
 }

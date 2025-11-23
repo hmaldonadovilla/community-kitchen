@@ -26,6 +26,7 @@ export class WebFormService {
   public buildDefinition(formKey?: string): WebFormDefinition {
     const form = this.findForm(formKey);
     const questions = ConfigSheet.getQuestions(this.ss, form.configSheet).filter(q => q.status === 'Active');
+    const languages: Array<'EN' | 'FR' | 'NL'> = this.computeLanguages(questions);
 
     const webQuestions: WebQuestionDefinition[] = questions.map(q => ({
       id: q.id,
@@ -51,7 +52,7 @@ export class WebFormService {
       title: form.title,
       description: form.description,
       destinationTab: form.destinationTab || `${form.title} Responses`,
-      languages: ['EN', 'FR', 'NL'],
+      languages,
       questions: webQuestions
     };
   }
@@ -67,7 +68,10 @@ export class WebFormService {
 
   public submitWebForm(formObject: any): { success: boolean; message: string } {
     const formKey = (formObject.formKey || formObject.form || '').toString();
-    const languageRaw = (formObject.language || 'EN').toString().toUpperCase();
+    const langValue = Array.isArray(formObject.language)
+      ? (formObject.language[formObject.language.length - 1] || formObject.language[0])
+      : formObject.language;
+    const languageRaw = (langValue || 'EN').toString().toUpperCase();
     const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
 
     const form = this.findForm(formKey);
@@ -155,15 +159,22 @@ export class WebFormService {
       if (!file) return;
 
       const name = typeof file.getName === 'function' ? file.getName() : undefined;
+      const bytes = typeof file.getBytes === 'function' ? file.getBytes() : undefined;
+      const isEmpty = Array.isArray(bytes) && bytes.length === 0;
+      if (isEmpty) return;
+
       if (uploadConfig?.allowedExtensions && name) {
         const lower = name.toLowerCase();
         const allowed = uploadConfig.allowedExtensions.map(ext => ext.toLowerCase().replace('.', ''));
         const isAllowed = allowed.some(ext => lower.endsWith(ext));
         if (!isAllowed) return;
+      } else if (uploadConfig?.allowedExtensions && !name) {
+        // Cannot validate extension without a name; skip to avoid trash files
+        return;
       }
 
-      if (uploadConfig?.maxFileSizeMb && typeof file.getBytes === 'function') {
-        const sizeMb = file.getBytes().length / (1024 * 1024);
+      if (uploadConfig?.maxFileSizeMb && bytes) {
+        const sizeMb = bytes.length / (1024 * 1024);
         if (sizeMb > uploadConfig.maxFileSizeMb) return;
       }
 
@@ -187,5 +198,13 @@ export class WebFormService {
 
   private buildTemplate(def: WebFormDefinition, formKey: string): string {
     return buildWebFormHtml(def, formKey);
+  }
+
+  private computeLanguages(questions: QuestionConfig[]): Array<'EN' | 'FR' | 'NL'> {
+    const langs: Array<'EN' | 'FR' | 'NL'> = [];
+    if (questions.some(q => !!q.qEn)) langs.push('EN');
+    if (questions.some(q => !!q.qFr)) langs.push('FR');
+    if (questions.some(q => !!q.qNl)) langs.push('NL');
+    return langs.length ? langs : ['EN'];
   }
 }

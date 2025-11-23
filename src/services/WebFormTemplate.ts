@@ -6,7 +6,7 @@ import { WebFormDefinition } from '../types';
  */
 export function buildWebFormHtml(def: WebFormDefinition, formKey: string): string {
   const defJson = JSON.stringify(def).replace(/</g, '\\u003c');
-  const keyJson = JSON.stringify(formKey);
+  const keyJson = JSON.stringify(formKey || def?.title || '');
 
   return `<!DOCTYPE html>
 <html>
@@ -625,13 +625,35 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         });
       }
 
+      function computeAllowedOptions(filter, options, row, linePrefix) {
+        if (!filter || !options) return options?.en || [];
+
+        const getDependencyValues = (dependsOn) => {
+          const ids = Array.isArray(dependsOn) ? dependsOn : [dependsOn];
+          return ids.map((id) => {
+            const prefixed = linePrefix ? (linePrefix + '__' + id) : id;
+            let val = row ? getRowValue(row, prefixed) : getValue(prefixed);
+            if ((val === '' || (Array.isArray(val) && val.length === 0)) && linePrefix) {
+              val = getValue(id);
+            }
+            if (Array.isArray(val)) return val.join('|');
+            return val ?? '';
+          });
+        };
+
+        const depValues = getDependencyValues(filter.dependsOn);
+        const candidateKeys = [];
+        if (depValues.length > 1) candidateKeys.push(depValues.join('||'));
+        depValues.filter(Boolean).forEach((v) => candidateKeys.push(v));
+        candidateKeys.push('*');
+        return candidateKeys.reduce((acc, key) => acc || filter.optionMap[key], void 0) || options.en || [];
+      }
+
       function applyFilter(el, filter, options, row, linePrefix) {
         if (!options) return;
         const langKey = state.language.toLowerCase();
-        const depName = linePrefix ? (linePrefix + '__' + filter.dependsOn) : filter.dependsOn;
-        const depEl = findDependency(depName, row || formEl);
-        const depVal = depEl ? (depEl instanceof HTMLSelectElement || depEl instanceof HTMLInputElement ? depEl.value : '') : '';
-        const allowed = filter.optionMap[depVal] || filter.optionMap['*'] || options.en || [];
+
+        const allowed = computeAllowedOptions(filter, options, row, linePrefix);
 
         if (el.tagName === 'SELECT') {
           const previous = el.value;
@@ -681,20 +703,34 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       }
 
       function findDependency(depName, scope) {
-        if (!scope) return null;
         const normalized = (depName || '').toString().trim().toLowerCase();
-        const byName = scope.querySelector('[name="' + depName + '"]');
-        if (byName) return byName;
-        const byFieldId = scope.querySelector('[data-field-id="' + depName + '"]');
-        if (byFieldId) return byFieldId;
+        const search = (ctx) => {
+          if (!ctx) return null;
+          const byName = ctx.querySelector('[name="' + depName + '"]');
+          if (byName) return byName;
+          const byFieldId = ctx.querySelector('[data-field-id="' + depName + '"]');
+          if (byFieldId) return byFieldId;
+          return null;
+        };
+        let found = search(scope);
         if (normalized) {
-          const byLabel = Array.from(scope.querySelectorAll('[data-label-en]')).find(el => {
+          const byLabel = Array.from((scope || formEl).querySelectorAll('[data-label-en]')).find(el => {
             const dataset = el instanceof HTMLElement ? el.dataset : undefined;
             return dataset?.labelEn === normalized;
           });
-          if (byLabel) return byLabel;
+          if (byLabel) found = byLabel;
         }
-        return null;
+        if (!found && scope !== formEl) {
+          found = search(formEl);
+          if (!found && normalized) {
+            const byLabel = Array.from(formEl.querySelectorAll('[data-label-en]')).find(el => {
+              const dataset = el instanceof HTMLElement ? el.dataset : undefined;
+              return dataset?.labelEn === normalized;
+            });
+            if (byLabel) found = byLabel;
+          }
+        }
+        return found;
       }
 
       function validateForm() {
@@ -723,7 +759,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             for (const row of rows) {
               const whenName = entry.groupId + '__' + entry.rule.when.fieldId;
               const thenName = entry.groupId + '__' + entry.rule.then.fieldId;
-              const whenVal = getRowValue(row, whenName);
+              let whenVal = getRowValue(row, whenName);
+              if (whenVal === '' || (Array.isArray(whenVal) && whenVal.length === 0)) {
+                whenVal = getValue(entry.rule.when.fieldId);
+              }
               if (!matchesWhen(whenVal, entry.rule.when)) continue;
               const targetVal = getRowValue(row, thenName);
               const msg = checkRule(targetVal, entry.rule.then, entry.rule.message);
@@ -819,10 +858,17 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         const langKey = state.language.toLowerCase();
         overlay.style.display = 'flex';
         optionsBox.innerHTML = '';
-        const labels = (langKey === 'fr' ? anchorField.optionsFr : langKey === 'nl' ? anchorField.optionsNl : anchorField.options) || [];
-        const baseOpts = anchorField.options || [];
+        const optionsObj = {
+          en: anchorField.options || [],
+          fr: anchorField.optionsFr || [],
+          nl: anchorField.optionsNl || []
+        };
+        const allowed = anchorField.optionFilter ? computeAllowedOptions(anchorField.optionFilter, optionsObj, null, group.id) : (optionsObj.en || []);
+        const labels = (langKey === 'fr' ? optionsObj.fr : langKey === 'nl' ? optionsObj.nl : optionsObj.en) || [];
+        const baseOpts = optionsObj.en || [];
         (labels || []).forEach((label, idx) => {
           const base = baseOpts[idx] || label;
+          if (!allowed.includes(base)) return;
           const row = document.createElement('label');
           row.style.display = 'flex';
           row.style.alignItems = 'center';
@@ -893,12 +939,27 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
         const langInput = formEl.querySelector('select[name="language"]') || langSelect;
         if (langInput && langInput.value) {
+          const existingLangInputs = formEl.querySelectorAll('input[type="hidden"][name="language"]');
+          existingLangInputs.forEach(n => n.remove());
           const hiddenLang = document.createElement('input');
           hiddenLang.type = 'hidden';
           hiddenLang.name = 'language';
           hiddenLang.value = langInput.value;
           formEl.appendChild(hiddenLang);
         }
+
+        // Build a plain payload to avoid losing values when disabling the form
+        const fd = new FormData(formEl);
+        const payload = {};
+        fd.forEach((val, key) => {
+          if (payload[key] === undefined) {
+            payload[key] = val;
+          } else if (Array.isArray(payload[key])) {
+            payload[key].push(val);
+          } else {
+            payload[key] = [payload[key], val];
+          }
+        });
 
         setSubmitting(true);
         statusEl.textContent = 'Submitting...';
@@ -917,7 +978,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             statusEl.className = 'status error';
             setSubmitting(false);
           })
-          .submitWebForm(formEl);
+          .submitWebForm(payload);
       }
 
       function setSubmitting(flag) {

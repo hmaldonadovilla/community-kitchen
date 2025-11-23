@@ -89,6 +89,8 @@ export class ConfigSheet {
       const uploadConfig = type === 'FILE_UPLOAD' ? this.parseUploadConfig(rawConfig || row[6]) : undefined;
       const optionFilter = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseOptionFilter(optionFilterRaw) : undefined;
       const validationRules = this.parseValidationRules(validationRaw);
+      const statusRaw = row[9] ? row[9].toString().trim().toLowerCase() : 'active';
+      const status = statusRaw === 'archived' ? 'Archived' : 'Active';
 
       return {
         id: row[0] ? row[0].toString() : '',
@@ -100,7 +102,7 @@ export class ConfigSheet {
         options,
         optionsFr,
         optionsNl,
-        status: row[9] ? row[9].toString() as 'Active' | 'Archived' : 'Active',
+        status,
         uploadConfig,
         lineItemConfig,
         optionFilter,
@@ -341,12 +343,12 @@ export class ConfigSheet {
     if (lastRow <= 1) return { fields: [] };
 
     const lastColumn = Math.max(10, sheet.getLastColumn());
-    const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
-    const fields: LineItemFieldConfig[] = rows.map((row, idx) => {
-      const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
-      const rawConfig = row[9] ? row[9].toString().trim() : '';
-      const optionFilter = this.parseOptionFilter(rawConfig);
-      const validationRules = this.parseValidationRules(rawConfig);
+      const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+      const fields: LineItemFieldConfig[] = rows.map((row, idx) => {
+        const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
+        const rawConfig = row[9] ? row[9].toString().trim() : '';
+        const optionFilter = this.parseOptionFilter(rawConfig);
+        const validationRules = this.parseValidationRules(rawConfig);
       return {
         id: row[0] ? row[0].toString() : `LI${idx + 1}`,
         type: (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as BaseQuestionType,
