@@ -16,27 +16,41 @@ export class Dashboard {
   private createDashboard(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): GoogleAppsScript.Spreadsheet.Sheet {
     const sheet = ss.insertSheet(DASHBOARD_SHEET_NAME);
     sheet.getRange('A1').setValue('Forms Dashboard').setFontSize(14).setFontWeight('bold');
-    
+
+    const baseUrl = (typeof ScriptApp !== 'undefined' && ScriptApp.getService().getUrl())
+      ? ScriptApp.getService().getUrl()
+      : 'https://script.google.com/.../exec';
     const headers = [
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID (DO NOT EDIT)', 'Edit URL', 'Published URL']
+      [
+        'Form Title',
+        'Configuration Sheet Name',
+        'Destination Tab Name',
+        'Description',
+        'Web App URL (?form=ConfigSheetName)'
+      ]
     ];
-    
-    sheet.getRange('A3:G3').setValues(headers).setFontWeight('bold').setBackground('#e0e0e0');
-    
-    // Example Data
+
+    sheet.getRange('A3:E3').setValues(headers).setFontWeight('bold').setBackground('#e0e0e0');
+
+    const exampleAppUrl = `${baseUrl}?form=${encodeURIComponent('Config: Example')}`;
     const examples = [
-      ['Example Form', 'Config: Example', 'Form Responses', 'Multi-language form with date, text, number, and choice questions.', '', '', '']
+      [
+        'Example Form',
+        'Config: Example',
+        'Form Responses',
+        'Multi-language form with date, text, number, and choice questions.',
+        exampleAppUrl
+      ]
     ];
-    sheet.getRange(4, 1, examples.length, 7).setValues(examples);
-    
+
+    sheet.getRange(4, 1, examples.length, 5).setValues(examples);
+
     // Styling
     sheet.setColumnWidth(1, 200);
     sheet.setColumnWidth(2, 150);
     sheet.setColumnWidth(3, 150);
     sheet.setColumnWidth(4, 250);
-    sheet.setColumnWidth(5, 150);
-    sheet.setColumnWidth(6, 150);
-    sheet.setColumnWidth(7, 150);
+    sheet.setColumnWidth(5, 260);
     
     return sheet;
   }
@@ -44,18 +58,39 @@ export class Dashboard {
   public getForms(): FormConfig[] {
     const lastRow = this.sheet.getLastRow();
     if (lastRow < 4) return [];
-    
-    const data = this.sheet.getRange(4, 1, lastRow - 3, 5).getValues();
+
+    const headerRow = this.sheet.getRange(3, 1, 1, this.sheet.getLastColumn()).getValues()[0].map(h => h?.toString().trim().toLowerCase());
+    const findHeader = (labels: string[], fallback: number) => {
+      const normalized = labels.map(l => l.toLowerCase());
+      const found = headerRow.findIndex(h => normalized.some(n => h === n || h.startsWith(n)));
+      return found >= 0 ? found : fallback;
+    };
+
+    const colTitle = findHeader(['form title'], 0);
+    const colConfig = findHeader(['configuration sheet name'], 1);
+    const colDestination = findHeader(['destination tab name'], 2);
+    const colDescription = findHeader(['description'], 3);
+    const colAppUrl = findHeader(['web app url (?form=configsheetname)', 'web app url'], -1);
+    const legacyFormIdIndex = (headerRow.length === 0 || headerRow.length > 5) ? 4 : -1;
+    const colFormId = findHeader(['form id', 'form id (legacy)'], legacyFormIdIndex);
+
+    const data = this.sheet.getRange(4, 1, lastRow - 3, this.sheet.getLastColumn()).getValues();
     const forms: FormConfig[] = [];
     
     data.forEach((row, index) => {
-      const [title, configSheetName, destinationTab, description, formId] = row;
+      const title = row[colTitle];
+      const configSheetName = row[colConfig];
+      const destinationTab = row[colDestination];
+      const description = row[colDescription];
+      const appUrl = colAppUrl >= 0 ? row[colAppUrl] : undefined;
+      const formId = colFormId >= 0 ? row[colFormId] : undefined;
       if (title && configSheetName) {
         forms.push({
           title,
           configSheet: configSheetName,
           destinationTab,
           description,
+          appUrl,
           formId,
           rowIndex: index + 4
         });
@@ -65,9 +100,12 @@ export class Dashboard {
     return forms;
   }
 
-  public updateFormDetails(rowIndex: number, id: string, editUrl: string, publishedUrl: string): void {
-    this.sheet.getRange(rowIndex, 5).setValue(id);
-    this.sheet.getRange(rowIndex, 6).setValue(editUrl);
-    this.sheet.getRange(rowIndex, 7).setValue(publishedUrl);
+  public updateFormDetails(rowIndex: number, appUrl?: string): void {
+    if (!appUrl) return;
+    const headers = this.sheet.getRange(3, 1, 1, this.sheet.getLastColumn()).getValues()[0].map(h => h?.toString().trim().toLowerCase());
+    const appUrlCol = headers.findIndex(h => h.startsWith('web app url')) + 1; // 1-based
+    if (appUrlCol > 0) {
+      this.sheet.getRange(rowIndex, appUrlCol).setValue(appUrl);
+    }
   }
 }

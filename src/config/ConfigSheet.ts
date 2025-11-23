@@ -1,4 +1,4 @@
-import { FileUploadConfig, LineItemFieldConfig, LineItemGroupConfig, QuestionConfig, QuestionType, BaseQuestionType } from '../types';
+import { FileUploadConfig, LineItemFieldConfig, LineItemGroupConfig, OptionFilter, QuestionConfig, QuestionType, BaseQuestionType, ValidationRule } from '../types';
 
 export class ConfigSheet {
   public static setupExample(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, name: string, exampleRows: any[]): void {
@@ -6,21 +6,21 @@ export class ConfigSheet {
     
     const sheet = ss.insertSheet(name);
     const headers = [
-      ['ID', 'Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Status (Active/Archived)', 'Edit Options', 'Config (JSON/REF)']
+      ['ID', 'Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Status (Active/Archived)', 'Config (JSON/REF)', 'Option Filter (JSON)', 'Validation Rules (JSON)', 'Edit Options']
     ];
     
-    sheet.getRange(1, 1, 1, 12).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
+    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
     
     // Add IDs to example rows if missing
     const rowsWithIds = exampleRows.map(row => {
       const id = 'Q' + Math.random().toString(36).substr(2, 9).toUpperCase();
-      // Ensure row has 12 columns (add empty for Edit Options + Config)
+      // Ensure row has the same columns as headers
       const newRow = [id, ...row];
-      while (newRow.length < 12) newRow.push('');
+      while (newRow.length < headers[0].length) newRow.push('');
       return newRow;
     });
 
-    sheet.getRange(2, 1, rowsWithIds.length, 12).setValues(rowsWithIds);
+    sheet.getRange(2, 1, rowsWithIds.length, headers[0].length).setValues(rowsWithIds);
     
     sheet.setColumnWidth(1, 100); // ID
     sheet.setColumnWidth(2, 100); // Type
@@ -28,8 +28,11 @@ export class ConfigSheet {
     sheet.setColumnWidth(4, 200);
     sheet.setColumnWidth(5, 200);
     sheet.setColumnWidth(8, 100);
-    sheet.setColumnWidth(11, 100); // Edit Options
-    sheet.setColumnWidth(12, 200); // Config JSON/REF
+    sheet.setColumnWidth(10, 120); // Status
+    sheet.setColumnWidth(11, 220); // Config JSON/REF
+    sheet.setColumnWidth(12, 200); // Option Filter
+    sheet.setColumnWidth(13, 220); // Validation Rules
+    sheet.setColumnWidth(14, 110); // Edit Options
     
     // Data validation for Type column
     const typeRange = sheet.getRange(2, 2, 100, 1);
@@ -53,7 +56,7 @@ export class ConfigSheet {
     statusRange.setDataValidation(rule);
 
     // Dropdown for Edit Options
-    const editRange = sheet.getRange(2, 11, 100, 1);
+    const editRange = sheet.getRange(2, 14, 100, 1);
     const editRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(['Edit'])
       .setAllowInvalid(true) // Allow invalid so we can replace with formula
@@ -72,16 +75,20 @@ export class ConfigSheet {
 
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) return []; // No questions
-    const lastColumn = Math.max(12, sheet.getLastColumn());
+    const lastColumn = Math.max(14, sheet.getLastColumn());
     const range = sheet.getRange(2, 1, lastRow - 1, lastColumn);
     const data = range.getValues();
     
     return data.map(row => {
       const type = row[1] ? row[1].toString().toUpperCase() as QuestionType : 'TEXT';
       const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
-      const rawConfig = row[11] ? row[11].toString().trim() : '';
-      const lineItemConfig = type === 'LINE_ITEM_GROUP' ? this.parseLineItemConfig(ss, rawConfig || row[6]) : undefined;
+      const rawConfig = row[10] ? row[10].toString().trim() : '';
+      const optionFilterRaw = row[11] ? row[11].toString().trim() : rawConfig;
+      const validationRaw = row[12] ? row[12].toString().trim() : rawConfig;
+      const lineItemConfig = type === 'LINE_ITEM_GROUP' ? this.parseLineItemConfig(ss, rawConfig || row[6], row[6]) : undefined;
       const uploadConfig = type === 'FILE_UPLOAD' ? this.parseUploadConfig(rawConfig || row[6]) : undefined;
+      const optionFilter = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseOptionFilter(optionFilterRaw) : undefined;
+      const validationRules = this.parseValidationRules(validationRaw);
 
       return {
         id: row[0] ? row[0].toString() : '',
@@ -95,7 +102,9 @@ export class ConfigSheet {
         optionsNl,
         status: row[9] ? row[9].toString() as 'Active' | 'Archived' : 'Active',
         uploadConfig,
-        lineItemConfig
+        lineItemConfig,
+        optionFilter,
+        validationRules
       };
     });
   }
@@ -107,8 +116,8 @@ export class ConfigSheet {
     // Check if we are in a Config sheet (name starts with "Config")
     if (!sheet.getName().startsWith('Config')) return;
     
-    // Check if we are in the "Edit Options" column (Column 11 / K)
-    if (range.getColumn() !== 11) return;
+    // Check if we are in the "Edit Options" column (Column 14 / N)
+    if (range.getColumn() !== 14) return;
     
     // Check if the value is "Edit" (user selected from dropdown)
     if (e.value !== 'Edit') return;
@@ -122,16 +131,27 @@ export class ConfigSheet {
     // Check type (Column 2)
     const val = sheet.getRange(row, 2).getValue();
     const type = (val ? val.toString() : '').toUpperCase();
-    if (type !== 'CHOICE' && type !== 'CHECKBOX') {
-      SpreadsheetApp.getActiveSpreadsheet().toast('Option tabs are only available for CHOICE and CHECKBOX types.', 'Invalid Type');
+    if (type !== 'CHOICE' && type !== 'CHECKBOX' && type !== 'LINE_ITEM_GROUP') {
+      SpreadsheetApp.getActiveSpreadsheet().toast('Option tabs are only available for CHOICE, CHECKBOX and LINE_ITEM_GROUP types.', 'Invalid Type');
       range.setValue(''); // Reset cell
       return;
     }
-    
-    const optionsSheetName = `Options_${id}`;
+
+    const optionsRef = sheet.getRange(row, 7).getValue(); // Options (EN)
+    let optionsSheetName = '';
+
+    if (optionsRef && optionsRef.toString().startsWith('REF:')) {
+      optionsSheetName = optionsRef.toString().substring(4).trim();
+    } else {
+      optionsSheetName = `Options_${id}`;
+      sheet.getRange(row, 7).setValue(`REF:${optionsSheetName}`);
+      sheet.getRange(row, 8).clearContent();
+      sheet.getRange(row, 9).clearContent();
+    }
+
     let optionsSheet = ss.getSheetByName(optionsSheetName);
     let sheetId = '';
-    
+
     if (!optionsSheet) {
       optionsSheet = ss.insertSheet(optionsSheetName);
       optionsSheet.getRange(1, 1, 1, 3).setValues([['Options (EN)', 'Options (FR)', 'Options (NL)']]).setFontWeight('bold');
@@ -139,19 +159,13 @@ export class ConfigSheet {
     } else {
       sheetId = optionsSheet.getSheetId().toString();
     }
-    
-    // Update the Config sheet to point to this new sheet
-    // Set Options (EN) to REF:..., clear FR and NL
-    sheet.getRange(row, 7).setValue(`REF:${optionsSheetName}`);
-    sheet.getRange(row, 8).clearContent();
-    sheet.getRange(row, 9).clearContent();
-    
+
     // Replace "Edit" with a Hyperlink to the sheet
     const ssId = ss.getId();
     const url = `https://docs.google.com/spreadsheets/d/${ssId}/edit#gid=${sheetId}`;
     const formula = `=HYPERLINK("${url}", "🔗 Edit Options")`;
     range.setFormula(formula);
-    
+
     // Activate the options sheet
     optionsSheet.activate();
   }
@@ -244,28 +258,71 @@ export class ConfigSheet {
     return Object.keys(config).length ? config : undefined;
   }
 
+  private static parseOptionFilter(rawConfig: string): OptionFilter | undefined {
+    if (!rawConfig) return undefined;
+    try {
+      const parsed = JSON.parse(rawConfig);
+      if (parsed && parsed.optionFilter && parsed.optionFilter.dependsOn && parsed.optionFilter.optionMap) {
+        return parsed.optionFilter as OptionFilter;
+      }
+    } catch (_) {
+      // ignore
+    }
+    return undefined;
+  }
+
+  private static parseValidationRules(rawConfig: string): ValidationRule[] | undefined {
+    if (!rawConfig) return undefined;
+    try {
+      const parsed = JSON.parse(rawConfig);
+      if (parsed && Array.isArray(parsed.validationRules)) {
+        return parsed.validationRules as ValidationRule[];
+      }
+    } catch (_) {
+      // ignore
+    }
+    return undefined;
+  }
+
   private static parseLineItemConfig(
     ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
-    rawConfig: string
+    rawConfig: string,
+    optionsRef?: string
   ): LineItemGroupConfig | undefined {
     if (!rawConfig) return { fields: [] };
+
+    // Helper to load fields from a REF sheet (either from config or options column)
+    const loadRefFields = (ref: string | undefined): LineItemFieldConfig[] => {
+      if (!ref || !ref.startsWith('REF:')) return [];
+      const refSheetName = ref.substring(4).trim();
+      const refConfig = this.parseLineItemSheet(ss, refSheetName);
+      return refConfig?.fields || [];
+    };
 
     if (rawConfig.startsWith('REF:')) {
       const refSheetName = rawConfig.substring(4).trim();
       return this.parseLineItemSheet(ss, refSheetName);
     }
 
+    // If JSON is provided, parse metadata and merge with fields from JSON or referenced sheet in Options (EN)
+    let parsed: any;
+
     try {
-      const parsed = JSON.parse(rawConfig);
+      parsed = JSON.parse(rawConfig);
       if (parsed && typeof parsed === 'object') {
-        const fields: LineItemFieldConfig[] = Array.isArray(parsed.fields)
+        const jsonFields: LineItemFieldConfig[] = Array.isArray(parsed.fields)
           ? parsed.fields.map((f: any, idx: number) => this.normalizeLineItemField(f, idx))
           : [];
+        const refFields = jsonFields.length === 0 ? loadRefFields(optionsRef) : [];
+        const mergedFields = jsonFields.length ? jsonFields : refFields;
+
         return {
           minRows: parsed.minRows ? Number(parsed.minRows) : undefined,
           maxRows: parsed.maxRows ? Number(parsed.maxRows) : undefined,
           addButtonLabel: parsed.addButtonLabel,
-          fields
+          anchorFieldId: parsed.anchorFieldId,
+          addMode: parsed.addMode,
+          fields: mergedFields
         };
       }
     } catch (_) {
@@ -283,10 +340,13 @@ export class ConfigSheet {
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) return { fields: [] };
 
-    const lastColumn = Math.max(9, sheet.getLastColumn());
+    const lastColumn = Math.max(10, sheet.getLastColumn());
     const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
     const fields: LineItemFieldConfig[] = rows.map((row, idx) => {
       const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
+      const rawConfig = row[9] ? row[9].toString().trim() : '';
+      const optionFilter = this.parseOptionFilter(rawConfig);
+      const validationRules = this.parseValidationRules(rawConfig);
       return {
         id: row[0] ? row[0].toString() : `LI${idx + 1}`,
         type: (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as BaseQuestionType,
@@ -296,7 +356,9 @@ export class ConfigSheet {
         required: !!row[5],
         options,
         optionsFr,
-        optionsNl
+        optionsNl,
+        optionFilter,
+        validationRules
       };
     }).filter(f => f.labelEn || f.labelFr || f.labelNl);
 
@@ -314,7 +376,9 @@ export class ConfigSheet {
       required: !!field?.required,
       options: Array.isArray(field?.options) ? field.options : [],
       optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],
-      optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : []
+      optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : [],
+      optionFilter: field?.optionFilter,
+      validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined
     };
   }
 }

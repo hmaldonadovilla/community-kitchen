@@ -8,6 +8,36 @@ export interface FileUploadConfig {
   allowedExtensions?: string[];
 }
 
+export interface OptionFilter {
+  dependsOn: string; // question/field ID to watch
+  optionMap: Record<string, string[]>; // value -> allowed options
+}
+
+export type LocalizedString = string | {
+  en?: string;
+  fr?: string;
+  nl?: string;
+  [key: string]: string | undefined;
+};
+
+export interface ValidationRule {
+  when: {
+    fieldId: string;
+    equals?: string | string[];
+    greaterThan?: number | string;
+    lessThan?: number | string;
+  };
+  then: {
+    fieldId: string;
+    required?: boolean;
+    min?: number | string;
+    max?: number | string;
+    allowed?: string[];
+    disallowed?: string[];
+  };
+  message?: LocalizedString;
+}
+
 export interface LineItemFieldConfig {
   id: string;
   type: BaseQuestionType;
@@ -18,6 +48,8 @@ export interface LineItemFieldConfig {
   options: string[];
   optionsFr: string[];
   optionsNl: string[];
+  optionFilter?: OptionFilter;
+  validationRules?: ValidationRule[];
 }
 
 export interface LineItemGroupConfig {
@@ -28,6 +60,8 @@ export interface LineItemGroupConfig {
     fr?: string;
     nl?: string;
   };
+  anchorFieldId?: string; // field to drive overlay multi-add
+  addMode?: 'overlay' | 'inline';
   fields: LineItemFieldConfig[];
 }
 
@@ -44,6 +78,8 @@ export interface QuestionConfig {
   status: 'Active' | 'Archived';
   uploadConfig?: FileUploadConfig;
   lineItemConfig?: LineItemGroupConfig;
+  optionFilter?: OptionFilter;
+  validationRules?: ValidationRule[];
 }
 
 export interface FormConfig {
@@ -51,14 +87,14 @@ export interface FormConfig {
   configSheet: string;
   destinationTab: string;
   description: string;
-  formId: string;
+  formId?: string;
+  appUrl?: string;
   rowIndex: number;
 }
 
 export interface FormResult {
-  id: string;
-  editUrl: string;
-  publishedUrl: string;
+  destinationTab: string;
+  appUrl?: string;
 }
 
 export interface WebQuestionDefinition {
@@ -77,6 +113,8 @@ export interface WebQuestionDefinition {
   };
   lineItemConfig?: LineItemGroupConfig;
   uploadConfig?: FileUploadConfig;
+  optionFilter?: OptionFilter;
+  validationRules?: ValidationRule[];
 }
 
 export interface WebFormDefinition {

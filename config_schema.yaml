@@ -36,6 +36,14 @@ components:
             The referenced sheet must contain three columns: Options (EN), Options (FR), Options (NL).
             Inline comma-separated lists are also supported for quick setup.
             Ignored for FILE_UPLOAD and LINE_ITEM_GROUP.
+        optionFilter:
+          $ref: '#/components/schemas/OptionFilter'
+          description: Optional dependency to filter options based on another field's value.
+        validationRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationRule'
+          description: Cross-field validation rules for this question.
         uploadConfig:
           $ref: '#/components/schemas/FileUploadConfig'
           description: Additional settings for FILE_UPLOAD questions. Provide as JSON in the `Config (JSON/REF)` column.
@@ -102,6 +110,14 @@ components:
           type: array
           items:
             type: string
+        optionFilter:
+          $ref: '#/components/schemas/OptionFilter'
+          description: Optional dependency to filter options based on another line item field's value.
+        validationRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationRule'
+          description: Cross-field validation rules inside the line item row.
 
     LineItemGroupConfig:
       type: object
@@ -122,19 +138,120 @@ components:
             nl:
               type: string
           description: Custom labels for the "Add line" button in each language.
+        anchorFieldId:
+          type: string
+          description: ID of the line-item field used as anchor when bulk-adding rows.
+        addMode:
+          type: string
+          enum: [overlay, inline]
+          description: Use `overlay` to open a multi-select overlay for anchor choices when adding rows.
         fields:
           type: array
           items:
             $ref: '#/components/schemas/LineItemFieldConfig'
+          description: |
+            Line item field definitions. If `Config (JSON/REF)` uses `REF:SheetName`, the fields are pulled from that sheet (columns: ID, Type, Label EN/FR/NL, Required?, Options EN/FR/NL, Config JSON in column 10).
+            The optional Config JSON column on that ref sheet can include `optionFilter` and `validationRules` for each line-item field.
+            You can mix a `REF:SheetName` for field definitions with inline JSON in `Config (JSON/REF)` to set `addMode`, `addButtonLabel`, `anchorFieldId`, `minRows`, `maxRows`, and other group-level settings even when the fields themselves come from the ref sheet.
       required:
         - fields
+
+    OptionFilter:
+      type: object
+      properties:
+        dependsOn:
+          type: string
+          description: ID of the field whose value determines allowed options.
+        optionMap:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Mapping of parent value -> allowed options for this field.
+      example:
+        dependsOn: Product
+        optionMap:
+          Carrots: [Crates]
+          '*': [Bags, Crates]
+
+    ValidationRule:
+      type: object
+      properties:
+        when:
+          type: object
+          properties:
+            fieldId:
+              type: string
+            equals:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+            greaterThan:
+              oneOf:
+                - type: number
+                - type: string
+            lessThan:
+              oneOf:
+                - type: number
+                - type: string
+        then:
+          type: object
+          properties:
+            fieldId:
+              type: string
+            required:
+              type: boolean
+              description: If true, target field must have a value when the condition matches.
+            min:
+              type: number
+              description: Enforce target numeric value >= min.
+            max:
+              type: number
+              description: Enforce target numeric value <= max.
+            allowed:
+              type: array
+              items:
+                type: string
+            disallowed:
+              type: array
+              items:
+                type: string
+        message:
+          oneOf:
+            - type: string
+            - type: object
+              properties:
+                en:
+                  type: string
+                fr:
+                  type: string
+                nl:
+                  type: string
+              additionalProperties:
+                type: string
+      required:
+        - when
+        - then
+      description: Cross-field validation rule to enforce allowed/disallowed combinations.
+      example:
+        when:
+          fieldId: Product
+          equals: Carrots
+        then:
+          fieldId: Unit
+          allowed: [Crates]
+        message: Carrots must be recorded in crates.
 
     LineItemSheet:
       type: array
       description: |
         Structure of the separate sheet referenced by `REF:SheetName` for LINE_ITEM_GROUP questions.
-        Columns should be: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL).
+        Columns should be: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON.
         Type must be one of DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
+        The Config JSON (column 10) can optionally include `optionFilter` and/or `validationRules` per line-item field.
       items:
         type: object
         properties:

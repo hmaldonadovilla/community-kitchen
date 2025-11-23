@@ -10,6 +10,7 @@ A Google Apps Script project to digitize AFSCA compliance documentation for a co
 - **Archiving**: Soft-delete questions by marking them as "Archived" in the config sheet.
 - **Destination Management**: Automatically renames response tabs for better organization.
 - **Custom Web App Forms**: Generate Apps Script web apps (via `doGet`) that support line items and file uploads while still writing back to your Sheets.
+- **Dynamic Options & Rules**: Option filtering based on another field plus cross-field validation rules (main form and line items).
 
 ## Architecture
 
@@ -54,6 +55,10 @@ The project is refactored into modular components:
 - **New column**: `Config (JSON/REF)` in each Config sheet. Use it to store JSON or `REF:SheetName` for line items and upload settings.
 - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and provide a `lineItemConfig` via JSON or `REF:SheetName` pointing to a sheet with columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN/FR/NL). Types inside a line item can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
 - **File uploads**: Set `Type` to `FILE_UPLOAD` and provide `uploadConfig` in the Config column (JSON). Supported keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`.
+- **Filters**: Add `optionFilter` in the Config JSON to filter CHOICE/CHECKBOX options (works in line items too).  
+  Example: `{ "optionFilter": { "dependsOn": "Product", "optionMap": { "Carrots": ["Crates"], "*": ["Bags","Crates"] } } }`
+- **Validation rules**: Add `validationRules` array in Config JSON.  
+  Example: `{ "validationRules":[ { "when": {"fieldId":"Product","equals":"Carrots"}, "then": {"fieldId":"Unit","allowed":["Crates"]}, "message":"Carrots only in crates" } ] }`.
 
 ## Testing
 

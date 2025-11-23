@@ -1,9 +1,7 @@
 import { Dashboard } from '../config/Dashboard';
 import { ConfigSheet } from '../config/ConfigSheet';
 import { ConfigValidator } from '../config/ConfigValidator';
-import { FormBuilder } from './FormBuilder';
-import { ResponseNormalizer } from './ResponseNormalizer';
-import { FormConfig, FormResult } from '../types';
+import { FormConfig, FormResult, QuestionConfig } from '../types';
 
 export class FormGenerator {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -40,12 +38,14 @@ export class FormGenerator {
   public createAllForms(): string[] {
     const forms = this.dashboard.getForms();
     const results: string[] = [];
+    const baseAppUrl = ScriptApp.getService().getUrl() || '';
 
     forms.forEach(config => {
       try {
-        const result = this.generateSingleForm(config);
-        this.dashboard.updateFormDetails(config.rowIndex, result.id, result.editUrl, result.publishedUrl);
-        results.push(`${config.title}: Success`);
+        const result = this.generateSingleForm(config, baseAppUrl);
+        this.dashboard.updateFormDetails(config.rowIndex, result.appUrl);
+        const appUrlMsg = result.appUrl ? ` | App URL: ${result.appUrl}` : '';
+        results.push(`${config.title}: Destination ready (${result.destinationTab})${appUrlMsg}`);
       } catch (e: any) {
         results.push(`${config.title}: ERROR - ${e.message}`);
       }
@@ -56,106 +56,53 @@ export class FormGenerator {
 
   public translateAllResponses(): string[] {
     const forms = this.dashboard.getForms();
-    const results: string[] = [];
-
-    // Hide all Options_ sheets to keep the spreadsheet clean
-    const allSheets = this.ss.getSheets();
-    allSheets.forEach(sheet => {
-      if (sheet.getName().startsWith('Options_')) {
-        sheet.hideSheet();
-      }
-    });
-
-    forms.forEach(config => {
-      try {
-        const questions = ConfigSheet.getQuestions(this.ss, config.configSheet);
-        
-        if (!config.destinationTab) {
-          results.push(`${config.title}: Skipped (no destination tab configured)`);
-          return;
-        }
-        
-        const normalizer = new ResponseNormalizer(this.ss);
-        // Use normalize() instead of translateResponses() to ensure we fetch fresh data
-        // from the raw sheet (via formulas) before translating and freezing values.
-        normalizer.normalize(config.destinationTab, questions);
-        
-        results.push(`${config.title}: Refreshed & Translated successfully`);
-      } catch (e: any) {
-        results.push(`${config.title}: ERROR - ${e.message}`);
-      }
-    });
-
-    return results;
+    return forms.map(config => `${config.title}: Skipped (responses already stored in destination tab)`);
   }
 
-  private generateSingleForm(config: FormConfig): FormResult {
-    const questions = ConfigSheet.getQuestions(this.ss, config.configSheet);
-    
-    // Validate configuration before creating form
+  private generateSingleForm(config: FormConfig, baseAppUrl: string): FormResult {
+    const questions = ConfigSheet.getQuestions(this.ss, config.configSheet).filter(q => q.status === 'Active');
+
+    // Validate configuration before creating destination
     const errors = ConfigValidator.validate(questions, config.configSheet);
     if (errors.length > 0) {
       const errorMessage = `Configuration errors found:\n\n${errors.join('\n\n')}`;
       throw new Error(errorMessage);
     }
-    
-    if (questions.length === 0) throw new Error('No questions found.');
 
-    let form: GoogleAppsScript.Forms.Form;
-    let isNew = false;
+    if (questions.length === 0) throw new Error('No active questions found.');
 
-    if (config.formId) {
-      try {
-        form = FormApp.openById(config.formId);
-      } catch (e) {
-        form = FormApp.create(config.title);
-        isNew = true;
-      }
-    } else {
-      form = FormApp.create(config.title);
-      isNew = true;
-    }
-
-    form.setTitle(config.title);
-    form.setDescription(config.description);
-
-    let destinationTabName = config.destinationTab;
-
-    if (isNew) {
-      const oldSheets = this.ss.getSheets().map((s: GoogleAppsScript.Spreadsheet.Sheet) => s.getName());
-      form.setDestination(FormApp.DestinationType.SPREADSHEET, this.ss.getId());
-      SpreadsheetApp.flush();
-      const newSheets = this.ss.getSheets();
-      const newSheet = newSheets.find((s: GoogleAppsScript.Spreadsheet.Sheet) => !oldSheets.includes(s.getName()));
-
-      if (newSheet && config.destinationTab) {
-        if (this.ss.getSheetByName(destinationTabName)) {
-          destinationTabName = destinationTabName + ' (New)';
-        }
-        newSheet.setName(destinationTabName);
-      }
-    } else {
-        // Ensure destination tab name is correct for normalization
-        // If not new, we assume the user hasn't renamed the tab manually or we use the config one
-        // But we can't easily find which tab is linked if we didn't just create it.
-        // We'll assume the config.destinationTab is the one.
-    }
-
-    const builder = new FormBuilder(form);
-    // builder.clearItems(); // No longer clearing!
-    builder.updateForm(questions);
-
-    // Normalize Responses
-    if (destinationTabName) {
-        SpreadsheetApp.flush(); // Ensure new columns are visible
-        const normalizer = new ResponseNormalizer(this.ss);
-        normalizer.normalize(destinationTabName, questions);
-    }
+    const destinationTabName = config.destinationTab || `${config.title} Responses`;
+    const sheet = this.ensureDestinationTab(destinationTabName, questions);
+    const appUrl = baseAppUrl ? `${baseAppUrl}?form=${encodeURIComponent(config.configSheet || config.title)}` : undefined;
 
     return {
-      id: form.getId(),
-      editUrl: form.getEditUrl(),
-      publishedUrl: form.getPublishedUrl()
+      destinationTab: sheet.getName(),
+      appUrl
     };
+  }
+
+  private ensureDestinationTab(destinationTab: string, questions: QuestionConfig[]): GoogleAppsScript.Spreadsheet.Sheet {
+    let sheet = this.ss.getSheetByName(destinationTab);
+    if (!sheet) {
+      sheet = this.ss.insertSheet(destinationTab);
+    }
+
+    const headers = ['Timestamp', 'Language', ...questions.map(q => q.qEn || q.id)];
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    const existing = headerRange.getValues()[0];
+    const needsHeader = existing.filter(v => v).length === 0;
+
+    if (needsHeader) {
+      headerRange.setValues([headers]).setFontWeight('bold');
+    } else {
+      headers.forEach((h, idx) => {
+        const current = existing[idx];
+        if (!current) {
+          sheet.getRange(1, idx + 1).setValue(h).setFontWeight('bold');
+        }
+      });
+    }
+
+    return sheet;
   }
 }
