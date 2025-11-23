@@ -152,14 +152,30 @@ export class WebFormService {
     const fileArray = Array.isArray(files) ? files : [files];
     const limitedFiles = uploadConfig?.maxFiles ? fileArray.slice(0, uploadConfig.maxFiles) : fileArray;
 
+    const toBlob = (file: any): GoogleAppsScript.Base.Blob | null => {
+      if (!file) return null;
+      if (typeof file.getBytes === 'function') return file as GoogleAppsScript.Base.Blob;
+
+      const dataStr = (file.data || file.dataUrl || '').toString();
+      if (!dataStr) return null;
+      const parts = dataStr.split(',');
+      const base64 = parts.length > 1 ? parts[1] : parts[0];
+      const inferredMime = parts[0]?.match(/data:(.*);base64/)?.[1];
+      const mime = file.type || inferredMime || 'application/octet-stream';
+      const bytes = Utilities.base64Decode(base64);
+      const name = file.name || 'upload';
+      return Utilities.newBlob(bytes, mime, name);
+    };
+
     const folder = this.getUploadFolder(uploadConfig);
     const urls: string[] = [];
 
     limitedFiles.forEach(file => {
-      if (!file) return;
+      const blob = toBlob(file);
+      if (!blob) return;
 
-      const name = typeof file.getName === 'function' ? file.getName() : undefined;
-      const bytes = typeof file.getBytes === 'function' ? file.getBytes() : undefined;
+      const name = blob.getName();
+      const bytes = blob.getBytes();
       const isEmpty = Array.isArray(bytes) && bytes.length === 0;
       if (isEmpty) return;
 
@@ -178,7 +194,7 @@ export class WebFormService {
         if (sizeMb > uploadConfig.maxFileSizeMb) return;
       }
 
-      const created = folder.createFile(file);
+      const created = folder.createFile(blob);
       urls.push(created.getUrl());
     });
 

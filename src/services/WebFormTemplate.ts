@@ -309,6 +309,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           const container = document.createElement('div');
           container.className = 'line-item';
           container.dataset.lineItem = q.id;
+          container.dataset.fieldId = q.id;
           field.appendChild(container);
 
           state.lineItems[q.id] = state.lineItems[q.id] || [];
@@ -344,6 +345,12 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         Array.from(formEl.querySelectorAll('.has-error')).forEach((n) => n.classList.remove('has-error'));
         statusEl.textContent = '';
         statusEl.className = 'status';
+      }
+
+      function getLineItemRowCount(groupId) {
+        const container = document.querySelector('[data-line-item="' + groupId + '"]');
+        if (!container) return 0;
+        return container.querySelectorAll('.line-item-row').length;
       }
 
       function clearFieldErrorForTarget(target) {
@@ -735,6 +742,14 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
       function validateForm() {
         clearAllErrors();
+        const missingRequiredLineItem = definition.questions.find(q => q.type === 'LINE_ITEM_GROUP' && q.required && getLineItemRowCount(q.id) === 0);
+        if (missingRequiredLineItem) {
+          const msg = getLangLabel(
+            { en: 'Please add at least one line.', fr: 'Ajoutez au moins une ligne.', nl: 'Voeg minstens één regel toe.' },
+            'Please add at least one line.'
+          );
+          return { message: msg, fieldId: missingRequiredLineItem.id, scope: 'main' };
+        }
         const rules = [];
         definition.questions.forEach(q => {
           if (q.validationRules?.length) q.validationRules.forEach(r => rules.push({ scope: 'main', rule: r }));
@@ -920,6 +935,46 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         });
       }
 
+      function buildPayloadFromForm() {
+        const fd = new FormData(formEl);
+        const payload = {};
+        const fileReads = [];
+
+        const addValue = (key, val) => {
+          if (payload[key] === undefined) {
+            payload[key] = val;
+          } else if (Array.isArray(payload[key])) {
+            payload[key].push(val);
+          } else {
+            payload[key] = [payload[key], val];
+          }
+        };
+
+        fd.forEach((val, key) => {
+          if (val instanceof File) {
+            if (!val || (!val.name && val.size === 0)) return;
+            const reader = new FileReader();
+            const p = new Promise(resolve => {
+              reader.onload = () => {
+                addValue(key, {
+                  name: val.name || 'upload',
+                  data: reader.result,
+                  type: val.type || 'application/octet-stream'
+                });
+                resolve();
+              };
+              reader.onerror = () => resolve();
+            });
+            reader.readAsDataURL(val);
+            fileReads.push(p);
+          } else {
+            addValue(key, val);
+          }
+        });
+
+        return Promise.all(fileReads).then(() => payload);
+      }
+
       function handleSubmit(evt) {
         evt.preventDefault();
         statusEl.textContent = '';
@@ -948,37 +1003,33 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           formEl.appendChild(hiddenLang);
         }
 
-        // Build a plain payload to avoid losing values when disabling the form
-        const fd = new FormData(formEl);
-        const payload = {};
-        fd.forEach((val, key) => {
-          if (payload[key] === undefined) {
-            payload[key] = val;
-          } else if (Array.isArray(payload[key])) {
-            payload[key].push(val);
-          } else {
-            payload[key] = [payload[key], val];
-          }
-        });
-
-        setSubmitting(true);
         statusEl.textContent = 'Submitting...';
         statusEl.className = 'status';
-        google.script.run
-          .withSuccessHandler(() => {
-            statusEl.textContent = 'Saved!';
-            statusEl.className = 'status success';
-            formEl.reset();
-            clearAllErrors();
-            applyAllFilters();
-            setSubmitting(false);
+
+        buildPayloadFromForm()
+          .then(payload => {
+            setSubmitting(true);
+            google.script.run
+              .withSuccessHandler(() => {
+                statusEl.textContent = 'Saved!';
+                statusEl.className = 'status success';
+                formEl.reset();
+                clearAllErrors();
+                applyAllFilters();
+                setSubmitting(false);
+              })
+              .withFailureHandler(err => {
+                statusEl.textContent = err && err.message ? err.message : 'Submission failed';
+                statusEl.className = 'status error';
+                setSubmitting(false);
+              })
+              .submitWebForm(payload);
           })
-          .withFailureHandler(err => {
+          .catch(err => {
             statusEl.textContent = err && err.message ? err.message : 'Submission failed';
             statusEl.className = 'status error';
             setSubmitting(false);
-          })
-          .submitWebForm(payload);
+          });
       }
 
       function setSubmitting(flag) {
