@@ -588,7 +588,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         input.dataset.labelEn = (q.label.en || '').toLowerCase();
         input.required = !!q.required;
         if (q.type === 'DATE') input.type = 'date';
-        else if (q.type === 'NUMBER') input.type = 'number';
+        else if (q.type === 'NUMBER') {
+          input.type = 'number';
+          input.step = 'any';
+        }
         else input.type = 'text';
         return input;
       }
@@ -668,6 +671,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           } else {
             input = document.createElement('input');
             input.type = field.type === 'NUMBER' ? 'number' : 'text';
+            if (field.type === 'NUMBER') input.step = 'any';
             input.name = q.id + '__' + field.id;
           }
 
