@@ -135,6 +135,12 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
       .line-item { border: 1px dashed var(--stroke); padding: 10px; border-radius: 12px; background: #f8fbff; }
       .line-item-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: end; }
+      .line-item-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+      .line-item-rows { display: flex; flex-direction: column; gap: 10px; }
+      .line-item-totals { margin-top: 8px; padding: 10px; border-radius: 10px; background: #eef6ff; border: 1px solid var(--stroke); display: flex; flex-wrap: wrap; gap: 10px; font-weight: 800; font-size: 22px; color: var(--text); }
+      .line-item-total-pill { background: #fff; border: 1px solid var(--stroke); padding: 8px 12px; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(37,99,235,0.08); }
+      .is-hidden-field { display: none !important; }
+      .required-star { color: #b91c1c; display: inline-block; margin-right: 6px; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 8px; }
       .chips label { border: 1px solid var(--stroke); padding: 14px 16px; border-radius: 12px; background: #fff; font-weight: 800; font-size: 25px; }
@@ -269,11 +275,18 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           console.error(err);
         }
         formEl.addEventListener('submit', handleSubmit);
-        formEl.addEventListener('change', () => applyAllFilters());
         formEl.addEventListener('focusin', lockViewport);
         formEl.addEventListener('focusout', unlockViewport);
         formEl.addEventListener('input', (e) => clearFieldErrorForTarget(e.target));
-        formEl.addEventListener('change', (e) => clearFieldErrorForTarget(e.target));
+        formEl.addEventListener('change', (e) => {
+          clearFieldErrorForTarget(e.target);
+          const changedId = resolveFieldIdFromElement(e.target);
+          const changedQuestion = definition.questions.find(q => q.id === changedId);
+          if (changedQuestion?.clearOnChange) {
+            clearOtherFieldsExcept(changedId);
+          }
+          applyAllFilters();
+        });
       }
 
       function lockViewport() {
@@ -297,7 +310,17 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           label.dataset.enLabel = q.label.en || '';
           label.dataset.frLabel = q.label.fr || '';
           label.dataset.nlLabel = q.label.nl || '';
-          label.textContent = q.label.en || '';
+          label.textContent = '';
+          if (q.required) {
+            const star = document.createElement('span');
+            star.className = 'required-star';
+            star.textContent = '*';
+            label.appendChild(star);
+          }
+          const labelText = document.createElement('span');
+          labelText.dataset.labelText = 'true';
+          labelText.textContent = q.label.en || '';
+          label.appendChild(labelText);
           if (q.required) {
             const badge = document.createElement('span');
             badge.className = 'badge';
@@ -313,21 +336,78 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             hidden.name = q.id + '_json';
             field.appendChild(hidden);
 
-          const container = document.createElement('div');
-          container.className = 'line-item';
-          container.dataset.lineItem = q.id;
-          container.dataset.fieldId = q.id;
-          field.appendChild(container);
+            const container = document.createElement('div');
+            container.className = 'line-item';
+            container.dataset.lineItem = q.id;
+            container.dataset.fieldId = q.id;
 
-          state.lineItems[q.id] = state.lineItems[q.id] || [];
-          if (q.lineItemConfig?.addMode !== 'overlay') {
-            addLineItemRow(q, container);
-          }
+            const rowsWrapper = document.createElement('div');
+            rowsWrapper.className = 'line-item-rows';
+            container.appendChild(rowsWrapper);
 
-          const addBtn = document.createElement('button');
-          addBtn.type = 'button';
-          addBtn.className = 'secondary';
-          const defaultLabel = q.lineItemConfig?.addMode === 'overlay' ? 'Add lines' : '+ Add line';
+            const selectorCfg = q.lineItemConfig?.sectionSelector;
+            if (selectorCfg) {
+              const toolbar = document.createElement('div');
+              toolbar.className = 'line-item-toolbar';
+
+              const selectorLabel = document.createElement('label');
+              selectorLabel.style.marginBottom = '0';
+              selectorLabel.dataset.enLabel = selectorCfg.labelEn || '';
+              selectorLabel.dataset.frLabel = selectorCfg.labelFr || '';
+              selectorLabel.dataset.nlLabel = selectorCfg.labelNl || '';
+              selectorLabel.textContent = selectorCfg.labelEn || '';
+              toolbar.appendChild(selectorLabel);
+
+              const selector = document.createElement('select');
+              selector.name = selectorCfg.id;
+              selector.dataset.fieldId = selectorCfg.id;
+              selector.dataset.labelEn = (selectorCfg.labelEn || '').toLowerCase();
+              selector.required = !!selectorCfg.required;
+              const selectorOptions = {
+                en: selectorCfg.options || [],
+                fr: selectorCfg.optionsFr || [],
+                nl: selectorCfg.optionsNl || []
+              };
+              selector.dataset.originalOptions = JSON.stringify(selectorOptions);
+              const langKey = (state.language || 'EN').toLowerCase();
+              const labels = selectorOptions[langKey] || selectorOptions.en || [];
+              const baseOpts = selectorOptions.en || labels;
+              const emptyOpt = document.createElement('option');
+              emptyOpt.value = '';
+              emptyOpt.textContent = '';
+              selector.appendChild(emptyOpt);
+              labels.forEach((opt, idx) => {
+                const base = baseOpts[idx] || opt;
+                const optionEl = document.createElement('option');
+                optionEl.value = base;
+                optionEl.dataset.enLabel = selectorOptions.en?.[idx] || base;
+                optionEl.dataset.frLabel = selectorOptions.fr?.[idx] || base;
+                optionEl.dataset.nlLabel = selectorOptions.nl?.[idx] || base;
+                optionEl.textContent = opt;
+                selector.appendChild(optionEl);
+              });
+              toolbar.appendChild(selector);
+              container.insertBefore(toolbar, rowsWrapper);
+            }
+
+            if (q.lineItemConfig?.totals?.length) {
+              const totalsHolder = document.createElement('div');
+              totalsHolder.className = 'line-item-totals';
+              totalsHolder.dataset.lineTotals = q.id;
+              container.appendChild(totalsHolder);
+            }
+
+            field.appendChild(container);
+
+            state.lineItems[q.id] = state.lineItems[q.id] || [];
+            if (q.lineItemConfig?.addMode !== 'overlay') {
+              addLineItemRow(q, container);
+            }
+
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'secondary';
+            const defaultLabel = q.lineItemConfig?.addMode === 'overlay' ? 'Add lines' : '+ Add line';
             addBtn.dataset.defaultLabel = defaultLabel;
             if (q.lineItemConfig?.addButtonLabel) {
               addBtn.dataset.addLabels = JSON.stringify(q.lineItemConfig.addButtonLabel);
@@ -357,7 +437,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       function getLineItemRowCount(groupId) {
         const container = document.querySelector('[data-line-item="' + groupId + '"]');
         if (!container) return 0;
-        return container.querySelectorAll('.line-item-row').length;
+        return Array.from(container.querySelectorAll('.line-item-row')).filter(row => !row.classList.contains('is-hidden-field') && !isEmptyLineItemRow(row)).length;
       }
 
       function clearFieldErrorForTarget(target) {
@@ -438,6 +518,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           select.dataset.fieldId = q.id;
           select.dataset.labelEn = (q.label.en || '').toLowerCase();
           select.required = !!q.required;
+          const emptyOpt = document.createElement('option');
+          emptyOpt.value = '';
+          emptyOpt.textContent = '';
+          select.appendChild(emptyOpt);
           (q.options?.en || []).forEach((opt, idx) => {
             const option = document.createElement('option');
             option.value = opt;
@@ -491,6 +575,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           input.type = 'file';
           input.name = q.id;
           input.multiple = !q.uploadConfig || q.uploadConfig.maxFiles !== 1;
+          input.required = !!q.required;
           if (q.uploadConfig?.allowedExtensions?.length) {
             input.accept = q.uploadConfig.allowedExtensions.map(ext => ext.startsWith('.') ? ext : '.' + ext).join(',');
           }
@@ -509,16 +594,30 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       }
 
       function addLineItemRow(q, container, presetValues = {}) {
+        const rowsWrapper = container.querySelector('.line-item-rows') || container;
         const row = document.createElement('div');
         row.className = 'line-item-row';
+        row.dataset.groupId = q.id;
 
         (q.lineItemConfig?.fields || []).forEach(field => {
           const cell = document.createElement('div');
+          cell.dataset.fieldId = field.id;
+          cell.dataset.groupId = q.id;
           const lbl = document.createElement('label');
           lbl.dataset.enLabel = field.labelEn || '';
           lbl.dataset.frLabel = field.labelFr || '';
           lbl.dataset.nlLabel = field.labelNl || '';
-          lbl.textContent = field.labelEn || '';
+          lbl.textContent = '';
+          if (field.required) {
+            const star = document.createElement('span');
+            star.className = 'required-star';
+            star.textContent = '*';
+            lbl.appendChild(star);
+          }
+          const labelText = document.createElement('span');
+          labelText.dataset.labelText = 'true';
+          labelText.textContent = field.labelEn || '';
+          lbl.appendChild(labelText);
           cell.appendChild(lbl);
 
           let input;
@@ -526,6 +625,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             input = document.createElement('select');
             input.dataset.fieldId = field.id;
             input.dataset.labelEn = (field.labelEn || '').toLowerCase();
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = '';
+            emptyOpt.textContent = '';
+            input.appendChild(emptyOpt);
             (field.options || []).forEach((opt, idx) => {
               const option = document.createElement('option');
               option.value = opt;
@@ -571,6 +674,8 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           if (input && input.tagName !== 'DIV') {
             input.required = !!field.required;
             input.name = q.id + '__' + field.id;
+            input.dataset.fieldId = field.id;
+            input.dataset.labelEn = (field.labelEn || '').toLowerCase();
             if (presetValues[field.id] && 'value' in input) {
               input.value = presetValues[field.id];
             }
@@ -586,20 +691,68 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         removeBtn.className = 'secondary';
         removeBtn.textContent = 'Remove';
         removeBtn.addEventListener('click', () => {
-          container.removeChild(row);
+          if (row.parentElement) row.parentElement.removeChild(row);
+          updateLineItemTotals(q.id);
         });
         actions.appendChild(removeBtn);
         row.appendChild(actions);
 
-        container.appendChild(row);
+        row.addEventListener('input', () => updateLineItemTotals(q.id));
+        row.addEventListener('change', () => updateLineItemTotals(q.id));
+
+        rowsWrapper.appendChild(row);
         applyAllFilters(row);
+        updateLineItemTotals(q.id);
+      }
+
+      function formatTotalValue(value, decimalPlaces) {
+        const num = Number(value);
+        if (isNaN(num)) return '0';
+        if (typeof decimalPlaces === 'number' && !isNaN(decimalPlaces)) {
+          return num.toFixed(decimalPlaces);
+        }
+        return Number.isInteger(num) ? num.toString() : num.toFixed(2);
+      }
+
+      function updateLineItemTotals(groupId) {
+        const group = definition.questions.find((q) => q.id === groupId);
+        if (!group || group.type !== 'LINE_ITEM_GROUP' || !group.lineItemConfig?.totals?.length) return;
+        const container = document.querySelector('[data-line-item="' + groupId + '"]');
+        if (!container) return;
+        const holder = container.querySelector('[data-line-totals]');
+        if (!holder) return;
+        const rows = Array.from(container.querySelectorAll('.line-item-row')).filter((r) => !r.classList.contains('is-hidden-field') && !isEmptyLineItemRow(r));
+        holder.innerHTML = '';
+
+        group.lineItemConfig.totals.forEach((totalCfg) => {
+          let total = 0;
+          if (totalCfg.type === 'count') {
+            total = rows.length;
+          } else if (totalCfg.type === 'sum' && totalCfg.fieldId) {
+            rows.forEach((row) => {
+              const val = getRowValue(row, groupId + '__' + totalCfg.fieldId);
+              const parsed = Array.isArray(val) ? Number(val[0]) : Number(val);
+              if (!isNaN(parsed)) total += parsed;
+            });
+          }
+          const pill = document.createElement('div');
+          pill.className = 'line-item-total-pill';
+          const label = getLangLabel(totalCfg.label, totalCfg.type === 'count' ? 'Total' : (totalCfg.fieldId || 'Total'));
+          pill.textContent = label ? (label + ': ' + formatTotalValue(total, totalCfg.decimalPlaces)) : formatTotalValue(total, totalCfg.decimalPlaces);
+          holder.appendChild(pill);
+        });
       }
 
       function updateLanguage() {
         const current = state.language.toLowerCase();
         document.querySelectorAll('[data-en-label]').forEach(el => {
           const label = el.dataset[current + 'Label'] || el.dataset.enLabel || '';
-          el.textContent = label;
+          const textTarget = el.querySelector ? el.querySelector('[data-label-text]') : null;
+          if (textTarget) {
+            textTarget.textContent = label;
+          } else {
+            el.textContent = label;
+          }
         });
 
         document.querySelectorAll('option[data-en-label]').forEach(opt => {
@@ -628,7 +781,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           if (q.type === 'LINE_ITEM_GROUP') {
             const container = document.querySelector('[data-line-item="' + q.id + '"]');
             if (!container) return;
-            const rows = Array.from(container.querySelectorAll('.line-item-row'));
+            const rows = scopeRow ? [scopeRow] : Array.from(container.querySelectorAll('.line-item-row'));
             rows.forEach(row => {
               (q.lineItemConfig?.fields || []).forEach(field => {
                 if (!field.optionFilter) return;
@@ -676,6 +829,91 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             wrapper.appendChild(l);
           });
         });
+
+        // Apply visibility after options are filtered
+        definition.questions.forEach(q => {
+          if (q.visibility) applyVisibilityForQuestion(q);
+          if (q.type === 'LINE_ITEM_GROUP') {
+            const container = document.querySelector('[data-line-item="' + q.id + '"]');
+            if (!container) return;
+            const rows = Array.from(container.querySelectorAll('.line-item-row'));
+            rows.forEach(row => {
+              (q.lineItemConfig?.fields || []).forEach(field => {
+                if (!field.visibility) return;
+                applyVisibilityForLineItemField(q, field, row);
+              });
+            });
+          }
+        });
+
+        definition.questions.forEach(q => {
+          if (q.type === 'LINE_ITEM_GROUP') updateLineItemTotals(q.id);
+        });
+      }
+
+      function resolveVisibilityValue(condition, row, linePrefix) {
+        if (!condition) return '';
+        const targetId = condition.fieldId;
+        const scopedName = linePrefix ? (linePrefix + '__' + targetId) : targetId;
+        let value = row ? getRowValue(row, scopedName) : getValue(scopedName);
+        if ((value === '' || (Array.isArray(value) && value.length === 0)) && linePrefix) {
+          value = getValue(targetId);
+        }
+        return value;
+      }
+
+      function shouldHideFieldByVisibility(visibility, row, linePrefix) {
+        if (!visibility) return false;
+        const showMatch = visibility.showWhen ? matchesWhen(resolveVisibilityValue(visibility.showWhen, row, linePrefix), visibility.showWhen) : true;
+        const hideMatch = visibility.hideWhen ? matchesWhen(resolveVisibilityValue(visibility.hideWhen, row, linePrefix), visibility.hideWhen) : false;
+        if (visibility.showWhen && !showMatch) return true;
+        if (visibility.hideWhen && hideMatch) return true;
+        return false;
+      }
+
+      function toggleFieldVisibility(holder, shouldHide) {
+        if (!holder) return;
+        if (shouldHide) {
+          holder.classList.add('is-hidden-field');
+          const inputs = holder.querySelectorAll('input, select, textarea');
+          inputs.forEach(input => {
+            const data = input.dataset || {};
+            if (data.originalRequired === undefined) data.originalRequired = input.required ? 'true' : 'false';
+            input.required = false;
+            if (input instanceof HTMLInputElement && (input.type === 'checkbox' || input.type === 'radio')) {
+              input.checked = false;
+            } else {
+              try { input.value = ''; } catch (_) { /* ignore */ }
+            }
+          });
+          const err = holder.querySelector('.field-error');
+          if (err) err.remove();
+        } else {
+          holder.classList.remove('is-hidden-field');
+          const inputs = holder.querySelectorAll('input, select, textarea');
+          inputs.forEach(input => {
+            if (input.dataset && input.dataset.originalRequired === 'true') input.required = true;
+          });
+        }
+      }
+
+      function applyVisibilityForQuestion(q) {
+        const shouldHide = shouldHideFieldByVisibility(q.visibility, null, q.type === 'LINE_ITEM_GROUP' ? q.id : undefined);
+        const holder = questionsEl.querySelector('[data-qid="' + q.id + '"]');
+        toggleFieldVisibility(holder, shouldHide);
+      }
+
+      function applyVisibilityForLineItemField(group, field, row) {
+        const shouldHide = shouldHideFieldByVisibility(field.visibility, row, group.id);
+        const cell = row.querySelector('[data-field-id="' + field.id + '"][data-group-id="' + group.id + '"]') || row.querySelector('[name="' + group.id + '__' + field.id + '"]')?.closest('div');
+        toggleFieldVisibility(cell || row, shouldHide);
+      }
+
+      function isFieldHidden(fieldId, row) {
+        const el = findFieldElement(fieldId, row);
+        if (!el) return false;
+        const hiddenHolder = el.closest('.is-hidden-field');
+        return !!hiddenHolder;
       }
 
       function computeAllowedOptions(filter, options, row, linePrefix) {
@@ -699,7 +937,9 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         if (depValues.length > 1) candidateKeys.push(depValues.join('||'));
         depValues.filter(Boolean).forEach((v) => candidateKeys.push(v));
         candidateKeys.push('*');
-        return candidateKeys.reduce((acc, key) => acc || filter.optionMap[key], void 0) || options.en || [];
+        const match = candidateKeys.reduce((acc, key) => acc || filter.optionMap[key], void 0);
+        if (match) return match;
+        return [];
       }
 
       function applyFilter(el, filter, options, row, linePrefix) {
@@ -707,38 +947,64 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         const langKey = state.language.toLowerCase();
 
         const allowed = computeAllowedOptions(filter, options, row, linePrefix);
+        const getLabelForBase = (base) => {
+          const idx = Array.isArray(options.en) ? options.en.indexOf(base) : -1;
+          if (idx >= 0) return (options[langKey] || [])[idx] || base;
+          return base;
+        };
 
         if (el.tagName === 'SELECT') {
           const previous = el.value;
+          const currentSelections = previous ? [previous] : [];
+          const extras = currentSelections.filter((v) => v && !allowed.includes(v));
+          const allowedSet = new Set((allowed || []).map((v) => (v || '').toString().toLowerCase()));
+          const combined = [];
+          const seen = new Set();
+          [...allowed, ...extras].forEach((v) => {
+            if (seen.has(v)) return;
+            seen.add(v);
+            combined.push(v);
+          });
           el.innerHTML = '';
-          (options[langKey] || options.en || []).forEach((label, idx) => {
-            const base = options.en?.[idx] || label;
-            if (!allowed.includes(base)) return;
+          combined.forEach((base) => {
+            const optIdx = Array.isArray(options.en) ? options.en.indexOf(base) : -1;
+            const label = optIdx >= 0 ? ((options[langKey] || [])[optIdx] || base) : base;
             const opt = document.createElement('option');
             opt.value = base;
-            opt.dataset.enLabel = options.en?.[idx] || base;
-            opt.dataset.frLabel = options.fr?.[idx] || base;
-            opt.dataset.nlLabel = options.nl?.[idx] || base;
+            opt.dataset.enLabel = optIdx >= 0 ? (options.en?.[optIdx] || base) : base;
+            opt.dataset.frLabel = optIdx >= 0 ? (options.fr?.[optIdx] || base) : base;
+            opt.dataset.nlLabel = optIdx >= 0 ? (options.nl?.[optIdx] || base) : base;
             opt.textContent = label;
             if (previous && previous === base) opt.selected = true;
-            el.appendChild(opt);
+            if (!allowedSet.size || allowedSet.has(base.toLowerCase()) || extras.includes(base)) {
+              el.appendChild(opt);
+            }
           });
         } else {
           const wrapper = el.tagName === 'DIV' ? el : el.parentElement;
           const prevChecked = Array.from(wrapper.querySelectorAll('input[type="checkbox"]')).filter((c) => c.checked).map((c) => c.value);
+          const extras = prevChecked.filter((v) => v && !allowed.includes(v));
+          const allowedSet = new Set((allowed || []).map((v) => (v || '').toString().toLowerCase()));
+          const combined = [];
+          const seen = new Set();
+          [...allowed, ...extras].forEach((v) => {
+            if (seen.has(v)) return;
+            seen.add(v);
+            combined.push(v);
+          });
           wrapper.innerHTML = '';
           const nameAttr = (wrapper.dataset && wrapper.dataset.fieldName) || wrapper.getAttribute('name') || '';
-          (options[langKey] || options.en || []).forEach((label, idx) => {
-            const base = options.en?.[idx] || label;
-            if (!allowed.includes(base)) return;
+          combined.forEach((base, idx) => {
+            const label = getLabelForBase(base);
             const id = nameAttr + '_' + idx + '_' + Math.random().toString(16).slice(2);
             const l = document.createElement('label');
             l.className = 'inline';
             l.style.fontWeight = '400';
             l.htmlFor = id;
-            l.dataset.enLabel = options.en?.[idx] || base;
-            l.dataset.frLabel = options.fr?.[idx] || base;
-            l.dataset.nlLabel = options.nl?.[idx] || base;
+            const optIdx = Array.isArray(options.en) ? options.en.indexOf(base) : -1;
+            l.dataset.enLabel = optIdx >= 0 ? (options.en?.[optIdx] || base) : base;
+            l.dataset.frLabel = optIdx >= 0 ? (options.fr?.[optIdx] || base) : base;
+            l.dataset.nlLabel = optIdx >= 0 ? (options.nl?.[optIdx] || base) : base;
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.name = nameAttr;
@@ -750,7 +1016,9 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             span.textContent = label;
             l.appendChild(cb);
             l.appendChild(span);
-            wrapper.appendChild(l);
+            if (!allowedSet.size || allowedSet.has(base.toLowerCase()) || prevChecked.includes(base)) {
+              wrapper.appendChild(l);
+            }
           });
         }
       }
@@ -788,7 +1056,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
       function validateForm() {
         clearAllErrors();
-        const missingRequiredLineItem = definition.questions.find(q => q.type === 'LINE_ITEM_GROUP' && q.required && getLineItemRowCount(q.id) === 0);
+        const missingRequiredLineItem = definition.questions.find(q => q.type === 'LINE_ITEM_GROUP' && q.required && !isFieldHidden(q.id) && getLineItemRowCount(q.id) === 0);
         if (missingRequiredLineItem) {
           const msg = getLangLabel(
             { en: 'Please add at least one line.', fr: 'Ajoutez au moins une ligne.', nl: 'Voeg minstens één regel toe.' },
@@ -805,18 +1073,39 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             });
           }
         });
+        const fileQuestions = definition.questions.filter((q) => q.type === 'FILE_UPLOAD' && q.required);
+        for (const fq of fileQuestions) {
+          const fileInput = formEl.querySelector('input[type="file"][name="' + fq.id + '"]');
+          const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+          if (!hasFile) {
+            const msg = getLangLabel(
+              { en: 'Please upload a file.', fr: 'Veuillez t\u00e9l\u00e9charger un fichier.', nl: 'Upload een bestand.' },
+              'Please upload a file.'
+            );
+            return { message: msg, fieldId: fq.id, scope: 'main' };
+          }
+        }
 
         for (const entry of rules) {
           if (entry.scope === 'main') {
+            if (isFieldHidden(entry.rule.then.fieldId)) continue;
             const whenVal = getValue(entry.rule.when.fieldId);
             if (!matchesWhen(whenVal, entry.rule.when)) continue;
+            const targetQuestion = definition.questions.find((q) => q.id === entry.rule.then.fieldId);
+            if (targetQuestion && targetQuestion.type === 'LINE_ITEM_GROUP' && entry.rule.then.required) {
+              if (getLineItemRowCount(targetQuestion.id) === 0) {
+                const msg = checkRule('', entry.rule.then, entry.rule.message) || resolveMessage(defaultRuleMessages.required, 'This field is required.');
+                return { message: msg, fieldId: entry.rule.then.fieldId, scope: 'main' };
+              }
+              continue;
+            }
             const targetVal = getValue(entry.rule.then.fieldId);
             const msg = checkRule(targetVal, entry.rule.then, entry.rule.message);
             if (msg) return { message: msg, fieldId: entry.rule.then.fieldId, scope: 'main' };
           } else if (entry.scope === 'line' && entry.groupId) {
             const container = document.querySelector('[data-line-item="' + entry.groupId + '"]');
             if (!container) continue;
-            const rows = Array.from(container.querySelectorAll('.line-item-row'));
+            const rows = Array.from(container.querySelectorAll('.line-item-row')).filter((r) => !r.classList.contains('is-hidden-field') && !isEmptyLineItemRow(r));
             for (const row of rows) {
               const whenName = entry.groupId + '__' + entry.rule.when.fieldId;
               const thenName = entry.groupId + '__' + entry.rule.then.fieldId;
@@ -825,6 +1114,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
                 whenVal = getValue(entry.rule.when.fieldId);
               }
               if (!matchesWhen(whenVal, entry.rule.when)) continue;
+              if (isFieldHidden(entry.rule.then.fieldId, row)) continue;
               const targetVal = getRowValue(row, thenName);
               const msg = checkRule(targetVal, entry.rule.then, entry.rule.message);
               if (msg) return { message: msg, fieldId: entry.rule.then.fieldId, scope: 'line', row: row };
@@ -849,7 +1139,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       }
 
       function getRowValue(row, name) {
-        const els = row.querySelectorAll('[name="' + name + '"]');
+        let els = row.querySelectorAll('[name="' + name + '"]');
+        if (!els || els.length === 0) {
+          const wrapper = row.querySelector('[data-field-name="' + name + '"]');
+          if (wrapper) {
+            els = wrapper.querySelectorAll('input');
+          }
+        }
         if (!els || els.length === 0) return '';
         const el = els[0];
         if (el instanceof HTMLSelectElement) return el.value;
@@ -883,7 +1179,11 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         const values = Array.isArray(value) ? value : [value];
         const customMessage = resolveMessage(message, '');
         if (thenCfg?.required) {
-          const hasValue = values.some(v => v !== undefined && v !== null && v !== '');
+          const hasValue = values.some(v => {
+            if (v === undefined || v === null) return false;
+            if (typeof v === 'string') return v.trim() !== '';
+            return true;
+          });
           if (!hasValue) return customMessage || resolveMessage(defaultRuleMessages.required, 'This field is required.');
         }
         if (thenCfg?.min !== undefined) {
@@ -905,6 +1205,108 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           return customMessage || resolveMessage(defaultRuleMessages.disallowed, 'This combination is not allowed.');
         }
         return '';
+      }
+
+      function clearFieldValuesByName(name) {
+        if (!name) return;
+        const nodes = formEl.querySelectorAll('[name="' + name + '"]');
+        nodes.forEach((node) => {
+          if (node instanceof HTMLInputElement) {
+            if (node.type === 'checkbox' || node.type === 'radio') {
+              node.checked = false;
+            } else {
+              node.value = '';
+            }
+          } else if (node instanceof HTMLSelectElement || node instanceof HTMLTextAreaElement) {
+            node.value = '';
+          }
+        });
+      }
+
+      function resetLineItemGroup(q) {
+        const container = document.querySelector('[data-line-item="' + q.id + '"]');
+        if (!container) return;
+        const rowsWrapper = container.querySelector('.line-item-rows') || container;
+        rowsWrapper.innerHTML = '';
+        if (q.lineItemConfig?.addMode !== 'overlay') {
+          addLineItemRow(q, container);
+        }
+        const selector = q.lineItemConfig?.sectionSelector;
+        if (selector) {
+          const selectorEl = container.querySelector('select[name="' + selector.id + '"]');
+          if (selectorEl instanceof HTMLSelectElement) {
+            selectorEl.selectedIndex = 0;
+          }
+        }
+        const totals = container.querySelector('[data-line-totals]');
+        if (totals) totals.innerHTML = '';
+        const hidden = formEl.querySelector('[name="' + q.id + '_json"]');
+        if (hidden) hidden.value = '';
+        updateLineItemTotals(q.id);
+      }
+
+      function resetFormState(preserveLanguage = true) {
+        const currentLang = langSelect.value;
+        formEl.reset();
+        definition.questions.forEach(q => {
+          if (q.type === 'LINE_ITEM_GROUP') resetLineItemGroup(q);
+        });
+        clearAllErrors();
+        if (preserveLanguage && currentLang) {
+          langSelect.value = currentLang;
+          state.language = currentLang;
+        }
+        applyAllFilters();
+      }
+
+      function resolveFieldIdFromElement(el) {
+        if (!el) return '';
+        const datasetId = el.dataset?.fieldId;
+        if (datasetId) return datasetId;
+        const nameAttr = el.name || (typeof el.getAttribute === 'function' ? el.getAttribute('name') : '');
+        if (nameAttr) {
+          if (nameAttr.includes('__')) return nameAttr.split('__')[0];
+          return nameAttr;
+        }
+        const holder = (typeof el.closest === 'function') ? el.closest('[data-field-id]') : null;
+        if (holder && holder.dataset?.fieldId) return holder.dataset.fieldId;
+        return '';
+      }
+
+      function clearOtherFieldsExcept(fieldId) {
+        definition.questions.forEach(q => {
+          if (q.id === fieldId) return;
+          if (q.type === 'LINE_ITEM_GROUP') {
+            resetLineItemGroup(q);
+            return;
+          }
+          clearFieldValuesByName(q.id);
+          const hidden = formEl.querySelector('[name="' + q.id + '_json"]');
+          if (hidden) hidden.value = '';
+        });
+        clearAllErrors();
+      }
+
+      function isEmptyLineItemRow(row) {
+        if (!row) return true;
+        const inputs = Array.from(row.querySelectorAll('input, select, textarea'));
+        for (const input of inputs) {
+          if (input instanceof HTMLInputElement) {
+            if ((input.type === 'checkbox' || input.type === 'radio')) {
+              if (input.checked) return false;
+            } else {
+              const val = (input.value || '').trim();
+              if (val !== '') return false;
+            }
+          } else if (input instanceof HTMLSelectElement) {
+            const val = (input.value || '').trim();
+            if (val !== '') return false;
+          } else if (input instanceof HTMLTextAreaElement) {
+            const val = (input.value || '').trim();
+            if (val !== '') return false;
+          }
+        }
+        return true;
       }
 
       function openLineOverlay(group, container) {
@@ -956,16 +1358,16 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       function syncLineItemPayload() {
         definition.questions.forEach(q => {
           if (q.type !== 'LINE_ITEM_GROUP') return;
-          const container = document.querySelector('[data-line-item="' + q.id + '"]');
-          const hidden = formEl.querySelector('[name="' + q.id + '_json"]');
-          if (!container || !hidden) return;
+        const container = document.querySelector('[data-line-item="' + q.id + '"]');
+        const hidden = formEl.querySelector('[name="' + q.id + '_json"]');
+        if (!container || !hidden) return;
 
-          const rows = Array.from(container.querySelectorAll('.line-item-row'));
-          const data = rows.map(row => {
-            const result = {};
-            (q.lineItemConfig?.fields || []).forEach(field => {
-              const name = q.id + '__' + field.id;
-              const inputs = row.querySelectorAll('[name="' + name + '"]');
+        const rows = Array.from(container.querySelectorAll('.line-item-row')).filter((r) => !r.classList.contains('is-hidden-field') && !isEmptyLineItemRow(r));
+        const data = rows.map(row => {
+          const result = {};
+          (q.lineItemConfig?.fields || []).forEach(field => {
+            const name = q.id + '__' + field.id;
+            const inputs = row.querySelectorAll('[name="' + name + '"]');
               if (!inputs || inputs.length === 0) return;
               if (inputs[0].type === 'checkbox') {
                 const selected = Array.from(inputs).filter(i => i.checked).map(i => i.value);
@@ -1059,9 +1461,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
               .withSuccessHandler(() => {
                 statusEl.textContent = 'Saved!';
                 statusEl.className = 'status success';
-                formEl.reset();
-                clearAllErrors();
-                applyAllFilters();
+                resetFormState(true);
                 setSubmitting(false);
               })
               .withFailureHandler(err => {

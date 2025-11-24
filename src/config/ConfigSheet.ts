@@ -1,4 +1,17 @@
-import { FileUploadConfig, LineItemFieldConfig, LineItemGroupConfig, OptionFilter, QuestionConfig, QuestionType, BaseQuestionType, ValidationRule } from '../types';
+import {
+  BaseQuestionType,
+  FileUploadConfig,
+  LineItemFieldConfig,
+  LineItemGroupConfig,
+  LineItemSelectorConfig,
+  LineItemTotalConfig,
+  OptionFilter,
+  QuestionConfig,
+  QuestionType,
+  ValidationRule,
+  VisibilityCondition,
+  VisibilityConfig
+} from '../types';
 
 export class ConfigSheet {
   public static setupExample(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, name: string, exampleRows: any[]): void {
@@ -89,6 +102,8 @@ export class ConfigSheet {
       const uploadConfig = type === 'FILE_UPLOAD' ? this.parseUploadConfig(rawConfig || row[6]) : undefined;
       const optionFilter = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseOptionFilter(optionFilterRaw) : undefined;
       const validationRules = this.parseValidationRules(validationRaw);
+      const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
+      const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
       const statusRaw = row[9] ? row[9].toString().trim().toLowerCase() : 'active';
       const status = statusRaw === 'archived' ? 'Archived' : 'Active';
 
@@ -106,7 +121,9 @@ export class ConfigSheet {
         uploadConfig,
         lineItemConfig,
         optionFilter,
-        validationRules
+        validationRules,
+        visibility,
+        clearOnChange
       };
     });
   }
@@ -286,6 +303,68 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static safeParseObject(rawConfig: string): any | undefined {
+    if (!rawConfig || rawConfig.startsWith('REF:')) return undefined;
+    try {
+      const parsed = JSON.parse(rawConfig);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (_) {
+      // ignore
+    }
+    return undefined;
+  }
+
+  private static normalizeVisibilityCondition(raw: any): VisibilityCondition | undefined {
+    if (!raw || !raw.fieldId) return undefined;
+    const condition: VisibilityCondition = { fieldId: raw.fieldId };
+    if (raw.equals !== undefined) condition.equals = raw.equals;
+    if (raw.greaterThan !== undefined) condition.greaterThan = raw.greaterThan;
+    if (raw.lessThan !== undefined) condition.lessThan = raw.lessThan;
+    return condition;
+  }
+
+  private static normalizeVisibility(raw: any): VisibilityConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const showWhen = this.normalizeVisibilityCondition(raw.showWhen || raw.show || raw.visibleWhen);
+    const hideWhen = this.normalizeVisibilityCondition(raw.hideWhen || raw.hide || raw.hiddenWhen);
+    if (showWhen || hideWhen) return { showWhen, hideWhen };
+    return undefined;
+  }
+
+  private static parseVisibility(rawConfig: string): VisibilityConfig | undefined {
+    const parsed = this.safeParseObject(rawConfig);
+    if (!parsed) return undefined;
+    if (parsed.visibility) {
+      const vis = this.normalizeVisibility(parsed.visibility);
+      if (vis) return vis;
+    }
+    if (parsed.showWhen || parsed.hideWhen) {
+      const vis = this.normalizeVisibility(parsed);
+      if (vis) return vis;
+    }
+    return undefined;
+  }
+
+  private static parseVisibilityFromAny(rawConfigs: Array<string | undefined>): VisibilityConfig | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const vis = this.parseVisibility(raw);
+      if (vis) return vis;
+    }
+    return undefined;
+  }
+
+  private static parseClearOnChange(rawConfigs: Array<string | undefined>): boolean | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const parsed = this.safeParseObject(raw);
+      if (parsed && parsed.clearOnChange !== undefined) {
+        return !!parsed.clearOnChange;
+      }
+    }
+    return undefined;
+  }
+
   private static parseLineItemConfig(
     ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
     rawConfig: string,
@@ -317,6 +396,8 @@ export class ConfigSheet {
           : [];
         const refFields = jsonFields.length === 0 ? loadRefFields(optionsRef) : [];
         const mergedFields = jsonFields.length ? jsonFields : refFields;
+        const sectionSelector = this.normalizeLineItemSelector(ss, parsed.sectionSelector);
+        const totals = this.normalizeLineItemTotals(parsed.totals);
 
         return {
           minRows: parsed.minRows ? Number(parsed.minRows) : undefined,
@@ -324,6 +405,8 @@ export class ConfigSheet {
           addButtonLabel: parsed.addButtonLabel,
           anchorFieldId: parsed.anchorFieldId,
           addMode: parsed.addMode,
+          sectionSelector,
+          totals,
           fields: mergedFields
         };
       }
@@ -333,6 +416,58 @@ export class ConfigSheet {
 
     // If nothing parsed, return empty definition so downstream code can still render a table
     return { fields: [] };
+  }
+
+  private static normalizeLineItemSelector(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    rawSelector: any
+  ): LineItemSelectorConfig | undefined {
+    if (!rawSelector || typeof rawSelector !== 'object') return undefined;
+    const id = rawSelector.id || rawSelector.fieldId;
+    if (!id) return undefined;
+    let options: string[] = [];
+    let optionsFr: string[] = [];
+    let optionsNl: string[] = [];
+
+    if (rawSelector.optionsRef) {
+      const parsed = this.parseOptions(ss, rawSelector.optionsRef, rawSelector.optionsRefFr, rawSelector.optionsRefNl);
+      options = parsed.options;
+      optionsFr = parsed.optionsFr;
+      optionsNl = parsed.optionsNl;
+    } else {
+      options = Array.isArray(rawSelector.options) ? rawSelector.options : [];
+      optionsFr = Array.isArray(rawSelector.optionsFr) ? rawSelector.optionsFr : [];
+      optionsNl = Array.isArray(rawSelector.optionsNl) ? rawSelector.optionsNl : [];
+    }
+
+    return {
+      id: id.toString(),
+      labelEn: rawSelector.labelEn || '',
+      labelFr: rawSelector.labelFr || '',
+      labelNl: rawSelector.labelNl || '',
+      required: !!rawSelector.required,
+      options,
+      optionsFr,
+      optionsNl,
+      optionsRef: rawSelector.optionsRef
+    };
+  }
+
+  private static normalizeLineItemTotals(rawTotals: any): LineItemTotalConfig[] | undefined {
+    if (!Array.isArray(rawTotals)) return undefined;
+    const totals: LineItemTotalConfig[] = rawTotals.map((entry: any) => {
+      const typeVal = (entry?.type || (entry?.fieldId ? 'sum' : 'count')) as LineItemTotalConfig['type'];
+      const type: LineItemTotalConfig['type'] = typeVal === 'sum' ? 'sum' : 'count';
+      const cfg: LineItemTotalConfig = { type };
+      if (entry?.fieldId) cfg.fieldId = entry.fieldId;
+      if (entry?.label !== undefined) cfg.label = entry.label;
+      if (entry?.decimalPlaces !== undefined && entry.decimalPlaces !== null) {
+        const num = Number(entry.decimalPlaces);
+        if (!isNaN(num)) cfg.decimalPlaces = num;
+      }
+      return cfg;
+    }).filter(cfg => cfg.type === 'count' || !!cfg.fieldId);
+    return totals.length ? totals : undefined;
   }
 
   private static parseLineItemSheet(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, sheetName: string): LineItemGroupConfig | undefined {
@@ -349,6 +484,7 @@ export class ConfigSheet {
         const rawConfig = row[9] ? row[9].toString().trim() : '';
         const optionFilter = this.parseOptionFilter(rawConfig);
         const validationRules = this.parseValidationRules(rawConfig);
+        const visibility = this.parseVisibility(rawConfig);
       return {
         id: row[0] ? row[0].toString() : `LI${idx + 1}`,
         type: (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as BaseQuestionType,
@@ -360,7 +496,8 @@ export class ConfigSheet {
         optionsFr,
         optionsNl,
         optionFilter,
-        validationRules
+        validationRules,
+        visibility
       };
     }).filter(f => f.labelEn || f.labelFr || f.labelNl);
 
@@ -380,7 +517,8 @@ export class ConfigSheet {
       optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],
       optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : [],
       optionFilter: field?.optionFilter,
-      validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined
+      validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined,
+      visibility: this.normalizeVisibility(field?.visibility)
     };
   }
 }

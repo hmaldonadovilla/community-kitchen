@@ -45,7 +45,9 @@ export class WebFormService {
       lineItemConfig: q.lineItemConfig,
       uploadConfig: q.uploadConfig,
       optionFilter: q.optionFilter,
-      validationRules: q.validationRules
+      validationRules: q.validationRules,
+      visibility: q.visibility,
+      clearOnChange: q.clearOnChange
     }));
 
     return {

@@ -125,6 +125,41 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        The same operators (`equals`, `greaterThan`, `lessThan`) and actions (`required`, `min`, `max`, `allowed`, `disallowed`) work inside line items.
+   - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
+   - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
+   - **Quick recipe for the new features**:
+     - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
+
+       ```json
+       {
+         "sectionSelector": {
+           "id": "ITEM_FILTER",
+           "labelEn": "Category",
+           "optionsRef": "REF:SelectorOptions" // or inline: "options": ["Veg", "Dairy"], "optionsFr": [...]
+         },
+         "fields": [ ...your existing line-item fields... ]
+       }
+       ```
+
+       Use `ITEM_FILTER` in line-item `optionFilter.dependsOn` or validation `when.fieldId` so options/rules react to the selector.
+     - *Totals under line items*: In the same LINE_ITEM_GROUP JSON, append:
+
+       ```json
+       "totals": [
+         { "type": "count", "label": { "en": "Items" } },
+         { "type": "sum", "fieldId": "QTY", "label": { "en": "Total qty" }, "decimalPlaces": 1 }
+       ]
+       ```
+
+       `count` tallies visible rows; `sum` adds a numeric line-item field (`fieldId` required).
+     - *Show/hide logic*: Add `visibility` wherever you configure the field (Config JSON for main questions; line-item field Config column or inline field JSON):
+
+       ```json
+       { "visibility": { "showWhen": { "fieldId": "Supplier", "equals": "Local" } } }
+       ```
+
+       Supports `showWhen`/`hideWhen` with `equals`, `greaterThan`, `lessThan`. Line-item fields can reference top-level or sibling fields (including `sectionSelector`).
+     - *Clear-on-change reset*: On a controlling question add `clearOnChange: true` in Config JSON. When that field changes, all other fields and line items clear, then filters/visibility reapply. Handy for “mode” or “category” selectors.
 
 3. **Web App (Custom UI)**
    - Publish a **Web app** deployment pointing to `doGet`.

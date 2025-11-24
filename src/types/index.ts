@@ -13,6 +13,18 @@ export interface OptionFilter {
   optionMap: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
 }
 
+export interface VisibilityCondition {
+  fieldId: string;
+  equals?: string | string[];
+  greaterThan?: number | string;
+  lessThan?: number | string;
+}
+
+export interface VisibilityConfig {
+  showWhen?: VisibilityCondition;
+  hideWhen?: VisibilityCondition;
+}
+
 export type LocalizedString = string | {
   en?: string;
   fr?: string;
@@ -50,6 +62,26 @@ export interface LineItemFieldConfig {
   optionsNl: string[];
   optionFilter?: OptionFilter;
   validationRules?: ValidationRule[];
+  visibility?: VisibilityConfig;
+}
+
+export interface LineItemSelectorConfig {
+  id: string;
+  labelEn?: string;
+  labelFr?: string;
+  labelNl?: string;
+  options?: string[];
+  optionsFr?: string[];
+  optionsNl?: string[];
+  optionsRef?: string;
+  required?: boolean;
+}
+
+export interface LineItemTotalConfig {
+  type: 'sum' | 'count';
+  fieldId?: string; // required for sum, ignored for count
+  label?: LocalizedString;
+  decimalPlaces?: number;
 }
 
 export interface LineItemGroupConfig {
@@ -62,6 +94,8 @@ export interface LineItemGroupConfig {
   };
   anchorFieldId?: string; // field to drive overlay multi-add
   addMode?: 'overlay' | 'inline';
+  sectionSelector?: LineItemSelectorConfig;
+  totals?: LineItemTotalConfig[];
   fields: LineItemFieldConfig[];
 }
 
@@ -80,6 +114,8 @@ export interface QuestionConfig {
   lineItemConfig?: LineItemGroupConfig;
   optionFilter?: OptionFilter;
   validationRules?: ValidationRule[];
+  visibility?: VisibilityConfig;
+  clearOnChange?: boolean;
 }
 
 export interface FormConfig {
@@ -115,6 +151,8 @@ export interface WebQuestionDefinition {
   uploadConfig?: FileUploadConfig;
   optionFilter?: OptionFilter;
   validationRules?: ValidationRule[];
+  visibility?: VisibilityConfig;
+  clearOnChange?: boolean;
 }
 
 export interface WebFormDefinition {

@@ -44,6 +44,12 @@ components:
           items:
             $ref: '#/components/schemas/ValidationRule'
           description: Cross-field validation rules for this question.
+        visibility:
+          $ref: '#/components/schemas/VisibilityConfig'
+          description: Show or hide this question based on another field value.
+        clearOnChange:
+          type: boolean
+          description: If true, changing this field clears all other fields and line items.
         uploadConfig:
           $ref: '#/components/schemas/FileUploadConfig'
           description: Additional settings for FILE_UPLOAD questions. Provide as JSON in the `Config (JSON/REF)` column.
@@ -118,6 +124,9 @@ components:
           items:
             $ref: '#/components/schemas/ValidationRule'
           description: Cross-field validation rules inside the line item row.
+        visibility:
+          $ref: '#/components/schemas/VisibilityConfig'
+          description: Show/hide logic for this line item field based on another value.
 
     LineItemGroupConfig:
       type: object
@@ -145,6 +154,14 @@ components:
           type: string
           enum: [overlay, inline]
           description: Use `overlay` to open a multi-select overlay for anchor choices when adding rows.
+        sectionSelector:
+          $ref: '#/components/schemas/LineItemSelectorConfig'
+          description: Optional selector rendered above the line items to scope filters/validation rules (options can come from a REF tab).
+        totals:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemTotalConfig'
+          description: Totals to show under the line items (sum numeric fields or count rows).
         fields:
           type: array
           items:
@@ -181,6 +198,87 @@ components:
           "Carrots||Local": [Crates]
           Carrots: [Bags, Crates]
           "*": [Bags]
+
+    VisibilityCondition:
+      type: object
+      properties:
+        fieldId:
+          type: string
+        equals:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        greaterThan:
+          oneOf:
+            - type: number
+            - type: string
+        lessThan:
+          oneOf:
+            - type: number
+            - type: string
+
+    VisibilityConfig:
+      type: object
+      properties:
+        showWhen:
+          $ref: '#/components/schemas/VisibilityCondition'
+        hideWhen:
+          $ref: '#/components/schemas/VisibilityCondition'
+      description: Show/hide logic tied to another field value.
+
+    LineItemSelectorConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID used by option filters or validation rules to read the selector value.
+        labelEn:
+          type: string
+        labelFr:
+          type: string
+        labelNl:
+          type: string
+        optionsRef:
+          type: string
+          description: REF:TabName pointing to a 3-column list of options for the selector.
+        options:
+          type: array
+          items:
+            type: string
+        optionsFr:
+          type: array
+          items:
+            type: string
+        optionsNl:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+          description: Whether the selector is required before adding lines.
+
+    LineItemTotalConfig:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [sum, count]
+          description: Use `sum` to add numeric field values or `count` to count rows.
+        fieldId:
+          type: string
+          description: Line item field ID to sum (ignored for `count`).
+        label:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties:
+                type: string
+          description: Optional label shown before the aggregated value (supports localization keys).
+        decimalPlaces:
+          type: integer
+          description: Optional decimal precision for totals.
 
     ValidationRule:
       type: object
