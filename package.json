@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "Google Apps Script for Community Kitchen Forms",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --outfile=dist/Code.js --format=iife --global-name=CommunityKitchen && echo '\\nfunction setup() { CommunityKitchen.setup(); }\\nfunction createAllForms() { CommunityKitchen.createAllForms(); }\\nfunction translateAllResponses() { CommunityKitchen.translateAllResponses(); }\\nfunction onOpen() { CommunityKitchen.onOpen(); }\\nfunction installTriggers() { CommunityKitchen.installTriggers(); }\\nfunction onConfigEdit(e) { CommunityKitchen.onConfigEdit(e); }\\nfunction doGet(e) { return CommunityKitchen.doGet(e); }\\nfunction submitWebForm(formObject) { return CommunityKitchen.submitWebForm(formObject); }' >> dist/Code.js",
+    "build": "npm run build:web && npm run build:server",
+    "build:server": "esbuild src/index.ts --bundle --outfile=dist/Code.js --format=iife --global-name=CommunityKitchen && echo '\\nfunction setup() { CommunityKitchen.setup(); }\\nfunction createAllForms() { CommunityKitchen.createAllForms(); }\\nfunction translateAllResponses() { CommunityKitchen.translateAllResponses(); }\\nfunction onOpen() { CommunityKitchen.onOpen(); }\\nfunction installTriggers() { CommunityKitchen.installTriggers(); }\\nfunction onConfigEdit(e) { CommunityKitchen.onConfigEdit(e); }\\nfunction doGet(e) { return CommunityKitchen.doGet(e); }\\nfunction submitWebForm(formObject) { return CommunityKitchen.submitWebForm(formObject); }' >> dist/Code.js",
+    "build:web": "esbuild src/web/main.ts --bundle --outfile=dist/webform.js --format=iife --global-name=WebFormApp --target=es2019 && node scripts/embed-web-bundle.js",
     "test": "jest"
   },
   "keywords": [],

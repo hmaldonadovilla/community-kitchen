@@ -99,6 +99,19 @@ export interface LineItemGroupConfig {
   fields: LineItemFieldConfig[];
 }
 
+export interface SelectionEffect {
+  type: 'addLineItems';
+  groupId: string; // target line item group
+  preset?: Record<string, string | number>; // preset field values
+  triggerValues?: string[]; // which choice/checkbox values trigger this effect (defaults to any)
+}
+
+export interface DataSourceConfig {
+  id: string;
+  ref?: string; // optional reference key used by backend
+  mode?: 'options' | 'prefill';
+}
+
 export interface QuestionConfig {
   id: string;
   type: QuestionType;
@@ -116,6 +129,8 @@ export interface QuestionConfig {
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
   clearOnChange?: boolean;
+  dataSource?: DataSourceConfig;
+  selectionEffects?: SelectionEffect[];
 }
 
 export interface FormConfig {
@@ -153,6 +168,8 @@ export interface WebQuestionDefinition {
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
   clearOnChange?: boolean;
+  dataSource?: DataSourceConfig;
+  selectionEffects?: SelectionEffect[];
 }
 
 export interface WebFormDefinition {

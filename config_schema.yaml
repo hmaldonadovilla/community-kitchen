@@ -39,6 +39,16 @@ components:
         optionFilter:
           $ref: '#/components/schemas/OptionFilter'
           description: Optional dependency to filter options based on other field value(s).
+        dataSource:
+          $ref: '#/components/schemas/DataSourceConfig'
+          description: |
+            Optional remote data source for options or prefills. Use when a question's options should come from a backend source instead of static options/ref sheets.
+        selectionEffects:
+          type: array
+          items:
+            $ref: '#/components/schemas/SelectionEffect'
+          description: |
+            Effects triggered when specific choices/checkbox values are selected (e.g., auto-add line items with prefilled values).
         validationRules:
           type: array
           items:
@@ -198,6 +208,43 @@ components:
           "Carrots||Local": [Crates]
           Carrots: [Bags, Crates]
           "*": [Bags]
+
+    DataSourceConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Identifier to look up a backend data source (passed to Apps Script `fetchDataSource`).
+        ref:
+          type: string
+          description: Optional reference key to disambiguate multiple sources.
+        mode:
+          type: string
+          enum: [options, prefill]
+          description: Whether the source populates options or prefills values.
+      required:
+        - id
+
+    SelectionEffect:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [addLineItems]
+          description: Effect type. `addLineItems` will insert line-item rows.
+        groupId:
+          type: string
+          description: Target LINE_ITEM_GROUP id where rows are added.
+        preset:
+          type: object
+          additionalProperties:
+            type: [string, number]
+          description: Optional preset values for line-item fields when rows are added.
+        triggerValues:
+          type: array
+          items:
+            type: string
+          description: Choice/checkbox values that trigger the effect (omit to trigger on any selection).
 
     VisibilityCondition:
       type: object

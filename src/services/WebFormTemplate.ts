@@ -1,4 +1,5 @@
 import { WebFormDefinition } from '../types';
+import { WEB_FORM_BUNDLE } from '../web/webformBundle';
 
 /**
  * Builds the HTML string for the web form. Kept as a separate module to keep
@@ -7,6 +8,7 @@ import { WebFormDefinition } from '../types';
 export function buildWebFormHtml(def: WebFormDefinition, formKey: string): string {
   const defJson = JSON.stringify(def).replace(/</g, '\\u003c');
   const keyJson = JSON.stringify(formKey || def?.title || '');
+  const bundleScript = (WEB_FORM_BUNDLE || '').replace(/<\/script/gi, '<\\/script');
 
   return `<!DOCTYPE html>
 <html>
@@ -185,14 +187,24 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         </div>
       </div>
       <div class="card">
-        <form id="web-form">
-          <input type="hidden" name="formKey" value=${keyJson} />
-          <div id="questions"></div>
-          <div class="actions">
-            <button class="primary" type="submit">Submit</button>
-            <span id="status" class="status"></span>
+        <div id="view-container">
+          <div id="form-view">
+            <form id="web-form">
+              <input type="hidden" name="formKey" value=${keyJson} />
+              <div id="questions"></div>
+              <div class="actions">
+                <button class="primary" type="submit">Submit</button>
+                <span id="status" class="status"></span>
+              </div>
+            </form>
           </div>
-        </form>
+          <div id="summary-view" style="display:none;padding:12px;"></div>
+          <div id="followup-view" style="display:none;padding:12px;"></div>
+          <div id="list-view" style="display:none;padding:12px;"></div>
+          <div id="view-actions" style="display:none;padding:12px 0;gap:10px;flex-wrap:wrap;">
+            <button id="back-to-form" class="secondary" type="button">Submit another</button>
+          </div>
+        </div>
       </div>
       <div id="line-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.48);display:none;align-items:center;justify-content:center;z-index:9999;">
         <div class="panel" style="background:#fff;border-radius:16px;padding:16px;width:min(520px,92vw);box-shadow:0 18px 40px rgba(0,0,0,0.25);display:flex;flex-direction:column;gap:12px;">
@@ -205,9 +217,15 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         </div>
       </div>
     </div>
+    <script>${bundleScript}</script>
     <script>
       const definition = ${defJson};
       const formKey = ${keyJson};
+      window.__WEB_FORM_DEF__ = definition;
+      window.__WEB_FORM_KEY__ = formKey;
+      if (typeof WebFormApp !== 'undefined' && typeof WebFormApp.bootstrapWebForm === 'function') {
+        try { WebFormApp.bootstrapWebForm(definition, formKey); } catch (err) { console && console.error && console.error(err); }
+      }
 
       const viewportMeta = document.querySelector('meta[name="viewport"]');
       const originalViewport = viewportMeta?.getAttribute('content') || 'width=device-width, initial-scale=1';
@@ -219,6 +237,12 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       const questionsEl = document.getElementById('questions');
       const statusEl = document.getElementById('status');
       const formEl = document.getElementById('web-form');
+      const formView = document.getElementById('form-view');
+      const summaryView = document.getElementById('summary-view');
+      const followupView = document.getElementById('followup-view');
+      const listView = document.getElementById('list-view');
+      const viewActions = document.getElementById('view-actions');
+      const backToFormBtn = document.getElementById('back-to-form');
 
       const state = { language: 'EN', lineItems: {} };
       const defaultRuleMessages = {
@@ -285,8 +309,35 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           if (changedQuestion?.clearOnChange) {
             clearOtherFieldsExcept(changedId);
           }
+          if (window.WebFormApp && typeof WebFormApp.handleSelectionEffects === 'function' && changedQuestion) {
+            try {
+              const value = getValue(changedId);
+              WebFormApp.handleSelectionEffects(definition, changedQuestion, value, state.language, {
+                addLineItemRow: (groupId, preset) => {
+                  const container = document.querySelector('[data-line-item="' + groupId + '"]');
+                  const groupDef = definition.questions.find(q => q.id === groupId);
+                  if (container && groupDef && groupDef.type === 'LINE_ITEM_GROUP') {
+                    addLineItemRow(groupDef, container, preset || {});
+                  }
+                }
+              });
+            } catch (err) {
+              console && console.warn && console.warn('Selection effect failed', err);
+            }
+          }
           applyAllFilters();
         });
+
+        if (backToFormBtn) {
+          backToFormBtn.addEventListener('click', () => {
+            if (formView) formView.style.display = 'block';
+            if (summaryView) summaryView.style.display = 'none';
+            if (followupView) followupView.style.display = 'none';
+            if (listView) listView.style.display = 'none';
+            if (viewActions) viewActions.style.display = 'none';
+            resetFormState(true);
+          });
+        }
       }
 
       function lockViewport() {
@@ -410,13 +461,23 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             const defaultLabel = q.lineItemConfig?.addMode === 'overlay' ? 'Add lines' : '+ Add line';
             addBtn.dataset.defaultLabel = defaultLabel;
             if (q.lineItemConfig?.addButtonLabel) {
-              addBtn.dataset.addLabels = JSON.stringify(q.lineItemConfig.addButtonLabel);
-            }
-            addBtn.textContent = getLangLabel(q.lineItemConfig?.addButtonLabel, defaultLabel);
-            if (q.lineItemConfig?.addMode === 'overlay' && q.lineItemConfig.anchorFieldId) {
+            addBtn.dataset.addLabels = JSON.stringify(q.lineItemConfig.addButtonLabel);
+          }
+          addBtn.textContent = getLangLabel(q.lineItemConfig?.addButtonLabel, defaultLabel);
+          if (q.lineItemConfig?.addMode === 'overlay' && q.lineItemConfig.anchorFieldId) {
               addBtn.addEventListener('click', () => openLineOverlay(q, container));
             } else {
-              addBtn.addEventListener('click', () => addLineItemRow(q, container));
+              addBtn.addEventListener('click', () => {
+                if (window.WebFormApp && typeof WebFormApp.addLineItemRowFromBundle === 'function') {
+                  try {
+                    WebFormApp.addLineItemRowFromBundle(q, formEl, {});
+                    return;
+                  } catch (err) {
+                    console && console.warn && console.warn('addLineItemRow via bundle failed; using legacy', err);
+                  }
+                }
+                addLineItemRow(q, container);
+              });
             }
             field.appendChild(addBtn);
           } else {
@@ -600,6 +661,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         const rowsWrapper = container.querySelector('.line-item-rows') || container;
         const row = document.createElement('div');
         row.className = 'line-item-row';
+        row.dataset.rowId = q.id + '_' + Math.random().toString(16).slice(2);
         row.dataset.groupId = q.id;
 
         (q.lineItemConfig?.fields || []).forEach(field => {
@@ -728,6 +790,29 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         const rows = Array.from(container.querySelectorAll('.line-item-row')).filter((r) => !r.classList.contains('is-hidden-field') && !isEmptyLineItemRow(r));
         holder.innerHTML = '';
 
+        const rowData = rows.map((row) => {
+          const values = {};
+          (group.lineItemConfig?.fields || []).forEach((field) => {
+            values[field.id] = getRowValue(row, groupId + '__' + field.id);
+          });
+          return { id: row.dataset.rowId || '', values };
+        });
+
+        if (window.WebFormApp && typeof WebFormApp.computeLineTotals === 'function') {
+          try {
+            const totals = WebFormApp.computeLineTotals({ config: group.lineItemConfig, rows: rowData }, state.language);
+            totals.forEach((t) => {
+              const pill = document.createElement('div');
+              pill.className = 'line-item-total-pill';
+              pill.textContent = t.label ? t.label + ': ' + formatTotalValue(t.value, t.decimalPlaces) : formatTotalValue(t.value, t.decimalPlaces);
+              holder.appendChild(pill);
+            });
+            return;
+          } catch (err) {
+            console && console.warn && console.warn('Line totals via bundle failed; using legacy', err);
+          }
+        }
+
         group.lineItemConfig.totals.forEach((totalCfg) => {
           let total = 0;
           if (totalCfg.type === 'count') {
@@ -749,31 +834,60 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
       function updateLanguage() {
         const current = state.language.toLowerCase();
-        document.querySelectorAll('[data-en-label]').forEach(el => {
-          const label = el.dataset[current + 'Label'] || el.dataset.enLabel || '';
-          const textTarget = el.querySelector ? el.querySelector('[data-label-text]') : null;
-          if (textTarget) {
-            textTarget.textContent = label;
-          } else {
-            el.textContent = label;
+        if (window.WebFormApp && typeof WebFormApp.updateLanguageLabels === 'function') {
+          try {
+            WebFormApp.updateLanguageLabels({ language: state.language, root: document, definition });
+          } catch (err) {
+            console && console.warn && console.warn('Language update via bundle failed, using legacy path', err);
           }
-        });
+        } else {
+          document.querySelectorAll('[data-en-label]').forEach(el => {
+            const label = el.dataset[current + 'Label'] || el.dataset.enLabel || '';
+            const textTarget = el.querySelector ? el.querySelector('[data-label-text]') : null;
+            if (textTarget) {
+              textTarget.textContent = label;
+            } else {
+              el.textContent = label;
+            }
+          });
 
-        document.querySelectorAll('option[data-en-label]').forEach(opt => {
-          const label = opt.dataset[current + 'Label'] || opt.dataset.enLabel || '';
-          opt.textContent = label;
-        });
+          document.querySelectorAll('option[data-en-label]').forEach(opt => {
+            const label = opt.dataset[current + 'Label'] || opt.dataset.enLabel || '';
+            opt.textContent = label;
+          });
 
-        document.querySelectorAll('button[data-default-label]').forEach(btn => {
-          const defaultLabel = btn.dataset?.defaultLabel || '+ Add line';
-          const labels = btn.dataset?.addLabels ? JSON.parse(btn.dataset.addLabels) : void 0;
-          btn.textContent = getLangLabel(labels, defaultLabel);
-        });
+          document.querySelectorAll('button[data-default-label]').forEach(btn => {
+            const defaultLabel = btn.dataset?.defaultLabel || '+ Add line';
+            const labels = btn.dataset?.addLabels ? JSON.parse(btn.dataset.addLabels) : void 0;
+            btn.textContent = getLangLabel(labels, defaultLabel);
+          });
+        }
 
         applyAllFilters();
       }
 
       function applyAllFilters(scopeRow) {
+        if (window.WebFormApp && typeof WebFormApp.hydrateDataSources === 'function') {
+          WebFormApp.hydrateDataSources(definition, state.language, formEl)
+            .then(() => {
+              if (window.WebFormApp && typeof WebFormApp.applyFiltersAndVisibility === 'function') {
+                WebFormApp.applyFiltersAndVisibility({ definition, language: state.language, formEl, scopeRow });
+                definition.questions.forEach(q => { if (q.type === 'LINE_ITEM_GROUP') updateLineItemTotals(q.id); });
+              }
+            })
+            .catch(() => {
+              // ignore hydration errors; fall back below
+            });
+        }
+        if (window.WebFormApp && typeof WebFormApp.applyFiltersAndVisibility === 'function') {
+          try {
+            WebFormApp.applyFiltersAndVisibility({ definition, language: state.language, formEl, scopeRow });
+            definition.questions.forEach(q => { if (q.type === 'LINE_ITEM_GROUP') updateLineItemTotals(q.id); });
+            return;
+          } catch (err) {
+            console && console.warn && console.warn('applyFilters fallback to legacy due to error', err);
+          }
+        }
         definition.questions.forEach(q => {
           if ((q.type === 'CHOICE' || q.type === 'CHECKBOX') && q.optionFilter) {
             const target = q.type === 'CHECKBOX'
@@ -1060,6 +1174,18 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
       function validateForm() {
         clearAllErrors();
+        if (window.WebFormApp && typeof WebFormApp.validateFormWithBundle === 'function') {
+          try {
+            const result = WebFormApp.validateFormWithBundle(definition, state.language, formEl);
+            if (result && Array.isArray(result.errors) && result.errors.length) {
+              const first = result.errors[0];
+              const fieldEl = WebFormApp.resolveFieldElement ? WebFormApp.resolveFieldElement(first, formEl) : null;
+              return { message: first.message, fieldId: first.fieldId, scope: first.scope || 'main', row: fieldEl?.closest('.line-item-row') || undefined };
+            }
+          } catch (err) {
+            console && console.warn && console.warn('Validation via bundle failed; using legacy', err);
+          }
+        }
         const missingRequiredLineItem = definition.questions.find(q => q.type === 'LINE_ITEM_GROUP' && q.required && !isFieldHidden(q.id) && getLineItemRowCount(q.id) === 0);
         if (missingRequiredLineItem) {
           const msg = getLangLabel(
@@ -1079,11 +1205,12 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         });
         const fileQuestions = definition.questions.filter((q) => q.type === 'FILE_UPLOAD' && q.required);
         for (const fq of fileQuestions) {
+          if (isFieldHidden(fq.id)) continue;
           const fileInput = formEl.querySelector('input[type="file"][name="' + fq.id + '"]');
           const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
           if (!hasFile) {
             const msg = getLangLabel(
-              { en: 'Please upload a file.', fr: 'Veuillez t\u00e9l\u00e9charger un fichier.', nl: 'Upload een bestand.' },
+              { en: 'Please upload a file.', fr: 'Veuillez t\\u00e9l\\u00e9charger un fichier.', nl: 'Upload een bestand.' },
               'Please upload a file.'
             );
             return { message: msg, fieldId: fq.id, scope: 'main' };
@@ -1139,6 +1266,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           }
           return el.value;
         }
+        if (el instanceof HTMLTextAreaElement) return el.value;
         return '';
       }
 
@@ -1159,6 +1287,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           }
           return el.value;
         }
+        if (el instanceof HTMLTextAreaElement) return el.value;
         return '';
       }
 
@@ -1360,18 +1489,26 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       }
 
       function syncLineItemPayload() {
+        if (window.WebFormApp && typeof WebFormApp.syncLineItemPayload === 'function') {
+          try {
+            WebFormApp.syncLineItemPayload(definition, formEl);
+            return;
+          } catch (err) {
+            console && console.warn && console.warn('syncLineItemPayload via bundle failed; using legacy', err);
+          }
+        }
         definition.questions.forEach(q => {
           if (q.type !== 'LINE_ITEM_GROUP') return;
-        const container = document.querySelector('[data-line-item="' + q.id + '"]');
-        const hidden = formEl.querySelector('[name="' + q.id + '_json"]');
-        if (!container || !hidden) return;
+          const container = document.querySelector('[data-line-item="' + q.id + '"]');
+          const hidden = formEl.querySelector('[name="' + q.id + '_json"]');
+          if (!container || !hidden) return;
 
-        const rows = Array.from(container.querySelectorAll('.line-item-row')).filter((r) => !r.classList.contains('is-hidden-field') && !isEmptyLineItemRow(r));
-        const data = rows.map(row => {
-          const result = {};
-          (q.lineItemConfig?.fields || []).forEach(field => {
-            const name = q.id + '__' + field.id;
-            const inputs = row.querySelectorAll('[name="' + name + '"]');
+          const rows = Array.from(container.querySelectorAll('.line-item-row')).filter((r) => !r.classList.contains('is-hidden-field') && !isEmptyLineItemRow(r));
+          const data = rows.map(row => {
+            const result = {};
+            (q.lineItemConfig?.fields || []).forEach(field => {
+              const name = q.id + '__' + field.id;
+              const inputs = row.querySelectorAll('[name="' + name + '"]');
               if (!inputs || inputs.length === 0) return;
               if (inputs[0].type === 'checkbox') {
                 const selected = Array.from(inputs).filter(i => i.checked).map(i => i.value);
@@ -1388,6 +1525,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       }
 
       function buildPayloadFromForm() {
+        if (window.WebFormApp && typeof WebFormApp.buildPayloadFromForm === 'function') {
+          try {
+            return WebFormApp.buildPayloadFromForm(formEl);
+          } catch (err) {
+            console && console.warn && console.warn('buildPayloadFromForm via bundle failed; using legacy', err);
+          }
+        }
         const fd = new FormData(formEl);
         const payload = {};
         const fileReads = [];
@@ -1433,6 +1577,9 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         clearAllErrors();
         const validationError = validateForm();
         if (validationError) {
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[validateForm] blocking submission', validationError);
+          }
           showFieldError(validationError);
           return;
         }
@@ -1458,15 +1605,21 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         statusEl.textContent = 'Submitting...';
         statusEl.className = 'status';
 
-        buildPayloadFromForm()
+        const payloadPromise = buildPayloadFromForm();
+
+        payloadPromise
           .then(payload => {
             setSubmitting(true);
             google.script.run
               .withSuccessHandler(() => {
                 statusEl.textContent = 'Saved!';
                 statusEl.className = 'status success';
-                resetFormState(true);
                 setSubmitting(false);
+                try {
+                  showSummaryAndFollowUp(payload);
+                } catch (_) {
+                  resetFormState(true);
+                }
               })
               .withFailureHandler(err => {
                 statusEl.textContent = err && err.message ? err.message : 'Submission failed';
@@ -1491,6 +1644,47 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
             el.removeAttribute('disabled');
           }
         });
+      }
+
+      function showSummaryAndFollowUp(payload) {
+        if (!summaryView || !followupView || !formView || !viewActions) {
+          resetFormState(true);
+          return;
+        }
+        formView.style.display = 'none';
+        viewActions.style.display = 'flex';
+        summaryView.style.display = 'block';
+        followupView.style.display = 'block';
+        if (listView) listView.style.display = 'none';
+
+        summaryView.innerHTML = '';
+        followupView.innerHTML = '';
+
+        if (window.WebFormApp && typeof WebFormApp.renderSummaryView === 'function') {
+          try {
+            WebFormApp.renderSummaryView({
+              mount: summaryView,
+              definition,
+              language: state.language,
+              payload
+            });
+          } catch (err) {
+            console && console.warn && console.warn('renderSummaryView failed', err);
+          }
+        }
+
+        if (window.WebFormApp && typeof WebFormApp.renderFollowupView === 'function') {
+          try {
+            WebFormApp.renderFollowupView({
+              mount: followupView,
+              definition,
+              language: state.language,
+              actions: []
+            });
+          } catch (err) {
+            console && console.warn && console.warn('renderFollowupView failed', err);
+          }
+        }
       }
 
       init();
