@@ -19,7 +19,7 @@ export class ConfigSheet {
     
     const sheet = ss.insertSheet(name);
     const headers = [
-      ['ID', 'Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Status (Active/Archived)', 'Config (JSON/REF)', 'Option Filter (JSON)', 'Validation Rules (JSON)', 'Edit Options']
+      ['ID', 'Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Status (Active/Archived)', 'Config (JSON/REF)', 'Option Filter (JSON)', 'Validation Rules (JSON)', 'List View?', 'Edit Options']
     ];
     
     sheet.getRange(1, 1, 1, headers[0].length).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
@@ -68,8 +68,16 @@ export class ConfigSheet {
     const rule = SpreadsheetApp.newDataValidation().requireValueInList(['Active', 'Archived']).build();
     statusRange.setDataValidation(rule);
 
-    // Dropdown for Edit Options
-    const editRange = sheet.getRange(2, 14, 100, 1);
+    // List View? column (TRUE/FALSE)
+    const listViewRange = sheet.getRange(2, 14, 100, 1);
+    const listViewRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['TRUE', 'FALSE'])
+      .setAllowInvalid(true)
+      .build();
+    listViewRange.setDataValidation(listViewRule);
+
+    // Dropdown for Edit Options (shifted to column 15)
+    const editRange = sheet.getRange(2, 15, 100, 1);
     const editRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(['Edit'])
       .setAllowInvalid(true) // Allow invalid so we can replace with formula
@@ -88,32 +96,55 @@ export class ConfigSheet {
 
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) return []; // No questions
-    const lastColumn = Math.max(14, sheet.getLastColumn());
+    const lastColumn = Math.max(15, sheet.getLastColumn());
+    const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(h => (h || '').toString().trim().toLowerCase());
     const range = sheet.getRange(2, 1, lastRow - 1, lastColumn);
     const data = range.getValues();
-    
+
+    const findHeader = (labels: string[], fallbackIdx: number): number => {
+      const normalized = labels.map(l => l.toLowerCase());
+      const found = headers.findIndex(h => normalized.some(n => h === n || h.startsWith(n)));
+      return found >= 0 ? found : fallbackIdx;
+    };
+
+    const idxType = findHeader(['type'], 1);
+    const idxQEn = findHeader(['question (en)', 'question en'], 2);
+    const idxQFr = findHeader(['question (fr)'], 3);
+    const idxQNl = findHeader(['question (nl)'], 4);
+    const idxRequired = findHeader(['required'], 5);
+    const idxOptionsEn = findHeader(['options (en)'], 6);
+    const idxOptionsFr = findHeader(['options (fr)'], 7);
+    const idxOptionsNl = findHeader(['options (nl)'], 8);
+    const idxStatus = findHeader(['status'], 9);
+    const idxConfig = findHeader(['config', 'config (json/ref)'], 10);
+    const idxOptionFilter = findHeader(['option filter'], 11);
+    const idxValidation = findHeader(['validation rules'], 12);
+    const idxListView = findHeader(['list view', 'list view?'], 14);
+
     return data.map(row => {
-      const type = row[1] ? row[1].toString().toUpperCase() as QuestionType : 'TEXT';
-      const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
-      const rawConfig = row[10] ? row[10].toString().trim() : '';
-      const optionFilterRaw = row[11] ? row[11].toString().trim() : rawConfig;
-      const validationRaw = row[12] ? row[12].toString().trim() : rawConfig;
-      const lineItemConfig = type === 'LINE_ITEM_GROUP' ? this.parseLineItemConfig(ss, rawConfig || row[6], row[6]) : undefined;
+      const type = row[idxType] ? row[idxType].toString().toUpperCase() as QuestionType : 'TEXT';
+      const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[idxOptionsEn], row[idxOptionsFr], row[idxOptionsNl]);
+      const rawConfig = row[idxConfig] ? row[idxConfig].toString().trim() : '';
+      const optionFilterRaw = row[idxOptionFilter] ? row[idxOptionFilter].toString().trim() : rawConfig;
+      const validationRaw = row[idxValidation] ? row[idxValidation].toString().trim() : rawConfig;
+      const lineItemConfig = type === 'LINE_ITEM_GROUP' ? this.parseLineItemConfig(ss, rawConfig || row[idxOptionsEn], row[idxOptionsEn]) : undefined;
       const uploadConfig = type === 'FILE_UPLOAD' ? this.parseUploadConfig(rawConfig || row[6]) : undefined;
       const optionFilter = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseOptionFilter(optionFilterRaw) : undefined;
       const validationRules = this.parseValidationRules(validationRaw);
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
-      const statusRaw = row[9] ? row[9].toString().trim().toLowerCase() : 'active';
+      const statusRaw = row[idxStatus] ? row[idxStatus].toString().trim().toLowerCase() : 'active';
       const status = statusRaw === 'archived' ? 'Archived' : 'Active';
+      const listViewFlag = row[idxListView] !== '' && row[idxListView] !== null ? !!row[idxListView] : false;
 
       return {
         id: row[0] ? row[0].toString() : '',
         type,
-        qEn: row[2],
-        qFr: row[3],
-        qNl: row[4],
-        required: !!row[5],
+        qEn: row[idxQEn],
+        qFr: row[idxQFr],
+        qNl: row[idxQNl],
+        required: !!row[idxRequired],
+        listView: listViewFlag,
         options,
         optionsFr,
         optionsNl,
@@ -135,8 +166,23 @@ export class ConfigSheet {
     // Check if we are in a Config sheet (name starts with "Config")
     if (!sheet.getName().startsWith('Config')) return;
     
-    // Check if we are in the "Edit Options" column (Column 14 / N)
-    if (range.getColumn() !== 14) return;
+    // Dynamically find the "Edit Options" column (header may shift if columns are added)
+    let targetColumn = 14; // legacy fallback
+    try {
+      const headerRange = sheet.getRange(1, 1, 1, sheet.getLastColumn());
+      const headers = typeof headerRange.getValues === 'function' ? headerRange.getValues()[0] : [];
+      const editColIdx = headers.findIndex(h => {
+        const normalized = (h || '').toString().trim().toLowerCase();
+        return normalized === 'edit options' || normalized.startsWith('edit options');
+      });
+      if (editColIdx >= 0) {
+        targetColumn = editColIdx + 1; // convert to 1-based index
+      }
+    } catch (_) {
+      // If header lookup fails (e.g., during tests/mocks), fall back to legacy column
+      targetColumn = 14;
+    }
+    if (range.getColumn() !== targetColumn) return;
     
     // Check if the value is "Edit" (user selected from dropdown)
     if (e.value !== 'Edit') return;
@@ -153,6 +199,29 @@ export class ConfigSheet {
     if (type !== 'CHOICE' && type !== 'CHECKBOX' && type !== 'LINE_ITEM_GROUP') {
       SpreadsheetApp.getActiveSpreadsheet().toast('Option tabs are only available for CHOICE, CHECKBOX and LINE_ITEM_GROUP types.', 'Invalid Type');
       range.setValue(''); // Reset cell
+      return;
+    }
+
+    if (type === 'LINE_ITEM_GROUP') {
+      const refCell = sheet.getRange(row, 7); // Config (JSON/REF) commonly used for REF
+      const refValue = refCell.getValue();
+      let lineSheetName = '';
+      if (refValue && refValue.toString().startsWith('REF:')) {
+        lineSheetName = refValue.toString().substring(4).trim();
+      } else {
+        lineSheetName = `LineItems_${id}`;
+        refCell.setValue(`REF:${lineSheetName}`);
+      }
+      let lineSheet = ss.getSheetByName(lineSheetName);
+      if (!lineSheet) {
+        lineSheet = this.createLineItemRefSheet(ss, lineSheetName);
+      }
+      const ssId = ss.getId();
+      const sheetId = lineSheet.getSheetId().toString();
+      const url = `https://docs.google.com/spreadsheets/d/${ssId}/edit#gid=${sheetId}`;
+      const formula = `=HYPERLINK("${url}", "🔗 Edit Line Items")`;
+      range.setFormula(formula);
+      lineSheet.activate();
       return;
     }
 
@@ -233,6 +302,50 @@ export class ConfigSheet {
       optionsFr: rawFr ? rawFr.toString().split(',').map((s: string) => s.trim()).filter(Boolean) : [],
       optionsNl: rawNl ? rawNl.toString().split(',').map((s: string) => s.trim()).filter(Boolean) : []
     };
+  }
+
+  private static createLineItemRefSheet(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, name: string): GoogleAppsScript.Spreadsheet.Sheet {
+    const sheet = ss.insertSheet(name);
+  const headers = [
+      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Config (JSON/REF)', 'Option Filter (JSON)', 'Validation Rules (JSON)', 'List View?', 'Edit Options']
+    ];
+    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
+
+    // Data validation for Type column
+    const typeRange = sheet.getRange(2, 2, 200, 1);
+    const typeRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['DATE', 'TEXT', 'PARAGRAPH', 'NUMBER', 'CHOICE', 'CHECKBOX'])
+      .setAllowInvalid(false)
+      .build();
+    typeRange.setDataValidation(typeRule);
+
+    // Required column validation
+    const requiredRange = sheet.getRange(2, 6, 200, 1);
+    const requiredRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['TRUE', 'FALSE'])
+      .setAllowInvalid(false)
+      .build();
+    requiredRange.setDataValidation(requiredRule);
+
+    // List View? column (TRUE/FALSE)
+    const listViewRange = sheet.getRange(2, 13, 200, 1);
+    const listViewRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['TRUE', 'FALSE'])
+      .setAllowInvalid(true)
+      .build();
+    listViewRange.setDataValidation(listViewRule);
+
+    // Edit Options column validation (shifted)
+    const editRange = sheet.getRange(2, 14, 200, 1);
+    const editRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['Edit'])
+      .setAllowInvalid(true)
+      .build();
+    editRange.setDataValidation(editRule);
+
+    // Hide options columns to declutter
+    sheet.hideColumns(7, 3);
+    return sheet;
   }
 
   private static parseUploadConfig(rawConfig: string): FileUploadConfig | undefined {

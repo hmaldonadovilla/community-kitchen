@@ -1,6 +1,7 @@
 import { FormGenerator } from './services/FormGenerator';
 import { ConfigSheet } from './config/ConfigSheet';
 import { WebFormService } from './services/WebFormService';
+import { WebFormSubmission } from './types';
 
 export function setup(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -46,6 +47,55 @@ export function submitWebForm(formObject: any): { success: boolean; message: str
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.submitWebForm(formObject);
+}
+
+// New endpoints (scaffolding)
+export function fetchDataSource(
+  dataSourceId: string,
+  locale?: string,
+  projection?: string[],
+  limit?: number,
+  pageToken?: string
+): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchDataSource(dataSourceId, locale, projection, limit, pageToken);
+}
+
+export function fetchSubmissions(
+  formKey: string,
+  projection?: string[],
+  pageSize: number = 10,
+  pageToken?: string
+): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchSubmissions(formKey, projection, pageSize, pageToken);
+}
+
+export function fetchSubmissionsBatch(
+  formKey: string,
+  projection?: string[],
+  pageSize: number = 10,
+  pageToken?: string,
+  includePageRecords: boolean = true,
+  recordIds?: string[]
+): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchSubmissionsBatch(formKey, projection, pageSize, pageToken, includePageRecords, recordIds);
+}
+
+export function fetchSubmissionById(formKey: string, id: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchSubmissionById(formKey, id);
+}
+
+export function saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.saveSubmissionWithId(formObject);
 }
 
 export function installTriggers(): void {

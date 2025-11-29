@@ -109,7 +109,12 @@ export interface SelectionEffect {
 export interface DataSourceConfig {
   id: string;
   ref?: string; // optional reference key used by backend
-  mode?: 'options' | 'prefill';
+  mode?: 'options' | 'prefill' | 'list';
+  sheetId?: string; // optional sheet id when sourcing from another file
+  tabName?: string; // tab name for the source table
+  localeKey?: string; // optional column used to scope localized rows
+  projection?: string[]; // limit columns returned
+  mapping?: Record<string, string>; // optional map from source column -> target field id
 }
 
 export interface QuestionConfig {
@@ -119,6 +124,7 @@ export interface QuestionConfig {
   qFr: string;
   qNl: string;
   required: boolean;
+  listView?: boolean;
   options: string[];      // English options
   optionsFr: string[];    // French options
   optionsNl: string[];    // Dutch options
@@ -157,6 +163,7 @@ export interface WebQuestionDefinition {
     nl: string;
   };
   required: boolean;
+  listView?: boolean;
   options?: {
     en: string[];
     fr: string[];
@@ -178,6 +185,10 @@ export interface WebFormDefinition {
   destinationTab: string;
   languages: Array<'EN' | 'FR' | 'NL'>;
   questions: WebQuestionDefinition[];
+  dataSources?: DataSourceConfig[];
+  listView?: ListViewConfig;
+  dedupRules?: DedupRule[];
+  startRoute?: 'list' | 'form' | 'summary' | string;
 }
 
 export interface WebFormSubmission {
@@ -185,4 +196,48 @@ export interface WebFormSubmission {
   language: 'EN' | 'FR' | 'NL';
   // Raw form payload; values can be strings, arrays (checkbox), blobs (file upload), or JSON strings
   values: Record<string, any>;
+  id?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ListViewColumnConfig {
+  fieldId: string;
+  label?: LocalizedString;
+}
+
+export interface ListViewConfig {
+  columns: ListViewColumnConfig[];
+  defaultSort?: {
+    fieldId: string;
+    direction?: 'asc' | 'desc';
+  };
+  pageSize?: number;
+}
+
+export interface DedupRule {
+  id: string;
+  scope?: 'form' | string; // optionally point to a dataSourceId
+  keys: string[];
+  matchMode?: 'exact' | 'caseInsensitive';
+  onConflict?: 'reject' | 'ignore' | 'merge';
+  message?: LocalizedString;
+  mergeHandlerKey?: string; // only when onConflict = merge
+}
+
+export interface RecordMetadata {
+  id?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  nextPageToken?: string;
+  totalCount?: number;
+}
+
+export interface SubmissionBatchResult<T = Record<string, any>> {
+  list: PaginatedResult<T>;
+  records: Record<string, WebFormSubmission>;
 }

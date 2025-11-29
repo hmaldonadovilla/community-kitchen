@@ -13,16 +13,32 @@ import { createViewRouter } from './views/router';
 import { renderListView } from './views/listView';
 import { renderSummaryView } from './views/summaryView';
 import { renderFollowupView } from './views/followupView';
+import { fetchSubmissionsPage } from './data/submissions';
+import { submitWithDedup } from './data/submit';
 
 export interface BootstrapOptions {
   onReady?: (definition: WebFormDefinition, formKey?: string) => void;
+  mountListView?: HTMLElement;
+  formMount?: HTMLElement;
 }
 
 export function bootstrapWebForm(definition: WebFormDefinition, formKey?: string, opts?: BootstrapOptions): void {
   const initialLang = (definition.languages && definition.languages[0]) || ('EN' as LangCode);
   setState({ language: initialLang });
   if (opts?.onReady) opts.onReady(definition, formKey);
-  // UI wiring will be added in subsequent steps; keep bootstrap lightweight and side-effect free.
+  // Optionally render list view if a mount is provided
+  if (opts?.mountListView) {
+    renderListView({
+      mount: opts.mountListView,
+      definition,
+      language: initialLang,
+      fetchRows: (pageToken?: string) => fetchSubmissionsPage({ formKey, pageToken }),
+      onSelectRow: (row) => {
+        // set record meta to enable prefill in a downstream flow
+        setState({ recordMeta: { id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt } });
+      }
+    });
+  }
   if (typeof console !== 'undefined') {
     console.info('[WebFormApp] bootstrapped', { formKey, language: initialLang });
   }
@@ -52,6 +68,8 @@ declare global {
       renderListView?: typeof renderListView;
       renderSummaryView?: typeof renderSummaryView;
       renderFollowupView?: typeof renderFollowupView;
+      fetchSubmissionsPage?: typeof fetchSubmissionsPage;
+      submitWithDedup?: typeof submitWithDedup;
     };
     __WEB_FORM_DEF__?: WebFormDefinition;
     __WEB_FORM_KEY__?: string;
@@ -79,4 +97,6 @@ if (typeof window !== 'undefined') {
   window.WebFormApp.renderListView = renderListView;
   window.WebFormApp.renderSummaryView = renderSummaryView;
   window.WebFormApp.renderFollowupView = renderFollowupView;
+  window.WebFormApp.fetchSubmissionsPage = fetchSubmissionsPage;
+  window.WebFormApp.submitWithDedup = submitWithDedup;
 }

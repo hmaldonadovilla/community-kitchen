@@ -6,7 +6,7 @@ declare const google: {
     run?: {
       withSuccessHandler: (cb: (res: any) => void) => any;
       withFailureHandler: (cb: (err: any) => void) => any;
-      fetchDataSource?: (id: string, language: LangCode) => void;
+      fetchDataSource?: (config: any, locale?: LangCode, projection?: string[], limit?: number, pageToken?: string) => void;
     };
   };
 } | undefined;
@@ -36,7 +36,7 @@ export async function fetchDataSource(
           resolve(res);
         })
         .withFailureHandler(() => resolve(null))
-        .fetchDataSource?.(config.id, language);
+        .fetchDataSource?.(config, language, config.projection, config.limit, undefined);
     } catch (_) {
       resolve(null);
     }
@@ -50,6 +50,21 @@ export async function resolveQuestionOptionsFromSource(
   if (!question.dataSource || question.type !== 'CHOICE') return null;
   const res = await fetchDataSource(question.dataSource, language);
   if (!res) return null;
-  if (Array.isArray(res)) return res;
-  return null;
+  const items = Array.isArray((res as any).items) ? (res as any).items : Array.isArray(res) ? res : [];
+  if (!items.length) return null;
+
+  const mapping = (question.dataSource as any).mapping || {};
+  const valueKey = mapping.value || mapping.id;
+
+  if (typeof items[0] === 'object' && !Array.isArray(items[0])) {
+    const keys = Object.keys(items[0]);
+    if (!keys.length) return null;
+    const resolvedKey = valueKey || keys[0];
+    return items
+      .map((row: any) => row[resolvedKey])
+      .filter(Boolean)
+      .map((v: any) => v.toString());
+  }
+
+  return (items as any[]).map(v => v != null ? v.toString() : '').filter(Boolean);
 }

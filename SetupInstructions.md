@@ -44,6 +44,7 @@ This project uses TypeScript. You need to build the script before using it in Go
    - **Form ID / URLs**: Leave these blank. The script will fill them in.
 2. **Config Sheets**: Create new sheets (tabs) for each form.
    - Copy the header row from an example sheet (includes `Config (JSON/REF)` for line items or file upload settings).
+   - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text.
    - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
    - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN/FR/NL, Required?, Options EN/FR/NL). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
      - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
@@ -179,10 +180,38 @@ This project uses TypeScript. You need to build the script before using it in Go
 
        Supports `showWhen`/`hideWhen` with `equals`, `greaterThan`, `lessThan`. Line-item fields can reference top-level or sibling fields (including `sectionSelector`).
      - *Clear-on-change reset*: On a controlling question add `clearOnChange: true` in Config JSON. When that field changes, all other fields and line items clear, then filters/visibility reapply. Handy for “mode” or “category” selectors.
+     - *List view (start on list)*: Add a `List View?` column to the config sheet and mark `TRUE` on the fields you want to display in the list. If at least one is `TRUE`, the form definition includes `listView` and `startRoute: "list"` so the app opens in list mode showing those fields plus `createdAt`/`updatedAt` with pagination.
+     - *Data sources (options/prefill from sheets/tabs)*: For CHOICE/CHECKBOX questions (or line-item fields via field JSON), set `dataSource`:
+
+       ```json
+       {
+         "dataSource": {
+           "id": "1abcDEFsheetId::Products",    // or "Products" for same spreadsheet tab
+           "projection": ["name_en"],
+           "localeKey": "locale",               // optional column used to filter by locale
+           "mapping": { "name_en": "value" },   // optional source->target remap
+           "limit": 100,
+           "mode": "options"
+         }
+       }
+       ```
+
+       The backend `fetchDataSource` reads that tab (or external sheet id + tab) with projection, locale filtering, and mapping. For prefilling line items, include the `mapping` that matches source columns to target field ids.
+     - *List view support*: The web app list view is paginated and shows `createdAt`/`updatedAt`. Configure which columns to display via the form definition’s `listView` (field ids). Backend uses `fetchSubmissions`/`fetchSubmissionById`; save uses `saveSubmissionWithId`.
+     - *Dedup rules*: Create a sheet named `<Config Sheet Name> Dedup` (e.g., `Config: Fridge Dedup`) with columns:
+       1) Rule ID
+       2) Scope (`form` or a `dataSourceId` if dedup checks another tab)
+       3) Keys (comma-separated field ids forming the uniqueness composite)
+       4) Match mode (`exact` or `caseInsensitive`)
+       5) On conflict (`reject`, `ignore`, `merge` – merge not implemented)
+       6) Message (string or localized JSON)
+
+       Example row: `uniqueNameDate | form | name,date | caseInsensitive | reject | {"en":"Duplicate entry","fr":"Entrée dupliquée"}`. On submit, duplicates are rejected and the message is returned to the frontend.
 
 3. **Web App (Custom UI)**
    - Publish a **Web app** deployment pointing to `doGet`.
    - Share the deployment URL with volunteers; submissions will be written directly to the destination tab and support line items + file uploads.
+   - The web app supports list views (paginated) and edit-in-place. The frontend uses `fetchSubmissions` and `fetchSubmissionById` to open existing records with `createdAt`/`updatedAt`. Save calls `saveSubmissionWithId` (or client helper `submitWithDedup`), which enforces dedup rules and returns any conflict messages to display.
    - Validation errors surface in-context: the first invalid field is highlighted and auto-scrolled into view, and a red banner appears under the submit button on long forms.
    - Optional: add `?form=ConfigSheetName` to target a specific form (defaults to the first dashboard entry).
 

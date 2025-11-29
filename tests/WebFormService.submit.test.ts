@@ -35,10 +35,10 @@ describe('WebFormService submitWebForm', () => {
     expect(result.success).toBe(true);
     const sheet = ss.getSheetByName('Test Responses');
     const rows = sheet?.getValues() || [];
-    // Row 0 headers, Row 1 data
-    expect(rows[1][0]).toBeInstanceOf(Date); // Timestamp
-    expect(rows[1][1]).toBe('FR');           // Language
-    expect(rows[1][2]).toBe('Alice');        // Q1
-    expect(rows[1][3]).toBe('Blue');         // Q2
+    // Row 0 headers, Row 1 data (Language now first column; Created At is meta)
+    expect(rows[1][0]).toBe('FR');           // Language
+    expect(rows[1][1]).toBe('Alice');        // Q1
+    expect(rows[1][2]).toBe('Blue');         // Q2
+    expect(rows[1][4]).toBeInstanceOf(Date); // Created At
   });
 });

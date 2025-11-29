@@ -87,21 +87,28 @@ export class FormGenerator {
       sheet = this.ss.insertSheet(destinationTab);
     }
 
-    const headers = ['Timestamp', 'Language', ...questions.map(q => q.qEn || q.id)];
-    const headerRange = sheet.getRange(1, 1, 1, headers.length);
-    const existing = headerRange.getValues()[0];
-    const needsHeader = existing.filter(v => v).length === 0;
+    const lastColumn = Math.max(sheet.getLastColumn(), 1);
+    const existingRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+    const existingHeaders = existingRow.map(h => (h || '').toString().trim()).filter(Boolean);
+    const hasTimestamp = existingHeaders.some(h => h.toLowerCase() === 'timestamp');
+    const baseHeaders = [
+      ...(hasTimestamp ? ['Timestamp'] : []),
+      'Language',
+      ...questions.map(q => q.qEn || q.id),
+      'Record ID',
+      'Created At',
+      'Updated At'
+    ];
 
-    if (needsHeader) {
-      headerRange.setValues([headers]).setFontWeight('bold');
-    } else {
-      headers.forEach((h, idx) => {
-        const current = existing[idx];
-        if (!current) {
-          sheet.getRange(1, idx + 1).setValue(h).setFontWeight('bold');
-        }
-      });
-    }
+    const headers = existingHeaders.length ? [...existingHeaders] : [];
+    baseHeaders.forEach(label => {
+      if (!headers.some(h => h.toLowerCase() === label.toLowerCase())) {
+        headers.push(label);
+      }
+    });
+
+    const finalHeaders = headers.length ? headers : baseHeaders;
+    sheet.getRange(1, 1, 1, finalHeaders.length).setValues([finalHeaders]).setFontWeight('bold');
 
     return sheet;
   }

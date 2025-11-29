@@ -65,10 +65,10 @@ describe('WebFormService', () => {
     expect(sheet).toBeDefined();
 
     const values = sheet!.getRange(1, 1, sheet!.getLastRow(), sheet!.getLastColumn()).getValues();
-    expect(values[0][0]).toBe('Timestamp');
-    expect(values[1][1]).toBe('EN');
-    expect(values[1][2]).toBe('Alice');
-    expect(values[1][3]).toContain('Apples');
-    expect(values[1][4]).toContain('http://file-url');
+    expect(values[0][0]).toBe('Language');
+    expect(values[1][0]).toBe('EN');
+    expect(values[1][1]).toBe('Alice');
+    expect(values[1][2]).toContain('Apples');
+    expect(values[1][3]).toContain('http://file-url');
   });
 });

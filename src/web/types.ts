@@ -1,4 +1,8 @@
 import {
+  DedupRule,
+  ListViewConfig,
+  PaginatedResult,
+  RecordMetadata,
   LineItemGroupConfig,
   LocalizedString,
   OptionFilter,
@@ -22,6 +26,7 @@ export interface FormState {
   values: Record<string, FieldValue>;
   lineItems: Record<string, LineItemRowState[]>;
   submitting: boolean;
+  recordMeta?: RecordMetadata;
 }
 
 export interface OptionSet {
@@ -62,5 +67,9 @@ export {
   LocalizedString,
   OptionFilter,
   VisibilityConfig,
-  ValidationRule
+  ValidationRule,
+  ListViewConfig,
+  DedupRule,
+  PaginatedResult,
+  RecordMetadata
 };

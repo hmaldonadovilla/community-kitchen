@@ -5,12 +5,45 @@ import { WEB_FORM_BUNDLE } from '../web/webformBundle';
  * Builds the HTML string for the web form. Kept as a separate module to keep
  * WebFormService focused on data and submission logic.
  */
-export function buildWebFormHtml(def: WebFormDefinition, formKey: string): string {
-  const defJson = JSON.stringify(def).replace(/</g, '\\u003c');
-  const keyJson = JSON.stringify(formKey || def?.title || '');
-  const bundleScript = (WEB_FORM_BUNDLE || '').replace(/<\/script/gi, '<\\/script');
+const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
+const SCRIPT_CLOSE_ESCAPED = String.raw`<\\/script`;
+const replaceScriptTerminators = (value: string): string => {
+  const str = value.toString();
+  const replaceAllFn = (str as any).replaceAll as ((pattern: RegExp | string, replacement: string) => string) | undefined;
+  if (typeof replaceAllFn === 'function') {
+    return replaceAllFn.call(str, SCRIPT_CLOSE_PATTERN, SCRIPT_CLOSE_ESCAPED);
+  }
+  // Fallback for ES2019 target
+  return str.replace(SCRIPT_CLOSE_PATTERN, SCRIPT_CLOSE_ESCAPED);
+};
+const escapeScriptTerminator = (value: string): string => replaceScriptTerminators(value);
+const escapeForSrcdoc = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+const isServerDebugEnabled = (): boolean => {
+  try {
+    const props = (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties)
+      ? PropertiesService.getScriptProperties()
+      : undefined;
+    const flag = props?.getProperty('CK_DEBUG');
+    if (!flag) return false;
+    return flag === '1' || flag.toLowerCase() === 'true';
+  } catch (_) {
+    return false;
+  }
+};
 
-  return `<!DOCTYPE html>
+export function buildWebFormHtml(def: WebFormDefinition, formKey: string): string {
+  const debugEnabled = isServerDebugEnabled();
+  const defJson = escapeScriptTerminator(JSON.stringify(def).replace(/</g, '\\u003c'));
+  const keyJson = escapeScriptTerminator(JSON.stringify(formKey || def?.title || ''));
+  const bundleScript = escapeScriptTerminator(WEB_FORM_BUNDLE || '');
+
+  const formHtml = `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -191,9 +224,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           <div id="form-view">
             <form id="web-form">
               <input type="hidden" name="formKey" value=${keyJson} />
+              <input type="hidden" name="id" id="record-id" value="" />
               <div id="questions"></div>
-              <div class="actions">
-                <button class="primary" type="submit">Submit</button>
+              <div class="actions" style="display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                  <button id="back-to-list-inline" class="secondary" type="button" style="display:none;flex:1;max-width:33%;">Back to list</button>
+                  <button class="primary" type="submit" style="flex:2;">Submit</button>
+                </div>
                 <span id="status" class="status"></span>
               </div>
             </form>
@@ -202,6 +239,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           <div id="followup-view" style="display:none;padding:12px;"></div>
           <div id="list-view" style="display:none;padding:12px;"></div>
           <div id="view-actions" style="display:none;padding:12px 0;gap:10px;flex-wrap:wrap;">
+            <button id="new-record" class="secondary" type="button">New record</button>
             <button id="back-to-form" class="secondary" type="button">Submit another</button>
           </div>
         </div>
@@ -217,14 +255,37 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         </div>
       </div>
     </div>
+    <script>
+      if (typeof google === 'undefined' && parent && parent.google) {
+        window.google = parent.google;
+      }
+    </script>
     <script>${bundleScript}</script>
     <script>
+      const __WEB_FORM_DEBUG__ = ${debugEnabled ? 'true' : 'false'};
       const definition = ${defJson};
       const formKey = ${keyJson};
       window.__WEB_FORM_DEF__ = definition;
       window.__WEB_FORM_KEY__ = formKey;
+      if (__WEB_FORM_DEBUG__ && console && console.info) {
+        try {
+          console.info('[WebForm] inline script loaded', { questionCount: definition.questions?.length || 0, languages: definition.languages });
+        } catch (_) {}
+      }
       if (typeof WebFormApp !== 'undefined' && typeof WebFormApp.bootstrapWebForm === 'function') {
-        try { WebFormApp.bootstrapWebForm(definition, formKey); } catch (err) { console && console.error && console.error(err); }
+        try {
+          WebFormApp.bootstrapWebForm(definition, formKey, {
+            mountListView: document.getElementById('list-view'),
+            onReady: () => {
+              if (definition.startRoute === 'list') {
+                document.getElementById('form-view').style.display = 'none';
+                document.getElementById('list-view').style.display = 'block';
+              }
+            },
+          });
+        } catch (err) {
+          console && console.error && console.error(err);
+        }
       }
 
       const viewportMeta = document.querySelector('meta[name="viewport"]');
@@ -238,13 +299,31 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       const statusEl = document.getElementById('status');
       const formEl = document.getElementById('web-form');
       const formView = document.getElementById('form-view');
+      const recordIdInput = document.getElementById('record-id');
       const summaryView = document.getElementById('summary-view');
       const followupView = document.getElementById('followup-view');
       const listView = document.getElementById('list-view');
       const viewActions = document.getElementById('view-actions');
+      const newRecordBtn = document.getElementById('new-record');
       const backToFormBtn = document.getElementById('back-to-form');
+      const backToListInline = document.getElementById('back-to-list-inline');
+      const getListStatus = () => {
+        if (!listView) return null;
+        if (!listStatus || !listStatus.isConnected) {
+          listStatus = document.createElement('div');
+          listStatus.id = 'list-status';
+          listStatus.className = 'status';
+          listStatus.style.marginBottom = '8px';
+          listView.prepend(listStatus);
+        }
+        return listStatus;
+      };
 
       const state = { language: 'EN', lineItems: {} };
+      const recordCache = {};
+  const listColumns = definition.questions.filter(q => q.listView);
+  let listViewLoaded = false;
+  let listStatus = document.getElementById('list-status');
       const defaultRuleMessages = {
         required: { en: 'This field is required.', fr: 'Ce champ est obligatoire.', nl: 'Dit veld is verplicht.' },
         min: (limit) => ({ en: 'Value must be >= ' + limit + '.', fr: 'La valeur doit être >= ' + limit + '.', nl: 'Waarde moet >= ' + limit + '.' }),
@@ -271,6 +350,329 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         return getLangLabel(msg, fallbackText);
       }
 
+      function setRecordId(value) {
+        if (recordIdInput) {
+          recordIdInput.value = value || '';
+        }
+      }
+
+      function showFormMode(reset = false, preserveLanguage = true) {
+        if (formView) formView.style.display = 'block';
+        if (summaryView) summaryView.style.display = 'none';
+        if (followupView) followupView.style.display = 'none';
+        if (listView) listView.style.display = 'none';
+        if (viewActions) viewActions.style.display = 'none';
+        if (reset) {
+          setRecordId('');
+          resetFormState(preserveLanguage);
+        }
+        if (backToFormBtn) backToFormBtn.style.display = 'inline-flex';
+        if (backToListInline) backToListInline.style.display = listColumns.length ? 'inline-flex' : 'none';
+        if (newRecordBtn) newRecordBtn.style.display = 'inline-flex';
+      }
+
+      function renderList(forceRefresh = false) {
+        if (forceRefresh) {
+          listViewLoaded = false;
+          Object.keys(recordCache).forEach(key => delete recordCache[key]);
+        }
+        if (!listView || !listColumns.length) return;
+        if (listViewLoaded) return;
+        listViewLoaded = true;
+        const fetchRows = (pageToken) =>
+          new Promise(resolve => {
+            const handleSuccess = (res) => {
+              const listPayload = res && res.list ? res.list : (res || { items: [], totalCount: 0 });
+              const recordsPayload = (res && res.records && typeof res.records === 'object') ? res.records : {};
+              Object.keys(recordsPayload).forEach(key => {
+                if (!key) return;
+                recordCache[key] = recordsPayload[key];
+              });
+              if (__WEB_FORM_DEBUG__) {
+                console.info('[ListView] fetchSubmissionsBatch success', {
+                  pageToken,
+                  count: listPayload?.items?.length || 0,
+                  total: listPayload?.totalCount
+                });
+              }
+              resolve({ list: listPayload, records: recordsPayload });
+            };
+            const attempt = () => {
+              if (!(google && google.script && google.script.run)) {
+                if (__WEB_FORM_DEBUG__) {
+                  console.info('[ListView] google.script.run not ready, retrying...');
+                }
+                setTimeout(attempt, 150);
+                return;
+              }
+              try {
+                google.script.run
+                  .withSuccessHandler(handleSuccess)
+                  .withFailureHandler(err => {
+                    console.error('[ListView] fetchSubmissionsBatch failed', err);
+                    resolve({ list: { items: [], totalCount: 0 }, records: {} });
+                  })
+                  .fetchSubmissionsBatch(formKey || '', undefined, 10, pageToken, true);
+              } catch (_) {
+                console.error('[ListView] fetchSubmissionsBatch threw synchronously');
+                resolve({ list: { items: [], totalCount: 0 }, records: {} });
+              }
+            };
+            attempt();
+          });
+
+        const columns = (listColumns.length ? listColumns : definition.questions).slice(0, 8);
+        listView.innerHTML = '';
+        const initialStatus = getListStatus();
+        if (initialStatus) {
+          initialStatus.textContent = 'Loading...';
+          initialStatus.style.display = 'block';
+        }
+
+        const table = document.createElement('table');
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.style.marginBottom = '8px';
+
+        const header = document.createElement('tr');
+        columns.forEach(col => {
+          const th = document.createElement('th');
+          th.style.textAlign = 'left';
+          th.style.borderBottom = '1px solid #e2e8f0';
+          th.style.padding = '6px 4px';
+          th.textContent = (col.label && (col.label[state.language.toLowerCase()] || col.label.en)) || col.label?.en || col.label?.fr || col.label?.nl || col.id;
+          header.appendChild(th);
+        });
+        const metaTh = document.createElement('th');
+        metaTh.style.textAlign = 'left';
+        metaTh.style.borderBottom = '1px solid #e2e8f0';
+        metaTh.style.padding = '6px 4px';
+        metaTh.textContent = 'Updated';
+        header.appendChild(metaTh);
+        table.appendChild(header);
+        listView.appendChild(table);
+
+        const pager = document.createElement('div');
+        pager.style.display = 'flex';
+        pager.style.gap = '8px';
+        listView.appendChild(pager);
+
+        let nextToken = undefined;
+        const renderPage = (token) => {
+          const statusNode = getListStatus();
+          if (statusNode) {
+            statusNode.textContent = 'Loading...';
+            statusNode.style.display = 'block';
+          }
+          fetchRows(token)
+            .then(payload => {
+              const res = payload && payload.list ? payload.list : (payload || { items: [], totalCount: 0 });
+              if (__WEB_FORM_DEBUG__) {
+                console.info('[ListView] renderPage response', { token, items: res?.items?.length || 0, nextToken: res?.nextPageToken });
+              }
+              table.querySelectorAll('tr:not(:first-child)').forEach(row => row.remove());
+              const fragment = document.createDocumentFragment();
+              const rows = res.items || [];
+              rows.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.style.cursor = row.id ? 'pointer' : 'default';
+                if (row.id) {
+                  tr.addEventListener('click', () => {
+                    const statusNode = getListStatus();
+                    if (statusNode) {
+                      statusNode.textContent = 'Loading record...';
+                      statusNode.style.display = 'block';
+                    }
+                    setFormInteractive(false);
+                    loadSubmission(row.id);
+                    showFormMode(false, true);
+                  });
+                }
+                columns.forEach(col => {
+                  const td = document.createElement('td');
+                  td.style.borderBottom = '1px solid #f1f5f9';
+                  td.style.padding = '6px 4px';
+                  const val = row[col.id];
+                  td.textContent = Array.isArray(val) ? val.join(', ') : (val || '');
+                  tr.appendChild(td);
+                });
+                const meta = document.createElement('td');
+                meta.style.borderBottom = '1px solid #f1f5f9';
+                meta.style.padding = '6px 4px';
+                meta.textContent = row.updatedAt || row.createdAt || '';
+                tr.appendChild(meta);
+                fragment.appendChild(tr);
+              });
+              table.appendChild(fragment);
+              nextToken = res.nextPageToken;
+              pager.innerHTML = '';
+              if (nextToken) {
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'secondary';
+                nextBtn.type = 'button';
+                nextBtn.textContent = 'Next';
+                nextBtn.addEventListener('click', () => renderPage(nextToken));
+                pager.appendChild(nextBtn);
+              }
+              const statusNode = getListStatus();
+              if (statusNode) {
+                statusNode.textContent = (rows.length) ? '' : 'No records yet.';
+                statusNode.style.display = rows.length ? 'none' : 'block';
+              }
+            })
+            .catch(() => {
+              const statusNode = getListStatus();
+              if (statusNode) {
+                statusNode.textContent = 'Failed to load records.';
+                statusNode.style.display = 'block';
+              }
+            });
+        };
+
+        renderPage();
+      }
+
+      function showListMode() {
+        if (listView) listView.style.display = 'block';
+        if (formView) formView.style.display = 'none';
+        if (summaryView) summaryView.style.display = 'none';
+        if (followupView) followupView.style.display = 'none';
+        if (viewActions) viewActions.style.display = 'flex';
+        if (newRecordBtn) newRecordBtn.style.display = 'inline-flex';
+        if (backToFormBtn) backToFormBtn.style.display = 'none';
+        if (backToListInline) backToListInline.style.display = 'none';
+        renderList();
+      }
+
+      function setFieldValue(name, value, scope) {
+        const ctx = scope || formEl;
+        if (!ctx) return;
+        const els = ctx.querySelectorAll('[name="' + name + '"]');
+        if (!els || els.length === 0) return;
+        const first = els[0];
+        if (first instanceof HTMLInputElement && first.type === 'checkbox') {
+          const values = Array.isArray(value)
+            ? value.map(v => (v != null ? v.toString().trim() : ''))
+            : (value ? value.toString().split(',').map(s => s.trim()) : []);
+          els.forEach(el => {
+            if (el instanceof HTMLInputElement) {
+              el.checked = values.includes(el.value);
+            }
+          });
+        } else if (first instanceof HTMLSelectElement || first instanceof HTMLTextAreaElement || first instanceof HTMLInputElement) {
+          first.value = Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
+        }
+      }
+
+      function applyPrefill(values) {
+        definition.questions.forEach(q => {
+          const val = values ? values[q.id] : undefined;
+          if (q.type === 'LINE_ITEM_GROUP') {
+            if (!Array.isArray(val)) {
+              resetLineItemGroup(q);
+              return;
+            }
+            resetLineItemGroup(q);
+            const container = document.querySelector('[data-line-item="' + q.id + '"]');
+            val.forEach(entry => {
+              addLineItemRow(q, container, entry || {});
+              const rows = container ? container.querySelectorAll('.line-item-row') : [];
+              const currentRow = rows.length ? rows[rows.length - 1] : null;
+              if (!currentRow) return;
+              Object.entries(entry || {}).forEach(([fid, fVal]) => {
+                setFieldValue(q.id + '__' + fid, fVal, currentRow);
+              });
+            });
+            updateLineItemTotals(q.id);
+          } else if (q.type === 'CHECKBOX') {
+            setFieldValue(q.id, val, formEl);
+          } else if (q.type === 'CHOICE' || q.type === 'DATE' || q.type === 'NUMBER' || q.type === 'TEXT' || q.type === 'PARAGRAPH') {
+            setFieldValue(q.id, val ?? '', formEl);
+          }
+        });
+      }
+
+      function setFormInteractive(enabled) {
+        const elements = formEl.querySelectorAll('input, select, textarea, button');
+        elements.forEach(el => {
+          if (enabled) {
+            el.removeAttribute('disabled');
+          } else {
+            el.setAttribute('disabled', 'true');
+          }
+        });
+      }
+
+      function hydrateRecord(record) {
+        if (!record) return;
+        setRecordId(record.id);
+        state.language = record.language || state.language;
+        if (langSelect) langSelect.value = state.language;
+        resetFormState(true);
+        applyPrefill(record.values || {});
+        updateLanguage();
+        applyAllFilters();
+        showFormMode(false, true);
+        statusEl.textContent = '';
+        statusEl.className = 'status';
+        const statusNode = getListStatus();
+        if (statusNode) {
+          statusNode.textContent = '';
+          statusNode.style.display = 'none';
+        }
+        setFormInteractive(true);
+      }
+
+      function loadSubmission(recordId, preferCache = true) {
+        if (!recordId) {
+          return;
+        }
+        if (preferCache && recordCache[recordId]) {
+          if (__WEB_FORM_DEBUG__) {
+            console.info('[ListView] record cache hit', { recordId });
+          }
+          setFormInteractive(false);
+          hydrateRecord(recordCache[recordId]);
+          return;
+        }
+        if (!(google && google.script && google.script.run)) {
+          return;
+        }
+        setFormInteractive(false);
+        statusEl.textContent = 'Loading record...';
+        statusEl.className = 'status';
+        const statusNode = getListStatus();
+        if (statusNode) {
+          statusNode.textContent = 'Loading record...';
+          statusNode.style.display = 'block';
+        }
+        google.script.run
+          .withSuccessHandler(res => {
+            if (!res) {
+              statusEl.textContent = 'Record not found.';
+              statusEl.className = 'status error';
+              setFormInteractive(true);
+              if (statusNode) {
+                statusNode.textContent = 'Record not found.';
+                statusNode.style.display = 'block';
+              }
+              return;
+            }
+            recordCache[recordId] = res;
+            hydrateRecord(res);
+          })
+          .withFailureHandler(err => {
+            statusEl.textContent = (err && err.message) ? err.message : 'Failed to load record.';
+            statusEl.className = 'status error';
+            setFormInteractive(true);
+            if (statusNode) {
+              statusNode.textContent = 'Failed to load record.';
+              statusNode.style.display = 'block';
+            }
+          })
+          .fetchSubmissionById(formKey || '', recordId);
+      }
+
       function init() {
         if (viewportMeta) viewportMeta.setAttribute('content', lockedViewport);
 
@@ -291,6 +693,11 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
         try {
           renderQuestions();
+          if (__WEB_FORM_DEBUG__ && console && console.info) {
+            try {
+              console.info('[WebForm] renderQuestions completed', { questionCount: definition.questions.length });
+            } catch (_) {}
+          }
           updateLanguage();
           applyAllFilters();
         } catch (err) {
@@ -330,13 +737,25 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
         if (backToFormBtn) {
           backToFormBtn.addEventListener('click', () => {
-            if (formView) formView.style.display = 'block';
-            if (summaryView) summaryView.style.display = 'none';
-            if (followupView) followupView.style.display = 'none';
-            if (listView) listView.style.display = 'none';
-            if (viewActions) viewActions.style.display = 'none';
-            resetFormState(true);
+            showFormMode(true);
           });
+        }
+
+        if (backToListInline && listColumns.length) {
+          backToListInline.addEventListener('click', () => {
+            showListMode();
+          });
+          backToListInline.style.display = 'inline-flex';
+        }
+
+        if (newRecordBtn) {
+          newRecordBtn.addEventListener('click', () => {
+            showFormMode(true);
+          });
+        }
+
+        if (definition.startRoute === 'list') {
+          showListMode();
         }
       }
 
@@ -1210,7 +1629,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
           if (!hasFile) {
             const msg = getLangLabel(
-              { en: 'Please upload a file.', fr: 'Veuillez t\\u00e9l\\u00e9charger un fichier.', nl: 'Upload een bestand.' },
+              { en: 'Please upload a file.', fr: 'Veuillez télécharger un fichier.', nl: 'Upload een bestand.' },
               'Please upload a file.'
             );
             return { message: msg, fieldId: fq.id, scope: 'main' };
@@ -1617,6 +2036,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
                 setSubmitting(false);
                 try {
                   showSummaryAndFollowUp(payload);
+                  if (listColumns.length) {
+        renderList(true);
+        showListMode();
+                  }
                 } catch (_) {
                   resetFormState(true);
                 }
@@ -1688,7 +2111,31 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       }
 
       init();
+      if (listColumns.length) {
+        renderList();
+      }
+      if (__WEB_FORM_DEBUG__ && console && console.info) {
+        try {
+          console.info('[WebForm] init invoked');
+        } catch (_) {}
+      }
     <\/script>
   </body>
 </html>`;
+  const srcdoc = escapeForSrcdoc(formHtml);
+  const outerHtml = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      html, body, iframe { margin: 0; padding: 0; width: 100%; height: 100%; border: 0; }
+      body { background: #f5f7fb; }
+      iframe { display: block; }
+    </style>
+  </head>
+  <body>
+    <iframe id="ck-form-frame" sandbox="allow-forms allow-scripts allow-same-origin" srcdoc="${srcdoc}"></iframe>
+  </body>
+</html>`;
+  return outerHtml;
 }

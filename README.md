@@ -23,6 +23,23 @@ The project is refactored into modular components:
 - **`src/services/FormBuilder.ts`**: Handles the low-level Google Form manipulation.
 - **`src/services/WebFormService.ts`**: Renders custom web app forms (with line items and file uploads) and writes submissions directly into the destination tabs.
 
+## Server-Side Caching & Prefill
+
+The custom web app now ships with a multi-layer cache to keep list views and record prefill snappy while staying inside Apps Script limits:
+
+- **Script Cache (5‑minute TTL)** – Each page of `fetchSubmissions` results and every hydrated record is serialized into `CacheService.getScriptCache()`. Cache keys are scoped by form key, page size/token, and a sheet fingerprint so stale rows are automatically discarded after edits.
+- **Document Properties ETags** – Every destination tab maintains a lightweight “etag” in `PropertiesService.getDocumentProperties()`. The fingerprint is based on sheet id, row/column counts, and the last updated metadata columns. Any write (including `saveSubmissionWithId`) recomputes the etag, effectively invalidating the Script Cache entries for that sheet.
+- **Batch Fetch Endpoint** – `fetchSubmissionsBatch(formKey, projection?, pageSize?, pageToken?, includePageRecords?, recordIds?)` wraps the existing pagination API and returns `{ list, records }`. `list` mirrors the original `fetchSubmissions` response, while `records` pre-hydrates the row objects that were read for that page (plus any explicit `recordIds`). The iframe client uses this payload to render the table and immediately prefill a form without a second round trip.
+- **Client Row Cache** – The inline `WebFormTemplate` keeps the most recent batch of records in memory. Selecting a row reuses that cached payload to render the form instantly; a background `google.script.run.fetchSubmissionById` only runs if the record is missing or stale.
+
+### When to refresh or invalidate
+
+Nothing extra is required in day-to-day use: submitting a form, editing a row, or changing the destination tab automatically triggers a new etag and clears the corresponding Script Cache entries. If you need to force a reset after manual sheet edits you can:
+
+- Temporarily change data in the destination tab (e.g., add + remove a dummy row) to generate a fresh etag.
+- Delete the stored fingerprints via the Apps Script console: `PropertiesService.getDocumentProperties().deleteAllProperties();`.
+- Redeploy a rebuilt `dist/Code.js` bundle (new cache prefixes) or wait for the ~5 minute CacheService TTL to expire naturally.
+
 ## Setup
 
 1. **Install Dependencies**:

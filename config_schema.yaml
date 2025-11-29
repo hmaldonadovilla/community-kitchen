@@ -220,10 +220,185 @@ components:
           description: Optional reference key to disambiguate multiple sources.
         mode:
           type: string
-          enum: [options, prefill]
-          description: Whether the source populates options or prefills values.
+          enum: [options, prefill, list]
+          description: Whether the source populates options, prefills values/line items, or serves list views.
+        sheetId:
+          type: string
+          description: Optional sheet id when sourcing from another spreadsheet file.
+        tabName:
+          type: string
+          description: Tab name for the source table.
+        localeKey:
+          type: string
+          description: Optional column used to scope localized rows.
+        limit:
+          type: integer
+          description: Optional max rows to read (default 50; hard cap 200).
+        projection:
+          type: array
+          items:
+            type: string
+          description: Limit columns returned from the data source.
+        mapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional map from source column -> target field id (used for prefill/line-item injection).
       required:
         - id
+      example:
+        id: recipes
+        sheetId: 1AbcDEF_sheet_id_here
+        tabName: Recipes Data
+        projection: [name_en, ingredient, quantity, unit]
+        localeKey: locale
+        limit: 100
+        mode: prefill
+        mapping:
+          ingredient: ingredient
+          quantity: qty
+          unit: unit
+
+    ListViewColumnConfig:
+      type: object
+      properties:
+        fieldId:
+          type: string
+        label:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties:
+                type: string
+      required:
+        - fieldId
+
+    ListViewConfig:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListViewColumnConfig'
+        defaultSort:
+          type: object
+          properties:
+            fieldId:
+              type: string
+            direction:
+              type: string
+              enum: [asc, desc]
+        pageSize:
+          type: integer
+          description: Max rows per page (default 10, capped at 10).
+      required:
+        - columns
+      description: Configuration for list views showing saved submissions.
+      example:
+        columns:
+          - fieldId: dishName
+          - fieldId: createdAt
+            label:
+              en: Created
+              fr: Créé
+        defaultSort:
+          fieldId: createdAt
+          direction: desc
+        pageSize: 10
+
+
+    DedupRule:
+      type: object
+      properties:
+        id:
+          type: string
+        scope:
+          type: string
+          description: A `form` (default) or a `dataSourceId` if dedup checks another tab.
+        keys:
+          type: array
+          items:
+            type: string
+          description: Field ids forming the uniqueness composite.
+        matchMode:
+          type: string
+          enum: [exact, caseInsensitive]
+          default: exact
+        onConflict:
+          type: string
+          enum: [reject, ignore, merge]
+          default: reject
+        message:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties:
+                type: string
+          description: User-facing error when `onConflict=reject`.
+        mergeHandlerKey:
+          type: string
+          description: Only used when `onConflict=merge` to look up custom merge logic.
+      required:
+        - id
+        - keys
+      description: Deduplication rules evaluated at submission time.
+      example:
+        id: uniqueDishPerDay
+        scope: form
+        keys: [dishName, serviceDate]
+        matchMode: caseInsensitive
+        onConflict: reject
+        message:
+          en: This dish is already recorded for that date.
+    DedupSheet:
+      type: array
+      description: |
+        Optional per-form dedup sheet named "<ConfigSheetName> Dedup" with columns:
+        1) Rule ID, 2) Scope (form or dataSourceId), 3) Keys (comma-separated field ids),
+        4) Match mode (exact|caseInsensitive), 5) On conflict (reject|ignore|merge),
+        6) Message (string or localized JSON).
+      items:
+        type: object
+        properties:
+          ruleId:
+            type: string
+          scope:
+            type: string
+          keys:
+            type: string
+          matchMode:
+            type: string
+          onConflict:
+            type: string
+          message:
+            type: string
+
+    PaginatedResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+        nextPageToken:
+          type: string
+        totalCount:
+          type: integer
+      required:
+        - items
+      description: Generic paginated response wrapper for list endpoints (totalCount capped at 200).
+
+    RecordMetadata:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     SelectionEffect:
       type: object

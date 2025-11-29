@@ -1,9 +1,11 @@
 import { FormConfig } from '../types';
 
 export const DASHBOARD_SHEET_NAME = 'Forms Dashboard';
+const DEBUG_PROPERTY_KEY = 'CK_DEBUG';
 
 export class Dashboard {
-  private sheet: GoogleAppsScript.Spreadsheet.Sheet;
+  private readonly sheet: GoogleAppsScript.Spreadsheet.Sheet;
+  private readonly debugEnabled: boolean;
 
   constructor(ss: GoogleAppsScript.Spreadsheet.Spreadsheet) {
     let sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
@@ -11,6 +13,8 @@ export class Dashboard {
       sheet = this.createDashboard(ss);
     }
     this.sheet = sheet;
+    this.debugEnabled = this.isDebugEnabled();
+    this.debug('Dashboard initialized', { lastRow: this.sheet.getLastRow(), lastColumn: this.sheet.getLastColumn() });
   }
 
   private createDashboard(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): GoogleAppsScript.Spreadsheet.Sheet {
@@ -57,7 +61,12 @@ export class Dashboard {
     const lastRow = this.sheet.getLastRow();
     if (lastRow < 4) return [];
 
-    const headerRow = this.sheet.getRange(3, 1, 1, this.sheet.getLastColumn()).getValues()[0].map(h => h?.toString().trim().toLowerCase());
+    const totalColumns = Math.max(5, this.sheet.getLastColumn());
+    const { rowIndex: headerRowIndex, headerValues } = this.resolveHeaderRow();
+    this.debug('Header row resolved', { headerRowIndex, headerValues });
+    const headerRow = headerValues.map(h => h?.toString().trim().toLowerCase());
+    const dataStartRow = headerRowIndex + 1;
+    if (lastRow < dataStartRow) return [];
     const findHeader = (labels: string[], fallback: number) => {
       const normalized = labels.map(l => l.toLowerCase());
       const found = headerRow.findIndex(h => normalized.some(n => h === n || h.startsWith(n)));
@@ -72,7 +81,9 @@ export class Dashboard {
     const legacyFormIdIndex = (headerRow.length === 0 || headerRow.length > 5) ? 4 : -1;
     const colFormId = findHeader(['form id', 'form id (legacy)'], legacyFormIdIndex);
 
-    const data = this.sheet.getRange(4, 1, lastRow - 3, this.sheet.getLastColumn()).getValues();
+    const dataRowCount = Math.max(0, lastRow - headerRowIndex);
+    if (dataRowCount === 0) return [];
+    const data = this.sheet.getRange(dataStartRow, 1, dataRowCount, totalColumns).getValues();
     const forms: FormConfig[] = [];
     
     data.forEach((row, index) => {
@@ -90,17 +101,19 @@ export class Dashboard {
           description,
           appUrl,
           formId,
-          rowIndex: index + 4
+          rowIndex: dataStartRow + index
         });
       }
     });
+    this.debug('Forms parsed from dashboard', { count: forms.length, forms });
     
     return forms;
   }
 
   public updateFormDetails(rowIndex: number, appUrl?: string): void {
     if (!appUrl) return;
-    const headers = this.sheet.getRange(3, 1, 1, this.sheet.getLastColumn()).getValues()[0].map(h => h?.toString().trim().toLowerCase());
+    const { headerValues } = this.resolveHeaderRow();
+    const headers = headerValues.map(h => h?.toString().trim().toLowerCase());
     const appUrlCol = headers.findIndex(h => h.startsWith('web app url')) + 1; // 1-based
     if (appUrlCol > 0) {
       this.sheet.getRange(rowIndex, appUrlCol).setValue(appUrl);
@@ -134,6 +147,56 @@ export class Dashboard {
       return url || '';
     } catch (_) {
       return '';
+    }
+  }
+
+  private resolveHeaderRow(): { rowIndex: number; headerValues: any[] } {
+    const lastColumn = Math.max(5, this.sheet.getLastColumn());
+    const lastRow = this.sheet.getLastRow();
+    const scanRows = Math.min(Math.max(lastRow, 3), 25);
+    if (scanRows > 0) {
+      const rows = this.sheet.getRange(1, 1, scanRows, lastColumn).getValues();
+      for (let idx = 0; idx < rows.length; idx++) {
+        const normalized = rows[idx].map(cell => cell?.toString().trim().toLowerCase());
+        if (normalized.some(cell => cell && (cell === 'form title' || cell.startsWith('form title')))) {
+          return { rowIndex: idx + 1, headerValues: rows[idx] };
+        }
+      }
+    }
+    const fallbackHeaders = this.sheet.getRange(3, 1, 1, lastColumn).getValues()[0];
+    return { rowIndex: 3, headerValues: fallbackHeaders };
+  }
+
+  private debug(message: string, payload?: Record<string, any>): void {
+    if (!this.debugEnabled) return;
+    const serialized = payload ? ` ${JSON.stringify(payload)}` : '';
+    const entry = `[Dashboard] ${message}${serialized}`;
+    if (typeof Logger !== 'undefined' && Logger.log) {
+      try {
+        Logger.log(entry);
+      } catch (_) {
+        // ignore logging failures
+      }
+    }
+    if (typeof console !== 'undefined' && console.log) {
+      try {
+        console.log(entry);
+      } catch (_) {
+        // ignore console failures
+      }
+    }
+  }
+
+  private isDebugEnabled(): boolean {
+    try {
+      const props = (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties)
+        ? PropertiesService.getScriptProperties()
+        : undefined;
+      const flag = props?.getProperty(DEBUG_PROPERTY_KEY);
+      if (!flag) return false;
+      return flag === '1' || flag.toLowerCase() === 'true';
+    } catch (_) {
+      return false;
     }
   }
 }
