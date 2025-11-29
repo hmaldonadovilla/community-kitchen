@@ -1,5 +1,6 @@
 import {
   BaseQuestionType,
+  DataSourceConfig,
   FileUploadConfig,
   LineItemFieldConfig,
   LineItemGroupConfig,
@@ -130,6 +131,7 @@ export class ConfigSheet {
       const lineItemConfig = type === 'LINE_ITEM_GROUP' ? this.parseLineItemConfig(ss, rawConfig || row[idxOptionsEn], row[idxOptionsEn]) : undefined;
       const uploadConfig = type === 'FILE_UPLOAD' ? this.parseUploadConfig(rawConfig || row[6]) : undefined;
       const optionFilter = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseOptionFilter(optionFilterRaw) : undefined;
+      const dataSource = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseDataSource(rawConfig) : undefined;
       const validationRules = this.parseValidationRules(validationRaw);
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
@@ -151,6 +153,7 @@ export class ConfigSheet {
         status,
         uploadConfig,
         lineItemConfig,
+        dataSource,
         optionFilter,
         validationRules,
         visibility,
@@ -353,7 +356,7 @@ export class ConfigSheet {
     const config: FileUploadConfig = {};
 
     try {
-      const parsed = JSON.parse(rawConfig);
+      const parsed = JSON.parse(this.sanitizeJson(rawConfig));
       if (parsed && typeof parsed === 'object') {
         if (parsed.destinationFolderId) config.destinationFolderId = parsed.destinationFolderId;
         if (parsed.maxFiles) config.maxFiles = Number(parsed.maxFiles);
@@ -393,7 +396,7 @@ export class ConfigSheet {
   private static parseOptionFilter(rawConfig: string): OptionFilter | undefined {
     if (!rawConfig) return undefined;
     try {
-      const parsed = JSON.parse(rawConfig);
+      const parsed = JSON.parse(this.sanitizeJson(rawConfig));
       if (parsed && parsed.optionFilter && parsed.optionFilter.dependsOn && parsed.optionFilter.optionMap) {
         return parsed.optionFilter as OptionFilter;
       }
@@ -403,10 +406,59 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static parseDataSource(rawConfig: string): DataSourceConfig | undefined {
+    const parsed = this.safeParseObject(rawConfig);
+    if (!parsed) return undefined;
+    const candidate = this.extractDataSourceCandidate(parsed);
+    if (!candidate || typeof candidate !== 'object') return undefined;
+    const idValue = candidate.id || candidate.sourceId || candidate.sheet;
+    if (!idValue) return undefined;
+
+    const config: DataSourceConfig = { id: idValue.toString() };
+    if (candidate.ref) config.ref = candidate.ref.toString();
+    const mode = (candidate.mode || candidate.kind || '').toString();
+    if (mode && (mode === 'options' || mode === 'prefill' || mode === 'list')) {
+      config.mode = mode as DataSourceConfig['mode'];
+    }
+    if (candidate.sheetId) config.sheetId = candidate.sheetId.toString();
+    if (candidate.tabName) config.tabName = candidate.tabName.toString();
+    if (candidate.localeKey) config.localeKey = candidate.localeKey.toString();
+    if (Array.isArray(candidate.projection)) {
+      const projection = candidate.projection
+        .map((p: any) => (p !== undefined && p !== null ? p.toString() : ''))
+        .filter(Boolean);
+      if (projection.length) config.projection = projection;
+    }
+    if (candidate.limit !== undefined && candidate.limit !== null && candidate.limit !== '') {
+      const limitNum = Number(candidate.limit);
+      if (!isNaN(limitNum)) config.limit = limitNum;
+    }
+    if (candidate.mapping && typeof candidate.mapping === 'object') {
+      const mapping: Record<string, string> = {};
+      Object.keys(candidate.mapping).forEach(key => {
+        const val = candidate.mapping[key];
+        if (val !== undefined && val !== null) {
+          mapping[key.toString()] = val.toString();
+        }
+      });
+      if (Object.keys(mapping).length) config.mapping = mapping;
+    }
+    return config;
+  }
+
+  private static extractDataSourceCandidate(raw: any): any | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    if (raw.dataSource && typeof raw.dataSource === 'object') return raw.dataSource;
+    if (raw.source && typeof raw.source === 'object') return raw.source;
+    if (raw.dataSourceConfig && typeof raw.dataSourceConfig === 'object') return raw.dataSourceConfig;
+    if (raw.id && (raw.mode || raw.projection || raw.limit || raw.tabName || raw.sheetId)) return raw;
+    return undefined;
+  }
+
   private static parseValidationRules(rawConfig: string): ValidationRule[] | undefined {
     if (!rawConfig) return undefined;
     try {
-      const parsed = JSON.parse(rawConfig);
+      const parsed = JSON.parse(this.sanitizeJson(rawConfig));
       if (parsed && Array.isArray(parsed.validationRules)) {
         return parsed.validationRules as ValidationRule[];
       }
@@ -419,12 +471,52 @@ export class ConfigSheet {
   private static safeParseObject(rawConfig: string): any | undefined {
     if (!rawConfig || rawConfig.startsWith('REF:')) return undefined;
     try {
-      const parsed = JSON.parse(rawConfig);
+      const parsed = JSON.parse(this.sanitizeJson(rawConfig));
       if (parsed && typeof parsed === 'object') return parsed;
     } catch (_) {
       // ignore
     }
     return undefined;
+  }
+
+  private static sanitizeJson(raw: string): string {
+    if (!raw) return raw;
+    let result = '';
+    let inString = false;
+    let escaping = false;
+    for (let i = 0; i < raw.length; i++) {
+      const char = raw[i];
+      if (inString) {
+        result += char;
+        if (escaping) {
+          escaping = false;
+        } else if (char === '\\') {
+          escaping = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+        result += char;
+        continue;
+      }
+      if (char === '#' || (char === '/' && raw[i + 1] === '/')) {
+        if (char === '/' && raw[i + 1] === '/') {
+          i++;
+        }
+        while (i < raw.length && raw[i] !== '\n' && raw[i] !== '\r') {
+          i++;
+        }
+        if (i < raw.length) {
+          result += raw[i];
+        }
+        continue;
+      }
+      result += char;
+    }
+    return result;
   }
 
   private static normalizeVisibilityCondition(raw: any): VisibilityCondition | undefined {

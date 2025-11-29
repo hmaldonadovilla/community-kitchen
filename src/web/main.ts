@@ -23,7 +23,7 @@ export interface BootstrapOptions {
 }
 
 export function bootstrapWebForm(definition: WebFormDefinition, formKey?: string, opts?: BootstrapOptions): void {
-  const initialLang = (definition.languages && definition.languages[0]) || ('EN' as LangCode);
+  const initialLang = definition.languages?.[0] || ('EN' as LangCode);
   setState({ language: initialLang });
   if (opts?.onReady) opts.onReady(definition, formKey);
   // Optionally render list view if a mount is provided
@@ -76,27 +76,43 @@ declare global {
   }
 }
 
-if (typeof window !== 'undefined') {
-  window.WebFormApp = { ...(window.WebFormApp || {}), bootstrapWebForm };
-  window.WebFormApp.updateLanguageLabels = updateLanguageLabels;
-  window.WebFormApp.applyFiltersAndVisibility = (opts) => {
+const globalWindow: (Window & typeof globalThis) | undefined =
+  typeof globalThis === 'object' && 'document' in globalThis
+    ? (globalThis as Window & typeof globalThis)
+    : undefined;
+
+if (globalWindow) {
+  const applyFiltersAndVisibility = (opts: {
+    definition: WebFormDefinition;
+    language: LangCode;
+    formEl: HTMLFormElement;
+    scopeRow?: HTMLElement | null;
+  }) => {
     const { definition, language, formEl, scopeRow } = opts;
     applyFilters({ definition, language, formEl, scopeRow });
     applyVisibility({ definition, language, formEl });
   };
-  window.WebFormApp.validateFormWithBundle = validateFormWithBundle;
-  window.WebFormApp.resolveFieldElement = resolveFieldElement;
-  window.WebFormApp.computeLineTotals = computeTotals;
-  window.WebFormApp.syncLineItemPayload = syncLineItemPayload;
-  window.WebFormApp.buildPayloadFromForm = buildPayloadFromForm;
-  window.WebFormApp.handleSelectionEffects = handleSelectionEffects;
-  window.WebFormApp.hydrateDataSources = hydrateDataSources;
-  window.WebFormApp.addLineItemRowFromBundle = addLineItemRowFromBundle;
-  window.WebFormApp.computeLineItemTotalsLegacy = computeLineTotalsLegacy;
-  window.WebFormApp.createViewRouter = createViewRouter;
-  window.WebFormApp.renderListView = renderListView;
-  window.WebFormApp.renderSummaryView = renderSummaryView;
-  window.WebFormApp.renderFollowupView = renderFollowupView;
-  window.WebFormApp.fetchSubmissionsPage = fetchSubmissionsPage;
-  window.WebFormApp.submitWithDedup = submitWithDedup;
+
+  const existingApp = globalWindow.WebFormApp || {};
+  globalWindow.WebFormApp = {
+    ...existingApp,
+    bootstrapWebForm,
+    updateLanguageLabels,
+    applyFiltersAndVisibility,
+    validateFormWithBundle,
+    resolveFieldElement,
+    computeLineTotals: computeTotals,
+    syncLineItemPayload,
+    buildPayloadFromForm,
+    handleSelectionEffects,
+    hydrateDataSources,
+    addLineItemRowFromBundle,
+    computeLineItemTotalsLegacy: computeLineTotalsLegacy,
+    createViewRouter,
+    renderListView,
+    renderSummaryView,
+    renderFollowupView,
+    fetchSubmissionsPage,
+    submitWithDedup,
+  };
 }

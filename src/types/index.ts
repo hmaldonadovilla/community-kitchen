@@ -114,6 +114,7 @@ export interface DataSourceConfig {
   tabName?: string; // tab name for the source table
   localeKey?: string; // optional column used to scope localized rows
   projection?: string[]; // limit columns returned
+  limit?: number; // optional max rows
   mapping?: Record<string, string>; // optional map from source column -> target field id
 }
 

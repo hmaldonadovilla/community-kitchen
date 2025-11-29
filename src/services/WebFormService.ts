@@ -91,6 +91,7 @@ export class WebFormService {
       },
       required: q.required,
       listView: q.listView,
+      dataSource: q.dataSource,
       options: q.options.length || q.optionsFr.length || q.optionsNl.length
         ? {
             en: q.options,

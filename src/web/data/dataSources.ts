@@ -13,9 +13,28 @@ declare const google: {
 
 type CacheKey = string;
 const cache: Map<CacheKey, any> = new Map();
+const RUNNER_RETRY_DELAY = 150;
+const RUNNER_MAX_ATTEMPTS = 20;
 
 function key(id: string, lang: LangCode): string {
   return `${id || 'default'}::${(lang || 'EN').toString().toUpperCase()}`;
+}
+
+function emitLog(
+  level: 'info' | 'warn' | 'error',
+  message: string,
+  payload?: Record<string, any>
+): void {
+  const localConsole = typeof console !== 'undefined' ? console : undefined;
+  localConsole?.[level]?.(message, payload);
+  try {
+    if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+      const parentConsole = (window.parent as any).console as Console | undefined;
+      parentConsole?.[level]?.(message, payload);
+    }
+  } catch (_) {
+    // ignore cross-origin errors
+  }
 }
 
 export async function fetchDataSource(
@@ -24,22 +43,48 @@ export async function fetchDataSource(
 ): Promise<any> {
   const cacheKey = key(config.id, language);
   if (cache.has(cacheKey)) return cache.get(cacheKey);
-  const scriptRun = google?.script?.run;
-  if (!scriptRun) {
-    return null;
-  }
+
   return new Promise((resolve) => {
-    try {
-      scriptRun
-        .withSuccessHandler((res: any) => {
-          cache.set(cacheKey, res);
-          resolve(res);
-        })
-        .withFailureHandler(() => resolve(null))
-        .fetchDataSource?.(config, language, config.projection, config.limit, undefined);
-    } catch (_) {
-      resolve(null);
-    }
+    let attempts = 0;
+
+    const attempt = () => {
+      const scriptRun = google?.script?.run;
+      if (!scriptRun) {
+        attempts += 1;
+        if (attempts === 1) {
+          emitLog('info', '[DataSource] google.script.run not ready, retrying', { id: config.id });
+        }
+        if (attempts > RUNNER_MAX_ATTEMPTS) {
+          emitLog('error', '[DataSource] google.script.run never became ready', { id: config.id });
+          resolve(null);
+          return;
+        }
+        setTimeout(attempt, RUNNER_RETRY_DELAY);
+        return;
+      }
+
+      try {
+        scriptRun
+          .withSuccessHandler((res: any) => {
+            emitLog('info', '[DataSource] fetchDataSource success', {
+              id: config.id,
+              itemCount: Array.isArray(res?.items) ? res.items.length : Array.isArray(res) ? res.length : 0
+            });
+            cache.set(cacheKey, res);
+            resolve(res);
+          })
+          .withFailureHandler((err: any) => {
+            emitLog('error', '[DataSource] fetchDataSource failed', { id: config.id, err });
+            resolve(null);
+          })
+          .fetchDataSource?.(config, language, config.projection, config.limit, undefined);
+      } catch (_) {
+        emitLog('error', '[DataSource] fetchDataSource threw synchronously', { id: config.id });
+        resolve(null);
+      }
+    };
+
+    attempt();
   });
 }
 
@@ -47,7 +92,12 @@ export async function resolveQuestionOptionsFromSource(
   question: WebQuestionDefinition,
   language: LangCode
 ): Promise<string[] | null> {
-  if (!question.dataSource || question.type !== 'CHOICE') return null;
+  if (
+    !question.dataSource ||
+    (question.type !== 'CHOICE' && question.type !== 'CHECKBOX')
+  ) {
+    return null;
+  }
   const res = await fetchDataSource(question.dataSource, language);
   if (!res) return null;
   const items = Array.isArray((res as any).items) ? (res as any).items : Array.isArray(res) ? res : [];

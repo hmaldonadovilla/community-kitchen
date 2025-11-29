@@ -201,4 +201,42 @@ describe('ConfigSheet', () => {
     expect(questions[0].uploadConfig!.allowedExtensions).toEqual(['jpg', 'png']);
     expect(questions[0].uploadConfig!.destinationFolderId).toBe('abc');
   });
+
+  test('getQuestions parses dataSource config JSON for choice fields', () => {
+    const configSheet = mockSS.insertSheet('Config: DataSource');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q8',
+        'CHOICE',
+        'Dish',
+        'Plat',
+        'Gerecht',
+        true,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "dataSource": {
+            "id": "Recepies Data",
+            "projection": ["Dish Name"],
+            "limit": 100,
+            "mode": "options"
+          }
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: DataSource');
+    expect(questions[0].dataSource).toBeDefined();
+    expect(questions[0].dataSource!.id).toBe('Recepies Data');
+    expect(questions[0].dataSource!.projection).toEqual(['Dish Name']);
+    expect(questions[0].dataSource!.limit).toBe(100);
+    expect(questions[0].dataSource!.mode).toBe('options');
+  });
 });

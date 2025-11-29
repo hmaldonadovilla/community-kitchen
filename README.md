@@ -40,6 +40,24 @@ Nothing extra is required in day-to-day use: submitting a form, editing a row, o
 - Delete the stored fingerprints via the Apps Script console: `PropertiesService.getDocumentProperties().deleteAllProperties();`.
 - Redeploy a rebuilt `dist/Code.js` bundle (new cache prefixes) or wait for the ~5 minute CacheService TTL to expire naturally.
 
+## Debug Logging
+
+Verbose logging can be toggled per deployment via a script property (`CK_DEBUG`). Add the following helper functions to the Apps Script editor (e.g., in `Code.gs`) and run them as needed:
+
+```js
+function enableDebugLogs() {
+  PropertiesService.getScriptProperties().setProperty('CK_DEBUG', '1');
+  Logger.log('CK_DEBUG enabled');
+}
+
+function disableDebugLogs() {
+  PropertiesService.getScriptProperties().deleteProperty('CK_DEBUG');
+  Logger.log('CK_DEBUG disabled');
+}
+```
+
+When enabled, server-side debug statements (e.g., `WebFormService` diagnostics) stream to both `Logger.log` and the execution log, making it easier to trace dashboard loading, form rendering, and data fetches. Disable logging before final deployments to avoid noisy logs.
+
 ## Setup
 
 1. **Install Dependencies**:

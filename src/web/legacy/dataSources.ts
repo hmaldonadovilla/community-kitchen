@@ -63,29 +63,87 @@ function writeOptionsToCheckbox(wrapper: HTMLElement, name: string, options: str
   wrapper.dataset.originalOptions = JSON.stringify({ en: labelsMap.en || options, fr: labelsMap.fr || options, nl: labelsMap.nl || options });
 }
 
+function emitLog(
+  level: 'info' | 'warn' | 'error',
+  message: string,
+  payload?: Record<string, any>
+): void {
+  const localConsole =
+    typeof globalThis === 'object' && 'console' in globalThis
+      ? (globalThis as typeof globalThis & { console: Console }).console
+      : undefined;
+  localConsole?.[level]?.(message, payload);
+  try {
+    const currentWindow =
+      typeof globalThis === 'object' && 'window' in globalThis
+        ? (globalThis as Window & typeof globalThis)
+        : undefined;
+    const parentWindow = currentWindow?.parent;
+    if (parentWindow && parentWindow === currentWindow) {
+      return;
+    }
+    if (parentWindow) {
+      const parentConsole = (parentWindow as any).console as Console | undefined;
+      parentConsole?.[level]?.(message, payload);
+    }
+  } catch (err) {
+    localConsole?.debug?.('[DataSource] emitLog parent mirror failed', err);
+  }
+}
+
 async function hydrateQuestionOptions(
   question: WebQuestionDefinition,
   language: LangCode,
   formEl: HTMLFormElement
 ): Promise<void> {
+  emitLog('info', '[DataSource] hydrateQuestionOptions start', { questionId: question.id, type: question.type });
   const options = await resolveQuestionOptionsFromSource(question, language);
-  if (!options || !options.length) return;
+  const resolvedOptions = options ?? [];
+  if (resolvedOptions.length === 0) {
+    emitLog('warn', '[DataSource] no options returned', { questionId: question.id });
+    return;
+  }
+  // Persist hydrated options on the definition so filters/visibility logic can
+  // keep using question.options even after dynamic replacement.
+  question.options = {
+    en: resolvedOptions,
+    fr: resolvedOptions,
+    nl: resolvedOptions
+  };
   const langKey = (language || 'en').toString().toLowerCase();
   const labelsMap: Record<string, string[]> = {
-    en: options,
-    fr: options,
-    nl: options,
+    en: resolvedOptions,
+    fr: resolvedOptions,
+    nl: resolvedOptions,
     __lang: langKey
   } as any;
 
   if (question.type === 'CHOICE') {
     const select = formEl.querySelector<HTMLSelectElement>('[name="' + question.id + '"]');
-    if (select) writeOptionsToSelect(select, options, labelsMap);
+    if (select) {
+      const previousValue = select.value;
+      writeOptionsToSelect(select, resolvedOptions, labelsMap);
+      if (previousValue && Array.from(select.options).some(opt => opt.value === previousValue)) {
+        select.value = previousValue;
+      }
+    }
+    emitLog('info', '[DataSource] choice options written', { questionId: question.id, count: resolvedOptions.length });
   } else if (question.type === 'CHECKBOX') {
     const wrapper =
       formEl.querySelector<HTMLElement>('[data-field-name="' + question.id + '"]') ||
       formEl.querySelector<HTMLElement>('[name="' + question.id + '"]');
-    if (wrapper) writeOptionsToCheckbox(wrapper, question.id, options, labelsMap);
+    if (wrapper) {
+      const prevSelections = Array.from(wrapper.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+      writeOptionsToCheckbox(wrapper, question.id, resolvedOptions, labelsMap);
+      if (prevSelections.length) {
+        wrapper.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(cb => {
+          if (prevSelections.includes(cb.value)) cb.checked = true;
+        });
+      }
+    }
+    emitLog('info', '[DataSource] checkbox options written', { questionId: question.id, count: resolvedOptions.length });
   }
 }
 
@@ -93,6 +151,7 @@ export async function hydrateDataSources(definition: WebFormDefinition, language
   const tasks: Promise<void>[] = [];
   definition.questions.forEach(q => {
     if (q.dataSource && (q.type === 'CHOICE' || q.type === 'CHECKBOX')) {
+      emitLog('info', '[DataSource] scheduling hydration', { questionId: q.id });
       tasks.push(hydrateQuestionOptions(q, language, formEl));
     }
   });

@@ -270,24 +270,16 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       if (__WEB_FORM_DEBUG__ && console && console.info) {
         try {
           console.info('[WebForm] inline script loaded', { questionCount: definition.questions?.length || 0, languages: definition.languages });
+          console.info('[WebForm] WebFormApp keys', Object.keys(window.WebFormApp || {}));
+        } catch (_) {}
+        try {
+          const dsQuestions = (definition.questions || []).filter(q => q.dataSource);
+          console.info('[WebForm] dataSource diagnostics', {
+            count: dsQuestions.length,
+            questionIds: dsQuestions.map(q => q.id)
+          });
         } catch (_) {}
       }
-      if (typeof WebFormApp !== 'undefined' && typeof WebFormApp.bootstrapWebForm === 'function') {
-        try {
-          WebFormApp.bootstrapWebForm(definition, formKey, {
-            mountListView: document.getElementById('list-view'),
-            onReady: () => {
-              if (definition.startRoute === 'list') {
-                document.getElementById('form-view').style.display = 'none';
-                document.getElementById('list-view').style.display = 'block';
-              }
-            },
-          });
-        } catch (err) {
-          console && console.error && console.error(err);
-        }
-      }
-
       const viewportMeta = document.querySelector('meta[name="viewport"]');
       const originalViewport = viewportMeta?.getAttribute('content') || 'width=device-width, initial-scale=1';
       const lockedViewport = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
@@ -324,6 +316,35 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
   const listColumns = definition.questions.filter(q => q.listView);
   let listViewLoaded = false;
   let listStatus = document.getElementById('list-status');
+      function getWebFormApp() {
+        if (window.WebFormApp) return window.WebFormApp;
+        try {
+          if (typeof WebFormApp !== 'undefined') {
+            return WebFormApp;
+          }
+        } catch (_) {
+          // ignore
+        }
+        return undefined;
+      }
+
+      const initialApp = getWebFormApp();
+      if (initialApp && typeof initialApp.bootstrapWebForm === 'function') {
+        try {
+          initialApp.bootstrapWebForm(definition, formKey, {
+            mountListView: document.getElementById('list-view'),
+            onReady: () => {
+              if (definition.startRoute === 'list') {
+                document.getElementById('form-view').style.display = 'none';
+                document.getElementById('list-view').style.display = 'block';
+              }
+            },
+          });
+        } catch (err) {
+          console && console.error && console.error(err);
+        }
+      }
+
       const defaultRuleMessages = {
         required: { en: 'This field is required.', fr: 'Ce champ est obligatoire.', nl: 'Dit veld is verplicht.' },
         min: (limit) => ({ en: 'Value must be >= ' + limit + '.', fr: 'La valeur doit être >= ' + limit + '.', nl: 'Waarde moet >= ' + limit + '.' }),
@@ -716,10 +737,11 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           if (changedQuestion?.clearOnChange) {
             clearOtherFieldsExcept(changedId);
           }
-          if (window.WebFormApp && typeof WebFormApp.handleSelectionEffects === 'function' && changedQuestion) {
+          const app = getWebFormApp();
+          if (app && typeof app.handleSelectionEffects === 'function' && changedQuestion) {
             try {
               const value = getValue(changedId);
-              WebFormApp.handleSelectionEffects(definition, changedQuestion, value, state.language, {
+              app.handleSelectionEffects(definition, changedQuestion, value, state.language, {
                 addLineItemRow: (groupId, preset) => {
                   const container = document.querySelector('[data-line-item="' + groupId + '"]');
                   const groupDef = definition.questions.find(q => q.id === groupId);
@@ -887,9 +909,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
               addBtn.addEventListener('click', () => openLineOverlay(q, container));
             } else {
               addBtn.addEventListener('click', () => {
-                if (window.WebFormApp && typeof WebFormApp.addLineItemRowFromBundle === 'function') {
+                const app = getWebFormApp();
+                if (app && typeof app.addLineItemRowFromBundle === 'function') {
                   try {
-                    WebFormApp.addLineItemRowFromBundle(q, formEl, {});
+                    app.addLineItemRowFromBundle(q, formEl, {});
                     return;
                   } catch (err) {
                     console && console.warn && console.warn('addLineItemRow via bundle failed; using legacy', err);
@@ -1217,9 +1240,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           return { id: row.dataset.rowId || '', values };
         });
 
-        if (window.WebFormApp && typeof WebFormApp.computeLineTotals === 'function') {
+        const app = getWebFormApp();
+        if (app && typeof app.computeLineTotals === 'function') {
           try {
-            const totals = WebFormApp.computeLineTotals({ config: group.lineItemConfig, rows: rowData }, state.language);
+            const totals = app.computeLineTotals({ config: group.lineItemConfig, rows: rowData }, state.language);
             totals.forEach((t) => {
               const pill = document.createElement('div');
               pill.className = 'line-item-total-pill';
@@ -1253,9 +1277,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
       function updateLanguage() {
         const current = state.language.toLowerCase();
-        if (window.WebFormApp && typeof WebFormApp.updateLanguageLabels === 'function') {
+        const app = getWebFormApp();
+        if (app && typeof app.updateLanguageLabels === 'function') {
           try {
-            WebFormApp.updateLanguageLabels({ language: state.language, root: document, definition });
+            app.updateLanguageLabels({ language: state.language, root: document, definition });
           } catch (err) {
             console && console.warn && console.warn('Language update via bundle failed, using legacy path', err);
           }
@@ -1285,22 +1310,43 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         applyAllFilters();
       }
 
+      let hydrateAttemptCount = 0;
       function applyAllFilters(scopeRow) {
-        if (window.WebFormApp && typeof WebFormApp.hydrateDataSources === 'function') {
-          WebFormApp.hydrateDataSources(definition, state.language, formEl)
+        const appForHydration = getWebFormApp();
+        if (appForHydration && typeof appForHydration.hydrateDataSources === 'function') {
+          if (__WEB_FORM_DEBUG__) {
+            console.info('[WebForm] hydrateDataSources invoked', { language: state.language });
+          }
+          appForHydration.hydrateDataSources(definition, state.language, formEl)
             .then(() => {
-              if (window.WebFormApp && typeof WebFormApp.applyFiltersAndVisibility === 'function') {
-                WebFormApp.applyFiltersAndVisibility({ definition, language: state.language, formEl, scopeRow });
+              if (__WEB_FORM_DEBUG__) {
+                console.info('[WebForm] hydrateDataSources completed');
+              }
+              const appAfterHydration = getWebFormApp();
+              if (appAfterHydration && typeof appAfterHydration.applyFiltersAndVisibility === 'function') {
+                appAfterHydration.applyFiltersAndVisibility({ definition, language: state.language, formEl, scopeRow });
                 definition.questions.forEach(q => { if (q.type === 'LINE_ITEM_GROUP') updateLineItemTotals(q.id); });
               }
             })
-            .catch(() => {
-              // ignore hydration errors; fall back below
+            .catch((err) => {
+              if (__WEB_FORM_DEBUG__) {
+                console.error('[WebForm] hydrateDataSources failed', err);
+              }
             });
+        } else if (hydrateAttemptCount < 20) {
+          hydrateAttemptCount += 1;
+          if (__WEB_FORM_DEBUG__) {
+            console.warn('[WebForm] hydrateDataSources not ready, retrying', { attempt: hydrateAttemptCount });
+          }
+          setTimeout(() => applyAllFilters(scopeRow), 100);
+          return;
+        } else if (__WEB_FORM_DEBUG__) {
+          console.warn('[WebForm] hydrateDataSources function missing on WebFormApp after retries');
         }
-        if (window.WebFormApp && typeof WebFormApp.applyFiltersAndVisibility === 'function') {
+        const appForFilters = getWebFormApp();
+        if (appForFilters && typeof appForFilters.applyFiltersAndVisibility === 'function') {
           try {
-            WebFormApp.applyFiltersAndVisibility({ definition, language: state.language, formEl, scopeRow });
+            appForFilters.applyFiltersAndVisibility({ definition, language: state.language, formEl, scopeRow });
             definition.questions.forEach(q => { if (q.type === 'LINE_ITEM_GROUP') updateLineItemTotals(q.id); });
             return;
           } catch (err) {
@@ -1593,12 +1639,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
 
       function validateForm() {
         clearAllErrors();
-        if (window.WebFormApp && typeof WebFormApp.validateFormWithBundle === 'function') {
+        const appForValidation = getWebFormApp();
+        if (appForValidation && typeof appForValidation.validateFormWithBundle === 'function') {
           try {
-            const result = WebFormApp.validateFormWithBundle(definition, state.language, formEl);
+            const result = appForValidation.validateFormWithBundle(definition, state.language, formEl);
             if (result && Array.isArray(result.errors) && result.errors.length) {
               const first = result.errors[0];
-              const fieldEl = WebFormApp.resolveFieldElement ? WebFormApp.resolveFieldElement(first, formEl) : null;
+              const fieldEl = appForValidation.resolveFieldElement ? appForValidation.resolveFieldElement(first, formEl) : null;
               return { message: first.message, fieldId: first.fieldId, scope: first.scope || 'main', row: fieldEl?.closest('.line-item-row') || undefined };
             }
           } catch (err) {
@@ -1908,9 +1955,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       }
 
       function syncLineItemPayload() {
-        if (window.WebFormApp && typeof WebFormApp.syncLineItemPayload === 'function') {
+        const appForSync = getWebFormApp();
+        if (appForSync && typeof appForSync.syncLineItemPayload === 'function') {
           try {
-            WebFormApp.syncLineItemPayload(definition, formEl);
+            appForSync.syncLineItemPayload(definition, formEl);
             return;
           } catch (err) {
             console && console.warn && console.warn('syncLineItemPayload via bundle failed; using legacy', err);
@@ -1944,9 +1992,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
       }
 
       function buildPayloadFromForm() {
-        if (window.WebFormApp && typeof WebFormApp.buildPayloadFromForm === 'function') {
+        const appForPayload = getWebFormApp();
+        if (appForPayload && typeof appForPayload.buildPayloadFromForm === 'function') {
           try {
-            return WebFormApp.buildPayloadFromForm(formEl);
+            return appForPayload.buildPayloadFromForm(formEl);
           } catch (err) {
             console && console.warn && console.warn('buildPayloadFromForm via bundle failed; using legacy', err);
           }
@@ -2083,9 +2132,10 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         summaryView.innerHTML = '';
         followupView.innerHTML = '';
 
-        if (window.WebFormApp && typeof WebFormApp.renderSummaryView === 'function') {
+        const appSummary = getWebFormApp();
+        if (appSummary && typeof appSummary.renderSummaryView === 'function') {
           try {
-            WebFormApp.renderSummaryView({
+            appSummary.renderSummaryView({
               mount: summaryView,
               definition,
               language: state.language,
@@ -2096,9 +2146,9 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           }
         }
 
-        if (window.WebFormApp && typeof WebFormApp.renderFollowupView === 'function') {
+        if (appSummary && typeof appSummary.renderFollowupView === 'function') {
           try {
-            WebFormApp.renderFollowupView({
+            appSummary.renderFollowupView({
               mount: followupView,
               definition,
               language: state.language,
