@@ -263,6 +263,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
     <script>${bundleScript}</script>
     <script>
       const __WEB_FORM_DEBUG__ = ${debugEnabled ? 'true' : 'false'};
+      try { window.__WEB_FORM_DEBUG__ = __WEB_FORM_DEBUG__; } catch (_) {}
       const definition = ${defJson};
       const formKey = ${keyJson};
       window.__WEB_FORM_DEF__ = definition;
@@ -277,6 +278,17 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           console.info('[WebForm] dataSource diagnostics', {
             count: dsQuestions.length,
             questionIds: dsQuestions.map(q => q.id)
+          });
+        } catch (_) {}
+        try {
+          const effectQuestions = (definition.questions || []).filter(q => Array.isArray(q.selectionEffects) && q.selectionEffects.length);
+          console.info('[WebForm] selectionEffects diagnostics', {
+            count: effectQuestions.length,
+            entries: effectQuestions.map(q => ({
+              id: q.id,
+              effectCount: q.selectionEffects.length,
+              triggerValues: q.selectionEffects.map(e => e.triggerValues || [])
+            }))
           });
         } catch (_) {}
       }
@@ -419,22 +431,22 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
               resolve({ list: listPayload, records: recordsPayload });
             };
             const attempt = () => {
-              if (!(google && google.script && google.script.run)) {
+            if (!(google && google.script && google.script.run)) {
                 if (__WEB_FORM_DEBUG__) {
                   console.info('[ListView] google.script.run not ready, retrying...');
                 }
                 setTimeout(attempt, 150);
-                return;
-              }
-              try {
-                google.script.run
+              return;
+            }
+            try {
+              google.script.run
                   .withSuccessHandler(handleSuccess)
                   .withFailureHandler(err => {
                     console.error('[ListView] fetchSubmissionsBatch failed', err);
                     resolve({ list: { items: [], totalCount: 0 }, records: {} });
                   })
                   .fetchSubmissionsBatch(formKey || '', undefined, 10, pageToken, true);
-              } catch (_) {
+            } catch (_) {
                 console.error('[ListView] fetchSubmissionsBatch threw synchronously');
                 resolve({ list: { items: [], totalCount: 0 }, records: {} });
               }

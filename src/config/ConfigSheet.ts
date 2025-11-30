@@ -9,6 +9,7 @@ import {
   OptionFilter,
   QuestionConfig,
   QuestionType,
+  SelectionEffect,
   ValidationRule,
   VisibilityCondition,
   VisibilityConfig
@@ -135,6 +136,7 @@ export class ConfigSheet {
       const validationRules = this.parseValidationRules(validationRaw);
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
+      const selectionEffects = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseSelectionEffects(rawConfig) : undefined;
       const statusRaw = row[idxStatus] ? row[idxStatus].toString().trim().toLowerCase() : 'active';
       const status = statusRaw === 'archived' ? 'Archived' : 'Active';
       const listViewFlag = row[idxListView] !== '' && row[idxListView] !== null ? !!row[idxListView] : false;
@@ -157,7 +159,8 @@ export class ConfigSheet {
         optionFilter,
         validationRules,
         visibility,
-        clearOnChange
+        clearOnChange,
+        selectionEffects
       };
     });
   }
@@ -466,6 +469,36 @@ export class ConfigSheet {
       // ignore
     }
     return undefined;
+  }
+
+  private static parseSelectionEffects(rawConfig: string): SelectionEffect[] | undefined {
+    const parsed = this.safeParseObject(rawConfig);
+    if (!parsed || !Array.isArray(parsed.selectionEffects)) return undefined;
+    const effects: SelectionEffect[] = [];
+    parsed.selectionEffects.forEach((effect: any) => {
+      if (!effect || (effect.type || '').toString() !== 'addLineItems' || !effect.groupId) return;
+      const normalized: SelectionEffect = {
+        type: 'addLineItems',
+        groupId: effect.groupId.toString()
+      };
+      if (Array.isArray(effect.triggerValues)) {
+        const triggers = effect.triggerValues
+          .map((val: any) => (val !== undefined && val !== null ? val.toString() : ''))
+          .filter(Boolean);
+        if (triggers.length) normalized.triggerValues = triggers;
+      }
+      if (effect.preset && typeof effect.preset === 'object') {
+        const preset: Record<string, string | number> = {};
+        Object.keys(effect.preset).forEach(key => {
+          const val = effect.preset[key];
+          if (val === undefined || val === null) return;
+          preset[key.toString()] = typeof val === 'number' ? val : val.toString();
+        });
+        if (Object.keys(preset).length) normalized.preset = preset;
+      }
+      effects.push(normalized);
+    });
+    return effects.length ? effects : undefined;
   }
 
   private static safeParseObject(rawConfig: string): any | undefined {

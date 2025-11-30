@@ -104,7 +104,8 @@ export class WebFormService {
       optionFilter: q.optionFilter,
       validationRules: q.validationRules,
       visibility: q.visibility,
-      clearOnChange: q.clearOnChange
+      clearOnChange: q.clearOnChange,
+      selectionEffects: q.selectionEffects
     }));
 
     const listView = this.buildListViewConfig(webQuestions);
