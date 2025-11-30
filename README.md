@@ -94,6 +94,43 @@ When enabled, server-side debug statements (e.g., `WebFormService` diagnostics) 
   Example: `{ "optionFilter": { "dependsOn": ["Product","Supplier"], "optionMap": { "Carrots||Local": ["Crates"], "Carrots": ["Bags","Crates"], "*": ["Bags"] } } }`
 - **Validation rules**: Add `validationRules` array in Config JSON.  
   Example: `{ "validationRules":[ { "when": {"fieldId":"Product","equals":"Carrots"}, "then": {"fieldId":"Unit","allowed":["Crates"]}, "message":"Carrots only in crates" } ] }`.
+- **Data-driven selection effects**: You can now hydrate a line item group with rows that already exist in a data sheet. Add a `selectionEffects` entry with `type: "addLineItemsFromDataSource"` on any CHOICE / CHECKBOX question. The form will reuse the cached data source rows (or fetch the provided override) and, when the selected value matches, deserialize the specified column (e.g., JSON stored in `Ingredients`) into line-item presets.
+
+  ```json
+  {
+    "dataSource": {
+      "id": "Recepies Data",
+      "projection": ["Dish Name", "Ingredients"],
+      "mode": "options"
+    },
+    "selectionEffects": [
+      {
+        "type": "addLineItemsFromDataSource",
+        "groupId": "MP_INGREDIENTS_LI",
+        "triggerValues": ["Dish A", "Dish B"],
+        "lookupField": "Dish Name",
+        "dataField": "Ingredients",
+        "lineItemMapping": {
+          "ING": "ingredient",
+          "QTY": "quantity",
+          "UNIT": "unit"
+        },
+        "aggregateBy": ["ING", "UNIT"],
+        "aggregateNumericFields": ["QTY"],
+        "clearGroupBeforeAdd": true
+      }
+    ]
+  }
+  ```
+
+  - `dataSource`: optional override; defaults to the question’s own dataSource.
+  - `lookupField`: column used to match the selected option (defaults to the data source `mapping.value` or the first column).
+  - `dataField`: column that contains the JSON array / object used to create line items (required for the data-driven effect).
+  - `lineItemMapping`: map of line item field IDs → keys inside each JSON entry (dot notation allowed).
+  - `aggregateBy`: which line item fields are treated as “non-numeric” keys; rows with matching values are merged.
+  - `aggregateNumericFields`: which fields should be summed even if the underlying line item field is typed as TEXT in the config sheet.
+  - `clearGroupBeforeAdd`: clear existing rows (default `true`). Set to `false` if you want to append.
+  - When multiple dishes are selected (e.g., the driver question is a checkbox), the client rebuilds the target line item group on every change: rows are aggregated using `aggregateBy`, and every field listed in `aggregateNumericFields` (plus all LINE_ITEM_GROUP fields typed as NUMBER) is summed. Deselecting a dish re-computes the totals immediately, so the remaining rows stay proportional to the active selections.
 
 ## Testing
 

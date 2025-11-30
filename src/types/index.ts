@@ -100,10 +100,17 @@ export interface LineItemGroupConfig {
 }
 
 export interface SelectionEffect {
-  type: 'addLineItems';
+  type: 'addLineItems' | 'addLineItemsFromDataSource';
   groupId: string; // target line item group
-  preset?: Record<string, string | number>; // preset field values
+  preset?: Record<string, string | number>; // preset field values for simple addLineItems
   triggerValues?: string[]; // which choice/checkbox values trigger this effect (defaults to any)
+  dataSource?: DataSourceConfig; // optional override source for data-driven effects
+  lookupField?: string; // column/field used to match the selected value
+  dataField?: string; // column/field that contains serialized row payloads (e.g., JSON array)
+  lineItemMapping?: Record<string, string>; // map of line item field id -> source field key
+  clearGroupBeforeAdd?: boolean; // when true (default) clear existing rows before populating
+  aggregateBy?: string[]; // optional line-item field ids to treat as non-numeric grouping keys
+  aggregateNumericFields?: string[]; // optional explicit list of numeric/sum fields
 }
 
 export interface DataSourceConfig {

@@ -1,0 +1,18 @@
+---
+alwaysApply: true
+always_on: true
+trigger: always_on
+applyTo: "**"
+description: Snyk Security At Inception
+---
+
+# Development rules
+
+## Application bundle
+
+- The application bundle that is generated and available at dist/Code.js is a compiled version of the application code.
+- Elemets written in formHtml at /src/WebFormTemplate.ts must not contain typescript references since the final bundle is pure javascript.
+
+## New features
+
+- When creating new features, always add diagnostic logs at the web form level and specific feature logs. This logs need to surface on the top of the web form, to be easily visible in DevTools console.

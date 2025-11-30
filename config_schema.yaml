@@ -405,8 +405,10 @@ components:
       properties:
         type:
           type: string
-          enum: [addLineItems]
-          description: Effect type. `addLineItems` will insert line-item rows.
+          enum: [addLineItems, addLineItemsFromDataSource]
+          description: |
+            Effect type. `addLineItems` inserts rows with static presets.
+            `addLineItemsFromDataSource` hydrates rows by looking up the selected value inside a data source row (supports JSON columns).
         groupId:
           type: string
           description: Target LINE_ITEM_GROUP id where rows are added.
@@ -420,6 +422,33 @@ components:
           items:
             type: string
           description: Choice/checkbox values that trigger the effect (omit to trigger on any selection).
+        dataSource:
+          $ref: '#/components/schemas/DataSourceConfig'
+          description: Optional override for data-driven effects. Defaults to the question's own `dataSource`.
+        lookupField:
+          type: string
+          description: Column/field used to match the selected value when `type=addLineItemsFromDataSource`.
+        dataField:
+          type: string
+          description: Column/field that contains the serialized payload (typically JSON) used to create the line item rows.
+        lineItemMapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map of line item field ids to keys/paths inside each JSON entry (dot notation supported).
+        clearGroupBeforeAdd:
+          type: boolean
+          description: When true (default) the target line item group is cleared before new rows are inserted.
+        aggregateBy:
+          type: array
+          items:
+            type: string
+          description: Explicit list of line item field ids to treat as grouping keys (non-numeric). Rows with the same values across these fields are merged.
+        aggregateNumericFields:
+          type: array
+          items:
+            type: string
+          description: Line item field ids whose values should be summed even if their underlying line item field type is not NUMBER.
 
     VisibilityCondition:
       type: object

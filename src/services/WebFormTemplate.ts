@@ -760,6 +760,9 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
                   if (container && groupDef && groupDef.type === 'LINE_ITEM_GROUP') {
                     addLineItemRow(groupDef, container, preset || {});
                   }
+                },
+                clearLineItems: (groupId) => {
+                  clearLineItemRows(groupId);
                 }
               });
             } catch (err) {
@@ -1223,6 +1226,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         rowsWrapper.appendChild(row);
         applyAllFilters(row);
         updateLineItemTotals(q.id);
+      }
+
+      function clearLineItemRows(groupId) {
+        const container = document.querySelector('[data-line-item="' + groupId + '"]');
+        if (!container) return;
+        Array.from(container.querySelectorAll('.line-item-row')).forEach((row) => row.parentElement && row.parentElement.removeChild(row));
+        updateLineItemTotals(groupId);
       }
 
       function formatTotalValue(value, decimalPlaces) {

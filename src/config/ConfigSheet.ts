@@ -414,6 +414,10 @@ export class ConfigSheet {
     if (!parsed) return undefined;
     const candidate = this.extractDataSourceCandidate(parsed);
     if (!candidate || typeof candidate !== 'object') return undefined;
+    return this.buildDataSourceConfig(candidate);
+  }
+
+  private static buildDataSourceConfig(candidate: any): DataSourceConfig | undefined {
     const idValue = candidate.id || candidate.sourceId || candidate.sheet;
     if (!idValue) return undefined;
 
@@ -476,9 +480,11 @@ export class ConfigSheet {
     if (!parsed || !Array.isArray(parsed.selectionEffects)) return undefined;
     const effects: SelectionEffect[] = [];
     parsed.selectionEffects.forEach((effect: any) => {
-      if (!effect || (effect.type || '').toString() !== 'addLineItems' || !effect.groupId) return;
+      if (!effect || !effect.groupId) return;
+      const type = (effect.type || 'addLineItems').toString();
+      if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource') return;
       const normalized: SelectionEffect = {
-        type: 'addLineItems',
+        type: type as SelectionEffect['type'],
         groupId: effect.groupId.toString()
       };
       if (Array.isArray(effect.triggerValues)) {
@@ -495,6 +501,50 @@ export class ConfigSheet {
           preset[key.toString()] = typeof val === 'number' ? val : val.toString();
         });
         if (Object.keys(preset).length) normalized.preset = preset;
+      }
+      if (type === 'addLineItemsFromDataSource') {
+        const dsCandidate = this.extractDataSourceCandidate(effect) || this.extractDataSourceCandidate(effect.dataSource);
+        if (dsCandidate) {
+          const config = this.buildDataSourceConfig(dsCandidate);
+          if (config) {
+            normalized.dataSource = config;
+          }
+        } else if (effect.dataSourceId) {
+          normalized.dataSource = { id: effect.dataSourceId.toString() };
+        }
+        if (effect.lookupField) {
+          normalized.lookupField = effect.lookupField.toString();
+        }
+        if (effect.dataField) {
+          normalized.dataField = effect.dataField.toString();
+        }
+        if (effect.clearGroupBeforeAdd !== undefined) {
+          normalized.clearGroupBeforeAdd = Boolean(effect.clearGroupBeforeAdd);
+        }
+        if (effect.lineItemMapping && typeof effect.lineItemMapping === 'object') {
+          const mapping: Record<string, string> = {};
+          Object.keys(effect.lineItemMapping).forEach(key => {
+            const value = effect.lineItemMapping[key];
+            if (value !== undefined && value !== null) {
+              mapping[key.toString()] = value.toString();
+            }
+          });
+          if (Object.keys(mapping).length) {
+            normalized.lineItemMapping = mapping;
+          }
+        }
+        if (Array.isArray(effect.aggregateBy)) {
+          const aggregateBy = effect.aggregateBy
+            .map((fieldId: any) => (fieldId !== undefined && fieldId !== null ? fieldId.toString() : ''))
+            .filter(Boolean);
+          if (aggregateBy.length) normalized.aggregateBy = aggregateBy;
+        }
+        if (Array.isArray(effect.aggregateNumericFields)) {
+          const numericFields = effect.aggregateNumericFields
+            .map((fieldId: any) => (fieldId !== undefined && fieldId !== null ? fieldId.toString() : ''))
+            .filter(Boolean);
+          if (numericFields.length) normalized.aggregateNumericFields = numericFields;
+        }
       }
       effects.push(normalized);
     });
