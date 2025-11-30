@@ -7,6 +7,16 @@ interface EffectContext {
   clearLineItems?: (groupId: string) => void;
 }
 
+export interface SelectionEffectOptions {
+  contextId?: string;
+  lineItem?: {
+    groupId: string;
+    rowId?: string;
+    rowValues?: Record<string, any>;
+  };
+  forceContextReset?: boolean;
+}
+
 function applies(effect: SelectionEffect, value: string | string[] | null | undefined): boolean {
   if (!effect.triggerValues || effect.triggerValues.length === 0) return true;
   const vals = Array.isArray(value) ? value : value ? [value] : [];
@@ -26,17 +36,21 @@ export function handleSelectionEffects(
   question: WebQuestionDefinition | undefined,
   value: string | string[] | null | undefined,
   language: LangCode,
-  ctx: EffectContext
+  ctx: EffectContext,
+  options?: SelectionEffectOptions
 ): void {
   if (!question?.selectionEffects || !question.selectionEffects.length) return;
   const debug = isDebug();
+  const contextId = options?.contextId || '__global__';
   const normalizedSelections = normalizeSelectionValues(value);
-  const diffPreview = previewSelectionDiff(question, normalizedSelections);
+  const diffPreview = previewSelectionDiff(question, contextId, normalizedSelections, options?.forceContextReset);
   if (debug && typeof console !== 'undefined') {
     console.info('[SelectionEffects] evaluating', {
       questionId: question.id,
       value,
       effectCount: question.selectionEffects.length,
+      contextId,
+      rowId: options?.lineItem?.rowId,
       currentSelections: diffPreview.currentSelections,
       newlySelected: diffPreview.newlySelected,
       removedSelections: diffPreview.removedSelections
@@ -69,10 +83,13 @@ export function handleSelectionEffects(
         effect,
         definition,
         question,
-        value,
         language,
         ctx,
-        debug
+        debug,
+        contextId,
+        normalizedSelections,
+        diff: diffPreview,
+        lineItem: options?.lineItem
       });
     }
   });
@@ -82,14 +99,22 @@ interface DataDrivenEffectParams {
   effect: SelectionEffect;
   definition: WebFormDefinition;
   question: WebQuestionDefinition;
-  value: string | string[] | null | undefined;
   language: LangCode;
   ctx: EffectContext;
   debug: boolean;
+  contextId: string;
+  normalizedSelections: string[];
+  diff: SelectionDiffPreview;
+  lineItem?: SelectionEffectOptions['lineItem'];
+}
+
+interface SelectionCacheEntry {
+  value: string;
+  entries: any[];
 }
 
 interface SelectionEffectCache {
-  selectionEntries: Map<string, any[]>;
+  contexts: Map<string, Map<string, SelectionCacheEntry>>;
   token: number;
 }
 
@@ -108,9 +133,22 @@ function getStateKey(question: WebQuestionDefinition): string {
 function getOrCreateCache(question: WebQuestionDefinition): SelectionEffectCache {
   const key = getStateKey(question);
   if (!selectionEffectState.has(key)) {
-    selectionEffectState.set(key, { selectionEntries: new Map(), token: 0 });
+    selectionEffectState.set(key, { contexts: new Map(), token: 0 });
   }
   return selectionEffectState.get(key)!;
+}
+
+function getContextMap(
+  cache: SelectionEffectCache,
+  contextId: string,
+  create = false
+): Map<string, SelectionCacheEntry> | undefined {
+  const key = contextId || '__global__';
+  if (!cache.contexts.has(key)) {
+    if (!create) return undefined;
+    cache.contexts.set(key, new Map());
+  }
+  return cache.contexts.get(key);
 }
 
 function normalizeString(val: any): string {
@@ -127,10 +165,22 @@ function normalizeSelectionValues(value: string | string[] | null | undefined): 
   return Array.from(new Set(normalized));
 }
 
-function previewSelectionDiff(question: WebQuestionDefinition, normalizedSelections: string[]): SelectionDiffPreview {
+function previewSelectionDiff(
+  question: WebQuestionDefinition,
+  contextId: string,
+  normalizedSelections: string[],
+  forceContextReset?: boolean
+): SelectionDiffPreview {
   const cache = getOrCreateCache(question);
-  const removedSelections = Array.from(cache.selectionEntries.keys()).filter(sel => !normalizedSelections.includes(sel));
-  const newlySelected = normalizedSelections.filter(sel => !cache.selectionEntries.has(sel));
+  const contextMap = getContextMap(cache, contextId, true)!;
+  const previousSelections = Array.from(contextMap.keys());
+  if (forceContextReset) {
+    contextMap.clear();
+  }
+  const removedSelections = forceContextReset
+    ? previousSelections
+    : previousSelections.filter(sel => !normalizedSelections.includes(sel));
+  const newlySelected = normalizedSelections.filter(sel => !contextMap.has(sel));
   return {
     newlySelected,
     removedSelections,
@@ -184,6 +234,17 @@ function getValueFromPath(source: any, path: string | undefined): any {
   return current;
 }
 
+function getValueFromSourceRow(source: any, path: string | undefined): any {
+  if (!source || !path) return undefined;
+  const direct = getValueFromPath(source, path);
+  if (direct !== undefined) return direct;
+  if (typeof source !== 'object' || !source) return undefined;
+  const normalized = path.toLowerCase();
+  const fallbackKey = Object.keys(source).find(key => key.toLowerCase() === normalized);
+  if (fallbackKey) return source[fallbackKey];
+  return undefined;
+}
+
 function buildPreset(
   entry: any,
   effect: SelectionEffect,
@@ -201,14 +262,118 @@ function buildPreset(
   return preset;
 }
 
+function setValueAtPath(target: any, path: string | undefined, value: any): void {
+  if (!target || !path) return;
+  const segments = path.split('.').map(seg => seg.trim()).filter(Boolean);
+  if (!segments.length) return;
+  let current = target;
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    const segment = segments[i];
+    if (current[segment] === undefined || current[segment] === null || typeof current[segment] !== 'object') {
+      current[segment] = {};
+    }
+    current = current[segment];
+  }
+  current[segments[segments.length - 1]] = value;
+}
+
+function parseNumericValue(value: any): number {
+  if (Array.isArray(value)) {
+    return Number(value[0]);
+  }
+  return Number(value);
+}
+
+function determineScaleFactor(
+  effect: SelectionEffect,
+  lineItemContext: SelectionEffectOptions['lineItem'],
+  sourceRow: any
+): number {
+  if (!effect.rowMultiplierFieldId) return 1;
+  const rowValues = lineItemContext?.rowValues || {};
+  const desiredRaw = rowValues[effect.rowMultiplierFieldId];
+  const desiredValue = parseNumericValue(desiredRaw);
+  if (!Number.isFinite(desiredValue)) return 1;
+  if (!effect.dataSourceMultiplierField) return desiredValue;
+  const baselineRaw = getValueFromSourceRow(sourceRow, effect.dataSourceMultiplierField);
+  const baseline = Number(baselineRaw);
+  if (!Number.isFinite(baseline) || baseline === 0) {
+    if (isDebug() && typeof console !== 'undefined') {
+      console.info('[SelectionEffects] scale baseline missing', {
+        groupId: effect.groupId,
+        rowId: lineItemContext?.rowId,
+        fieldId: effect.dataSourceMultiplierField,
+        baseline: baselineRaw
+      });
+    }
+    return desiredValue;
+  }
+  const factor = desiredValue / baseline;
+  if (isDebug() && typeof console !== 'undefined') {
+    console.info('[SelectionEffects] scale factor computed', {
+      groupId: effect.groupId,
+      rowId: lineItemContext?.rowId,
+      multiplierField: effect.rowMultiplierFieldId,
+      sourceField: effect.dataSourceMultiplierField,
+      desired: desiredValue,
+      baseline,
+      factor
+    });
+  }
+  return factor;
+}
+
+function resolveNumericTargets(effect: SelectionEffect, group: WebQuestionDefinition): string[] {
+  if (effect.scaleNumericFields && effect.scaleNumericFields.length) {
+    return effect.scaleNumericFields;
+  }
+  if (effect.aggregateNumericFields && effect.aggregateNumericFields.length) {
+    return effect.aggregateNumericFields;
+  }
+  const numericFields = group.lineItemConfig?.fields
+    ?.filter(field => field.type === 'NUMBER')
+    .map(field => field.id) || [];
+  return numericFields;
+}
+
+function applyScale(
+  entries: any[],
+  effect: SelectionEffect,
+  lineItemContext: SelectionEffectOptions['lineItem'],
+  sourceRow: any,
+  group: WebQuestionDefinition
+): any[] {
+  const scaleFactor = determineScaleFactor(effect, lineItemContext, sourceRow);
+  const targets = resolveNumericTargets(effect, group);
+  const mapping = effect.lineItemMapping || {};
+  return entries.map(entry => {
+    const clone = { ...entry };
+    if (isFinite(scaleFactor) && scaleFactor !== 1 && targets.length) {
+      targets.forEach(fieldId => {
+        const sourcePath = mapping[fieldId] || fieldId;
+        const currentValue = Number(getValueFromPath(clone, sourcePath));
+        if (!Number.isFinite(currentValue)) return;
+        const scaledRaw = currentValue * scaleFactor;
+        if (!Number.isFinite(scaledRaw)) return;
+        const scaledValue = Number(scaledRaw.toFixed(2));
+        setValueAtPath(clone, sourcePath, scaledValue);
+      });
+    }
+    return clone;
+  });
+}
+
 function populateLineItemsFromDataSource({
   effect,
   definition,
   question,
-  value,
   language,
   ctx,
-  debug
+  debug,
+  contextId,
+  normalizedSelections,
+  diff,
+  lineItem
 }: DataDrivenEffectParams): void {
   const sourceConfig = effect.dataSource || question.dataSource;
   if (!sourceConfig) {
@@ -220,24 +385,46 @@ function populateLineItemsFromDataSource({
     }
     return;
   }
-  const rawSelections = Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
-  const normalizedSelections = Array.from(new Set(rawSelections.map(normalizeString))).filter(Boolean);
-  const cache = getOrCreateCache(question);
-  const removedSelections = Array.from(cache.selectionEntries.keys()).filter(sel => !normalizedSelections.includes(sel));
-  removedSelections.forEach(sel => cache.selectionEntries.delete(sel));
-  if (!normalizedSelections.length) {
-    cache.selectionEntries.clear();
-    if (typeof ctx.clearLineItems === 'function') {
-      ctx.clearLineItems(effect.groupId);
-    }
+  const group = definition.questions.find(q => q.id === effect.groupId);
+  if (!group || group.type !== 'LINE_ITEM_GROUP' || !group.lineItemConfig) {
     if (debug && typeof console !== 'undefined') {
-      console.info('[SelectionEffects] no selected values for data-driven effect', {
+      console.warn('[SelectionEffects] target group missing or misconfigured', {
+        effect,
         questionId: question.id
       });
     }
     return;
   }
-  const missingSelections = normalizedSelections.filter(sel => !cache.selectionEntries.has(sel));
+  const cache = getOrCreateCache(question);
+  const contextMap = getContextMap(cache, contextId, true)!;
+  diff.removedSelections.forEach(sel => contextMap.delete(sel));
+  if (!normalizedSelections.length) {
+    contextMap.clear();
+    if (debug && typeof console !== 'undefined') {
+      console.info('[SelectionEffects] context cleared (no selections)', { questionId: question.id, contextId });
+    }
+    renderAggregatedRows({
+      effect,
+      definition,
+      group,
+      cache,
+      ctx,
+      debug
+    });
+    return;
+  }
+  const missingSelections = normalizedSelections.filter(sel => !contextMap.has(sel));
+  if (!missingSelections.length) {
+    renderAggregatedRows({
+      effect,
+      definition,
+      group,
+      cache,
+      ctx,
+      debug
+    });
+    return;
+  }
   const stateToken = ++cache.token;
 
   fetchDataSource(sourceConfig, language)
@@ -257,6 +444,15 @@ function populateLineItemsFromDataSource({
             sourceId: sourceConfig.id
           });
         }
+        contextMap.clear();
+        renderAggregatedRows({
+          effect,
+          definition,
+          group,
+          cache,
+          ctx,
+          debug
+        });
         return;
       }
       const sampleRow = rows[0];
@@ -270,17 +466,7 @@ function populateLineItemsFromDataSource({
         }
         return;
       }
-      const group = definition.questions.find(q => q.id === effect.groupId);
-      if (!group || group.type !== 'LINE_ITEM_GROUP' || !group.lineItemConfig) {
-        if (debug && typeof console !== 'undefined') {
-          console.warn('[SelectionEffects] target group missing or misconfigured', {
-            effect,
-            questionId: question.id
-          });
-        }
-        return;
-      }
-      const lineFieldIds = (group?.lineItemConfig?.fields || []).map(field => field.id);
+      const lineFieldIds = (group.lineItemConfig?.fields || []).map(field => field.id);
       missingSelections.forEach(selectedValue => {
         const normalizedTarget = selectedValue.toLowerCase();
         const row = rows.find((candidate: any) => {
@@ -295,7 +481,7 @@ function populateLineItemsFromDataSource({
               lookupField
             });
           }
-          cache.selectionEntries.delete(selectedValue);
+          contextMap.delete(selectedValue);
           return;
         }
         const payload = effect.dataField ? row[effect.dataField] : row;
@@ -308,16 +494,19 @@ function populateLineItemsFromDataSource({
               dataField: effect.dataField
             });
           }
-          cache.selectionEntries.delete(selectedValue);
+          contextMap.delete(selectedValue);
           return;
         }
-        cache.selectionEntries.set(selectedValue, entries.map(entry => ({ ...entry })));
+        const scaledEntries = applyScale(entries, effect, lineItem, row, group);
+        contextMap.set(selectedValue, {
+          value: selectedValue,
+          entries: scaledEntries
+        });
       });
       renderAggregatedRows({
+        effect,
         definition,
         group,
-        effect,
-        normalizedSelections,
         cache,
         ctx,
         debug
@@ -334,7 +523,6 @@ interface RenderParams {
   definition: WebFormDefinition;
   group: WebQuestionDefinition;
   effect: SelectionEffect;
-  normalizedSelections: string[];
   cache: SelectionEffectCache;
   ctx: EffectContext;
   debug: boolean;
@@ -343,17 +531,17 @@ interface RenderParams {
 function renderAggregatedRows({
   effect,
   group,
-  normalizedSelections,
   cache,
   ctx,
   debug
 }: RenderParams): void {
   const entriesForAllSelections: any[] = [];
-  normalizedSelections.forEach(selectionValue => {
-    const entries = cache.selectionEntries.get(selectionValue);
-    if (entries && entries.length) {
-      entriesForAllSelections.push(...entries);
-    }
+  cache.contexts.forEach(selectionMap => {
+    selectionMap.forEach(entry => {
+      if (entry.entries && entry.entries.length) {
+        entriesForAllSelections.push(...entry.entries);
+      }
+    });
   });
   if (!entriesForAllSelections.length) {
     if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
@@ -419,8 +607,9 @@ function aggregateEntries(
     numericFieldIds.forEach(id => {
       if (preset[id] !== undefined && preset[id] !== null) {
         const asNumber = Number(preset[id]);
-        if (!isNaN(asNumber)) {
-          preset[id] = asNumber.toString();
+        if (Number.isFinite(asNumber)) {
+          const rounded = Number(asNumber.toFixed(2));
+          preset[id] = rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(2);
         }
       }
     });

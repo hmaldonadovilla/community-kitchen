@@ -769,6 +769,16 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
               console && console.warn && console.warn('Selection effect failed', err);
             }
           }
+          if (!changedQuestion && typeof e.target.closest === 'function') {
+            const rowEl = e.target.closest('.line-item-row');
+            if (rowEl) {
+              const groupId = rowEl.dataset.groupId || (rowEl.closest('[data-line-item]')?.dataset.lineItem);
+              const groupDef = definition.questions.find(q => q.id === groupId);
+              if (groupDef && groupDef.type === 'LINE_ITEM_GROUP') {
+                triggerLineItemEffects(groupDef, rowEl);
+              }
+            }
+          }
           applyAllFilters();
         });
 
@@ -1214,6 +1224,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         removeBtn.className = 'secondary';
         removeBtn.textContent = 'Remove';
         removeBtn.addEventListener('click', () => {
+          clearLineItemEffectsForRow(q, row);
           if (row.parentElement) row.parentElement.removeChild(row);
           updateLineItemTotals(q.id);
         });
@@ -1233,6 +1244,111 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         if (!container) return;
         Array.from(container.querySelectorAll('.line-item-row')).forEach((row) => row.parentElement && row.parentElement.removeChild(row));
         updateLineItemTotals(groupId);
+      }
+
+      function getLineItemEffectFields(group) {
+        if (!group || group.type !== 'LINE_ITEM_GROUP') return [];
+        return (group.lineItemConfig?.fields || []).filter(field => Array.isArray(field.selectionEffects) && field.selectionEffects.length);
+      }
+
+      function getLineItemRowContextId(groupId, row) {
+        const rowId = row?.dataset?.rowId || ('row_' + Math.random().toString(16).slice(2));
+        if (row && !row.dataset.rowId) {
+          row.dataset.rowId = rowId;
+        }
+        return groupId + '::' + rowId;
+      }
+
+      function collectLineItemRowValues(group, row) {
+        const values = {};
+        if (!group?.lineItemConfig?.fields || !row) return values;
+        group.lineItemConfig.fields.forEach(field => {
+          const name = group.id + '__' + field.id;
+          if (field.type === 'CHECKBOX') {
+            const inputs = Array.from(row.querySelectorAll('input[name="' + name + '"]'));
+            values[field.id] = inputs.filter(i => i.checked).map(i => i.value);
+            return;
+          }
+          const input = row.querySelector('[name="' + name + '"]');
+          if (!input) {
+            values[field.id] = '';
+            return;
+          }
+          values[field.id] = input.value || '';
+        });
+        return values;
+      }
+
+      function isLineItemRowComplete(group, rowValues) {
+        if (!group?.lineItemConfig?.fields) return true;
+        return group.lineItemConfig.fields.every(field => {
+          if (!field.required) return true;
+          const val = rowValues[field.id];
+          if (Array.isArray(val)) return val.length > 0;
+          return typeof val === 'string' ? val.trim() !== '' : val !== undefined && val !== null;
+        });
+      }
+
+      function buildLineItemQuestion(field) {
+        return {
+          id: field.id,
+          type: field.type,
+          label: {
+            en: field.labelEn || '',
+            fr: field.labelFr || '',
+            nl: field.labelNl || ''
+          },
+          required: !!field.required,
+          options: {
+            en: field.options || [],
+            fr: field.optionsFr || [],
+            nl: field.optionsNl || []
+          },
+          dataSource: field.dataSource,
+          selectionEffects: field.selectionEffects
+        };
+      }
+
+      function triggerLineItemEffects(group, row, forceClear = false) {
+        const app = getWebFormApp();
+        if (!app || typeof app.handleSelectionEffects !== 'function') return;
+        const effectFields = getLineItemEffectFields(group);
+        if (!effectFields.length) return;
+        const rowValues = collectLineItemRowValues(group, row);
+        const rowComplete = forceClear ? false : isLineItemRowComplete(group, rowValues);
+        const contextId = getLineItemRowContextId(group.id, row);
+        effectFields.forEach(field => {
+          const questionDef = buildLineItemQuestion(field);
+          const value = rowComplete ? rowValues[field.id] : null;
+          try {
+            app.handleSelectionEffects(definition, questionDef, value, state.language, {
+              addLineItemRow: (groupId, preset) => {
+                const container = document.querySelector('[data-line-item="' + groupId + '"]');
+                const targetGroup = definition.questions.find(q => q.id === groupId);
+                if (container && targetGroup && targetGroup.type === 'LINE_ITEM_GROUP') {
+                  addLineItemRow(targetGroup, container, preset || {});
+                }
+              },
+              clearLineItems: (groupId) => {
+                clearLineItemRows(groupId);
+              }
+            }, {
+              contextId,
+              lineItem: {
+                groupId: group.id,
+                rowId: row?.dataset?.rowId || '',
+                rowValues
+              },
+              forceContextReset: true
+            });
+          } catch (err) {
+            console && console.warn && console.warn('Selection effect failed', err);
+          }
+        });
+      }
+
+      function clearLineItemEffectsForRow(group, row) {
+        triggerLineItemEffects(group, row, true);
       }
 
       function formatTotalValue(value, decimalPlaces) {
@@ -1848,6 +1964,8 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         const container = document.querySelector('[data-line-item="' + q.id + '"]');
         if (!container) return;
         const rowsWrapper = container.querySelector('.line-item-rows') || container;
+        const existingRows = Array.from(rowsWrapper.querySelectorAll('.line-item-row'));
+        existingRows.forEach(row => clearLineItemEffectsForRow(q, row));
         rowsWrapper.innerHTML = '';
         if (q.lineItemConfig?.addMode !== 'overlay') {
           addLineItemRow(q, container);

@@ -477,9 +477,14 @@ export class ConfigSheet {
 
   private static parseSelectionEffects(rawConfig: string): SelectionEffect[] | undefined {
     const parsed = this.safeParseObject(rawConfig);
-    if (!parsed || !Array.isArray(parsed.selectionEffects)) return undefined;
+    if (!parsed) return undefined;
+    return this.normalizeSelectionEffects(parsed.selectionEffects);
+  }
+
+  private static normalizeSelectionEffects(rawEffects: any): SelectionEffect[] | undefined {
+    if (!Array.isArray(rawEffects)) return undefined;
     const effects: SelectionEffect[] = [];
-    parsed.selectionEffects.forEach((effect: any) => {
+    rawEffects.forEach((effect: any) => {
       if (!effect || !effect.groupId) return;
       const type = (effect.type || 'addLineItems').toString();
       if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource') return;
@@ -544,6 +549,18 @@ export class ConfigSheet {
             .map((fieldId: any) => (fieldId !== undefined && fieldId !== null ? fieldId.toString() : ''))
             .filter(Boolean);
           if (numericFields.length) normalized.aggregateNumericFields = numericFields;
+        }
+        if (effect.rowMultiplierFieldId) {
+          normalized.rowMultiplierFieldId = effect.rowMultiplierFieldId.toString();
+        }
+        if (effect.dataSourceMultiplierField) {
+          normalized.dataSourceMultiplierField = effect.dataSourceMultiplierField.toString();
+        }
+        if (Array.isArray(effect.scaleNumericFields)) {
+          const scaleFields = effect.scaleNumericFields
+            .map((fieldId: any) => (fieldId !== undefined && fieldId !== null ? fieldId.toString() : ''))
+            .filter(Boolean);
+          if (scaleFields.length) normalized.scaleNumericFields = scaleFields;
         }
       }
       effects.push(normalized);
@@ -773,9 +790,14 @@ export class ConfigSheet {
         const optionFilter = this.parseOptionFilter(rawConfig);
         const validationRules = this.parseValidationRules(rawConfig);
         const visibility = this.parseVisibility(rawConfig);
+        const fieldType = (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as BaseQuestionType;
+        const dataSource = (fieldType === 'CHOICE' || fieldType === 'CHECKBOX')
+          ? this.parseDataSource(rawConfig)
+          : undefined;
+        const selectionEffects = this.parseSelectionEffects(rawConfig);
       return {
         id: row[0] ? row[0].toString() : `LI${idx + 1}`,
-        type: (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as BaseQuestionType,
+        type: fieldType,
         labelEn: row[2] || '',
         labelFr: row[3] || '',
         labelNl: row[4] || '',
@@ -785,7 +807,9 @@ export class ConfigSheet {
         optionsNl,
         optionFilter,
         validationRules,
-        visibility
+        visibility,
+        dataSource,
+        selectionEffects
       };
     }).filter(f => f.labelEn || f.labelFr || f.labelNl);
 
@@ -794,6 +818,10 @@ export class ConfigSheet {
 
   private static normalizeLineItemField(field: any, idx: number): LineItemFieldConfig {
     const baseType = (field?.type ? field.type.toString().toUpperCase() : 'TEXT') as BaseQuestionType;
+    const dataSource = (baseType === 'CHOICE' || baseType === 'CHECKBOX')
+      ? this.buildDataSourceConfig(this.extractDataSourceCandidate(field))
+      : undefined;
+    const selectionEffects = this.normalizeSelectionEffects(field?.selectionEffects);
     return {
       id: field?.id || `LI${idx + 1}`,
       type: baseType,
@@ -806,7 +834,9 @@ export class ConfigSheet {
       optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : [],
       optionFilter: field?.optionFilter,
       validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined,
-      visibility: this.normalizeVisibility(field?.visibility)
+      visibility: this.normalizeVisibility(field?.visibility),
+      dataSource,
+      selectionEffects
     };
   }
 }

@@ -137,6 +137,14 @@ components:
         visibility:
           $ref: '#/components/schemas/VisibilityConfig'
           description: Show/hide logic for this line item field based on another value.
+        dataSource:
+          $ref: '#/components/schemas/DataSourceConfig'
+          description: Optional data source for CHOICE/CHECKBOX line-item fields. When present, options are hydrated just like top-level questions.
+        selectionEffects:
+          type: array
+          items:
+            $ref: '#/components/schemas/SelectionEffect'
+          description: Selection effects supported on line-item fields (triggered per row once required fields are complete).
 
     LineItemGroupConfig:
       type: object
@@ -449,6 +457,17 @@ components:
           items:
             type: string
           description: Line item field ids whose values should be summed even if their underlying line item field type is not NUMBER.
+        rowMultiplierFieldId:
+          type: string
+          description: ID of the originating line-item field whose numeric value scales the generated rows (e.g., MEALS in a batch row).
+        dataSourceMultiplierField:
+          type: string
+          description: Column/field in the data source row representing the baseline quantity used to normalize the multiplier (e.g., "Meals" column in the recipe sheet).
+        scaleNumericFields:
+          type: array
+          items:
+            type: string
+          description: Explicit list of mapped line-item field ids whose numeric values should be multiplied by the computed scale factor. Defaults to `aggregateNumericFields` when omitted.
 
     VisibilityCondition:
       type: object

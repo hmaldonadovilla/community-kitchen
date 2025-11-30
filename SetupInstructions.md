@@ -197,6 +197,121 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        The backend `fetchDataSource` reads that tab (or external sheet id + tab) with projection, locale filtering, and mapping. For prefilling line items, include the `mapping` that matches source columns to target field ids.
+
+### Data-driven selection effects (line items)
+
+Use `type: "addLineItemsFromDataSource"` when you want a CHOICE/CHECKBOX field—either on the main form or inside a `LINE_ITEM_GROUP`—to pull JSON rows from another sheet and generate ingredients/parts automatically. This is how the Meal Production form hydrates `MP_INGREDIENTS_LI` from the “Recepies Data” tab.
+
+1. **Provide a data source on the driving field** (main question or line-item field):
+
+   ```json
+   {
+     "dataSource": {
+       "id": "Recepies Data",
+       "projection": ["Dish Name", "Number of Portions", "Ingredients"],
+       "mode": "options"
+     }
+   }
+   ```
+
+   - `id`: tab name (same spreadsheet) or `sheetId::tabName` for an external file.
+   - `projection`: columns you need to return (include the lookup column plus any fields referenced later such as `Ingredients`, `Number of Portions`).
+   - Optional `mapping`, `localeKey`, `limit`, etc., follow the standard data-source contract.
+
+2. **Attach the selection effect** to the same field:
+
+   ```json
+   {
+     "selectionEffects": [
+       {
+         "type": "addLineItemsFromDataSource",
+         "groupId": "MP_INGREDIENTS_LI",
+         "lookupField": "Dish Name",
+         "dataField": "Ingredients",
+         "lineItemMapping": { "ING": "ING", "QTY": "QTY", "UNIT": "UNIT" },
+         "aggregateBy": ["ING", "UNIT"],
+         "aggregateNumericFields": ["QTY"],
+         "clearGroupBeforeAdd": true,
+         "rowMultiplierFieldId": "QTY",
+         "dataSourceMultiplierField": "Number of Portions",
+         "scaleNumericFields": ["QTY"]
+       }
+     ]
+   }
+   ```
+
+   Field reference guide:
+
+   - `groupId`: destination line-item group ID (must exist in the same form definition).
+   - `lookupField`: column from the data source used to match the selected value. Defaults to the first column or the data source `mapping.value`.
+   - `dataField`: column that contains a JSON array/object describing the rows to add (e.g., `Ingredients` = `[{"ING":"Carrots","QTY":"2","UNIT":"kg"}]`).
+   - `lineItemMapping`: map of line-item field ids → keys/paths in each JSON entry. Dot notation is supported for nested objects.
+   - `aggregateBy`: non-numeric fields used to build a dedupe key. Identical values across these fields are merged into a single row.
+   - `aggregateNumericFields`: numeric fields that should be summed when aggregation occurs. All line-item fields typed as NUMBER are automatically included.
+   - `scaleNumericFields`: optional explicit list of fields whose numeric values should be multiplied by the scale factor. If omitted, it reuses `aggregateNumericFields`, then NUMBER fields.
+   - `clearGroupBeforeAdd`: defaults to `true`. Set to `false` to append instead of rebuilding.
+
+3. **Optional multiplier support**:
+
+   - `rowMultiplierFieldId`: the originating line-item field whose numeric value (e.g., “Meals” or “Quantity”) drives scaling.
+   - `dataSourceMultiplierField`: column in the data source row that represents the baseline quantity (e.g., “Number of Portions”). The runtime divides `rowMultiplierFieldId` by this baseline to get the scale factor.
+   - Effectively, `scaledValue = sourceValue * (rowMultiplier / dataSourceBaseline)`, and the result is rounded to two decimals before aggregation.
+
+4. **Line-item drivers**: You can place the CHOICE/CHECKBOX field inside the same line-item group that will receive the generated rows. Each row maintains its own cache so selecting “Dish A” in row one and “Dish B” in row two aggregates correctly. A row triggers only when all required fields are filled (or when you explicitly clear the row).
+
+5. **Debugging & logs**:
+
+   - Enable `CK_DEBUG` (see “Debug Logging” in this document) to surface `[SelectionEffects]` logs in DevTools.
+   - Watch for:
+     - `[SelectionEffects] evaluating …` – shows current/new/removed selections per row/context.
+     - `[SelectionEffects] scale factor computed …` – prints the multiplier, desired quantity, baseline, and final factor.
+     - `[SelectionEffects] data-driven effect produced no entries` – indicates the data field returned an empty array or the lookup column didn’t match.
+
+Full example (Meal Production line items):
+
+```json
+{
+  "lineItemConfig": {
+    "fields": [
+      {
+        "id": "RECIPE",
+        "type": "CHOICE",
+        "labelEn": "Recipe",
+        "required": true,
+        "dataSource": {
+          "id": "Recepies Data",
+          "projection": ["Dish Name", "Number of Portions", "Ingredients"],
+          "mode": "options"
+        },
+        "selectionEffects": [
+          {
+            "type": "addLineItemsFromDataSource",
+            "groupId": "MP_INGREDIENTS_LI",
+            "lookupField": "Dish Name",
+            "dataField": "Ingredients",
+            "lineItemMapping": { "ING": "ING", "QTY": "QTY", "UNIT": "UNIT" },
+            "aggregateBy": ["ING", "UNIT"],
+            "aggregateNumericFields": ["QTY"],
+            "rowMultiplierFieldId": "MEALS",
+            "dataSourceMultiplierField": "Number of Portions",
+            "scaleNumericFields": ["QTY"]
+          }
+        ]
+      },
+      { "id": "MEALS", "type": "NUMBER", "labelEn": "Meals", "required": true }
+    ]
+  }
+}
+```
+
+When a row is filled with `RECIPE = "Dish A"` and `MEALS = 20`, the runtime:
+
+1. Fetches “Dish A” from “Recepies Data”.
+2. Reads the `Ingredients` JSON and the baseline `Number of Portions` (e.g., `10`).
+3. Multiplies every ingredient quantity by `20 / 10 = 2.0`, rounds to two decimals, aggregates duplicates across all selected dishes, and writes them into `MP_INGREDIENTS_LI`.
+4. If the row is cleared or deselected, only that contribution is removed.
+
+Tip: if you see more than two decimals, confirm you’re on the latest bundle and that `scaleNumericFields` includes the field you expect. Aggregation rounds to two decimals before sending presets to the DOM.
      - *List view support*: The web app list view is paginated and shows `createdAt`/`updatedAt`. Configure which columns to display via the form definition’s `listView` (field ids). Backend uses `fetchSubmissions`/`fetchSubmissionById`; save uses `saveSubmissionWithId`.
      - *Dedup rules*: Create a sheet named `<Config Sheet Name> Dedup` (e.g., `Config: Fridge Dedup`) with columns:
        1) Rule ID

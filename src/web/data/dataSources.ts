@@ -1,4 +1,4 @@
-import { DataSourceConfig, WebQuestionDefinition } from '../../types';
+import { DataSourceConfig } from '../../types';
 import { LangCode } from '../types';
 
 declare const google: {
@@ -35,6 +35,17 @@ function emitLog(
   } catch (_) {
     // ignore cross-origin errors
   }
+}
+
+interface DataSourceTarget {
+  id: string;
+  type: string;
+  dataSource?: DataSourceConfig;
+}
+
+function isChoiceOrCheckbox(type: string): boolean {
+  const normalized = (type || '').toString().toUpperCase();
+  return normalized === 'CHOICE' || normalized === 'CHECKBOX';
 }
 
 export async function fetchDataSource(
@@ -89,13 +100,10 @@ export async function fetchDataSource(
 }
 
 export async function resolveQuestionOptionsFromSource(
-  question: WebQuestionDefinition,
+  question: DataSourceTarget,
   language: LangCode
 ): Promise<string[] | null> {
-  if (
-    !question.dataSource ||
-    (question.type !== 'CHOICE' && question.type !== 'CHECKBOX')
-  ) {
+  if (!question.dataSource || !isChoiceOrCheckbox(question.type)) {
     return null;
   }
   const res = await fetchDataSource(question.dataSource, language);

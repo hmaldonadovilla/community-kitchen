@@ -1,4 +1,4 @@
-import { WebFormDefinition, WebQuestionDefinition } from '../../types';
+import { LineItemFieldConfig, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LangCode } from '../types';
 import { resolveQuestionOptionsFromSource } from '../data/dataSources';
 
@@ -147,12 +147,82 @@ async function hydrateQuestionOptions(
   }
 }
 
+async function hydrateLineItemFieldOptions(
+  group: WebQuestionDefinition,
+  field: LineItemFieldConfig,
+  language: LangCode,
+  formEl: HTMLFormElement
+): Promise<void> {
+  emitLog('info', '[DataSource] hydrateLineItemFieldOptions start', { groupId: group.id, fieldId: field.id, type: field.type });
+  const options = await resolveQuestionOptionsFromSource(
+    {
+      id: `${group.id}__${field.id}`,
+      type: field.type,
+      dataSource: field.dataSource
+    },
+    language
+  );
+  const resolvedOptions = options ?? [];
+  if (!resolvedOptions.length) {
+    emitLog('warn', '[DataSource] no line item options returned', { groupId: group.id, fieldId: field.id });
+    return;
+  }
+  field.options = resolvedOptions;
+  field.optionsFr = resolvedOptions;
+  field.optionsNl = resolvedOptions;
+  const container = formEl.querySelector<HTMLElement>('[data-line-item="' + group.id + '"]');
+  if (!container) return;
+  const langKey = (language || 'en').toString().toLowerCase();
+  const labelsMap: Record<string, string[]> = {
+    en: resolvedOptions,
+    fr: resolvedOptions,
+    nl: resolvedOptions,
+    __lang: langKey
+  } as any;
+
+  if (field.type === 'CHOICE') {
+    const selects = container.querySelectorAll<HTMLSelectElement>('select[name="' + group.id + '__' + field.id + '"]');
+    selects.forEach(select => {
+      const previousValue = select.value;
+      writeOptionsToSelect(select, resolvedOptions, labelsMap);
+      if (previousValue && Array.from(select.options).some(opt => opt.value === previousValue)) {
+        select.value = previousValue;
+      }
+    });
+    emitLog('info', '[DataSource] line item choice options written', { groupId: group.id, fieldId: field.id, count: resolvedOptions.length });
+    return;
+  }
+
+  if (field.type === 'CHECKBOX') {
+    const wrappers = container.querySelectorAll<HTMLElement>('[data-field-name="' + group.id + '__' + field.id + '"]');
+    wrappers.forEach(wrapper => {
+      const prevSelections = Array.from(wrapper.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+      writeOptionsToCheckbox(wrapper, group.id + '__' + field.id, resolvedOptions, labelsMap);
+      if (prevSelections.length) {
+        wrapper.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(cb => {
+          if (prevSelections.includes(cb.value)) cb.checked = true;
+        });
+      }
+    });
+    emitLog('info', '[DataSource] line item checkbox options written', { groupId: group.id, fieldId: field.id, count: resolvedOptions.length });
+  }
+}
+
 export async function hydrateDataSources(definition: WebFormDefinition, language: LangCode, formEl: HTMLFormElement): Promise<void> {
   const tasks: Promise<void>[] = [];
   definition.questions.forEach(q => {
     if (q.dataSource && (q.type === 'CHOICE' || q.type === 'CHECKBOX')) {
       emitLog('info', '[DataSource] scheduling hydration', { questionId: q.id });
       tasks.push(hydrateQuestionOptions(q, language, formEl));
+    }
+    if (q.type === 'LINE_ITEM_GROUP') {
+      (q.lineItemConfig?.fields || []).forEach(field => {
+        if (!field.dataSource || (field.type !== 'CHOICE' && field.type !== 'CHECKBOX')) return;
+        emitLog('info', '[DataSource] scheduling line item hydration', { groupId: q.id, fieldId: field.id });
+        tasks.push(hydrateLineItemFieldOptions(q, field, language, formEl));
+      });
     }
   });
   await Promise.all(tasks);

@@ -63,6 +63,8 @@ export interface LineItemFieldConfig {
   optionFilter?: OptionFilter;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
+  dataSource?: DataSourceConfig;
+  selectionEffects?: SelectionEffect[];
 }
 
 export interface LineItemSelectorConfig {
@@ -111,6 +113,9 @@ export interface SelectionEffect {
   clearGroupBeforeAdd?: boolean; // when true (default) clear existing rows before populating
   aggregateBy?: string[]; // optional line-item field ids to treat as non-numeric grouping keys
   aggregateNumericFields?: string[]; // optional explicit list of numeric/sum fields
+  rowMultiplierFieldId?: string; // originating line-item field id whose numeric value scales results
+  dataSourceMultiplierField?: string; // column/field in the data source describing the default quantity
+  scaleNumericFields?: string[]; // override list of mapped numeric fields to scale (defaults to aggregateNumericFields)
 }
 
 export interface DataSourceConfig {
