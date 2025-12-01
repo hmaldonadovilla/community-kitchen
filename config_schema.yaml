@@ -11,7 +11,7 @@ components:
       properties:
         id:
           type: string
-          description: Unique identifier for the question (e.g., Q123). Generated automatically if missing.
+          description: Question identifier (e.g., `Q1`). Generated automatically if omitted.
         type:
           type: string
           enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD, LINE_ITEM_GROUP]
@@ -70,14 +70,30 @@ components:
           type: string
           enum: [Active, Archived]
           description: Status of the question. Archived questions are ignored during form generation.
-      required:
-        - id
-        - type
-        - qEn
-        - qFr
-        - qNl
-        - required
-        - status
+        listViewSort:
+          type: object
+          description: Optional list-view sort metadata applied when rendering saved submissions.
+          properties:
+            direction:
+              type: string
+              enum: [asc, desc]
+            priority:
+              type: integer
+              description: Lower numbers are evaluated first.
+        listView:
+          type: boolean
+          description: When true, this question appears in the list view.
+        autoIncrement:
+          type: object
+          properties:
+            prefix:
+              type: string
+            padLength:
+              type: integer
+            propertyKey:
+              type: string
+          description: Auto-generated ID metadata for TEXT fields.
+      required: [id, type, qEn, qFr, qNl, required, status]
 
     FileUploadConfig:
       type: object
@@ -156,14 +172,7 @@ components:
           type: integer
           description: Maximum number of line item rows allowed.
         addButtonLabel:
-          type: object
-          properties:
-            en:
-              type: string
-            fr:
-              type: string
-            nl:
-              type: string
+          $ref: '#/components/schemas/LocalizedString'
           description: Custom labels for the "Add line" button in each language.
         anchorFieldId:
           type: string
@@ -188,8 +197,7 @@ components:
             Line item field definitions. If `Config (JSON/REF)` uses `REF:SheetName`, the fields are pulled from that sheet (columns: ID, Type, Label EN/FR/NL, Required?, Options EN/FR/NL, Config JSON in column 10).
             The optional Config JSON column on that ref sheet can include `optionFilter` and `validationRules` for each line-item field.
             You can mix a `REF:SheetName` for field definitions with inline JSON in `Config (JSON/REF)` to set `addMode`, `addButtonLabel`, `anchorFieldId`, `minRows`, `maxRows`, and other group-level settings even when the fields themselves come from the ref sheet.
-      required:
-        - fields
+      required: [fields]
 
     OptionFilter:
       type: object
@@ -252,8 +260,7 @@ components:
           additionalProperties:
             type: string
           description: Optional map from source column -> target field id (used for prefill/line-item injection).
-      required:
-        - id
+      required: [id]
       example:
         id: recipes
         sheetId: 1AbcDEF_sheet_id_here
@@ -267,6 +274,88 @@ components:
           quantity: qty
           unit: unit
 
+    DashboardConfig:
+      type: object
+      description: JSON stored in the dashboard’s “Follow-up Config (JSON)” column.
+      properties:
+        pdfTemplateId:
+          $ref: '#/components/schemas/TemplateIdMap'
+        pdfFolderId:
+          type: string
+        emailTemplateId:
+          $ref: '#/components/schemas/TemplateIdMap'
+        emailSubject:
+          $ref: '#/components/schemas/LocalizedString'
+        emailRecipients:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailRecipientEntry'
+        emailCc:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailRecipientEntry'
+        emailBcc:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailRecipientEntry'
+        statusFieldId:
+          type: string
+        statusTransitions:
+          $ref: '#/components/schemas/FollowupStatusConfig'
+        listViewMetaColumns:
+          type: array
+          items:
+            type: string
+            enum: [createdAt, updatedAt, status, pdfUrl]
+      additionalProperties: true
+
+    TemplateIdMap:
+      oneOf:
+        - type: string
+        - type: object
+          additionalProperties:
+            type: string
+
+    LocalizedString:
+      oneOf:
+        - type: string
+        - type: object
+          additionalProperties:
+            type: string
+
+    EmailRecipientEntry:
+      oneOf:
+        - type: string
+        - $ref: '#/components/schemas/EmailRecipientDataSourceConfig'
+
+    EmailRecipientDataSourceConfig:
+      type: object
+      required: [type, recordFieldId, lookupField, valueField, dataSource]
+      properties:
+        type:
+          type: string
+          enum: [dataSource]
+        recordFieldId:
+          type: string
+        lookupField:
+          type: string
+        valueField:
+          type: string
+        dataSource:
+          $ref: '#/components/schemas/DataSourceConfig'
+        fallbackEmail:
+          type: string
+
+    FollowupStatusConfig:
+      type: object
+      properties:
+        onPdf:
+          type: string
+        onEmail:
+          type: string
+        onClose:
+          type: string
+
     ListViewColumnConfig:
       type: object
       properties:
@@ -278,6 +367,10 @@ components:
             - type: object
               additionalProperties:
                 type: string
+        kind:
+          type: string
+          enum: [question, meta]
+          description: Distinguishes user-defined question columns from system meta columns (Created/Updated/Status/PDF).
       required:
         - fieldId
 
@@ -288,6 +381,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ListViewColumnConfig'
+        metaColumns:
+          type: array
+          description: System columns appended after question columns.
+          items:
+            type: string
+            enum: [createdAt, updatedAt, status, pdfUrl]
         defaultSort:
           type: object
           properties:
@@ -443,7 +542,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: Map of line item field ids to keys/paths inside each JSON entry (dot notation supported).
+          description: Map of line item field ids to keys/paths inside each JSON entry (dot notation supported). Prefix with `$row.` to pull from the originating line-item row instead of the data-source payload.
         clearGroupBeforeAdd:
           type: boolean
           description: When true (default) the target line item group is cleared before new rows are inserted.

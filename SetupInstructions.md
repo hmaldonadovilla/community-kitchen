@@ -44,7 +44,8 @@ This project uses TypeScript. You need to build the script before using it in Go
    - **Form ID / URLs**: Leave these blank. The script will fill them in.
 2. **Config Sheets**: Create new sheets (tabs) for each form.
    - Copy the header row from an example sheet (includes `Config (JSON/REF)` for line items or file upload settings).
-   - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text.
+   - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON. Lower priorities win; when nothing is specified we fall back to `updatedAt desc`.
+   - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
    - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
    - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN/FR/NL, Required?, Options EN/FR/NL). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
      - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
@@ -64,6 +65,18 @@ This project uses TypeScript. You need to build the script before using it in Go
        Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
    - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`.
    - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, language)` Apps Script function (to be added by you) should return an array of options. Use this when options need to stay in sync with another form or sheet.
+   - **Auto-increment IDs**: For `TEXT` questions that should generate IDs (e.g., “Meal Preparation #”), add:
+
+     ```json
+     {
+       "autoIncrement": {
+         "prefix": "MP-AA",
+         "padLength": 6
+       }
+     }
+     ```
+
+     Leave the field empty in the UI and the backend will emit `MP-AA000001`, `MP-AA000002`, etc. Counters are stored in script properties, so numbering persists across deployments. Use `"propertyKey": "MEAL_RUN"` when you need isolated counters within the same form.
    - **Selection effects (auto line items)**: Add `selectionEffects` to a CHOICE/CHECKBOX config to spawn line items automatically when certain values are picked. Example:
 
       ```json
@@ -245,7 +258,8 @@ Use `type: "addLineItemsFromDataSource"` when you want a CHOICE/CHECKBOX field�
    - `groupId`: destination line-item group ID (must exist in the same form definition).
    - `lookupField`: column from the data source used to match the selected value. Defaults to the first column or the data source `mapping.value`.
    - `dataField`: column that contains a JSON array/object describing the rows to add (e.g., `Ingredients` = `[{"ING":"Carrots","QTY":"2","UNIT":"kg"}]`).
-   - `lineItemMapping`: map of line-item field ids → keys/paths in each JSON entry. Dot notation is supported for nested objects.
+   - `lineItemMapping`: map of line-item field ids → keys/paths in each JSON entry. Dot notation is supported for nested objects.  
+     - Prefix a path with `$row.` to copy values from the originating line-item row (the row whose fields triggered the effect). Example: `"lineItemMapping": { "ING": "ING", "QTY": "QTY", "UNIT": "UNIT", "RECIPE": "$row.RECIPE" }` copies the row’s `RECIPE` field into each generated ingredient line so you can keep track of the source dish; add that field to `aggregateBy` if you need separate buckets per recipe.
    - `aggregateBy`: non-numeric fields used to build a dedupe key. Identical values across these fields are merged into a single row.
    - `aggregateNumericFields`: numeric fields that should be summed when aggregation occurs. All line-item fields typed as NUMBER are automatically included.
    - `scaleNumericFields`: optional explicit list of fields whose numeric values should be multiplied by the scale factor. If omitted, it reuses `aggregateNumericFields`, then NUMBER fields.
@@ -312,6 +326,73 @@ When a row is filled with `RECIPE = "Dish A"` and `MEALS = 20`, the runtime:
 4. If the row is cleared or deselected, only that contribution is removed.
 
 Tip: if you see more than two decimals, confirm you’re on the latest bundle and that `scaleNumericFields` includes the field you expect. Aggregation rounds to two decimals before sending presets to the DOM.
+
+### Follow-up actions (PDF/email/close)
+
+1. **Add config on the dashboard**: the *Forms Dashboard* now includes a “Follow-up Config (JSON)” column. Provide the per-form automation settings there. Example:
+
+   ```json
+   {
+     "pdfTemplateId": {
+       "EN": "1PdfTemplateForEnglish",
+       "FR": "1PdfTemplateForFrench"
+     },
+     "pdfFolderId": "1FOLDERIDOptional",
+     "emailTemplateId": {
+       "EN": "1EmailDocEn",
+       "FR": "1EmailDocFr"
+     },
+     "emailSubject": {
+       "en": "Meal production summary",
+       "fr": "Synthèse production"
+     },
+     "emailRecipients": [
+       "ops@example.com",
+       {
+         "type": "dataSource",
+         "recordFieldId": "DISTRIBUTOR",
+         "lookupField": "Distributor",
+         "valueField": "email",
+         "dataSource": {
+           "id": "Distributor Data",
+           "projection": ["Distributor", "email"]
+         },
+         "fallbackEmail": "kitchen@example.com"
+       }
+     ],
+     "statusFieldId": "STATUS_FIELD",
+     "statusTransitions": {
+       "onPdf": "PDF ready",
+       "onEmail": "Emailed",
+       "onClose": "Closed"
+     }
+   }
+   ```
+
+   - `pdfTemplateId`: Google Doc template used to build the PDF. Provide either a single Doc ID or an object keyed by `EN`/`FR`/`NL` (the form language determines which template runs). Use `{{FIELD_ID}}` tokens (or slugified labels) in the Doc; the runtime replaces them with the submitted values (line items render as bullet summaries).  
+   - `pdfFolderId` (optional): target Drive folder for generated PDFs; falls back to the spreadsheet’s parent folder.  
+   - `emailTemplateId`: Google Doc containing the email body. Can be a string or language map (same rules as the PDF template). Tokens work the same as in the PDF template.  
+   - `emailRecipients`: list of addresses. Entries can be plain strings (placeholders allowed) or objects describing a data source lookup:
+     - `recordFieldId`: the form/line-item field whose submitted value should be used as the lookup key.
+     - `dataSource`: standard data source config (sheet/tab reference, projection, limit, etc.).
+     - `lookupField`: column in the data source to match against the submitted value.
+     - `valueField`: column containing the email address to use.
+     - `fallbackEmail` (optional): used when the lookup fails.
+   - `emailCc` / `emailBcc`: same structure as `emailRecipients`, useful for copying chefs/managers automatically.
+   - `statusFieldId` (optional): question ID to overwrite when actions run. If omitted we use the auto-generated `Status` column in the response tab.  
+   - `statusTransitions`: strings written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
+
+2. **Provide templates**:
+   - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).  
+   - Store the Doc IDs in the dashboard JSON. When the action runs we copy the Doc, replace tokens, export to PDF, and (optionally) email it as an attachment.
+
+3. **Run actions**:
+   - After submit, the Summary step now surfaces “Create PDF”, “Send PDF via email”, and “Close record” buttons when a record ID is available.  
+   - The list view gained the `⋮` action menu so you can trigger the same follow-ups (or open the record) without leaving the table. Search/filter/sort all run client-side, so it feels instant even with ~200 rows.
+
+4. **Status & links**:
+   - The response tab automatically gains `Status` and `PDF URL` columns. Actions update those cells plus any custom `statusFieldId` you provided.  
+   - Every action also refreshes the list view cache, so the new status is visible after a second or two.
      - *List view support*: The web app list view is paginated and shows `createdAt`/`updatedAt`. Configure which columns to display via the form definition’s `listView` (field ids). Backend uses `fetchSubmissions`/`fetchSubmissionById`; save uses `saveSubmissionWithId`.
      - *Dedup rules*: Create a sheet named `<Config Sheet Name> Dedup` (e.g., `Config: Fridge Dedup`) with columns:
        1) Rule ID
@@ -323,12 +404,25 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
        Example row: `uniqueNameDate | form | name,date | caseInsensitive | reject | {"en":"Duplicate entry","fr":"Entrée dupliquée"}`. On submit, duplicates are rejected and the message is returned to the frontend.
 
-3. **Web App (Custom UI)**
-   - Publish a **Web app** deployment pointing to `doGet`.
-   - Share the deployment URL with volunteers; submissions will be written directly to the destination tab and support line items + file uploads.
-   - The web app supports list views (paginated) and edit-in-place. The frontend uses `fetchSubmissions` and `fetchSubmissionById` to open existing records with `createdAt`/`updatedAt`. Save calls `saveSubmissionWithId` (or client helper `submitWithDedup`), which enforces dedup rules and returns any conflict messages to display.
-   - Validation errors surface in-context: the first invalid field is highlighted and auto-scrolled into view, and a red banner appears under the submit button on long forms.
-   - Optional: add `?form=ConfigSheetName` to target a specific form (defaults to the first dashboard entry).
+### Web App (Custom UI)
+
+- Publish a **Web app** deployment pointing to `doGet`.
+- Share the deployment URL with volunteers; submissions will be writtendirectly to the destination tab and support line items + file uploads.
+- The web app supports list views (paginated) and edit-in-place. The frontenduses `fetchSubmissions` and `fetchSubmissionById` to open existing records with`createdAt`/`updatedAt`. Save calls `saveSubmissionWithId` (or client helper`submitWithDedup`), which enforces dedup rules and returns any conflictmessages to display.
+- Validation errors surface in-context: the first invalid field is highlightedand auto-scrolled into view, and a red banner appears under the submit buttonon long forms.
+- Optional: add `?form=ConfigSheetName` to target a specific form (defaults tothe first dashboard entry).
+
+### Template placeholders (PDF/email)
+
+- **Basic fields**: Use `{{FIELD_ID}}` or the slugified label (`{{MEAL_NUMBER}}`) inside your Doc template. Standard metadata is available out of the box: `{{RECORD_ID}}`, `{{FORM_KEY}}`, `{{CREATED_AT}}`, `{{UPDATED_AT}}`, `{{STATUS}}`, etc. Placeholder matching is case-insensitive, so `{{Updated_At}}` works.
+- **Data source columns**: When a CHOICE/CHECKBOX question comes from a data source, you can access the columns returned in its `projection` via `{{QUESTION_ID.Column_Name}}` (spaces become underscores). Example: `{{MP_DISTRIBUTOR.Address_Line_1}}`, `{{MP_DISTRIBUTOR.CITY}}`, `{{MP_DISTRIBUTOR.EMAIL}}`.
+- **Line item tables**: Build a table row whose cells contain placeholders such as `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`. The service duplicates that row for every line item entry and replaces the placeholders per row. Empty groups simply clear the template row.
+- **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` anywhere inside the table you want duplicated per recipe. The renderer will:
+  1. Create a copy of the entire table for every distinct value of the referenced field (`RECIPE` in this example).
+  2. Replace the directive placeholder with the group value (so you can show it in the heading).
+  3. Populate the table rows with only the line items that belong to that recipe.  
+  Combine this with row-level placeholders (e.g., `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`) to print a dedicated ingredient table per dish without manually duplicating sections in the template.
+- **Consolidated values**: Use `{{CONSOLIDATED(GROUP_ID.FIELD_ID)}}` (or the slugified label) to list the unique values across a line item group. Example: `{{CONSOLIDATED(MP_INGREDIENTS_LI.ALLERGEN)}}` renders `GLUTEN, NUTS, SOY`.
 
 ## 7. Generate All Forms
 

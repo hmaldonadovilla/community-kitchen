@@ -2,6 +2,8 @@ import { Dashboard } from '../config/Dashboard';
 import { ConfigSheet } from '../config/ConfigSheet';
 import { buildWebFormHtml } from './WebFormTemplate';
 import {
+  AutoIncrementConfig,
+  DataSourceConfig,
   DedupRule,
   PaginatedResult,
   RecordMetadata,
@@ -11,7 +13,13 @@ import {
   WebFormDefinition,
   WebFormSubmission,
   WebQuestionDefinition,
-  ListViewConfig
+  ListViewConfig,
+  FollowupActionResult,
+  FollowupConfig,
+  EmailRecipientDataSourceConfig,
+  EmailRecipientEntry,
+  TemplateIdMap,
+  LocalizedString
 } from '../types';
 import { evaluateDedupConflict, ExistingRecord } from './dedup';
 
@@ -19,6 +27,7 @@ const DEBUG_PROPERTY_KEY = 'CK_DEBUG';
 const CACHE_TTL_SECONDS = 300;
 const CACHE_PREFIX = 'CK_CACHE';
 const ETAG_PROPERTY_PREFIX = 'CK_ETAG_';
+const AUTO_INCREMENT_PROPERTY_PREFIX = 'CK_AUTO_';
 
 const debugLog = (message: string, payload?: Record<string, any>): void => {
   if (!isDebugEnabled()) return;
@@ -66,12 +75,16 @@ export class WebFormService {
   private dashboard: Dashboard;
   private cache: GoogleAppsScript.Cache.Cache | null;
   private docProps: GoogleAppsScript.Properties.Properties | null;
+  private autoIncrementState: Record<string, number>;
+  private dataSourceCache: Record<string, PaginatedResult<any>>;
 
   constructor(ss: GoogleAppsScript.Spreadsheet.Spreadsheet) {
     this.ss = ss;
     this.dashboard = new Dashboard(ss);
     this.cache = this.resolveCache();
     this.docProps = this.resolveDocumentProperties();
+    this.autoIncrementState = {};
+    this.dataSourceCache = {};
   }
 
   public buildDefinition(formKey?: string): WebFormDefinition {
@@ -94,9 +107,9 @@ export class WebFormService {
       dataSource: q.dataSource,
       options: q.options.length || q.optionsFr.length || q.optionsNl.length
         ? {
-            en: q.options,
-            fr: q.optionsFr,
-            nl: q.optionsNl
+        en: q.options,
+        fr: q.optionsFr,
+        nl: q.optionsNl
           }
         : undefined,
       lineItemConfig: q.lineItemConfig,
@@ -105,10 +118,12 @@ export class WebFormService {
       validationRules: q.validationRules,
       visibility: q.visibility,
       clearOnChange: q.clearOnChange,
-      selectionEffects: q.selectionEffects
+      selectionEffects: q.selectionEffects,
+      listViewSort: q.listViewSort,
+      autoIncrement: q.autoIncrement
     }));
 
-    const listView = this.buildListViewConfig(webQuestions);
+    const listView = this.buildListViewConfig(webQuestions, form.listViewMetaColumns);
 
     return {
       title: form.title,
@@ -119,7 +134,8 @@ export class WebFormService {
       dataSources: [],
       listView,
       dedupRules: this.getDedupRules(form.configSheet),
-      startRoute: listView ? 'list' : 'form'
+      startRoute: listView ? 'list' : 'form',
+      followup: form.followupConfig
     };
   }
 
@@ -260,6 +276,33 @@ export class WebFormService {
     return { list: page.list, records };
   }
 
+  public triggerFollowupAction(
+    formKey: string,
+    recordId: string,
+    action: string
+  ): FollowupActionResult {
+    if (!recordId) {
+      return { success: false, message: 'Record ID is required.' };
+    }
+    const normalizedAction = (action || '').toString().toUpperCase();
+    const form = this.findForm(formKey);
+    const followup = form.followupConfig;
+    if (!followup) {
+      return { success: false, message: 'Follow-up actions are not configured for this form.' };
+    }
+    const questions = ConfigSheet.getQuestions(this.ss, form.configSheet).filter(q => q.status === 'Active');
+    switch (normalizedAction) {
+      case 'CREATE_PDF':
+        return this.handleCreatePdfAction(form, questions, recordId, followup);
+      case 'SEND_EMAIL':
+        return this.handleSendEmailAction(form, questions, recordId, followup);
+      case 'CLOSE_RECORD':
+        return this.handleCloseRecordAction(form, questions, recordId, followup);
+      default:
+        return { success: false, message: `Unsupported follow-up action "${action}".` };
+    }
+  }
+
   /**
    * Fetch a single submission by id for edit prefill.
    */
@@ -320,10 +363,12 @@ export class WebFormService {
       item.id = rowId;
       item.createdAt = columns.createdAt ? this.asIso(row[columns.createdAt - 1]) : undefined;
       item.updatedAt = columns.updatedAt ? this.asIso(row[columns.updatedAt - 1]) : undefined;
+      item.status = columns.status ? row[columns.status - 1] : undefined;
+      item.pdfUrl = columns.pdfUrl ? row[columns.pdfUrl - 1] : undefined;
       fieldIds.forEach(fid => {
         const key = (fid || '').toString();
         const colIdx = columns.fields[key];
-        if (!colIdx) return;
+      if (!colIdx) return;
         item[key] = row[colIdx - 1];
       });
       if (rowId) {
@@ -394,10 +439,23 @@ export class WebFormService {
       const existing = sheet.getRange(2 + existingRowIdx, columns.createdAt, 1, 1).getValues()[0][0];
       createdAtVal = existing || now;
     }
+    const updatedAtVal = existingRowIdx >= 0 ? now : createdAtVal;
     setIf(columns.createdAt, createdAtVal);
-    setIf(columns.updatedAt, existingRowIdx >= 0 ? now : '');
+    setIf(columns.updatedAt, updatedAtVal);
 
     const candidateValues: Record<string, any> = {};
+    questions.forEach(q => {
+      if (q.type === 'TEXT' && q.autoIncrement) {
+        const currentVal = (formObject as any)[q.id];
+        if (!currentVal) {
+          const generated = this.generateAutoIncrementValue(formKey, q.id, q.autoIncrement);
+          if (generated) {
+            (formObject as any)[q.id] = generated;
+          }
+        }
+      }
+    });
+
     questions.forEach(q => {
       const colIdx = columns.fields[q.id];
       if (!colIdx) return;
@@ -458,7 +516,7 @@ export class WebFormService {
     const meta: RecordMetadata = {
       id: recordId,
       createdAt: createdAtVal instanceof Date ? createdAtVal.toISOString() : createdAtVal,
-      updatedAt: existingRowIdx >= 0 ? now.toISOString() : undefined
+      updatedAt: updatedAtVal instanceof Date ? updatedAtVal.toISOString() : updatedAtVal
     };
 
     const newEtag = this.getSheetEtag(sheet, columns);
@@ -491,7 +549,7 @@ export class WebFormService {
       sheet = this.ss.insertSheet(destinationTab);
     }
 
-    const metaHeaders = ['Record ID', 'Created At', 'Updated At'];
+    const metaHeaders = ['Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'];
     const rawHeaderRow = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
     const existingHeaders = rawHeaderRow.map(h => (h ? h.toString().trim() : '')).filter(Boolean);
     const hasTimestamp = existingHeaders.some(h => h.toLowerCase() === 'timestamp');
@@ -517,6 +575,8 @@ export class WebFormService {
       recordId: this.findHeader(headers, ['record id', 'id']),
       createdAt: this.findHeader(headers, ['created at']),
       updatedAt: this.findHeader(headers, ['updated at']),
+      status: this.findHeader(headers, ['status']),
+      pdfUrl: this.findHeader(headers, ['pdf url', 'pdf link']),
       fields: {}
     };
 
@@ -696,11 +756,82 @@ export class WebFormService {
     return 'uuid-' + Math.random().toString(16).slice(2);
   }
 
-  private buildListViewConfig(questions: WebQuestionDefinition[]): ListViewConfig | undefined {
-    const columns = questions
-      .filter(q => q.listView)
-      .map(q => ({ fieldId: q.id, label: q.label }));
-    return columns.length ? { columns } : undefined;
+  private buildListViewConfig(
+    questions: WebQuestionDefinition[],
+    metaColumns?: string[]
+  ): ListViewConfig | undefined {
+    const listQuestions = questions.filter(q => q.listView);
+    if (!listQuestions.length) return undefined;
+    const questionColumns = listQuestions.map(q => ({ fieldId: q.id, label: q.label, kind: 'question' as const }));
+    const resolvedMetaColumns = this.normalizeMetaColumnList(metaColumns);
+    const metaColumnDefs = resolvedMetaColumns.map(fieldId => ({
+      fieldId,
+      label: this.buildMetaColumnLabel(fieldId),
+      kind: 'meta' as const
+    }));
+    const columns = [...questionColumns, ...metaColumnDefs];
+    const sortCandidate = listQuestions
+      .filter(q => !!q.listViewSort)
+      .sort((a, b) => {
+        const aPriority = a.listViewSort?.priority ?? Number.MAX_SAFE_INTEGER;
+        const bPriority = b.listViewSort?.priority ?? Number.MAX_SAFE_INTEGER;
+        return aPriority - bPriority;
+      })[0];
+    const normalizeDirection = (value?: string): 'asc' | 'desc' | undefined => {
+      if (!value) return undefined;
+      const lower = value.toLowerCase();
+      if (lower === 'asc' || lower === 'desc') {
+        return lower as 'asc' | 'desc';
+      }
+      return undefined;
+    };
+    const defaultSort = sortCandidate
+      ? {
+          fieldId: sortCandidate.id,
+          direction: normalizeDirection(sortCandidate.listViewSort?.direction) || 'asc'
+        }
+      : {
+          fieldId: resolvedMetaColumns[0] || (questionColumns[0]?.fieldId ?? 'updatedAt'),
+          direction: 'desc' as const
+        };
+    return { columns, metaColumns: resolvedMetaColumns, defaultSort };
+  }
+
+  private normalizeMetaColumnList(metaColumns?: string[]): string[] {
+    const allowedMap: Record<string, string> = {
+      createdat: 'createdAt',
+      created_at: 'createdAt',
+      created: 'createdAt',
+      updatedat: 'updatedAt',
+      updated_at: 'updatedAt',
+      updated: 'updatedAt',
+      status: 'status',
+      pdfurl: 'pdfUrl',
+      pdf_url: 'pdfUrl',
+      pdf: 'pdfUrl'
+    };
+    if (!metaColumns || !metaColumns.length) return ['updatedAt'];
+    const normalized = metaColumns
+      .map(value => value && value.toString().trim().toLowerCase())
+      .filter(Boolean)
+      .map(key => allowedMap[key!] || '')
+      .filter(Boolean);
+    const unique = Array.from(new Set(normalized));
+    return unique.length ? unique : ['updatedAt'];
+  }
+
+  private buildMetaColumnLabel(fieldId: string): LocalizedString {
+    switch (fieldId) {
+      case 'createdAt':
+        return { en: 'Created', fr: 'Créé', nl: 'Aangemaakt' };
+      case 'status':
+        return { en: 'Status', fr: 'Statut', nl: 'Status' };
+      case 'pdfUrl':
+        return { en: 'PDF URL', fr: 'Lien PDF', nl: 'PDF-link' };
+      case 'updatedAt':
+      default:
+        return { en: 'Updated', fr: 'Mis à jour', nl: 'Bijgewerkt' };
+    }
   }
 
   private computeLanguages(questions: QuestionConfig[]): Array<'EN' | 'FR' | 'NL'> {
@@ -868,14 +999,791 @@ export class WebFormService {
     const languageIdx = columns.language ? columns.language - 1 : 1;
     const languageRaw = (rowValues[languageIdx] || 'EN').toString().toUpperCase();
     const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
+    const statusValue = columns.status ? rowValues[columns.status - 1] : '';
+    const pdfLinkValue = columns.pdfUrl ? rowValues[columns.pdfUrl - 1] : '';
     return {
       formKey,
       language,
       values,
       id: recordId,
       createdAt: columns.createdAt ? this.asIso(rowValues[columns.createdAt - 1]) : undefined,
-      updatedAt: columns.updatedAt ? this.asIso(rowValues[columns.updatedAt - 1]) : undefined
+      updatedAt: columns.updatedAt ? this.asIso(rowValues[columns.updatedAt - 1]) : undefined,
+      status: statusValue ? statusValue.toString() : undefined,
+      pdfUrl: pdfLinkValue ? pdfLinkValue.toString() : undefined
     };
+  }
+
+  private handleCreatePdfAction(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    recordId: string,
+    followup: FollowupConfig
+  ): FollowupActionResult {
+    if (!followup.pdfTemplateId) {
+      return { success: false, message: 'PDF template ID missing in follow-up config.' };
+    }
+    const context = this.getRecordContext(form, questions, recordId);
+    if (!context || !context.record) {
+      return { success: false, message: 'Record not found.' };
+    }
+    const pdfArtifact = this.generatePdfArtifact(form, questions, context.record, followup);
+    if (!pdfArtifact.success) {
+      return { success: false, message: pdfArtifact.message || 'Failed to generate PDF.' };
+    }
+    if (context.columns.pdfUrl && pdfArtifact.url) {
+      context.sheet.getRange(context.rowIndex, context.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
+    }
+    const statusValue = followup.statusTransitions?.onPdf;
+    if (statusValue) {
+      this.writeStatus(context.sheet, context.columns, context.rowIndex, statusValue, followup.statusFieldId);
+    }
+    this.refreshRecordCache(form.configSheet, questions, context);
+    return {
+      success: true,
+      status: statusValue || context.record.status,
+      pdfUrl: pdfArtifact.url,
+      fileId: pdfArtifact.fileId
+    };
+  }
+
+  private handleSendEmailAction(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    recordId: string,
+    followup: FollowupConfig
+  ): FollowupActionResult {
+    if (!followup.emailTemplateId) {
+      return { success: false, message: 'Email template ID missing in follow-up config.' };
+    }
+    if (!followup.emailRecipients || !followup.emailRecipients.length) {
+      return { success: false, message: 'Email recipients not configured.' };
+    }
+    const context = this.getRecordContext(form, questions, recordId);
+    if (!context || !context.record) {
+      return { success: false, message: 'Record not found.' };
+    }
+    const lineItemRows = this.collectLineItemRows(context.record, questions);
+    const placeholders = this.buildPlaceholderMap(context.record, questions, lineItemRows);
+    const pdfArtifact = this.generatePdfArtifact(form, questions, context.record, followup);
+    if (!pdfArtifact.success) {
+      return { success: false, message: pdfArtifact.message || 'Failed to generate PDF.' };
+    }
+    if (context.columns.pdfUrl && pdfArtifact.url) {
+      context.sheet.getRange(context.rowIndex, context.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
+    }
+    const toRecipients = this.resolveRecipients(followup.emailRecipients, placeholders, context.record);
+    if (!toRecipients.length) {
+      return { success: false, message: 'Resolved email recipients are empty.' };
+    }
+    const ccRecipients = this.resolveRecipients(followup.emailCc, placeholders, context.record);
+    const bccRecipients = this.resolveRecipients(followup.emailBcc, placeholders, context.record);
+    const templateId = this.resolveTemplateId(followup.emailTemplateId, context.record.language);
+    if (!templateId) {
+      return { success: false, message: 'No email template matched the submission language.' };
+    }
+    try {
+      const templateDoc = DocumentApp.openById(templateId);
+      const templateBody = templateDoc.getBody().getText();
+      const body = this.applyPlaceholders(templateBody, placeholders);
+      const htmlBody = body.replace(/\n/g, '<br/>');
+      const subject =
+        this.resolveLocalizedStringValue(followup.emailSubject, context.record.language) ||
+        `${form.title || 'Form'} submission ${context.record.id}`;
+      GmailApp.sendEmail(toRecipients.join(','), subject || 'Form submission', body || 'See attached PDF.', {
+        htmlBody,
+        attachments: pdfArtifact.blob ? [pdfArtifact.blob] : undefined,
+        cc: ccRecipients.length ? ccRecipients.join(',') : undefined,
+        bcc: bccRecipients.length ? bccRecipients.join(',') : undefined
+      });
+    } catch (err) {
+      debugLog('followup.email.failed', { error: err ? err.toString() : 'unknown' });
+      return { success: false, message: 'Failed to send follow-up email.' };
+    }
+    const statusValue = followup.statusTransitions?.onEmail;
+    if (statusValue) {
+      this.writeStatus(context.sheet, context.columns, context.rowIndex, statusValue, followup.statusFieldId);
+    }
+    this.refreshRecordCache(form.configSheet, questions, context);
+    return {
+      success: true,
+      status: statusValue || context.record.status,
+      pdfUrl: pdfArtifact.url,
+      fileId: pdfArtifact.fileId
+    };
+  }
+
+  private handleCloseRecordAction(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    recordId: string,
+    followup: FollowupConfig
+  ): FollowupActionResult {
+    const context = this.getRecordContext(form, questions, recordId);
+    if (!context) {
+      return { success: false, message: 'Record not found.' };
+    }
+    const statusValue = followup.statusTransitions?.onClose || 'Closed';
+    this.writeStatus(context.sheet, context.columns, context.rowIndex, statusValue, followup.statusFieldId);
+    this.refreshRecordCache(form.configSheet, questions, context);
+    return { success: true, status: statusValue };
+  }
+
+  private getRecordContext(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    recordId: string
+  ): RecordContext | null {
+    const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+    const rowIndex = this.findRowIndexById(sheet, columns, recordId);
+    if (rowIndex < 0) return null;
+    const rowValues = sheet.getRange(rowIndex, 1, 1, headers.length).getValues()[0];
+    const record = this.buildSubmissionRecord(form.configSheet, questions, columns, rowValues, recordId);
+    return { sheet, headers, columns, rowIndex, rowValues, record };
+  }
+
+  private findRowIndexById(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    columns: HeaderColumns,
+    recordId: string
+  ): number {
+    if (!columns.recordId) return -1;
+    const dataRows = Math.max(0, sheet.getLastRow() - 1);
+    if (dataRows <= 0) return -1;
+    const idRange = sheet.getRange(2, columns.recordId, dataRows, 1).getValues();
+    const matchIndex = idRange.findIndex(r => (r[0] || '').toString() === recordId);
+    if (matchIndex < 0) return -1;
+    return 2 + matchIndex;
+  }
+
+  private writeStatus(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    columns: HeaderColumns,
+    rowIndex: number,
+    value: string | undefined,
+    statusFieldId?: string
+  ): void {
+    if (!value) return;
+    if (statusFieldId && columns.fields[statusFieldId]) {
+      sheet.getRange(rowIndex, columns.fields[statusFieldId] as number, 1, 1).setValue(value);
+      return;
+    }
+    if (columns.status) {
+      sheet.getRange(rowIndex, columns.status, 1, 1).setValue(value);
+    }
+  }
+
+  private refreshRecordCache(
+    formKey: string,
+    questions: QuestionConfig[],
+    context: RecordContext
+  ): void {
+    const rowValues = context.sheet.getRange(context.rowIndex, 1, 1, context.headers.length).getValues()[0];
+    const record = this.buildSubmissionRecord(formKey, questions, context.columns, rowValues, context.record?.id);
+    if (record) {
+      const etag = this.getSheetEtag(context.sheet, context.columns);
+      this.cacheRecord(formKey, etag, record);
+    }
+  }
+
+  private generatePdfArtifact(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    record: WebFormSubmission,
+    followup: FollowupConfig
+  ): { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob } {
+    if (!followup.pdfTemplateId) {
+      return { success: false, message: 'PDF template ID missing.' };
+    }
+    const templateId = this.resolveTemplateId(followup.pdfTemplateId, record.language);
+    if (!templateId) {
+      return { success: false, message: 'No PDF template matched the submission language.' };
+    }
+    try {
+      const templateFile = DriveApp.getFileById(templateId);
+      const folder = this.resolveFollowupFolder(followup);
+      const copyName = `${form.title || 'Form'} - ${record.id || this.generateUuid()}`;
+      const copy = templateFile.makeCopy(copyName, folder);
+      const doc = DocumentApp.openById(copy.getId());
+      const lineItemRows = this.collectLineItemRows(record, questions);
+      const placeholders = this.buildPlaceholderMap(record, questions, lineItemRows);
+      this.addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
+      this.renderLineItemTables(doc, questions, lineItemRows);
+      const body = doc.getBody();
+      Object.entries(placeholders).forEach(([token, value]) => {
+        body.replaceText(this.escapeRegExp(token), value ?? '');
+      });
+      doc.saveAndClose();
+      const pdfBlob = copy.getAs('application/pdf');
+      const pdfFile = folder.createFile(pdfBlob).setName(`${copyName}.pdf`);
+      copy.setTrashed(true);
+      return { success: true, url: pdfFile.getUrl(), fileId: pdfFile.getId(), blob: pdfBlob };
+    } catch (err) {
+      debugLog('followup.pdf.failed', { error: err ? err.toString() : 'unknown' });
+      return { success: false, message: 'Failed to generate PDF.' };
+    }
+  }
+
+  private resolveFollowupFolder(followup: FollowupConfig): GoogleAppsScript.Drive.Folder {
+    if (followup.pdfFolderId) {
+      try {
+        return DriveApp.getFolderById(followup.pdfFolderId);
+      } catch (_) {
+        // fall through to default
+      }
+    }
+    try {
+      const file = DriveApp.getFileById(this.ss.getId());
+      const parents = file.getParents();
+      if (parents && parents.hasNext()) {
+        return parents.next();
+      }
+    } catch (_) {
+      // ignore
+    }
+    return DriveApp.getRootFolder();
+  }
+
+  private buildPlaceholderMap(
+    record: WebFormSubmission,
+    questions: QuestionConfig[],
+    lineItemRows: Record<string, any[]>
+  ): Record<string, string> {
+    const map: Record<string, string> = {};
+    this.addPlaceholderVariants(map, 'RECORD_ID', record.id || '');
+    this.addPlaceholderVariants(map, 'FORM_KEY', record.formKey || '');
+    this.addPlaceholderVariants(map, 'CREATED_AT', record.createdAt || '');
+    this.addPlaceholderVariants(map, 'UPDATED_AT', record.updatedAt || '');
+    this.addPlaceholderVariants(map, 'STATUS', record.status || '');
+    this.addPlaceholderVariants(map, 'PDF_URL', record.pdfUrl || '');
+    this.addPlaceholderVariants(map, 'LANGUAGE', record.language || '');
+    questions.forEach(q => {
+      const value = record.values ? record.values[q.id] : '';
+      const formatted = this.formatTemplateValue(value);
+      this.addPlaceholderVariants(map, q.id, formatted);
+      const labelToken = this.slugifyPlaceholder(q.qEn || q.id);
+      this.addPlaceholderVariants(map, labelToken, formatted);
+      if (q.type === 'LINE_ITEM_GROUP') {
+        const rows = lineItemRows[q.id] || [];
+        (q.lineItemConfig?.fields || []).forEach(field => {
+          const values = rows
+            .map(row => row[field.id])
+            .filter(val => val !== undefined && val !== null && val !== '')
+            .map(val => this.formatTemplateValue(val));
+          if (!values.length) return;
+          const joined = values.join('\n');
+          this.addPlaceholderVariants(map, `${q.id}.${field.id}`, joined);
+          const fieldSlug = this.slugifyPlaceholder(field.labelEn || field.id);
+          this.addPlaceholderVariants(map, `${q.id}.${fieldSlug}`, joined);
+        });
+      } else if (q.dataSource && typeof value === 'string' && value) {
+        const dsDetails = this.lookupDataSourceDetails(q, value, record.language);
+        if (dsDetails) {
+          Object.entries(dsDetails).forEach(([key, val]) => {
+            this.addPlaceholderVariants(map, `${q.id}.${key}`, val);
+          });
+        }
+      }
+    });
+    return map;
+  }
+
+  private collectLineItemRows(
+    record: WebFormSubmission,
+    questions: QuestionConfig[]
+  ): Record<string, any[]> {
+    const map: Record<string, any[]> = {};
+    questions.forEach(q => {
+      if (q.type !== 'LINE_ITEM_GROUP') return;
+      const value = record.values ? record.values[q.id] : undefined;
+      if (Array.isArray(value)) {
+        map[q.id] = value.map(row => (row && typeof row === 'object' ? row : {}));
+      }
+    });
+    return map;
+  }
+
+  private addConsolidatedPlaceholders(
+    placeholders: Record<string, string>,
+    questions: QuestionConfig[],
+    lineItemRows: Record<string, any[]>
+  ): void {
+    questions.forEach(q => {
+      if (q.type !== 'LINE_ITEM_GROUP') return;
+      const rows = lineItemRows[q.id];
+      if (!rows || !rows.length) return;
+      (q.lineItemConfig?.fields || []).forEach(field => {
+        const unique = Array.from(
+          new Set(
+            rows
+              .map(row => row[field.id])
+              .filter(val => val !== undefined && val !== null && val !== '')
+              .map(val => this.formatTemplateValue(val))
+          )
+        );
+        if (!unique.length) return;
+        const text = unique.join(', ');
+        placeholders[`{{CONSOLIDATED(${q.id}.${field.id})}}`] = text;
+        const slug = this.slugifyPlaceholder(field.labelEn || field.id);
+        placeholders[`{{CONSOLIDATED(${q.id}.${slug})}}`] = text;
+      });
+    });
+  }
+
+  private renderLineItemTables(
+    doc: GoogleAppsScript.Document.Document,
+    questions: QuestionConfig[],
+    lineItemRows: Record<string, any[]>
+  ): void {
+    const body = doc.getBody();
+    if (!body) return;
+    const groupLookup: Record<string, QuestionConfig> = {};
+    questions
+      .filter(q => q.type === 'LINE_ITEM_GROUP')
+      .forEach(q => {
+        groupLookup[q.id.toUpperCase()] = q;
+      });
+
+    let childIndex = 0;
+    while (childIndex < body.getNumChildren()) {
+      const element = body.getChild(childIndex);
+      if (!element || element.getType() !== DocumentApp.ElementType.TABLE) {
+        childIndex++;
+        continue;
+      }
+      const table = element.asTable();
+      const directive = this.extractTableGroupDirective(table);
+      if (directive) {
+        const inserted = this.renderGroupedLineItemTables(
+          body,
+          childIndex,
+          table,
+          directive,
+          groupLookup,
+          lineItemRows
+        );
+        childIndex += inserted;
+        continue;
+      }
+      this.renderTableRows(table, groupLookup, lineItemRows);
+      childIndex++;
+    }
+  }
+
+  private renderGroupedLineItemTables(
+    body: GoogleAppsScript.Document.Body,
+    childIndex: number,
+    templateTable: GoogleAppsScript.Document.Table,
+    directive: { groupId: string; fieldId: string },
+    groupLookup: Record<string, QuestionConfig>,
+    lineItemRows: Record<string, any[]>
+  ): number {
+    const group = groupLookup[directive.groupId];
+    if (!group) {
+      body.removeChild(templateTable);
+      return 0;
+    }
+    const rows = lineItemRows[group.id] || [];
+    const groupedValues = this.collectGroupFieldValues(rows, directive.fieldId);
+    const preservedTemplate = templateTable.copy();
+    body.removeChild(templateTable);
+    if (!groupedValues.length) {
+      return 0;
+    }
+    groupedValues.forEach((groupValue, idx) => {
+      const newTable = body.insertTable(childIndex + idx, preservedTemplate.copy());
+      this.replaceGroupDirectivePlaceholders(newTable, directive, groupValue);
+      const filteredRows = rows.filter(row => {
+        const raw = row?.[directive.fieldId] ?? '';
+        return this.normalizeText(raw) === this.normalizeText(groupValue);
+      });
+      this.renderTableRows(
+        newTable,
+        groupLookup,
+        lineItemRows,
+        { groupId: group.id, rows: filteredRows }
+      );
+    });
+    return groupedValues.length;
+  }
+
+  private collectGroupFieldValues(rows: any[], fieldId: string): string[] {
+    if (!rows || !rows.length) return [];
+    const seen = new Set<string>();
+    const order: string[] = [];
+    rows.forEach(row => {
+      const raw = row?.[fieldId];
+      const normalized = this.normalizeText(raw);
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      order.push(raw ?? '');
+    });
+    return order;
+  }
+
+  private replaceGroupDirectivePlaceholders(
+    table: GoogleAppsScript.Document.Table,
+    directive: { groupId: string; fieldId: string },
+    groupValue: string
+  ): void {
+    const pattern = `(?i){{GROUP_TABLE(${directive.groupId}.${directive.fieldId})}}`;
+    for (let r = 0; r < table.getNumRows(); r++) {
+      const tableRow = table.getRow(r);
+      for (let c = 0; c < tableRow.getNumCells(); c++) {
+        tableRow.getCell(c).replaceText(pattern, groupValue || '');
+      }
+    }
+  }
+
+  private normalizeText(value: any): string {
+    if (value === undefined || value === null) return '';
+    return value.toString().trim();
+  }
+
+  private extractTableGroupDirective(
+    table: GoogleAppsScript.Document.Table
+  ): { groupId: string; fieldId: string } | null {
+    const text = table.getText && table.getText();
+    if (!text) return null;
+    const match = text.match(/{{GROUP_TABLE\(([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/i);
+    if (!match) return null;
+    return {
+      groupId: match[1].toUpperCase(),
+      fieldId: match[2].toUpperCase()
+    };
+  }
+
+  private renderTableRows(
+    table: GoogleAppsScript.Document.Table,
+    groupLookup: Record<string, QuestionConfig>,
+    lineItemRows: Record<string, any[]>,
+    override?: { groupId: string; rows: any[] }
+  ): void {
+    for (let r = 0; r < table.getNumRows(); r++) {
+      const row = table.getRow(r);
+      const placeholders = this.extractLineItemPlaceholders(row.getText());
+      if (!placeholders.length) continue;
+      const distinctGroups = Array.from(new Set(placeholders.map(p => p.groupId)));
+      if (distinctGroups.length !== 1) continue;
+      const groupId = distinctGroups[0];
+      const group = groupLookup[groupId];
+      if (!group) continue;
+      const rows = override && override.groupId === group.id
+        ? override.rows
+        : lineItemRows[group.id];
+      if (!rows || !rows.length) {
+        this.clearTableRow(row);
+        continue;
+      }
+      const templateCells: string[] = [];
+      for (let c = 0; c < row.getNumCells(); c++) {
+        templateCells.push(row.getCell(c).getText());
+      }
+      rows.forEach((dataRow, idx) => {
+        let targetRow = row;
+        if (idx > 0) {
+          targetRow = table.insertTableRow(r + idx);
+          while (targetRow.getNumCells() < templateCells.length) {
+            targetRow.appendTableCell('');
+          }
+        }
+        for (let c = 0; c < templateCells.length; c++) {
+          const template = templateCells[c];
+          const text = this.replaceLineItemPlaceholders(template, group, dataRow);
+          const cell = targetRow.getCell(c);
+          cell.clear();
+          cell.appendParagraph(text || '');
+        }
+      });
+      r += rows.length - 1;
+    }
+  }
+
+  private extractLineItemPlaceholders(text: string): Array<{ groupId: string; fieldId: string }> {
+    const matches: Array<{ groupId: string; fieldId: string }> = [];
+    if (!text) return matches;
+    const pattern = /{{([A-Z0-9_]+)\.([A-Z0-9_]+)}}/gi;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      matches.push({ groupId: match[1].toUpperCase(), fieldId: match[2].toUpperCase() });
+    }
+    return matches;
+  }
+
+  private clearTableRow(row: GoogleAppsScript.Document.TableRow): void {
+    if (!row) return;
+    for (let c = 0; c < row.getNumCells(); c++) {
+      const cell = row.getCell(c);
+      cell.clear();
+    }
+  }
+
+  private replaceLineItemPlaceholders(
+    template: string,
+    group: QuestionConfig,
+    rowData: Record<string, any>
+  ): string {
+    if (!template) return '';
+    const normalizedGroupId = group.id.toUpperCase();
+    const replacements: Record<string, string> = {};
+    (group.lineItemConfig?.fields || []).forEach(field => {
+      const text = this.formatTemplateValue(rowData ? rowData[field.id] : '');
+      const tokens = [
+        `${normalizedGroupId}.${field.id.toUpperCase()}`,
+        `${normalizedGroupId}.${this.slugifyPlaceholder(field.labelEn || field.id)}`
+      ];
+      tokens.forEach(token => {
+        replacements[token] = text;
+      });
+    });
+    return template.replace(/{{([A-Z0-9_]+)\.([A-Z0-9_]+)}}/gi, (_, groupId, fieldKey) => {
+      if (groupId.toUpperCase() !== normalizedGroupId) return '';
+      const token = `${normalizedGroupId}.${fieldKey.toUpperCase()}`;
+      return replacements[token] ?? '';
+    });
+  }
+
+  private formatTemplateValue(value: any): string {
+    if (value === undefined || value === null) return '';
+    if (Array.isArray(value)) {
+      if (value.length && typeof value[0] === 'object') {
+        return value
+          .map(entry =>
+            Object.entries(entry)
+              .map(([key, val]) => `${key}: ${val ?? ''}`)
+              .join(', ')
+          )
+          .join('\n');
+      }
+      return value.map(v => (v ?? '').toString()).join(', ');
+    }
+    if (typeof value === 'object') {
+      return Object.entries(value)
+        .map(([key, val]) => `${key}: ${val ?? ''}`)
+        .join(', ');
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    return value.toString();
+  }
+
+  private addPlaceholderVariants(map: Record<string, string>, key: string, value: any): void {
+    if (!key) return;
+    const keys = this.buildPlaceholderKeys(key);
+    const text = this.formatTemplateValue(value);
+    keys.forEach(token => {
+      map[`{{${token}}}`] = text;
+    });
+  }
+
+  private buildPlaceholderKeys(raw: string): string[] {
+    const sanitized = raw || '';
+    const segments = sanitized.split('.').map(seg => seg.trim());
+    const upper = segments.map(seg => seg.toUpperCase()).join('.');
+    const lower = segments.map(seg => seg.toLowerCase()).join('.');
+    const title = segments
+      .map(seg =>
+        seg
+          .toLowerCase()
+          .split('_')
+          .map(word => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ''))
+          .join('_')
+      )
+      .join('.');
+    return Array.from(new Set([upper, lower, title]));
+  }
+
+  private resolveTemplateId(template: TemplateIdMap | undefined, language: string): string | undefined {
+    if (!template) return undefined;
+    if (typeof template === 'string') {
+      const trimmed = template.trim();
+      return trimmed || undefined;
+    }
+    const langKey = (language || 'EN').toUpperCase();
+    if (template[langKey]) return template[langKey];
+    const lower = (language || 'en').toLowerCase();
+    if (template[lower]) return template[lower];
+    if (template.EN) return template.EN;
+    const firstKey = Object.keys(template)[0];
+    return firstKey ? template[firstKey] : undefined;
+  }
+
+  private lookupRecipientFromDataSource(
+    entry: EmailRecipientDataSourceConfig,
+    lookupValue: any,
+    language: string
+  ): string | undefined {
+    if (!lookupValue) return undefined;
+    try {
+      const projection = entry.dataSource?.projection || [entry.lookupField, entry.valueField];
+      const limit = entry.dataSource?.limit || 200;
+      const response = this.fetchDataSource(entry.dataSource, language, projection, limit);
+      const items = Array.isArray(response.items) ? response.items : [];
+      const normalizedLookup = lookupValue.toString().trim().toLowerCase();
+      for (const item of items) {
+        if (!item || typeof item !== 'object') continue;
+        const matchValue = (item as any)[entry.lookupField];
+        if (matchValue === undefined || matchValue === null) continue;
+        const normalizedMatch = matchValue.toString().trim().toLowerCase();
+        if (normalizedMatch === normalizedLookup) {
+          const emailValue = (item as any)[entry.valueField];
+          if (emailValue && emailValue.toString().trim()) {
+            return emailValue.toString().trim();
+          }
+        }
+      }
+    } catch (err) {
+      debugLog('followup.recipient.lookup.failed', {
+        error: err ? err.toString() : 'lookup error',
+        dataSource: entry.dataSource?.id || entry.dataSource
+      });
+    }
+    return undefined;
+  }
+
+  private lookupDataSourceDetails(
+    question: QuestionConfig,
+    selectedValue: string,
+    language: string
+  ): Record<string, string> | null {
+    if (!selectedValue || !question.dataSource) return null;
+    const ds = question.dataSource;
+    const normalized = selectedValue.toString().trim().toLowerCase();
+    if (!normalized) return null;
+    const cacheKey = JSON.stringify({
+      id: ds.id,
+      tabName: ds.tabName,
+      sheetId: ds.sheetId,
+      projection: ds.projection
+    });
+    if (!this.dataSourceCache[cacheKey]) {
+      this.dataSourceCache[cacheKey] = this.fetchDataSource(ds, language, ds.projection, ds.limit);
+    }
+    const response = this.dataSourceCache[cacheKey];
+    const items = Array.isArray(response.items) ? response.items : [];
+    const lookupFields = this.buildDataSourceLookupFields(ds);
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const matchField = lookupFields.find(field => item[field] !== undefined);
+      if (!matchField) continue;
+      const candidate = item[matchField];
+      if (!candidate) continue;
+      if (candidate.toString().trim().toLowerCase() === normalized) {
+        const result: Record<string, string> = {};
+        Object.entries(item).forEach(([key, val]) => {
+          if (val === undefined || val === null) return;
+          const text = val instanceof Date ? val.toISOString() : val.toString();
+          const sanitizedKey = key.replace(/\s+/g, '_').toUpperCase();
+          result[sanitizedKey] = text;
+        });
+        return result;
+      }
+    }
+    return null;
+  }
+
+  private buildDataSourceLookupFields(ds: DataSourceConfig): string[] {
+    const fields: string[] = [];
+    if (ds.mapping) {
+      Object.entries(ds.mapping).forEach(([source, target]) => {
+        if (target === 'value' || target === 'id') {
+          fields.push(source);
+        }
+      });
+    }
+    if (ds.projection && ds.projection.length) {
+      fields.push(ds.projection[0]);
+    }
+    fields.push('value');
+    return Array.from(new Set(fields.filter(Boolean).map(f => f.toString())));
+  }
+
+  private slugifyPlaceholder(label: string): string {
+    return (label || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  }
+
+  private applyPlaceholders(template: string, placeholders: Record<string, string>): string {
+    if (!template) return '';
+    let output = template;
+    Object.entries(placeholders).forEach(([token, value]) => {
+      output = output.replace(new RegExp(this.escapeRegExp(token), 'g'), value ?? '');
+    });
+    return output;
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private resolveRecipients(
+    entries: EmailRecipientEntry[] | undefined,
+    placeholders: Record<string, string>,
+    record: WebFormSubmission
+  ): string[] {
+    if (!entries || !entries.length) return [];
+    const resolved: string[] = [];
+    entries.forEach(entry => {
+      if (typeof entry === 'string') {
+        const address = this.applyPlaceholders(entry, placeholders).trim();
+        if (address) resolved.push(address);
+        return;
+      }
+      if (entry && entry.type === 'dataSource') {
+        const lookupValue = (record.values && record.values[entry.recordFieldId]) || '';
+        const address = this.lookupRecipientFromDataSource(entry, lookupValue, record.language);
+        if (address) {
+          resolved.push(address);
+        } else if (entry.fallbackEmail) {
+          resolved.push(entry.fallbackEmail);
+        }
+      }
+    });
+    return resolved.filter(Boolean);
+  }
+
+  private resolveLocalizedStringValue(value: any, language?: string): string {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    const langKey = (language || 'EN').toLowerCase();
+    return value[langKey] || value.en || value.EN || '';
+  }
+
+  private generateAutoIncrementValue(
+    formKey: string,
+    fieldId: string,
+    config?: AutoIncrementConfig
+  ): string | undefined {
+    const key = this.getAutoIncrementPropertyKey(formKey, fieldId, config?.propertyKey);
+    let current = this.autoIncrementState[key] || 0;
+    if (this.docProps) {
+      try {
+        const stored = this.docProps.getProperty(key);
+        const parsed = stored ? parseInt(stored, 10) : NaN;
+        if (!Number.isNaN(parsed)) {
+          current = parsed;
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+    const next = current + 1;
+    const padLength = Math.max(1, Math.min(20, config?.padLength || 6));
+    const prefix = config?.prefix || '';
+    const formatted = `${prefix}${next.toString().padStart(padLength, '0')}`;
+    this.autoIncrementState[key] = next;
+    if (this.docProps) {
+      try {
+        this.docProps.setProperty(key, next.toString());
+      } catch (_) {
+        // ignore
+      }
+    }
+    return formatted;
+  }
+
+  private getAutoIncrementPropertyKey(formKey: string, fieldId: string, override?: string): string {
+    const base = (override && override.trim()) || `${formKey || ''}::${fieldId}`;
+    return `${AUTO_INCREMENT_PROPERTY_PREFIX}${this.digestKey(base)}`;
   }
 }
 
@@ -885,6 +1793,8 @@ interface HeaderColumns {
   recordId?: number;
   createdAt?: number;
   updatedAt?: number;
+  status?: number;
+  pdfUrl?: number;
   fields: Record<string, number>;
 }
 
@@ -895,4 +1805,13 @@ interface CachedListPage {
 
 interface ListPageResult extends CachedListPage {
   etag: string;
+}
+
+interface RecordContext {
+  sheet: GoogleAppsScript.Spreadsheet.Sheet;
+  headers: string[];
+  columns: HeaderColumns;
+  rowIndex: number;
+  rowValues: any[];
+  record: WebFormSubmission | null;
 }

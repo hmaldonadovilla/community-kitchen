@@ -248,6 +248,60 @@ export class MockFile {
   getRootFolder: () => new MockFolder()
 };
 
+const createMockTableCell = () => ({
+  getText: () => '',
+  clear: jest.fn(),
+  appendParagraph: jest.fn(),
+  replaceText: jest.fn()
+});
+
+const createMockTableRow = () => ({
+  getText: () => '',
+  getNumCells: () => 0,
+  getCell: () => createMockTableCell(),
+  appendTableCell: jest.fn()
+});
+
+const createMockTable = () => {
+  const table: any = {
+    copy: jest.fn(() => createMockTable()),
+    getText: () => '',
+    getNumRows: () => 0,
+    getRow: () => createMockTableRow(),
+    insertTableRow: jest.fn(() => createMockTableRow()),
+    removeFromParent: jest.fn()
+  };
+  return table;
+};
+
+const createMockBody = () => {
+  const body: any = {
+    getText: () => '',
+    replaceText: jest.fn(),
+    getTables: () => [],
+    getNumChildren: () => 0,
+    getChild: () => null,
+    getChildIndex: () => 0,
+    insertTable: jest.fn(() => createMockTable()),
+    removeChild: jest.fn()
+  };
+  return body;
+};
+
+const mockBodyInstance = createMockBody();
+
+(global as any).DocumentApp = {
+  ElementType: { TABLE: 'TABLE' },
+  openById: jest.fn(() => ({
+    getBody: () => mockBodyInstance,
+    saveAndClose: jest.fn()
+  }))
+};
+
+(global as any).GmailApp = {
+  sendEmail: jest.fn()
+};
+
 (global as any).Utilities = {
   sleep: jest.fn()
 };

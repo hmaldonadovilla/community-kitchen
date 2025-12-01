@@ -1,4 +1,5 @@
 import {
+  AutoIncrementConfig,
   BaseQuestionType,
   DataSourceConfig,
   FileUploadConfig,
@@ -6,6 +7,7 @@ import {
   LineItemGroupConfig,
   LineItemSelectorConfig,
   LineItemTotalConfig,
+  ListViewSortConfig,
   OptionFilter,
   QuestionConfig,
   QuestionType,
@@ -140,6 +142,8 @@ export class ConfigSheet {
       const statusRaw = row[idxStatus] ? row[idxStatus].toString().trim().toLowerCase() : 'active';
       const status = statusRaw === 'archived' ? 'Archived' : 'Active';
       const listViewFlag = row[idxListView] !== '' && row[idxListView] !== null ? !!row[idxListView] : false;
+      const listViewSort = listViewFlag ? this.parseListViewSort(rawConfig) : undefined;
+      const autoIncrement = type === 'TEXT' ? this.parseAutoIncrement(rawConfig) : undefined;
 
       return {
         id: row[0] ? row[0].toString() : '',
@@ -160,7 +164,9 @@ export class ConfigSheet {
         validationRules,
         visibility,
         clearOnChange,
-        selectionEffects
+        selectionEffects,
+        listViewSort,
+        autoIncrement
       };
     });
   }
@@ -566,6 +572,54 @@ export class ConfigSheet {
       effects.push(normalized);
     });
     return effects.length ? effects : undefined;
+  }
+
+  private static parseListViewSort(rawConfig: string): ListViewSortConfig | undefined {
+    if (!rawConfig) return undefined;
+    const parsed = this.safeParseObject(rawConfig);
+    if (!parsed) return undefined;
+    const candidate =
+      (parsed.listView && (parsed.listView.sort || parsed.listView.defaultSort)) ||
+      parsed.listViewSort;
+    if (!candidate) return undefined;
+    const normalizeDirection = (value: any): 'asc' | 'desc' | undefined => {
+      if (!value) return undefined;
+      const dir = value.toString().toLowerCase();
+      if (dir === 'desc') return 'desc';
+      if (dir === 'asc') return 'asc';
+      return undefined;
+    };
+    if (typeof candidate === 'string') {
+      const direction = normalizeDirection(candidate);
+      return direction ? { direction } : undefined;
+    }
+    if (typeof candidate !== 'object') return undefined;
+    const direction = normalizeDirection(candidate.direction || candidate.order);
+    const prioritySource = candidate.priority ?? candidate.rank ?? candidate.orderIndex;
+    const priority =
+      prioritySource !== undefined && prioritySource !== null && !Number.isNaN(Number(prioritySource))
+        ? Number(prioritySource)
+        : undefined;
+    const result: ListViewSortConfig = {};
+    if (direction) result.direction = direction;
+    if (priority !== undefined) result.priority = priority;
+    return Object.keys(result).length ? result : undefined;
+  }
+
+  private static parseAutoIncrement(rawConfig: string): AutoIncrementConfig | undefined {
+    if (!rawConfig || rawConfig.startsWith('REF:')) return undefined;
+    const parsed = this.safeParseObject(rawConfig);
+    if (!parsed || typeof parsed !== 'object') return undefined;
+    const source = parsed.autoIncrement || parsed.autoIncrementConfig;
+    if (!source || typeof source !== 'object') return undefined;
+    const config: AutoIncrementConfig = {};
+    if (source.prefix) config.prefix = source.prefix.toString();
+    if (source.padLength !== undefined) {
+      const pad = Number(source.padLength);
+      if (Number.isFinite(pad) && pad > 0) config.padLength = pad;
+    }
+    if (source.propertyKey) config.propertyKey = source.propertyKey.toString();
+    return Object.keys(config).length ? config : undefined;
   }
 
   private static safeParseObject(rawConfig: string): any | undefined {

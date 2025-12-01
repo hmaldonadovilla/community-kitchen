@@ -41,4 +41,31 @@ describe('WebFormService submitWebForm', () => {
     expect(rows[1][2]).toBe('Blue');         // Q2
     expect(rows[1][4]).toBeInstanceOf(Date); // Created At
   });
+
+  test('new submissions set Updated At equal to Created At', () => {
+    const ss = new MockSpreadsheet() as any;
+    const service = new WebFormService(ss);
+    const dashboard = ss.getSheetByName('Forms Dashboard');
+    dashboard.setMockData([
+      [], [], [],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', '', '', '']
+    ]);
+    const config = ss.insertSheet('Config: Meals');
+    config.setMockData([
+      ['ID', 'Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Status', 'Config'],
+      ['Q1', 'TEXT', 'Meal', 'Repas', 'Maaltijd', true, '', '', '', 'Active', '']
+    ]);
+
+    service.submitWebForm({ formKey: 'Config: Meals', language: 'EN', Q1: 'Lunch' });
+
+    const sheet = ss.getSheetByName('Meals Data');
+    const rows = sheet?.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues() || [];
+    const header = rows[0];
+    const createdIdx = header.findIndex((col: string) => col === 'Created At');
+    const updatedIdx = header.findIndex((col: string) => col === 'Updated At');
+    expect(createdIdx).toBeGreaterThan(-1);
+    expect(updatedIdx).toBeGreaterThan(-1);
+    expect(rows[1][createdIdx]).toBeInstanceOf(Date);
+    expect(rows[1][updatedIdx]).toEqual(rows[1][createdIdx]);
+  });
 });

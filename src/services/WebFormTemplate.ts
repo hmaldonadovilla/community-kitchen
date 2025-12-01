@@ -323,11 +323,42 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         return listStatus;
       };
 
-      const state = { language: 'EN', lineItems: {} };
+      const state = { language: 'EN', lineItems: {}, lastSubmissionMeta: null };
       const recordCache = {};
-  const listColumns = definition.questions.filter(q => q.listView);
-  let listViewLoaded = false;
-  let listStatus = document.getElementById('list-status');
+      const fallbackListColumns = definition.questions
+        .filter(q => q.listView)
+        .map(q => ({ fieldId: q.id, label: q.label, kind: 'question' }));
+      const listColumns = (definition.listView && Array.isArray(definition.listView.columns) && definition.listView.columns.length)
+        ? definition.listView.columns
+        : fallbackListColumns;
+      let listViewLoaded = false;
+      let listStatus = document.getElementById('list-status');
+      const defaultSortField =
+        (definition.listView && definition.listView.defaultSort && definition.listView.defaultSort.fieldId) ||
+        (listColumns[0] && listColumns[0].fieldId) ||
+        'updatedAt';
+      const defaultSortDirection =
+        definition.listView && definition.listView.defaultSort && definition.listView.defaultSort.direction === 'asc'
+          ? 'asc'
+          : 'desc';
+      const listState = {
+        search: '',
+        sortField: defaultSortField,
+        sortDirection: defaultSortDirection,
+        page: 0
+      };
+      let listDataRows = [];
+      let activeActionMenu = null;
+      document.addEventListener('click', event => {
+        if (!activeActionMenu) return;
+        const target = event.target;
+        if (target && target.closest && (target.closest('.action-menu') || target.closest('.action-menu-btn'))) {
+          return;
+        }
+        activeActionMenu.classList.add('hidden');
+        activeActionMenu.style.display = 'none';
+        activeActionMenu = null;
+      });
       function getWebFormApp() {
         if (window.WebFormApp) return window.WebFormApp;
         try {
@@ -404,165 +435,508 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         if (newRecordBtn) newRecordBtn.style.display = 'inline-flex';
       }
 
+      function buildFollowupActions(recordId) {
+        if (!recordId || !definition.followup) return [];
+        const actions = [];
+        if (definition.followup.pdfTemplateId) {
+          actions.push({
+            label: 'Create PDF',
+            onClick: () => runFollowupAction('CREATE_PDF', recordId)
+          });
+        }
+        if (definition.followup.emailTemplateId && definition.followup.emailRecipients) {
+          actions.push({
+            label: 'Send PDF via email',
+            onClick: () => runFollowupAction('SEND_EMAIL', recordId)
+          });
+        }
+        actions.push({
+          label: 'Close record',
+          onClick: () => runFollowupAction('CLOSE_RECORD', recordId)
+        });
+        return actions;
+      }
+
+      function runFollowupAction(actionId, recordId) {
+        if (!(google && google.script && google.script.run)) {
+          statusEl.textContent = 'Follow-up actions are unavailable offline.';
+          statusEl.className = 'status error';
+          return Promise.reject(new Error('Follow-up unavailable'));
+        }
+        statusEl.textContent = 'Running follow-up action...';
+        statusEl.className = 'status';
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(res => {
+              statusEl.textContent = (res && res.message) || 'Action completed.';
+              statusEl.className = 'status success';
+              if (listColumns.length) {
+                renderList(true);
+              }
+              resolve(res);
+            })
+            .withFailureHandler(err => {
+              statusEl.textContent = (err && err.message) ? err.message : 'Action failed.';
+              statusEl.className = 'status error';
+              reject(err);
+            })
+            .triggerFollowupAction(formKey || '', recordId, actionId);
+        });
+      }
+
       function renderList(forceRefresh = false) {
+        if (!listView || !listColumns.length) return;
         if (forceRefresh) {
           listViewLoaded = false;
+          listDataRows = [];
           Object.keys(recordCache).forEach(key => delete recordCache[key]);
+          listState.page = 0;
         }
-        if (!listView || !listColumns.length) return;
-        if (listViewLoaded) return;
-        listViewLoaded = true;
+        const columns = listColumns.length ? listColumns : fallbackListColumns;
+        const headerRefs = [];
+        const pageSize = Math.min(Math.max((definition.listView && definition.listView.pageSize) || 10, 1), 10);
         const fetchRows = (pageToken) =>
           new Promise(resolve => {
-            const handleSuccess = (res) => {
+            const handleSuccess = res => {
               const listPayload = res && res.list ? res.list : (res || { items: [], totalCount: 0 });
-              const recordsPayload = (res && res.records && typeof res.records === 'object') ? res.records : {};
+              const recordsPayload =
+                res && res.records && typeof res.records === 'object' ? res.records : {};
               Object.keys(recordsPayload).forEach(key => {
                 if (!key) return;
                 recordCache[key] = recordsPayload[key];
               });
-              if (__WEB_FORM_DEBUG__) {
-                console.info('[ListView] fetchSubmissionsBatch success', {
-                  pageToken,
-                  count: listPayload?.items?.length || 0,
-                  total: listPayload?.totalCount
-                });
-              }
               resolve({ list: listPayload, records: recordsPayload });
             };
             const attempt = () => {
             if (!(google && google.script && google.script.run)) {
-                if (__WEB_FORM_DEBUG__) {
-                  console.info('[ListView] google.script.run not ready, retrying...');
-                }
                 setTimeout(attempt, 150);
               return;
             }
             try {
               google.script.run
                   .withSuccessHandler(handleSuccess)
-                  .withFailureHandler(err => {
-                    console.error('[ListView] fetchSubmissionsBatch failed', err);
-                    resolve({ list: { items: [], totalCount: 0 }, records: {} });
-                  })
-                  .fetchSubmissionsBatch(formKey || '', undefined, 10, pageToken, true);
+                  .withFailureHandler(() => resolve({ list: { items: [], totalCount: 0 }, records: {} }))
+                  .fetchSubmissionsBatch(formKey || '', undefined, pageSize, pageToken, true);
             } catch (_) {
-                console.error('[ListView] fetchSubmissionsBatch threw synchronously');
                 resolve({ list: { items: [], totalCount: 0 }, records: {} });
               }
             };
             attempt();
           });
 
-        const columns = (listColumns.length ? listColumns : definition.questions).slice(0, 8);
-        listView.innerHTML = '';
-        const initialStatus = getListStatus();
-        if (initialStatus) {
-          initialStatus.textContent = 'Loading...';
-          initialStatus.style.display = 'block';
+        if (listViewLoaded && listDataRows.length && !forceRefresh) {
+          updateListView();
+          return;
         }
+
+        listViewLoaded = true;
+        listView.innerHTML = '';
+        const statusNode = getListStatus();
+        if (statusNode) {
+          statusNode.textContent = 'Loading...';
+          statusNode.style.display = 'block';
+        }
+
+        const controls = buildListControls(columns);
+        listView.appendChild(controls);
 
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.marginBottom = '8px';
-
         const header = document.createElement('tr');
         columns.forEach(col => {
           const th = document.createElement('th');
           th.style.textAlign = 'left';
           th.style.borderBottom = '1px solid #e2e8f0';
           th.style.padding = '6px 4px';
-          th.textContent = (col.label && (col.label[state.language.toLowerCase()] || col.label.en)) || col.label?.en || col.label?.fr || col.label?.nl || col.id;
+          th.style.cursor = 'pointer';
+          th.style.userSelect = 'none';
+          th.style.whiteSpace = 'nowrap';
+          const label =
+            (col.label && (col.label[state.language.toLowerCase()] || col.label.en)) ||
+            col.label?.en ||
+            col.label?.fr ||
+            col.label?.nl ||
+            col.fieldId;
+          const labelSpan = document.createElement('span');
+          labelSpan.textContent = label;
+          const icon = document.createElement('span');
+          icon.style.marginLeft = '6px';
+          icon.style.fontSize = '11px';
+          icon.style.color = '#94a3b8';
+          icon.textContent = '↕';
+          th.appendChild(labelSpan);
+          th.appendChild(icon);
+          th.addEventListener('click', () => handleHeaderSort(col.fieldId));
+          headerRefs.push({ fieldId: col.fieldId, icon });
           header.appendChild(th);
         });
-        const metaTh = document.createElement('th');
-        metaTh.style.textAlign = 'left';
-        metaTh.style.borderBottom = '1px solid #e2e8f0';
-        metaTh.style.padding = '6px 4px';
-        metaTh.textContent = 'Updated';
-        header.appendChild(metaTh);
+        const actionTh = document.createElement('th');
+        actionTh.style.textAlign = 'center';
+        actionTh.style.borderBottom = '1px solid #e2e8f0';
+        actionTh.style.padding = '6px 4px';
+        actionTh.textContent = '';
+        header.appendChild(actionTh);
         table.appendChild(header);
         listView.appendChild(table);
 
         const pager = document.createElement('div');
         pager.style.display = 'flex';
+        pager.style.alignItems = 'center';
         pager.style.gap = '8px';
         listView.appendChild(pager);
 
-        let nextToken = undefined;
-        const renderPage = (token) => {
+        loadAllRows()
+          .then(() => {
+            if (statusNode) {
+              statusNode.textContent = listDataRows.length ? '' : 'No records yet.';
+              statusNode.style.display = listDataRows.length ? 'none' : 'block';
+            }
+            updateListView();
+          })
+          .catch(() => {
+            if (statusNode) {
+              statusNode.textContent = 'Failed to load records.';
+              statusNode.style.display = 'block';
+            }
+          });
+
+        function buildListControls(columns) {
+          const wrapper = document.createElement('div');
+          wrapper.style.display = 'flex';
+          wrapper.style.flexWrap = 'wrap';
+          wrapper.style.alignItems = 'flex-end';
+          wrapper.style.gap = '12px';
+          wrapper.style.marginBottom = '12px';
+
+          const buildFieldLabel = (text) => {
+            const label = document.createElement('label');
+            label.textContent = text;
+            label.style.fontSize = '12px';
+            label.style.textTransform = 'uppercase';
+            label.style.letterSpacing = '0.04em';
+            label.style.color = '#475569';
+            return label;
+          };
+
+          const searchGroup = document.createElement('div');
+          searchGroup.style.display = 'flex';
+          searchGroup.style.flexDirection = 'column';
+          searchGroup.style.flex = '1 1 260px';
+          searchGroup.appendChild(buildFieldLabel('Search'));
+          const searchInput = document.createElement('input');
+          searchInput.type = 'search';
+          searchInput.placeholder = 'Search records…';
+          searchInput.value = listState.search;
+          searchInput.style.padding = '6px 10px';
+          searchInput.style.border = '1px solid #cbd5f5';
+          searchInput.style.borderRadius = '6px';
+          let searchTimer;
+          searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+              listState.search = searchInput.value.trim();
+              listState.page = 0;
+              updateListView();
+            }, 200);
+          });
+          searchGroup.appendChild(searchInput);
+          wrapper.appendChild(searchGroup);
+
+          const hint = document.createElement('span');
+          hint.textContent = 'Tip: click a column header to sort.';
+          hint.style.flex = '1 1 200px';
+          hint.style.fontSize = '12px';
+          hint.style.color = '#64748b';
+          wrapper.appendChild(hint);
+
+          return wrapper;
+        }
+
+        function loadAllRows() {
+          listDataRows = [];
+          return new Promise((resolve, reject) => {
+            const collect = token => {
+              fetchRows(token)
+                .then(payload => {
+                  const listPayload = payload && payload.list ? payload.list : { items: [] };
+                  const rows = listPayload.items || [];
+                  listDataRows = listDataRows.concat(rows);
+                  if (listPayload.nextPageToken) {
+                    collect(listPayload.nextPageToken);
+        } else {
+                    resolve();
+                  }
+                })
+                .catch(reject);
+            };
+            collect();
+          });
+        }
+
+        function updateListView() {
+          const filtered = sortRows(applySearch(listDataRows));
+          const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+          listState.page = Math.min(listState.page, totalPages - 1);
+          const start = listState.page * pageSize;
+          const visible = filtered.slice(start, start + pageSize);
+          renderRows(visible);
+          renderPager(totalPages, filtered.length);
+          refreshSortIndicators();
+        }
+
+        function applySearch(rows) {
+          return rows.filter(row => matchesSearch(row));
+        }
+
+        function matchesSearch(row) {
+          if (!listState.search) return true;
+          const normalized = Object.values(row || {})
+            .map(val => (Array.isArray(val) ? val.join(', ') : val ?? ''))
+            .join(' ')
+            .toLowerCase();
+          return normalized.includes(listState.search.toLowerCase());
+        }
+
+        function sortRows(rows) {
+          const field = listState.sortField || 'updatedAt';
+          const direction = listState.sortDirection === 'asc' ? 1 : -1;
+          return rows.slice().sort((a, b) => {
+            const valA = normalizeSortValue(a[field]);
+            const valB = normalizeSortValue(b[field]);
+            if (valA < valB) return -1 * direction;
+            if (valA > valB) return 1 * direction;
+            return 0;
+          });
+        }
+
+        function normalizeSortValue(value) {
+          if (value === undefined || value === null || value === '') return '';
+          if (typeof value === 'number') return value;
+          if (value instanceof Date) return value.getTime();
+          const text = Array.isArray(value) ? value.join(', ') : value.toString();
+          const timestamp = Date.parse(text);
+          if (!Number.isNaN(timestamp) && text.includes('T')) {
+            return timestamp;
+          }
+          return text.toLowerCase();
+        }
+
+        function renderRows(rows) {
+          table.querySelectorAll('tr:not(:first-child)').forEach(row => row.remove());
+          const fragment = document.createDocumentFragment();
+          rows.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.style.cursor = 'default';
+            columns.forEach(col => {
+              const td = document.createElement('td');
+              td.style.borderBottom = '1px solid #f1f5f9';
+              td.style.padding = '6px 4px';
+              const val = row[col.fieldId];
+              if (col.fieldId === 'pdfUrl' && val) {
+                const link = document.createElement('a');
+                link.href = val;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = 'Open PDF';
+                link.style.color = '#2563eb';
+                link.style.textDecoration = 'none';
+                td.appendChild(link);
+              } else {
+                td.textContent = formatListValue(col.fieldId, val);
+              }
+              tr.appendChild(td);
+            });
+            const actionsTd = document.createElement('td');
+            actionsTd.style.borderBottom = '1px solid #f1f5f9';
+            actionsTd.style.padding = '6px 4px';
+            actionsTd.style.textAlign = 'right';
+            if (row.id) {
+              actionsTd.appendChild(buildActionMenu(row));
+            }
+            tr.appendChild(actionsTd);
+            fragment.appendChild(tr);
+          });
+          table.appendChild(fragment);
+        }
+
+        function handleHeaderSort(fieldId) {
+          if (listState.sortField === fieldId) {
+            listState.sortDirection = listState.sortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            listState.sortField = fieldId;
+            listState.sortDirection = 'asc';
+          }
+          listState.page = 0;
+          updateListView();
+        }
+
+        function formatListValue(fieldId, value) {
+          if (value === undefined || value === null || value === '') return '';
+          if (fieldId === 'createdAt' || fieldId === 'updatedAt') {
+            const date = new Date(value);
+            if (!Number.isNaN(date.getTime())) {
+              return date.toLocaleString();
+            }
+          }
+          if (Array.isArray(value)) return value.join(', ');
+          return value.toString();
+        }
+
+        function refreshSortIndicators() {
+          headerRefs.forEach(ref => {
+            if (!ref || !ref.icon) return;
+            if (ref.fieldId === listState.sortField) {
+              ref.icon.textContent = listState.sortDirection === 'asc' ? '▲' : '▼';
+              ref.icon.style.color = '#0f172a';
+              ref.icon.style.opacity = '1';
+            } else {
+              ref.icon.textContent = '↕';
+              ref.icon.style.color = '#94a3b8';
+              ref.icon.style.opacity = '0.6';
+            }
+          });
+        }
+
+        function buildActionMenu(row) {
+          const wrapper = document.createElement('div');
+          wrapper.style.position = 'relative';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'ghost action-menu-btn';
+          btn.textContent = '⋮';
+          wrapper.appendChild(btn);
+          const menu = document.createElement('div');
+          menu.className = 'action-menu hidden';
+          menu.style.position = 'absolute';
+          menu.style.top = 'calc(100% + 4px)';
+          menu.style.right = '0';
+          menu.style.background = '#fff';
+          menu.style.border = '1px solid #e2e8f0';
+          menu.style.borderRadius = '8px';
+          menu.style.boxShadow = '0 8px 24px rgba(15,23,42,0.15)';
+          menu.style.display = 'flex';
+          menu.style.flexDirection = 'column';
+          menu.style.minWidth = '140px';
+          menu.style.zIndex = '5';
+          menu.style.display = 'none';
+          wrapper.appendChild(menu);
+
+          const hideMenu = () => {
+            menu.classList.add('hidden');
+            menu.style.display = 'none';
+            activeActionMenu = null;
+          };
+
+          const showMenu = () => {
+            menu.classList.remove('hidden');
+            menu.style.display = 'flex';
+            activeActionMenu = menu;
+          };
+
+          const toggleMenu = event => {
+            event.stopPropagation();
+            if (activeActionMenu && activeActionMenu !== menu) {
+              activeActionMenu.classList.add('hidden');
+              activeActionMenu.style.display = 'none';
+            }
+            if (menu.classList.contains('hidden')) {
+              showMenu();
+            } else {
+              hideMenu();
+            }
+          };
+
+          btn.addEventListener('click', toggleMenu);
+
+          const editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.textContent = 'Edit';
+          editBtn.addEventListener('click', event => {
+            event.stopPropagation();
+            hideMenu();
+            openRecord(row.id);
+          });
+          menu.appendChild(editBtn);
+
+          if (definition.followup && row.id) {
+            if (definition.followup.pdfTemplateId) {
+              const pdfBtn = document.createElement('button');
+              pdfBtn.type = 'button';
+              pdfBtn.textContent = 'Create PDF';
+              pdfBtn.addEventListener('click', event => {
+                event.stopPropagation();
+                hideMenu();
+                runFollowupAction('CREATE_PDF', row.id);
+              });
+              menu.appendChild(pdfBtn);
+            }
+            if (definition.followup.emailTemplateId && definition.followup.emailRecipients) {
+              const mailBtn = document.createElement('button');
+              mailBtn.type = 'button';
+              mailBtn.textContent = 'Send PDF';
+              mailBtn.addEventListener('click', event => {
+                event.stopPropagation();
+                hideMenu();
+                runFollowupAction('SEND_EMAIL', row.id);
+              });
+              menu.appendChild(mailBtn);
+            }
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.textContent = 'Close';
+            closeBtn.addEventListener('click', event => {
+              event.stopPropagation();
+              hideMenu();
+              runFollowupAction('CLOSE_RECORD', row.id);
+            });
+            menu.appendChild(closeBtn);
+          }
+
+          return wrapper;
+        }
+
+        function renderPager(totalPages, totalItems) {
+          pager.innerHTML = '';
+          if (!totalItems) return;
+          const info = document.createElement('span');
+          info.textContent = 'Page ' + (listState.page + 1) + ' of ' + totalPages;
+          pager.appendChild(info);
+          if (listState.page > 0) {
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'secondary';
+            prevBtn.type = 'button';
+            prevBtn.textContent = 'Prev';
+            prevBtn.addEventListener('click', () => {
+              listState.page = Math.max(0, listState.page - 1);
+              updateListView();
+            });
+            pager.appendChild(prevBtn);
+          }
+          if (listState.page < totalPages - 1) {
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'secondary';
+            nextBtn.type = 'button';
+            nextBtn.textContent = 'Next';
+            nextBtn.addEventListener('click', () => {
+              listState.page = Math.min(totalPages - 1, listState.page + 1);
+              updateListView();
+            });
+            pager.appendChild(nextBtn);
+          }
+        }
+
+        function openRecord(recordId) {
           const statusNode = getListStatus();
           if (statusNode) {
-            statusNode.textContent = 'Loading...';
+            statusNode.textContent = 'Loading record...';
             statusNode.style.display = 'block';
           }
-          fetchRows(token)
-            .then(payload => {
-              const res = payload && payload.list ? payload.list : (payload || { items: [], totalCount: 0 });
-              if (__WEB_FORM_DEBUG__) {
-                console.info('[ListView] renderPage response', { token, items: res?.items?.length || 0, nextToken: res?.nextPageToken });
-              }
-              table.querySelectorAll('tr:not(:first-child)').forEach(row => row.remove());
-              const fragment = document.createDocumentFragment();
-              const rows = res.items || [];
-              rows.forEach(row => {
-                const tr = document.createElement('tr');
-                tr.style.cursor = row.id ? 'pointer' : 'default';
-                if (row.id) {
-                  tr.addEventListener('click', () => {
-                    const statusNode = getListStatus();
-                    if (statusNode) {
-                      statusNode.textContent = 'Loading record...';
-                      statusNode.style.display = 'block';
-                    }
-                    setFormInteractive(false);
-                    loadSubmission(row.id);
-                    showFormMode(false, true);
-                  });
-                }
-                columns.forEach(col => {
-                  const td = document.createElement('td');
-                  td.style.borderBottom = '1px solid #f1f5f9';
-                  td.style.padding = '6px 4px';
-                  const val = row[col.id];
-                  td.textContent = Array.isArray(val) ? val.join(', ') : (val || '');
-                  tr.appendChild(td);
-                });
-                const meta = document.createElement('td');
-                meta.style.borderBottom = '1px solid #f1f5f9';
-                meta.style.padding = '6px 4px';
-                meta.textContent = row.updatedAt || row.createdAt || '';
-                tr.appendChild(meta);
-                fragment.appendChild(tr);
-              });
-              table.appendChild(fragment);
-              nextToken = res.nextPageToken;
-              pager.innerHTML = '';
-              if (nextToken) {
-                const nextBtn = document.createElement('button');
-                nextBtn.className = 'secondary';
-                nextBtn.type = 'button';
-                nextBtn.textContent = 'Next';
-                nextBtn.addEventListener('click', () => renderPage(nextToken));
-                pager.appendChild(nextBtn);
-              }
-              const statusNode = getListStatus();
-              if (statusNode) {
-                statusNode.textContent = (rows.length) ? '' : 'No records yet.';
-                statusNode.style.display = rows.length ? 'none' : 'block';
-              }
-            })
-            .catch(() => {
-              const statusNode = getListStatus();
-              if (statusNode) {
-                statusNode.textContent = 'Failed to load records.';
-                statusNode.style.display = 'block';
-              }
-            });
-        };
-
-        renderPage();
+          setFormInteractive(false);
+          loadSubmission(recordId);
+          showFormMode(false, true);
+        }
       }
 
       function showListMode() {
@@ -2219,15 +2593,16 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           .then(payload => {
             setSubmitting(true);
             google.script.run
-              .withSuccessHandler(() => {
-                statusEl.textContent = 'Saved!';
+              .withSuccessHandler(res => {
+                statusEl.textContent = (res && res.message) || 'Saved!';
                 statusEl.className = 'status success';
                 setSubmitting(false);
                 try {
-                  showSummaryAndFollowUp(payload);
+                  state.lastSubmissionMeta = res && res.meta ? res.meta : null;
+                  showSummaryAndFollowUp(payload, state.lastSubmissionMeta);
                   if (listColumns.length) {
-        renderList(true);
-        showListMode();
+                    renderList(true);
+                    showListMode();
                   }
                 } catch (_) {
                   resetFormState(true);
@@ -2258,7 +2633,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         });
       }
 
-      function showSummaryAndFollowUp(payload) {
+      function showSummaryAndFollowUp(payload, meta) {
         if (!summaryView || !followupView || !formView || !viewActions) {
           resetFormState(true);
           return;
@@ -2286,13 +2661,14 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           }
         }
 
+        const followupActions = buildFollowupActions(meta && meta.id ? meta.id : (recordIdInput?.value || ''));
         if (appSummary && typeof appSummary.renderFollowupView === 'function') {
           try {
             appSummary.renderFollowupView({
               mount: followupView,
               definition,
               language: state.language,
-              actions: []
+              actions: followupActions
             });
           } catch (err) {
             console && console.warn && console.warn('renderFollowupView failed', err);

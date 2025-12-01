@@ -16,3 +16,8 @@ description: Snyk Security At Inception
 ## New features
 
 - When creating new features, always add diagnostic logs at the web form level and specific feature logs. This logs need to surface on the top of the web form, to be easily visible in DevTools console.
+- Update the SetupInstructions.md file to reflect the new feature (step by step instructions).
+- Update the config_schema.yaml file to reflect the new feature (yaml schema for the new feature). This file is used by LLMs to generate form configuration, it need to provide clear and descriptive information.
+- Update the README.md file to reflect the new feature (high level overview).
+- Run unit tests to ensure the new feature works as expected. Fix failures and update the tests to cover the new feature.
+- Run `npm run build` to ensure the application can be compiled successfully.

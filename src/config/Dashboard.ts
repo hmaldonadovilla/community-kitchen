@@ -1,4 +1,10 @@
-import { FormConfig } from '../types';
+import {
+  FollowupConfig,
+  FollowupStatusConfig,
+  EmailRecipientEntry,
+  EmailRecipientDataSourceConfig,
+  FormConfig
+} from '../types';
 
 export const DASHBOARD_SHEET_NAME = 'Forms Dashboard';
 const DEBUG_PROPERTY_KEY = 'CK_DEBUG';
@@ -28,11 +34,12 @@ export class Dashboard {
         'Configuration Sheet Name',
         'Destination Tab Name',
         'Description',
-        'Web App URL (?form=ConfigSheetName)'
+        'Web App URL (?form=ConfigSheetName)',
+        'Follow-up Config (JSON)'
       ]
     ];
 
-    sheet.getRange('A3:E3').setValues(headers).setFontWeight('bold').setBackground('#e0e0e0');
+    sheet.getRange('A3:F3').setValues(headers).setFontWeight('bold').setBackground('#e0e0e0');
 
     const exampleAppUrl = `${baseUrl}?form=${encodeURIComponent('Config: Example')}`;
     const examples = [
@@ -41,11 +48,12 @@ export class Dashboard {
         'Config: Example',
         'Form Responses',
         'Multi-language form with date, text, number, and choice questions.',
-        exampleAppUrl
+        exampleAppUrl,
+        ''
       ]
     ];
 
-    sheet.getRange(4, 1, examples.length, 5).setValues(examples);
+    sheet.getRange(4, 1, examples.length, 6).setValues(examples);
 
     // Styling
     sheet.setColumnWidth(1, 200);
@@ -80,6 +88,7 @@ export class Dashboard {
     const colAppUrl = findHeader(['web app url (?form=configsheetname)', 'web app url'], -1);
     const legacyFormIdIndex = (headerRow.length === 0 || headerRow.length > 5) ? 4 : -1;
     const colFormId = findHeader(['form id', 'form id (legacy)'], legacyFormIdIndex);
+    const colFollowup = findHeader(['follow-up config', 'follow up config'], -1);
 
     const dataRowCount = Math.max(0, lastRow - headerRowIndex);
     if (dataRowCount === 0) return [];
@@ -93,6 +102,9 @@ export class Dashboard {
       const description = row[colDescription];
       const appUrl = colAppUrl >= 0 ? row[colAppUrl] : undefined;
       const formId = colFormId >= 0 ? row[colFormId] : undefined;
+      const dashboardConfig = colFollowup >= 0 ? this.parseDashboardConfig(row[colFollowup]) : undefined;
+      const followupConfig = dashboardConfig?.followup;
+      const listViewMetaColumns = dashboardConfig?.listViewMetaColumns;
       if (title && configSheetName) {
         forms.push({
           title,
@@ -101,7 +113,9 @@ export class Dashboard {
           description,
           appUrl,
           formId,
-          rowIndex: dataStartRow + index
+          rowIndex: dataStartRow + index,
+          followupConfig,
+          listViewMetaColumns
         });
       }
     });
@@ -124,6 +138,186 @@ export class Dashboard {
     const propUrl = this.readWebAppUrlFromProps();
     if (propUrl) return propUrl;
     return this.resolveWebAppUrl();
+  }
+
+  private parseDashboardConfig(raw: any): { followup?: FollowupConfig; listViewMetaColumns?: string[] } | undefined {
+    if (!raw || (typeof raw === 'string' && raw.trim() === '')) return undefined;
+    const value = raw.toString().trim();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(this.sanitizeJson(value));
+    } catch (err) {
+      this.debug('Failed to parse dashboard config', { error: err ? err.toString() : 'parse error' });
+      return undefined;
+    }
+    if (!parsed || typeof parsed !== 'object') return undefined;
+    const followup = this.buildFollowupConfig(parsed);
+    const listViewMetaColumns = this.normalizeListViewMetaColumns(
+      parsed.listViewMetaColumns || parsed.listViewDefaults || parsed.defaultListFields
+    );
+    if (!followup && (!listViewMetaColumns || !listViewMetaColumns.length)) return undefined;
+    return { followup, listViewMetaColumns };
+  }
+
+  private buildFollowupConfig(source: any): FollowupConfig | undefined {
+    if (!source || typeof source !== 'object') return undefined;
+    const config: FollowupConfig = {};
+    config.pdfTemplateId = this.normalizeTemplateId(source.pdfTemplateId);
+    if (source.pdfFolderId) config.pdfFolderId = source.pdfFolderId;
+    config.emailTemplateId = this.normalizeTemplateId(source.emailTemplateId);
+    if (source.emailSubject) config.emailSubject = source.emailSubject;
+    if (source.emailRecipients) {
+      config.emailRecipients = this.normalizeRecipientEntries(source.emailRecipients);
+    }
+    if (source.emailCc || source.emailCcRecipients) {
+      config.emailCc = this.normalizeRecipientEntries(source.emailCc || source.emailCcRecipients);
+    }
+    if (source.emailBcc || source.emailBccRecipients) {
+      config.emailBcc = this.normalizeRecipientEntries(source.emailBcc || source.emailBccRecipients);
+    }
+    if (source.statusFieldId) config.statusFieldId = source.statusFieldId;
+    const transitionsSource = source.statusTransitions || source.transitions || {};
+    if (transitionsSource && typeof transitionsSource === 'object') {
+      const transitions: FollowupStatusConfig = {};
+      if (transitionsSource.onPdf) transitions.onPdf = transitionsSource.onPdf;
+      if (transitionsSource.onEmail) transitions.onEmail = transitionsSource.onEmail;
+      if (transitionsSource.onClose) transitions.onClose = transitionsSource.onClose;
+      if (Object.keys(transitions).length) {
+        config.statusTransitions = transitions;
+      }
+    }
+    return Object.keys(config).length ? config : undefined;
+  }
+
+  private normalizeListViewMetaColumns(value: any): string[] | undefined {
+    if (!value) return undefined;
+    const rawEntries: string[] = Array.isArray(value)
+      ? value
+      : value.toString().split(',').map((entry: string) => entry.trim());
+    const allowedMap: Record<string, string> = {
+      createdat: 'createdAt',
+      created_at: 'createdAt',
+      created: 'createdAt',
+      updatedat: 'updatedAt',
+      updated_at: 'updatedAt',
+      updated: 'updatedAt',
+      status: 'status',
+      pdfurl: 'pdfUrl',
+      pdf_url: 'pdfUrl',
+      pdf: 'pdfUrl'
+    };
+    const normalized = rawEntries
+      .map((entry: string) => entry && entry.toString().trim().toLowerCase())
+      .filter(Boolean)
+      .map((key: string) => allowedMap[key!] || '')
+      .filter(Boolean);
+    const unique = Array.from(new Set(normalized)) as string[];
+    return unique.length ? unique : undefined;
+  }
+
+  private normalizeTemplateId(value: any): FollowupConfig['pdfTemplateId'] {
+    if (!value) return undefined;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? trimmed : undefined;
+    }
+    if (typeof value === 'object') {
+      const map: Record<string, string> = {};
+      Object.entries(value).forEach(([lang, id]) => {
+        if (typeof id !== 'string') return;
+        const trimmed = id.trim();
+        if (!trimmed) return;
+        map[lang.toUpperCase()] = trimmed;
+      });
+      return Object.keys(map).length ? map : undefined;
+    }
+    return undefined;
+  }
+
+  private normalizeRecipientEntries(value: any): EmailRecipientEntry[] | undefined {
+    if (!value) return undefined;
+    const entries: EmailRecipientEntry[] = [];
+    const pushString = (input: string) => {
+      const trimmed = input.trim();
+      if (trimmed) entries.push(trimmed);
+    };
+    const consume = (entry: any) => {
+      if (typeof entry === 'string') {
+        pushString(entry);
+        return;
+      }
+      if (entry && typeof entry === 'object' && entry.type === 'dataSource') {
+        const normalized = this.normalizeRecipientDataSource(entry);
+        if (normalized) entries.push(normalized);
+      }
+    };
+    if (Array.isArray(value)) {
+      value.forEach(consume);
+    } else if (typeof value === 'string') {
+      value.split(/[,;\n]/).forEach(str => pushString(str));
+    } else if (typeof value === 'object') {
+      consume(value);
+    }
+    return entries.length ? entries : undefined;
+  }
+
+  private normalizeRecipientDataSource(entry: any): EmailRecipientDataSourceConfig | undefined {
+    const dataSource = entry?.dataSource;
+    const recordFieldId = entry?.recordFieldId || entry?.fieldId;
+    const lookupField = entry?.lookupField || entry?.matchField;
+    const valueField = entry?.valueField || entry?.emailField || entry?.targetField;
+    if (!dataSource || !recordFieldId || !lookupField || !valueField) return undefined;
+    const normalized: EmailRecipientDataSourceConfig = {
+      type: 'dataSource',
+      recordFieldId: recordFieldId.toString(),
+      lookupField: lookupField.toString(),
+      valueField: valueField.toString(),
+      dataSource
+    };
+    if (entry.fallbackEmail && typeof entry.fallbackEmail === 'string') {
+      normalized.fallbackEmail = entry.fallbackEmail.trim();
+    }
+    return normalized;
+  }
+
+  private sanitizeJson(raw: string): string {
+    if (!raw) return raw;
+    let inString = false;
+    let escaping = false;
+    let result = '';
+    for (let i = 0; i < raw.length; i++) {
+      const char = raw[i];
+      if (inString) {
+        result += char;
+        if (escaping) {
+          escaping = false;
+        } else if (char === '\\') {
+          escaping = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+        result += char;
+        continue;
+      }
+      if (char === '#' || (char === '/' && raw[i + 1] === '/')) {
+        if (char === '/' && raw[i + 1] === '/') {
+          i++;
+        }
+        while (i < raw.length && raw[i] !== '\n' && raw[i] !== '\r') {
+          i++;
+        }
+        if (i < raw.length) {
+          result += raw[i];
+        }
+        continue;
+      }
+      result += char;
+    }
+    return result;
   }
 
   private resolveWebAppUrl(): string {

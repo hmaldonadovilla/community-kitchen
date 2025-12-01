@@ -125,6 +125,8 @@ interface SelectionDiffPreview {
 }
 
 const selectionEffectState = new Map<string, SelectionEffectCache>();
+const ROW_CONTEXT_PREFIX = '$row.';
+const ROW_CONTEXT_KEY = '__ckRowContext';
 
 function getStateKey(question: WebQuestionDefinition): string {
   return question.id;
@@ -245,6 +247,37 @@ function getValueFromSourceRow(source: any, path: string | undefined): any {
   return undefined;
 }
 
+function getRowContext(entry: any): Record<string, any> | undefined {
+  if (!entry || typeof entry !== 'object') return undefined;
+  return entry[ROW_CONTEXT_KEY];
+}
+
+function resolveRowContextValue(entry: any, sourcePath: string): any {
+  if (!sourcePath || !sourcePath.startsWith(ROW_CONTEXT_PREFIX)) return undefined;
+  const rowField = sourcePath.slice(ROW_CONTEXT_PREFIX.length).trim();
+  if (!rowField) return undefined;
+  const ctx = getRowContext(entry);
+  if (!ctx) return undefined;
+  return ctx[rowField];
+}
+
+function resolveMappingValue(entry: any, sourcePath: string): any {
+  if (!sourcePath) return undefined;
+  if (sourcePath.startsWith(ROW_CONTEXT_PREFIX)) {
+    return resolveRowContextValue(entry, sourcePath);
+  }
+  return getValueFromPath(entry, sourcePath);
+}
+
+function attachRowContext(entries: any[], rowValues?: Record<string, any>): any[] {
+  if (!rowValues) return entries;
+  const snapshot = { ...rowValues };
+  return entries.map(entry => ({
+    ...entry,
+    [ROW_CONTEXT_KEY]: snapshot
+  }));
+}
+
 function buildPreset(
   entry: any,
   effect: SelectionEffect,
@@ -255,7 +288,7 @@ function buildPreset(
   const preset: Record<string, string | number> = {};
   targetFields.forEach(fieldId => {
     const sourcePath = mapping[fieldId] || fieldId;
-    const rawValue = getValueFromPath(entry, sourcePath);
+    const rawValue = resolveMappingValue(entry, sourcePath);
     if (rawValue === undefined || rawValue === null || rawValue === '') return;
     preset[fieldId] = typeof rawValue === 'number' ? rawValue : rawValue.toString();
   });
@@ -498,9 +531,10 @@ function populateLineItemsFromDataSource({
           return;
         }
         const scaledEntries = applyScale(entries, effect, lineItem, row, group);
+        const enrichedEntries = attachRowContext(scaledEntries, lineItem?.rowValues);
         contextMap.set(selectedValue, {
           value: selectedValue,
-          entries: scaledEntries
+          entries: enrichedEntries
         });
       });
       renderAggregatedRows({

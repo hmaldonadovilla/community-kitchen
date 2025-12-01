@@ -98,6 +98,12 @@ export function saveSubmissionWithId(formObject: WebFormSubmission): { success: 
   return service.saveSubmissionWithId(formObject);
 }
 
+export function triggerFollowupAction(formKey: string, recordId: string, action: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.triggerFollowupAction(formKey, recordId, action);
+}
+
 export function installTriggers(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   // Check if trigger already exists to avoid duplicates

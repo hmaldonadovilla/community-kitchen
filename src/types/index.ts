@@ -50,6 +50,12 @@ export interface ValidationRule {
   message?: LocalizedString;
 }
 
+export interface AutoIncrementConfig {
+  prefix?: string;
+  padLength?: number;
+  propertyKey?: string;
+}
+
 export interface LineItemFieldConfig {
   id: string;
   type: BaseQuestionType;
@@ -65,6 +71,7 @@ export interface LineItemFieldConfig {
   visibility?: VisibilityConfig;
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];
+  autoIncrement?: AutoIncrementConfig;
 }
 
 export interface LineItemSelectorConfig {
@@ -118,6 +125,42 @@ export interface SelectionEffect {
   scaleNumericFields?: string[]; // override list of mapped numeric fields to scale (defaults to aggregateNumericFields)
 }
 
+export interface ListViewSortConfig {
+  direction?: 'asc' | 'desc';
+  priority?: number;
+}
+
+export interface FollowupStatusConfig {
+  onPdf?: string;
+  onEmail?: string;
+  onClose?: string;
+}
+
+export type TemplateIdMap = string | Record<string, string>;
+
+export interface EmailRecipientDataSourceConfig {
+  type: 'dataSource';
+  recordFieldId: string;
+  lookupField: string;
+  valueField: string;
+  dataSource: DataSourceConfig;
+  fallbackEmail?: string;
+}
+
+export type EmailRecipientEntry = string | EmailRecipientDataSourceConfig;
+
+export interface FollowupConfig {
+  pdfTemplateId?: TemplateIdMap;
+  pdfFolderId?: string;
+  emailTemplateId?: TemplateIdMap;
+  emailSubject?: LocalizedString | string;
+  emailRecipients?: EmailRecipientEntry[];
+  emailCc?: EmailRecipientEntry[];
+  emailBcc?: EmailRecipientEntry[];
+  statusFieldId?: string;
+  statusTransitions?: FollowupStatusConfig;
+}
+
 export interface DataSourceConfig {
   id: string;
   ref?: string; // optional reference key used by backend
@@ -150,6 +193,8 @@ export interface QuestionConfig {
   clearOnChange?: boolean;
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];
+  listViewSort?: ListViewSortConfig;
+  autoIncrement?: AutoIncrementConfig;
 }
 
 export interface FormConfig {
@@ -160,6 +205,8 @@ export interface FormConfig {
   formId?: string;
   appUrl?: string;
   rowIndex: number;
+  followupConfig?: FollowupConfig;
+  listViewMetaColumns?: string[];
 }
 
 export interface FormResult {
@@ -190,6 +237,8 @@ export interface WebQuestionDefinition {
   clearOnChange?: boolean;
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];
+  listViewSort?: ListViewSortConfig;
+  autoIncrement?: AutoIncrementConfig;
 }
 
 export interface WebFormDefinition {
@@ -202,6 +251,7 @@ export interface WebFormDefinition {
   listView?: ListViewConfig;
   dedupRules?: DedupRule[];
   startRoute?: 'list' | 'form' | 'summary' | string;
+  followup?: FollowupConfig;
 }
 
 export interface WebFormSubmission {
@@ -212,20 +262,33 @@ export interface WebFormSubmission {
   id?: string;
   createdAt?: string;
   updatedAt?: string;
+  status?: string;
+  pdfUrl?: string;
 }
 
 export interface ListViewColumnConfig {
   fieldId: string;
   label?: LocalizedString;
+  kind?: 'question' | 'meta';
 }
 
 export interface ListViewConfig {
   columns: ListViewColumnConfig[];
+  metaColumns?: string[];
   defaultSort?: {
     fieldId: string;
     direction?: 'asc' | 'desc';
   };
   pageSize?: number;
+}
+
+export interface ListViewQueryOptions {
+  search?: string;
+  filters?: Record<string, string>;
+  sort?: {
+    fieldId: string;
+    direction?: 'asc' | 'desc';
+  };
 }
 
 export interface DedupRule {
@@ -253,4 +316,12 @@ export interface PaginatedResult<T> {
 export interface SubmissionBatchResult<T = Record<string, any>> {
   list: PaginatedResult<T>;
   records: Record<string, WebFormSubmission>;
+}
+
+export interface FollowupActionResult {
+  success: boolean;
+  message?: string;
+  status?: string;
+  pdfUrl?: string;
+  fileId?: string;
 }
