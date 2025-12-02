@@ -7,6 +7,7 @@ import { WEB_FORM_BUNDLE } from '../web/webformBundle';
  */
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
 const SCRIPT_CLOSE_ESCAPED = String.raw`<\\/script`;
+const JS_UNSAFE_CHARS = /[\u2028\u2029]/g;
 const replaceScriptTerminators = (value: string): string => {
   const str = value.toString();
   const replaceAllFn = (str as any).replaceAll as ((pattern: RegExp | string, replacement: string) => string) | undefined;
@@ -17,6 +18,13 @@ const replaceScriptTerminators = (value: string): string => {
   return str.replace(SCRIPT_CLOSE_PATTERN, SCRIPT_CLOSE_ESCAPED);
 };
 const escapeScriptTerminator = (value: string): string => replaceScriptTerminators(value);
+const escapeJsonForScript = (value: any): string =>
+  escapeScriptTerminator(
+    JSON.stringify(value)
+      .replace(/</g, '\\u003c')
+      // Guard against U+2028/2029 which break inline <script> parsing in some browsers.
+      .replace(JS_UNSAFE_CHARS, ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  );
 const escapeForSrcdoc = (value: string): string =>
   value
     .replace(/&/g, '&amp;')
@@ -39,8 +47,8 @@ const isServerDebugEnabled = (): boolean => {
 
 export function buildWebFormHtml(def: WebFormDefinition, formKey: string): string {
   const debugEnabled = isServerDebugEnabled();
-  const defJson = escapeScriptTerminator(JSON.stringify(def).replace(/</g, '\\u003c'));
-  const keyJson = escapeScriptTerminator(JSON.stringify(formKey || def?.title || ''));
+  const defJson = escapeJsonForScript(def);
+  const keyJson = escapeJsonForScript(formKey || def?.title || '');
   const bundleScript = escapeScriptTerminator(WEB_FORM_BUNDLE || '');
 
   const formHtml = `<!DOCTYPE html>

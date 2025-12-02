@@ -1,6 +1,7 @@
 import { Dashboard } from '../config/Dashboard';
 import { ConfigSheet } from '../config/ConfigSheet';
 import { buildWebFormHtml } from './WebFormTemplate';
+import { buildReactWebFormHtml } from './WebFormReactTemplate';
 import {
   AutoIncrementConfig,
   DataSourceConfig,
@@ -143,11 +144,12 @@ export class WebFormService {
     };
   }
 
-  public renderForm(formKey?: string): GoogleAppsScript.HTML.HtmlOutput {
-    debugLog('renderForm.start', { requestedKey: formKey });
+  public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
+    const useReact = this.shouldUseReact(params);
+    debugLog('renderForm.start', { requestedKey: formKey, mode: useReact ? 'react' : 'legacy' });
     const def = this.buildDefinition(formKey);
     const targetKey = formKey || def.title;
-    const html = this.buildTemplate(def, targetKey);
+    const html = useReact ? this.buildReactTemplate(def, targetKey) : this.buildTemplate(def, targetKey);
     debugLog('renderForm.htmlBuilt', {
       formKey: targetKey,
       questionCount: def.questions.length,
@@ -758,6 +760,19 @@ export class WebFormService {
 
   private buildTemplate(def: WebFormDefinition, formKey: string): string {
     return buildWebFormHtml(def, formKey);
+  }
+
+  private buildReactTemplate(def: WebFormDefinition, formKey: string): string {
+    return buildReactWebFormHtml(def, formKey);
+  }
+
+  private shouldUseReact(params?: Record<string, any>): boolean {
+    if (!params) return false;
+    const value = params.react || params.view || params.ui;
+    const normalized = Array.isArray(value) ? value[0] : value;
+    if (!normalized) return false;
+    const text = normalized.toString().toLowerCase();
+    return text === 'react' || text === '1' || text === 'true';
   }
 
   private generateUuid(): string {
