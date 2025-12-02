@@ -13,9 +13,19 @@ export function updateLanguageLabels(options: LanguageUpdateOptions): void {
 
   root.querySelectorAll<HTMLElement>('[data-en-label]').forEach(el => {
     const label = (el as any).dataset?.[`${langKey}Label`] || (el as any).dataset?.enLabel || '';
+    const optionLabel = (el as HTMLElement).querySelector?.<HTMLElement>('.option-label');
     const textTarget = (el as HTMLElement).querySelector?.<HTMLElement>('[data-label-text]');
+    if (optionLabel) {
+      optionLabel.textContent = label;
+      return;
+    }
     if (textTarget) {
       textTarget.textContent = label;
+      return;
+    }
+    const textNode = Array.from(el.childNodes || []).find(node => node.nodeType === Node.TEXT_NODE);
+    if (textNode) {
+      textNode.textContent = label;
     } else {
       el.textContent = label;
     }

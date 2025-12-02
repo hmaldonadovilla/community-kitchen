@@ -2,6 +2,7 @@ import { Dashboard } from '../config/Dashboard';
 import { ConfigSheet } from '../config/ConfigSheet';
 import { ConfigValidator } from '../config/ConfigValidator';
 import { FormConfig, FormResult, QuestionConfig } from '../types';
+import { WebFormService } from './WebFormService';
 
 export class FormGenerator {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -50,6 +51,12 @@ export class FormGenerator {
         results.push(`${config.title}: ERROR - ${e.message}`);
       }
     });
+
+    try {
+      WebFormService.invalidateServerCache('createAllForms');
+    } catch (_) {
+      // Best-effort cache invalidation; continue even if it fails.
+    }
 
     return results;
   }

@@ -38,6 +38,7 @@ Nothing extra is required in day-to-day use: submitting a form, editing a row, o
 
 - Temporarily change data in the destination tab (e.g., add + remove a dummy row) to generate a fresh etag.
 - Delete the stored fingerprints via the Apps Script console: `PropertiesService.getDocumentProperties().deleteAllProperties();`.
+- Run **Community Kitchen → Create/Update All Forms** in the Google Sheet. The generator now bumps the cache version in `PropertiesService`, which invalidates every Script Cache namespace immediately after forms are regenerated.
 - Redeploy a rebuilt `dist/Code.js` bundle (new cache prefixes) or wait for the ~5 minute CacheService TTL to expire naturally.
 
 ## Debug Logging

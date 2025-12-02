@@ -348,6 +348,18 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         page: 0
       };
       let listDataRows = [];
+      const dedupeRows = (rows = []) => {
+        const map = new Map();
+        rows.forEach((row, idx) => {
+          if (!row) return;
+          const key =
+            row.id ||
+            row.recordId ||
+            [row.updatedAt || '', row.createdAt || '', idx].join('|');
+          map.set(key, row);
+        });
+        return Array.from(map.values());
+      };
       let activeActionMenu = null;
       document.addEventListener('click', event => {
         if (!activeActionMenu) return;
@@ -662,7 +674,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
                 .then(payload => {
                   const listPayload = payload && payload.list ? payload.list : { items: [] };
                   const rows = listPayload.items || [];
-                  listDataRows = listDataRows.concat(rows);
+                  listDataRows = dedupeRows(listDataRows.concat(rows));
                   if (listPayload.nextPageToken) {
                     collect(listPayload.nextPageToken);
         } else {
@@ -856,7 +868,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           editBtn.addEventListener('click', event => {
             event.stopPropagation();
             hideMenu();
-            openRecord(row.id);
+            openRecord(row.id, row.updatedAt || row.createdAt || '');
           });
           menu.appendChild(editBtn);
 
@@ -927,14 +939,14 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
           }
         }
 
-        function openRecord(recordId) {
+        function openRecord(recordId, updatedAt) {
           const statusNode = getListStatus();
           if (statusNode) {
             statusNode.textContent = 'Loading record...';
             statusNode.style.display = 'block';
           }
           setFormInteractive(false);
-          loadSubmission(recordId);
+          loadSubmission(recordId, true, updatedAt);
           showFormMode(false, true);
         }
       }
@@ -1030,17 +1042,23 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         setFormInteractive(true);
       }
 
-      function loadSubmission(recordId, preferCache = true) {
+      function loadSubmission(recordId, preferCache = true, expectedUpdatedAt) {
         if (!recordId) {
           return;
         }
         if (preferCache && recordCache[recordId]) {
+          const cached = recordCache[recordId];
+          const cachedUpdatedAt = cached?.updatedAt || cached?.lastUpdated || '';
+          if (expectedUpdatedAt && cachedUpdatedAt && expectedUpdatedAt !== cachedUpdatedAt) {
+            // Cached value is stale compared to the row metadata; fall through to server fetch.
+          } else {
           if (__WEB_FORM_DEBUG__) {
             console.info('[ListView] record cache hit', { recordId });
           }
           setFormInteractive(false);
-          hydrateRecord(recordCache[recordId]);
-          return;
+            hydrateRecord(cached);
+            return;
+          }
         }
         if (!(google && google.script && google.script.run)) {
           return;
@@ -1799,9 +1817,19 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         } else {
           document.querySelectorAll('[data-en-label]').forEach(el => {
             const label = el.dataset[current + 'Label'] || el.dataset.enLabel || '';
+            const optionLabel = el.querySelector ? el.querySelector('.option-label') : null;
             const textTarget = el.querySelector ? el.querySelector('[data-label-text]') : null;
+            if (optionLabel) {
+              optionLabel.textContent = label;
+              return;
+            }
             if (textTarget) {
               textTarget.textContent = label;
+              return;
+            }
+            const textNode = Array.from(el.childNodes || []).find(node => node.nodeType === Node.TEXT_NODE);
+            if (textNode) {
+              textNode.textContent = label;
             } else {
               el.textContent = label;
             }

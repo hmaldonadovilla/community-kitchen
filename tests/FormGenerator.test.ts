@@ -1,6 +1,8 @@
 import './mocks/GoogleAppsScript';
 import { FormGenerator } from '../src/services/FormGenerator';
 import { ConfigSheet } from '../src/config/ConfigSheet';
+import { Dashboard } from '../src/config/Dashboard';
+import { WebFormService } from '../src/services/WebFormService';
 import { MockSpreadsheet } from './mocks/GoogleAppsScript';
 
 describe('FormGenerator', () => {
@@ -73,5 +75,29 @@ describe('FormGenerator', () => {
       'Config: Custom', 
       expect.anything()
     );
+  });
+
+  test('createAllForms invalidates server cache', () => {
+    const forms = [
+      {
+        title: 'Menu Form',
+        configSheet: 'Config: Menu',
+        destinationTab: 'Menu Responses',
+        description: 'desc',
+        rowIndex: 4
+      }
+    ] as any;
+
+    jest.spyOn(Dashboard.prototype, 'getForms').mockReturnValue(forms);
+    jest.spyOn(Dashboard.prototype, 'getWebAppUrl').mockReturnValue('https://example.com/exec');
+    jest.spyOn(Dashboard.prototype, 'updateFormDetails').mockImplementation(() => undefined);
+    jest
+      .spyOn(FormGenerator.prototype as any, 'generateSingleForm')
+      .mockReturnValue({ destinationTab: 'Menu Responses', appUrl: 'https://example.com/app' });
+    const invalidateSpy = jest.spyOn(WebFormService, 'invalidateServerCache').mockImplementation(() => undefined);
+
+    generator.createAllForms();
+
+    expect(invalidateSpy).toHaveBeenCalledWith('createAllForms');
   });
 });

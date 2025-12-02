@@ -432,3 +432,4 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Update existing forms if they do (based on Form ID).
    - Rename the response tab for new forms.
    - Populate the Dashboard with Edit/Published URLs.
+   - Invalidate the server-side Script Cache so the custom web app immediately serves the regenerated form definitions.

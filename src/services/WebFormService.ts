@@ -26,6 +26,8 @@ import { evaluateDedupConflict, ExistingRecord } from './dedup';
 const DEBUG_PROPERTY_KEY = 'CK_DEBUG';
 const CACHE_TTL_SECONDS = 300;
 const CACHE_PREFIX = 'CK_CACHE';
+const CACHE_VERSION_PROPERTY_KEY = 'CK_CACHE_VERSION';
+const DEFAULT_CACHE_VERSION = 'v1';
 const ETAG_PROPERTY_PREFIX = 'CK_ETAG_';
 const AUTO_INCREMENT_PROPERTY_PREFIX = 'CK_AUTO_';
 
@@ -75,6 +77,7 @@ export class WebFormService {
   private dashboard: Dashboard;
   private cache: GoogleAppsScript.Cache.Cache | null;
   private docProps: GoogleAppsScript.Properties.Properties | null;
+  private cachePrefix: string;
   private autoIncrementState: Record<string, number>;
   private dataSourceCache: Record<string, PaginatedResult<any>>;
 
@@ -83,6 +86,7 @@ export class WebFormService {
     this.dashboard = new Dashboard(ss);
     this.cache = this.resolveCache();
     this.docProps = this.resolveDocumentProperties();
+    this.cachePrefix = this.computeCachePrefix();
     this.autoIncrementState = {};
     this.dataSourceCache = {};
   }
@@ -160,6 +164,17 @@ export class WebFormService {
   public submitWebForm(formObject: any): { success: boolean; message: string } {
     const result = this.saveSubmissionWithId(formObject as WebFormSubmission);
     return { success: result.success, message: result.message };
+  }
+
+  public static invalidateServerCache(reason?: string): void {
+    const props = WebFormService.getDocumentProperties();
+    if (!props) {
+      debugLog('cache.invalidate.skipped', { reason: reason || 'manual', cause: 'missingDocProps' });
+      return;
+    }
+    const version = WebFormService.generateCacheVersion();
+    WebFormService.persistCacheVersion(props, version);
+    debugLog('cache.invalidated', { reason: reason || 'manual', version });
   }
 
   /**
@@ -853,12 +868,50 @@ export class WebFormService {
   }
 
   private resolveDocumentProperties(): GoogleAppsScript.Properties.Properties | null {
+    return WebFormService.getDocumentProperties();
+  }
+
+  private static getDocumentProperties(): GoogleAppsScript.Properties.Properties | null {
     try {
       return (typeof PropertiesService !== 'undefined' && PropertiesService.getDocumentProperties)
         ? PropertiesService.getDocumentProperties()
         : null;
     } catch (_) {
       return null;
+    }
+  }
+
+  private computeCachePrefix(): string {
+    const version = WebFormService.getOrCreateCacheVersion(this.docProps);
+    return `${CACHE_PREFIX}:${version}`;
+  }
+
+  private static getOrCreateCacheVersion(props: GoogleAppsScript.Properties.Properties | null): string {
+    if (!props) return DEFAULT_CACHE_VERSION;
+    try {
+      const existing = props.getProperty(CACHE_VERSION_PROPERTY_KEY);
+      if (existing) return existing;
+      const fresh = WebFormService.generateCacheVersion();
+      props.setProperty(CACHE_VERSION_PROPERTY_KEY, fresh);
+      return fresh;
+    } catch (_) {
+      return DEFAULT_CACHE_VERSION;
+    }
+  }
+
+  private static generateCacheVersion(): string {
+    return `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  private static persistCacheVersion(
+    props: GoogleAppsScript.Properties.Properties | null,
+    version: string
+  ): void {
+    if (!props) return;
+    try {
+      props.setProperty(CACHE_VERSION_PROPERTY_KEY, version);
+    } catch (_) {
+      // ignore
     }
   }
 
@@ -906,7 +959,8 @@ export class WebFormService {
 
   private makeCacheKey(namespace: string, parts: string[]): string {
     const digest = this.digestKey(parts.join('::'));
-    const key = `${CACHE_PREFIX}:${namespace}:${digest}`;
+    const prefix = this.cachePrefix || `${CACHE_PREFIX}:${DEFAULT_CACHE_VERSION}`;
+    const key = `${prefix}:${namespace}:${digest}`;
     return key.length > 250 ? key.slice(0, 250) : key;
   }
 
@@ -969,8 +1023,27 @@ export class WebFormService {
       });
       marker = tokens.join('|');
     }
-    const raw = [sheetId, lastRow, lastCol, marker].join(':');
+    const updatedDigest = this.computeColumnDigest(sheet, columns.updatedAt);
+    const recordDigest = this.computeColumnDigest(sheet, columns.recordId);
+    const raw = [sheetId, lastRow, lastCol, marker, updatedDigest, recordDigest].join(':');
     return this.digestKey(raw);
+  }
+
+  private computeColumnDigest(sheet: GoogleAppsScript.Spreadsheet.Sheet, columnIndex?: number): string {
+    if (!columnIndex) return '';
+    const totalRows = Math.max(sheet.getLastRow() - 1, 0);
+    if (totalRows <= 0) return '';
+    try {
+      const values = sheet.getRange(2, columnIndex, totalRows, 1).getValues();
+      const tokens = values.map(row => {
+        const cell = row[0];
+        if (cell instanceof Date) return cell.toISOString();
+        return cell !== undefined && cell !== null ? cell.toString() : '';
+      });
+      return this.digestKey(tokens.join('|'));
+    } catch (_) {
+      return '';
+    }
   }
 
   private buildSubmissionRecord(
