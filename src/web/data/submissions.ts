@@ -1,4 +1,16 @@
-import { PaginatedResult } from '../types';
+import type { PaginatedResult } from '../types';
+
+declare global {
+  const google: {
+    script?: {
+      run?: {
+        withSuccessHandler: (cb: (res: any) => void) => any;
+        withFailureHandler: (cb: (err: any) => void) => any;
+        fetchSubmissions?: (formKey: string, projection?: string[], pageSize?: number, pageToken?: string) => void;
+      };
+    };
+  } | undefined;
+}
 
 export interface FetchSubmissionsOptions {
   formKey?: string;
@@ -15,19 +27,15 @@ export async function fetchSubmissionsPage(
   opts: FetchSubmissionsOptions
 ): Promise<PaginatedResult<Record<string, any>>> {
   const { formKey, projection, pageSize = 10, pageToken } = opts;
-  const runner = (typeof google !== 'undefined' && google.script && google.script.run) ? google.script.run : null;
+  const runner = google?.script?.run;
   if (!runner || typeof runner.withSuccessHandler !== 'function') {
     return { items: [], totalCount: 0, nextPageToken: undefined };
   }
 
   return new Promise(resolve => {
-    try {
-      runner
-        .withSuccessHandler((res: any) => resolve(res || { items: [], totalCount: 0 }))
-        .withFailureHandler(() => resolve({ items: [], totalCount: 0 }))
-        .fetchSubmissions(formKey || '', projection || undefined, pageSize, pageToken);
-    } catch (_) {
-      resolve({ items: [], totalCount: 0 });
-    }
+    runner
+      .withSuccessHandler((res: any) => resolve(res || { items: [], totalCount: 0 }))
+      .withFailureHandler(() => resolve({ items: [], totalCount: 0 }))
+      ?.fetchSubmissions?.(formKey || '', projection || undefined, pageSize, pageToken);
   });
 }

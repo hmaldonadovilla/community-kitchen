@@ -9,7 +9,8 @@ import {
   ValidationRule,
   VisibilityConfig,
   WebFormDefinition,
-  WebQuestionDefinition
+  WebQuestionDefinition,
+  WebFormSubmission
 } from '../types';
 
 export type LangCode = 'EN' | 'FR' | 'NL' | string;
@@ -71,5 +72,6 @@ export {
   ListViewConfig,
   DedupRule,
   PaginatedResult,
-  RecordMetadata
+  RecordMetadata,
+  WebFormSubmission
 };

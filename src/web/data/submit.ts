@@ -1,4 +1,4 @@
-import { WebFormSubmission } from '../types';
+import { type WebFormSubmission } from '../types';
 
 declare const google: {
   script?: {
@@ -26,10 +26,10 @@ export async function submitWithDedup(payload: WebFormSubmission): Promise<Submi
   }
   return new Promise(resolve => {
     try {
-      runner
-        .withSuccessHandler((res: any) => resolve(res || { success: false, message: 'Unknown response' }))
-        .withFailureHandler((err: any) => resolve({ success: false, message: (err && err.message) || 'Submit failed' }))
-        .saveSubmissionWithId?.(payload);
+      const pipeline = runner
+        ?.withSuccessHandler?.((res: any) => resolve(res || { success: false, message: 'Unknown response' }))
+        ?.withFailureHandler?.((err: any) => resolve({ success: false, message: (err && err.message) || 'Submit failed' }));
+      pipeline?.saveSubmissionWithId?.(payload);
     } catch (err: any) {
       resolve({ success: false, message: err?.message || 'Submit failed' });
     }
