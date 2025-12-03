@@ -5,6 +5,42 @@ export interface ExistingRecord {
   values: Record<string, any>;
 }
 
+/**
+ * Load dedup rules from the config sheet.
+ */
+export function loadDedupRules(
+  ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+  configSheetName: string
+): DedupRule[] {
+  const sheetName = `${configSheetName} Dedup`;
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return [];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const data = sheet.getRange(2, 1, lastRow - 1, Math.max(6, sheet.getLastColumn())).getValues();
+  return data
+    .map(row => {
+      const id = (row[0] || '').toString().trim();
+      if (!id) return null;
+      const scope = (row[1] || 'form').toString().trim() || 'form';
+      const keysRaw = (row[2] || '').toString();
+      const keys = keysRaw.split(',').map((s: string) => s.trim()).filter(Boolean);
+      const matchMode = ((row[3] || 'exact').toString().toLowerCase() === 'caseinsensitive') ? 'caseInsensitive' : 'exact';
+      const onConflictRaw = (row[4] || 'reject').toString().toLowerCase();
+      const onConflict = onConflictRaw === 'ignore' || onConflictRaw === 'merge' ? onConflictRaw : 'reject';
+      const message = row[5] || undefined;
+      return {
+        id,
+        scope,
+        keys,
+        matchMode: matchMode as DedupRule['matchMode'],
+        onConflict: onConflict as DedupRule['onConflict'],
+        message
+      };
+    })
+    .filter(Boolean) as DedupRule[];
+}
+
 function normalize(val: any, mode: 'exact' | 'caseInsensitive'): string {
   if (val === null || val === undefined) return '';
   const base = Array.isArray(val) ? val.join('|') : val.toString();

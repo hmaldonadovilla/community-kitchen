@@ -324,4 +324,5 @@ export interface FollowupActionResult {
   status?: string;
   pdfUrl?: string;
   fileId?: string;
+  updatedAt?: string;
 }
