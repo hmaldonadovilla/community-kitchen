@@ -123,7 +123,8 @@ describe('WebFormService', () => {
   });
 
   test('triggerFollowupAction sends emails using data source recipients', () => {
-    jest.spyOn(service as any, 'generatePdfArtifact').mockReturnValue({
+    const followups = (service as any).followups || (service as any);
+    jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
       success: true,
       url: 'http://pdf',
       fileId: 'file-1',

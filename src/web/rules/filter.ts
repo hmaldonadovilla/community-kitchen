@@ -30,31 +30,49 @@ export function computeAllowedOptions(
   return [];
 }
 
-export function buildLocalizedOptions(
-  options: OptionSet,
-  allowed: string[],
-  language: LangCode
-): OptionItem[] {
+const normalizeValue = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return '';
+  return value.toString();
+};
+
+export function buildLocalizedOptions(options: OptionSet, allowed: string[], language: LangCode): OptionItem[] {
   const langKey = (language || 'en').toString().toLowerCase();
   const labels = options[langKey] || options.en || [];
   const baseOpts = options.en || labels;
   const allowedSet = allowed && allowed.length ? new Set(allowed) : null;
   const values = allowedSet ? allowed : baseOpts;
+  const seen = new Set<string>();
   const items: OptionItem[] = [];
 
-  values.forEach((value, idx) => {
-    const base = baseOpts[idx] || value;
-    const labelIdx = baseOpts.indexOf(base);
-    const label = labelIdx >= 0 ? (labels[labelIdx] || base) : value;
-    items.push({
-      value: base,
+  const buildItem = (value: string): OptionItem => {
+    const labelIdx = baseOpts.findIndex(opt => opt === value);
+    const label =
+      labelIdx >= 0
+        ? labels[labelIdx] || value
+        : (() => {
+            const fallbackIdx = baseOpts.findIndex(opt => normalizeValue(opt) === value);
+            if (fallbackIdx >= 0) {
+              return labels[fallbackIdx] || baseOpts[fallbackIdx];
+            }
+            return value;
+          })();
+    const resolvedIndex = labelIdx >= 0 ? labelIdx : baseOpts.findIndex(opt => opt === value);
+    return {
+      value,
       label,
       labels: {
-        en: options.en?.[labelIdx] || base,
-        fr: options.fr?.[labelIdx] || base,
-        nl: options.nl?.[labelIdx] || base
+        en: options.en?.[resolvedIndex] || value,
+        fr: options.fr?.[resolvedIndex] || value,
+        nl: options.nl?.[resolvedIndex] || value
       }
-    });
+    };
+  };
+
+  values.forEach(entry => {
+    const normalized = normalizeValue(entry);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    items.push(buildItem(normalized));
   });
 
   return items;

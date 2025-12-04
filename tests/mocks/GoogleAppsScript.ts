@@ -302,6 +302,26 @@ const mockBodyInstance = createMockBody();
   sendEmail: jest.fn()
 };
 
+let uuidCounter = 0;
+
 (global as any).Utilities = {
-  sleep: jest.fn()
+  sleep: jest.fn(),
+  base64Encode: (input: any) => {
+    if (Array.isArray(input)) {
+      return Buffer.from(input).toString('base64');
+    }
+    return Buffer.from(input?.toString() || '').toString('base64');
+  },
+  base64Decode: (input: string) => Array.from(Buffer.from(input, 'base64')),
+  computeDigest: (_alg: any, input: any) => {
+    if (Array.isArray(input)) return input;
+    return Array.from(Buffer.from(input?.toString() || ''));
+  },
+  DigestAlgorithm: { MD5: 'MD5' },
+  getUuid: () => `uuid-mock-${++uuidCounter}`,
+  newBlob: (bytes: any, mime?: string, name?: string) => ({
+    getBytes: () => bytes,
+    getContentType: () => mime || 'application/octet-stream',
+    getName: () => name || 'blob'
+  })
 };

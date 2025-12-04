@@ -4,6 +4,7 @@ import {
   PaginatedResult,
   RecordMetadata,
   LineItemGroupConfig,
+  LineItemSelectorConfig,
   LocalizedString,
   OptionFilter,
   ValidationRule,
@@ -15,7 +16,7 @@ import {
 
 export type LangCode = 'EN' | 'FR' | 'NL' | string;
 
-export type FieldValue = string | number | string[] | null | undefined;
+export type FieldValue = string | number | string[] | File[] | FileList | null | undefined;
 
 export interface LineItemRowState {
   id: string;
@@ -70,6 +71,7 @@ export {
   VisibilityConfig,
   ValidationRule,
   ListViewConfig,
+  LineItemSelectorConfig,
   DedupRule,
   PaginatedResult,
   RecordMetadata,

@@ -2,7 +2,8 @@ openapi: 3.0.0
 info:
   title: Community Kitchen Config Sheet Schema
   version: 1.0.0
-  description: Schema definition for the Configuration Sheet used to generate forms.
+  description: |
+    Schema definition for the Configuration Sheet used to generate forms. The React web template is the default experience for deployed web apps; append `?legacy=1` (or `?view=legacy`) to a deployment URL when you need the classic iframe UI—no sheet-level configuration is required for that fallback.
 paths: {}
 components:
   schemas:
@@ -112,6 +113,8 @@ components:
           items:
             type: string
           description: List of allowed file extensions (e.g., ['jpg', 'png', 'pdf']).
+      description: |
+        Upload settings consumed by FILE_UPLOAD questions. The React UI renders drag-and-drop dropzones that enforce these caps, show remaining slots + total size, and announce state changes for assistive tech. When `CK_DEBUG` (and thus `__WEB_FORM_DEBUG__`) is enabled the form also emits `[ReactForm] upload.*` diagnostics in DevTools for every add/drop/remove.
 
     LineItemFieldConfig:
       type: object
@@ -377,6 +380,13 @@ components:
     ListViewConfig:
       type: object
       properties:
+        title:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties:
+                type: string
+          description: Optional localized heading displayed above the list view.
         columns:
           type: array
           items:

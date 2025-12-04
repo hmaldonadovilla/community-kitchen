@@ -40,7 +40,7 @@ export function doGet(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.H
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   const formKey = e?.parameter?.form;
-  return service.renderForm(formKey);
+  return service.renderForm(formKey, e?.parameter);
 }
 
 export function submitWebForm(formObject: any): { success: boolean; message: string } {
