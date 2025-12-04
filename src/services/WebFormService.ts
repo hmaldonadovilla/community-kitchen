@@ -52,11 +52,11 @@ export class WebFormService {
   }
 
   public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
-    const useReact = this.shouldUseReact(params);
-    debugLog('renderForm.start', { requestedKey: formKey, mode: useReact ? 'react' : 'legacy' });
+    const useLegacy = this.shouldUseLegacy(params);
+    debugLog('renderForm.start', { requestedKey: formKey, mode: useLegacy ? 'legacy' : 'react' });
     const def = this.buildDefinition(formKey);
     const targetKey = formKey || def.title;
-    const html = useReact ? buildReactTemplate(def, targetKey) : buildLegacyTemplate(def, targetKey);
+    const html = useLegacy ? buildLegacyTemplate(def, targetKey) : buildReactTemplate(def, targetKey);
     debugLog('renderForm.htmlBuilt', {
       formKey: targetKey,
       questionCount: def.questions.length,
@@ -152,12 +152,31 @@ export class WebFormService {
     }
   }
 
-  private shouldUseReact(params?: Record<string, any>): boolean {
+  private shouldUseLegacy(params?: Record<string, any>): boolean {
     if (!params) return false;
-    const value = (params as any).react || (params as any).view || (params as any).ui;
-    const normalized = Array.isArray(value) ? value[0] : value;
-    if (!normalized) return false;
+    const candidate =
+      (params as any).legacy ??
+      (params as any).view ??
+      (params as any).ui ??
+      (params as any).react;
+    const normalized = Array.isArray(candidate) ? candidate[0] : candidate;
+    if (normalized === undefined || normalized === null) {
+      return false;
+    }
     const text = normalized.toString().toLowerCase();
-    return text === 'react' || text === '1' || text === 'true';
+    if (text === 'legacy' || text === 'classic' || text === 'html' || text === 'iframe') {
+      return true;
+    }
+    if (text === 'react') {
+      return false;
+    }
+    if (text === '1' || text === 'true') {
+      // maintain compatibility with existing view=react URLs
+      return false;
+    }
+    if (text === '0' || text === 'false') {
+      return true;
+    }
+    return false;
   }
 }

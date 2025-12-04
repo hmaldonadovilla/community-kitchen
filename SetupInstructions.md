@@ -63,7 +63,7 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
-   - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`.
+   - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`. The React UI renders drag-and-drop upload zones that respect those caps, highlight remaining slots, and announce changes for screen readers; volunteers can still click to browse if drag/drop is unavailable. When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
    - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, language)` Apps Script function (to be added by you) should return an array of options. Use this when options need to stay in sync with another form or sheet.
    - **Auto-increment IDs**: For `TEXT` questions that should generate IDs (e.g., “Meal Preparation #”), add:
 
@@ -157,7 +157,7 @@ This project uses TypeScript. You need to build the script before using it in Go
 
        The same operators (`equals`, `greaterThan`, `lessThan`) and actions (`required`, `min`, `max`, `allowed`, `disallowed`) work inside line items.
    - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
-   - **Post-submit views (summary/follow-up)**: The web app now shows a submission summary and optional follow-up actions after submit. Configure follow-up actions in code (e.g., links to download receipts or start a follow-up form). A **Submit another** button returns to the form.
+   - **Post-submit views (summary/follow-up)**: The React app shows a submission summary with the record ID (copy button), timestamps, status, and quick CTAs for “Go to follow-up” / “Submit another”. Follow-up actions stay disabled until a record is selected, display the current status + last updated timestamp, and highlight the configured status transitions so operators always know what each button does. Configure the follow-up behavior in code (PDF/email templates, destination folders, recipients) just like before.
    - **Data list view**: A simple list view scaffold is available; wire it to a backend fetcher if you want to show submitted rows in the web app.
    - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
    - **Quick recipe for the new features**:
@@ -433,3 +433,9 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Rename the response tab for new forms.
    - Populate the Dashboard with Edit/Published URLs.
    - Invalidate the server-side Script Cache so the custom web app immediately serves the regenerated form definitions.
+
+## 8. Publish the Web App
+
+1. In Apps Script, go to **Deploy → New deployment** and choose **Web app**.
+2. Set the entry point to `doGet`, grant access to the volunteers’ Google accounts, and deploy.
+3. Share the deployment URL. The React experience is served by default; append `?legacy=1` or `?view=legacy` to the URL whenever you need the classic iframe UI for regression testing or phased rollout. Removing the flag returns to the React shell.

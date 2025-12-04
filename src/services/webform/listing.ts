@@ -105,7 +105,8 @@ export class ListingService {
     const cacheKey = this.cacheManager.makeListCacheKey(form.configSheet, etag, fieldIds, size, pageToken);
     const cached = this.cacheManager.cacheGet<ListPageResult>(cacheKey);
     if (cached) {
-      return { list: cached.list, records: cached.records || {}, etag };
+      const cachedList = { ...cached.list, etag: cached.list.etag || etag };
+      return { list: cachedList, records: cached.records || {}, etag };
     }
 
     const readCount = Math.min(size, cappedTotal - offset);
@@ -142,7 +143,8 @@ export class ListingService {
     const listResult: PaginatedResult<Record<string, any>> = {
       items,
       nextPageToken: nextPageTokenValue,
-      totalCount: cappedTotal
+      totalCount: cappedTotal,
+      etag
     };
 
     this.cacheManager.cachePut(cacheKey, { list: listResult, records });

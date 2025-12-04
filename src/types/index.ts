@@ -273,6 +273,7 @@ export interface ListViewColumnConfig {
 }
 
 export interface ListViewConfig {
+  title?: LocalizedString;
   columns: ListViewColumnConfig[];
   metaColumns?: string[];
   defaultSort?: {
@@ -311,6 +312,7 @@ export interface PaginatedResult<T> {
   items: T[];
   nextPageToken?: string;
   totalCount?: number;
+  etag?: string;
 }
 
 export interface SubmissionBatchResult<T = Record<string, any>> {
