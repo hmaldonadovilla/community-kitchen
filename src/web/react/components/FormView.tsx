@@ -74,6 +74,26 @@ const buildSelectorOptionSet = (selector?: LineItemSelectorConfig | null): Optio
 const hasSelectionEffects = (field: any): boolean =>
   Array.isArray(field?.selectionEffects) && field.selectionEffects.length > 0;
 
+const getSelectionEffects = (field: any): any[] =>
+  Array.isArray(field?.selectionEffects) ? field.selectionEffects : [];
+
+const selectionEffectDependsOnField = (field: any, targetFieldId: string): boolean => {
+  return getSelectionEffects(field).some(effect => {
+    if (!effect) return false;
+    if (effect.rowMultiplierFieldId && effect.rowMultiplierFieldId === targetFieldId) {
+      return true;
+    }
+    if (effect.lineItemMapping) {
+      return Object.values(effect.lineItemMapping).some(value => {
+        if (typeof value !== 'string' || !value.startsWith('$row.')) return false;
+        const referencedField = value.slice(5).split('.')[0];
+        return referencedField === targetFieldId;
+      });
+    }
+    return false;
+  });
+};
+
 const isLineRowComplete = (group: WebQuestionDefinition, rowValues: Record<string, FieldValue>): boolean => {
   const fields = group.lineItemConfig?.fields || [];
   return fields.every(field => {
@@ -386,7 +406,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (onStatusClear) onStatusClear();
     const existingRows = lineItems[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
-    const nextRowValues = { ...(currentRow?.values || {}), [field.id]: value };
+    const nextRowValues: Record<string, FieldValue> = { ...(currentRow?.values || {}), [field.id]: value };
     updateLineValue(group.id, rowId, field.id, value);
     setErrors(prev => {
       const next = { ...prev };
@@ -398,9 +418,33 @@ const FormView: React.FC<FormViewProps> = ({
       if (effectFields.length) {
         const rowComplete = isLineRowComplete(group, nextRowValues);
         effectFields.forEach(effectField => {
+          const isSourceField = effectField.id === field.id;
+          const dependsOnChangedField = !isSourceField && selectionEffectDependsOnField(effectField, field.id);
+          if (!isSourceField && !dependsOnChangedField) {
+            return;
+          }
           const contextId = buildLineContextId(group.id, rowId, effectField.id);
-          const nextValue = rowComplete ? nextRowValues[effectField.id] : null;
-          onSelectionEffect(effectField as WebQuestionDefinition, nextValue, {
+          const currentValue = nextRowValues[effectField.id] as FieldValue;
+          const effectQuestion = effectField as unknown as WebQuestionDefinition;
+          if (!isSourceField && dependsOnChangedField) {
+            onSelectionEffect(effectQuestion, null, {
+              contextId,
+              lineItem: { groupId: group.id, rowId, rowValues: nextRowValues },
+              forceContextReset: true
+            });
+            if (!rowComplete) {
+              return;
+            }
+            onSelectionEffect(effectQuestion, currentValue ?? null, {
+              contextId,
+              lineItem: { groupId: group.id, rowId, rowValues: nextRowValues },
+              forceContextReset: false
+            });
+            return;
+          }
+          const isClearingSource = isSourceField && isEmptyValue(value as FieldValue);
+          const payloadValue = rowComplete && !isClearingSource ? currentValue ?? null : null;
+          onSelectionEffect(effectQuestion, payloadValue, {
             contextId,
             lineItem: { groupId: group.id, rowId, rowValues: nextRowValues },
             forceContextReset: true
@@ -723,6 +767,7 @@ const FormView: React.FC<FormViewProps> = ({
           );
         };
 
+        const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: lineItems[q.id] || [] }, language);
         return (
           <div key={q.id} className="card" data-field-path={q.id}>
             <h3>{resolveLabel(q, language)}</h3>
@@ -731,7 +776,6 @@ const FormView: React.FC<FormViewProps> = ({
                 getValue: fid => values[fid],
                 getLineValue: (_rowId, fid) => row.values[fid]
               };
-              const totals = computeTotals({ config: q.lineItemConfig!, rows: lineItems[q.id] || [] }, language);
               return (
                 <div key={row.id} className="line-item-row">
                   {(q.lineItemConfig?.fields || []).map(field => {
@@ -829,15 +873,6 @@ const FormView: React.FC<FormViewProps> = ({
                       Remove
                     </button>
                   </div>
-                  {totals.length ? (
-                    <div className="line-totals">
-                      {totals.map(t => (
-                        <span key={t.key} className="pill">
-                          {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               );
             })}
@@ -867,7 +902,18 @@ const FormView: React.FC<FormViewProps> = ({
                   </select>
                 </div>
               )}
-              {renderAddButton()}
+              <div className="line-item-toolbar-actions">
+                {renderAddButton()}
+                {groupTotals.length ? (
+                  <div className="line-item-totals">
+                    {groupTotals.map(t => (
+                      <span key={t.key} className="pill">
+                        {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         );

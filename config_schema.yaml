@@ -3,7 +3,7 @@ info:
   title: Community Kitchen Config Sheet Schema
   version: 1.0.0
   description: |
-    Schema definition for the Configuration Sheet used to generate forms. The React web template is the default experience for deployed web apps; append `?legacy=1` (or `?view=legacy`) to a deployment URL when you need the classic iframe UI—no sheet-level configuration is required for that fallback.
+    Schema definition for the Configuration Sheet used to generate forms. The React web template is the only supported experience for deployed web apps; the legacy iframe UI has been retired, so no sheet-level configuration or query parameters are required for toggling views.
 paths: {}
 components:
   schemas:

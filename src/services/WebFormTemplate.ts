@@ -174,10 +174,12 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
         color: #dc2626;
         font-size: 0.9em;
       }
-      .line-item-toolbar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+      .line-item-toolbar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 12px; justify-content: space-between; }
+      .line-item-toolbar-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
       .line-item-toolbar .section-selector { flex: 1 1 220px; }
       .line-item-toolbar .section-selector label { margin-bottom: 4px; display: inline-block; }
       .line-item-toolbar .section-selector select { width: 100%; }
+      .line-item-totals { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
       .line-item-row { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
       .inline-field { min-width: 180px; }
       .line-actions { display: flex; justify-content: flex-end; }

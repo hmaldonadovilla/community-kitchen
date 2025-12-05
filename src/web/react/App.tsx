@@ -375,13 +375,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         payloadValues[q.id] = serialized;
         payloadValues[`${q.id}_json`] = JSON.stringify(serialized);
       });
-    return {
+    const submission: SubmissionPayload = {
       formKey,
       language,
       values: payloadValues,
-      id: undefined,
       ...payloadValues
     };
+    const submissionId = selectedRecordId || selectedRecordSnapshot?.id || lastSubmissionMeta?.id || undefined;
+    if (submissionId) {
+      submission.id = submissionId;
+    }
+    return submission;
   };
 
   const handleSubmit = async () => {

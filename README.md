@@ -13,7 +13,7 @@ A Google Apps Script project to digitize AFSCA compliance documentation for a co
 - **Dynamic Options & Rules**: Option filtering based on another field plus cross-field validation rules (main form and line items).
 - **Post-submit Console**: The React summary screen now surfaces record metadata (ID, timestamps, status), provides a one-click copy + “Go to follow-up” shortcut, and keeps a “Submit another” loop for operators.
 - **Drag & Drop Uploads**: React forms ship with keyboard-accessible dropzones that enforce file caps, surface total size + remaining slots, and expose per-file remove/clear controls with live announcements.
-- **React Shell by Default**: The published web app now renders the React UI automatically; append `?legacy=1` (or `?view=legacy`) to the deployment URL if you need to validate the legacy template.
+- **React Shell Only**: The published web app renders the React UI automatically; the legacy iframe template has been removed.
 
 ## Architecture
 
@@ -91,7 +91,7 @@ Enabling `CK_DEBUG` also flips `window.__WEB_FORM_DEBUG__` on the web client, so
    - In Apps Script, go to **Deploy > New deployment** and choose **Web app**.
    - Set the entry point to `doGet`.
    - Deploy and use the generated URL as your custom form link (supports line items and uploads).
-   - React is the default experience. Add `?legacy=1` (or `?view=legacy`) to the URL when you need to fall back to the classic iframe UI during phased rollouts.
+   - React is the only experience; the legacy iframe UI has been removed.
 
 ## Config Notes (LINE_ITEM_GROUP / FILE_UPLOAD)
 

@@ -17,7 +17,7 @@ import { SubmissionService } from './webform/submissions';
 import { ListingService } from './webform/listing';
 import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
-import { buildLegacyTemplate, buildReactTemplate } from './webform/template';
+import { buildReactTemplate } from './webform/template';
 import { loadDedupRules } from './dedup';
 
 export class WebFormService {
@@ -51,12 +51,11 @@ export class WebFormService {
     return def;
   }
 
-  public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
-    const useLegacy = this.shouldUseLegacy(params);
-    debugLog('renderForm.start', { requestedKey: formKey, mode: useLegacy ? 'legacy' : 'react' });
+  public renderForm(formKey?: string, _params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
+    debugLog('renderForm.start', { requestedKey: formKey, mode: 'react' });
     const def = this.buildDefinition(formKey);
     const targetKey = formKey || def.title;
-    const html = useLegacy ? buildLegacyTemplate(def, targetKey) : buildReactTemplate(def, targetKey);
+    const html = buildReactTemplate(def, targetKey);
     debugLog('renderForm.htmlBuilt', {
       formKey: targetKey,
       questionCount: def.questions.length,
@@ -152,31 +151,4 @@ export class WebFormService {
     }
   }
 
-  private shouldUseLegacy(params?: Record<string, any>): boolean {
-    if (!params) return false;
-    const candidate =
-      (params as any).legacy ??
-      (params as any).view ??
-      (params as any).ui ??
-      (params as any).react;
-    const normalized = Array.isArray(candidate) ? candidate[0] : candidate;
-    if (normalized === undefined || normalized === null) {
-      return false;
-    }
-    const text = normalized.toString().toLowerCase();
-    if (text === 'legacy' || text === 'classic' || text === 'html' || text === 'iframe') {
-      return true;
-    }
-    if (text === 'react') {
-      return false;
-    }
-    if (text === '1' || text === 'true') {
-      // maintain compatibility with existing view=react URLs
-      return false;
-    }
-    if (text === '0' || text === 'false') {
-      return true;
-    }
-    return false;
-  }
 }

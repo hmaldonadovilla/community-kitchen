@@ -55,7 +55,7 @@ This plan keeps a single deployable `dist/Code.js` for Apps Script. We will prot
   - Reimplements behaviors: validation rules, filters/visibility, line items, totals, selection effects, dedup messaging, uploads.
   - Uses a small `api.ts` wrapper over `google.script.run` for submit, fetch submissions, fetch data sources, follow-up actions.
 - Extract a shared form engine (validation, visibility, filters, selection effects, line-item totals/sync, data-source hydration) into framework-agnostic modules consumed by both legacy and React UIs.
-- Revise `WebFormTemplate` to a minimal HTML shell (meta + root div + preload JSON + script tag for the bundled React IIFE). Styling moves to CSS/inline assets compiled into the bundle. React becomes the default; use `legacy=1` / `view=legacy` to force the classic iframe.
+- Revise `WebFormTemplate` to a minimal HTML shell (meta + root div + preload JSON + script tag for the bundled React IIFE). Styling moves to CSS/inline assets compiled into the bundle. React becomes the default; Phase 3 removes the legacy iframe entirely.
 - React template injects `__WEB_FORM_DEF__`, `__WEB_FORM_KEY__`, and optional `__WEB_FORM_RECORD__` into `window` before loading the bundled IIFE (ES2019, no dynamic imports). Inline bundle is escaped/base64-safe for HtmlService.
 - Continue bundling with esbuild to a single IIFE (`dist/webform.js`), embedded into `dist/Code.js` via the template step. A size budget gate now runs after every build (warn at ~1 MB, hard fail at ~1.2 MB gzipped) to catch HtmlService limits early.
 
@@ -69,13 +69,14 @@ This plan keeps a single deployable `dist/Code.js` for Apps Script. We will prot
 - Errors: failures always return `{ success: false, message }`; UI preserves prior state and surfaces the message. React list should honor `etag`/`records` to avoid refetch; invalidate on submit/follow-up.
 - Continue bundling with esbuild to a single IIFE (`dist/webform.js`), embedded into `dist/Code.js` via the template step.
 
-## Phase 3: Swap and Rollout
+## Phase 3: React-Only Rollout
 
-**Objective:** Ship React UI safely.
+**Objective:** Remove the legacy HtmlService template and make React the sole experience.
 
-- Dual-boot controls: keep the query-param fallback (`legacy=1` / `view=legacy`) and/or a property flag while teams dogfood the React UI.
-- Dogfood on non-critical forms; compare behavior and submissions for parity.
-- Remove the legacy bundle entirely once parity is confirmed and we no longer rely on the fallback.
+- Delete the legacy bundle/template and any query-param toggles (`legacy`, `view`, `ui`, etc.).
+- Simplify `WebFormService.renderForm` to always serve the React template.
+- Update documentation (README, SetupInstructions, config schema) to reflect the React-only deployment.
+- Run the full regression suite (unit tests, `npm run build`, Snyk) before redeploying the single `dist/Code.js`.
 
 ## Testing Strategy
 

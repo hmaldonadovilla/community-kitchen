@@ -438,4 +438,4 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 1. In Apps Script, go to **Deploy → New deployment** and choose **Web app**.
 2. Set the entry point to `doGet`, grant access to the volunteers’ Google accounts, and deploy.
-3. Share the deployment URL. The React experience is served by default; append `?legacy=1` or `?view=legacy` to the URL whenever you need the classic iframe UI for regression testing or phased rollout. Removing the flag returns to the React shell.
+3. Share the deployment URL. The React experience is served by default and is the only supported UI going forward.

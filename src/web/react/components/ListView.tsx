@@ -176,20 +176,31 @@ const ListView: React.FC<ListViewProps> = ({
   const showPrev = pageIndex > 0;
   const showNext = pageIndex < totalPages - 1;
 
+  const formatDate = (value: any): string | null => {
+    if (value === undefined || value === null || value === '') return null;
+    const candidate = typeof value === 'number' ? value : `${value}`;
+    const date = new Date(candidate);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+  };
+
   const renderCellValue = (row: ListItem, fieldId: string) => {
     const raw = (row as any)[fieldId];
     if (raw === undefined || raw === null || raw === '') return '—';
-    const text = Array.isArray(raw) ? raw.join(', ') : `${raw}`;
+    const isScalar = typeof raw === 'string' || typeof raw === 'number';
+    const dateText = isScalar ? formatDate(raw) : null;
+    const text = dateText || (Array.isArray(raw) ? raw.join(', ') : `${raw}`);
+    const title = dateText ? `${raw}` : text;
     const isLink = typeof raw === 'string' && /^https?:\/\//i.test(raw);
     if (isLink) {
       return (
-        <a href={raw as string} target="_blank" rel="noopener noreferrer" className="truncate-link" title={text}>
+        <a href={raw as string} target="_blank" rel="noopener noreferrer" className="truncate-link" title={title}>
           {text}
         </a>
       );
     }
     return (
-      <span className="truncate-link" title={text}>
+      <span className="truncate-link" title={title}>
         {text}
       </span>
     );
