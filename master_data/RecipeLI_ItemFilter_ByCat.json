@@ -14,6 +14,8 @@
         "Squash",
         "Sweet potatoes",
         "Parsley",
+        "Basil",
+        "Dill",
         "Butternut",
         "Pumpkin",
         "Pleurotte mushrooms",
@@ -49,10 +51,12 @@
         "Chickpeas (tinned)",
         "Red beans (tinned)",
         "White beans (tinned)",
-        "Greek yogurt"
+        "Pesto"
       ],
       "Dairy": [
-        "Mozzarella grated cheese"
+        "Mozzarella grated cheese",
+        "Greek yogurt",
+        "Oat milk"
       ],
       "Animal protein Halal": [
         "Chicken stripes (breaded)",
@@ -64,12 +68,12 @@
       ],
       "Frozen vegetables": [
         "Frozen green beans",
-        "Chinese mix",
-        "Corn (frozen)",
+        "Frozen Chinese mix",
+        "Frozen corn",
         "Frozen leeks",
         "Frozen mushrooms",
         "Frozen carrots",
-        "Couscous mix (frozen)",
+        "Frozen couscous mix",
         "Frozen courgettes",
         "Frozen pumpkin",
         "Frozen peppers",
@@ -91,6 +95,13 @@
         "Paprika",
         "Cumin",
         "Cinnamon",
+        "Basil",
+        "Parsley",
+        "Dill",
+        "Mint",
+        "Oregano",
+        "Dried parsley",
+        "Dried dill",
         "Dried mint",
         "Dried oregano",
         "Nutmeg",

@@ -35,6 +35,12 @@
             "Parsley": [
                 "None"
             ],
+            "Basil": [
+                "None"
+            ],
+            "Dill": [
+                "None"
+            ],
             "Butternut": [
                 "None"
             ],
@@ -60,16 +66,16 @@
                 "None"
             ],
             "Couscous (wheat)": [
-                "GLUTEN"
+                "Gluten"
             ],
             "Bulgur (wheat)": [
-                "GLUTEN"
+                "Gluten"
             ],
             "Orzo (wheat)": [
-                "GLUTEN"
+                "Gluten"
             ],
             "Pasta (wheat)": [
-                "GLUTEN"
+                "Gluten"
             ],
             "Chickpeas (dry)": [
                 "None"
@@ -96,7 +102,7 @@
                 "None"
             ],
             "Cream": [
-                "MILK"
+                "Milk"
             ],
             "Yellow curry paste": [
                 "None"
@@ -104,8 +110,11 @@
             "Coconut milk": [
                 "None"
             ],
+            "Oat milk": [
+                "Gluten"
+            ],
             "Peanut butter": [
-                "PEANUTS"
+                "Peanuts"
             ],
             "Green beans (tinned)": [
                 "None"
@@ -122,14 +131,17 @@
             "White beans (tinned)": [
                 "None"
             ],
+            "Pesto": [
+                "Milk", "Peanuts"
+            ],
             "Greek yogurt": [
-                "MILK"
+                "Milk"
             ],
             "Mozzarella grated cheese": [
-                "MILK"
+                "Milk"
             ],
             "Chicken stripes (breaded)": [
-                "GLUTEN"
+                "Gluten"
             ],
             "Chicken cubes": [
                 "None"
@@ -138,21 +150,21 @@
                 "None"
             ],
             "Chicken tenders (breaded)": [
-                "GLUTEN"
+                "Gluten"
             ],
             "Cordon bleu": [
-                "GLUTEN"
+                "Gluten"
             ],
             "Fishsticks (breaded)": [
-                "GLUTEN"
+                "Gluten"
             ],
             "Frozen green beans": [
                 "None"
             ],
-            "Chinese mix": [
+            "Frozen Chinese mix": [
                 "None"
             ],
-            "Corn (frozen)": [
+            "Frozen corn": [
                 "None"
             ],
             "Frozen leeks": [
@@ -164,8 +176,8 @@
             "Frozen carrots": [
                 "None"
             ],
-            "Couscous mix (frozen)": [
-                "GLUTEN"
+            "Frozen couscous mix": [
+                "Gluten"
             ],
             "Frozen courgettes": [
                 "None"
@@ -192,7 +204,7 @@
                 "None"
             ],
             "Bouillon powder (soy)": [
-                "SOY"
+                "Soy"
             ],
             "Salt": [
                 "None"
@@ -224,6 +236,18 @@
             "Cinnamon": [
                 "None"
             ],
+            "Mint": [
+                "None"
+            ],
+            "Oregano": [
+                "None"
+            ],
+            "Dried parsley": [
+                "None"
+            ],
+            "Dried dill": [
+                "None"
+            ],
             "Dried mint": [
                 "None"
             ],
@@ -237,10 +261,10 @@
                 "None"
             ],
             "Soy sauce (soy)": [
-                "SOY"
+                "Soy"
             ],
             "Miso paste (soy)": [
-                "SOY"
+                "Soy"
             ],
             "Sunflower oil": [
                 "None"

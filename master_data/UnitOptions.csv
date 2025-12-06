@@ -1,6 +1,6 @@
 optionEn,optionFr,optionNl
 kg,kg,kg
-g,g,g
+gr,gr,gr
 piece,pièce,stuk
 bag,sac,zak
 box,boîte,doos
@@ -8,3 +8,9 @@ crate,caisse,krat
 sack,sac,zak
 bucket,seau,emmer
 other,autre,anders
+Tsp,c.à.c,tl
+Tbsp,c.à.s,el
+Ladle,louche,pollepel
+L,L,L
+ml,ml,ml
+cl,cl,cl

@@ -10,6 +10,8 @@ Cauliflower,Chou-fleur,Chou-fleur
 Squash,Courge,Courge
 Sweet potatoes,Patates douces,Patates douces
 Parsley,Persil,Persil
+Basil,Basilic,Basilic
+Dill,Aneth,Aneth
 Butternut,Butternut,Butternut
 Pumpkin,Potiron,Potiron
 Pleurotte mushrooms,Pleurotes,Pleurotes
@@ -33,12 +35,14 @@ Ginger paste,Pâte de gingembre,Pâte de gingembre
 Cream,Crème,Crème
 Yellow curry paste,Pâte de curry jaune,Pâte de curry jaune
 Coconut milk,Lait de coco,Lait de coco
+Oat milk,Lait d'avoine,Havermelk
 Peanut butter,Beurre de cacahuète,Beurre de cacahuète
 Green beans (tinned),Haricots verts en conserve,Haricots verts en conserve
 Carrots (tinned),Carottes en conserve,Carottes en conserve
 Chickpeas (tinned),Pois chiches en conserve,Pois chiches en conserve
 Red beans (tinned),Haricots rouges en conserve,Haricots rouges en conserve
 White beans (tinned),Haricots blancs en conserve,Haricots blancs en conserve
+Pesto,Pesto,Pesto
 Greek yogurt,Yaourt grec,Yaourt grec
 Mozzarella grated cheese,Mozzarella râpée,Mozzarella râpée
 Chicken stripes (breaded),Lanières de poulet panées,Lanières de poulet panées
@@ -48,7 +52,7 @@ Chicken tenders (breaded),Nuggets de poulet panés,Nuggets de poulet panés
 Cordon bleu,Cordon bleu,Cordon bleu
 Fishsticks (breaded),Bâtonnets de poisson panés,Bâtonnets de poisson panés
 Frozen green beans,Haricots verts surgelés,Haricots verts surgelés
-Frozen chinese mix,Mélange chinois,Mélange chinois
+Frozen Chinese mix,Mélange chinois surgelé,Mélange chinois surgelé
 Frozen corn,Maïs surgelé,Maïs surgelé
 Frozen leeks,Poireaux surgelés,Poireaux surgelés
 Frozen mushrooms,Champignons surgelés,Champignons surgelés
@@ -73,6 +77,10 @@ Black pepper,Poivre noir,Poivre noir
 Paprika,Paprika,Paprika
 Cumin,Cumin,Cumin
 Cinnamon,Cannelle,Cannelle
+Mint,Menthe,Menthe
+Oregano,Origan,Origan
+Dried parsley,Persil séché,Persil séché
+Dried dill,Aneth séché,Aneth séché
 Dried mint,Menthe séchée,Menthe séchée
 Dried oregano,Origan séché,Origan séché
 Nutmeg,Muscade,Muscade
