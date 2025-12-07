@@ -798,20 +798,42 @@ const FormView: React.FC<FormViewProps> = ({
     return optionState[optionKey(q.id)] || toOptionSet(q);
   };
 
+  const resolveVisibilityValue = (fieldId: string): FieldValue | undefined => {
+    const direct = values[fieldId];
+    if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+    // scan all line item groups for the first non-empty occurrence
+    for (const rows of Object.values(lineItems)) {
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const v = (row as LineItemRowState).values[fieldId];
+        if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+      }
+    }
+    return undefined;
+  };
+
   const renderQuestion = (q: WebQuestionDefinition) => {
     const optionSet = renderOptions(q);
     const dependencyValues = (dependsOn: string | string[]) => {
       const ids = Array.isArray(dependsOn) ? dependsOn : [dependsOn];
       return ids.map(id => toDependencyValue(values[id]));
     };
+    const firstLineValue = (groupId: string, fieldId: string): FieldValue | undefined => {
+      const rows = lineItems[groupId] || [];
+      for (const row of rows) {
+        const v = row.values[fieldId];
+        if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+      }
+      return undefined;
+    };
     const allowed = computeAllowedOptions(q.optionFilter, optionSet, dependencyValues(q.optionFilter?.dependsOn || []));
     const currentVal = values[q.id];
     const allowedWithCurrent =
       currentVal && typeof currentVal === 'string' && !allowed.includes(currentVal) ? [...allowed, currentVal] : allowed;
     const opts = buildLocalizedOptions(optionSet, allowedWithCurrent, language);
-    const hidden = shouldHideField(q.visibility, {
-      getValue: (fieldId: string) => values[fieldId]
-    });
+        const hidden = shouldHideField(q.visibility, {
+          getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
+        });
     if (hidden) return null;
 
     switch (q.type) {

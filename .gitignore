@@ -1,5 +1,7 @@
 dist
 node_modules
+src/web/webformBundle.ts
+src/web/react/reactBundle.ts
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc
