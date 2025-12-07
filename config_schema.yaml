@@ -302,6 +302,10 @@ components:
         tooltipField:
           type: string
           description: Optional column name to surface as tooltip text for each option (shown in form + summary).
+        tooltipLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized label/title to show on the tooltip trigger and overlay header for fields using this data source.
       required: [id]
       example:
         id: recipes

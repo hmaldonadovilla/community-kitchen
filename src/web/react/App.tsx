@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   shouldHideField,
   validateRules,
@@ -68,6 +69,137 @@ const resolveSubgroupKey = (sub?: { id?: string; label?: any }): string => {
   if (typeof sub.label === 'string') return sub.label;
   return sub.label?.en || sub.label?.fr || sub.label?.nl || '';
 };
+
+const TooltipIcon: React.FC<{
+  text?: string;
+  label?: string;
+  triggerText?: string;
+  linkStyle?: boolean;
+}> = ({ text, label, triggerText, linkStyle }) => {
+  const [hoverOpen, setHoverOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const open = hoverOpen || pinned;
+  const hasText = !!text;
+
+  useLayoutEffect(() => {
+    if (!hasText || !open || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const maxWidth = 460;
+    const margin = 8;
+    const left = Math.min(Math.max(rect.left, margin), window.innerWidth - maxWidth - margin);
+    const top = Math.min(rect.bottom + margin, window.innerHeight - margin);
+    setPosition({ top, left });
+  }, [open, hasText]);
+
+  useEffect(() => {
+    if (!hasText || !open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (buttonRef.current && buttonRef.current.contains(e.target as Node)) return;
+      setPinned(false);
+      setHoverOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open, hasText]);
+
+  if (!hasText) return null;
+
+  const overlay =
+    open && position
+      ? createPortal(
+          <div
+            role="tooltip"
+            style={{
+              position: 'fixed',
+              zIndex: 3000,
+              top: position.top,
+              left: position.left,
+              background: '#ffffff',
+              color: '#111827',
+              border: '1px solid #e5e7eb',
+              borderRadius: 12,
+              boxShadow: '0 16px 40px rgba(15,23,42,0.16)',
+              padding: 14,
+              maxWidth: 460,
+              minWidth: 260,
+              maxHeight: 360,
+              overflowY: 'auto',
+              fontSize: 14,
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap'
+            }}
+            onMouseEnter={() => setHoverOpen(true)}
+            onMouseLeave={() => {
+              if (!pinned) setHoverOpen(false);
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontWeight: 700, color: '#0f172a' }}>{label || 'Details'}</span>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => {
+                  setPinned(false);
+                  setHoverOpen(false);
+                }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: 16,
+                  cursor: 'pointer',
+                  padding: 2,
+                  lineHeight: 1,
+                  color: '#475569'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ marginTop: 10, color: '#1f2937' }}>{text}</div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <span className="tooltip-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={label ? `Show ${label}` : 'Show details'}
+        aria-expanded={open}
+        onMouseEnter={() => setHoverOpen(true)}
+        onMouseLeave={() => {
+          if (!pinned) setHoverOpen(false);
+        }}
+        onFocus={() => setHoverOpen(true)}
+        onBlur={() => {
+          if (!pinned) setHoverOpen(false);
+        }}
+        onClick={() => setPinned(prev => !prev)}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: '#2563eb',
+          cursor: 'pointer',
+          fontWeight: linkStyle ? 600 : 700,
+          padding: 0,
+          lineHeight: 1,
+          textDecoration: linkStyle ? 'underline' : 'none',
+          textAlign: 'left',
+        }}
+      >
+        {triggerText || label || 'ℹ'}
+      </button>
+      {overlay}
+    </span>
+  );
+};
+
+// Build marker to verify deployed bundle version in UI
+const BUILD_MARKER = 'tooltip-overlay-2025-02-08-01';
 
 const seedSubgroupDefaults = (
   lineItems: LineItemState,
@@ -338,6 +470,39 @@ const formatFieldValue = (value: FieldValue): string => {
   return value.toString();
 };
 
+const renderValueWithTooltip = (
+  value: FieldValue,
+  tooltipText?: string,
+  label?: string,
+  linkStyle?: boolean
+) => {
+  const display = formatFieldValue(value);
+  if (!tooltipText) return display;
+  if (linkStyle) {
+    return <TooltipIcon text={tooltipText} label={label} triggerText={display} linkStyle />;
+  }
+  return <TooltipIcon text={tooltipText} label={label} />;
+};
+
+const resolveTooltipText = (
+  tooltipState: Record<string, Record<string, string>>,
+  optionState: OptionState,
+  key: string,
+  value: FieldValue
+): string | undefined => {
+  const map = tooltipState[key] || optionState[key]?.tooltips;
+  if (!map) return undefined;
+  const pick = (v: any) => (v !== undefined && v !== null ? map[v as string] : undefined);
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const hit = pick(v);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+  return pick(value);
+};
+
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [language, setLanguage] = useState<LangCode>(normalizeLanguage(definition.languages?.[0] || record?.language));
   const [values, setValues] = useState<Record<string, FieldValue>>(() => {
@@ -361,6 +526,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [selectedRecordSnapshot, setSelectedRecordSnapshot] = useState<WebFormSubmission | null>(record || null);
   const [followupMessage, setFollowupMessage] = useState<string | null>(null);
   const [optionState, setOptionState] = useState<OptionState>({});
+  const [tooltipState, setTooltipState] = useState<Record<string, Record<string, string>>>({});
+  const preloadPromisesRef = useRef<Record<string, Promise<void> | undefined>>({});
   const [lastSubmissionMeta, setLastSubmissionMeta] = useState<SubmissionMeta | null>(() =>
     record
       ? {
@@ -394,6 +561,45 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setListCache({ response: null, records: {} });
     setListRefreshToken(token => token + 1);
   };
+
+  const loadOptionsForField = useCallback(
+    (field: any, groupId?: string) => {
+      if (!field?.dataSource) return Promise.resolve();
+      const key = optionKey(field.id, groupId);
+      if (optionState[key] && tooltipState[key]) return Promise.resolve();
+      if (preloadPromisesRef.current[key]) return preloadPromisesRef.current[key];
+      const promise = loadOptionsFromDataSource(field.dataSource, language).then(res => {
+        if (res) {
+          setOptionState(prev => ({ ...prev, [key]: res }));
+          if (res.tooltips) {
+            setTooltipState(prev => ({ ...prev, [key]: res.tooltips || {} }));
+          }
+        }
+      });
+      preloadPromisesRef.current[key] = promise;
+      return promise;
+    },
+    [language, optionState, tooltipState]
+  );
+
+  const preloadSummaryTooltips = useCallback(() => {
+    const tasks: Promise<void>[] = [];
+    definition.questions.forEach(q => {
+      if (q.dataSource) tasks.push(loadOptionsForField(q) as Promise<void>);
+      if (q.type === 'LINE_ITEM_GROUP') {
+        (q.lineItemConfig?.fields || []).forEach(field => {
+          if (field?.dataSource) tasks.push(loadOptionsForField(field, q.id) as Promise<void>);
+        });
+        (q.lineItemConfig?.subGroups || []).forEach(sub => {
+          const subKey = resolveSubgroupKey(sub);
+          (sub.fields || []).forEach(field => {
+            if (field?.dataSource) tasks.push(loadOptionsForField(field, `${q.id}::${subKey}`) as Promise<void>);
+          });
+        });
+      }
+    });
+    return Promise.all(tasks).then(() => undefined);
+  }, [definition.questions, loadOptionsForField]);
   const clearStatus = useCallback(() => {
     setStatus(null);
     setStatusLevel(null);
@@ -480,12 +686,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, [record, definition]);
 
   useEffect(() => {
+    if (view !== 'summary') return;
+    preloadSummaryTooltips();
+  }, [view, preloadSummaryTooltips]);
+
+  useEffect(() => {
     if (!selectedRecordId || selectedRecordSnapshot) return;
     const cached = listCache.records[selectedRecordId];
     if (cached) {
       setSelectedRecordSnapshot(cached);
     }
   }, [selectedRecordId, selectedRecordSnapshot, listCache.records]);
+
+  useEffect(() => {
+    if (view !== 'summary') return;
+    preloadSummaryTooltips();
+  }, [view, preloadSummaryTooltips]);
 
   const ensureOptions = (q: WebQuestionDefinition) => {
     if (!q.dataSource) return;
@@ -494,6 +710,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     loadOptionsFromDataSource(q.dataSource, language).then(res => {
       if (res) {
         setOptionState(prev => ({ ...prev, [key]: res }));
+        if (res.tooltips) {
+          setTooltipState(prev => ({ ...prev, [key]: res.tooltips || {} }));
+        }
         logEvent('options.loaded', { questionId: q.id, source: 'question', count: res.en?.length || 0 });
       }
     });
@@ -878,7 +1097,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       .map(field => ({
         id: field.id,
         label: resolveFieldLabel(field, language, field.id),
-        getValue: (row: LineItemRowState) => row.values[field.id]
+        getValue: (row: LineItemRowState) => row.values[field.id],
+        tooltipKey: optionKey(field.id, group.id)
       }));
 
     const renderSubgroups = () => {
@@ -938,11 +1158,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
                     <tbody>
                       {childRows.map(child => (
                         <tr key={child.id}>
-                          {subColumns.map(col => (
-                            <td key={col.id} style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                              {formatFieldValue(col.getValue(child))}
-                            </td>
-                          ))}
+                          {subColumns.map(col => {
+                            const tooltipKey = optionKey(col.id, key);
+                            const tooltipText = resolveTooltipText(tooltipState, optionState, tooltipKey, col.getValue(child));
+                            const tooltipLabel = (sub.fields || []).find(f => f.id === col.id)?.dataSource?.tooltipLabel;
+                            const localizedLabel = resolveLocalizedString(tooltipLabel, language, col.label);
+                            return (
+                              <td key={col.id} style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                                {renderValueWithTooltip(col.getValue(child), tooltipText, localizedLabel, true)}
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>
@@ -983,11 +1209,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           <tbody>
             {rows.map(row => (
               <tr key={row.id}>
-                {fieldColumns.map(col => (
-                  <td key={col.id} style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                    {formatFieldValue(col.getValue(row))}
-                  </td>
-                ))}
+                {fieldColumns.map(col => {
+                  const tooltipText = resolveTooltipText(tooltipState, optionState, col.tooltipKey, col.getValue(row));
+                  const tooltipLabel =
+                    definition.questions.find(q => q.id === group.id)?.lineItemConfig?.fields?.find(f => f.id === col.id)
+                      ?.dataSource?.tooltipLabel;
+                  const localizedLabel = resolveLocalizedString(tooltipLabel, language, col.label);
+                  return (
+                    <td key={col.id} style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                      {renderValueWithTooltip(col.getValue(row), tooltipText, localizedLabel, true)}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -1001,6 +1234,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     <div className="page">
       <header>
         <h1>{definition.title || 'Form'}</h1>
+        <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>Build: {BUILD_MARKER}</div>
         <div className="controls">
           <label>
             Language:
@@ -1048,6 +1282,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
                 loadOptionsFromDataSource(field.dataSource, language).then(res => {
                   if (res) {
                     setOptionState(prev => ({ ...prev, [key]: res }));
+                    if (res.tooltips) {
+                      setTooltipState(prev => ({ ...prev, [key]: res.tooltips || {} }));
+                    }
                   }
                 });
               }
@@ -1121,13 +1358,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             }
             const value = values[q.id];
             if (Array.isArray(value)) {
+              const tooltipText = resolveTooltipText(tooltipState, optionState, optionKey(q.id), value);
+              const tooltipLabel = resolveLocalizedString(q.dataSource?.tooltipLabel, language, resolveLabel(q, language));
               return (
                 <div key={q.id} className="field">
                   <div className="muted">{resolveLabel(q, language)}</div>
-                  {value.length ? <div>{(value as string[]).join(', ')}</div> : <div className="muted">No response</div>}
+                  {value.length ? (
+                    <div>{renderValueWithTooltip(value, tooltipText, tooltipLabel, true)}</div>
+                  ) : (
+                    <div className="muted">No response</div>
+                  )}
                 </div>
               );
             }
+            const tooltipText = resolveTooltipText(tooltipState, optionState, optionKey(q.id), value);
+            const tooltipLabel = resolveLocalizedString(q.dataSource?.tooltipLabel, language, resolveLabel(q, language));
             const showParagraphStyle =
               q.type === 'PARAGRAPH'
                 ? {
@@ -1141,7 +1386,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
                 {value === undefined || value === null || value === '' ? (
                   <div className="muted">No response</div>
                 ) : (
-                  <div style={showParagraphStyle}>{value as string}</div>
+                  <div style={showParagraphStyle}>
+                    {renderValueWithTooltip(value, tooltipText, tooltipLabel, true)}
+                  </div>
                 )}
               </div>
             );

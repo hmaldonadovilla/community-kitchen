@@ -1,6 +1,128 @@
-import { WebFormDefinition } from '../../types';
+import { WebFormDefinition, LineItemFieldConfig } from '../../types';
 import { LangCode } from '../types';
 import { resolveLocalizedString } from '../i18n';
+
+function createTooltipIcon(text: string, label?: string): HTMLElement {
+  const wrapper = document.createElement('span');
+  wrapper.style.position = 'relative';
+  wrapper.style.display = 'inline-flex';
+  wrapper.style.marginLeft = '6px';
+  wrapper.style.color = '#2563eb';
+  wrapper.style.fontWeight = '700';
+  wrapper.style.cursor = 'pointer';
+
+  const icon = document.createElement('button');
+  icon.type = 'button';
+  icon.textContent = label || 'ℹ';
+  icon.setAttribute('aria-label', label ? `Show ${label}` : 'Show details');
+  icon.style.background = 'transparent';
+  icon.style.border = 'none';
+  icon.style.padding = '0';
+  icon.style.lineHeight = '1';
+  icon.style.color = 'inherit';
+  icon.style.cursor = 'pointer';
+  icon.style.textDecoration = 'underline';
+  icon.style.textAlign = 'left';
+  icon.style.display = 'inline-flex';
+
+  const overlay = document.createElement('div');
+  overlay.setAttribute('role', 'tooltip');
+  overlay.style.position = 'absolute';
+  overlay.style.zIndex = '30';
+  overlay.style.top = '100%';
+  overlay.style.left = '0';
+  overlay.style.marginTop = '8px';
+  overlay.style.background = '#ffffff';
+  overlay.style.color = '#111827';
+  overlay.style.border = '1px solid #e5e7eb';
+  overlay.style.borderRadius = '12px';
+  overlay.style.boxShadow = '0 16px 40px rgba(15,23,42,0.16)';
+  overlay.style.padding = '14px';
+  overlay.style.maxWidth = '460px';
+  overlay.style.minWidth = '260px';
+  overlay.style.maxHeight = '360px';
+  overlay.style.overflowY = 'auto';
+  overlay.style.fontSize = '14px';
+  overlay.style.lineHeight = '1.6';
+  overlay.style.whiteSpace = 'pre-wrap';
+  overlay.style.display = 'none';
+  overlay.style.textAlign = 'left';
+
+  const header = document.createElement('div');
+  header.style.display = 'flex';
+  header.style.justifyContent = 'space-between';
+  header.style.alignItems = 'flex-start';
+  header.style.gap = '10px';
+
+  const titleSpan = document.createElement('span');
+  titleSpan.style.fontWeight = '700';
+  titleSpan.style.color = '#0f172a';
+  titleSpan.textContent = label || 'Details';
+  header.appendChild(titleSpan);
+
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.ariaLabel = 'Close';
+  closeButton.textContent = '×';
+  closeButton.style.border = 'none';
+  closeButton.style.background = 'transparent';
+  closeButton.style.fontSize = '16px';
+  closeButton.style.cursor = 'pointer';
+  closeButton.style.padding = '2px';
+  closeButton.style.lineHeight = '1';
+  closeButton.style.color = '#475569';
+  header.appendChild(closeButton);
+
+  const content = document.createElement('div');
+  content.style.marginTop = '10px';
+  content.style.color = '#1f2937';
+  content.textContent = text;
+
+  overlay.appendChild(header);
+  overlay.appendChild(content);
+
+  let pinned = false;
+  const show = () => {
+    overlay.style.display = 'block';
+  };
+  const hide = () => {
+    if (!pinned) overlay.style.display = 'none';
+  };
+
+  icon.addEventListener('mouseenter', show);
+  icon.addEventListener('mouseleave', hide);
+  icon.addEventListener('focus', show);
+  icon.addEventListener('blur', hide);
+  icon.addEventListener('click', e => {
+    e.stopPropagation();
+    pinned = !pinned;
+    if (pinned) overlay.style.display = 'block';
+    else overlay.style.display = 'none';
+  });
+  closeButton.addEventListener('click', () => {
+    pinned = false;
+    overlay.style.display = 'none';
+  });
+
+  wrapper.appendChild(icon);
+  wrapper.appendChild(overlay);
+  return wrapper;
+}
+
+function resolveTooltipForValue(
+  question: SummaryViewOptions['definition']['questions'][number],
+  rawValue: any
+): string | undefined {
+  const tooltips = (question as any)?.options?.tooltips;
+  if (!tooltips) return undefined;
+  if (Array.isArray(rawValue)) {
+    for (const val of rawValue) {
+      if (tooltips[val]) return tooltips[val];
+    }
+    return undefined;
+  }
+  return tooltips[rawValue];
+}
 
 interface SummaryViewOptions {
   mount: HTMLElement;
@@ -39,7 +161,26 @@ export function renderSummaryView(opts: SummaryViewOptions): void {
       }
     } else {
       const val = (payload as any)[q.id];
-      value.textContent = Array.isArray(val) ? val.join(', ') : ((val as string) || '');
+      const textValue = Array.isArray(val) ? val.join(', ') : ((val as string) || '');
+      const tooltipText = resolveTooltipForValue(q, val);
+      if (tooltipText) {
+        const row = document.createElement('div');
+        row.style.display = 'inline-flex';
+        row.style.alignItems = 'center';
+        row.style.flexWrap = 'wrap';
+        const span = document.createElement('span');
+        span.textContent = textValue;
+        row.appendChild(span);
+        const tooltipLabel = resolveLocalizedString(
+          (q as any).dataSource?.tooltipLabel,
+          language,
+          q.label[langKey as keyof typeof q.label] || q.label.en || q.id
+        );
+        row.appendChild(createTooltipIcon(tooltipText, tooltipLabel));
+        value.appendChild(row);
+      } else {
+        value.textContent = textValue;
+      }
     }
     block.appendChild(label);
     block.appendChild(value);
@@ -191,18 +332,19 @@ function buildConsolidatedValues(
   return wrapper;
 }
 
-function renderSubLineItemList(
-  rows: Record<string, any>[],
-  subGroup: NonNullable<SummaryViewOptions['definition']['questions'][number]['lineItemConfig']>['subGroups'][number],
-  languageKey: string
-): HTMLElement {
+type SubGroupConfig = NonNullable<
+  NonNullable<SummaryViewOptions['definition']['questions'][number]['lineItemConfig']>['subGroups']
+>[number];
+
+function renderSubLineItemList(rows: Record<string, any>[], subGroup: SubGroupConfig, languageKey: string): HTMLElement {
   const list = document.createElement('ul');
   list.style.margin = '2px 0 0 12px';
   list.style.padding = '0 0 0 12px';
   rows.forEach(row => {
     const li = document.createElement('li');
     const parts: string[] = [];
-    (subGroup.fields || []).forEach(field => {
+    const fields: LineItemFieldConfig[] = (subGroup?.fields as LineItemFieldConfig[]) || [];
+    fields.forEach((field: LineItemFieldConfig) => {
       if (field.id === 'ITEM_FILTER') return;
       const raw = row[field.id];
       if (!raw) return;

@@ -88,19 +88,49 @@ export const loadOptionsFromDataSource = async (
       return buildOptionSet(primitiveValues);
     }
     const mapping = dataSource?.mapping || {};
+    const projection = Array.isArray(dataSource?.projection) ? dataSource?.projection : [];
     const candidateKeys = Object.keys(firstItem);
-    const mappedValueKey = Object.entries(mapping).find(([, target]) => target === 'value')?.[0];
-    const mappedIdKey = Object.entries(mapping).find(([, target]) => target === 'id')?.[0];
-    const valueKey =
-      mappedValueKey ||
-      (mapping as any).value ||
-      mappedIdKey ||
-      (mapping as any).id ||
-      candidateKeys.find(key => {
+
+    const findMappingKey = (target: string): string | undefined =>
+      Object.entries(mapping).find(([, mapped]) => mapped === target)?.[0] ||
+      (mapping as any)[target];
+
+    const pickValueKey = (): string | undefined => {
+      const mappedValueKey = findMappingKey('value');
+      const mappedIdKey = findMappingKey('id');
+      if (mappedValueKey) return mappedValueKey;
+      if (mappedIdKey) return mappedIdKey;
+
+      // Prefer projection order when it contains a likely label column
+      const preferredOrder = [
+        ...projection,
+        'Dish Name',
+        'Name',
+        'Label',
+        'Description',
+        'Title',
+        'value',
+        'id'
+      ].map(k => k.toString());
+
+      const firstStringKey = preferredOrder.find(key => {
+        if (!candidateKeys.includes(key)) return false;
+        const sample = (firstItem as any)?.[key];
+        return sample !== null && sample !== undefined && typeof sample === 'string';
+      });
+      if (firstStringKey) return firstStringKey;
+
+      const anyStringKey = candidateKeys.find(key => typeof (firstItem as any)?.[key] === 'string');
+      if (anyStringKey) return anyStringKey;
+
+      const firstPrimitive = candidateKeys.find(key => {
         const sampleValue = (firstItem as any)?.[key];
         return sampleValue !== null && sampleValue !== undefined && typeof sampleValue !== 'object';
-      }) ||
-      candidateKeys[0];
+      });
+      return firstPrimitive || candidateKeys[0];
+    };
+
+    const valueKey = pickValueKey();
     if (!valueKey) return null;
     const tooltips: Record<string, string> = {};
     const mappedValues = items

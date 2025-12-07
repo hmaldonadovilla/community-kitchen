@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   computeAllowedOptions,
   buildLocalizedOptions,
@@ -97,21 +98,110 @@ const srOnly: React.CSSProperties = {
   border: 0
 };
 
-const InfoTooltip: React.FC<{ text?: string }> = ({ text }) => {
-  const [open, setOpen] = useState(false);
-  if (!text) return null;
+const InfoTooltip: React.FC<{ text?: string; label?: string }> = ({ text, label }) => {
+  const [hoverOpen, setHoverOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const open = hoverOpen || pinned;
+  const hasText = !!text;
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current || !text) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const maxWidth = 460;
+    const margin = 8;
+    const left = Math.min(Math.max(rect.left, margin), window.innerWidth - maxWidth - margin);
+    const top = Math.min(rect.bottom + margin, window.innerHeight - margin);
+    setPosition({ top, left });
+  }, [open, text]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (buttonRef.current && buttonRef.current.contains(e.target as Node)) return;
+      setPinned(false);
+      setHoverOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const overlay =
+    hasText && open && position
+      ? createPortal(
+          <div
+            role="tooltip"
+            style={{
+              position: 'fixed',
+              zIndex: 3000,
+              top: position.top,
+              left: position.left,
+              background: '#ffffff',
+              color: '#111827',
+              border: '1px solid #e5e7eb',
+              borderRadius: 12,
+              boxShadow: '0 16px 40px rgba(15,23,42,0.16)',
+              padding: 14,
+              maxWidth: 460,
+              minWidth: 260,
+              maxHeight: 360,
+              overflowY: 'auto',
+              fontSize: 14,
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap'
+            }}
+            onMouseEnter={() => setHoverOpen(true)}
+            onMouseLeave={() => {
+              if (!pinned) setHoverOpen(false);
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontWeight: 700, color: '#0f172a' }}>{label || 'Details'}</span>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => {
+                  setPinned(false);
+                  setHoverOpen(false);
+                }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: 16,
+                  cursor: 'pointer',
+                  padding: 2,
+                  lineHeight: 1,
+                  color: '#475569'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ marginTop: 10, color: '#1f2937' }}>{text}</div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  if (!hasText) return null;
+
   return (
-    <span
-      className="tooltip-wrapper"
-      style={{ position: 'relative', display: 'inline-block', marginLeft: 6 }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-    >
+    <span className="tooltip-wrapper" style={{ position: 'relative', display: 'inline-block', marginLeft: 6 }}>
       <button
+        ref={buttonRef}
         type="button"
-        aria-label={text}
+        aria-label={label ? `Show ${label}` : 'Show details'}
+        aria-expanded={open}
+        onMouseEnter={() => setHoverOpen(true)}
+        onMouseLeave={() => {
+          if (!pinned) setHoverOpen(false);
+        }}
+        onFocus={() => setHoverOpen(true)}
+        onBlur={() => {
+          if (!pinned) setHoverOpen(false);
+        }}
+        onClick={() => setPinned(prev => !prev)}
         style={{
           background: 'transparent',
           border: 'none',
@@ -122,31 +212,9 @@ const InfoTooltip: React.FC<{ text?: string }> = ({ text }) => {
           lineHeight: 1
         }}
       >
-        ℹ
+        {label || 'ℹ'}
       </button>
-      {open && (
-        <div
-          role="tooltip"
-          style={{
-            position: 'absolute',
-            zIndex: 20,
-            top: '100%',
-            left: 0,
-            marginTop: 4,
-            background: '#111827',
-            color: '#fff',
-            padding: '6px 8px',
-            borderRadius: 6,
-            boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
-            maxWidth: 340,
-            fontSize: 12,
-            lineHeight: 1.4,
-            whiteSpace: 'pre-wrap'
-          }}
-        >
-          {text}
-        </div>
-      )}
+      {overlay}
     </span>
   );
 };
@@ -750,7 +818,9 @@ const FormView: React.FC<FormViewProps> = ({
             </select>
             {(() => {
               const selected = opts.find(opt => opt.value === choiceValue);
-              return <InfoTooltip text={selected?.tooltip} />;
+              const fallbackLabel = resolveLabel(q, language);
+              const tooltipLabel = resolveLocalizedString(q.dataSource?.tooltipLabel, language, fallbackLabel);
+              return <InfoTooltip text={selected?.tooltip} label={tooltipLabel} />;
             })()}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
           </div>
@@ -781,19 +851,21 @@ const FormView: React.FC<FormViewProps> = ({
                 </label>
               ))}
             </div>
-                {(() => {
-                  const withTooltips = opts.filter(opt => opt.tooltip && selected.includes(opt.value));
-                  if (!withTooltips.length) return null;
-                  return (
-                    <div className="muted">
-                      {withTooltips.map(opt => (
-                        <span key={opt.value} style={{ display: 'inline-block', marginRight: 8 }}>
-                          {opt.label} <InfoTooltip text={opt.tooltip} />
-                        </span>
-                      ))}
-                    </div>
-                  );
-                })()}
+            {(() => {
+              const withTooltips = opts.filter(opt => opt.tooltip && selected.includes(opt.value));
+              if (!withTooltips.length) return null;
+              const fallbackLabel = resolveLabel(q, language);
+              const tooltipLabel = resolveLocalizedString(q.dataSource?.tooltipLabel, language, fallbackLabel);
+              return (
+                <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {withTooltips.map(opt => (
+                    <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {opt.label} <InfoTooltip text={opt.tooltip} label={tooltipLabel} />
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
           </div>
         );
@@ -1091,11 +1163,9 @@ const FormView: React.FC<FormViewProps> = ({
                             {(() => {
                               const selected = optsField.find(opt => opt.value === choiceVal);
                               if (!selected?.tooltip) return null;
-                              return (
-                                <div className="muted" title={selected.tooltip} aria-label={selected.tooltip}>
-                                  ℹ {selected.tooltip}
-                                </div>
-                              );
+                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
+                              return <InfoTooltip text={selected.tooltip} label={tooltipLabel} />;
                             })()}
                             {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                           </div>
@@ -1134,12 +1204,14 @@ const FormView: React.FC<FormViewProps> = ({
                             {(() => {
                               const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
                               if (!withTooltips.length) return null;
+                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
                               return (
-                                <div className="muted">
+                                <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                   {withTooltips.map(opt => (
-                                    <div key={opt.value} title={opt.tooltip} aria-label={opt.tooltip}>
-                                      ℹ {opt.label}: {opt.tooltip}
-                                    </div>
+                                    <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                      {opt.label} <InfoTooltip text={opt.tooltip} label={tooltipLabel} />
+                                    </span>
                                   ))}
                                 </div>
                               );
@@ -1357,11 +1429,13 @@ const FormView: React.FC<FormViewProps> = ({
                                         {(() => {
                                           const selected = optsField.find(opt => opt.value === choiceVal);
                                           if (!selected?.tooltip) return null;
-                                          return (
-                                            <div className="muted" title={selected.tooltip} aria-label={selected.tooltip}>
-                                              ℹ {selected.tooltip}
-                                            </div>
+                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                                          const tooltipLabel = resolveLocalizedString(
+                                            field.dataSource?.tooltipLabel,
+                                            language,
+                                            fallbackLabel
                                           );
+                                          return <InfoTooltip text={selected.tooltip} label={tooltipLabel} />;
                                         })()}
                                         {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                       </div>
@@ -1395,12 +1469,18 @@ const FormView: React.FC<FormViewProps> = ({
                                         {(() => {
                                           const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
                                           if (!withTooltips.length) return null;
+                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                                          const tooltipLabel = resolveLocalizedString(
+                                            field.dataSource?.tooltipLabel,
+                                            language,
+                                            fallbackLabel
+                                          );
                                           return (
-                                            <div className="muted">
+                                            <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                               {withTooltips.map(opt => (
-                                                <div key={opt.value} title={opt.tooltip} aria-label={opt.tooltip}>
-                                                  ℹ {opt.label}: {opt.tooltip}
-                                                </div>
+                                                <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                  {opt.label} <InfoTooltip text={opt.tooltip} label={tooltipLabel} />
+                                                </span>
                                               ))}
                                             </div>
                                           );

@@ -461,6 +461,22 @@ export class ConfigSheet {
     if (candidate.tooltipField) {
       config.tooltipField = candidate.tooltipField.toString();
     }
+    if (candidate.tooltipLabel !== undefined && candidate.tooltipLabel !== null) {
+      const tl = candidate.tooltipLabel;
+      if (typeof tl === 'string') {
+        config.tooltipLabel = tl;
+      } else if (typeof tl === 'object') {
+        const localized: any = {};
+        Object.entries(tl).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) {
+            localized[k] = v.toString();
+          }
+        });
+        if (Object.keys(localized).length) {
+          config.tooltipLabel = localized;
+        }
+      }
+    }
     return config;
   }
 
