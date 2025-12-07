@@ -18,7 +18,7 @@ import {
   WebQuestionDefinition,
   WebFormSubmission
 } from '../types';
-import { BootstrapContext, SubmissionPayload, submit, triggerFollowup, ListResponse, ListItem } from './api';
+import { BootstrapContext, SubmissionPayload, submit, triggerFollowup, ListResponse, ListItem, fetchBatch } from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
 import FollowupView from './components/FollowupView';
@@ -68,6 +68,55 @@ const resolveSubgroupKey = (sub?: { id?: string; label?: any }): string => {
   if (sub.id) return sub.id;
   if (typeof sub.label === 'string') return sub.label;
   return sub.label?.en || sub.label?.fr || sub.label?.nl || '';
+};
+
+const clearAutoIncrementFields = (
+  definition: BootstrapContext['definition'],
+  values: Record<string, FieldValue>,
+  lineItems: LineItemState
+): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
+  const nextValues = { ...values };
+  const nextLineItems: LineItemState = { ...lineItems };
+
+  definition.questions.forEach(q => {
+    if (q.type === 'TEXT' && q.autoIncrement) {
+      nextValues[q.id] = '';
+    }
+    if (q.type !== 'LINE_ITEM_GROUP') return;
+
+    const autoFields = (q.lineItemConfig?.fields || []).filter(f => f.autoIncrement).map(f => f.id);
+    const rows = nextLineItems[q.id] || [];
+    if (autoFields.length && rows.length) {
+      nextLineItems[q.id] = rows.map(row => {
+        const vals = { ...row.values };
+        autoFields.forEach(fid => {
+          vals[fid] = '';
+        });
+        return { ...row, values: vals };
+      });
+    }
+
+    const subGroups = q.lineItemConfig?.subGroups || [];
+    subGroups.forEach(sub => {
+      const subKey = resolveSubgroupKey(sub);
+      const autoSubFields = (sub.fields || []).filter(f => f.autoIncrement).map(f => f.id);
+      if (!autoSubFields.length) return;
+      rows.forEach(row => {
+        const childKey = buildSubgroupKey(q.id, row.id, subKey);
+        const childRows = nextLineItems[childKey];
+        if (!childRows || !childRows.length) return;
+        nextLineItems[childKey] = childRows.map(child => {
+          const vals = { ...child.values };
+          autoSubFields.forEach(fid => {
+            vals[fid] = '';
+          });
+          return { ...child, values: vals };
+        });
+      });
+    });
+  });
+
+  return { values: nextValues, lineItems: nextLineItems };
 };
 
 const TooltipIcon: React.FC<{
@@ -517,7 +566,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
     return mapped.lineItems;
   });
-  const [view, setView] = useState<View>('form');
+  const [view, setView] = useState<View>('list');
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<string | null>(null);
@@ -539,7 +588,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       : null
   );
   const [followupRunning, setFollowupRunning] = useState<string | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [summaryActionsOpen, setSummaryActionsOpen] = useState<boolean>(false);
+  const [headerActionsOpen, setHeaderActionsOpen] = useState<boolean>(false);
   const [debugEnabled] = useState<boolean>(() => detectDebug());
   const logEvent = useCallback(
     (event: string, payload?: Record<string, unknown>) => {
@@ -561,6 +612,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setListCache({ response: null, records: {} });
     setListRefreshToken(token => token + 1);
   };
+
+  const handleGlobalRefresh = useCallback(async () => {
+    invalidateListCache();
+    if (!selectedRecordId) return;
+    try {
+      const batch = await fetchBatch(formKey, undefined, undefined, undefined, true, [selectedRecordId]);
+      const refreshed = batch.records?.[selectedRecordId];
+      if (refreshed) {
+        const normalized = normalizeRecordValues(definition, refreshed.values || {});
+        const initialLineItems = buildInitialLineItems(definition, normalized);
+        const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+        setValues(mapped.values);
+        setLineItems(mapped.lineItems);
+        setSelectedRecordSnapshot(refreshed);
+        setLastSubmissionMeta({
+          id: refreshed.id,
+          createdAt: refreshed.createdAt,
+          updatedAt: refreshed.updatedAt,
+          status: refreshed.status || null
+        });
+      }
+    } catch (err: any) {
+      setStatus(err?.message || 'Refresh failed');
+      setStatusLevel('error');
+    }
+  }, [definition, formKey, invalidateListCache, selectedRecordId]);
 
   const loadOptionsForField = useCallback(
     (field: any, groupId?: string) => {
@@ -606,6 +683,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     logEvent('status.cleared');
   }, [logEvent]);
 
+  useEffect(() => {
+    const updateMobile = () => {
+      if (typeof window === 'undefined') return;
+      const widthBased = window.innerWidth <= 900;
+      const uaBased = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      setIsMobile(widthBased || uaBased);
+    };
+    updateMobile();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', updateMobile);
+      return () => window.removeEventListener('resize', updateMobile);
+    }
+    return undefined;
+  }, []);
+
   const handleSubmitAnother = useCallback(() => {
     const normalized = normalizeRecordValues(definition);
     const initialLineItems = buildInitialLineItems(definition);
@@ -624,7 +716,35 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     logEvent('form.reset', { reason: 'submitAnother' });
   }, [definition, logEvent]);
 
+  const handleGoHome = useCallback(() => {
+    setView('list');
+    setStatus(null);
+    setStatusLevel(null);
+  }, []);
+
+  const handleDuplicateCurrent = useCallback(() => {
+    // Preserve current values/line items but clear record context so the next submit creates a new record.
+    const cleared = clearAutoIncrementFields(definition, values, lineItems);
+    setValues(cleared.values);
+    setLineItems(cleared.lineItems);
+    setSelectedRecordId('');
+    setSelectedRecordSnapshot(null);
+    setLastSubmissionMeta(null);
+    setErrors({});
+    setStatus(null);
+    setStatusLevel(null);
+    setFollowupMessage(null);
+    setView('form');
+  }, [definition, values, lineItems]);
+
   const summaryRecordId = lastSubmissionMeta?.id || selectedRecordId || '';
+  const summaryTitle =
+    (() => {
+      const candidate = definition.questions.find(q => q.type !== 'LINE_ITEM_GROUP' && values[q.id]);
+      const raw = candidate ? values[candidate.id] : null;
+      if (Array.isArray(raw)) return (raw[0] as any)?.toString?.() || definition.title || 'Submission';
+      return (raw as any)?.toString?.() || definition.title || 'Submission';
+    })() || definition.title || 'Submission';
 
   const formatDateTime = (value?: string | null) => {
     if (!value) return '—';
@@ -636,28 +756,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       return value;
     }
   };
-
-  const handleCopyRecordId = useCallback(async () => {
-    if (!summaryRecordId) return;
-    try {
-      if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(summaryRecordId);
-        setCopyFeedback('Copied');
-        logEvent('record.copy', { recordId: summaryRecordId });
-      } else {
-        setCopyFeedback('Press Cmd/Ctrl+C to copy');
-      }
-    } catch (_) {
-      setCopyFeedback('Unable to copy');
-    }
-    const clear = () => setCopyFeedback(null);
-    if (typeof window !== 'undefined' && window?.setTimeout) {
-      window.setTimeout(clear, 2000);
-    } else {
-      setTimeout(clear, 2000);
-    }
-  }, [summaryRecordId, logEvent]);
-
 
   useEffect(() => {
     if (record?.values) {
@@ -987,6 +1085,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setSubmitting(true);
     try {
       const payload = await buildPayload();
+      const payloadValues = (payload as any).values as Record<string, any> | undefined;
+      if (payloadValues) {
+        const fileUpdates: Record<string, any> = {};
+        definition.questions
+          .filter(q => q.type === 'FILE_UPLOAD')
+          .forEach(q => {
+            if (payloadValues[q.id] !== undefined) {
+              fileUpdates[q.id] = payloadValues[q.id];
+            }
+          });
+        if (Object.keys(fileUpdates).length) {
+          setValues(prev => ({ ...prev, ...fileUpdates }));
+          setSelectedRecordSnapshot(prev =>
+            prev ? { ...prev, values: { ...(prev.values || {}), ...fileUpdates } } : prev
+          );
+        }
+      }
       const res = await submit(payload);
       const message = res.message || (res.success ? 'Submitted' : 'Submit failed');
       setStatus(message);
@@ -1005,6 +1120,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         updatedAt: res.meta?.updatedAt || prev?.updatedAt,
         status: prev?.status || null
       }));
+
+      // Refresh from saved record to surface server-side autoIncrement values immediately
+      if (res.meta?.id) {
+        try {
+          const batch = await fetchBatch(formKey, undefined, undefined, undefined, true, [res.meta.id]);
+          const savedRecord = batch.records?.[res.meta.id];
+          if (savedRecord) {
+            const normalized = normalizeRecordValues(definition, savedRecord.values || {});
+            const initialLineItems = buildInitialLineItems(definition, normalized);
+            const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+            setValues(mapped.values);
+            setLineItems(mapped.lineItems);
+            setSelectedRecordSnapshot(savedRecord);
+            setLastSubmissionMeta({
+              id: savedRecord.id,
+              createdAt: savedRecord.createdAt,
+              updatedAt: savedRecord.updatedAt,
+              status: savedRecord.status || null
+            });
+          }
+        } catch (err: any) {
+          logEvent('submit.fetchRecord.error', { message: err?.message || err, recordId: res.meta.id });
+        }
+      }
       setView('summary');
       invalidateListCache();
     } catch (err: any) {
@@ -1095,8 +1234,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     const fieldColumns = (group.lineItemConfig?.fields || [])
       .filter(field => field.id !== 'ITEM_FILTER' && field.id !== selector?.id)
       .map(field => ({
-        id: field.id,
-        label: resolveFieldLabel(field, language, field.id),
+      id: field.id,
+      label: resolveFieldLabel(field, language, field.id),
         getValue: (row: LineItemRowState) => row.values[field.id],
         tooltipKey: optionKey(field.id, group.id)
       }));
@@ -1132,15 +1271,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             const parentLabel = parentAnchorId
               ? formatFieldValue(parent.values[parentAnchorId])
               : parent.id;
-            return (
+    return (
               <div key={key} style={{ marginTop: 8 }}>
                 <div className="muted" style={{ marginBottom: 4, fontWeight: 600, wordBreak: 'break-word' }}>
                   {parentAnchorLabel}: {parentLabel}
                 </div>
-                <div className="line-summary-table">
+      <div className="line-summary-table">
                   <table style={{ tableLayout: 'fixed', width: '100%' }}>
-                    <thead>
-                      <tr>
+          <thead>
+            <tr>
                         {subColumns.map(col => (
                           <th
                             key={col.id}
@@ -1231,27 +1370,148 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   };
 
   return (
-    <div className="page">
-      <header>
-        <h1>{definition.title || 'Form'}</h1>
-        <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>Build: {BUILD_MARKER}</div>
-        <div className="controls">
-          <label>
+    <div className="page" style={isMobile ? { fontSize: '29px', lineHeight: 1.7 } : undefined}>
+      <header
+        className="app-shell-header"
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          background: '#fff',
+          padding: '14px 16px',
+          marginBottom: 12,
+          borderRadius: 12,
+          border: '1px solid #e5e7eb',
+          boxShadow: '0 10px 30px rgba(15,23,42,0.08)'
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+          justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: isMobile ? 32 : 24, fontWeight: 800 }}>{definition.title || 'Form'}</div>
+            <div className="muted" style={{ fontSize: isMobile ? 16 : 14, marginTop: 2 }}>
+              Build: {BUILD_MARKER}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label htmlFor="language-select" className="muted" style={{ fontWeight: 600 }}>
             Language:
-            <select value={language} onChange={e => setLanguage(normalizeLanguage(e.target.value))}>
+            </label>
+            <select
+              id="language-select"
+              value={language}
+              onChange={e => setLanguage(normalizeLanguage(e.target.value))}
+            >
               {(definition.languages || ['EN']).map(lang => (
                 <option key={lang} value={lang}>
                   {lang}
                 </option>
               ))}
             </select>
-          </label>
-          <div className="tabs">
-            {(['form', 'summary', 'list', 'followup'] as View[]).map(v => (
-              <button key={v} className={view === v ? 'active' : ''} type="button" onClick={() => setView(v)}>
-                {v.toUpperCase()}
+          </div>
+        </div>
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setHeaderActionsOpen(open => !open)}
+              aria-label="Menu"
+              style={{
+                border: '1px solid #475569',
+                background: '#1e293b',
+                color: '#fff',
+                borderRadius: 12,
+                padding: isMobile ? '16px 18px' : '13px 15px',
+                cursor: 'pointer',
+                fontWeight: 800,
+                fontSize: isMobile ? 22 : 19,
+                minWidth: isMobile ? 70 : 58
+              }}
+            >
+              ☰
               </button>
-            ))}
+            {headerActionsOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: '100%',
+                  marginTop: 8,
+                  background: '#fff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 12,
+                  boxShadow: '0 14px 36px rgba(15,23,42,0.16)',
+                  padding: 10,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  minWidth: 180,
+                  zIndex: 8
+                }}
+              >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHeaderActionsOpen(false);
+                      handleGlobalRefresh();
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: '1px solid #e5e7eb',
+                      background: '#f8fafc',
+                      fontWeight: 700,
+                      textAlign: 'left',
+                      color: '#0f172a'
+                    }}
+                  >
+                    ⟳ Refresh
+                  </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHeaderActionsOpen(false);
+                    handleGoHome();
+                  }}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1px solid #e5e7eb',
+                    background: '#f8fafc',
+                  fontWeight: 700,
+                  textAlign: 'left',
+                  color: '#0f172a'
+                  }}
+                >
+                  Home
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHeaderActionsOpen(false);
+                    handleSubmitAnother();
+                  }}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1px solid #1d4ed8',
+                    background: '#2563eb',
+                    color: '#fff',
+                    fontWeight: 700,
+                  textAlign: 'left'
+                  }}
+                >
+                  New
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -1266,6 +1526,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             lineItems={lineItems}
             setLineItems={setLineItems}
             onSubmit={handleSubmit}
+            onBack={() => {
+              const target = selectedRecordId || selectedRecordSnapshot ? 'summary' : 'list';
+              setView(target);
+            }}
             submitting={submitting}
             errors={errors}
             setErrors={setErrors}
@@ -1297,10 +1561,88 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
       {view === 'summary' && (
         <div className="card">
-          <h3>Submission summary</h3>
-          <p className="muted" style={{ marginTop: -4 }}>
-            Review the captured values and optionally jump to follow-up actions or start a fresh entry.
-          </p>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              alignItems: 'flex-start',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div>
+              <div className="muted">Summary</div>
+              <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>{summaryTitle}</div>
+              <div className="muted" style={{ marginTop: 6 }}>
+                Updated {formatDateTime(lastSubmissionMeta?.updatedAt)} · Status {lastSubmissionMeta?.status || '—'}
+              </div>
+            </div>
+            <div style={{ position: 'relative' }}>
+              {isMobile ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setSummaryActionsOpen(open => !open)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: '1px solid #1d4ed8',
+                      background: '#2563eb',
+                      color: '#fff',
+                      fontWeight: 700
+                    }}
+                  >
+                    ☰ Actions
+                  </button>
+                  {summaryActionsOpen && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: 46,
+                        background: '#fff',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 12,
+                        boxShadow: '0 12px 30px rgba(15,23,42,0.12)',
+                        padding: 10,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        zIndex: 5,
+                        minWidth: 150
+                      }}
+                    >
+                      <button type="button" onClick={() => { setSummaryActionsOpen(false); setView('form'); }}>
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSummaryActionsOpen(false); setView('followup'); }}
+                        disabled={!summaryRecordId}
+                      >
+                        Follow-up
+                      </button>
+                      <button type="button" onClick={() => { setSummaryActionsOpen(false); handleDuplicateCurrent(); }}>
+                        Create copy
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => setView('form')}>
+                    Edit
+                  </button>
+                  <button type="button" onClick={() => setView('followup')} disabled={!summaryRecordId}>
+                    Follow-up
+                  </button>
+                  <button type="button" onClick={handleDuplicateCurrent}>
+                    Create copy
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
           <div
             style={{
               display: 'grid',
@@ -1309,22 +1651,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               margin: '16px 0'
             }}
           >
-            <div>
-              <div className="muted">Record ID</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, fontWeight: 600 }}>
-                {summaryRecordId || 'Pending'}
-                {summaryRecordId && (
-                  <button type="button" className="secondary" onClick={handleCopyRecordId}>
-                    Copy
-                  </button>
-                )}
-              </div>
-              {copyFeedback && (
-                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                  {copyFeedback}
-                </div>
-              )}
-            </div>
             <div>
               <div className="muted">Created</div>
               <div style={{ marginTop: 4, fontWeight: 600 }}>{formatDateTime(lastSubmissionMeta?.createdAt)}</div>
@@ -1337,14 +1663,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               <div className="muted">Status</div>
               <div style={{ marginTop: 4, fontWeight: 600 }}>{lastSubmissionMeta?.status || '—'}</div>
             </div>
+            <div>
+              <div className="muted">Language</div>
+              <div style={{ marginTop: 4, fontWeight: 600 }}>{(language || 'en').toString().toUpperCase()}</div>
           </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-            <button type="button" onClick={() => setView('followup')} disabled={!summaryRecordId}>
-              Go to follow-up
-            </button>
-            <button type="button" className="secondary" onClick={handleSubmitAnother}>
-              Submit another
-            </button>
           </div>
           <hr />
           {definition.questions.map(q => {
@@ -1353,6 +1675,48 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
                 <div key={q.id} className="field">
                   <div className="muted">{resolveLabel(q, language)}</div>
                   {renderLineSummaryTable(q)}
+                </div>
+              );
+            }
+            if (q.type === 'FILE_UPLOAD') {
+              const raw = values[q.id] ?? currentRecord?.values?.[q.id];
+              const files = Array.isArray(raw) ? raw : raw ? [raw] : [];
+              const items = files
+                .map(f => {
+                  if (typeof f === 'string') {
+                    const trimmed = f.trim();
+                    if (!trimmed) return null;
+                    return { url: trimmed, name: trimmed.split('/').pop() || 'File' };
+                  }
+                  if (f && typeof f === 'object') {
+                    const any = f as any;
+                    const url = (any.url || any.dataUrl || any.link || '').toString().trim();
+                    const name = any.name || (url ? url.split('/').pop() : '') || 'File';
+                    return url ? { url, name } : null;
+                  }
+                  return null;
+                })
+                .filter(Boolean) as { url: string; name: string }[];
+              return (
+                <div key={q.id} className="field">
+                  <div className="muted">{resolveLabel(q, language)}</div>
+                  {items.length ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {items.map((file, idx) => (
+                        <a
+                          key={`${file.url}-${idx}`}
+                          href={file.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#2563eb', textDecoration: 'underline', wordBreak: 'break-all' }}
+                        >
+                          {file.name}
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="muted">No response</div>
+                  )}
                 </div>
               );
             }
@@ -1414,6 +1778,25 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       )}
 
       {view === 'followup' && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setView('summary')}
+              style={{
+                border: '1px solid #fecdd3',
+                background: '#fff7f7',
+                color: '#b42318',
+                borderRadius: 10,
+                padding: '10px 12px',
+                cursor: 'pointer',
+                fontWeight: 700
+              }}
+            >
+              ← Back to summary
+            </button>
+            <div className="muted" style={{ fontWeight: 600 }}>Follow-up</div>
+          </div>
         <FollowupView
           recordId={selectedRecordId}
           onRun={handleRunFollowup}
@@ -1423,7 +1806,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           recordStatus={currentRecord?.status || lastSubmissionMeta?.status || null}
           lastUpdated={currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt || null}
           pdfUrl={currentRecord?.pdfUrl}
+            isMobile={isMobile}
         />
+        </div>
       )}
     </div>
   );

@@ -46,13 +46,17 @@ const ListView: React.FC<ListViewProps> = ({
       const mergedRecords: Record<string, WebFormSubmission> = {};
       let lastResponse: ListResponse | null = null;
       do {
-        const res: BatchResponse = await fetchBatch(formKey, undefined, pageSize, token, true);
-        lastResponse = res.list || null;
-        const items = res.list?.items || [];
+        const res: BatchResponse | null = await fetchBatch(formKey, undefined, pageSize, token, true);
+        if (!res || !res.list) {
+          setError('Failed to load list');
+          break;
+        }
+        lastResponse = res.list;
+        const items = res.list.items || [];
         aggregated = aggregated.concat(items);
         Object.assign(mergedRecords, res.records || {});
-        token = res.list?.nextPageToken;
-        if (!token || aggregated.length >= (res.list?.totalCount || 200)) {
+        token = res.list.nextPageToken;
+        if (!token || aggregated.length >= (res.list.totalCount || 200)) {
           token = undefined;
         }
       } while (token);

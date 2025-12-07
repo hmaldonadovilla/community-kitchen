@@ -37,13 +37,13 @@ function createTooltipIcon(text: string, label?: string): HTMLElement {
   overlay.style.border = '1px solid #e5e7eb';
   overlay.style.borderRadius = '12px';
   overlay.style.boxShadow = '0 16px 40px rgba(15,23,42,0.16)';
-  overlay.style.padding = '14px';
-  overlay.style.maxWidth = '460px';
-  overlay.style.minWidth = '260px';
-  overlay.style.maxHeight = '360px';
+  overlay.style.padding = '18px';
+  overlay.style.maxWidth = '90vw';
+  overlay.style.minWidth = '70vw';
+  overlay.style.maxHeight = '80vh';
   overlay.style.overflowY = 'auto';
-  overlay.style.fontSize = '14px';
-  overlay.style.lineHeight = '1.6';
+  overlay.style.fontSize = '15px';
+  overlay.style.lineHeight = '1.7';
   overlay.style.whiteSpace = 'pre-wrap';
   overlay.style.display = 'none';
   overlay.style.textAlign = 'left';
@@ -142,11 +142,14 @@ export function renderSummaryView(opts: SummaryViewOptions): void {
 
   definition.questions.forEach(q => {
     const block = document.createElement('div');
-    block.style.padding = '8px 0';
+    block.style.padding = '10px 0';
     const label = document.createElement('div');
     label.style.fontWeight = '800';
+    label.style.fontSize = '18px';
     label.textContent = q.label[langKey as keyof typeof q.label] || q.label.en || q.id;
     const value = document.createElement('div');
+    value.style.fontSize = '18px';
+    value.style.lineHeight = '1.6';
     if (q.type === 'LINE_ITEM_GROUP') {
       const raw = (payload as any)[`${q.id}_json`] || (payload as any)[q.id];
       const rows = parseLineItems(raw);

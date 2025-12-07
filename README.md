@@ -15,7 +15,8 @@ A Google Apps Script project to digitize AFSCA compliance documentation for a co
 - **Derived TEXT Maps**: TEXT fields (and line-item fields) can be readonly value-maps that derive their content from another field via `optionMap`.
 - **Nested Line Items**: Line-item groups support child subgroups (e.g., Dish headers with Ingredients sub-rows) with option filters, selection effects, and totals.
 - **Consolidated Outputs**: Summary view and PDF placeholders support consolidated aggregations, including subgroup paths (e.g., `{{CONSOLIDATED(MP_DISHES.INGREDIENTS.ALLERGEN)}}`). `ITEM_FILTER` is hidden in summary.
-- **Post-submit Console**: The React summary screen now surfaces record metadata (ID, timestamps, status), provides a one-click copy + “Go to follow-up” shortcut, and keeps a “Submit another” loop for operators.
+- **Unified Shell & Navigation**: Sticky header across List, Summary, Form, and Follow-up with a home button (always returns to List on refresh) and top-right language selector for mobile-friendly navigation.
+- **Post-submit Console**: The React summary screen now shows a modern summary header (status/timestamps only, no exposed IDs), quick actions (Edit, Follow-up, Create copy, New blank), and keeps a “Submit another” loop for operators.
 - **Drag & Drop Uploads**: React forms ship with keyboard-accessible dropzones that enforce file caps, surface total size + remaining slots, and expose per-file remove/clear controls with live announcements.
 - **React Shell Only**: The published web app renders the React UI automatically; the legacy iframe template has been removed.
 

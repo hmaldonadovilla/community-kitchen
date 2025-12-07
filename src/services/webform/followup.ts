@@ -437,6 +437,12 @@ export class FollowupService {
         continue;
       }
       const table = element.asTable();
+      const subDirective = this.extractSubGroupDirective(table);
+      if (subDirective) {
+        const inserted = this.renderSubGroupTables(body, childIndex, table, subDirective, groupLookup, lineItemRows);
+        childIndex += inserted;
+        continue;
+      }
       const directive = this.extractTableGroupDirective(table);
       if (directive) {
         const inserted = this.renderGroupedLineItemTables(
@@ -536,6 +542,116 @@ export class FollowupService {
       groupId: match[1].toUpperCase(),
       fieldId: match[2].toUpperCase()
     };
+  }
+
+  private extractSubGroupDirective(
+    table: GoogleAppsScript.Document.Table
+  ): { groupId: string; subGroupId: string } | null {
+    const text = table.getText && table.getText();
+    if (!text) return null;
+    const match = text.match(/{{([A-Z0-9_]+)\.([A-Z0-9_]+)\.[A-Z0-9_]+}}/i);
+    if (!match) return null;
+    return {
+      groupId: match[1].toUpperCase(),
+      subGroupId: match[2].toUpperCase()
+    };
+  }
+
+  private renderSubGroupTables(
+    body: GoogleAppsScript.Document.Body,
+    childIndex: number,
+    templateTable: GoogleAppsScript.Document.Table,
+    directive: { groupId: string; subGroupId: string },
+    groupLookup: Record<string, QuestionConfig>,
+    lineItemRows: Record<string, any[]>
+  ): number {
+    const group = groupLookup[directive.groupId];
+    if (!group || !group.lineItemConfig?.subGroups?.length) {
+      body.removeChild(templateTable);
+      return 0;
+    }
+    const subConfig = group.lineItemConfig.subGroups.find(sub => {
+      const key = resolveSubgroupKey(sub as SubGroupConfig);
+      const normalizedKey = (key || '').toUpperCase();
+      const slugKey = this.slugifyPlaceholder(key || '');
+      return normalizedKey === directive.subGroupId || slugKey === directive.subGroupId;
+    });
+    if (!subConfig) {
+      body.removeChild(templateTable);
+      return 0;
+    }
+    const subKey = resolveSubgroupKey(subConfig);
+    const parentRows = lineItemRows[group.id] || [];
+    const preserved = templateTable.copy();
+    body.removeChild(templateTable);
+    let inserted = 0;
+
+    parentRows.forEach((parentRow, idx) => {
+      const children = Array.isArray((parentRow || {})[subKey]) ? (parentRow as any)[subKey] : [];
+      if (!children.length) return;
+      const newTable = body.insertTable(childIndex + inserted, preserved.copy());
+
+      let r = 0;
+      while (r < newTable.getNumRows()) {
+        const row = newTable.getRow(r);
+        const rowTextParts: string[] = [];
+        for (let c = 0; c < row.getNumCells(); c++) {
+          rowTextParts.push(row.getCell(c).getText() || '');
+        }
+        const placeholders = this.extractLineItemPlaceholders(rowTextParts.join(' '));
+        const hasSubPlaceholders = placeholders.some(
+          p => p.subGroupId && p.subGroupId.toUpperCase() === directive.subGroupId
+        );
+
+        if (!hasSubPlaceholders) {
+          // Parent-level row: replace placeholders once with parent data, keep formatting
+          for (let c = 0; c < row.getNumCells(); c++) {
+            const cell = row.getCell(c);
+            const text = cell.getText();
+            const filled = this.replaceLineItemPlaceholders(text, group, parentRow || {}, {
+              subGroup: undefined,
+              subGroupToken: undefined
+            });
+            cell.clear();
+            cell.appendParagraph(filled || '');
+          }
+          r += 1;
+          continue;
+        }
+
+        if (!children.length) {
+          this.clearTableRow(row);
+          r += 1;
+          continue;
+        }
+
+        // Duplicate this row for each child using a pristine template copy
+        const templateRow = row.copy().asTableRow();
+        const insertAt = r;
+        newTable.removeRow(r);
+        children.forEach((child: any, childIdx: number) => {
+          const dataRow = { __parent: parentRow, ...(parentRow || {}), ...(child || {}) };
+          const targetRow = newTable.insertTableRow(insertAt + childIdx, templateRow.copy().asTableRow());
+          for (let c = 0; c < targetRow.getNumCells(); c++) {
+            const cell = targetRow.getCell(c);
+            const text = cell.getText();
+            const filled = this.replaceLineItemPlaceholders(text, group, dataRow, {
+              subGroup: subConfig,
+              subGroupToken: directive.subGroupId
+            });
+            while (cell.getNumChildren() > 0) {
+              cell.removeChild(cell.getChild(0));
+            }
+            cell.appendParagraph(filled || '');
+          }
+        });
+        // Skip past inserted rows
+        r = insertAt + children.length;
+      }
+      inserted += 1;
+    });
+
+    return inserted;
   }
 
   private renderTableRows(

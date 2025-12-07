@@ -109,10 +109,11 @@ const InfoTooltip: React.FC<{ text?: string; label?: string }> = ({ text, label 
   useLayoutEffect(() => {
     if (!open || !buttonRef.current || !text) return;
     const rect = buttonRef.current.getBoundingClientRect();
-    const maxWidth = 460;
-    const margin = 8;
-    const left = Math.min(Math.max(rect.left, margin), window.innerWidth - maxWidth - margin);
-    const top = Math.min(rect.bottom + margin, window.innerHeight - margin);
+    const maxWidth = Math.min(960, window.innerWidth - 32);
+    const maxHeight = Math.min(800, window.innerHeight - 48);
+    const margin = 12;
+    const left = Math.min(Math.max(rect.left - 12, margin), window.innerWidth - maxWidth - margin);
+    const top = Math.min(rect.bottom + margin, window.innerHeight - margin - 24);
     setPosition({ top, left });
   }, [open, text]);
 
@@ -142,13 +143,13 @@ const InfoTooltip: React.FC<{ text?: string; label?: string }> = ({ text, label 
               border: '1px solid #e5e7eb',
               borderRadius: 12,
               boxShadow: '0 16px 40px rgba(15,23,42,0.16)',
-              padding: 14,
-              maxWidth: 460,
-              minWidth: 260,
-              maxHeight: 360,
+              padding: 18,
+              maxWidth: Math.min(960, window.innerWidth - 32),
+              minWidth: Math.min(720, window.innerWidth - 32),
+              maxHeight: Math.min(800, window.innerHeight - 48),
               overflowY: 'auto',
-              fontSize: 14,
-              lineHeight: 1.6,
+              fontSize: 15,
+              lineHeight: 1.7,
               whiteSpace: 'pre-wrap'
             }}
             onMouseEnter={() => setHoverOpen(true)}
@@ -284,6 +285,7 @@ interface FormViewProps {
   lineItems: LineItemState;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
   onSubmit: () => Promise<void>;
+  onBack: () => void;
   submitting: boolean;
   errors: FormErrors;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
@@ -418,6 +420,7 @@ const FormView: React.FC<FormViewProps> = ({
   lineItems,
   setLineItems,
   onSubmit,
+  onBack,
   submitting,
   errors,
   setErrors,
@@ -1088,9 +1091,8 @@ const FormView: React.FC<FormViewProps> = ({
             {files.length ? (
               <button
                 type="button"
-                className="secondary"
                 onClick={() => clearFiles(q)}
-                style={{ marginBottom: 12 }}
+                style={{ ...buttonStyles.secondary, marginBottom: 12 }}
               >
                 Clear files
               </button>
@@ -1168,16 +1170,69 @@ const FormView: React.FC<FormViewProps> = ({
         };
 
         const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: lineItems[q.id] || [] }, language);
+        const parentRows = lineItems[q.id] || [];
+        const parentCount = parentRows.length;
+        const selectorControl =
+          selectorCfg && selectorOptions.length ? (
+            <div
+              className="section-selector"
+              data-field-path={selectorCfg.id}
+              style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}
+            >
+              <label style={{ fontWeight: 600 }}>
+                {resolveSelectorLabel(selectorCfg, language)}
+                {selectorCfg.required && <RequiredStar />}
+              </label>
+              <select
+                value={selectorValue}
+                onChange={e => {
+                  const nextVal = e.target.value;
+                  setValues(prev => {
+                    if (prev[selectorCfg.id] === nextVal) return prev;
+                    return { ...prev, [selectorCfg.id]: nextVal };
+                  });
+                }}
+              >
+                <option value="">Select…</option>
+                {selectorOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null;
         return (
           <div key={q.id} className="card" data-field-path={q.id}>
-            <h3>{resolveLabel(q, language)}</h3>
-            {(lineItems[q.id] || []).map(row => {
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <h3 style={{ margin: 0 }}>{resolveLabel(q, language)}</h3>
+              <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
+                {parentCount} item{parentCount === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
+                {selectorControl}
+                {renderAddButton()}
+              </div>
+            </div>
+            {parentRows.map((row, rowIdx) => {
               const groupCtx: VisibilityContext = {
                 getValue: fid => values[fid],
                 getLineValue: (_rowId, fid) => row.values[fid]
               };
               return (
-                <div key={row.id} className="line-item-row">
+                <div
+                  key={row.id}
+                  className="line-item-row"
+                  style={{
+                    background: rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                    padding: 12,
+                    borderRadius: 10,
+                    border: '1px solid #e5e7eb',
+                    marginBottom: 10
+                  }}
+                >
                   {(q.lineItemConfig?.fields || []).map(field => {
                     ensureLineOptions(q.id, field);
                     const optionSetField: OptionSet =
@@ -1314,7 +1369,7 @@ const FormView: React.FC<FormViewProps> = ({
                     }
                   })}
                   <div className="line-actions">
-                    <button type="button" className="secondary" onClick={() => removeLineRow(q.id, row.id)}>
+                    <button type="button" onClick={() => removeLineRow(q.id, row.id)} style={buttonStyles.negative}>
                       Remove
                     </button>
                   </div>
@@ -1431,8 +1486,12 @@ const FormView: React.FC<FormViewProps> = ({
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
                               {subSelectorCfg && (
-                                <div className="section-selector" data-field-path={subSelectorCfg.id} style={{ minWidth: 200 }}>
-                                  <label>
+                                <div
+                                  className="section-selector"
+                                  data-field-path={subSelectorCfg.id}
+                                  style={{ minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4 }}
+                                >
+                                  <label style={{ fontWeight: 600 }}>
                                     {resolveSelectorLabel(subSelectorCfg, language)}
                                     {subSelectorCfg.required && <RequiredStar />}
                                   </label>
@@ -1460,15 +1519,15 @@ const FormView: React.FC<FormViewProps> = ({
                             <div style={{ marginLeft: 'auto' }}>
                               <button
                                 type="button"
-                                className="secondary"
-                              onClick={() =>
-                                setCollapsedSubgroups(prev => ({
-                                  ...prev,
-                                  [subKey]: !(prev[subKey] ?? true)
-                                }))
-                              }
+                                onClick={() =>
+                                  setCollapsedSubgroups(prev => ({
+                                    ...prev,
+                                    [subKey]: !(prev[subKey] ?? true)
+                                  }))
+                                }
                                 aria-expanded={!collapsed}
                                 aria-controls={`${subKey}-body`}
+                                style={buttonStyles.secondary}
                               >
                                 {collapsed
                                   ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
@@ -1480,7 +1539,7 @@ const FormView: React.FC<FormViewProps> = ({
                         {collapsed ? null : (
                         <div id={`${subKey}-body`}>
                         <div style={{ marginTop: 8 }}>
-                        {orderedSubRows.map(subRow => {
+                        {orderedSubRows.map((subRow, subIdx) => {
                           const subCtx: VisibilityContext = {
                             getValue: fid => values[fid],
                             getLineValue: (_rowId, fid) => subRow.values[fid]
@@ -1492,7 +1551,17 @@ const FormView: React.FC<FormViewProps> = ({
                           };
                           const targetGroup = subGroupDef;
                           return (
-                            <div key={subRow.id} className="line-item-row">
+                            <div
+                              key={subRow.id}
+                              className="line-item-row"
+                              style={{
+                                background: subIdx % 2 === 0 ? '#ffffff' : '#f1f5f9',
+                                padding: 12,
+                                borderRadius: 10,
+                                border: '1px solid #e5e7eb',
+                                marginBottom: 10
+                              }}
+                            >
                               {!subRow.autoGenerated && (
                                 <div style={{ marginBottom: 8 }}>
                                   <span className="pill" style={{ background: '#eef2ff', color: '#312e81' }}>
@@ -1659,14 +1728,19 @@ const FormView: React.FC<FormViewProps> = ({
                                 }
                               })}
                               <div className="line-actions">
-                                <button type="button" className="secondary" onClick={() => removeLineRow(subKey, subRow.id)}>
+                                <button
+                                  type="button"
+                                  onClick={() => removeLineRow(subKey, subRow.id)}
+                                  style={buttonStyles.negative}
+                                >
                                   Remove
                                 </button>
                               </div>
                             </div>
                           );
                         })}
-                          <div
+                        {orderedSubRows.length > 0 && (
+                        <div
                             ref={el => {
                               subgroupBottomRefs.current[subKey] = el;
                             }}
@@ -1724,13 +1798,13 @@ const FormView: React.FC<FormViewProps> = ({
                               <div style={{ marginLeft: 'auto'}}>
                                 <button
                                   type="button"
-                                  className="secondary"
                                   onClick={() =>
                                     setCollapsedSubgroups(prev => ({
                                       ...prev,
                                       [subKey]: !(prev[subKey] ?? true)
                                     }))
                                   }
+                                  style={buttonStyles.secondary}
                                   aria-expanded={!collapsed}
                                   aria-controls={`${subKey}-body`}
                                 >
@@ -1740,7 +1814,8 @@ const FormView: React.FC<FormViewProps> = ({
                                 </button>
                               </div>
                             </div>
-                          </div>
+                        </div>
+                        )}
                         </div>
                         </div>
                         )}
@@ -1750,45 +1825,51 @@ const FormView: React.FC<FormViewProps> = ({
                 </div>
               );
             })}
-            <div className="line-item-toolbar">
-              {selectorCfg && (
-                <div className="section-selector" data-field-path={selectorCfg.id}>
-                  <label>
-                    {resolveSelectorLabel(selectorCfg, language)}
-                    {selectorCfg.required && <RequiredStar />}
-                  </label>
-                  <select
-                    value={selectorValue}
-                    onChange={e => {
-                      const nextValue = e.target.value;
-                      setValues(prev => {
-                        if (prev[selectorCfg.id] === nextValue) return prev;
-                        return { ...prev, [selectorCfg.id]: nextValue };
-                      });
-                    }}
+            {parentRows.length > 0 && (
+              <div className="line-item-toolbar">
+                {selectorCfg && (
+                  <div
+                    className="section-selector"
+                    data-field-path={selectorCfg.id}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 220 }}
                   >
-                    <option value="">Select…</option>
-                    {selectorOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="line-item-toolbar-actions">
-                {renderAddButton()}
-                {groupTotals.length ? (
-                  <div className="line-item-totals">
-                    {groupTotals.map(t => (
-                      <span key={t.key} className="pill">
-                        {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
-                      </span>
-                    ))}
+                    <label style={{ fontWeight: 600 }}>
+                      {resolveSelectorLabel(selectorCfg, language)}
+                      {selectorCfg.required && <RequiredStar />}
+                    </label>
+                    <select
+                      value={selectorValue}
+                      onChange={e => {
+                        const nextValue = e.target.value;
+                        setValues(prev => {
+                          if (prev[selectorCfg.id] === nextValue) return prev;
+                          return { ...prev, [selectorCfg.id]: nextValue };
+                        });
+                      }}
+                    >
+                      <option value="">Select…</option>
+                      {selectorOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                ) : null}
+                )}
+                <div className="line-item-toolbar-actions">
+                  {renderAddButton()}
+                  {groupTotals.length ? (
+                    <div className="line-item-totals">
+                      {groupTotals.map(t => (
+                        <span key={t.key} className="pill">
+                          {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         );
       }
@@ -1955,8 +2036,63 @@ const FormView: React.FC<FormViewProps> = ({
     }
   }, [errors]);
 
+  const buttonBase: React.CSSProperties = {
+    padding: '10px 16px',
+    borderRadius: 10,
+    fontWeight: 700,
+    border: '1px solid transparent',
+    cursor: 'pointer'
+  };
+
+  const buttonStyles = {
+    primary: {
+      ...buttonBase,
+      background: '#2563eb',
+      borderColor: '#1d4ed8',
+      color: '#ffffff'
+    },
+    secondary: {
+      ...buttonBase,
+      background: '#ffffff',
+      borderColor: '#cbd5e1',
+      color: '#0f172a'
+    },
+    negative: {
+      ...buttonBase,
+      background: '#fff7f7',
+      borderColor: '#fecdd3',
+      color: '#b42318'
+    }
+  } as const;
+
+  const withDisabled = (style: React.CSSProperties, disabled?: boolean): React.CSSProperties =>
+    disabled
+      ? {
+          ...style,
+          opacity: 0.6,
+          cursor: 'not-allowed'
+        }
+      : style;
+
   return (
     <>
+      <style>{`
+        .form-card input,
+        .form-card select,
+        .form-card textarea {
+          font-size: 18px;
+          line-height: 1.5;
+        }
+        .form-card .line-item-table td,
+        .form-card .line-item-table th {
+          font-size: 18px;
+        }
+        .form-card .line-item-table input,
+        .form-card .line-item-table select,
+        .form-card .line-item-table textarea {
+          font-size: 18px;
+        }
+      `}</style>
       <div className="card form-card">
         {status ? (
           <div
@@ -1988,8 +2124,19 @@ const FormView: React.FC<FormViewProps> = ({
         ) : null}
         {definition.questions.map(renderQuestion)}
       </div>
-      <div className="sticky-submit">
-        <button type="button" onClick={onSubmit} disabled={submitting}>
+      <div
+        className="sticky-submit"
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}
+      >
+        <button type="button" onClick={onBack} style={buttonStyles.negative}>
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={submitting}
+          style={withDisabled(buttonStyles.primary, submitting)}
+        >
           {submitting ? 'Submitting…' : 'Submit'}
         </button>
       </div>
@@ -2032,7 +2179,11 @@ const FormView: React.FC<FormViewProps> = ({
               {!overlay.options.length && <div className="muted">No options available.</div>}
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 12 }}>
-              <button type="button" className="secondary" onClick={() => setOverlay({ open: false, options: [], selected: [] })}>
+              <button
+                type="button"
+                onClick={() => setOverlay({ open: false, options: [], selected: [] })}
+                style={buttonStyles.secondary}
+              >
                 Cancel
               </button>
               <button
@@ -2043,6 +2194,7 @@ const FormView: React.FC<FormViewProps> = ({
                   }
                   setOverlay({ open: false, options: [], selected: [] });
                 }}
+                style={buttonStyles.primary}
               >
                 Add
               </button>
