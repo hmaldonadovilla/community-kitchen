@@ -3,8 +3,17 @@ import { LangCode } from '../types';
 import { fetchDataSource } from '../data/dataSources';
 
 interface EffectContext {
-  addLineItemRow: (groupId: string, preset?: Record<string, string | number>) => void;
-  clearLineItems?: (groupId: string) => void;
+  addLineItemRow: (
+    groupId: string,
+    preset?: Record<string, string | number>,
+    meta?: { effectContextId?: string; auto?: boolean }
+  ) => void;
+  clearLineItems?: (groupId: string, contextId?: string) => void;
+  updateAutoLineItems?: (
+    groupId: string,
+    presets: Array<Record<string, string | number>>,
+    meta: { effectContextId: string; numericTargets: string[] }
+  ) => void;
 }
 
 export interface SelectionEffectOptions {
@@ -117,6 +126,13 @@ interface SelectionEffectCache {
   contexts: Map<string, Map<string, SelectionCacheEntry>>;
   token: number;
 }
+
+const resolveSubgroupKey = (sub?: { id?: string; label?: any }): string => {
+  if (!sub) return '';
+  if (sub.id) return sub.id;
+  if (typeof sub.label === 'string') return sub.label;
+  return sub.label?.en || sub.label?.fr || sub.label?.nl || '';
+};
 
 interface SelectionDiffPreview {
   newlySelected: string[];
@@ -356,16 +372,14 @@ function determineScaleFactor(
   return factor;
 }
 
-function resolveNumericTargets(effect: SelectionEffect, group: WebQuestionDefinition): string[] {
+function resolveNumericTargets(effect: SelectionEffect, fields: any[]): string[] {
   if (effect.scaleNumericFields && effect.scaleNumericFields.length) {
     return effect.scaleNumericFields;
   }
   if (effect.aggregateNumericFields && effect.aggregateNumericFields.length) {
     return effect.aggregateNumericFields;
   }
-  const numericFields = group.lineItemConfig?.fields
-    ?.filter(field => field.type === 'NUMBER')
-    .map(field => field.id) || [];
+  const numericFields = fields.filter((field: any) => field.type === 'NUMBER').map((field: any) => field.id) || [];
   return numericFields;
 }
 
@@ -374,10 +388,10 @@ function applyScale(
   effect: SelectionEffect,
   lineItemContext: SelectionEffectOptions['lineItem'],
   sourceRow: any,
-  group: WebQuestionDefinition
+  fields: any[]
 ): any[] {
   const scaleFactor = determineScaleFactor(effect, lineItemContext, sourceRow);
-  const targets = resolveNumericTargets(effect, group);
+  const targets = resolveNumericTargets(effect, fields);
   const mapping = effect.lineItemMapping || {};
   return entries.map(entry => {
     const clone = { ...entry };
@@ -418,8 +432,23 @@ function populateLineItemsFromDataSource({
     }
     return;
   }
-  const group = definition.questions.find(q => q.id === effect.groupId);
-  if (!group || group.type !== 'LINE_ITEM_GROUP' || !group.lineItemConfig) {
+  const resolveTargetLineConfig = (): { id: string; fields: any[] } | null => {
+    const direct = definition.questions.find(q => q.id === effect.groupId);
+    if (direct?.lineItemConfig?.fields) {
+      return { id: direct.id, fields: direct.lineItemConfig.fields };
+    }
+    const parents = lineItem?.groupId
+      ? definition.questions.filter(q => q.id === lineItem.groupId)
+      : definition.questions;
+    for (const parent of parents) {
+      const match = parent.lineItemConfig?.subGroups?.find(sub => resolveSubgroupKey(sub) === effect.groupId);
+      if (match) return { id: effect.groupId, fields: match.fields || [] };
+    }
+    return null;
+  };
+
+  const targetConfig = resolveTargetLineConfig();
+  if (!targetConfig || !targetConfig.fields.length) {
     if (debug && typeof console !== 'undefined') {
       console.warn('[SelectionEffects] target group missing or misconfigured', {
         effect,
@@ -438,11 +467,11 @@ function populateLineItemsFromDataSource({
     }
     renderAggregatedRows({
       effect,
-      definition,
-      group,
+      targetConfig,
       cache,
       ctx,
-      debug
+      debug,
+      contextId
     });
     return;
   }
@@ -450,11 +479,11 @@ function populateLineItemsFromDataSource({
   if (!missingSelections.length) {
     renderAggregatedRows({
       effect,
-      definition,
-      group,
+      targetConfig,
       cache,
       ctx,
-      debug
+      debug,
+      contextId
     });
     return;
   }
@@ -480,11 +509,11 @@ function populateLineItemsFromDataSource({
         contextMap.clear();
         renderAggregatedRows({
           effect,
-          definition,
-          group,
+          targetConfig,
           cache,
           ctx,
-          debug
+          debug,
+          contextId
         });
         return;
       }
@@ -499,7 +528,6 @@ function populateLineItemsFromDataSource({
         }
         return;
       }
-      const lineFieldIds = (group.lineItemConfig?.fields || []).map(field => field.id);
       missingSelections.forEach(selectedValue => {
         const normalizedTarget = selectedValue.toLowerCase();
         const row = rows.find((candidate: any) => {
@@ -530,7 +558,7 @@ function populateLineItemsFromDataSource({
           contextMap.delete(selectedValue);
           return;
         }
-        const scaledEntries = applyScale(entries, effect, lineItem, row, group);
+        const scaledEntries = applyScale(entries, effect, lineItem, row, targetConfig.fields);
         const enrichedEntries = attachRowContext(scaledEntries, lineItem?.rowValues);
         contextMap.set(selectedValue, {
           value: selectedValue,
@@ -539,11 +567,11 @@ function populateLineItemsFromDataSource({
       });
       renderAggregatedRows({
         effect,
-        definition,
-        group,
+        targetConfig,
         cache,
         ctx,
-        debug
+        debug,
+        contextId
       });
     })
     .catch(err => {
@@ -554,46 +582,52 @@ function populateLineItemsFromDataSource({
 }
 
 interface RenderParams {
-  definition: WebFormDefinition;
-  group: WebQuestionDefinition;
+  targetConfig: { id: string; fields: any[] };
   effect: SelectionEffect;
   cache: SelectionEffectCache;
   ctx: EffectContext;
   debug: boolean;
+  contextId: string;
 }
 
-function renderAggregatedRows({
-  effect,
-  group,
-  cache,
-  ctx,
-  debug
-}: RenderParams): void {
+function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, contextId }: RenderParams): void {
   const entriesForAllSelections: any[] = [];
-  cache.contexts.forEach(selectionMap => {
-    selectionMap.forEach(entry => {
+  const contextMap = getContextMap(cache, contextId);
+  if (contextMap) {
+    contextMap.forEach(entry => {
       if (entry.entries && entry.entries.length) {
         entriesForAllSelections.push(...entry.entries);
       }
     });
-  });
+  }
+  const numericTargets = resolveNumericTargets(effect, targetConfig.fields);
+
   if (!entriesForAllSelections.length) {
     if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-      ctx.clearLineItems(effect.groupId);
+      ctx.clearLineItems(effect.groupId, contextId);
     }
     if (debug && typeof console !== 'undefined') {
       console.warn('[SelectionEffects] data-driven effect produced no entries after filtering', {
-        questionId: group.id
+        questionId: effect.groupId
       });
     }
     return;
   }
-  if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-    ctx.clearLineItems(effect.groupId);
+  const aggregatedPresets = aggregateEntries(entriesForAllSelections, effect, targetConfig.fields);
+
+  if (ctx.updateAutoLineItems) {
+    ctx.updateAutoLineItems(effect.groupId, aggregatedPresets, {
+      effectContextId: contextId,
+      numericTargets
+    });
+    return;
   }
-  const aggregatedPresets = aggregateEntries(entriesForAllSelections, effect, group);
+
+  if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
+    ctx.clearLineItems(effect.groupId, contextId);
+  }
   aggregatedPresets.forEach(preset => {
-    ctx.addLineItemRow(effect.groupId, preset);
+    ctx.addLineItemRow(effect.groupId, preset, { effectContextId: contextId, auto: true });
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] addLineItemsFromDataSource dispatched', {
         groupId: effect.groupId,
@@ -606,9 +640,8 @@ function renderAggregatedRows({
 function aggregateEntries(
   entries: any[],
   effect: SelectionEffect,
-  group: WebQuestionDefinition
+  fields: any[]
 ): Array<Record<string, string | number>> {
-  const fields = group.lineItemConfig?.fields || [];
   const numericFieldIds = (effect.aggregateNumericFields && effect.aggregateNumericFields.length
     ? effect.aggregateNumericFields
     : fields.filter(field => field.type === 'NUMBER').map(field => field.id)

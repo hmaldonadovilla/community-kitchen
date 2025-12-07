@@ -12,6 +12,7 @@ import {
   LangCode,
   LineItemRowState,
   LineItemSelectorConfig,
+  OptionFilter,
   VisibilityContext,
   WebQuestionDefinition,
   WebFormSubmission
@@ -49,8 +50,52 @@ const buildFilePayload = async (files: FileList | File[] | undefined | null, max
   return payloads;
 };
 
+const buildSubgroupKey = (parentGroupId: string, parentRowId: string, subGroupId: string) =>
+  `${parentGroupId}::${parentRowId}::${subGroupId}`;
+
+const parseSubgroupKey = (key: string): { parentGroupId: string; parentRowId: string; subGroupId: string } | null => {
+  const parts = key.split('::');
+  if (parts.length !== 3) return null;
+  return { parentGroupId: parts[0], parentRowId: parts[1], subGroupId: parts[2] };
+};
+
+const resolveSubgroupKey = (sub?: { id?: string; label?: any }): string => {
+  if (!sub) return '';
+  if (sub.id) return sub.id;
+  if (typeof sub.label === 'string') return sub.label;
+  return sub.label?.en || sub.label?.fr || sub.label?.nl || '';
+};
+
+const seedSubgroupDefaults = (
+  lineItems: LineItemState,
+  group: WebQuestionDefinition,
+  parentRowId: string
+): LineItemState => {
+  if (!group.lineItemConfig?.subGroups?.length) return lineItems;
+  let next = lineItems;
+  group.lineItemConfig.subGroups.forEach(sub => {
+    const subKeyRaw = resolveSubgroupKey(sub);
+    if (!subKeyRaw || sub.addMode === 'overlay') return;
+    const subKey = buildSubgroupKey(group.id, parentRowId, subKeyRaw);
+    const existing = next[subKey] || [];
+    if (existing.length) return;
+    const minRows = Math.max(1, sub.minRows || 1);
+    const newRows: LineItemRowState[] = [];
+    for (let i = 0; i < minRows; i += 1) {
+      newRows.push({
+        id: `${subKey}_${i}_${Math.random().toString(16).slice(2)}`,
+        values: {},
+        parentId: parentRowId,
+        parentGroupId: group.id
+      });
+    }
+    next = { ...next, [subKey]: newRows };
+  });
+  return next;
+};
+
 const buildInitialLineItems = (definition: BootstrapContext['definition'], recordValues?: Record<string, any>): LineItemState => {
-  const state: LineItemState = {};
+  let state: LineItemState = {};
   definition.questions
     .filter(q => q.type === 'LINE_ITEM_GROUP')
     .forEach(q => {
@@ -66,19 +111,138 @@ const buildInitialLineItems = (definition: BootstrapContext['definition'], recor
           rows = [];
         }
       }
-      const parsedRows = (rows || []).map((r, idx) => ({
-        id: `${q.id}_${idx}_${Math.random().toString(16).slice(2)}`,
-        values: r || {}
-      }));
+      const parsedRows = (rows || []).map((r, idx) => {
+        const rowId = `${q.id}_${idx}_${Math.random().toString(16).slice(2)}`;
+        const values = { ...(r || {}) };
+        // extract subgroup rows if present
+        if (q.lineItemConfig?.subGroups?.length) {
+          q.lineItemConfig.subGroups.forEach(sub => {
+            const key = resolveSubgroupKey(sub);
+            if (!key) return;
+            const rawChild = (r && r[key]) || [];
+            const childRows: any[] = Array.isArray(rawChild)
+              ? rawChild
+              : typeof rawChild === 'string'
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(rawChild);
+                    return Array.isArray(parsed) ? parsed : [];
+                  } catch (_) {
+                    return [];
+                  }
+                })()
+              : [];
+            const childParsed = childRows.map((cr, cIdx) => ({
+              id: `${sub.id || key}_${cIdx}_${Math.random().toString(16).slice(2)}`,
+              values: cr || {},
+              parentId: rowId,
+              parentGroupId: q.id
+            }));
+            if (childParsed.length) {
+              state = { ...state, [buildSubgroupKey(q.id, rowId, key)]: childParsed };
+            }
+            delete (values as any)[key];
+          });
+        }
+        state = seedSubgroupDefaults(state, q, rowId);
+        return {
+          id: rowId,
+          values
+        };
+      });
       if (!parsedRows.length && q.lineItemConfig?.addMode !== 'overlay') {
         const minRows = Math.max(1, q.lineItemConfig?.minRows || 1);
         for (let i = 0; i < minRows; i += 1) {
-          parsedRows.push({ id: `${q.id}_${i}_${Math.random().toString(16).slice(2)}`, values: {} });
+          const newRowId = `${q.id}_${i}_${Math.random().toString(16).slice(2)}`;
+          parsedRows.push({ id: newRowId, values: {} });
+          state = seedSubgroupDefaults(state, q, newRowId);
         }
       }
       state[q.id] = parsedRows;
     });
   return state;
+};
+
+const resolveValueMapValue = (
+  valueMap: OptionFilter,
+  getValue: (fieldId: string) => FieldValue
+): string => {
+  if (!valueMap?.optionMap || !valueMap.dependsOn) return '';
+  const dependsOn = Array.isArray(valueMap.dependsOn) ? valueMap.dependsOn : [valueMap.dependsOn];
+  const depValues = dependsOn.map(dep => {
+    const raw = getValue(dep);
+    if (Array.isArray(raw)) return raw.join('|');
+    return raw ?? '';
+  });
+  const candidateKeys: string[] = [];
+  if (depValues.length > 1) candidateKeys.push(depValues.join('||'));
+  depValues.filter(Boolean).forEach(v => candidateKeys.push(v.toString()));
+  candidateKeys.push('*');
+  const matchKey = candidateKeys.find(key => valueMap.optionMap[key] !== undefined);
+  const values = (matchKey ? valueMap.optionMap[matchKey] : []) || [];
+  const unique = Array.from(new Set(values.map(v => (v ?? '').toString().trim()).filter(Boolean)));
+  return unique.join(', ');
+};
+
+const applyValueMapsToLineRow = (
+  fields: any[],
+  rowValues: Record<string, FieldValue>,
+  topValues: Record<string, FieldValue>
+): Record<string, FieldValue> => {
+  const nextValues = { ...rowValues };
+  fields
+    .filter(field => field?.valueMap)
+    .forEach(field => {
+      const computed = resolveValueMapValue(field.valueMap, fieldId => {
+        if (fieldId === undefined || fieldId === null) return undefined;
+        if (rowValues.hasOwnProperty(fieldId)) return nextValues[fieldId];
+        return topValues[fieldId];
+      });
+      nextValues[field.id] = computed;
+    });
+  return nextValues;
+};
+
+const applyValueMapsToForm = (
+  definition: BootstrapContext['definition'],
+  currentValues: Record<string, FieldValue>,
+  currentLineItems: LineItemState
+): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
+  let values = { ...currentValues };
+  let lineItems = { ...currentLineItems };
+
+  definition.questions.forEach(q => {
+    if (q.valueMap) {
+      values[q.id] = resolveValueMapValue(q.valueMap, fieldId => values[fieldId]);
+    }
+    if (q.type === 'LINE_ITEM_GROUP' && q.lineItemConfig?.fields) {
+      const rows = lineItems[q.id] || [];
+      const updatedRows = rows.map(row => ({
+        ...row,
+        values: applyValueMapsToLineRow(q.lineItemConfig!.fields, row.values, values)
+      }));
+      lineItems = { ...lineItems, [q.id]: updatedRows };
+
+      // handle nested subgroups
+      if (q.lineItemConfig.subGroups?.length) {
+        rows.forEach(row => {
+          q.lineItemConfig?.subGroups?.forEach(sub => {
+            const key = resolveSubgroupKey(sub);
+            if (!key) return;
+            const subgroupKey = `${q.id}::${row.id}::${key}`;
+            const subRows = lineItems[subgroupKey] || [];
+            const updatedSubRows = subRows.map(subRow => ({
+              ...subRow,
+              values: applyValueMapsToLineRow(sub.fields || [], subRow.values, { ...values, ...row.values })
+            }));
+            lineItems = { ...lineItems, [subgroupKey]: updatedSubRows };
+          });
+        });
+      }
+    }
+  });
+
+  return { values, lineItems };
 };
 
 const normalizeRecordValues = (
@@ -146,8 +310,18 @@ const formatFieldValue = (value: FieldValue): string => {
 
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [language, setLanguage] = useState<LangCode>(normalizeLanguage(definition.languages?.[0] || record?.language));
-  const [values, setValues] = useState<Record<string, FieldValue>>(() => normalizeRecordValues(definition, record?.values));
-  const [lineItems, setLineItems] = useState<LineItemState>(() => buildInitialLineItems(definition, record?.values));
+  const [values, setValues] = useState<Record<string, FieldValue>>(() => {
+    const normalized = normalizeRecordValues(definition, record?.values);
+    const initialLineItems = buildInitialLineItems(definition, record?.values);
+    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+    return mapped.values;
+  });
+  const [lineItems, setLineItems] = useState<LineItemState>(() => {
+    const normalized = normalizeRecordValues(definition, record?.values);
+    const initialLineItems = buildInitialLineItems(definition, record?.values);
+    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+    return mapped.lineItems;
+  });
   const [view, setView] = useState<View>('form');
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -197,8 +371,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, [logEvent]);
 
   const handleSubmitAnother = useCallback(() => {
-    setValues(normalizeRecordValues(definition));
-    setLineItems(buildInitialLineItems(definition));
+    const normalized = normalizeRecordValues(definition);
+    const initialLineItems = buildInitialLineItems(definition);
+    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+    setValues(mapped.values);
+    setLineItems(mapped.lineItems);
     setErrors({});
     setStatus(null);
     setStatusLevel(null);
@@ -249,8 +426,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   useEffect(() => {
     if (record?.values) {
       const normalizedValues = normalizeRecordValues(definition, record.values);
-      setValues(normalizedValues);
-      setLineItems(buildInitialLineItems(definition, normalizedValues));
+      const initialLineItems = buildInitialLineItems(definition, normalizedValues);
+      const { values: mappedValues, lineItems: mappedLineItems } = applyValueMapsToForm(
+        definition,
+        normalizedValues,
+        initialLineItems
+      );
+      setValues(mappedValues);
+      setLineItems(mappedLineItems);
     }
     if (record?.id) {
       setSelectedRecordId(record.id);
@@ -296,24 +479,134 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
   ) => {
     if (!question.selectionEffects || !question.selectionEffects.length) return;
+    const resolveTargetGroupKey = (targetGroupId: string, lineItemCtx?: { groupId: string; rowId?: string }): string => {
+      if (!lineItemCtx?.groupId || !lineItemCtx?.rowId) return targetGroupId;
+      const parentGroup = definition.questions.find(q => q.id === lineItemCtx.groupId);
+      const subMatch = parentGroup?.lineItemConfig?.subGroups?.find(sub => {
+        const key = resolveSubgroupKey(sub);
+        return key === targetGroupId;
+      });
+      if (subMatch) {
+        const key = resolveSubgroupKey(subMatch) || targetGroupId;
+        return buildSubgroupKey(lineItemCtx.groupId, lineItemCtx.rowId, key);
+      }
+      return targetGroupId;
+    };
+
     handleSelectionEffects(
       definition,
       question,
       value as any,
       language,
       {
-        addLineItemRow: (groupId: string, preset?: Record<string, string | number>) => {
+        addLineItemRow: (
+          groupId: string,
+          preset?: Record<string, string | number>,
+          meta?: { effectContextId?: string; auto?: boolean }
+        ) => {
           setLineItems(prev => {
-            const rows = prev[groupId] || [];
+            const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
+            const rows = prev[targetKey] || [];
+            // capture section selector value at creation so later selector changes don't rewrite existing rows
+            const targetGroup =
+              definition.questions.find(q => q.id === targetKey) ||
+              definition.questions.find(q => q.id === opts?.lineItem?.groupId);
+            const selectorId = targetGroup?.lineItemConfig?.sectionSelector?.id;
+            const selectorValue =
+              selectorId && values.hasOwnProperty(selectorId) ? (values as any)[selectorId] : undefined;
+            const presetValues: Record<string, FieldValue> = {};
+            Object.entries(preset || {}).forEach(([key, raw]) => {
+              if (Array.isArray(raw)) {
+                const first = raw[0];
+                if (first !== undefined) presetValues[key] = first as FieldValue;
+              } else {
+                presetValues[key] = raw as FieldValue;
+              }
+            });
+            if (selectorId && selectorValue !== undefined && selectorValue !== null && presetValues[selectorId] === undefined) {
+              presetValues[selectorId] = selectorValue;
+            }
             const newRow: LineItemRowState = {
-              id: `${groupId}_${Math.random().toString(16).slice(2)}`,
-              values: { ...(preset || {}) }
+              id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
+              values: presetValues,
+              parentId: opts?.lineItem?.rowId,
+              parentGroupId: opts?.lineItem?.groupId,
+              autoGenerated: meta?.auto,
+              effectContextId: meta?.effectContextId
             };
-            return { ...prev, [groupId]: [...rows, newRow] };
+            const subgroupInfo = parseSubgroupKey(targetKey);
+            let nextLineItems = { ...prev, [targetKey]: [...rows, newRow] };
+            if (!subgroupInfo) {
+              const parentGroup = definition.questions.find(q => q.id === targetKey);
+              if (parentGroup) {
+                nextLineItems = seedSubgroupDefaults(nextLineItems, parentGroup, newRow.id);
+              }
+            }
+            const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(
+              definition,
+              values,
+              nextLineItems
+            );
+            setValues(nextValues);
+            return recomputed;
           });
         },
-        clearLineItems: (groupId: string) => {
-          setLineItems(prev => ({ ...prev, [groupId]: [] }));
+      updateAutoLineItems: (
+        groupId: string,
+        presets: Array<Record<string, string | number>>,
+        meta: { effectContextId: string; numericTargets: string[] }
+      ) => {
+        setLineItems(prev => {
+          const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
+          const rows = prev[targetKey] || [];
+          const manualRows = rows.filter(r => !(r.autoGenerated && r.effectContextId === meta.effectContextId));
+
+          // Rebuild auto rows for this context from scratch so recipe changes fully replace them
+          const rebuiltAuto: LineItemRowState[] = presets.map(preset => {
+            const values: Record<string, FieldValue> = { ...preset };
+            meta.numericTargets.forEach(fid => {
+              if (preset[fid] !== undefined) {
+                values[fid] = preset[fid] as FieldValue;
+              }
+            });
+            return {
+              id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
+              values,
+              parentId: opts?.lineItem?.rowId,
+              parentGroupId: opts?.lineItem?.groupId,
+              autoGenerated: true,
+              effectContextId: meta.effectContextId
+            };
+          });
+
+          const next: LineItemState = { ...prev, [targetKey]: [...manualRows, ...rebuiltAuto] };
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next);
+          setValues(nextValues);
+          return recomputed;
+        });
+      },
+        clearLineItems: (groupId: string, contextId?: string) => {
+          setLineItems(prev => {
+            const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
+            const rows = prev[targetKey] || [];
+            const remaining = contextId
+              ? rows.filter(r => !(r.autoGenerated && r.effectContextId === contextId))
+              : rows.filter(r => !r.autoGenerated);
+            const removedIds = rows.filter(r => !remaining.includes(r)).map(r => r.id);
+            const next: LineItemState = { ...prev, [targetKey]: remaining };
+            const subgroupInfo = parseSubgroupKey(targetKey);
+            if (!subgroupInfo) {
+              Object.keys(next).forEach(key => {
+                const parsed = parseSubgroupKey(key);
+                if (parsed?.parentGroupId === targetKey && removedIds.includes(parsed.parentRowId)) {
+                  delete (next as any)[key];
+                }
+              });
+            }
+            const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next);
+            setValues(nextValues);
+            return recomputed;
+          });
           logEvent('lineItems.cleared', { groupId });
         }
       },
@@ -350,6 +643,34 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               }
             }
           });
+
+          // validate subgroups, if any
+          if (q.lineItemConfig?.subGroups?.length) {
+            q.lineItemConfig.subGroups.forEach(sub => {
+              const subId = resolveSubgroupKey(sub);
+              if (!subId) return;
+              const subKey = buildSubgroupKey(q.id, row.id, subId);
+              const subRows = lineItems[subKey] || [];
+              subRows.forEach(subRow => {
+                const subCtx: VisibilityContext = {
+                  getValue: fid => values[fid],
+                  getLineValue: (_rowId, fid) => subRow.values[fid]
+                };
+                (sub.fields || []).forEach(field => {
+                  if (field.required) {
+                    const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                    if (hide) return;
+                    const val = subRow.values[field.id];
+                    const hasValue = Array.isArray(val) ? val.length > 0 : !!(val && val.toString().trim());
+                    if (!hasValue) {
+                      allErrors[`${subKey}__${field.id}__${subRow.id}`] =
+                        resolveFieldLabel(field, language, 'Required') + ' is required';
+                    }
+                  }
+                });
+              });
+            });
+          }
         });
       } else if (q.required && !questionHidden && isEmptyValue(values[q.id])) {
         allErrors[q.id] = 'This field is required.';
@@ -360,17 +681,34 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   };
 
   const buildPayload = async (): Promise<SubmissionPayload> => {
-    const payloadValues: Record<string, any> = { ...values };
+    const recomputed = applyValueMapsToForm(definition, values, lineItems);
+    const payloadValues: Record<string, any> = { ...recomputed.values };
     for (const q of definition.questions) {
       if (q.type === 'FILE_UPLOAD') {
-        const raw = values[q.id] as FileList | File[] | undefined | null;
+        const raw = recomputed.values[q.id] as FileList | File[] | undefined | null;
         payloadValues[q.id] = await buildFilePayload(raw, q.uploadConfig?.maxFiles);
       }
     }
     definition.questions
       .filter(q => q.type === 'LINE_ITEM_GROUP')
       .forEach(q => {
-        const rows = lineItems[q.id] || [];
+        const rows = recomputed.lineItems[q.id] || [];
+        if (q.lineItemConfig?.subGroups?.length) {
+          const serialized = rows.map(row => {
+            const base = { ...(row.values || {}) };
+            q.lineItemConfig?.subGroups?.forEach(sub => {
+              const key = resolveSubgroupKey(sub);
+              if (!key) return;
+              const childKey = buildSubgroupKey(q.id, row.id, key);
+              const childRows = recomputed.lineItems[childKey] || [];
+              base[key] = childRows.map(cr => cr.values);
+            });
+            return base;
+          });
+          payloadValues[q.id] = serialized;
+          payloadValues[`${q.id}_json`] = JSON.stringify(serialized);
+          return;
+        }
         const serialized = rows.map(r => r.values);
         payloadValues[q.id] = serialized;
         payloadValues[`${q.id}_json`] = JSON.stringify(serialized);
@@ -476,9 +814,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setStatus(null);
     setStatusLevel(null);
     if (sourceRecord) {
-      const nextValues = normalizeRecordValues(definition, sourceRecord.values || {});
-      setValues(nextValues);
-      setLineItems(buildInitialLineItems(definition, nextValues));
+      const normalized = normalizeRecordValues(definition, sourceRecord.values || {});
+      const initialLineItems = buildInitialLineItems(definition, normalized);
+      const { values: mappedValues, lineItems: mappedLineItems } = applyValueMapsToForm(
+        definition,
+        normalized,
+        initialLineItems
+      );
+      setValues(mappedValues);
+      setLineItems(mappedLineItems);
       setErrors({});
       setSelectedRecordSnapshot(sourceRecord);
       setLastSubmissionMeta({
@@ -499,21 +843,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     const rows = lineItems[group.id] || [];
     if (!rows.length) return <div className="muted">No line items captured.</div>;
     const selector = group.lineItemConfig?.sectionSelector;
-    const selectorColumn = selector
-      ? [
-          {
-            id: selector.id,
-            label: resolveSelectorLabel(selector, language),
-            getValue: () => values[selector.id]
-          }
-        ]
-      : [];
-    const fieldColumns = (group.lineItemConfig?.fields || []).map(field => ({
-      id: field.id,
-      label: resolveFieldLabel(field, language, field.id),
-      getValue: (row: LineItemRowState) => row.values[field.id]
-    }));
-    const columns = [...selectorColumn, ...fieldColumns];
+    // Hide sectionSelector/ITEM_FILTER columns in summary view
+    const fieldColumns = (group.lineItemConfig?.fields || [])
+      .filter(field => field.id !== 'ITEM_FILTER' && field.id !== selector?.id)
+      .map(field => ({
+        id: field.id,
+        label: resolveFieldLabel(field, language, field.id),
+        getValue: (row: LineItemRowState) => row.values[field.id]
+      }));
+    const columns = fieldColumns;
     return (
       <div className="line-summary-table">
         <table>

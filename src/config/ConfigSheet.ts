@@ -136,6 +136,7 @@ export class ConfigSheet {
       const optionFilter = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseOptionFilter(optionFilterRaw) : undefined;
       const dataSource = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseDataSource(rawConfig) : undefined;
       const validationRules = this.parseValidationRules(validationRaw);
+      const valueMap = type === 'TEXT' ? this.parseValueMap(rawConfig) : undefined;
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
       const selectionEffects = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseSelectionEffects(rawConfig) : undefined;
@@ -166,7 +167,8 @@ export class ConfigSheet {
         clearOnChange,
         selectionEffects,
         listViewSort,
-        autoIncrement
+        autoIncrement,
+        valueMap
       };
     });
   }
@@ -456,6 +458,9 @@ export class ConfigSheet {
       });
       if (Object.keys(mapping).length) config.mapping = mapping;
     }
+    if (candidate.tooltipField) {
+      config.tooltipField = candidate.tooltipField.toString();
+    }
     return config;
   }
 
@@ -485,6 +490,20 @@ export class ConfigSheet {
     const parsed = this.safeParseObject(rawConfig);
     if (!parsed) return undefined;
     return this.normalizeSelectionEffects(parsed.selectionEffects);
+  }
+
+  private static parseValueMap(rawConfig?: string): OptionFilter | undefined {
+    if (!rawConfig) return undefined;
+    try {
+      const parsed = JSON.parse(this.sanitizeJson(rawConfig || ''));
+      const vm = parsed?.valueMap;
+      if (vm && vm.dependsOn && vm.optionMap) {
+        return vm as OptionFilter;
+      }
+    } catch (_) {
+      // ignore parse errors
+    }
+    return undefined;
   }
 
   private static normalizeSelectionEffects(rawEffects: any): SelectionEffect[] | undefined {
@@ -757,8 +776,15 @@ export class ConfigSheet {
         const mergedFields = jsonFields.length ? jsonFields : refFields;
         const sectionSelector = this.normalizeLineItemSelector(ss, parsed.sectionSelector);
         const totals = this.normalizeLineItemTotals(parsed.totals);
+        const subGroups = Array.isArray(parsed.subGroups)
+          ? parsed.subGroups
+              .map((entry: any, idx: number) => this.normalizeSubGroupConfig(ss, entry, `${optionsRef || ''}_sub_${idx + 1}`))
+              .filter(Boolean) as LineItemGroupConfig[]
+          : undefined;
 
         return {
+          id: parsed.id ? parsed.id.toString() : undefined,
+          label: parsed.label,
           minRows: parsed.minRows ? Number(parsed.minRows) : undefined,
           maxRows: parsed.maxRows ? Number(parsed.maxRows) : undefined,
           addButtonLabel: parsed.addButtonLabel,
@@ -766,7 +792,8 @@ export class ConfigSheet {
           addMode: parsed.addMode,
           sectionSelector,
           totals,
-          fields: mergedFields
+          fields: mergedFields,
+          subGroups
         };
       }
     } catch (_) {
@@ -849,6 +876,7 @@ export class ConfigSheet {
           ? this.parseDataSource(rawConfig)
           : undefined;
         const selectionEffects = this.parseSelectionEffects(rawConfig);
+        const valueMap = this.parseValueMap(rawConfig);
       return {
         id: row[0] ? row[0].toString() : `LI${idx + 1}`,
         type: fieldType,
@@ -863,7 +891,8 @@ export class ConfigSheet {
         validationRules,
         visibility,
         dataSource,
-        selectionEffects
+        selectionEffects,
+        valueMap
       };
     }).filter(f => f.labelEn || f.labelFr || f.labelNl);
 
@@ -876,6 +905,7 @@ export class ConfigSheet {
       ? this.buildDataSourceConfig(this.extractDataSourceCandidate(field))
       : undefined;
     const selectionEffects = this.normalizeSelectionEffects(field?.selectionEffects);
+    const valueMap = this.normalizeValueMap(field?.valueMap);
     return {
       id: field?.id || `LI${idx + 1}`,
       type: baseType,
@@ -890,7 +920,60 @@ export class ConfigSheet {
       validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined,
       visibility: this.normalizeVisibility(field?.visibility),
       dataSource,
-      selectionEffects
+      selectionEffects,
+      valueMap
     };
+  }
+
+  private static normalizeSubGroupConfig(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    entry: any,
+    fallbackId?: string
+  ): LineItemGroupConfig | undefined {
+    if (!entry || typeof entry !== 'object') return undefined;
+
+    if (typeof entry.ref === 'string' && entry.ref.startsWith('REF:')) {
+      const refName = entry.ref.substring(4).trim();
+      const refCfg = this.parseLineItemSheet(ss, refName);
+      if (refCfg) {
+        return {
+          ...refCfg,
+          id: entry.id ? entry.id.toString() : refCfg.id || fallbackId,
+          label: entry.label || refCfg.label,
+          minRows: entry.minRows ?? refCfg.minRows,
+          maxRows: entry.maxRows ?? refCfg.maxRows,
+          addMode: entry.addMode ?? refCfg.addMode,
+          addButtonLabel: entry.addButtonLabel ?? refCfg.addButtonLabel,
+          anchorFieldId: entry.anchorFieldId ?? refCfg.anchorFieldId,
+          sectionSelector: entry.sectionSelector ? this.normalizeLineItemSelector(ss, entry.sectionSelector) : refCfg.sectionSelector,
+          totals: entry.totals ? this.normalizeLineItemTotals(entry.totals) : refCfg.totals
+        };
+      }
+    }
+
+    const fields: LineItemFieldConfig[] = Array.isArray(entry.fields)
+      ? entry.fields.map((f: any, idx: number) => this.normalizeLineItemField(f, idx))
+      : [];
+    const sectionSelector = this.normalizeLineItemSelector(ss, entry.sectionSelector);
+    const totals = this.normalizeLineItemTotals(entry.totals);
+
+    return {
+      id: entry.id ? entry.id.toString() : fallbackId,
+      label: entry.label,
+      minRows: entry.minRows ? Number(entry.minRows) : undefined,
+      maxRows: entry.maxRows ? Number(entry.maxRows) : undefined,
+      addButtonLabel: entry.addButtonLabel,
+      anchorFieldId: entry.anchorFieldId,
+      addMode: entry.addMode,
+      sectionSelector,
+      totals,
+      fields
+    };
+  }
+
+  private static normalizeValueMap(raw: any): OptionFilter | undefined {
+    if (!raw) return undefined;
+    if (raw.dependsOn && raw.optionMap) return raw as OptionFilter;
+    return undefined;
   }
 }

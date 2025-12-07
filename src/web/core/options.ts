@@ -9,7 +9,24 @@ export const toOptionSet = (question: any): OptionSet => {
   if (question.options) {
     const opts = question.options as any;
     if (Array.isArray(opts)) {
-      return { en: opts, fr: (question as any).optionsFr, nl: (question as any).optionsNl };
+      const tooltips: Record<string, string> = {};
+      const normalized = opts.map((entry: any) => {
+        if (entry && typeof entry === 'object') {
+          const val = entry.value ?? entry.id ?? entry.label ?? '';
+          if (entry.tooltip) {
+            tooltips[val] = entry.tooltip.toString();
+          }
+          return val?.toString?.() || '';
+        }
+        return entry;
+      });
+      const optionSet: OptionSet = {
+        en: normalized,
+        fr: (question as any).optionsFr,
+        nl: (question as any).optionsNl
+      };
+      if (Object.keys(tooltips).length) optionSet.tooltips = tooltips;
+      return optionSet;
     }
     return opts as OptionSet;
   }
@@ -72,8 +89,12 @@ export const loadOptionsFromDataSource = async (
     }
     const mapping = dataSource?.mapping || {};
     const candidateKeys = Object.keys(firstItem);
+    const mappedValueKey = Object.entries(mapping).find(([, target]) => target === 'value')?.[0];
+    const mappedIdKey = Object.entries(mapping).find(([, target]) => target === 'id')?.[0];
     const valueKey =
+      mappedValueKey ||
       (mapping as any).value ||
+      mappedIdKey ||
       (mapping as any).id ||
       candidateKeys.find(key => {
         const sampleValue = (firstItem as any)?.[key];
@@ -81,10 +102,26 @@ export const loadOptionsFromDataSource = async (
       }) ||
       candidateKeys[0];
     if (!valueKey) return null;
+    const tooltips: Record<string, string> = {};
     const mappedValues = items
-      .map((row: any) => (row?.[valueKey] ?? '').toString())
+      .map((row: any) => {
+        const rawVal = row?.[valueKey];
+        const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString();
+        if (val && dataSource.tooltipField && row?.[dataSource.tooltipField] !== undefined) {
+          const tooltip = row[dataSource.tooltipField];
+          if (tooltip !== null && tooltip !== undefined && tooltip !== '') {
+            tooltips[val] = tooltip.toString();
+          }
+        }
+        return val;
+      })
       .filter(Boolean);
-    return buildOptionSet(mappedValues);
+    const optionSet = buildOptionSet(mappedValues);
+    if (optionSet) {
+      optionSet.tooltips = tooltips;
+      optionSet.raw = items;
+    }
+    return optionSet;
   } catch (_) {
     return null;
   }

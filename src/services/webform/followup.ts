@@ -4,6 +4,7 @@ import {
   FollowupActionResult,
   FollowupConfig,
   FormConfig,
+  LineItemGroupConfig,
   LocalizedString,
   QuestionConfig,
   TemplateIdMap,
@@ -13,6 +14,20 @@ import { DataSourceService } from './dataSources';
 import { debugLog } from './debug';
 import { SubmissionService } from './submissions';
 import { RecordContext } from './types';
+
+type SubGroupConfig = LineItemGroupConfig;
+
+const resolveLocalizedValue = (value?: LocalizedString, fallback: string = ''): string => {
+  if (!value) return fallback;
+  if (typeof value === 'string') return value;
+  return value.en || value.fr || value.nl || fallback;
+};
+
+const resolveSubgroupKey = (sub?: SubGroupConfig): string => {
+  if (!sub) return '';
+  if (sub.id) return sub.id;
+  return resolveLocalizedValue(sub.label, '');
+};
 
 export class FollowupService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -281,6 +296,27 @@ export class FollowupService {
           const fieldSlug = this.slugifyPlaceholder(field.labelEn || field.id);
           this.addPlaceholderVariants(map, `${q.id}.${fieldSlug}`, joined);
         });
+
+        (q.lineItemConfig?.subGroups || []).forEach(sub => {
+          const subKey =
+            sub.id ||
+            (typeof sub.label === 'string' ? sub.label : sub.label?.en || sub.label?.fr || sub.label?.nl) ||
+            '';
+          if (!subKey) return;
+          rows.forEach(row => {
+            const subRows = Array.isArray((row || {})[subKey]) ? (row as any)[subKey] : [];
+            subRows.forEach((subRow: any) => {
+              (sub.fields || []).forEach(field => {
+                const raw = subRow?.[field.id];
+                if (raw === undefined || raw === null || raw === '') return;
+                const text = this.formatTemplateValue(raw);
+                this.addPlaceholderVariants(map, `${q.id}.${subKey}.${field.id}`, text);
+                const slug = this.slugifyPlaceholder(field.labelEn || field.id);
+                this.addPlaceholderVariants(map, `${q.id}.${subKey}.${slug}`, text);
+              });
+            });
+          });
+        });
       } else if (q.dataSource && typeof value === 'string' && value) {
         const dsDetails = this.dataSources.lookupDataSourceDetails(q, value, record.language);
         if (dsDetails) {
@@ -302,7 +338,23 @@ export class FollowupService {
       if (q.type !== 'LINE_ITEM_GROUP') return;
       const value = record.values ? record.values[q.id] : undefined;
       if (Array.isArray(value)) {
-        map[q.id] = value.map(row => (row && typeof row === 'object' ? row : {}));
+        const normalized = value.map(row => (row && typeof row === 'object' ? row : {}));
+        map[q.id] = normalized;
+        (q.lineItemConfig?.subGroups || []).forEach(sub => {
+          const subKey = resolveSubgroupKey(sub as SubGroupConfig);
+          if (!subKey) return;
+          const collected: any[] = [];
+          normalized.forEach(parentRow => {
+            const children = Array.isArray((parentRow as any)[subKey]) ? (parentRow as any)[subKey] : [];
+            children.forEach((child: any) => {
+              collected.push({
+                ...(child || {}),
+                __parent: parentRow
+              });
+            });
+          });
+          map[`${q.id}.${subKey}`] = collected;
+        });
       }
     });
     return map;
@@ -331,6 +383,34 @@ export class FollowupService {
         placeholders[`{{CONSOLIDATED(${q.id}.${field.id})}}`] = text;
         const slug = this.slugifyPlaceholder(field.labelEn || field.id);
         placeholders[`{{CONSOLIDATED(${q.id}.${slug})}}`] = text;
+      });
+
+      // nested sub groups
+      (q.lineItemConfig?.subGroups || []).forEach(sub => {
+        const subKey = resolveSubgroupKey(sub as SubGroupConfig);
+        if (!subKey) return;
+        const collected: Record<string, Set<string>> = {};
+        rows.forEach(row => {
+          const subRows = Array.isArray((row as any)[subKey]) ? (row as any)[subKey] : [];
+          subRows.forEach((subRow: any) => {
+            (sub.fields || []).forEach(field => {
+              const raw = subRow?.[field.id];
+              if (raw === undefined || raw === null || raw === '') return;
+              const text = this.formatTemplateValue(raw);
+              if (!collected[field.id]) collected[field.id] = new Set<string>();
+              collected[field.id].add(text);
+              const slug = this.slugifyPlaceholder(field.labelEn || field.id);
+              if (!collected[slug]) collected[slug] = new Set<string>();
+              collected[slug].add(text);
+            });
+          });
+        });
+        Object.entries(collected).forEach(([fieldId, set]) => {
+          const text = Array.from(set).join(', ');
+          placeholders[`{{CONSOLIDATED(${q.id}.${subKey}.${fieldId})}}`] = text;
+          const subSlug = this.slugifyPlaceholder(subKey);
+          placeholders[`{{CONSOLIDATED(${q.id}.${subSlug}.${fieldId})}}`] = text;
+        });
       });
     });
   }
@@ -473,9 +553,36 @@ export class FollowupService {
       const groupId = distinctGroups[0];
       const group = groupLookup[groupId];
       if (!group) continue;
-      const rows = override && override.groupId === group.id
+      const subGroups = Array.from(new Set(placeholders.map(p => p.subGroupId).filter(Boolean))) as string[];
+      if (subGroups.length > 1) continue;
+      const targetSubGroupId = subGroups[0];
+
+      const sourceRows = override && override.groupId === group.id
         ? override.rows
         : lineItemRows[group.id];
+
+      let rows: any[] = sourceRows || [];
+      let subConfig: SubGroupConfig | undefined;
+
+      if (targetSubGroupId && group.lineItemConfig?.subGroups?.length) {
+        subConfig = group.lineItemConfig.subGroups.find(sub => {
+          const key = resolveSubgroupKey(sub as SubGroupConfig);
+          const normalizedKey = (key || '').toUpperCase();
+          const slugKey = this.slugifyPlaceholder(key || '');
+          return normalizedKey === targetSubGroupId || slugKey === targetSubGroupId;
+        });
+        if (subConfig) {
+          const subKey = resolveSubgroupKey(subConfig);
+          rows = [];
+          (sourceRows || []).forEach(parentRow => {
+            const children = Array.isArray((parentRow || {})[subKey]) ? (parentRow as any)[subKey] : [];
+            children.forEach((child: any) => {
+              rows.push({ __parent: parentRow, ...(parentRow || {}), ...(child || {}) });
+            });
+          });
+        }
+      }
+
       if (!rows || !rows.length) {
         this.clearTableRow(row);
         continue;
@@ -494,7 +601,10 @@ export class FollowupService {
         }
         for (let c = 0; c < templateCells.length; c++) {
           const template = templateCells[c];
-          const text = this.replaceLineItemPlaceholders(template, group, dataRow);
+          const text = this.replaceLineItemPlaceholders(template, group, dataRow, {
+            subGroup: subConfig,
+            subGroupToken: targetSubGroupId
+          });
           const cell = targetRow.getCell(c);
           cell.clear();
           cell.appendParagraph(text || '');
@@ -504,13 +614,17 @@ export class FollowupService {
     }
   }
 
-  private extractLineItemPlaceholders(text: string): Array<{ groupId: string; fieldId: string }> {
-    const matches: Array<{ groupId: string; fieldId: string }> = [];
+  private extractLineItemPlaceholders(text: string): Array<{ groupId: string; subGroupId?: string; fieldId: string }> {
+    const matches: Array<{ groupId: string; subGroupId?: string; fieldId: string }> = [];
     if (!text) return matches;
-    const pattern = /{{([A-Z0-9_]+)\.([A-Z0-9_]+)}}/gi;
+    const pattern = /{{([A-Z0-9_]+)(?:\.([A-Z0-9_]+))?\.([A-Z0-9_]+)}}/gi;
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(text)) !== null) {
-      matches.push({ groupId: match[1].toUpperCase(), fieldId: match[2].toUpperCase() });
+      matches.push({
+        groupId: match[1].toUpperCase(),
+        subGroupId: match[2] ? match[2].toUpperCase() : undefined,
+        fieldId: (match[3] || match[2] || '').toUpperCase()
+      });
     }
     return matches;
   }
@@ -526,7 +640,8 @@ export class FollowupService {
   private replaceLineItemPlaceholders(
     template: string,
     group: QuestionConfig,
-    rowData: Record<string, any>
+    rowData: Record<string, any>,
+    opts?: { subGroup?: SubGroupConfig; subGroupToken?: string }
   ): string {
     if (!template) return '';
     const normalizedGroupId = group.id.toUpperCase();
@@ -541,9 +656,26 @@ export class FollowupService {
         replacements[token] = text;
       });
     });
-    return template.replace(/{{([A-Z0-9_]+)\.([A-Z0-9_]+)}}/gi, (_, groupId, fieldKey) => {
+    if (opts?.subGroup) {
+      const subKeyRaw = resolveSubgroupKey(opts.subGroup);
+      const subToken = opts.subGroupToken || this.slugifyPlaceholder(subKeyRaw);
+      const normalizedSubKey = subToken.toUpperCase();
+      (opts.subGroup.fields || []).forEach((field: any) => {
+        const text = this.formatTemplateValue(rowData ? rowData[field.id] : '');
+        const tokens = [
+          `${normalizedGroupId}.${normalizedSubKey}.${field.id.toUpperCase()}`,
+          `${normalizedGroupId}.${normalizedSubKey}.${this.slugifyPlaceholder(field.labelEn || field.id)}`
+        ];
+        tokens.forEach(token => {
+          replacements[token] = text;
+        });
+      });
+    }
+    return template.replace(/{{([A-Z0-9_]+)(?:\.([A-Z0-9_]+))?\.([A-Z0-9_]+)}}/gi, (_, groupId, maybeSub, fieldKey) => {
       if (groupId.toUpperCase() !== normalizedGroupId) return '';
-      const token = `${normalizedGroupId}.${fieldKey.toUpperCase()}`;
+      const token = maybeSub
+        ? `${normalizedGroupId}.${maybeSub.toUpperCase()}.${fieldKey.toUpperCase()}`
+        : `${normalizedGroupId}.${fieldKey.toUpperCase()}`;
       return replacements[token] ?? '';
     });
   }

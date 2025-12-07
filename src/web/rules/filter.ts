@@ -5,6 +5,7 @@ export interface OptionItem {
   value: string;
   label: string;
   labels: Record<string, string>;
+  tooltip?: string;
 }
 
 const normalize = (val: string | number | null | undefined): string => {
@@ -37,26 +38,26 @@ const normalizeValue = (value: string | number | null | undefined): string => {
 
 export function buildLocalizedOptions(options: OptionSet, allowed: string[], language: LangCode): OptionItem[] {
   const langKey = (language || 'en').toString().toLowerCase();
-  const labels = options[langKey] || options.en || [];
+  const labels = (options as any)[langKey] || options.en || [];
   const baseOpts = options.en || labels;
-  const allowedSet = allowed && allowed.length ? new Set(allowed) : null;
-  const values = allowedSet ? allowed : baseOpts;
+  const allowedSet = allowed ? new Set(allowed) : null;
+  const values = allowed ? allowed : baseOpts;
   const seen = new Set<string>();
   const items: OptionItem[] = [];
 
-  const buildItem = (value: string): OptionItem => {
-    const labelIdx = baseOpts.findIndex(opt => opt === value);
+  const buildItem = (value: string, originalIndex: number): OptionItem => {
+    const labelIdx = baseOpts.findIndex((opt: string) => opt === value);
     const label =
       labelIdx >= 0
         ? labels[labelIdx] || value
         : (() => {
-            const fallbackIdx = baseOpts.findIndex(opt => normalizeValue(opt) === value);
+            const fallbackIdx = baseOpts.findIndex((opt: string) => normalizeValue(opt) === value);
             if (fallbackIdx >= 0) {
               return labels[fallbackIdx] || baseOpts[fallbackIdx];
             }
             return value;
           })();
-    const resolvedIndex = labelIdx >= 0 ? labelIdx : baseOpts.findIndex(opt => opt === value);
+    const resolvedIndex = labelIdx >= 0 ? labelIdx : baseOpts.findIndex((opt: string) => opt === value);
     return {
       value,
       label,
@@ -64,16 +65,36 @@ export function buildLocalizedOptions(options: OptionSet, allowed: string[], lan
         en: options.en?.[resolvedIndex] || value,
         fr: options.fr?.[resolvedIndex] || value,
         nl: options.nl?.[resolvedIndex] || value
-      }
-    };
+      },
+      tooltip: (options as any)?.tooltips?.[value],
+      // carry original index to keep a stable secondary sort
+      originalIndex
+    } as OptionItem & { originalIndex: number };
   };
 
-  values.forEach(entry => {
+  values.forEach((entry: string, idx: number) => {
     const normalized = normalizeValue(entry);
     if (!normalized || seen.has(normalized)) return;
     seen.add(normalized);
-    items.push(buildItem(normalized));
+    items.push(buildItem(normalized, idx));
   });
 
-  return items;
+  const collator =
+    typeof Intl !== 'undefined' && typeof Intl.Collator === 'function'
+      ? new Intl.Collator(langKey, { sensitivity: 'base' })
+      : undefined;
+  items.sort((a, b) => {
+    const cmp = collator ? collator.compare(a.label, b.label) : a.label.localeCompare(b.label);
+    if (cmp !== 0) return cmp;
+    // stable tie-breaker by original order
+    return (a as any).originalIndex - (b as any).originalIndex;
+  });
+
+  // strip helper property
+  return items.map(item => ({
+    value: item.value,
+    label: item.label,
+    labels: item.labels,
+    tooltip: (item as any).tooltip
+  }));
 }

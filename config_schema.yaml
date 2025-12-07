@@ -40,6 +40,9 @@ components:
         optionFilter:
           $ref: '#/components/schemas/OptionFilter'
           description: Optional dependency to filter options based on other field value(s).
+        valueMap:
+          $ref: '#/components/schemas/ValueMapConfig'
+          description: Readonly TEXT helper that derives its value from another field using a map (arrays join with ", ").
         dataSource:
           $ref: '#/components/schemas/DataSourceConfig'
           description: |
@@ -164,6 +167,9 @@ components:
           items:
             $ref: '#/components/schemas/SelectionEffect'
           description: Selection effects supported on line-item fields (triggered per row once required fields are complete).
+        valueMap:
+          $ref: '#/components/schemas/ValueMapConfig'
+          description: Readonly TEXT helper that derives its value from another field using a map (arrays join with ", ").
 
     LineItemGroupConfig:
       type: object
@@ -200,6 +206,15 @@ components:
             Line item field definitions. If `Config (JSON/REF)` uses `REF:SheetName`, the fields are pulled from that sheet (columns: ID, Type, Label EN/FR/NL, Required?, Options EN/FR/NL, Config JSON in column 10).
             The optional Config JSON column on that ref sheet can include `optionFilter` and `validationRules` for each line-item field.
             You can mix a `REF:SheetName` for field definitions with inline JSON in `Config (JSON/REF)` to set `addMode`, `addButtonLabel`, `anchorFieldId`, `minRows`, `maxRows`, and other group-level settings even when the fields themselves come from the ref sheet.
+        subGroups:
+          type: array
+          description: |
+            Optional nested line-item groups that render under each parent row (e.g., Ingredients under each Dish header).
+            Each child supports the same structure as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals)
+            and may also specify `ref: "REF:TabName"` to load its fields from a ref sheet (same column format as parent line-item refs);
+            inline values override the ref.
+          items:
+            $ref: '#/components/schemas/LineItemGroupConfig'
       required: [fields]
 
     OptionFilter:
@@ -227,6 +242,27 @@ components:
           "Carrots||Local": [Crates]
           Carrots: [Bags, Crates]
           "*": [Bags]
+
+    ValueMapConfig:
+      type: object
+      properties:
+        dependsOn:
+          type: string
+          description: Field ID whose value is used to look up the mapped output.
+        optionMap:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Map of dependency value -> array of strings; arrays are joined with ", " for the readonly TEXT value. Supports `*` fallback.
+      required: [dependsOn, optionMap]
+      example:
+        dependsOn: ING
+        optionMap:
+          Yogurt: [Milk]
+          Pesto: [Milk, Peanuts]
+          "*": [None]
 
     DataSourceConfig:
       type: object
@@ -263,6 +299,9 @@ components:
           additionalProperties:
             type: string
           description: Optional map from source column -> target field id (used for prefill/line-item injection).
+        tooltipField:
+          type: string
+          description: Optional column name to surface as tooltip text for each option (shown in form + summary).
       required: [id]
       example:
         id: recipes

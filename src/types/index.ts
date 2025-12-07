@@ -13,6 +13,13 @@ export interface OptionFilter {
   optionMap: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
 }
 
+// Maps a controlling field's value to a derived readonly value for TEXT fields.
+// Schema mirrors OptionFilter for consistency.
+export interface ValueMapConfig {
+  dependsOn: string | string[];
+  optionMap: Record<string, string[]>;
+}
+
 export interface VisibilityCondition {
   fieldId: string;
   equals?: string | string[];
@@ -72,6 +79,7 @@ export interface LineItemFieldConfig {
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];
   autoIncrement?: AutoIncrementConfig;
+  valueMap?: ValueMapConfig; // readonly derived value for TEXT fields
 }
 
 export interface LineItemSelectorConfig {
@@ -94,6 +102,8 @@ export interface LineItemTotalConfig {
 }
 
 export interface LineItemGroupConfig {
+  id?: string;
+  label?: LocalizedString;
   minRows?: number;
   maxRows?: number;
   addButtonLabel?: {
@@ -106,6 +116,7 @@ export interface LineItemGroupConfig {
   sectionSelector?: LineItemSelectorConfig;
   totals?: LineItemTotalConfig[];
   fields: LineItemFieldConfig[];
+  subGroups?: LineItemGroupConfig[]; // nested line item groups driven by this header group
 }
 
 export interface SelectionEffect {
@@ -171,6 +182,7 @@ export interface DataSourceConfig {
   projection?: string[]; // limit columns returned
   limit?: number; // optional max rows
   mapping?: Record<string, string>; // optional map from source column -> target field id
+  tooltipField?: string; // optional column used for option tooltips
 }
 
 export interface QuestionConfig {
@@ -188,6 +200,7 @@ export interface QuestionConfig {
   uploadConfig?: FileUploadConfig;
   lineItemConfig?: LineItemGroupConfig;
   optionFilter?: OptionFilter;
+  valueMap?: ValueMapConfig;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
   clearOnChange?: boolean;
@@ -232,6 +245,7 @@ export interface WebQuestionDefinition {
   lineItemConfig?: LineItemGroupConfig;
   uploadConfig?: FileUploadConfig;
   optionFilter?: OptionFilter;
+  valueMap?: ValueMapConfig;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
   clearOnChange?: boolean;

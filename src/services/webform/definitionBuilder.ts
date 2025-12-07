@@ -57,6 +57,7 @@ export class DefinitionBuilder {
       lineItemConfig: q.lineItemConfig,
       uploadConfig: q.uploadConfig,
       optionFilter: q.optionFilter,
+      valueMap: q.valueMap,
       validationRules: q.validationRules,
       visibility: q.visibility,
       clearOnChange: q.clearOnChange,

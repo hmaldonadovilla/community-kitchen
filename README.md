@@ -11,6 +11,10 @@ A Google Apps Script project to digitize AFSCA compliance documentation for a co
 - **Destination Management**: Automatically renames response tabs for better organization.
 - **Custom Web App Forms**: Generate Apps Script web apps (via `doGet`) that support line items and file uploads while still writing back to your Sheets.
 - **Dynamic Options & Rules**: Option filtering based on another field plus cross-field validation rules (main form and line items).
+- **Localized Sorting & Tooltips**: All option lists sort alphabetically per language; options can show tooltips from data sources (with inline fallback).
+- **Derived TEXT Maps**: TEXT fields (and line-item fields) can be readonly value-maps that derive their content from another field via `optionMap`.
+- **Nested Line Items**: Line-item groups support child subgroups (e.g., Dish headers with Ingredients sub-rows) with option filters, selection effects, and totals.
+- **Consolidated Outputs**: Summary view and PDF placeholders support consolidated aggregations, including subgroup paths (e.g., `{{CONSOLIDATED(MP_DISHES.INGREDIENTS.ALLERGEN)}}`). `ITEM_FILTER` is hidden in summary.
 - **Post-submit Console**: The React summary screen now surfaces record metadata (ID, timestamps, status), provides a one-click copy + “Go to follow-up” shortcut, and keeps a “Submit another” loop for operators.
 - **Drag & Drop Uploads**: React forms ship with keyboard-accessible dropzones that enforce file caps, surface total size + remaining slots, and expose per-file remove/clear controls with live announcements.
 - **React Shell Only**: The published web app renders the React UI automatically; the legacy iframe template has been removed.
