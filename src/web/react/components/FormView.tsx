@@ -499,6 +499,28 @@ const FormView: React.FC<FormViewProps> = ({
     }
   };
 
+  // Auto-scroll when subgroup rows increase (works for inline add and overlay add)
+  useEffect(() => {
+    Object.entries(lineItems).forEach(([key, rows]) => {
+      const info = parseSubgroupKey(key);
+      if (!info) return; // only subgroups
+      const prevCount = subgroupPrevCountsRef.current[key] ?? 0;
+      const nextCount = Array.isArray(rows) ? rows.length : 0;
+      subgroupPrevCountsRef.current[key] = nextCount;
+      if (nextCount > prevCount) {
+        const isCollapsed = collapsedSubgroups[key] ?? true;
+        if (isCollapsed) return;
+        const el = subgroupBottomRefs.current[key];
+        if (!el) return;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        });
+      }
+    });
+  }, [lineItems, collapsedSubgroups]);
+
   useEffect(() => {
     Object.keys(lineItems).forEach(key => {
       const rows = lineItems[key] || [];
@@ -1635,7 +1657,9 @@ const FormView: React.FC<FormViewProps> = ({
                                 display: 'flex',
                                 gap: 12,
                                 alignItems: 'flex-end',
-                                flex: 1
+                                flex: 1,
+                                flexWrap: 'wrap',
+                                justifyContent: 'space-between'
                               }}
                             >
                               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
