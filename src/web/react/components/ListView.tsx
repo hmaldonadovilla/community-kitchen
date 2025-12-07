@@ -184,23 +184,59 @@ const ListView: React.FC<ListViewProps> = ({
     return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
   };
 
+  const summarizeArray = (raw: any[]): string => {
+    if (!raw.length) return '—';
+    const scalarOnly = raw.every(v => typeof v === 'string' || typeof v === 'number');
+    if (scalarOnly) return raw.join(', ');
+    const firstObject = raw.find(v => v && typeof v === 'object');
+    if (!firstObject) return raw.map(v => `${v}`).join(', ');
+    const keys = Object.keys(firstObject || {}).slice(0, 3);
+    const preview = raw
+      .slice(0, 3)
+      .map(item => {
+        if (!item || typeof item !== 'object') return `${item}`;
+        const parts = keys
+          .map(k => item[k])
+          .filter(Boolean)
+          .map(v => `${v}`);
+        return parts.join(' / ');
+      })
+      .filter(Boolean)
+      .join(' · ');
+    const suffix = raw.length > 3 ? ` … +${raw.length - 3}` : '';
+    return preview ? `${preview}${suffix}` : `${raw.length} item${raw.length > 1 ? 's' : ''}`;
+  };
+
+  const tryParseJson = (raw: string): unknown | null => {
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return null;
+    }
+  };
+
   const renderCellValue = (row: ListItem, fieldId: string) => {
     const raw = (row as any)[fieldId];
     if (raw === undefined || raw === null || raw === '') return '—';
-    const isScalar = typeof raw === 'string' || typeof raw === 'number';
+    const parsed = typeof raw === 'string' ? tryParseJson(raw) : null;
+    const value = parsed !== null ? parsed : raw;
+    const isArray = Array.isArray(value);
+    const isScalar = typeof value === 'string' || typeof value === 'number';
     const dateText = isScalar ? formatDate(raw) : null;
-    const text = dateText || (Array.isArray(raw) ? raw.join(', ') : `${raw}`);
+    const text = dateText || (isArray ? summarizeArray(value) : `${value}`);
     const title = dateText ? `${raw}` : text;
-    const isLink = typeof raw === 'string' && /^https?:\/\//i.test(raw);
+    const isLink = typeof value === 'string' && /^https?:\/\//i.test(value);
     if (isLink) {
       return (
-        <a href={raw as string} target="_blank" rel="noopener noreferrer" className="truncate-link" title={title}>
+        <a href={value as string} target="_blank" rel="noopener noreferrer" className="truncate-link" title={title}>
           {text}
         </a>
       );
     }
     return (
-      <span className="truncate-link" title={title}>
+      <span className="truncate-link" title={title} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
         {text}
       </span>
     );
@@ -237,7 +273,7 @@ const ListView: React.FC<ListViewProps> = ({
       {loading && <div className="status">Loading…</div>}
       {error && <div className="error">{error}</div>}
       <div className="list-table-wrapper">
-        <table className="list-table">
+        <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
           <thead>
             <tr>
               {columns.map(col => (
@@ -250,6 +286,7 @@ const ListView: React.FC<ListViewProps> = ({
                       sortField === nextField ? (prev === 'asc' ? 'desc' : 'asc') : 'desc'
                     );
                   }}
+                  style={{ maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}
                 >
                   {resolveLocalizedString(col.label, language, col.fieldId)}
                 </th>
@@ -265,7 +302,12 @@ const ListView: React.FC<ListViewProps> = ({
                   style={{ cursor: 'pointer' }}
                 >
                   {columns.map(col => (
-                    <td key={col.fieldId}>{renderCellValue(row, col.fieldId)}</td>
+                    <td
+                      key={col.fieldId}
+                      style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
+                    >
+                      {renderCellValue(row, col.fieldId)}
+                    </td>
                   ))}
                 </tr>
               ))

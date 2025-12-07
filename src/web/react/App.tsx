@@ -23,6 +23,7 @@ import ListView from './components/ListView';
 import FollowupView from './components/FollowupView';
 import { FormErrors, LineItemState, OptionState, View } from './types';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
+import { resolveLocalizedString } from '../i18n';
 import { isEmptyValue } from './utils/values';
 
 type SubmissionMeta = {
@@ -843,7 +844,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     const rows = lineItems[group.id] || [];
     if (!rows.length) return <div className="muted">No line items captured.</div>;
     const selector = group.lineItemConfig?.sectionSelector;
-    // Hide sectionSelector/ITEM_FILTER columns in summary view
     const fieldColumns = (group.lineItemConfig?.fields || [])
       .filter(field => field.id !== 'ITEM_FILTER' && field.id !== selector?.id)
       .map(field => ({
@@ -851,27 +851,119 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         label: resolveFieldLabel(field, language, field.id),
         getValue: (row: LineItemRowState) => row.values[field.id]
       }));
-    const columns = fieldColumns;
+
+    const renderSubgroups = () => {
+      const subGroups = group.lineItemConfig?.subGroups || [];
+      if (!subGroups.length) return null;
+      return subGroups.map(sub => {
+        const subKeyId = resolveSubgroupKey(sub);
+        if (!subKeyId) return null;
+        const subSelector = sub.sectionSelector;
+        const parentAnchorId = group.lineItemConfig?.anchorFieldId;
+        const parentAnchorLabel = parentAnchorId
+          ? resolveFieldLabel(
+              group.lineItemConfig?.fields?.find(f => f.id === parentAnchorId) || { labelEn: 'Parent', id: 'parent' },
+              language,
+              parentAnchorId
+            )
+          : 'Parent';
+        const subColumns =
+          (sub.fields || [])
+            .filter(field => field.id !== 'ITEM_FILTER' && field.id !== subSelector?.id)
+            .map(field => ({
+              id: field.id,
+              label: resolveFieldLabel(field, language, field.id),
+              getValue: (row: LineItemRowState) => row.values[field.id]
+            })) || [];
+        const parentTables = rows
+          .map(parent => {
+            const key = buildSubgroupKey(group.id, parent.id, subKeyId);
+            const childRows = lineItems[key] || [];
+            if (!childRows.length) return null;
+            const parentLabel = parentAnchorId
+              ? formatFieldValue(parent.values[parentAnchorId])
+              : parent.id;
+            return (
+              <div key={key} style={{ marginTop: 8 }}>
+                <div className="muted" style={{ marginBottom: 4, fontWeight: 600, wordBreak: 'break-word' }}>
+                  {parentAnchorLabel}: {parentLabel}
+                </div>
+                <div className="line-summary-table">
+                  <table style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <thead>
+                      <tr>
+                        {subColumns.map(col => (
+                          <th
+                            key={col.id}
+                            style={{
+                              wordBreak: 'break-word',
+                              whiteSpace: 'normal',
+                              maxWidth: `${Math.max(14, Math.floor(100 / Math.max(1, subColumns.length)))}%`
+                            }}
+                          >
+                            {col.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {childRows.map(child => (
+                        <tr key={child.id}>
+                          {subColumns.map(col => (
+                            <td key={col.id} style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                              {formatFieldValue(col.getValue(child))}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })
+          .filter(Boolean);
+        if (!parentTables.length) return null;
+
+        return (
+          <div key={subKeyId} style={{ marginTop: 12 }}>
+            <div className="muted" style={{ fontWeight: 600, marginBottom: 6 }}>
+              {resolveLocalizedString(sub.label, language, subKeyId)}
+            </div>
+            {parentTables}
+          </div>
+        );
+      });
+    };
+
     return (
       <div className="line-summary-table">
-        <table>
+        <table style={{ tableLayout: 'fixed', width: '100%' }}>
           <thead>
             <tr>
-              {columns.map(col => (
-                <th key={col.id}>{col.label}</th>
+              {fieldColumns.map(col => (
+                <th
+                  key={col.id}
+                  style={{ wordBreak: 'break-word', whiteSpace: 'normal', maxWidth: `${Math.max(18, Math.floor(100 / Math.max(1, fieldColumns.length)))}%` }}
+                >
+                  {col.label}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map(row => (
               <tr key={row.id}>
-                {columns.map(col => (
-                  <td key={col.id}>{formatFieldValue(col.getValue(row))}</td>
+                {fieldColumns.map(col => (
+                  <td key={col.id} style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                    {formatFieldValue(col.getValue(row))}
+                  </td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
+        {renderSubgroups()}
       </div>
     );
   };
