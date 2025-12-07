@@ -433,6 +433,9 @@ const FormView: React.FC<FormViewProps> = ({
 }) => {
   const [overlay, setOverlay] = useState<LineOverlayState>({ open: false, options: [], selected: [] });
   const [subgroupSelectors, setSubgroupSelectors] = useState<Record<string, string>>({});
+  const [collapsedSubgroups, setCollapsedSubgroups] = useState<Record<string, boolean>>({});
+  const subgroupBottomRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const subgroupPrevCountsRef = useRef<Record<string, number>>({});
   const statusRef = useRef<HTMLDivElement | null>(null);
   const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
   const [dragState, setDragState] = useState<Record<string, boolean>>({});
@@ -495,6 +498,26 @@ const FormView: React.FC<FormViewProps> = ({
       input.value = '';
     }
   };
+
+  useEffect(() => {
+    Object.keys(lineItems).forEach(key => {
+      const rows = lineItems[key] || [];
+      const prev = subgroupPrevCountsRef.current[key] || 0;
+      const next = Array.isArray(rows) ? rows.length : 0;
+      subgroupPrevCountsRef.current[key] = next;
+      if (next > prev) {
+        const isCollapsed = collapsedSubgroups[key] ?? true;
+        if (!isCollapsed) {
+          const el = subgroupBottomRefs.current[key];
+          if (el) {
+            requestAnimationFrame(() => {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+          }
+        }
+      }
+    });
+  }, [lineItems, collapsedSubgroups]);
 
   const handleFileFieldChange = (question: WebQuestionDefinition, files: File[], errorMessage?: string) => {
     if (onStatusClear) onStatusClear();
@@ -1252,14 +1275,18 @@ const FormView: React.FC<FormViewProps> = ({
                     </button>
                   </div>
                   {(q.lineItemConfig?.subGroups || []).map(sub => {
-                    const subLabel = sub.label;
-                    const subLabelString =
-                      typeof subLabel === 'string'
-                        ? subLabel
-                        : subLabel?.en || subLabel?.fr || subLabel?.nl || '';
-                    const subId = sub.id || subLabelString;
+                    const subLabelResolved = resolveLocalizedString(
+                      sub.label,
+                      language,
+                      sub.id ||
+                        (typeof sub.label === 'string'
+                          ? sub.label
+                          : sub.label?.en || sub.label?.fr || sub.label?.nl || '')
+                    );
+                    const subId = sub.id || subLabelResolved;
                     if (!subId) return null;
                     const subKey = buildSubgroupKey(q.id, row.id, subId);
+                    const collapsed = collapsedSubgroups[subKey] ?? true;
                     const subRows = lineItems[subKey] || [];
                     const orderedSubRows = [...subRows].sort((a, b) => {
                       // keep auto-generated rows first, manual rows (no flag) at the bottom
@@ -1335,9 +1362,80 @@ const FormView: React.FC<FormViewProps> = ({
                         </button>
                       );
                     };
+                    const subCount = orderedSubRows.length;
+                    const scrollSubgroupBottom = () => {
+                      const el = subgroupBottomRefs.current[subKey];
+                      if (!el) return;
+                      requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        });
+                      });
+                    };
                     return (
                       <div key={subKey} className="card" style={{ marginTop: 12, background: '#f8fafc' }}>
-                        <h4>{resolveLocalizedString(sub.label, language, subId)}</h4>
+                        <div
+                          className="subgroup-header"
+                          style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+                        >
+                          <div style={{ textAlign: 'center', fontWeight: 700 }}>
+                            {subLabelResolved || subId}
+                            <span className="pill" style={{ marginLeft: 8, background: '#e2e8f0', color: '#334155' }}>
+                              {subCount} item{subCount === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
+                              {subSelectorCfg && (
+                                <div className="section-selector" data-field-path={subSelectorCfg.id} style={{ minWidth: 200 }}>
+                                  <label>
+                                    {resolveSelectorLabel(subSelectorCfg, language)}
+                                    {subSelectorCfg.required && <RequiredStar />}
+                                  </label>
+                                  <select
+                                    value={subSelectorValue}
+                                    onChange={e => {
+                                      const nextValue = e.target.value;
+                                      setSubgroupSelectors(prev => {
+                                        if (prev[subKey] === nextValue) return prev;
+                                        return { ...prev, [subKey]: nextValue };
+                                      });
+                                    }}
+                                  >
+                                    <option value="">Select…</option>
+                                    {subSelectorOptions.map(opt => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                              {renderSubAddButton()}
+                            </div>
+                            <div style={{ marginLeft: 'auto' }}>
+                              <button
+                                type="button"
+                                className="secondary"
+                              onClick={() =>
+                                setCollapsedSubgroups(prev => ({
+                                  ...prev,
+                                  [subKey]: !(prev[subKey] ?? true)
+                                }))
+                              }
+                                aria-expanded={!collapsed}
+                                aria-controls={`${subKey}-body`}
+                              >
+                                {collapsed
+                                  ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
+                                  : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        {collapsed ? null : (
+                        <div id={`${subKey}-body`}>
+                        <div style={{ marginTop: 8 }}>
                         {orderedSubRows.map(subRow => {
                           const subCtx: VisibilityContext = {
                             getValue: fid => values[fid],
@@ -1524,48 +1622,82 @@ const FormView: React.FC<FormViewProps> = ({
                             </div>
                           );
                         })}
-                          <div className="line-item-toolbar" style={{ marginTop: 8 }}>
+                          <div
+                            ref={el => {
+                              subgroupBottomRefs.current[subKey] = el;
+                            }}
+                            className="line-item-toolbar"
+                            style={{ marginTop: 12 }}
+                          >
                             <div
                               className="line-item-toolbar-actions"
-                              style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}
+                              style={{
+                                display: 'flex',
+                                gap: 12,
+                                alignItems: 'flex-end',
+                                flex: 1
+                              }}
                             >
-                              {subSelectorCfg && (
-                                <div className="section-selector" data-field-path={subSelectorCfg.id}>
-                                  <label>
-                                    {resolveSelectorLabel(subSelectorCfg, language)}
-                                    {subSelectorCfg.required && <RequiredStar />}
-                                  </label>
-                                  <select
-                                    value={subSelectorValue}
-                                    onChange={e => {
-                                      const nextValue = e.target.value;
-                                      setSubgroupSelectors(prev => {
-                                        if (prev[subKey] === nextValue) return prev;
-                                        return { ...prev, [subKey]: nextValue };
-                                      });
-                                    }}
-                                  >
-                                    <option value="">Select…</option>
-                                    {subSelectorOptions.map(opt => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                      </option>
+                              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                {subSelectorCfg && (
+                                  <div className="section-selector" data-field-path={subSelectorCfg.id}>
+                                    <label>
+                                      {resolveSelectorLabel(subSelectorCfg, language)}
+                                      {subSelectorCfg.required && <RequiredStar />}
+                                    </label>
+                                    <select
+                                      value={subSelectorValue}
+                                      onChange={e => {
+                                        const nextValue = e.target.value;
+                                        setSubgroupSelectors(prev => {
+                                          if (prev[subKey] === nextValue) return prev;
+                                          return { ...prev, [subKey]: nextValue };
+                                        });
+                                      }}
+                                    >
+                                      <option value="">Select…</option>
+                                      {subSelectorOptions.map(opt => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                                {renderSubAddButton()}
+                                {subTotals.length ? (
+                                  <div className="line-item-totals">
+                                    {subTotals.map(t => (
+                                      <span key={t.key} className="pill">
+                                        {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
+                                      </span>
                                     ))}
-                                  </select>
-                                </div>
-                              )}
-                              {renderSubAddButton()}
-                              {subTotals.length ? (
-                                <div className="line-item-totals">
-                                  {subTotals.map(t => (
-                                    <span key={t.key} className="pill">
-                                      {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div style={{ marginLeft: 'auto'}}>
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  onClick={() =>
+                                    setCollapsedSubgroups(prev => ({
+                                      ...prev,
+                                      [subKey]: !(prev[subKey] ?? true)
+                                    }))
+                                  }
+                                  aria-expanded={!collapsed}
+                                  aria-controls={`${subKey}-body`}
+                                >
+                                  {collapsed
+                                    ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
+                                    : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
+                                </button>
+                              </div>
                             </div>
                           </div>
+                        </div>
+                        </div>
+                        )}
                       </div>
                     );
                   })}

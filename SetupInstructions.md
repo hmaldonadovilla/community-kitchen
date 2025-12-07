@@ -63,7 +63,7 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
-     - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). Submitted payloads contain an array of parents, each with a child array keyed by the subgroup id/label. Example config:
+     - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). Submitted payloads contain an array of parents, each with a child array keyed by the subgroup id/label. The UI renders a localized subgroup title (from `label`, falling back to `id`) plus a per-row Show/Hide toggle so operators can collapse/expand dense child lists without changing data. Example config:
 
       ```json
       {
@@ -76,6 +76,7 @@ This project uses TypeScript. You need to build the script before using it in Go
           "subGroups": [
             {
               "id": "INGREDIENTS",
+              "label": { "en": "Ingredients", "fr": "Ingrédients", "nl": "Ingrediënten" },
               "fields": [
                 { "id": "ING", "type": "TEXT", "labelEn": "Ingredient", "required": true },
                 { "id": "QTY", "type": "NUMBER", "labelEn": "Qty" },
