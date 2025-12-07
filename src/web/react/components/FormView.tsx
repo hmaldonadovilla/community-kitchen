@@ -33,7 +33,9 @@ interface LineOverlayState {
   selected?: string[];
 }
 
-const buildLineContextId = (groupId: string, rowId: string, fieldId?: string) => `${groupId}::${fieldId || 'field'}::${rowId}`;
+// keep context ids consistent with App.tsx so auto-generated rows from selection effects
+// can be reconciled when loading existing records
+const buildLineContextId = (groupId: string, rowId: string, fieldId?: string) => `${groupId}::${rowId}::${fieldId || 'field'}`;
 const buildSubgroupKey = (parentGroupId: string, parentRowId: string, subGroupId: string) =>
   `${parentGroupId}::${parentRowId}::${subGroupId}`;
 
