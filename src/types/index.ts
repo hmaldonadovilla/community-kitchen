@@ -55,6 +55,27 @@ export interface ValidationRule {
     disallowed?: string[];
   };
   message?: LocalizedString;
+  /**
+   * Optional phase scoping. Defaults to "both".
+   * - submit: apply only on form submission
+   * - followup: apply only on follow-up actions
+   * - both: apply everywhere
+   */
+  phase?: 'submit' | 'followup' | 'both';
+}
+
+export interface DerivedValueConfig {
+  dependsOn: string;
+  /**
+   * Currently supported: addDays
+   */
+  op: 'addDays';
+  offsetDays?: number;
+  /**
+   * Optional flag to indicate the field is system-managed and may be hidden in UI.
+   * (Hiding still uses existing visibility config; this flag is informational.)
+   */
+  hidden?: boolean;
 }
 
 export interface AutoIncrementConfig {
@@ -80,6 +101,7 @@ export interface LineItemFieldConfig {
   selectionEffects?: SelectionEffect[];
   autoIncrement?: AutoIncrementConfig;
   valueMap?: ValueMapConfig; // readonly derived value for TEXT fields
+  derivedValue?: DerivedValueConfig; // computed value (e.g., add days)
 }
 
 export interface LineItemSelectorConfig {
@@ -202,6 +224,7 @@ export interface QuestionConfig {
   lineItemConfig?: LineItemGroupConfig;
   optionFilter?: OptionFilter;
   valueMap?: ValueMapConfig;
+  derivedValue?: DerivedValueConfig;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
   clearOnChange?: boolean;
@@ -247,6 +270,7 @@ export interface WebQuestionDefinition {
   uploadConfig?: FileUploadConfig;
   optionFilter?: OptionFilter;
   valueMap?: ValueMapConfig;
+  derivedValue?: DerivedValueConfig;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
   clearOnChange?: boolean;

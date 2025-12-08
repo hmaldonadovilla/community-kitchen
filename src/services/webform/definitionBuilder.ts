@@ -58,6 +58,7 @@ export class DefinitionBuilder {
       uploadConfig: q.uploadConfig,
       optionFilter: q.optionFilter,
       valueMap: q.valueMap,
+      derivedValue: q.derivedValue,
       validationRules: q.validationRules,
       visibility: q.visibility,
       clearOnChange: q.clearOnChange,

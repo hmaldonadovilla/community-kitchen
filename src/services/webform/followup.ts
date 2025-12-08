@@ -14,6 +14,7 @@ import { DataSourceService } from './dataSources';
 import { debugLog } from './debug';
 import { SubmissionService } from './submissions';
 import { RecordContext } from './types';
+import { validateRules } from '../../web/rules/validation';
 
 type SubGroupConfig = LineItemGroupConfig;
 
@@ -58,13 +59,21 @@ export class FollowupService {
     if (!followup) {
       return { success: false, message: 'Follow-up actions are not configured for this form.' };
     }
+    const context = this.getRecordContext(form, questions, recordId);
+    if (!context || !context.record) {
+      return { success: false, message: 'Record not found.' };
+    }
+    const validationErrors = this.validateFollowupRequirements(questions, context.record);
+    if (validationErrors.length) {
+      return { success: false, message: `Validation failed: ${validationErrors.join('; ')}` };
+    }
     switch (normalizedAction) {
       case 'CREATE_PDF':
-        return this.handleCreatePdfAction(form, questions, recordId, followup);
+        return this.handleCreatePdfAction(form, questions, recordId, followup, context);
       case 'SEND_EMAIL':
-        return this.handleSendEmailAction(form, questions, recordId, followup);
+        return this.handleSendEmailAction(form, questions, recordId, followup, context);
       case 'CLOSE_RECORD':
-        return this.handleCloseRecordAction(form, questions, recordId, followup);
+        return this.handleCloseRecordAction(form, questions, recordId, followup, context);
       default:
         return { success: false, message: `Unsupported follow-up action "${action}".` };
     }
@@ -74,36 +83,37 @@ export class FollowupService {
     form: FormConfig,
     questions: QuestionConfig[],
     recordId: string,
-    followup: FollowupConfig
+    followup: FollowupConfig,
+    context?: RecordContext
   ): FollowupActionResult {
     if (!followup.pdfTemplateId) {
       return { success: false, message: 'PDF template ID missing in follow-up config.' };
     }
-    const context = this.getRecordContext(form, questions, recordId);
-    if (!context || !context.record) {
+    const ctx = context || this.getRecordContext(form, questions, recordId);
+    if (!ctx || !ctx.record) {
       return { success: false, message: 'Record not found.' };
     }
-    const pdfArtifact = this.generatePdfArtifact(form, questions, context.record, followup);
+    const pdfArtifact = this.generatePdfArtifact(form, questions, ctx.record, followup);
     if (!pdfArtifact.success) {
       return { success: false, message: pdfArtifact.message || 'Failed to generate PDF.' };
     }
-    if (context.columns.pdfUrl && pdfArtifact.url) {
-      context.sheet.getRange(context.rowIndex, context.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
+    if (ctx.columns.pdfUrl && pdfArtifact.url) {
+      ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
     }
     const statusValue = followup.statusTransitions?.onPdf;
     let updatedAt = statusValue
-      ? this.submissionService.writeStatus(context.sheet, context.columns, context.rowIndex, statusValue, followup.statusFieldId)
+      ? this.submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
       : null;
     if (!updatedAt) {
-      updatedAt = this.submissionService.touchUpdatedAt(context.sheet, context.columns, context.rowIndex);
+      updatedAt = this.submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
     }
-    this.submissionService.refreshRecordCache(form.configSheet, questions, context);
+    this.submissionService.refreshRecordCache(form.configSheet, questions, ctx);
     return {
       success: true,
-      status: statusValue || context.record.status,
+      status: statusValue || ctx.record.status,
       pdfUrl: pdfArtifact.url,
       fileId: pdfArtifact.fileId,
-      updatedAt: updatedAt ? updatedAt.toISOString() : context.record.updatedAt
+      updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
     };
   }
 
@@ -111,7 +121,8 @@ export class FollowupService {
     form: FormConfig,
     questions: QuestionConfig[],
     recordId: string,
-    followup: FollowupConfig
+    followup: FollowupConfig,
+    context?: RecordContext
   ): FollowupActionResult {
     if (!followup.emailTemplateId) {
       return { success: false, message: 'Email template ID missing in follow-up config.' };
@@ -119,26 +130,26 @@ export class FollowupService {
     if (!followup.emailRecipients || !followup.emailRecipients.length) {
       return { success: false, message: 'Email recipients not configured.' };
     }
-    const context = this.getRecordContext(form, questions, recordId);
-    if (!context || !context.record) {
+    const ctx = context || this.getRecordContext(form, questions, recordId);
+    if (!ctx || !ctx.record) {
       return { success: false, message: 'Record not found.' };
     }
-    const lineItemRows = this.collectLineItemRows(context.record, questions);
-    const placeholders = this.buildPlaceholderMap(context.record, questions, lineItemRows);
-    const pdfArtifact = this.generatePdfArtifact(form, questions, context.record, followup);
+    const lineItemRows = this.collectLineItemRows(ctx.record, questions);
+    const placeholders = this.buildPlaceholderMap(ctx.record, questions, lineItemRows);
+    const pdfArtifact = this.generatePdfArtifact(form, questions, ctx.record, followup);
     if (!pdfArtifact.success) {
       return { success: false, message: pdfArtifact.message || 'Failed to generate PDF.' };
     }
-    if (context.columns.pdfUrl && pdfArtifact.url) {
-      context.sheet.getRange(context.rowIndex, context.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
+    if (ctx.columns.pdfUrl && pdfArtifact.url) {
+      ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
     }
-    const toRecipients = this.resolveRecipients(followup.emailRecipients, placeholders, context.record);
+    const toRecipients = this.resolveRecipients(followup.emailRecipients, placeholders, ctx.record);
     if (!toRecipients.length) {
       return { success: false, message: 'Resolved email recipients are empty.' };
     }
-    const ccRecipients = this.resolveRecipients(followup.emailCc, placeholders, context.record);
-    const bccRecipients = this.resolveRecipients(followup.emailBcc, placeholders, context.record);
-    const templateId = this.resolveTemplateId(followup.emailTemplateId, context.record.language);
+    const ccRecipients = this.resolveRecipients(followup.emailCc, placeholders, ctx.record);
+    const bccRecipients = this.resolveRecipients(followup.emailBcc, placeholders, ctx.record);
+    const templateId = this.resolveTemplateId(followup.emailTemplateId, ctx.record.language);
     if (!templateId) {
       return { success: false, message: 'No email template matched the submission language.' };
     }
@@ -148,8 +159,8 @@ export class FollowupService {
       const body = this.applyPlaceholders(templateBody, placeholders);
       const htmlBody = body.replace(/\n/g, '<br/>');
       const subject =
-        this.resolveLocalizedStringValue(followup.emailSubject, context.record.language) ||
-        `${form.title || 'Form'} submission ${context.record.id}`;
+        this.resolveLocalizedStringValue(followup.emailSubject, ctx.record.language) ||
+        `${form.title || 'Form'} submission ${ctx.record.id}`;
       GmailApp.sendEmail(toRecipients.join(','), subject || 'Form submission', body || 'See attached PDF.', {
         htmlBody,
         attachments: pdfArtifact.blob ? [pdfArtifact.blob] : undefined,
@@ -162,18 +173,18 @@ export class FollowupService {
     }
     const statusValue = followup.statusTransitions?.onEmail;
     let updatedAt = statusValue
-      ? this.submissionService.writeStatus(context.sheet, context.columns, context.rowIndex, statusValue, followup.statusFieldId)
+      ? this.submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
       : null;
     if (!updatedAt) {
-      updatedAt = this.submissionService.touchUpdatedAt(context.sheet, context.columns, context.rowIndex);
+      updatedAt = this.submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
     }
-    this.submissionService.refreshRecordCache(form.configSheet, questions, context);
+    this.submissionService.refreshRecordCache(form.configSheet, questions, ctx);
     return {
       success: true,
-      status: statusValue || context.record.status,
+      status: statusValue || ctx.record.status,
       pdfUrl: pdfArtifact.url,
       fileId: pdfArtifact.fileId,
-      updatedAt: updatedAt ? updatedAt.toISOString() : context.record.updatedAt
+      updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
     };
   }
 
@@ -181,21 +192,111 @@ export class FollowupService {
     form: FormConfig,
     questions: QuestionConfig[],
     recordId: string,
-    followup: FollowupConfig
+    followup: FollowupConfig,
+    context?: RecordContext
   ): FollowupActionResult {
-    const context = this.getRecordContext(form, questions, recordId);
-    if (!context) {
+    const ctx = context || this.getRecordContext(form, questions, recordId);
+    if (!ctx) {
       return { success: false, message: 'Record not found.' };
     }
     const statusValue = followup.statusTransitions?.onClose || 'Closed';
-    const updatedAt = this.submissionService.writeStatus(context.sheet, context.columns, context.rowIndex, statusValue, followup.statusFieldId)
-      || this.submissionService.touchUpdatedAt(context.sheet, context.columns, context.rowIndex);
-    this.submissionService.refreshRecordCache(form.configSheet, questions, context);
+    const updatedAt = this.submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
+      || this.submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
+    this.submissionService.refreshRecordCache(form.configSheet, questions, ctx);
     return {
       success: true,
       status: statusValue,
-      updatedAt: updatedAt ? updatedAt.toISOString() : context.record?.updatedAt
+      updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record?.updatedAt
     };
+  }
+
+  private validateFollowupRequirements(questions: QuestionConfig[], record: WebFormSubmission): string[] {
+    const values = { ...(record.values || {}) };
+    const lineItems: Record<string, { id: string; values: Record<string, any> }[]> = {};
+    const buildSubgroupKey = (groupId: string, rowId: string, subId: string) => `${groupId}::${rowId}::${subId}`;
+
+    questions
+      .filter(q => q.type === 'LINE_ITEM_GROUP')
+      .forEach(q => {
+        const rows = Array.isArray(values[q.id]) ? values[q.id] : [];
+        const normalized = rows.map((row: any, idx: number) => ({
+          id: `${q.id}_${idx}`,
+          values: row || {}
+        }));
+        lineItems[q.id] = normalized;
+        if (q.lineItemConfig?.subGroups?.length) {
+          normalized.forEach((row: { id: string; values: Record<string, any> }, rowIdx: number) => {
+            q.lineItemConfig?.subGroups?.forEach(sub => {
+              const subId = resolveSubgroupKey(sub);
+              if (!subId) return;
+              const children = Array.isArray(row.values[subId]) ? row.values[subId] : [];
+              const childKey = buildSubgroupKey(q.id, row.id, subId);
+              lineItems[childKey] = children.map((c: any, cIdx: number) => ({
+                id: `${row.id}_${subId}_${cIdx}`,
+                values: c || {}
+              }));
+            });
+          });
+        }
+      });
+
+    const errors: string[] = [];
+    const lang = (record.language as any) || 'EN';
+    const ctxBase = {
+      language: lang,
+      phase: 'followup' as const,
+      getValue: (fid: string) => values[fid],
+      getLineValue: (_rowId: string, fid: string) => values[fid]
+    };
+
+    questions.forEach(q => {
+      if (q.validationRules?.length) {
+        const errs = validateRules(q.validationRules, { ...ctxBase, isHidden: () => false });
+        errs.forEach(e => errors.push(e.message));
+      }
+      if (q.type === 'LINE_ITEM_GROUP' && q.lineItemConfig?.fields) {
+        const rows = lineItems[q.id] || [];
+        rows.forEach((row, idx) => {
+          q.lineItemConfig?.fields.forEach(field => {
+            if (field.validationRules?.length) {
+              const fieldErrs = validateRules(field.validationRules, {
+                language: lang,
+                phase: 'followup',
+                getValue: (fid: string) => (row.values.hasOwnProperty(fid) ? row.values[fid] : values[fid]),
+                getLineValue: () => undefined,
+                isHidden: () => false
+              });
+              fieldErrs.forEach(e => errors.push(e.message));
+            }
+          });
+
+          if (q.lineItemConfig?.subGroups?.length) {
+            q.lineItemConfig.subGroups.forEach(sub => {
+              const subId = resolveSubgroupKey(sub);
+              if (!subId) return;
+              const subKey = buildSubgroupKey(q.id, row.id, subId);
+              const childRows = lineItems[subKey] || [];
+              childRows.forEach((child, cIdx) => {
+                (sub.fields || []).forEach(field => {
+                  if (field.validationRules?.length) {
+                    const childErrs = validateRules(field.validationRules, {
+                      language: lang,
+                      phase: 'followup',
+                      getValue: (fid: string) => (child.values.hasOwnProperty(fid) ? child.values[fid] : values[fid]),
+                      getLineValue: () => undefined,
+                      isHidden: () => false
+                    });
+                    childErrs.forEach(e => errors.push(e.message));
+                  }
+                });
+              });
+            });
+          }
+        });
+      }
+    });
+
+    return errors;
   }
 
   private getRecordContext(
@@ -325,6 +426,18 @@ export class FollowupService {
           });
         }
       }
+    });
+
+    // Fallback: include any raw record.values entries not already populated (helps when a header/id mismatch prevented mapping)
+    Object.entries(record.values || {}).forEach(([key, rawVal]) => {
+      const formatted = this.formatTemplateValue(rawVal);
+      const tokens = this.buildPlaceholderKeys(key);
+      tokens.forEach(t => {
+        const ph = `{{${t}}}`;
+        if (map[ph] === undefined || map[ph] === '') {
+          map[ph] = formatted;
+        }
+      });
     });
     return map;
   }
@@ -815,8 +928,50 @@ export class FollowupService {
         .map(([key, val]) => `${key}: ${val ?? ''}`)
         .join(', ');
     }
+    // Google Sheets numeric serial dates (roughly 1900 epoch)
+    if (typeof value === 'number') {
+      const days = Number(value);
+      if (days > 30000 && days < 90000) {
+        const millis = (days - 25569) * 86400 * 1000; // Excel/Sheets serial to epoch
+        return new Date(millis).toISOString().slice(0, 10);
+      }
+      return value.toString();
+    }
     if (value instanceof Date) {
-      return value.toISOString();
+      return value.toISOString().slice(0, 10);
+    }
+    // Handle date-like strings from Sheets without coercing plain numbers
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      // ISO date only: keep as-is to avoid TZ shifts
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return trimmed;
+      }
+      // ISO with time
+      const isoWithTime = /^\d{4}-\d{2}-\d{2}[T\s].*/.test(trimmed);
+      // Common d/m/y or m/d/y with separators
+      const dmMatch = /^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/.test(trimmed);
+      // Pure numeric serial stored as string
+      const numericSerial = /^\d{4,}$/.test(trimmed) ? Number(trimmed) : NaN;
+      if (isoWithTime) {
+        const parsed = Date.parse(trimmed);
+        if (!Number.isNaN(parsed)) return new Date(parsed).toISOString().slice(0, 10);
+      }
+      if (dmMatch) {
+        const [a, b, c] = trimmed.split(/[\/-]/);
+        const dayFirst = a.length <= 2 && b.length <= 2;
+        const day = dayFirst ? Number(a) : Number(b);
+        const month = dayFirst ? Number(b) : Number(a);
+        const year = c.length === 2 ? Number(`20${c}`) : Number(c);
+        if (!Number.isNaN(day) && !Number.isNaN(month) && !Number.isNaN(year)) {
+          const utc = Date.UTC(year, month - 1, day);
+          return new Date(utc).toISOString().slice(0, 10);
+        }
+      }
+      if (!Number.isNaN(numericSerial) && numericSerial > 30000 && numericSerial < 90000) {
+        const millis = (numericSerial - 25569) * 86400 * 1000;
+        return new Date(millis).toISOString().slice(0, 10);
+      }
     }
     return value.toString();
   }
@@ -904,6 +1059,12 @@ export class FollowupService {
     let output = template;
     Object.entries(placeholders).forEach(([token, value]) => {
       output = output.replace(new RegExp(this.escapeRegExp(token), 'g'), value ?? '');
+      // Relaxed matcher to tolerate incidental spaces around tokens in the Doc
+      if (token.startsWith('{{') && token.endsWith('}}')) {
+        const inner = token.slice(2, -2);
+        const relaxed = new RegExp(`{{\\s*${this.escapeRegExp(inner)}\\s*}}`, 'g');
+        output = output.replace(relaxed, value ?? '');
+      }
     });
     return output;
   }

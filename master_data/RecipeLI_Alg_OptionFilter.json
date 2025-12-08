@@ -3,67 +3,67 @@
         "dependsOn": "ING",
         "optionMap": {
             "Onions": [
-                "None"
+                ""
             ],
             "Potatoes": [
-                "None"
+                ""
             ],
             "Broccoli": [
-                "None"
+                ""
             ],
             "Aubergines": [
-                "None"
+                ""
             ],
             "Carrots": [
-                "None"
+                ""
             ],
             "Tomatoes": [
-                "None"
+                ""
             ],
             "Peppers": [
-                "None"
+                ""
             ],
             "Cauliflower": [
-                "None"
+                ""
             ],
             "Squash": [
-                "None"
+                ""
             ],
             "Sweet potatoes": [
-                "None"
+                ""
             ],
             "Parsley": [
-                "None"
+                ""
             ],
             "Basil": [
-                "None"
+                ""
             ],
             "Dill": [
-                "None"
+                ""
             ],
             "Butternut": [
-                "None"
+                ""
             ],
             "Pumpkin": [
-                "None"
+                ""
             ],
             "Pleurotte mushrooms": [
-                "None"
+                ""
             ],
             "Spaghetti squash": [
-                "None"
+                ""
             ],
             "Courgettes": [
-                "None"
+                ""
             ],
             "Leeks": [
-                "None"
+                ""
             ],
             "Fresh mushrooms": [
-                "None"
+                ""
             ],
             "Rice": [
-                "None"
+                ""
             ],
             "Couscous (wheat)": [
                 "Gluten"
@@ -78,37 +78,37 @@
                 "Gluten"
             ],
             "Chickpeas (dry)": [
-                "None"
+                ""
             ],
             "Red lentils": [
-                "None"
+                ""
             ],
             "Green lentils": [
-                "None"
+                ""
             ],
             "Tomato pulp": [
-                "None"
+                ""
             ],
             "Tomato paste": [
-                "None"
+                ""
             ],
             "Diced tomatoes": [
-                "None"
+                ""
             ],
             "Garlic paste": [
-                "None"
+                ""
             ],
             "Ginger paste": [
-                "None"
+                ""
             ],
             "Cream": [
                 "Milk"
             ],
             "Yellow curry paste": [
-                "None"
+                ""
             ],
             "Coconut milk": [
-                "None"
+                ""
             ],
             "Oat milk": [
                 "Gluten"
@@ -117,19 +117,19 @@
                 "Peanuts"
             ],
             "Green beans (tinned)": [
-                "None"
+                ""
             ],
             "Carrots (tinned)": [
-                "None"
+                ""
             ],
             "Chickpeas (tinned)": [
-                "None"
+                ""
             ],
             "Red beans (tinned)": [
-                "None"
+                ""
             ],
             "White beans (tinned)": [
-                "None"
+                ""
             ],
             "Pesto": [
                 "Milk", "Peanuts"
@@ -144,10 +144,10 @@
                 "Gluten"
             ],
             "Chicken cubes": [
-                "None"
+                ""
             ],
             "Chicken wings": [
-                "None"
+                ""
             ],
             "Chicken tenders (breaded)": [
                 "Gluten"
@@ -159,106 +159,106 @@
                 "Gluten"
             ],
             "Frozen green beans": [
-                "None"
+                ""
             ],
             "Frozen Chinese mix": [
-                "None"
+                ""
             ],
             "Frozen corn": [
-                "None"
+                ""
             ],
             "Frozen leeks": [
-                "None"
+                ""
             ],
             "Frozen mushrooms": [
-                "None"
+                ""
             ],
             "Frozen carrots": [
-                "None"
+                ""
             ],
             "Frozen couscous mix": [
                 "Gluten"
             ],
             "Frozen courgettes": [
-                "None"
+                ""
             ],
             "Frozen pumpkin": [
-                "None"
+                ""
             ],
             "Frozen peppers": [
-                "None"
+                ""
             ],
             "Frozen spinach": [
-                "None"
+                ""
             ],
             "Frozen red beans": [
-                "None"
+                ""
             ],
             "Frozen onions": [
-                "None"
+                ""
             ],
             "Frozen green peas": [
-                "None"
+                ""
             ],
             "Frozen cauliflower": [
-                "None"
+                ""
             ],
             "Bouillon powder (soy)": [
                 "Soy"
             ],
             "Salt": [
-                "None"
+                ""
             ],
             "Sugar": [
-                "None"
+                ""
             ],
             "Curry madras": [
-                "None"
+                ""
             ],
             "Coriander": [
-                "None"
+                ""
             ],
             "Cayenne pepper": [
-                "None"
+                ""
             ],
             "Turmeric": [
-                "None"
+                ""
             ],
             "Black pepper": [
-                "None"
+                ""
             ],
             "Paprika": [
-                "None"
+                ""
             ],
             "Cumin": [
-                "None"
+                ""
             ],
             "Cinnamon": [
-                "None"
+                ""
             ],
             "Mint": [
-                "None"
+                ""
             ],
             "Oregano": [
-                "None"
+                ""
             ],
             "Dried parsley": [
-                "None"
+                ""
             ],
             "Dried dill": [
-                "None"
+                ""
             ],
             "Dried mint": [
-                "None"
+                ""
             ],
             "Dried oregano": [
-                "None"
+                ""
             ],
             "Nutmeg": [
-                "None"
+                ""
             ],
             "Dried basil": [
-                "None"
+                ""
             ],
             "Soy sauce (soy)": [
                 "Soy"
@@ -267,10 +267,10 @@
                 "Soy"
             ],
             "Sunflower oil": [
-                "None"
+                ""
             ],
             "Olive oil": [
-                "None"
+                ""
             ]
         }
     }

@@ -2,6 +2,7 @@ import {
   AutoIncrementConfig,
   BaseQuestionType,
   DataSourceConfig,
+  DerivedValueConfig,
   FileUploadConfig,
   LineItemFieldConfig,
   LineItemGroupConfig,
@@ -145,6 +146,7 @@ export class ConfigSheet {
       const listViewFlag = row[idxListView] !== '' && row[idxListView] !== null ? !!row[idxListView] : false;
       const listViewSort = listViewFlag ? this.parseListViewSort(rawConfig) : undefined;
       const autoIncrement = type === 'TEXT' ? this.parseAutoIncrement(rawConfig) : undefined;
+      const derivedValue = this.parseDerivedValue(rawConfig);
 
       return {
         id: row[0] ? row[0].toString() : '',
@@ -168,7 +170,8 @@ export class ConfigSheet {
         selectionEffects,
         listViewSort,
         autoIncrement,
-        valueMap
+        valueMap,
+        derivedValue
       };
     });
   }
@@ -515,6 +518,19 @@ export class ConfigSheet {
       const vm = parsed?.valueMap;
       if (vm && vm.dependsOn && vm.optionMap) {
         return vm as OptionFilter;
+      }
+    } catch (_) {
+      // ignore parse errors
+    }
+    return undefined;
+  }
+
+  private static parseDerivedValue(rawConfig?: string): DerivedValueConfig | undefined {
+    if (!rawConfig) return undefined;
+    try {
+      const parsed = JSON.parse(this.sanitizeJson(rawConfig || ''));
+      if (parsed?.derivedValue) {
+        return this.normalizeDerivedValue(parsed.derivedValue);
       }
     } catch (_) {
       // ignore parse errors
@@ -893,6 +909,7 @@ export class ConfigSheet {
           : undefined;
         const selectionEffects = this.parseSelectionEffects(rawConfig);
         const valueMap = this.parseValueMap(rawConfig);
+        const derivedValue = this.parseDerivedValue(rawConfig);
       return {
         id: row[0] ? row[0].toString() : `LI${idx + 1}`,
         type: fieldType,
@@ -908,7 +925,8 @@ export class ConfigSheet {
         visibility,
         dataSource,
         selectionEffects,
-        valueMap
+        valueMap,
+        derivedValue
       };
     }).filter(f => f.labelEn || f.labelFr || f.labelNl);
 
@@ -922,6 +940,7 @@ export class ConfigSheet {
       : undefined;
     const selectionEffects = this.normalizeSelectionEffects(field?.selectionEffects);
     const valueMap = this.normalizeValueMap(field?.valueMap);
+    const derivedValue = this.normalizeDerivedValue(field?.derivedValue);
     return {
       id: field?.id || `LI${idx + 1}`,
       type: baseType,
@@ -937,7 +956,8 @@ export class ConfigSheet {
       visibility: this.normalizeVisibility(field?.visibility),
       dataSource,
       selectionEffects,
-      valueMap
+      valueMap,
+      derivedValue
     };
   }
 
@@ -991,5 +1011,20 @@ export class ConfigSheet {
     if (!raw) return undefined;
     if (raw.dependsOn && raw.optionMap) return raw as OptionFilter;
     return undefined;
+  }
+
+  private static normalizeDerivedValue(raw: any): DerivedValueConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const dependsOn = raw.dependsOn ? raw.dependsOn.toString() : '';
+    if (!dependsOn) return undefined;
+    const op = raw.op ? raw.op.toString() : 'addDays';
+    if (op !== 'addDays') return undefined;
+    const cfg: DerivedValueConfig = { dependsOn, op: 'addDays' };
+    if (raw.offsetDays !== undefined && raw.offsetDays !== null) {
+      const num = Number(raw.offsetDays);
+      if (!isNaN(num)) cfg.offsetDays = num;
+    }
+    if (raw.hidden !== undefined) cfg.hidden = Boolean(raw.hidden);
+    return cfg;
   }
 }

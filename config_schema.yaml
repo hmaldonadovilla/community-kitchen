@@ -58,6 +58,9 @@ components:
           items:
             $ref: '#/components/schemas/ValidationRule'
           description: Cross-field validation rules for this question.
+        derivedValue:
+          $ref: '#/components/schemas/DerivedValueConfig'
+          description: Computed value helper (e.g., add days to a date). Useful for hidden/system fields like expiration dates.
         visibility:
           $ref: '#/components/schemas/VisibilityConfig'
           description: Show or hide this question based on another field value.
@@ -156,6 +159,9 @@ components:
           items:
             $ref: '#/components/schemas/ValidationRule'
           description: Cross-field validation rules inside the line item row.
+        derivedValue:
+          $ref: '#/components/schemas/DerivedValueConfig'
+          description: Computed value helper for a line-item field (e.g., auto-calc expiry per row).
         visibility:
           $ref: '#/components/schemas/VisibilityConfig'
           description: Show/hide logic for this line item field based on another value.
@@ -267,6 +273,27 @@ components:
           Yogurt: [Milk]
           Pesto: [Milk, Peanuts]
           "*": [None]
+
+    DerivedValueConfig:
+      type: object
+      properties:
+        dependsOn:
+          type: string
+          description: ID of the source field to base the calculation on.
+        op:
+          type: string
+          enum: [addDays]
+          description: Supported operation (currently addDays).
+        offsetDays:
+          type: integer
+          description: Number of days to add (can be negative).
+        hidden:
+          type: boolean
+          description: Informational flag to mark the field as system-managed/hidden in UI.
+      required:
+        - dependsOn
+        - op
+      description: Compute a field value automatically (e.g., expiration date = prep date + 2 days).
 
     DataSourceConfig:
       type: object
@@ -763,6 +790,10 @@ components:
                   type: string
               additionalProperties:
                 type: string
+        phase:
+          type: string
+          enum: [submit, followup, both]
+          description: Optional scope; defaults to "both". Use "followup" to enforce a rule only during follow-up actions (e.g., require FINAL_QTY then).
       required:
         - when
         - then

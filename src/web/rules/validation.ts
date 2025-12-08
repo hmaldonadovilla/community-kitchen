@@ -29,6 +29,11 @@ const withLimitMessage = (prefix: string, limit: number | string) => ({
 
 export interface ValidationContext extends VisibilityContext {
   language: LangCode;
+  /**
+   * Optional phase indicator so rules can scope themselves
+   * (e.g., submit vs followup). Defaults to "submit".
+   */
+  phase?: 'submit' | 'followup';
   isHidden?: (fieldId: string, rowId?: string) => boolean;
 }
 
@@ -87,8 +92,11 @@ export function checkRule(
 
 export function validateRules(rules: ValidationRule[], ctx: ValidationContext): ValidationError[] {
   const errors: ValidationError[] = [];
+  const phase = ctx.phase || 'submit';
 
   rules.forEach(rule => {
+    const rulePhase = rule.phase || 'both';
+    if (rulePhase !== 'both' && rulePhase !== phase) return;
     const whenValue = ctx.getValue(rule.when.fieldId);
     if (!matchesWhen(whenValue, rule.when)) return;
     if (ctx.isHidden && ctx.isHidden(rule.then.fieldId)) return;

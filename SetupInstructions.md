@@ -170,6 +170,24 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```
 
         Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`. Actions: `required` true/false, `min`, `max`, `allowed`, `disallowed`.
+      - Scope rules to follow-up only: add `"phase": "followup"` to a rule when it should only block follow-up actions (e.g., require `FINAL_QTY` during follow-up but keep it optional on submit).
+
+    - Computed fields (`derivedValue`):
+      - Use when a value should auto-calc from another field (e.g., expiration date = meal prep date + 2 days), optionally hidden.
+      - Add in Config JSON (works for main or line-item fields):
+
+        ```json
+        {
+          "derivedValue": {
+            "dependsOn": "MEAL_DATE",
+            "op": "addDays",
+            "offsetDays": 2,
+            "hidden": true
+          }
+        }
+        ```
+
+      - Supported op: `addDays` (offset can be negative). The value is recomputed when dependencies change and is stored with the submission; use `visibility` to hide if needed.
 
         Validation messages can be localized. `message` accepts a string or an object keyed by language (EN/FR/NL) and falls back to English. Example:
 

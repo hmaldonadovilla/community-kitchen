@@ -26,6 +26,7 @@ import { FormErrors, LineItemState, OptionState, View } from './types';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
 import { resolveLocalizedString } from '../i18n';
 import { isEmptyValue } from './utils/values';
+import packageJson from '../../../package.json';
 
 type SubmissionMeta = {
   id?: string;
@@ -248,7 +249,7 @@ const TooltipIcon: React.FC<{
 };
 
 // Build marker to verify deployed bundle version in UI
-const BUILD_MARKER = 'tooltip-overlay-2025-02-08-01';
+const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
 
 const seedSubgroupDefaults = (
   lineItems: LineItemState,
@@ -395,6 +396,24 @@ const resolveValueMapValue = (
   return unique.join(', ');
 };
 
+const resolveDerivedValue = (
+  config: any,
+  getter: (fieldId: string) => FieldValue
+): FieldValue => {
+  if (!config) return undefined;
+  if (config.op === 'addDays') {
+    const base = getter(config.dependsOn);
+    if (!base) return '';
+    const baseDate = new Date(base as any);
+    if (isNaN(baseDate.getTime())) return '';
+    const offset = typeof config.offsetDays === 'number' ? config.offsetDays : Number(config.offsetDays || 0);
+    const result = new Date(baseDate);
+    result.setDate(result.getDate() + (isNaN(offset) ? 0 : offset));
+    return result.toISOString().slice(0, 10);
+  }
+  return undefined;
+};
+
 const applyValueMapsToLineRow = (
   fields: any[],
   rowValues: Record<string, FieldValue>,
@@ -402,14 +421,24 @@ const applyValueMapsToLineRow = (
 ): Record<string, FieldValue> => {
   const nextValues = { ...rowValues };
   fields
-    .filter(field => field?.valueMap)
+    .filter(field => field?.valueMap || field?.derivedValue)
     .forEach(field => {
-      const computed = resolveValueMapValue(field.valueMap, fieldId => {
-        if (fieldId === undefined || fieldId === null) return undefined;
-        if (rowValues.hasOwnProperty(fieldId)) return nextValues[fieldId];
-        return topValues[fieldId];
-      });
-      nextValues[field.id] = computed;
+      if (field.valueMap) {
+        const computed = resolveValueMapValue(field.valueMap, fieldId => {
+          if (fieldId === undefined || fieldId === null) return undefined;
+          if (rowValues.hasOwnProperty(fieldId)) return nextValues[fieldId];
+          return topValues[fieldId];
+        });
+        nextValues[field.id] = computed;
+      }
+      if (field.derivedValue) {
+        const derived = resolveDerivedValue(field.derivedValue, fid => {
+          if (fid === undefined || fid === null) return undefined;
+          if (rowValues.hasOwnProperty(fid)) return nextValues[fid];
+          return topValues[fid];
+        });
+        if (derived !== undefined) nextValues[field.id] = derived;
+      }
     });
   return nextValues;
 };
@@ -425,6 +454,10 @@ const applyValueMapsToForm = (
   definition.questions.forEach(q => {
     if (q.valueMap) {
       values[q.id] = resolveValueMapValue(q.valueMap, fieldId => values[fieldId]);
+    }
+    if ((q as any).derivedValue) {
+      const derived = resolveDerivedValue((q as any).derivedValue, fieldId => values[fieldId]);
+      if (derived !== undefined) values[q.id] = derived;
     }
     if (q.type === 'LINE_ITEM_GROUP' && q.lineItemConfig?.fields) {
       const rows = lineItems[q.id] || [];
@@ -967,7 +1000,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     definition.questions.forEach(q => {
       const questionHidden = shouldHideField(q.visibility, ctx);
       if (q.validationRules && q.validationRules.length) {
-        const errs = validateRules(q.validationRules, { ...ctx, language, isHidden: () => questionHidden });
+        const errs = validateRules(q.validationRules, { ...ctx, language, phase: 'submit', isHidden: () => questionHidden });
         errs.forEach(err => {
           allErrors[err.fieldId] = err.message;
         });
@@ -980,6 +1013,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             getLineValue: (_rowId, fid) => row.values[fid]
           };
           q.lineItemConfig?.fields.forEach(field => {
+            if (field.validationRules && field.validationRules.length) {
+              const errs = validateRules(field.validationRules, {
+                ...groupCtx,
+                language,
+                phase: 'submit',
+                isHidden: () => shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
+              } as any);
+              errs.forEach(err => {
+                allErrors[`${q.id}__${field.id}__${row.id}`] = err.message;
+              });
+            }
             if (field.required) {
               const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
               if (hideField) return;
@@ -1004,6 +1048,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
                   getLineValue: (_rowId, fid) => subRow.values[fid]
                 };
                 (sub.fields || []).forEach(field => {
+                if (field.validationRules && field.validationRules.length) {
+                  const errs = validateRules(field.validationRules, {
+                    ...subCtx,
+                    language,
+                    phase: 'submit',
+                    isHidden: () => shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey })
+                  } as any);
+                  errs.forEach(err => {
+                    allErrors[`${subKey}__${field.id}__${subRow.id}`] = err.message;
+                  });
+                }
                   if (field.required) {
                     const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
                     if (hide) return;
