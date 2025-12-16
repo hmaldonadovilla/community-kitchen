@@ -92,6 +92,12 @@ export function fetchSubmissionById(formKey: string, id: string): any {
   return service.fetchSubmissionById(formKey, id);
 }
 
+export function fetchSubmissionByRowNumber(formKey: string, rowNumber: number): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchSubmissionByRowNumber(formKey, rowNumber);
+}
+
 export function saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

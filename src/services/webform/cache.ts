@@ -8,6 +8,14 @@ export const CACHE_VERSION_PROPERTY_KEY = 'CK_CACHE_VERSION';
 export const DEFAULT_CACHE_VERSION = 'v1';
 export const ETAG_PROPERTY_PREFIX = 'CK_ETAG_';
 
+type SheetEtagMetadata = {
+  etag: string;
+  lastRow?: number;
+  lastCol?: number;
+  updatedAt?: string;
+  reason?: string;
+};
+
 export class CacheEtagManager {
   private cache: GoogleAppsScript.Cache.Cache | null;
   private docProps: GoogleAppsScript.Properties.Properties | null;
@@ -75,10 +83,19 @@ export class CacheEtagManager {
     etag: string,
     projection: string[],
     pageSize: number,
-    pageToken?: string
+    pageToken?: string,
+    includeRecords: boolean = true
   ): string {
     const projectionKey = (projection || []).map(id => id || '').join('|');
-    return this.makeCacheKey('LIST', [formKey || '', etag || '', projectionKey, pageSize.toString(), pageToken || '']);
+    const recordFlag = includeRecords ? 'R1' : 'R0';
+    return this.makeCacheKey('LIST', [
+      formKey || '',
+      etag || '',
+      projectionKey,
+      pageSize.toString(),
+      pageToken || '',
+      recordFlag
+    ]);
   }
 
   makeCacheKey(namespace: string, parts: string[]): string {
@@ -106,9 +123,46 @@ export class CacheEtagManager {
   }
 
   getSheetEtag(sheet: GoogleAppsScript.Spreadsheet.Sheet, columns: HeaderColumns): string {
+    // Prefer document-property etags to avoid expensive full-column digests on read paths.
+    const stored = this.readEtagMetadata(sheet);
+    if (stored?.etag) {
+      const currentLastRow = sheet.getLastRow();
+      const currentLastCol = sheet.getLastColumn();
+      const storedLastRow = typeof stored.lastRow === 'number' && !Number.isNaN(stored.lastRow) ? stored.lastRow : undefined;
+      const storedLastCol = typeof stored.lastCol === 'number' && !Number.isNaN(stored.lastCol) ? stored.lastCol : undefined;
+      const shapeChanged =
+        (storedLastRow !== undefined && storedLastRow !== currentLastRow) ||
+        (storedLastCol !== undefined && storedLastCol !== currentLastCol);
+      if (!shapeChanged) return stored.etag;
+      // Sheet structure changed (e.g., rows appended outside this app). Bump the etag so list/record caches refresh.
+      return this.bumpSheetEtag(sheet, columns, 'shapeChanged');
+    }
+
+    // If doc properties are available but no etag was stored yet, initialize one without hashing the entire sheet.
+    if (this.docProps) {
+      return this.bumpSheetEtag(sheet, columns, 'init');
+    }
+
+    // Fallback (tests / environments without document properties): compute the original fingerprint.
     const fingerprint = this.computeSheetFingerprint(sheet, columns);
-    this.storeEtagMetadata(sheet, fingerprint);
+    this.storeEtagMetadata(sheet, fingerprint, 'computed');
     return fingerprint;
+  }
+
+  bumpSheetEtag(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    columns?: HeaderColumns,
+    reason: string = 'bump'
+  ): string {
+    const next = this.generateEtag();
+    this.storeEtagMetadata(sheet, next, reason);
+    debugLog('etag.bumped', {
+      reason,
+      sheetName: sheet.getName ? sheet.getName() : 'unknown',
+      lastRow: sheet.getLastRow(),
+      lastCol: sheet.getLastColumn()
+    });
+    return next;
   }
 
   private computeSheetFingerprint(sheet: GoogleAppsScript.Spreadsheet.Sheet, columns: HeaderColumns): string {
@@ -151,18 +205,47 @@ export class CacheEtagManager {
     }
   }
 
-  private storeEtagMetadata(sheet: GoogleAppsScript.Spreadsheet.Sheet, etag: string): void {
+  private storeEtagMetadata(sheet: GoogleAppsScript.Spreadsheet.Sheet, etag: string, reason?: string): void {
     if (!this.docProps) return;
     try {
-      const payload = JSON.stringify({
+      const payload: SheetEtagMetadata = {
         etag,
         lastRow: sheet.getLastRow(),
-        updatedAt: new Date().toISOString()
-      });
-      this.docProps.setProperty(this.getEtagPropertyKey(sheet), payload);
+        lastCol: sheet.getLastColumn(),
+        updatedAt: new Date().toISOString(),
+        reason
+      };
+      this.docProps.setProperty(this.getEtagPropertyKey(sheet), JSON.stringify(payload));
     } catch (_) {
       // ignore
     }
+  }
+
+  private readEtagMetadata(sheet: GoogleAppsScript.Spreadsheet.Sheet): SheetEtagMetadata | null {
+    if (!this.docProps) return null;
+    try {
+      const raw = this.docProps.getProperty(this.getEtagPropertyKey(sheet));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      const etag = (parsed as any).etag;
+      if (!etag || typeof etag !== 'string') return null;
+      const lastRow = Number((parsed as any).lastRow);
+      const lastCol = Number((parsed as any).lastCol);
+      return {
+        etag,
+        lastRow: Number.isNaN(lastRow) ? undefined : lastRow,
+        lastCol: Number.isNaN(lastCol) ? undefined : lastCol,
+        updatedAt: (parsed as any).updatedAt,
+        reason: (parsed as any).reason
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  private generateEtag(): string {
+    return `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   }
 
   private getEtagPropertyKey(sheet: GoogleAppsScript.Spreadsheet.Sheet): string {

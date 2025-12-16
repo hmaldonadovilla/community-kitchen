@@ -481,7 +481,7 @@ components:
               enum: [asc, desc]
         pageSize:
           type: integer
-          description: Max rows per page (default 10, capped at 10).
+          description: Max rows per page (default 10, capped at 50).
       required:
         - columns
       description: Configuration for list views showing saved submissions.

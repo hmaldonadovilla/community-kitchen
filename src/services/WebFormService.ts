@@ -55,7 +55,8 @@ export class WebFormService {
     debugLog('renderForm.start', { requestedKey: formKey, mode: 'react' });
     const def = this.buildDefinition(formKey);
     const targetKey = formKey || def.title;
-    const html = buildReactTemplate(def, targetKey);
+    const bootstrap = this.buildBootstrap(targetKey, def);
+    const html = buildReactTemplate(def, targetKey, bootstrap);
     debugLog('renderForm.htmlBuilt', {
       formKey: targetKey,
       questionCount: def.questions.length,
@@ -67,6 +68,68 @@ export class WebFormService {
     const output = HtmlService.createHtmlOutput(html);
     output.setTitle(def.title || 'Form');
     return output;
+  }
+
+  private buildBootstrap(formKey: string, def: WebFormDefinition): any {
+    try {
+      if (!def?.listView?.columns?.length) return null;
+      const { form, questions } = this.getFormContextLite(formKey);
+
+      const projection = (def.listView.columns || [])
+        .filter(col => col && col.kind !== 'meta')
+        .map(col => (col.fieldId || '').toString())
+        .filter(Boolean);
+
+      const fetchPageSize = 50;
+      const recordBootstrapLimit = 25;
+      let token: string | undefined;
+      let aggregated: any[] = [];
+      let lastRes: any = null;
+      let pages = 0;
+      const startedAt = Date.now();
+
+      do {
+        const res = this.listing.fetchSubmissions(form, questions, projection, fetchPageSize, token);
+        lastRes = res;
+        const items = (res && Array.isArray((res as any).items)) ? (res as any).items : [];
+        aggregated = aggregated.concat(items);
+        token = (res as any)?.nextPageToken;
+        pages += 1;
+        if (!token || aggregated.length >= ((res as any)?.totalCount || 200)) {
+          token = undefined;
+        }
+      } while (token);
+
+      debugLog('renderForm.bootstrap.listPrefetch', {
+        formKey,
+        pages,
+        items: aggregated.length,
+        durationMs: Date.now() - startedAt
+      });
+
+      if (!lastRes) return null;
+      const totalCount = (lastRes as any)?.totalCount || aggregated.length;
+
+      // For small datasets, also embed record snapshots so record selection is instant (no google.script.run call on click).
+      if (totalCount > 0 && totalCount <= recordBootstrapLimit) {
+        const batch = this.listing.fetchSubmissionsBatch(form, questions, projection, totalCount, undefined, true);
+        const listResponse = { ...(batch?.list as any), items: (batch?.list as any)?.items || aggregated, nextPageToken: undefined };
+        const records = (batch as any)?.records || {};
+        debugLog('renderForm.bootstrap.recordPrefetch', {
+          formKey,
+          records: Object.keys(records).length,
+          totalCount,
+          durationMs: Date.now() - startedAt
+        });
+        return { listResponse, records };
+      }
+
+      const listResponse = { ...(lastRes as any), items: aggregated, nextPageToken: undefined };
+      return { listResponse, records: {} };
+    } catch (err: any) {
+      debugLog('renderForm.bootstrap.error', { formKey, message: err?.message || err?.toString?.() || 'unknown' });
+      return null;
+    }
   }
 
   public submitWebForm(formObject: any): { success: boolean; message: string } {
@@ -94,7 +157,7 @@ export class WebFormService {
     pageSize: number = 10,
     pageToken?: string
   ): PaginatedResult<Record<string, any>> {
-    const { form, questions } = this.getFormContext(formKey);
+    const { form, questions } = this.getFormContextLite(formKey);
     return this.listing.fetchSubmissions(form, questions, projection, pageSize, pageToken);
   }
 
@@ -106,13 +169,18 @@ export class WebFormService {
     includePageRecords: boolean = true,
     recordIds?: string[]
   ): SubmissionBatchResult<Record<string, any>> {
-    const { form, questions } = this.getFormContext(formKey);
+    const { form, questions } = this.getFormContextLite(formKey);
     return this.listing.fetchSubmissionsBatch(form, questions, projection, pageSize, pageToken, includePageRecords, recordIds);
   }
 
   public fetchSubmissionById(formKey: string, id: string): WebFormSubmission | null {
-    const { form, questions } = this.getFormContext(formKey);
+    const { form, questions } = this.getFormContextLite(formKey);
     return this.listing.fetchSubmissionById(form, questions, id);
+  }
+
+  public fetchSubmissionByRowNumber(formKey: string, rowNumber: number): WebFormSubmission | null {
+    const { form, questions } = this.getFormContextLite(formKey);
+    return this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber);
   }
 
   public saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
@@ -135,6 +203,19 @@ export class WebFormService {
     const form = this.definitionBuilder.findForm(formKey);
     const questions = this.loadActiveQuestions(form.configSheet);
     return { form, questions };
+  }
+
+  private getFormContextLite(formKey?: string): { form: FormConfig; questions: QuestionConfig[] } {
+    const cacheKey = this.cacheManager.makeCacheKey('CTX', [formKey || '', 'lite']);
+    const cached = this.cacheManager.cacheGet<{ form: FormConfig; questions: QuestionConfig[] }>(cacheKey);
+    if (cached && cached.form && Array.isArray(cached.questions)) {
+      return cached;
+    }
+    const form = this.definitionBuilder.findForm(formKey);
+    const questions = ConfigSheet.getQuestionsLite(this.ss, form.configSheet).filter(q => q.status === 'Active');
+    const result = { form, questions };
+    this.cacheManager.cachePut(cacheKey, result);
+    return result;
   }
 
   private loadActiveQuestions(configSheet: string): QuestionConfig[] {

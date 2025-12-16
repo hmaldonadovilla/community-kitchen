@@ -1,5 +1,6 @@
 import { WebFormDefinition } from '../types';
 import { WEB_FORM_REACT_BUNDLE } from '../web/react/reactBundle';
+import { isDebugEnabled } from './webform/debug';
 
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
 const SCRIPT_CLOSE_ESCAPED = String.raw`<\\/script`;
@@ -38,11 +39,21 @@ const encodeBase64 = (value: string): string => {
   return value;
 };
 
-export function buildWebFormHtml(def: WebFormDefinition, formKey: string): string {
+let cachedBundleBase64: string | null = null;
+const getBundleBase64 = (): string => {
+  if (cachedBundleBase64 !== null) return cachedBundleBase64;
+  // Base64 contains only A–Z/a–z/0–9/+//= so it is safe to embed directly in a single-quoted string literal.
+  cachedBundleBase64 = encodeBase64(WEB_FORM_REACT_BUNDLE || '');
+  return cachedBundleBase64;
+};
+
+export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootstrap?: any): string {
   const defJson = escapeJsonForScript(def);
   const keyJson = escapeJsonForScript(formKey || def?.title || '');
+  const debugJson = isDebugEnabled() ? 'true' : 'false';
+  const bootstrapJson = escapeJsonForScript(bootstrap || null);
   // Base64-encode the bundle to avoid parser issues when Google wraps HTML in document.write.
-  const bundleBase64 = escapeScriptTerminator(encodeBase64(WEB_FORM_REACT_BUNDLE || ''));
+  const bundleBase64 = escapeScriptTerminator(getBundleBase64());
 
   return `<!DOCTYPE html>
 <html>
@@ -211,7 +222,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string): strin
   </head>
   <body>
     <div id="react-prototype-root"></div>
-    <script>window.__WEB_FORM_DEF__ = ${defJson}; window.__WEB_FORM_KEY__ = ${keyJson};</script>
+    <script>window.__WEB_FORM_DEF__ = ${defJson}; window.__WEB_FORM_KEY__ = ${keyJson}; window.__WEB_FORM_DEBUG__ = ${debugJson}; window.__WEB_FORM_BOOTSTRAP__ = ${bootstrapJson};</script>
     <script>
       // Decode + eval to keep the inline script content parser-safe within Google wrappers.
       (function() {

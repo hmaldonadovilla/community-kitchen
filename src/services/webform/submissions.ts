@@ -159,7 +159,11 @@ export class SubmissionService {
       updatedAt: updatedAtVal instanceof Date ? updatedAtVal.toISOString() : updatedAtVal
     };
 
-    const newEtag = this.cacheManager.getSheetEtag(sheet, columns);
+    const newEtag = this.cacheManager.bumpSheetEtag(
+      sheet,
+      columns,
+      existingRowIdx >= 0 ? 'saveSubmission.update' : 'saveSubmission.create'
+    );
     const cachedRecord = this.buildSubmissionRecord(form.configSheet, questions, columns, valuesArray, recordId);
     if (cachedRecord) {
       this.cacheManager.cacheRecord(form.configSheet, newEtag, cachedRecord);
@@ -195,7 +199,13 @@ export class SubmissionService {
       }
     });
 
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    const headersChanged =
+      !existingHeaders.length ||
+      headers.length !== existingHeaders.length ||
+      headers.some((h, idx) => h !== existingHeaders[idx]);
+    if (headersChanged) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    }
 
     const columns: HeaderColumns = {
       timestamp: this.findHeader(headers, ['timestamp']),
@@ -288,9 +298,14 @@ export class SubmissionService {
     rowIndex: number,
     value?: Date
   ): Date | null {
-    if (!columns.updatedAt) return null;
+    if (!columns.updatedAt) {
+      // Still bump etag to invalidate list/record caches when callers mutate other columns (e.g., status/pdf URL).
+      this.cacheManager.bumpSheetEtag(sheet, columns, 'touchUpdatedAt.noColumn');
+      return null;
+    }
     const timestamp = value instanceof Date ? value : new Date();
     sheet.getRange(rowIndex, columns.updatedAt, 1, 1).setValue(timestamp);
+    this.cacheManager.bumpSheetEtag(sheet, columns, 'touchUpdatedAt');
     return timestamp;
   }
 
@@ -304,11 +319,19 @@ export class SubmissionService {
     if (!value) return null;
     if (statusFieldId && columns.fields[statusFieldId]) {
       sheet.getRange(rowIndex, columns.fields[statusFieldId] as number, 1, 1).setValue(value);
-      return this.touchUpdatedAt(sheet, columns, rowIndex);
+      const updated = this.touchUpdatedAt(sheet, columns, rowIndex);
+      if (!updated) {
+        this.cacheManager.bumpSheetEtag(sheet, columns, 'writeStatus.noUpdatedAt');
+      }
+      return updated;
     }
     if (columns.status) {
       sheet.getRange(rowIndex, columns.status, 1, 1).setValue(value);
-      return this.touchUpdatedAt(sheet, columns, rowIndex);
+      const updated = this.touchUpdatedAt(sheet, columns, rowIndex);
+      if (!updated) {
+        this.cacheManager.bumpSheetEtag(sheet, columns, 'writeStatus.noUpdatedAt');
+      }
+      return updated;
     }
     return null;
   }

@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { resolveLocalizedString } from '../../i18n';
 import { LangCode, WebFormDefinition, WebFormSubmission } from '../../types';
-import { fetchBatch, BatchResponse, ListItem, ListResponse } from '../api';
+import { fetchBatch, fetchList, ListItem, ListResponse } from '../api';
 
 interface ListViewProps {
   formKey: string;
@@ -12,6 +12,7 @@ interface ListViewProps {
   cachedRecords?: Record<string, WebFormSubmission>;
   refreshToken?: number;
   onCache?: (payload: { response: ListResponse; records: Record<string, WebFormSubmission> }) => void;
+  onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
 const ListView: React.FC<ListViewProps> = ({
@@ -22,7 +23,8 @@ const ListView: React.FC<ListViewProps> = ({
   cachedResponse,
   cachedRecords,
   refreshToken = 0,
-  onCache
+  onCache,
+  onDiagnostic
 }) => {
   const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
   const [loading, setLoading] = useState(false);
@@ -37,46 +39,6 @@ const ListView: React.FC<ListViewProps> = ({
   const [sortField, setSortField] = useState<string>(defaultSortField);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
 
-  const fetchAllPages = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      let token: string | undefined;
-      let aggregated: ListItem[] = [];
-      const mergedRecords: Record<string, WebFormSubmission> = {};
-      let lastResponse: ListResponse | null = null;
-      do {
-        const res: BatchResponse | null = await fetchBatch(formKey, undefined, pageSize, token, true);
-        if (!res || !res.list) {
-          setError('Failed to load list');
-          break;
-        }
-        lastResponse = res.list;
-        const items = res.list.items || [];
-        aggregated = aggregated.concat(items);
-        Object.assign(mergedRecords, res.records || {});
-        token = res.list.nextPageToken;
-        if (!token || aggregated.length >= (res.list.totalCount || 200)) {
-          token = undefined;
-        }
-      } while (token);
-      setAllItems(aggregated);
-      setRecords(mergedRecords);
-      setTotalCount(lastResponse?.totalCount || aggregated.length);
-      setPageIndex(0);
-      if (lastResponse) {
-        onCache?.({
-          response: { ...lastResponse, items: aggregated, nextPageToken: undefined },
-          records: mergedRecords
-        });
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load list');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (cachedResponse?.items?.length) {
       setAllItems(cachedResponse.items);
@@ -90,8 +52,141 @@ const ListView: React.FC<ListViewProps> = ({
     }
   }, [cachedRecords]);
 
+  const columns = useMemo(
+    () => definition.listView?.columns || definition.questions.map(q => ({ fieldId: q.id, label: q.label })),
+    [definition]
+  );
+
+  const projection = useMemo(() => {
+    const meta = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
+    const ids = new Set<string>();
+    columns.forEach(col => {
+      const fid = (col.fieldId || '').toString();
+      if (!fid || meta.has(fid)) return;
+      ids.add(fid);
+    });
+    return Array.from(ids);
+  }, [columns]);
+
+  const activeFetchRef = useRef(0);
+
+  const fetchAllPages = async () => {
+    const requestId = ++activeFetchRef.current;
+    const startedAt = Date.now();
+    const fetchPageSize = Math.min(50, Math.max(pageSize, 25));
+
+    setLoading(true);
+    setError(null);
+    setAllItems([]);
+    setTotalCount(0);
+
+    onDiagnostic?.('list.fetch.start', {
+      formKey,
+      uiPageSize: pageSize,
+      fetchPageSize,
+      projectionCount: projection.length
+    });
+
+    try {
+      let token: string | undefined;
+      let aggregated: ListItem[] = [];
+      let lastResponse: ListResponse | null = null;
+      let page = 0;
+
+      do {
+        // Primary path: use batch endpoint (more reliable in the presence of stale/duplicate `fetchSubmissions` functions).
+        let res: ListResponse | null | undefined;
+        try {
+          const batch = await fetchBatch(
+            formKey,
+            projection.length ? projection : undefined,
+            fetchPageSize,
+            token,
+            false
+          );
+          const list = (batch as any)?.list as ListResponse | undefined;
+          if (list && Array.isArray((list as any).items)) {
+            res = list;
+          }
+        } catch (_) {
+          res = undefined;
+        }
+
+        // Legacy fallback: attempt direct list endpoint if batch is unavailable.
+        if (!res) {
+          res = await fetchList(
+            formKey,
+            projection.length ? projection : undefined,
+            fetchPageSize,
+            token
+          );
+        }
+        if (requestId !== activeFetchRef.current) return;
+        if (!res || !Array.isArray((res as any).items)) {
+          const resType = res === null ? 'null' : typeof res;
+          const keys = res && typeof res === 'object' ? Object.keys(res as any).slice(0, 12) : [];
+          onDiagnostic?.('list.fetch.invalidResponse', { hasResponse: !!res, resType, keys });
+          setError(
+            'The server returned no list data. This usually means your Apps Script project has an older `fetchSubmissions` function still present (or the latest dist/Code.js was not fully pasted). Open Apps Script → search for `function fetchSubmissions` and ensure there is only one definition, then redeploy.'
+          );
+          break;
+        }
+        lastResponse = res;
+        const items = res.items || [];
+        aggregated = aggregated.concat(items);
+        token = res.nextPageToken;
+        page += 1;
+
+        setAllItems([...aggregated]);
+        setTotalCount(res.totalCount || aggregated.length);
+
+        onDiagnostic?.('list.fetch.page', {
+          page,
+          pageItems: items.length,
+          aggregated: aggregated.length,
+          totalCount: res.totalCount,
+          hasNext: !!token,
+          durationMs: Date.now() - startedAt
+        });
+
+        if (!token || aggregated.length >= (res.totalCount || 200)) {
+          token = undefined;
+        }
+      } while (token);
+
+      setPageIndex(0);
+      if (lastResponse) {
+        onCache?.({
+          response: { ...lastResponse, items: aggregated, nextPageToken: undefined },
+          records: {}
+        });
+      }
+
+      onDiagnostic?.('list.fetch.done', {
+        pages: page,
+        items: aggregated.length,
+        durationMs: Date.now() - startedAt
+      });
+    } catch (err: any) {
+      if (requestId !== activeFetchRef.current) return;
+      const message = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
+      setError(message);
+      onDiagnostic?.('list.fetch.error', { message });
+    } finally {
+      if (requestId === activeFetchRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
-    if (cachedResponse?.items?.length) return;
+    if (cachedResponse?.items?.length) {
+      onDiagnostic?.('list.bootstrap.used', {
+        items: cachedResponse.items.length,
+        totalCount: cachedResponse.totalCount
+      });
+      return;
+    }
     fetchAllPages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formKey, refreshToken]);
@@ -102,11 +197,6 @@ const ListView: React.FC<ListViewProps> = ({
     setSortField(defaultSortField);
     setSortDirection(defaultSortDirection);
   }, [formKey, refreshToken, defaultSortField, defaultSortDirection]);
-
-  const columns = useMemo(
-    () => definition.listView?.columns || definition.questions.map(q => ({ fieldId: q.id, label: q.label })),
-    [definition]
-  );
 
   const sortOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -188,6 +278,19 @@ const ListView: React.FC<ListViewProps> = ({
     return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
   };
 
+  const splitUrlList = (raw: string): string[] => {
+    const trimmed = (raw || '').trim();
+    if (!trimmed) return [];
+    const commaParts = trimmed
+      .split(',')
+      .map(p => p.trim())
+      .filter(Boolean);
+    if (commaParts.length > 1) return commaParts;
+    const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
+    if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
+    return [trimmed];
+  };
+
   const summarizeArray = (raw: any[]): string => {
     if (!raw.length) return '—';
     const scalarOnly = raw.every(v => typeof v === 'string' || typeof v === 'number');
@@ -231,6 +334,36 @@ const ListView: React.FC<ListViewProps> = ({
     const dateText = isScalar ? formatDate(raw) : null;
     const text = dateText || (isArray ? summarizeArray(value) : `${value}`);
     const title = dateText ? `${raw}` : text;
+    if (typeof value === 'string') {
+      const urls = splitUrlList(value).filter(u => /^https?:\/\//i.test(u));
+      if (urls.length > 1) {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {urls.slice(0, 3).map((u, idx) => (
+              <a
+                key={`${u}-${idx}`}
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="truncate-link"
+                title={u}
+              >
+                {u.split('/').pop() || u}
+              </a>
+            ))}
+            {urls.length > 3 && <span className="muted">+{urls.length - 3} more</span>}
+          </div>
+        );
+      }
+      if (urls.length === 1) {
+        const href = urls[0];
+        return (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="truncate-link" title={title}>
+            {text}
+          </a>
+        );
+      }
+    }
     const isLink = typeof value === 'string' && /^https?:\/\//i.test(value);
     if (isLink) {
       return (

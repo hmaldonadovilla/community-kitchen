@@ -176,6 +176,78 @@ export class ConfigSheet {
     });
   }
 
+  /**
+   * Lightweight question loader used by listing/record fetch endpoints.
+   *
+   * This intentionally avoids parsing options REF tabs and heavy JSON configs
+   * (line items, uploads, selection effects, validations, etc.) to keep
+   * Apps Script calls fast when we only need column mapping.
+   */
+  public static getQuestionsLite(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, sheetName: string): QuestionConfig[] {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+
+    // Ensure IDs exist (but do not parse any other config).
+    this.ensureIds(sheet);
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return [];
+    const lastColumn = Math.max(15, sheet.getLastColumn());
+    const headers = sheet
+      .getRange(1, 1, 1, lastColumn)
+      .getValues()[0]
+      .map(h => (h || '').toString().trim().toLowerCase());
+    const range = sheet.getRange(2, 1, lastRow - 1, lastColumn);
+    const data = range.getValues();
+
+    const findHeader = (labels: string[], fallbackIdx: number): number => {
+      const normalized = labels.map(l => l.toLowerCase());
+      const found = headers.findIndex(h => normalized.some(n => h === n || h.startsWith(n)));
+      return found >= 0 ? found : fallbackIdx;
+    };
+
+    const idxType = findHeader(['type'], 1);
+    const idxQEn = findHeader(['question (en)', 'question en'], 2);
+    const idxQFr = findHeader(['question (fr)'], 3);
+    const idxQNl = findHeader(['question (nl)'], 4);
+    const idxRequired = findHeader(['required'], 5);
+    const idxStatus = findHeader(['status'], 9);
+    const idxListView = findHeader(['list view', 'list view?'], 14);
+
+    return data.map(row => {
+      const type = row[idxType] ? (row[idxType].toString().toUpperCase() as QuestionType) : ('TEXT' as QuestionType);
+      const statusRaw = row[idxStatus] ? row[idxStatus].toString().trim().toLowerCase() : 'active';
+      const status = statusRaw === 'archived' ? 'Archived' : 'Active';
+      const listViewFlag = row[idxListView] !== '' && row[idxListView] !== null ? !!row[idxListView] : false;
+
+      return {
+        id: row[0] ? row[0].toString() : '',
+        type,
+        qEn: row[idxQEn],
+        qFr: row[idxQFr],
+        qNl: row[idxQNl],
+        required: !!row[idxRequired],
+        listView: listViewFlag,
+        options: [],
+        optionsFr: [],
+        optionsNl: [],
+        status,
+        uploadConfig: undefined,
+        lineItemConfig: undefined,
+        dataSource: undefined,
+        optionFilter: undefined,
+        validationRules: [],
+        visibility: undefined,
+        clearOnChange: false,
+        selectionEffects: undefined,
+        listViewSort: undefined,
+        autoIncrement: undefined,
+        valueMap: undefined,
+        derivedValue: undefined
+      };
+    });
+  }
+
   public static handleOptionEdit(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, e: GoogleAppsScript.Events.SheetsOnEdit): void {
     const range = e.range;
     const sheet = range.getSheet();

@@ -36,10 +36,10 @@ The project is refactored into modular components:
 
 The custom web app now ships with a multi-layer cache to keep list views and record prefill snappy while staying inside Apps Script limits:
 
-- **Script Cache (5‑minute TTL)** – Each page of `fetchSubmissions` results and every hydrated record is serialized into `CacheService.getScriptCache()`. Cache keys are scoped by form key, page size/token, and a sheet fingerprint so stale rows are automatically discarded after edits.
-- **Document Properties ETags** – Every destination tab maintains a lightweight “etag” in `PropertiesService.getDocumentProperties()`. The fingerprint is based on sheet id, row/column counts, and the last updated metadata columns. Any write (including `saveSubmissionWithId`) recomputes the etag, effectively invalidating the Script Cache entries for that sheet.
-- **Batch Fetch Endpoint** – `fetchSubmissionsBatch(formKey, projection?, pageSize?, pageToken?, includePageRecords?, recordIds?)` wraps the existing pagination API and returns `{ list, records }`. `list` mirrors the original `fetchSubmissions` response, while `records` pre-hydrates the row objects that were read for that page (plus any explicit `recordIds`). The iframe client uses this payload to render the table and immediately prefill a form without a second round trip.
-- **Client Row Cache** – The inline `WebFormTemplate` keeps the most recent batch of records in memory. Selecting a row reuses that cached payload to render the form instantly; a background `google.script.run.fetchSubmissionById` only runs if the record is missing or stale.
+- **Script Cache (5‑minute TTL)** – Each page of `fetchSubmissions` results and every hydrated record is serialized into `CacheService.getScriptCache()`. Cache keys are scoped by form key, page size/token, and a per-sheet etag so stale rows are automatically discarded after edits.
+- **Document Properties ETags (fast reads)** – Every destination tab maintains a lightweight “etag” (version string) in `PropertiesService.getDocumentProperties()`. Reads reuse the stored etag to avoid expensive full-column hashing; writes (including `saveSubmissionWithId` and follow-up status updates) bump the etag, invalidating Script Cache entries. If the destination tab grows (row/column counts change), the etag is auto-bumped as well.
+- **Batch Fetch Endpoint** – `fetchSubmissionsBatch(formKey, projection?, pageSize?, pageToken?, includePageRecords?, recordIds?)` returns `{ list, records }`. `list` mirrors `fetchSubmissions`, while `records` can optionally pre-hydrate the page’s records (plus any explicit `recordIds`) when you want to open a row without an extra round trip.
+- **Client Row Cache** – The React client keeps list rows and any hydrated records in memory. Selecting a row reuses the cached payload when available; otherwise it fetches the full record with `fetchSubmissionById`.
 
 ### When to refresh or invalidate
 

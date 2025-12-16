@@ -96,6 +96,12 @@ export const fetchBatch = (
 ): Promise<BatchResponse> =>
   runAppsScript<BatchResponse>('fetchSubmissionsBatch', formKey, projection, pageSize, pageToken, includePageRecords, recordIds);
 
+export const fetchRecordById = (formKey: string, id: string): Promise<WebFormSubmission | null> =>
+  runAppsScript<WebFormSubmission | null>('fetchSubmissionById', formKey, id);
+
+export const fetchRecordByRowNumber = (formKey: string, rowNumber: number): Promise<WebFormSubmission | null> =>
+  runAppsScript<WebFormSubmission | null>('fetchSubmissionByRowNumber', formKey, rowNumber);
+
 export const fetchDataSourceApi = (req: DataSourceRequest): Promise<DataSourceResponse> =>
   runAppsScript<DataSourceResponse>('fetchDataSource', req.source, req.locale, req.projection, req.limit, req.pageToken);
 

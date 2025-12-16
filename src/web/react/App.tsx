@@ -18,7 +18,7 @@ import {
   WebQuestionDefinition,
   WebFormSubmission
 } from '../types';
-import { BootstrapContext, SubmissionPayload, submit, triggerFollowup, ListResponse, ListItem, fetchBatch } from './api';
+import { BootstrapContext, SubmissionPayload, submit, triggerFollowup, ListResponse, ListItem, fetchRecordById, fetchRecordByRowNumber } from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
 import FollowupView from './components/FollowupView';
@@ -552,6 +552,19 @@ const formatFieldValue = (value: FieldValue): string => {
   return value.toString();
 };
 
+  const splitUrlList = (raw: string): string[] => {
+    const trimmed = (raw || '').trim();
+    if (!trimmed) return [];
+    const commaParts = trimmed
+      .split(',')
+      .map(p => p.trim())
+      .filter(Boolean);
+    if (commaParts.length > 1) return commaParts;
+    const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
+    if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
+    return [trimmed];
+  };
+
 const renderValueWithTooltip = (
   value: FieldValue,
   tooltipText?: string,
@@ -606,10 +619,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string>(record?.id || '');
   const [selectedRecordSnapshot, setSelectedRecordSnapshot] = useState<WebFormSubmission | null>(record || null);
+  const [recordLoadingId, setRecordLoadingId] = useState<string | null>(null);
+  const [recordLoadError, setRecordLoadError] = useState<string | null>(null);
   const [followupMessage, setFollowupMessage] = useState<string | null>(null);
   const [optionState, setOptionState] = useState<OptionState>({});
   const [tooltipState, setTooltipState] = useState<Record<string, Record<string, string>>>({});
   const preloadPromisesRef = useRef<Record<string, Promise<void> | undefined>>({});
+  const recordFetchSeqRef = useRef(0);
   const [lastSubmissionMeta, setLastSubmissionMeta] = useState<SubmissionMeta | null>(() =>
     record
       ? {
@@ -636,41 +652,99 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     },
     [debugEnabled]
   );
-  const [listCache, setListCache] = useState<{ response: ListResponse | null; records: Record<string, WebFormSubmission> }>({
-    response: null,
-    records: {}
+  const [listCache, setListCache] = useState<{ response: ListResponse | null; records: Record<string, WebFormSubmission> }>(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    const response = bootstrap?.listResponse || null;
+    const records = bootstrap?.records || {};
+    return { response, records };
   });
   const [listRefreshToken, setListRefreshToken] = useState(0);
   const invalidateListCache = () => {
-    setListCache({ response: null, records: {} });
+    // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
+    // back to the list does not reintroduce slow record fetches.
+    setListCache(prev => ({ response: null, records: prev.records }));
     setListRefreshToken(token => token + 1);
   };
+
+  const applyRecordSnapshot = useCallback(
+    (snapshot: WebFormSubmission) => {
+      const id = snapshot?.id;
+      if (!snapshot || !id) return;
+      const normalized = normalizeRecordValues(definition, snapshot.values || {});
+      const initialLineItems = buildInitialLineItems(definition, normalized);
+      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+      setValues(mapped.values);
+      setLineItems(mapped.lineItems);
+      setErrors({});
+      setSelectedRecordId(id);
+      setSelectedRecordSnapshot(snapshot);
+      setLastSubmissionMeta({
+        id,
+        createdAt: snapshot.createdAt,
+        updatedAt: snapshot.updatedAt,
+        status: snapshot.status || null
+      });
+      setRecordLoadingId(null);
+      setRecordLoadError(null);
+      setListCache(prev => ({
+        response: prev.response,
+        records: { ...prev.records, [id]: snapshot }
+      }));
+    },
+    [definition]
+  );
+
+  const loadRecordSnapshot = useCallback(
+    async (recordId: string, rowNumberHint?: number) => {
+      const candidateRow = rowNumberHint && Number.isFinite(rowNumberHint) && rowNumberHint >= 2 ? rowNumberHint : undefined;
+      if (!recordId && !candidateRow) return;
+      const seq = ++recordFetchSeqRef.current;
+      const startedAt = Date.now();
+      setRecordLoadingId(recordId || (candidateRow ? `row:${candidateRow}` : null));
+      setRecordLoadError(null);
+      logEvent('record.fetch.start', { recordId: recordId || null, rowNumberHint: candidateRow || null });
+      try {
+        let snapshot: WebFormSubmission | null = null;
+
+        // Prefer row-number fetch when available (avoids expensive ID scans and works even if legacy endpoints exist).
+        if (candidateRow) {
+          snapshot = await fetchRecordByRowNumber(formKey, candidateRow);
+          if (seq !== recordFetchSeqRef.current) return;
+          if (recordId && snapshot && snapshot.id && snapshot.id !== recordId) {
+            // Row hint might be stale; fall back to ID to avoid loading the wrong record.
+            logEvent('record.fetch.rowNumberMismatch', {
+              recordId,
+              rowNumberHint: candidateRow,
+              resolvedId: snapshot.id
+            });
+            snapshot = null;
+          }
+        }
+
+        if (!snapshot && recordId) {
+          snapshot = await fetchRecordById(formKey, recordId);
+        }
+        if (seq !== recordFetchSeqRef.current) return;
+        if (!snapshot) throw new Error('Record not found.');
+        applyRecordSnapshot(snapshot);
+        logEvent('record.fetch.done', { recordId: snapshot.id || recordId, durationMs: Date.now() - startedAt });
+      } catch (err: any) {
+        if (seq !== recordFetchSeqRef.current) return;
+        const message = (err?.message || err?.toString?.() || 'Failed to load record.').toString();
+        setRecordLoadError(message);
+        setRecordLoadingId(null);
+        logEvent('record.fetch.error', { recordId, message, rowNumberHint, durationMs: Date.now() - startedAt });
+      }
+    },
+    [applyRecordSnapshot, formKey, logEvent]
+  );
 
   const handleGlobalRefresh = useCallback(async () => {
     invalidateListCache();
     if (!selectedRecordId) return;
-    try {
-      const batch = await fetchBatch(formKey, undefined, undefined, undefined, true, [selectedRecordId]);
-      const refreshed = batch.records?.[selectedRecordId];
-      if (refreshed) {
-        const normalized = normalizeRecordValues(definition, refreshed.values || {});
-        const initialLineItems = buildInitialLineItems(definition, normalized);
-        const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
-        setValues(mapped.values);
-        setLineItems(mapped.lineItems);
-        setSelectedRecordSnapshot(refreshed);
-        setLastSubmissionMeta({
-          id: refreshed.id,
-          createdAt: refreshed.createdAt,
-          updatedAt: refreshed.updatedAt,
-          status: refreshed.status || null
-        });
-      }
-    } catch (err: any) {
-      setStatus(err?.message || 'Refresh failed');
-      setStatusLevel('error');
-    }
-  }, [definition, formKey, invalidateListCache, selectedRecordId]);
+    await loadRecordSnapshot(selectedRecordId);
+  }, [invalidateListCache, loadRecordSnapshot, selectedRecordId]);
 
   const loadOptionsForField = useCallback(
     (field: any, groupId?: string) => {
@@ -1179,22 +1253,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       // Refresh from saved record to surface server-side autoIncrement values immediately
       if (res.meta?.id) {
         try {
-          const batch = await fetchBatch(formKey, undefined, undefined, undefined, true, [res.meta.id]);
-          const savedRecord = batch.records?.[res.meta.id];
-          if (savedRecord) {
-            const normalized = normalizeRecordValues(definition, savedRecord.values || {});
-            const initialLineItems = buildInitialLineItems(definition, normalized);
-            const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
-            setValues(mapped.values);
-            setLineItems(mapped.lineItems);
-            setSelectedRecordSnapshot(savedRecord);
-            setLastSubmissionMeta({
-              id: savedRecord.id,
-              createdAt: savedRecord.createdAt,
-              updatedAt: savedRecord.updatedAt,
-              status: savedRecord.status || null
-            });
-          }
+          await loadRecordSnapshot(res.meta.id);
         } catch (err: any) {
           logEvent('submit.fetchRecord.error', { message: err?.message || err, recordId: res.meta.id });
         }
@@ -1252,31 +1311,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   const handleRecordSelect = (row: ListItem, fullRecord?: WebFormSubmission) => {
     const sourceRecord = fullRecord || listCache.records[row.id] || null;
-    setSelectedRecordId(row.id);
     setFollowupMessage(null);
     setStatus(null);
     setStatusLevel(null);
+    setRecordLoadError(null);
+    setSelectedRecordId(row.id);
+
     if (sourceRecord) {
-      const normalized = normalizeRecordValues(definition, sourceRecord.values || {});
-      const initialLineItems = buildInitialLineItems(definition, normalized);
-      const { values: mappedValues, lineItems: mappedLineItems } = applyValueMapsToForm(
-        definition,
-        normalized,
-        initialLineItems
-      );
-      setValues(mappedValues);
-      setLineItems(mappedLineItems);
-      setErrors({});
-      setSelectedRecordSnapshot(sourceRecord);
-      setLastSubmissionMeta({
-        id: sourceRecord.id,
-        createdAt: sourceRecord.createdAt,
-        updatedAt: sourceRecord.updatedAt,
-        status: sourceRecord.status || null
-      });
+      applyRecordSnapshot(sourceRecord);
     } else {
       setSelectedRecordSnapshot(null);
+      setLastSubmissionMeta({
+        id: row.id,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        status: row.status ? row.status.toString() : null
+      });
+      const rowNumberHint = Number((row as any).__rowNumber);
+      loadRecordSnapshot(row.id, Number.isFinite(rowNumberHint) ? rowNumberHint : undefined);
     }
+
     setView('summary');
   };
 
@@ -1724,7 +1778,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           </div>
           </div>
           <hr />
-          {definition.questions.map(q => {
+          {recordLoadError && <div className="error" style={{ marginBottom: 12 }}>{recordLoadError}</div>}
+          {selectedRecordId && recordLoadingId === selectedRecordId && !currentRecord && (
+            <div className="status">Loading record…</div>
+          )}
+          {(!selectedRecordId || currentRecord) && definition.questions.map(q => {
             if (q.type === 'LINE_ITEM_GROUP') {
               return (
                 <div key={q.id} className="field">
@@ -1736,22 +1794,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             if (q.type === 'FILE_UPLOAD') {
               const raw = values[q.id] ?? currentRecord?.values?.[q.id];
               const files = Array.isArray(raw) ? raw : raw ? [raw] : [];
-              const items = files
-                .map(f => {
-                  if (typeof f === 'string') {
-                    const trimmed = f.trim();
-                    if (!trimmed) return null;
-                    return { url: trimmed, name: trimmed.split('/').pop() || 'File' };
-                  }
-                  if (f && typeof f === 'object') {
-                    const any = f as any;
-                    const url = (any.url || any.dataUrl || any.link || '').toString().trim();
-                    const name = any.name || (url ? url.split('/').pop() : '') || 'File';
-                    return url ? { url, name } : null;
-                  }
-                  return null;
-                })
-                .filter(Boolean) as { url: string; name: string }[];
+              const urls: Array<{ url: string; name: string }> = [];
+              files.forEach(f => {
+                if (typeof f === 'string') {
+                  splitUrlList(f).forEach(u => {
+                    const trimmed = u.trim();
+                    if (!trimmed) return;
+                    urls.push({ url: trimmed, name: trimmed.split('/').pop() || 'File' });
+                  });
+                  return;
+                }
+                if (f && typeof f === 'object') {
+                  const any = f as any;
+                  const url = (any.url || any.dataUrl || any.link || '').toString().trim();
+                  const name = any.name || (url ? url.split('/').pop() : '') || 'File';
+                  if (url) urls.push({ url, name });
+                }
+              });
+              const items = urls.filter(entry => /^https?:\/\//i.test(entry.url));
               return (
                 <div key={q.id} className="field">
                   <div className="muted">{resolveLabel(q, language)}</div>
@@ -1822,6 +1882,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           cachedResponse={listCache.response}
           cachedRecords={listCache.records}
           refreshToken={listRefreshToken}
+          onDiagnostic={logEvent}
           onCache={({ response, records }) => {
             setListCache(prev => ({
               response,
