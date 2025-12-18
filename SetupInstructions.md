@@ -44,10 +44,49 @@ This project uses TypeScript. You need to build the script before using it in Go
    - **Form ID / URLs**: Leave these blank. The script will fill them in.
 2. **Config Sheets**: Create new sheets (tabs) for each form.
    - Copy the header row from an example sheet (includes `Config (JSON/REF)` for line items or file upload settings).
+   - **Header fields (always visible while editing)**: In a question’s `Config (JSON/REF)` cell, add `"header": true` to pin that question in the sticky header row of the edit view (label + value on the same row). Example:
+
+     ```json
+     { "header": true }
+     ```
+
    - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON. Lower priorities win; when nothing is specified we fall back to `updatedAt desc`.
    - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
    - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
    - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN/FR/NL, Required?, Options EN/FR/NL). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
+     - Progressive disclosure (collapsed-by-default rows): in the LINE_ITEM_GROUP JSON, add a `ui` block. The collapsed view renders only `collapsedFields` (editable). The expand toggle is gated by `expandGate`:
+
+       ```json
+       {
+         "ui": {
+           "mode": "progressive",
+           "collapsedFields": [
+             { "fieldId": "REQUESTED_PORTIONS", "showLabel": true },
+             { "fieldId": "LEFTOVER_USED", "showLabel": false }
+           ],
+           "expandGate": "collapsedFieldsValid",
+           "defaultCollapsed": true
+         },
+         "fields": [
+           { "id": "REQUESTED_PORTIONS", "type": "NUMBER", "labelEn": "Requested portions", "required": true },
+           { "id": "LEFTOVER_USED", "type": "CHOICE", "labelEn": "Leftover used?", "options": ["NO","YES"] },
+           { "id": "CORE_TEMP", "type": "NUMBER", "labelEn": "Core temperature (°C)" },
+           { "id": "ACTUAL_PORTIONS", "type": "NUMBER", "labelEn": "Actual portions" }
+         ]
+       }
+       ```
+
+       To block expansion when a numeric collapsed field is 0, add an unconditional validation rule on that field (rules run when `when` has no conditions):
+
+       ```json
+       {
+         "validationRules": [
+           { "when": { "fieldId": "REQUESTED_PORTIONS" }, "then": { "fieldId": "REQUESTED_PORTIONS", "min": 1 }, "message": "Requested must be > 0" }
+         ]
+       }
+       ```
+
+       Put the rule JSON on that line-item field (either inline in `fields[]` or in the line-item ref sheet’s Config column).
      - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
 
        ```json
@@ -63,7 +102,8 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
-     - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). Submitted payloads contain an array of parents, each with a child array keyed by the subgroup id/label. The UI renders a localized subgroup title (from `label`, falling back to `id`) plus a per-row Show/Hide toggle so operators can collapse/expand dense child lists without changing data. Example config:
+     - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). Submitted payloads contain an array of parents, each with a child array keyed by the subgroup id/label. Default mode renders inline subgroup sections with Show/Hide. Progressive mode (`ui.mode: "progressive"`) edits subgroups via a full-page overlay opened from “Open …” buttons next to triggering fields (selection effects) plus fallback “Open …” buttons for remaining subgroups.
+       Example config:
 
       ```json
       {
@@ -172,22 +212,22 @@ This project uses TypeScript. You need to build the script before using it in Go
         Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`. Actions: `required` true/false, `min`, `max`, `allowed`, `disallowed`.
       - Scope rules to follow-up only: add `"phase": "followup"` to a rule when it should only block follow-up actions (e.g., require `FINAL_QTY` during follow-up but keep it optional on submit).
 
-    - Computed fields (`derivedValue`):
-      - Use when a value should auto-calc from another field (e.g., expiration date = meal prep date + 2 days), optionally hidden.
-      - Add in Config JSON (works for main or line-item fields):
+      - Computed fields (`derivedValue`):
+          - Use when a value should auto-calc from another field (e.g., expiration date = meal prep date + 2 days), optionally hidden.
+          - Add in Config JSON (works for main or line-item fields):
 
-        ```json
-        {
-          "derivedValue": {
-            "dependsOn": "MEAL_DATE",
-            "op": "addDays",
-            "offsetDays": 2,
-            "hidden": true
-          }
-        }
-        ```
+            ```json
+            {
+              "derivedValue": {
+                "dependsOn": "MEAL_DATE",
+                "op": "addDays",
+                "offsetDays": 2,
+                "hidden": true
+              }
+            }
+            ```
 
-      - Supported op: `addDays` (offset can be negative). The value is recomputed when dependencies change and is stored with the submission; use `visibility` to hide if needed.
+          - Supported op: `addDays` (offset can be negative). The value is recomputed when dependencies change and is stored with the submission; use `visibility` to hide if needed.
 
         Validation messages can be localized. `message` accepts a string or an object keyed by language (EN/FR/NL) and falls back to English. Example:
 

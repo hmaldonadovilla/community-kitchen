@@ -5,7 +5,9 @@ import {
   DerivedValueConfig,
   FileUploadConfig,
   LineItemFieldConfig,
+  LineItemCollapsedFieldConfig,
   LineItemGroupConfig,
+  LineItemGroupUiConfig,
   LineItemSelectorConfig,
   LineItemTotalConfig,
   ListViewSortConfig,
@@ -140,6 +142,7 @@ export class ConfigSheet {
       const valueMap = type === 'TEXT' ? this.parseValueMap(rawConfig) : undefined;
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
+      const header = this.parseHeaderFlag([rawConfig, optionFilterRaw, validationRaw]);
       const selectionEffects = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseSelectionEffects(rawConfig) : undefined;
       const statusRaw = row[idxStatus] ? row[idxStatus].toString().trim().toLowerCase() : 'active';
       const status = statusRaw === 'archived' ? 'Archived' : 'Active';
@@ -155,6 +158,7 @@ export class ConfigSheet {
         qFr: row[idxQFr],
         qNl: row[idxQNl],
         required: !!row[idxRequired],
+        header,
         listView: listViewFlag,
         options,
         optionsFr,
@@ -227,6 +231,7 @@ export class ConfigSheet {
         qFr: row[idxQFr],
         qNl: row[idxQNl],
         required: !!row[idxRequired],
+          header: undefined,
         listView: listViewFlag,
         options: [],
         optionsFr: [],
@@ -847,6 +852,56 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static parseHeaderFlag(rawConfigs: Array<string | undefined>): boolean | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const parsed = this.safeParseObject(raw);
+      if (!parsed || typeof parsed !== 'object') continue;
+      if (parsed.header !== undefined) return !!parsed.header;
+      if (parsed.inHeader !== undefined) return !!parsed.inHeader;
+      if (parsed.editHeader !== undefined) return !!parsed.editHeader;
+    }
+    return undefined;
+  }
+
+  private static normalizeLineItemUi(rawUi: any): LineItemGroupUiConfig | undefined {
+    if (!rawUi || typeof rawUi !== 'object') return undefined;
+
+    const modeRaw = rawUi.mode !== undefined ? rawUi.mode : rawUi.type;
+    const modeCandidate = modeRaw !== undefined && modeRaw !== null ? modeRaw.toString().toLowerCase() : '';
+    const mode: LineItemGroupUiConfig['mode'] =
+      modeCandidate === 'progressive' ? 'progressive' : modeCandidate === 'default' ? 'default' : undefined;
+
+    const collapsedRaw = rawUi.collapsedFields || rawUi.collapsed || rawUi.summaryFields;
+    const collapsedFields: LineItemCollapsedFieldConfig[] | undefined = Array.isArray(collapsedRaw)
+      ? collapsedRaw
+          .map((entry: any) => {
+            if (!entry) return null;
+            if (typeof entry === 'string') return { fieldId: entry, showLabel: true };
+            if (typeof entry === 'object' && entry.fieldId) {
+              return { fieldId: entry.fieldId.toString(), showLabel: entry.showLabel !== undefined ? !!entry.showLabel : true };
+            }
+            return null;
+          })
+          .filter(Boolean) as LineItemCollapsedFieldConfig[]
+      : undefined;
+
+    const gateRaw = rawUi.expandGate || rawUi.gate;
+    const gateCandidate = gateRaw !== undefined && gateRaw !== null ? gateRaw.toString() : '';
+    const expandGate: LineItemGroupUiConfig['expandGate'] =
+      gateCandidate === 'always' ? 'always' : gateCandidate === 'collapsedFieldsValid' ? 'collapsedFieldsValid' : undefined;
+
+    const defaultCollapsed =
+      rawUi.defaultCollapsed !== undefined && rawUi.defaultCollapsed !== null ? !!rawUi.defaultCollapsed : undefined;
+
+    const cfg: LineItemGroupUiConfig = {};
+    if (mode) cfg.mode = mode;
+    if (collapsedFields && collapsedFields.length) cfg.collapsedFields = collapsedFields;
+    if (expandGate) cfg.expandGate = expandGate;
+    if (defaultCollapsed !== undefined) cfg.defaultCollapsed = defaultCollapsed;
+    return Object.keys(cfg).length ? cfg : undefined;
+  }
+
   private static parseLineItemConfig(
     ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
     rawConfig: string,
@@ -880,6 +935,7 @@ export class ConfigSheet {
         const mergedFields = jsonFields.length ? jsonFields : refFields;
         const sectionSelector = this.normalizeLineItemSelector(ss, parsed.sectionSelector);
         const totals = this.normalizeLineItemTotals(parsed.totals);
+        const ui = this.normalizeLineItemUi(parsed.ui || parsed.view || parsed.layout);
         const subGroups = Array.isArray(parsed.subGroups)
           ? parsed.subGroups
               .map((entry: any, idx: number) => this.normalizeSubGroupConfig(ss, entry, `${optionsRef || ''}_sub_${idx + 1}`))
@@ -889,6 +945,7 @@ export class ConfigSheet {
         return {
           id: parsed.id ? parsed.id.toString() : undefined,
           label: parsed.label,
+          ui,
           minRows: parsed.minRows ? Number(parsed.minRows) : undefined,
           maxRows: parsed.maxRows ? Number(parsed.maxRows) : undefined,
           addButtonLabel: parsed.addButtonLabel,
@@ -1048,6 +1105,7 @@ export class ConfigSheet {
           ...refCfg,
           id: entry.id ? entry.id.toString() : refCfg.id || fallbackId,
           label: entry.label || refCfg.label,
+          ui: entry.ui ? this.normalizeLineItemUi(entry.ui) : refCfg.ui,
           minRows: entry.minRows ?? refCfg.minRows,
           maxRows: entry.maxRows ?? refCfg.maxRows,
           addMode: entry.addMode ?? refCfg.addMode,
@@ -1064,10 +1122,12 @@ export class ConfigSheet {
       : [];
     const sectionSelector = this.normalizeLineItemSelector(ss, entry.sectionSelector);
     const totals = this.normalizeLineItemTotals(entry.totals);
+    const ui = this.normalizeLineItemUi(entry.ui);
 
     return {
       id: entry.id ? entry.id.toString() : fallbackId,
       label: entry.label,
+      ui,
       minRows: entry.minRows ? Number(entry.minRows) : undefined,
       maxRows: entry.maxRows ? Number(entry.maxRows) : undefined,
       addButtonLabel: entry.addButtonLabel,

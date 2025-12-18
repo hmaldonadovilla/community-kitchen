@@ -12,7 +12,7 @@ interface EffectContext {
   updateAutoLineItems?: (
     groupId: string,
     presets: Array<Record<string, string | number>>,
-    meta: { effectContextId: string; numericTargets: string[] }
+    meta: { effectContextId: string; numericTargets: string[]; keyFields?: string[] }
   ) => void;
 }
 
@@ -601,6 +601,7 @@ function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, context
     });
   }
   const numericTargets = resolveNumericTargets(effect, targetConfig.fields);
+  const { nonNumericFieldIds } = resolveAggregationFields(effect, targetConfig.fields);
 
   if (!entriesForAllSelections.length) {
     if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
@@ -618,7 +619,8 @@ function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, context
   if (ctx.updateAutoLineItems) {
     ctx.updateAutoLineItems(effect.groupId, aggregatedPresets, {
       effectContextId: contextId,
-      numericTargets
+      numericTargets,
+      keyFields: nonNumericFieldIds
     });
     return;
   }
@@ -642,15 +644,7 @@ function aggregateEntries(
   effect: SelectionEffect,
   fields: any[]
 ): Array<Record<string, string | number>> {
-  const numericFieldIds = (effect.aggregateNumericFields && effect.aggregateNumericFields.length
-    ? effect.aggregateNumericFields
-    : fields.filter(field => field.type === 'NUMBER').map(field => field.id)
-  ).map(id => id.toString());
-  const implicitNonNumeric = fields
-    .map(field => field.id)
-    .filter(fieldId => !numericFieldIds.includes(fieldId));
-  const nonNumericFieldIds = (effect.aggregateBy && effect.aggregateBy.length ? effect.aggregateBy : implicitNonNumeric)
-    .map(id => id.toString());
+  const { numericFieldIds, nonNumericFieldIds } = resolveAggregationFields(effect, fields);
   const lineFieldIds = fields.map(field => field.id);
   const buckets = new Map<string, Record<string, string | number>>();
 
@@ -682,6 +676,23 @@ function aggregateEntries(
     });
     return preset;
   });
+}
+
+function resolveAggregationFields(
+  effect: SelectionEffect,
+  fields: any[]
+): { numericFieldIds: string[]; nonNumericFieldIds: string[] } {
+  const numericFieldIds = (effect.aggregateNumericFields && effect.aggregateNumericFields.length
+    ? effect.aggregateNumericFields
+    : fields.filter(field => field.type === 'NUMBER').map(field => field.id)
+  ).map(id => id.toString());
+  const implicitNonNumeric = fields
+    .map(field => field.id)
+    .filter(fieldId => !numericFieldIds.includes(fieldId.toString()))
+    .map(id => id.toString());
+  const nonNumericFieldIds = (effect.aggregateBy && effect.aggregateBy.length ? effect.aggregateBy : implicitNonNumeric)
+    .map(id => id.toString());
+  return { numericFieldIds, nonNumericFieldIds };
 }
 
 function buildAggregationKey(

@@ -29,6 +29,11 @@ components:
         required:
           type: boolean
           description: Whether the question is mandatory.
+        header:
+          type: boolean
+          description: |
+            When true, the edit view renders this question in the sticky header area (label + value on the same row).
+            This is useful for "context" fields like Customer/Service/Production date that should stay visible while scrolling.
         options:
           type: string
           description: |
@@ -183,6 +188,9 @@ components:
         label:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional localized label rendered as the subgroup title; falls back to `id` when omitted.
+        ui:
+          $ref: '#/components/schemas/LineItemGroupUiConfig'
+          description: Optional UI settings for how line item rows are rendered (e.g., progressive disclosure).
         minRows:
           type: integer
           description: Minimum number of line item rows required.
@@ -223,9 +231,48 @@ components:
             and may also specify `ref: "REF:TabName"` to load its fields from a ref sheet (same column format as parent line-item refs);
             inline values override the ref.
             The web UI renders each subgroup with a localized title (from `label`, falling back to `id`) and a per-row Show/Hide toggle to collapse or expand its contents without affecting stored data.
+            In progressive edit mode (`ui.mode: "progressive"`), subgroup rows are edited in a full-page overlay opened from buttons next to triggering fields (selection effects) or fallback subgroup buttons.
           items:
             $ref: '#/components/schemas/LineItemGroupConfig'
       required: [fields]
+
+    LineItemCollapsedFieldConfig:
+      type: object
+      properties:
+        fieldId:
+          type: string
+          description: Line item field ID to show in collapsed view.
+        showLabel:
+          type: boolean
+          description: When false, omit the label in collapsed view (control/value only). Defaults to true.
+      required: [fieldId]
+
+    LineItemGroupUiConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [default, progressive]
+          description: |
+            UI mode for this line item group.
+            - default: existing editor behavior
+            - progressive: rows are collapsed by default and can be expanded once collapsed fields are valid
+        collapsedFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemCollapsedFieldConfig'
+          description: |
+            Field(s) rendered (and editable) while a row is collapsed. Typically 1–2 fields to keep the list compact.
+        expandGate:
+          type: string
+          enum: [collapsedFieldsValid, always]
+          description: |
+            Controls when the expand toggle is enabled.
+            - collapsedFieldsValid: enabled only when collapsedFields are filled and pass configured validation/visibility rules
+            - always: always enabled
+        defaultCollapsed:
+          type: boolean
+          description: Default collapsed state for each row. When omitted and mode=progressive, defaults to true.
 
     OptionFilter:
       type: object

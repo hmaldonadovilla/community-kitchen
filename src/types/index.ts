@@ -84,6 +84,39 @@ export interface AutoIncrementConfig {
   propertyKey?: string;
 }
 
+export interface LineItemCollapsedFieldConfig {
+  fieldId: string;
+  /**
+   * When false, the collapsed view omits the label and only shows the control/value.
+   * Defaults to true.
+   */
+  showLabel?: boolean;
+}
+
+export interface LineItemGroupUiConfig {
+  /**
+   * Optional UI mode for rendering this line item group.
+   * - undefined: default/table-like editor (existing behavior)
+   * - progressive: collapsed-by-default rows with gated expand
+   */
+  mode?: 'progressive' | 'default';
+  /**
+   * Fields to show (and allow editing) while the row is collapsed.
+   * Expand is gated by these fields when expandGate = 'collapsedFieldsValid'.
+   */
+  collapsedFields?: LineItemCollapsedFieldConfig[];
+  /**
+   * Controls when the expand toggle becomes enabled.
+   * - collapsedFieldsValid: enabled only when collapsedFields are filled and pass configured validation rules
+   * - always: always enabled
+   */
+  expandGate?: 'collapsedFieldsValid' | 'always';
+  /**
+   * Default collapsed state for each row. When omitted and mode=progressive, defaults to true.
+   */
+  defaultCollapsed?: boolean;
+}
+
 export interface LineItemFieldConfig {
   id: string;
   type: BaseQuestionType;
@@ -126,6 +159,7 @@ export interface LineItemTotalConfig {
 export interface LineItemGroupConfig {
   id?: string;
   label?: LocalizedString;
+  ui?: LineItemGroupUiConfig;
   minRows?: number;
   maxRows?: number;
   addButtonLabel?: {
@@ -215,6 +249,10 @@ export interface QuestionConfig {
   qFr: string;
   qNl: string;
   required: boolean;
+  /**
+   * When true, this field is rendered in the sticky header area of the edit view (still editable).
+   */
+  header?: boolean;
   listView?: boolean;
   options: string[];      // English options
   optionsFr: string[];    // French options
@@ -260,6 +298,10 @@ export interface WebQuestionDefinition {
     nl: string;
   };
   required: boolean;
+  /**
+   * When true, this field is rendered in the sticky header area of the edit view (still editable).
+   */
+  header?: boolean;
   listView?: boolean;
   options?: {
     en: string[];

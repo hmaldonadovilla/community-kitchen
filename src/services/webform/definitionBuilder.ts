@@ -45,6 +45,7 @@ export class DefinitionBuilder {
         nl: q.qNl
       },
       required: q.required,
+      header: q.header,
       listView: q.listView,
       dataSource: q.dataSource,
       options: q.options.length || q.optionsFr.length || q.optionsNl.length
