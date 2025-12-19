@@ -20,6 +20,7 @@ export const isEmptyValue = (value: FieldValue): boolean => {
   if (value === undefined || value === null) return true;
   if (typeof value === 'string') return value.trim().length === 0;
   if (typeof value === 'number') return false;
+  if (typeof value === 'boolean') return value === false;
   if (Array.isArray(value)) return value.length === 0;
   if (hasFileListCtor() && value instanceof FileList) {
     return value.length === 0;

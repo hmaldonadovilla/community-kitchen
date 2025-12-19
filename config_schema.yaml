@@ -29,11 +29,29 @@ components:
         required:
           type: boolean
           description: Whether the question is mandatory.
+        ui:
+          $ref: '#/components/schemas/QuestionUiConfig'
+          description: |
+            Optional UI hints for how this question should render in the edit view.
+            Most fields can stay on `auto` and the UI will choose an iOS-friendly control based on option count; you can override per field.
+        group:
+          $ref: '#/components/schemas/QuestionGroupConfig'
+          description: |
+            Optional group card configuration for the edit view.
+            Fields with the same group (by `id`, or by `title` if no `id` is provided) are rendered together inside a card section in the form body.
+            If `collapsible` is enabled, the section can be collapsed/expanded by the user.
+        pair:
+          type: string
+          description: |
+            Optional "pair key" for explicit two-up layout.
+            Fields with the same `pair` key will be rendered next to each other on the same row (when space permits).
+            If `pair` is not set (or no matching pair is found), the field takes the full row.
         header:
           type: boolean
+          deprecated: true
           description: |
-            When true, the edit view renders this question in the sticky header area (label + value on the same row).
-            This is useful for "context" fields like Customer/Service/Production date that should stay visible while scrolling.
+            Deprecated. Use `group: { header: true, title: "Header" }` instead.
+            Previously: when true, the edit view rendered this question in the sticky header area.
         options:
           type: string
           description: |
@@ -42,6 +60,7 @@ components:
             The referenced sheet must contain three columns: Options (EN), Options (FR), Options (NL).
             Inline comma-separated lists are also supported for quick setup.
             Ignored for FILE_UPLOAD and LINE_ITEM_GROUP.
+            For CHECKBOX questions: when no options are provided (and no `dataSource` is set), the UI treats the field as a consent boolean and renders a single checkbox.
         optionFilter:
           $ref: '#/components/schemas/OptionFilter'
           description: Optional dependency to filter options based on other field value(s).
@@ -135,7 +154,7 @@ components:
           description: Internal identifier for the line item field.
         type:
           type: string
-          enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX]
+          enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD]
         labelEn:
           type: string
         labelFr:
@@ -144,6 +163,20 @@ components:
           type: string
         required:
           type: boolean
+        ui:
+          $ref: '#/components/schemas/QuestionUiConfig'
+          description: Optional UI hints for how this line item field should render (e.g., use segmented/radio/select for CHOICE).
+        group:
+          $ref: '#/components/schemas/QuestionGroupConfig'
+          description: |
+            Optional group card configuration for the edit view inside a line-item row (or subgroup overlay).
+            Fields with the same group (by `id`, or by `title` if no `id` is provided) are rendered together inside a card section.
+        pair:
+          type: string
+          description: |
+            Optional "pair key" for explicit two-up layout inside line-item rows and subgroup overlays.
+            Fields with the same `pair` key will be rendered next to each other on the same row (when space permits).
+            If `pair` is not set (or no matching pair is found), the field takes the full row.
         options:
           type: array
           items:
@@ -181,6 +214,9 @@ components:
         valueMap:
           $ref: '#/components/schemas/ValueMapConfig'
           description: Readonly TEXT helper that derives its value from another field using a map (arrays join with ", ").
+        uploadConfig:
+          $ref: '#/components/schemas/FileUploadConfig'
+          description: Additional settings for FILE_UPLOAD line-item fields.
 
     LineItemGroupConfig:
       type: object
@@ -246,6 +282,48 @@ components:
           type: boolean
           description: When false, omit the label in collapsed view (control/value only). Defaults to true.
       required: [fieldId]
+
+    QuestionUiConfig:
+      type: object
+      properties:
+        control:
+          type: string
+          enum: [auto, select, radio, segmented, switch]
+          description: |
+            Control variant for CHOICE fields.
+            - auto: choose iOS-friendly defaults (segmented for <=3, radio for <=6, else select; boolean-like non-required choices may render as switch)
+            - select: native dropdown (best for long option lists)
+            - radio: radio list
+            - segmented: iOS segmented control
+            - switch: iOS switch (recommended only for boolean/non-required CHOICE fields)
+        labelLayout:
+          type: string
+          enum: [auto, stacked]
+          description: |
+            Label/control layout hint.
+            - auto: default behavior (inline on full-width rows; stacked in 2-up grids)
+            - stacked: force label above control even for full-width rows
+
+    QuestionGroupConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Optional stable group id. Recommended if you have multiple groups.
+        header:
+          type: boolean
+          description: |
+            Marks this as the "header group" (fields previously rendered in the sticky header).
+            Header groups render in the form body as a collapsible card section.
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional group title shown in the card header.
+        collapsible:
+          type: boolean
+          description: When true, the group card can be collapsed/expanded. Defaults to true when title is set.
+        defaultCollapsed:
+          type: boolean
+          description: Initial collapsed state (only applies when collapsible is true). Defaults to false.
 
     LineItemGroupUiConfig:
       type: object

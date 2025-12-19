@@ -1,9 +1,11 @@
 import {
   AutoIncrementConfig,
   BaseQuestionType,
+  ChoiceControl,
   DataSourceConfig,
   DerivedValueConfig,
   FileUploadConfig,
+  LineItemFieldType,
   LineItemFieldConfig,
   LineItemCollapsedFieldConfig,
   LineItemGroupConfig,
@@ -12,6 +14,8 @@ import {
   LineItemTotalConfig,
   ListViewSortConfig,
   OptionFilter,
+  QuestionGroupConfig,
+  QuestionUiConfig,
   QuestionConfig,
   QuestionType,
   SelectionEffect,
@@ -143,6 +147,9 @@ export class ConfigSheet {
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
       const header = this.parseHeaderFlag([rawConfig, optionFilterRaw, validationRaw]);
+      const group = this.parseQuestionGroup([rawConfig, optionFilterRaw, validationRaw]);
+      const pair = this.parsePairKey([rawConfig, optionFilterRaw, validationRaw]);
+      const ui = this.parseQuestionUi([rawConfig, optionFilterRaw, validationRaw]);
       const selectionEffects = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseSelectionEffects(rawConfig) : undefined;
       const statusRaw = row[idxStatus] ? row[idxStatus].toString().trim().toLowerCase() : 'active';
       const status = statusRaw === 'archived' ? 'Archived' : 'Active';
@@ -158,7 +165,18 @@ export class ConfigSheet {
         qFr: row[idxQFr],
         qNl: row[idxQNl],
         required: !!row[idxRequired],
+        ui,
         header,
+        group:
+          group ||
+          (header
+            ? {
+                header: true,
+                title: { en: 'Header', fr: 'Header', nl: 'Header' },
+                collapsible: true
+              }
+            : undefined),
+        pair,
         listView: listViewFlag,
         options,
         optionsFr,
@@ -482,6 +500,28 @@ export class ConfigSheet {
     }
 
     return Object.keys(config).length ? config : undefined;
+  }
+
+  private static normalizeUploadConfig(raw: any): FileUploadConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const cfg: FileUploadConfig = {};
+    if (raw.destinationFolderId !== undefined && raw.destinationFolderId !== null) {
+      cfg.destinationFolderId = raw.destinationFolderId.toString();
+    }
+    if (raw.maxFiles !== undefined && raw.maxFiles !== null) {
+      const n = Number(raw.maxFiles);
+      if (!isNaN(n)) cfg.maxFiles = n;
+    }
+    if (raw.maxFileSizeMb !== undefined && raw.maxFileSizeMb !== null) {
+      const n = Number(raw.maxFileSizeMb);
+      if (!isNaN(n)) cfg.maxFileSizeMb = n;
+    }
+    if (Array.isArray(raw.allowedExtensions)) {
+      cfg.allowedExtensions = raw.allowedExtensions
+        .map((v: any) => (v !== undefined && v !== null ? v.toString() : ''))
+        .filter(Boolean);
+    }
+    return Object.keys(cfg).length ? cfg : undefined;
   }
 
   private static parseOptionFilter(rawConfig: string): OptionFilter | undefined {
@@ -864,6 +904,107 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static normalizeQuestionGroup(raw: any): QuestionGroupConfig | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw === 'string' || typeof raw === 'number') {
+      const title = raw.toString().trim();
+      return title ? { title } : undefined;
+    }
+    if (typeof raw !== 'object') return undefined;
+
+    const cfg: QuestionGroupConfig = {};
+    if (raw.id !== undefined && raw.id !== null) cfg.id = raw.id.toString();
+    if (raw.header !== undefined) cfg.header = !!raw.header;
+
+    const titleRaw = raw.title !== undefined ? raw.title : raw.label !== undefined ? raw.label : raw.name;
+    if (titleRaw !== undefined && titleRaw !== null) cfg.title = titleRaw;
+
+    if (raw.collapsible !== undefined) cfg.collapsible = !!raw.collapsible;
+    if (raw.defaultCollapsed !== undefined) cfg.defaultCollapsed = !!raw.defaultCollapsed;
+
+    return Object.keys(cfg).length ? cfg : undefined;
+  }
+
+  private static parseQuestionGroup(rawConfigs: Array<string | undefined>): QuestionGroupConfig | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const parsed = this.safeParseObject(raw);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const group = this.normalizeQuestionGroup((parsed as any).group || (parsed as any).section || (parsed as any).card);
+      if (group) return group;
+    }
+    return undefined;
+  }
+
+  private static parsePairKey(rawConfigs: Array<string | undefined>): string | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const parsed = this.safeParseObject(raw);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const obj: any = parsed as any;
+      const candidate =
+        obj.pair !== undefined ? obj.pair : obj.pairKey !== undefined ? obj.pairKey : obj.pairWith !== undefined ? obj.pairWith : undefined;
+      if (candidate === undefined || candidate === null) continue;
+      const value = candidate.toString().trim();
+      if (value) return value;
+    }
+    return undefined;
+  }
+
+  private static normalizeChoiceControl(raw: any): ChoiceControl | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    const candidate = raw.toString().trim().toLowerCase();
+    switch (candidate) {
+      case 'auto':
+      case 'select':
+      case 'radio':
+      case 'segmented':
+      case 'switch':
+        return candidate as ChoiceControl;
+      default:
+        return undefined;
+    }
+  }
+
+  private static normalizeLabelLayout(raw: any): QuestionUiConfig['labelLayout'] | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (raw === true) return 'stacked';
+    const candidate = raw.toString().trim().toLowerCase();
+    switch (candidate) {
+      case 'stacked':
+      case 'stack':
+      case 'vertical':
+        return 'stacked';
+      case 'auto':
+        return 'auto';
+      default:
+        return undefined;
+    }
+  }
+
+  private static normalizeQuestionUi(rawUi: any): QuestionUiConfig | undefined {
+    if (!rawUi || typeof rawUi !== 'object') return undefined;
+    const control = this.normalizeChoiceControl(rawUi.control || rawUi.choiceControl || rawUi.choice);
+    const labelLayout = this.normalizeLabelLayout(
+      rawUi.labelLayout ?? rawUi.label_layout ?? rawUi.stackedLabel ?? rawUi.stackLabel ?? rawUi.stacked
+    );
+    const cfg: QuestionUiConfig = {};
+    if (control) cfg.control = control;
+    if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
+    return Object.keys(cfg).length ? cfg : undefined;
+  }
+
+  private static parseQuestionUi(rawConfigs: Array<string | undefined>): QuestionUiConfig | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const parsed = this.safeParseObject(raw);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const ui = this.normalizeQuestionUi(parsed.ui || parsed.view || parsed.layout);
+      if (ui) return ui;
+    }
+    return undefined;
+  }
+
   private static normalizeLineItemUi(rawUi: any): LineItemGroupUiConfig | undefined {
     if (!rawUi || typeof rawUi !== 'object') return undefined;
 
@@ -1032,13 +1173,20 @@ export class ConfigSheet {
         const optionFilter = this.parseOptionFilter(rawConfig);
         const validationRules = this.parseValidationRules(rawConfig);
         const visibility = this.parseVisibility(rawConfig);
-        const fieldType = (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as BaseQuestionType;
+        const fieldType = (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as LineItemFieldType;
         const dataSource = (fieldType === 'CHOICE' || fieldType === 'CHECKBOX')
           ? this.parseDataSource(rawConfig)
           : undefined;
         const selectionEffects = this.parseSelectionEffects(rawConfig);
         const valueMap = this.parseValueMap(rawConfig);
         const derivedValue = this.parseDerivedValue(rawConfig);
+      const ui = this.parseQuestionUi([rawConfig]);
+      const group = this.parseQuestionGroup([rawConfig]);
+      const pair = this.parsePairKey([rawConfig]);
+      const uploadConfig =
+        fieldType === 'FILE_UPLOAD'
+          ? this.parseUploadConfig(rawConfig || (row[6] ? row[6].toString().trim() : ''))
+          : undefined;
       return {
         id: row[0] ? row[0].toString() : `LI${idx + 1}`,
         type: fieldType,
@@ -1046,6 +1194,9 @@ export class ConfigSheet {
         labelFr: row[3] || '',
         labelNl: row[4] || '',
         required: !!row[5],
+        group,
+        pair,
+        ui,
         options,
         optionsFr,
         optionsNl,
@@ -1055,7 +1206,8 @@ export class ConfigSheet {
         dataSource,
         selectionEffects,
         valueMap,
-        derivedValue
+        derivedValue,
+        uploadConfig
       };
     }).filter(f => f.labelEn || f.labelFr || f.labelNl);
 
@@ -1063,13 +1215,26 @@ export class ConfigSheet {
   }
 
   private static normalizeLineItemField(field: any, idx: number): LineItemFieldConfig {
-    const baseType = (field?.type ? field.type.toString().toUpperCase() : 'TEXT') as BaseQuestionType;
+    const baseType = (field?.type ? field.type.toString().toUpperCase() : 'TEXT') as LineItemFieldType;
     const dataSource = (baseType === 'CHOICE' || baseType === 'CHECKBOX')
       ? this.buildDataSourceConfig(this.extractDataSourceCandidate(field))
       : undefined;
+    const uploadConfig =
+      baseType === 'FILE_UPLOAD' ? this.normalizeUploadConfig(field?.uploadConfig || field?.upload) : undefined;
     const selectionEffects = this.normalizeSelectionEffects(field?.selectionEffects);
     const valueMap = this.normalizeValueMap(field?.valueMap);
     const derivedValue = this.normalizeDerivedValue(field?.derivedValue);
+    const ui = this.normalizeQuestionUi(field?.ui || field?.view || field?.layout);
+    const group = this.normalizeQuestionGroup(field?.group || field?.section || field?.card);
+    const pairCandidate =
+      field?.pair !== undefined
+        ? field.pair
+        : field?.pairKey !== undefined
+        ? field.pairKey
+        : field?.pairWith !== undefined
+        ? field.pairWith
+        : undefined;
+    const pair = pairCandidate !== undefined && pairCandidate !== null ? pairCandidate.toString().trim() : undefined;
     return {
       id: field?.id || `LI${idx + 1}`,
       type: baseType,
@@ -1077,6 +1242,9 @@ export class ConfigSheet {
       labelFr: field?.labelFr || '',
       labelNl: field?.labelNl || '',
       required: !!field?.required,
+      group,
+      pair: pair || undefined,
+      ui,
       options: Array.isArray(field?.options) ? field.options : [],
       optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],
       optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : [],
@@ -1086,7 +1254,8 @@ export class ConfigSheet {
       dataSource,
       selectionEffects,
       valueMap,
-      derivedValue
+      derivedValue,
+      uploadConfig
     };
   }
 

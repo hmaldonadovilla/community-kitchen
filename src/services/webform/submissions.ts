@@ -13,6 +13,13 @@ import { UploadService } from './uploads';
 
 const AUTO_INCREMENT_PROPERTY_PREFIX = 'CK_AUTO_';
 
+const resolveSubgroupKey = (sub?: any): string => {
+  if (!sub) return '';
+  if (sub.id) return sub.id;
+  if (typeof sub.label === 'string') return sub.label;
+  return sub.label?.en || sub.label?.fr || sub.label?.nl || '';
+};
+
 export class SubmissionService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private uploadService: UploadService;
@@ -31,6 +38,36 @@ export class SubmissionService {
     this.cacheManager = cacheManager;
     this.docProps = docProps;
     this.autoIncrementState = {};
+  }
+
+  private applyUploadsToLineItemRows(rows: any, cfg: any): any {
+    if (!rows || !Array.isArray(rows) || !cfg) return rows;
+    const fields = Array.isArray(cfg.fields) ? cfg.fields : [];
+    const fileFields = fields.filter((f: any) => f && f.type === 'FILE_UPLOAD');
+    const subGroups = Array.isArray(cfg.subGroups) ? cfg.subGroups : [];
+
+    return rows.map((row: any) => {
+      if (!row || typeof row !== 'object') return row;
+      const next: any = { ...row };
+
+      // Upload FILE_UPLOAD fields at this level
+      fileFields.forEach((field: any) => {
+        const fieldId = (field.id || '').toString();
+        if (!fieldId) return;
+        next[fieldId] = this.uploadService.saveFiles(next[fieldId], field.uploadConfig);
+      });
+
+      // Recurse into subgroups (stored under their subgroup key)
+      subGroups.forEach((sub: any) => {
+        const key = resolveSubgroupKey(sub);
+        if (!key) return;
+        if (Array.isArray(next[key])) {
+          next[key] = this.applyUploadsToLineItemRows(next[key], sub);
+        }
+      });
+
+      return next;
+    });
   }
 
   saveSubmissionWithId(
@@ -103,7 +140,29 @@ export class SubmissionService {
 
       if (q.type === 'LINE_ITEM_GROUP') {
         const rawLineItems = (formObject as any)[`${q.id}_json`] || (formObject as any)[q.id];
+        let parsed: any = null;
         if (rawLineItems && typeof rawLineItems === 'string') {
+          try {
+            parsed = JSON.parse(rawLineItems);
+          } catch (_) {
+            parsed = null;
+          }
+        } else if (Array.isArray(rawLineItems)) {
+          parsed = rawLineItems;
+        }
+
+        if (parsed && q.lineItemConfig) {
+          try {
+            const processed = this.applyUploadsToLineItemRows(parsed, q.lineItemConfig);
+            value = JSON.stringify(processed);
+          } catch (_) {
+            try {
+              value = JSON.stringify(parsed);
+            } catch (_) {
+              value = '';
+            }
+          }
+        } else if (rawLineItems && typeof rawLineItems === 'string') {
           value = rawLineItems;
         } else if (rawLineItems) {
           try {

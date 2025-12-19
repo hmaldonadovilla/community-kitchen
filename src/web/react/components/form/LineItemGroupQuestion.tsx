@@ -1,0 +1,1796 @@
+import React from 'react';
+import {
+  computeAllowedOptions,
+  buildLocalizedOptions,
+  shouldHideField,
+  validateRules,
+  computeTotals,
+  loadOptionsFromDataSource,
+  optionKey,
+  toDependencyValue
+} from '../../../core';
+import { resolveLocalizedString } from '../../../i18n';
+import {
+  FieldValue,
+  LangCode,
+  OptionSet,
+  VisibilityContext,
+  WebFormDefinition,
+  WebQuestionDefinition
+} from '../../../types';
+import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
+import { FormErrors, LineItemState, OptionState } from '../../types';
+import { isEmptyValue } from '../../utils/values';
+import { toDateInputValue, toUploadItems } from './utils';
+import { buttonStyles, RequiredStar, srOnly, UploadIcon, withDisabled } from './ui';
+import { GroupedPairedFields } from './GroupedPairedFields';
+import { InfoTooltip } from './InfoTooltip';
+import { LineOverlayState } from './overlays/LineSelectOverlay';
+import { resolveValueMapValue } from './valueMaps';
+import { buildSelectorOptionSet, resolveSelectorLabel } from './lineItemSelectors';
+import { buildSubgroupKey, resolveSubgroupKey } from '../../app/lineItems';
+
+export interface ErrorIndex {
+  rowErrors: Set<string>;
+  subgroupErrors: Set<string>;
+}
+
+export interface OpenFileOverlayArgs {
+  open?: boolean;
+  title?: string;
+  scope?: 'top' | 'line';
+  question?: WebQuestionDefinition;
+  group?: WebQuestionDefinition;
+  rowId?: string;
+  field?: any;
+  fieldPath?: string;
+}
+
+export interface ChoiceControlArgs {
+  fieldPath: string;
+  value: string;
+  options: Array<{ value: string; label: string; tooltip?: string }>;
+  required: boolean;
+  override?: string | null;
+  onChange: (next: string) => void;
+}
+
+export interface LineItemGroupQuestionCtx {
+  definition: WebFormDefinition;
+  language: LangCode;
+  values: Record<string, FieldValue>;
+  setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
+  lineItems: LineItemState;
+  setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
+
+  submitting: boolean;
+
+  errors: FormErrors;
+  setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
+
+  optionState: OptionState;
+  setOptionState: React.Dispatch<React.SetStateAction<OptionState>>;
+
+  ensureLineOptions: (groupId: string, field: any) => void;
+
+  renderChoiceControl: (args: ChoiceControlArgs) => React.ReactNode;
+
+  openInfoOverlay: (title: string, text: string) => void;
+  openFileOverlay: (args: OpenFileOverlayArgs) => void;
+  openSubgroupOverlay: (subKey: string) => void;
+
+  addLineItemRowManual: (groupId: string, preset?: Record<string, any>) => void;
+  removeLineRow: (groupId: string, rowId: string) => void;
+  handleLineFieldChange: (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => void;
+
+  collapsedGroups: Record<string, boolean>;
+  toggleGroupCollapsed: (groupKey: string) => void;
+
+  collapsedRows: Record<string, boolean>;
+  setCollapsedRows: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+
+  collapsedSubgroups: Record<string, boolean>;
+  setCollapsedSubgroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+
+  subgroupSelectors: Record<string, string>;
+  setSubgroupSelectors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+
+  subgroupBottomRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
+
+  fileInputsRef: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
+  dragState: Record<string, boolean>;
+  incrementDrag: (key: string) => void;
+  decrementDrag: (key: string) => void;
+  resetDrag: (key: string) => void;
+  uploadAnnouncements: Record<string, string>;
+
+  handleLineFileInputChange: (args: {
+    group: WebQuestionDefinition;
+    rowId: string;
+    field: any;
+    fieldPath: string;
+    list: FileList | null;
+  }) => void;
+  handleLineFileDrop: (args: {
+    group: WebQuestionDefinition;
+    rowId: string;
+    field: any;
+    fieldPath: string;
+    event: React.DragEvent<HTMLDivElement>;
+  }) => void;
+  removeLineFile: (args: { group: WebQuestionDefinition; rowId: string; field: any; fieldPath: string; index: number }) => void;
+  clearLineFiles: (args: { group: WebQuestionDefinition; rowId: string; field: any; fieldPath: string }) => void;
+
+  errorIndex: ErrorIndex;
+
+  setOverlay: React.Dispatch<React.SetStateAction<LineOverlayState>>;
+
+  onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
+}
+
+export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: LineItemGroupQuestionCtx }> = ({ q, ctx }) => {
+  const {
+    language,
+    values,
+    setValues,
+    lineItems,
+    submitting,
+    errors,
+    optionState,
+    setOptionState,
+    ensureLineOptions,
+    renderChoiceControl,
+    openInfoOverlay,
+    openFileOverlay,
+    openSubgroupOverlay,
+    addLineItemRowManual,
+    removeLineRow,
+    handleLineFieldChange,
+    collapsedGroups,
+    toggleGroupCollapsed,
+    collapsedRows,
+    setCollapsedRows,
+    collapsedSubgroups,
+    setCollapsedSubgroups,
+    subgroupSelectors,
+    setSubgroupSelectors,
+    subgroupBottomRefs,
+    fileInputsRef,
+    dragState,
+    incrementDrag,
+    decrementDrag,
+    uploadAnnouncements,
+    handleLineFileInputChange,
+    handleLineFileDrop,
+    errorIndex,
+    setOverlay,
+    onDiagnostic
+  } = ctx;
+
+        const selectorCfg = q.lineItemConfig?.sectionSelector;
+        const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
+        const selectorOptions = selectorOptionSet
+          ? buildLocalizedOptions(selectorOptionSet, selectorOptionSet.en || [], language)
+          : [];
+        const selectorValue = selectorCfg ? ((values[selectorCfg.id] as string) || '') : '';
+
+        const renderAddButton = () => {
+          if (q.lineItemConfig?.addMode === 'overlay' && q.lineItemConfig.anchorFieldId) {
+            return (
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={async () => {
+                  if (submitting) return;
+                  const anchorField = (q.lineItemConfig?.fields || []).find(f => f.id === q.lineItemConfig?.anchorFieldId);
+                  if (!anchorField || anchorField.type !== 'CHOICE') {
+                    addLineItemRowManual(q.id);
+                    return;
+                  }
+                  const key = optionKey(anchorField.id, q.id);
+                  let opts = optionState[key];
+                  if (!opts && anchorField.dataSource) {
+                    const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                    if (loaded) {
+                      opts = loaded;
+                      setOptionState(prev => ({ ...prev, [key]: loaded }));
+                    }
+                  }
+                  if (!opts) {
+                    opts = {
+                      en: anchorField.options || [],
+                      fr: (anchorField as any).optionsFr || [],
+                      nl: (anchorField as any).optionsNl || []
+                    };
+                  }
+                  const dependencyIds = (
+                    Array.isArray(anchorField.optionFilter?.dependsOn)
+                      ? anchorField.optionFilter?.dependsOn
+                      : [anchorField.optionFilter?.dependsOn || '']
+                  ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
+                  const depVals = dependencyIds.map(dep => toDependencyValue(values[dep]));
+                  const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
+                  const localized = buildLocalizedOptions(opts, allowed, language);
+                  const deduped = Array.from(
+                    new Set(localized.map(opt => opt.value).filter(Boolean))
+                  );
+                  setOverlay({
+                    open: true,
+                    options: localized
+                      .filter(opt => deduped.includes(opt.value))
+                      .map(opt => ({ value: opt.value, label: opt.label })),
+                    groupId: q.id,
+                    anchorFieldId: anchorField.id,
+                    selected: []
+                  });
+                }}
+              >
+                {resolveLocalizedString(q.lineItemConfig?.addButtonLabel, language, 'Add lines')}
+              </button>
+            );
+          }
+          return (
+            <button type="button" disabled={submitting} onClick={() => addLineItemRowManual(q.id)}>
+              {resolveLocalizedString(q.lineItemConfig?.addButtonLabel, language, 'Add line')}
+            </button>
+          );
+        };
+
+        const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: lineItems[q.id] || [] }, language);
+        const parentRows = lineItems[q.id] || [];
+        const parentCount = parentRows.length;
+        const selectorControl =
+          selectorCfg && selectorOptions.length ? (
+            <div
+              className="section-selector"
+              data-field-path={selectorCfg.id}
+              style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}
+            >
+              <label style={{ fontWeight: 600 }}>
+                {resolveSelectorLabel(selectorCfg, language)}
+                {selectorCfg.required && <RequiredStar />}
+              </label>
+              <select
+                value={selectorValue}
+                onChange={e => {
+                  const nextVal = e.target.value;
+                  setValues(prev => {
+                    if (prev[selectorCfg.id] === nextVal) return prev;
+                    return { ...prev, [selectorCfg.id]: nextVal };
+                  });
+                }}
+              >
+                <option value="">Select…</option>
+                {selectorOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null;
+        return (
+          <div key={q.id} className="card ck-full-width" data-field-path={q.id}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <h3 style={{ margin: 0 }}>{resolveLabel(q, language)}</h3>
+              <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
+                {parentCount} item{parentCount === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
+                {selectorControl}
+                {renderAddButton()}
+              </div>
+            </div>
+            {parentRows.map((row, rowIdx) => {
+              const groupCtx: VisibilityContext = {
+                getValue: fid => values[fid],
+                getLineValue: (_rowId, fid) => row.values[fid]
+              };
+              const ui = q.lineItemConfig?.ui;
+              const isProgressive =
+                ui?.mode === 'progressive' && Array.isArray(ui.collapsedFields) && ui.collapsedFields.length > 0;
+              const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
+              const collapseKey = `${q.id}::${row.id}`;
+              const rowCollapsed = isProgressive ? (collapsedRows[collapseKey] ?? defaultCollapsed) : false;
+
+              const collapsedFieldConfigs = isProgressive ? ui?.collapsedFields || [] : [];
+              const collapsedLabelMap: Record<string, boolean> = {};
+              const collapsedFieldOrder: string[] = [];
+              collapsedFieldConfigs.forEach(cfg => {
+                const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
+                if (!fid) return;
+                collapsedFieldOrder.push(fid);
+                collapsedLabelMap[fid] = cfg.showLabel !== undefined ? !!cfg.showLabel : true;
+              });
+
+              const allFields = q.lineItemConfig?.fields || [];
+              const subGroups = q.lineItemConfig?.subGroups || [];
+              const subIdToLabel: Record<string, string> = {};
+              subGroups.forEach(sub => {
+                const id = resolveSubgroupKey(sub);
+                if (!id) return;
+                const label = resolveLocalizedString(sub.label, language, id);
+                subIdToLabel[id] = label || id;
+              });
+              const subIds = Object.keys(subIdToLabel);
+              const fieldTriggeredSubgroupIdSet =
+                !rowCollapsed && subIds.length > 0
+                  ? allFields.reduce<Set<string>>((acc, field) => {
+                      const effects = Array.isArray((field as any).selectionEffects)
+                        ? ((field as any).selectionEffects as any[])
+                        : [];
+                      effects.forEach(e => {
+                        const gid = e?.groupId ? e.groupId.toString() : '';
+                        if (gid && subIdToLabel[gid] !== undefined) acc.add(gid);
+                      });
+                      return acc;
+                    }, new Set<string>())
+                  : new Set<string>();
+              const hasFieldTriggeredSubgroup = fieldTriggeredSubgroupIdSet.size > 0;
+              const fallbackSubIds =
+                !rowCollapsed && subIds.length ? subIds.filter(id => !fieldTriggeredSubgroupIdSet.has(id)) : [];
+              const collapsedFieldsOrdered = collapsedFieldOrder
+                .map(fid => allFields.find(f => f.id === fid))
+                .filter(Boolean) as any[];
+              const fieldsToRenderBase =
+                isProgressive && rowCollapsed
+                  ? collapsedFieldsOrdered.length
+                    ? collapsedFieldsOrdered
+                    : allFields
+                  : allFields;
+
+              const titleFieldId = (() => {
+                if (!isProgressive) return '';
+                const unlabeled = (collapsedFieldConfigs || [])
+                  .filter(cfg => cfg && cfg.showLabel === false)
+                  .map(cfg => (cfg?.fieldId ? cfg.fieldId.toString() : ''))
+                  .filter(Boolean);
+                return unlabeled.length === 1 ? unlabeled[0] : '';
+              })();
+
+              const titleField = titleFieldId ? (allFields.find(f => f.id === titleFieldId) as any) : undefined;
+              const titleHidden = titleField
+                ? shouldHideField(titleField.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
+                : true;
+              const showTitleControl = !!titleField && !titleHidden;
+
+              const fieldsToRender = showTitleControl
+                ? fieldsToRenderBase.filter((f: any) => f?.id !== titleFieldId)
+                : fieldsToRenderBase;
+
+              const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
+              const gateResult = (() => {
+                if (!isProgressive || !rowCollapsed) return { canExpand: true, reason: '' };
+                if (expandGate === 'always') return { canExpand: true, reason: '' };
+
+                const missing: string[] = [];
+                const invalid: string[] = [];
+                (collapsedFieldConfigs || []).forEach(cfg => {
+                  const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
+                  if (!fid) return;
+                  const field = allFields.find(f => f.id === fid);
+                  if (!field) return;
+                  const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+                  if (hideField) return;
+
+                  const val = row.values[field.id];
+                  if (field.required && isEmptyValue(val as any)) {
+                    missing.push(field.id);
+                  }
+
+                  const rules = Array.isArray(field.validationRules)
+                    ? field.validationRules.filter(r => r?.then?.fieldId === field.id)
+                    : [];
+                  if (rules.length) {
+                    const isHidden = (fieldId: string) => {
+                      const target = allFields.find(f => f.id === fieldId);
+                      if (!target) return false;
+                      return shouldHideField(target.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+                    };
+                    const ctx: any = {
+                      ...groupCtx,
+                      getValue: (fieldId: string) =>
+                        Object.prototype.hasOwnProperty.call(row.values || {}, fieldId) ? row.values[fieldId] : values[fieldId],
+                      language,
+                      phase: 'submit',
+                      isHidden
+                    };
+                    const errs = validateRules(rules, ctx);
+                    if (errs.length) {
+                      invalid.push(field.id);
+                    }
+                  }
+                });
+
+                const blocked = Array.from(new Set([...missing, ...invalid]));
+                if (!blocked.length) return { canExpand: true, reason: '' };
+                return { canExpand: false, reason: `Complete required fields to expand: ${blocked.join(', ')}` };
+              })();
+              const canExpand = gateResult.canExpand;
+              const rowHasError = errorIndex.rowErrors.has(collapseKey);
+              return (
+                <div
+                  key={row.id}
+                  className="line-item-row"
+                  data-row-anchor={`${q.id}__${row.id}`}
+                  style={{
+                    background:
+                      isProgressive && rowCollapsed && !canExpand
+                        ? '#f1f5f9'
+                        : rowIdx % 2 === 0
+                        ? '#ffffff'
+                        : '#f8fafc',
+                    padding: 12,
+                    borderRadius: 10,
+                    border: '1px solid #e5e7eb',
+                    outline: rowHasError ? '3px solid rgba(239, 68, 68, 0.55)' : undefined,
+                    outlineOffset: 2,
+                    marginBottom: 10
+                  }}
+                >
+                  {isProgressive ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        {showTitleControl && titleField ? (
+                          <div style={{ maxWidth: 420 }}>
+                            {(() => {
+                              ensureLineOptions(q.id, titleField);
+                              const errorKey = `${q.id}__${titleField.id}__${row.id}`;
+                              const hideLabel = true;
+                              const labelStyle = hideLabel ? srOnly : undefined;
+                              const triggeredSubgroupIds = (() => {
+                                if (rowCollapsed) return [] as string[];
+                                if (!subIds.length) return [] as string[];
+                                const effects = Array.isArray((titleField as any).selectionEffects)
+                                  ? ((titleField as any).selectionEffects as any[])
+                                  : [];
+                                const hits = effects
+                                  .map(e => (e?.groupId !== undefined && e?.groupId !== null ? e.groupId.toString() : ''))
+                                  .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
+                                return Array.from(new Set(hits));
+                              })();
+                              const subgroupTriggerButtons =
+                                triggeredSubgroupIds.length && !rowCollapsed ? (
+                                  <div>
+                                    {triggeredSubgroupIds.map(subId => {
+                                      const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
+                                      const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
+                                      return (
+                                        <button
+                                          key={subId}
+                                          type="button"
+                                          style={{
+                                            ...buttonStyles.secondary,
+                                            borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
+                                            background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
+                                          }}
+                                          onClick={() => openSubgroupOverlay(fullSubKey)}
+                                        >
+                                          {subIdToLabel[subId] || subId}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ) : null;
+
+                              if (titleField.type === 'CHOICE') {
+                                const optionSetField: OptionSet =
+                                  optionState[optionKey(titleField.id, q.id)] || {
+                                    en: titleField.options || [],
+                                    fr: (titleField as any).optionsFr || [],
+                                    nl: (titleField as any).optionsNl || []
+                                  };
+                                const dependencyIds = (
+                                  Array.isArray(titleField.optionFilter?.dependsOn)
+                                    ? titleField.optionFilter?.dependsOn
+                                    : [titleField.optionFilter?.dependsOn || '']
+                                ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                                const allowedField = computeAllowedOptions(
+                                  titleField.optionFilter,
+                                  optionSetField,
+                                  dependencyIds.map((dep: string) => toDependencyValue(row.values[dep] ?? values[dep]))
+                                );
+                                const rawVal = row.values[titleField.id];
+                                const choiceVal =
+                                  Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                                const allowedWithCurrent =
+                                  choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
+                                    ? [...allowedField, choiceVal]
+                                    : allowedField;
+                                const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language);
+                                return (
+                                  <div
+                                    className={`field inline-field${titleField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                                    style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
+                                    data-field-path={errorKey}
+                                    data-has-error={errors[errorKey] ? 'true' : undefined}
+                                  >
+                                    <label style={labelStyle}>
+                                      {resolveFieldLabel(titleField, language, titleField.id)}
+                                      {titleField.required && <RequiredStar />}
+                                    </label>
+                                    <select
+                                      value={choiceVal || ''}
+                                      onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
+                                    >
+                                      <option value="">Select…</option>
+                                      {optsField.map(opt => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {subgroupTriggerButtons}
+                                    {(() => {
+                                      const selected = optsField.find(opt => opt.value === choiceVal);
+                                      if (!selected?.tooltip) return null;
+                                      const fallbackLabel = resolveFieldLabel(titleField, language, titleField.id);
+                                      const tooltipLabel = resolveLocalizedString(
+                                        titleField.dataSource?.tooltipLabel,
+                                        language,
+                                        fallbackLabel
+                                      );
+                                      return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
+                                    })()}
+                                    {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
+                                  </div>
+                                );
+                              }
+
+                              if (titleField.type === 'CHECKBOX') {
+                                const optionSetField: OptionSet =
+                                  optionState[optionKey(titleField.id, q.id)] || {
+                                    en: titleField.options || [],
+                                    fr: (titleField as any).optionsFr || [],
+                                    nl: (titleField as any).optionsNl || []
+                                  };
+                                const dependencyIds = (
+                                  Array.isArray(titleField.optionFilter?.dependsOn)
+                                    ? titleField.optionFilter?.dependsOn
+                                    : [titleField.optionFilter?.dependsOn || '']
+                                ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                                const allowedField = computeAllowedOptions(
+                                  titleField.optionFilter,
+                                  optionSetField,
+                                  dependencyIds.map((dep: string) => toDependencyValue(row.values[dep] ?? values[dep]))
+                                );
+                                const selected = Array.isArray(row.values[titleField.id]) ? (row.values[titleField.id] as string[]) : [];
+                                const allowedWithSelected = selected.reduce((acc, val) => {
+                                  if (val && !acc.includes(val)) acc.push(val);
+                                  return acc;
+                                }, [...allowedField]);
+                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language);
+                                return (
+                                  <div
+                                    className={`field inline-field${titleField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                                    style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
+                                    data-field-path={errorKey}
+                                    data-has-error={errors[errorKey] ? 'true' : undefined}
+                                  >
+                                    <label style={labelStyle}>
+                                      {resolveFieldLabel(titleField, language, titleField.id)}
+                                      {titleField.required && <RequiredStar />}
+                                    </label>
+                                    <div className="inline-options">
+                                      {optsField.map(opt => (
+                                        <label key={opt.value} className="inline">
+                                          <input
+                                            type="checkbox"
+                                            checked={selected.includes(opt.value)}
+                                            onChange={e => {
+                                              const next = e.target.checked
+                                                ? [...selected, opt.value]
+                                                : selected.filter(v => v !== opt.value);
+                                              handleLineFieldChange(q, row.id, titleField, next);
+                                            }}
+                                          />
+                                          <span>{opt.label}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                    {subgroupTriggerButtons}
+                                    {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
+                                  </div>
+                                );
+                              }
+
+                              const mapped = titleField.valueMap
+                                ? resolveValueMapValue(titleField.valueMap, fid => {
+                                    if (row.values.hasOwnProperty(fid)) return row.values[fid];
+                                    return values[fid];
+                                  })
+                                : undefined;
+                              const fieldValueRaw = titleField.valueMap ? mapped : (row.values[titleField.id] as string) || '';
+                              const fieldValue = titleField.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                              return (
+                                <div
+                                  className={`field inline-field${titleField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                                  style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
+                                  data-field-path={errorKey}
+                                  data-has-error={errors[errorKey] ? 'true' : undefined}
+                                >
+                                  <label style={labelStyle}>
+                                    {resolveFieldLabel(titleField, language, titleField.id)}
+                                    {titleField.required && <RequiredStar />}
+                                  </label>
+                                  <input
+                                    type={
+                                      titleField.type === 'NUMBER'
+                                        ? 'number'
+                                        : titleField.type === 'DATE'
+                                        ? 'date'
+                                        : 'text'
+                                    }
+                                    value={fieldValue}
+                                    onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
+                                    readOnly={!!titleField.valueMap}
+                                  />
+                                  {subgroupTriggerButtons}
+                                  {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ) : null}
+                        {rowCollapsed && !canExpand ? (
+                          <div
+                            className="muted"
+                            style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
+                          >
+                            {rowHasError ? 'Needs attention · ' : ''}
+                            Fill the collapsed fields to unlock expand.
+                          </div>
+                        ) : null}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div
+                          className="muted"
+                          style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
+                        >
+                          Row {rowIdx + 1}
+                          {rowHasError ? ' · Needs attention' : ''}
+                        </div>
+                        <button
+                          type="button"
+                          className="ck-group-chevron"
+                          aria-label={rowCollapsed ? 'Expand row' : 'Collapse row'}
+                          aria-expanded={!rowCollapsed}
+                          aria-disabled={rowCollapsed && !canExpand}
+                          title={rowCollapsed && !canExpand ? gateResult.reason : rowCollapsed ? 'Expand' : 'Collapse'}
+                          onClick={() => {
+                            if (rowCollapsed && !canExpand) {
+                              onDiagnostic?.('edit.progressive.expand.blocked', {
+                                groupId: q.id,
+                                rowId: row.id,
+                                reason: gateResult.reason
+                              });
+                              return;
+                            }
+                            setCollapsedRows(prev => ({ ...prev, [collapseKey]: !rowCollapsed }));
+                            onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
+                          }}
+                          style={{
+                            opacity: rowCollapsed && !canExpand ? 0.6 : 1,
+                            borderColor: rowHasError ? '#ef4444' : undefined,
+                            background: rowHasError ? '#fff7f7' : undefined
+                          }}
+                        >
+                          {rowCollapsed ? '▸' : '▾'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {(() => {
+                    const renderLineItemField = (field: any) => {
+                    ensureLineOptions(q.id, field);
+                    const optionSetField: OptionSet =
+                      optionState[optionKey(field.id, q.id)] || {
+                        en: field.options || [],
+                        fr: (field as any).optionsFr || [],
+                        nl: (field as any).optionsNl || []
+                      };
+                    const dependencyIds = (
+                      Array.isArray(field.optionFilter?.dependsOn)
+                        ? field.optionFilter?.dependsOn
+                        : [field.optionFilter?.dependsOn || '']
+                      ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                    const allowedField = computeAllowedOptions(
+                      field.optionFilter,
+                      optionSetField,
+                        dependencyIds.map((dep: string) => toDependencyValue(row.values[dep] ?? values[dep]))
+                    );
+                    const currentVal = row.values[field.id];
+                    const allowedWithCurrent =
+                      currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
+                        ? [...allowedField, currentVal]
+                        : allowedField;
+                    const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language);
+                    const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+                    if (hideField) return null;
+
+                      const fieldPath = `${q.id}__${field.id}__${row.id}`;
+                      const hideLabel = isProgressive && rowCollapsed && collapsedLabelMap[field.id] === false;
+                      const labelStyle = hideLabel ? srOnly : undefined;
+
+                      const triggeredSubgroupIds = (() => {
+                        if (rowCollapsed) return [] as string[];
+                        if (!subIds.length) return [] as string[];
+                        const effects = Array.isArray((field as any).selectionEffects)
+                          ? ((field as any).selectionEffects as any[])
+                          : [];
+                        const hits = effects
+                          .map(e => (e?.groupId !== undefined && e?.groupId !== null ? e.groupId.toString() : ''))
+                          .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
+                        return Array.from(new Set(hits));
+                      })();
+                      const subgroupTriggerButtons =
+                        triggeredSubgroupIds.length && !rowCollapsed ? (
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', alignSelf: 'center' }}>
+                            {triggeredSubgroupIds.map(subId => {
+                              const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
+                              const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
+                              return (
+                                <button
+                                  key={subId}
+                                  type="button"
+                                  style={{
+                                    ...buttonStyles.secondary,
+                                    borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
+                                    background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
+                                  }}
+                                  onClick={() => openSubgroupOverlay(fullSubKey)}
+                                >
+                                  {subIdToLabel[subId] || subId}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null;
+
+                    switch (field.type) {
+                      case 'CHOICE': {
+                        const rawVal = row.values[field.id];
+                        const choiceVal =
+                          Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                        return (
+                            <div
+                              key={field.id}
+                              className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            >
+                              <label style={labelStyle}>
+                              {resolveFieldLabel(field, language, field.id)}
+                              {field.required && <RequiredStar />}
+                            </label>
+                              {renderChoiceControl({
+                                fieldPath,
+                                value: choiceVal || '',
+                                options: optsField,
+                                required: !!field.required,
+                                override: (field as any)?.ui?.control,
+                                onChange: next => handleLineFieldChange(q, row.id, field, next)
+                              })}
+                              {subgroupTriggerButtons}
+                            {(() => {
+                              const selected = optsField.find(opt => opt.value === choiceVal);
+                              if (!selected?.tooltip) return null;
+                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
+                                return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
+                            })()}
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          </div>
+                        );
+                      }
+                      case 'CHECKBOX': {
+                          const hasAnyOption =
+                            !!((optionSetField.en && optionSetField.en.length) ||
+                              ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                              ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                          const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
+                        const selected = Array.isArray(row.values[field.id]) ? (row.values[field.id] as string[]) : [];
+                        const allowedWithSelected = selected.reduce((acc, val) => {
+                          if (val && !acc.includes(val)) acc.push(val);
+                          return acc;
+                        }, [...allowedField]);
+                        const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language);
+                        return (
+                            <div
+                              key={field.id}
+                              className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            >
+                              <label style={labelStyle}>
+                              {resolveFieldLabel(field, language, field.id)}
+                              {field.required && <RequiredStar />}
+                            </label>
+                              {isConsentCheckbox ? (
+                                <div className="ck-choice-control ck-consent-control">
+                                  <label className="ck-consent">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!row.values[field.id]}
+                                      onChange={e => handleLineFieldChange(q, row.id, field, e.target.checked)}
+                                    />
+                                  </label>
+                                </div>
+                              ) : (
+                            <div className="inline-options">
+                              {optsField.map(opt => (
+                                <label key={opt.value} className="inline">
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.includes(opt.value)}
+                                    onChange={e => {
+                                      const next = e.target.checked
+                                        ? [...selected, opt.value]
+                                        : selected.filter(v => v !== opt.value);
+                                      handleLineFieldChange(q, row.id, field, next);
+                                    }}
+                                  />
+                                  <span>{opt.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                              )}
+                              {subgroupTriggerButtons}
+                            {(() => {
+                              const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
+                              if (!withTooltips.length) return null;
+                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
+                              return (
+                                <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                  {withTooltips.map(opt => (
+                                    <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        {opt.label} <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                            </div>
+                          );
+                        }
+                        case 'FILE_UPLOAD': {
+                          const items = toUploadItems(row.values[field.id] as any);
+                          const uploadConfig = (field as any).uploadConfig || {};
+                          const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+                            ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+                          );
+                          const acceptAttr = allowedDisplay.length ? allowedDisplay.join(',') : undefined;
+                          const maxed = uploadConfig.maxFiles ? items.length >= uploadConfig.maxFiles : false;
+                          const helperParts: string[] = [];
+                          if (uploadConfig.maxFiles) {
+                            helperParts.push(`${uploadConfig.maxFiles} file${uploadConfig.maxFiles > 1 ? 's' : ''} max`);
+                          }
+                          if (uploadConfig.maxFileSizeMb) {
+                            helperParts.push(`<= ${uploadConfig.maxFileSizeMb} MB each`);
+                          }
+                          if (allowedDisplay.length) {
+                            helperParts.push(`Allowed: ${allowedDisplay.join(', ')}`);
+                          }
+                          const remainingSlots =
+                            uploadConfig.maxFiles && uploadConfig.maxFiles > items.length
+                              ? `${uploadConfig.maxFiles - items.length} slot${uploadConfig.maxFiles - items.length > 1 ? 's' : ''} remaining`
+                              : null;
+                          const dragActive = !!dragState[fieldPath];
+                          return (
+                            <div
+                              key={field.id}
+                              className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            >
+                              <label style={labelStyle}>
+                                {resolveFieldLabel(field, language, field.id)}
+                                {field.required && <RequiredStar />}
+                              </label>
+                              <div className="ck-upload-row">
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={maxed || submitting}
+                                  className="ck-upload-dropzone"
+                                  onClick={() => {
+                                    if (maxed || submitting) return;
+                                    fileInputsRef.current[fieldPath]?.click();
+                                  }}
+                                  onKeyDown={e => {
+                                    if (maxed || submitting) return;
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      fileInputsRef.current[fieldPath]?.click();
+                                    }
+                                  }}
+                                  onDragEnter={e => {
+                                    e.preventDefault();
+                                    if (submitting) return;
+                                    incrementDrag(fieldPath);
+                                  }}
+                                  onDragOver={e => e.preventDefault()}
+                                  onDragLeave={e => {
+                                    e.preventDefault();
+                                    if (submitting) return;
+                                    decrementDrag(fieldPath);
+                                  }}
+                                  onDrop={e =>
+                                    handleLineFileDrop({ group: q, rowId: row.id, field, fieldPath, event: e })
+                                  }
+                                  style={{
+                                    border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
+                                    borderRadius: 12,
+                                    padding: '10px 12px',
+                                    background: dragActive ? '#e0f2fe' : maxed || submitting ? '#f1f5f9' : '#f8fafc',
+                                    color: '#0f172a',
+                                    cursor: maxed || submitting ? 'not-allowed' : 'pointer',
+                                    transition: 'border-color 120ms ease, background 120ms ease',
+                                    boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none',
+                                    flex: 1,
+                                    minWidth: 0,
+                                    minHeight: 'var(--control-height)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 10
+                                  }}
+                                >
+                                  <UploadIcon />
+                                  {items.length ? <span className="pill">{items.length}</span> : null}
+                                  <span style={srOnly}>
+                                    {dragActive
+                                      ? 'Release to upload files'
+                                      : maxed
+                                        ? 'Maximum files selected'
+                                        : 'Click to browse'}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="ck-upload-files-btn"
+                                  onClick={() =>
+                                    openFileOverlay({
+                                      scope: 'line',
+                                      title: resolveFieldLabel(field, language, field.id),
+                                      group: q,
+                                      rowId: row.id,
+                                      field,
+                                      fieldPath
+                                    })
+                                  }
+                                  disabled={submitting}
+                                  style={withDisabled(buttonStyles.secondary, submitting)}
+                                  title={helperParts.length ? helperParts.join(' | ') : undefined}
+                                >
+                                  Files{items.length ? ` (${items.length})` : ''}
+                                </button>
+                                {subgroupTriggerButtons}
+                              </div>
+                              {remainingSlots ? <div className="muted">{remainingSlots}</div> : null}
+                              <div style={srOnly} aria-live="polite">
+                                {uploadAnnouncements[fieldPath] || ''}
+                              </div>
+                              <input
+                                ref={el => {
+                                  fileInputsRef.current[fieldPath] = el;
+                                }}
+                                type="file"
+                                multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
+                                accept={acceptAttr}
+                                style={{ display: 'none' }}
+                                onChange={e =>
+                                  handleLineFileInputChange({ group: q, rowId: row.id, field, fieldPath, list: e.target.files })
+                                }
+                              />
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          </div>
+                        );
+                      }
+                      default: {
+                        const mapped = field.valueMap
+                          ? resolveValueMapValue(field.valueMap, fid => {
+                              if (row.values.hasOwnProperty(fid)) return row.values[fid];
+                              return values[fid];
+                            })
+                          : undefined;
+                          const fieldValueRaw = field.valueMap ? mapped : (row.values[field.id] as string) || '';
+                          const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                        return (
+                            <div
+                              key={field.id}
+                              className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                                (field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
+                              }`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            >
+                              <label style={labelStyle}>
+                              {resolveFieldLabel(field, language, field.id)}
+                              {field.required && <RequiredStar />}
+                            </label>
+                            <input
+                              type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
+                              value={fieldValue}
+                              onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
+                              readOnly={!!field.valueMap}
+                            />
+                              {subgroupTriggerButtons}
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          </div>
+                        );
+                      }
+                    }
+                    };
+
+                    if (isProgressive && rowCollapsed) {
+                      return (
+                        <div
+                          className={`collapsed-fields-grid${fieldsToRender.length > 1 ? ' ck-collapsed-stack' : ''}`}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              fieldsToRender.length === 2
+                                ? 'repeat(2, minmax(0, 1fr))'
+                                : 'repeat(auto-fit, minmax(220px, 1fr))',
+                            gap: 12
+                          }}
+                        >
+                          {fieldsToRender.map(field => renderLineItemField(field))}
+                        </div>
+                      );
+                    }
+
+                    const visibleExpandedFields = fieldsToRender.filter(field => {
+                      const hide = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+                      return !hide;
+                    });
+
+                    return (
+                      <GroupedPairedFields
+                        contextPrefix={`li:${q.id}`}
+                        fields={visibleExpandedFields}
+                        language={language}
+                        collapsedGroups={collapsedGroups}
+                        toggleGroupCollapsed={toggleGroupCollapsed}
+                        renderField={renderLineItemField}
+                        hasError={(field: any) => !!errors[`${q.id}__${field.id}__${row.id}`]}
+                      />
+                    );
+                  })()}
+                  {!rowCollapsed && fallbackSubIds.length ? (
+                    <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {fallbackSubIds.map(subId => {
+                        const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
+                        const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
+                        return (
+                          <button
+                            key={subId}
+                            type="button"
+                            style={{
+                              ...buttonStyles.secondary,
+                              borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
+                              background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
+                            }}
+                            onClick={() => openSubgroupOverlay(fullSubKey)}
+                          >
+                            {subIdToLabel[subId] || subId}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <div
+                    className="line-actions"
+                    style={
+                      isProgressive
+                        ? { justifyContent: 'flex-end', alignItems: 'center', gap: 10, flexWrap: 'wrap' }
+                        : undefined
+                    }
+                  >
+                    <button type="button" onClick={() => removeLineRow(q.id, row.id)} style={buttonStyles.negative}>
+                      Remove
+                    </button>
+                  </div>
+                  {!isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
+                    const subLabelResolved = resolveLocalizedString(
+                      sub.label,
+                      language,
+                      sub.id ||
+                        (typeof sub.label === 'string'
+                          ? sub.label
+                          : sub.label?.en || sub.label?.fr || sub.label?.nl || '')
+                    );
+                    const subId = sub.id || subLabelResolved;
+                    if (!subId) return null;
+                    const subKey = buildSubgroupKey(q.id, row.id, subId);
+                    const collapsed = collapsedSubgroups[subKey] ?? true;
+                    const subRows = lineItems[subKey] || [];
+                    const orderedSubRows = [...subRows].sort((a, b) => {
+                      // keep auto-generated rows first, manual rows (no flag) at the bottom
+                      const aAuto = !!a.autoGenerated;
+                      const bAuto = !!b.autoGenerated;
+                      if (aAuto === bAuto) return 0;
+                      return aAuto ? -1 : 1;
+                    });
+                    const subTotals = computeTotals({ config: { ...sub, fields: sub.fields || [] }, rows: orderedSubRows }, language);
+                    const subSelectorCfg = sub.sectionSelector;
+                    const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
+                    const subSelectorOptions = subSelectorOptionSet
+                      ? buildLocalizedOptions(subSelectorOptionSet, subSelectorOptionSet.en || [], language)
+                      : [];
+                    const subSelectorValue = subgroupSelectors[subKey] || '';
+
+                    const renderSubAddButton = () => {
+                      if (sub.addMode === 'overlay' && sub.anchorFieldId) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const anchorField = (sub.fields || []).find(f => f.id === sub.anchorFieldId);
+                              if (!anchorField || anchorField.type !== 'CHOICE') {
+                                addLineItemRowManual(subKey);
+                                return;
+                              }
+                              const key = optionKey(anchorField.id, subKey);
+                              let opts = optionState[key];
+                              if (!opts && anchorField.dataSource) {
+                                const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                                if (loaded) {
+                                  opts = loaded;
+                                  setOptionState(prev => ({ ...prev, [key]: loaded }));
+                                }
+                              }
+                              if (!opts) {
+                                opts = {
+                                  en: anchorField.options || [],
+                                  fr: (anchorField as any).optionsFr || [],
+                                  nl: (anchorField as any).optionsNl || []
+                                };
+                              }
+                              const dependencyIds = (
+                                Array.isArray(anchorField.optionFilter?.dependsOn)
+                                  ? anchorField.optionFilter?.dependsOn
+                                  : [anchorField.optionFilter?.dependsOn || '']
+                              ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
+                              const depVals = dependencyIds.map(dep =>
+                                toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorValue)
+                              );
+                              const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
+                              const localized = buildLocalizedOptions(opts, allowed, language);
+                              const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
+                              setOverlay({
+                                open: true,
+                                options: localized
+                                  .filter(opt => deduped.includes(opt.value))
+                                  .map(opt => ({ value: opt.value, label: opt.label })),
+                                groupId: subKey,
+                                anchorFieldId: anchorField.id,
+                                selected: []
+                              });
+                            }}
+                          >
+                            {resolveLocalizedString(sub.addButtonLabel, language, 'Add lines')}
+                          </button>
+                        );
+                      }
+                      return (
+                        <button type="button" onClick={() => addLineItemRowManual(subKey)}>
+                          {resolveLocalizedString(sub.addButtonLabel, language, 'Add line')}
+                        </button>
+                      );
+                    };
+                    const subCount = orderedSubRows.length;
+                    const scrollSubgroupBottom = () => {
+                      const el = subgroupBottomRefs.current[subKey];
+                      if (!el) return;
+                      requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        });
+                      });
+                    };
+                    return (
+                      <div key={subKey} className="card" style={{ marginTop: 12, background: '#f8fafc' }}>
+                        <div
+                          className="subgroup-header"
+                          style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+                        >
+                          <div style={{ textAlign: 'center', fontWeight: 700 }}>
+                            {subLabelResolved || subId}
+                            <span className="pill" style={{ marginLeft: 8, background: '#e2e8f0', color: '#334155' }}>
+                              {subCount} item{subCount === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
+                              {subSelectorCfg && (
+                                <div
+                                  className="section-selector"
+                                  data-field-path={subSelectorCfg.id}
+                                  style={{ minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4 }}
+                                >
+                                  <label style={{ fontWeight: 600 }}>
+                                    {resolveSelectorLabel(subSelectorCfg, language)}
+                                    {subSelectorCfg.required && <RequiredStar />}
+                                  </label>
+                                  <select
+                                    value={subSelectorValue}
+                                    onChange={e => {
+                                      const nextValue = e.target.value;
+                                      setSubgroupSelectors(prev => {
+                                        if (prev[subKey] === nextValue) return prev;
+                                        return { ...prev, [subKey]: nextValue };
+                                      });
+                                    }}
+                                  >
+                                    <option value="">Select…</option>
+                                    {subSelectorOptions.map(opt => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                              {renderSubAddButton()}
+                            </div>
+                            <div style={{ marginLeft: 'auto' }}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setCollapsedSubgroups(prev => ({
+                                    ...prev,
+                                    [subKey]: !(prev[subKey] ?? true)
+                                  }))
+                                }
+                                aria-expanded={!collapsed}
+                                aria-controls={`${subKey}-body`}
+                                style={buttonStyles.secondary}
+                              >
+                                {collapsed
+                                  ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
+                                  : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        {collapsed ? null : (
+                        <div id={`${subKey}-body`}>
+                        <div style={{ marginTop: 8 }}>
+                        {orderedSubRows.map((subRow, subIdx) => {
+                          const subCtx: VisibilityContext = {
+                            getValue: fid => values[fid],
+                            getLineValue: (_rowId, fid) => subRow.values[fid]
+                          };
+                          const subGroupDef: WebQuestionDefinition = {
+                            ...(q as any),
+                            id: subKey,
+                            lineItemConfig: { ...(sub as any), fields: sub.fields || [], subGroups: [] }
+                          };
+                          const targetGroup = subGroupDef;
+                          return (
+                            <div
+                              key={subRow.id}
+                              className="line-item-row"
+                              data-row-anchor={`${subKey}__${subRow.id}`}
+                              style={{
+                                background: subIdx % 2 === 0 ? '#ffffff' : '#f1f5f9',
+                                padding: 12,
+                                borderRadius: 10,
+                                border: '1px solid #e5e7eb',
+                                marginBottom: 10
+                              }}
+                            >
+                              {!subRow.autoGenerated && (
+                                <div style={{ marginBottom: 8 }}>
+                                  <span className="pill" style={{ background: '#eef2ff', color: '#312e81' }}>
+                                    Manual
+                                  </span>
+                                </div>
+                              )}
+                              {(() => {
+                                const renderSubField = (field: any) => {
+                                ensureLineOptions(subKey, field);
+                                const optionSetField: OptionSet =
+                                  optionState[optionKey(field.id, subKey)] || {
+                                    en: field.options || [],
+                                    fr: (field as any).optionsFr || [],
+                                    nl: (field as any).optionsNl || []
+                                  };
+                                const dependencyIds = (
+                                  Array.isArray(field.optionFilter?.dependsOn)
+                                    ? field.optionFilter?.dependsOn
+                                    : [field.optionFilter?.dependsOn || '']
+                                  ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                                const allowedField = computeAllowedOptions(
+                                  field.optionFilter,
+                                  optionSetField,
+                                    dependencyIds.map((dep: string) => {
+                                    const selectorFallback =
+                                      subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
+                                    return toDependencyValue(
+                                      subRow.values[dep] ?? values[dep] ?? row.values[dep] ?? selectorFallback
+                                    );
+                                  })
+                                );
+                                const currentVal = subRow.values[field.id];
+                                const allowedWithCurrent =
+                                  currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
+                                    ? [...allowedField, currentVal]
+                                    : allowedField;
+                                const selectedSub = Array.isArray(subRow.values[field.id])
+                                  ? (subRow.values[field.id] as string[])
+                                  : null;
+                                const allowedWithSelection =
+                                  selectedSub && selectedSub.length
+                                    ? selectedSub.reduce((acc, val) => {
+                                        if (val && !acc.includes(val)) acc.push(val);
+                                        return acc;
+                                      }, [...allowedWithCurrent])
+                                    : allowedWithCurrent;
+                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language);
+                                const hideField = shouldHideField(field.visibility, subCtx, {
+                                  rowId: subRow.id,
+                                  linePrefix: subKey
+                                });
+                                if (hideField) return null;
+                                  const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
+
+                                switch (field.type) {
+                                  case 'CHOICE': {
+                                    const rawVal = subRow.values[field.id];
+                                    const choiceVal =
+                                        Array.isArray(rawVal) && rawVal.length
+                                          ? (rawVal as string[])[0]
+                                          : (rawVal as string);
+                                    return (
+                                        <div
+                                          key={field.id}
+                                          className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                                          data-field-path={fieldPath}
+                                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        >
+                                        <label>
+                                          {resolveFieldLabel(field, language, field.id)}
+                                          {field.required && <RequiredStar />}
+                                        </label>
+                                          {renderChoiceControl({
+                                            fieldPath,
+                                            value: choiceVal || '',
+                                            options: optsField,
+                                            required: !!field.required,
+                                            override: (field as any)?.ui?.control,
+                                            onChange: next => handleLineFieldChange(targetGroup, subRow.id, field, next)
+                                          })}
+                                        {(() => {
+                                          const selected = optsField.find(opt => opt.value === choiceVal);
+                                          if (!selected?.tooltip) return null;
+                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                                          const tooltipLabel = resolveLocalizedString(
+                                            field.dataSource?.tooltipLabel,
+                                            language,
+                                            fallbackLabel
+                                          );
+                                            return (
+                                              <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
+                                            );
+                                        })()}
+                                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                      </div>
+                                    );
+                                  }
+                                  case 'CHECKBOX': {
+                                      const hasAnyOption =
+                                        !!((optionSetField.en && optionSetField.en.length) ||
+                                          ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                                          ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                                      const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
+                                      const selected = Array.isArray(subRow.values[field.id])
+                                        ? (subRow.values[field.id] as string[])
+                                        : [];
+                                    return (
+                                        <div
+                                          key={field.id}
+                                          className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                                          data-field-path={fieldPath}
+                                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        >
+                                        <label>
+                                          {resolveFieldLabel(field, language, field.id)}
+                                          {field.required && <RequiredStar />}
+                                        </label>
+                                          {isConsentCheckbox ? (
+                                            <div className="ck-choice-control ck-consent-control">
+                                              <label className="ck-consent">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={!!subRow.values[field.id]}
+                                                  onChange={e =>
+                                                    handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked)
+                                                  }
+                                                />
+                                              </label>
+                                            </div>
+                                          ) : (
+                                        <div className="inline-options">
+                                          {optsField.map(opt => (
+                                            <label key={opt.value} className="inline">
+                                              <input
+                                                type="checkbox"
+                                                checked={selected.includes(opt.value)}
+                                                onChange={e => {
+                                                  const next = e.target.checked
+                                                    ? [...selected, opt.value]
+                                                    : selected.filter(v => v !== opt.value);
+                                                  handleLineFieldChange(targetGroup, subRow.id, field, next);
+                                                }}
+                                              />
+                                              <span>{opt.label}</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                          )}
+                                        {(() => {
+                                          const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
+                                          if (!withTooltips.length) return null;
+                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                                          const tooltipLabel = resolveLocalizedString(
+                                            field.dataSource?.tooltipLabel,
+                                            language,
+                                            fallbackLabel
+                                          );
+                                          return (
+                                            <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                              {withTooltips.map(opt => (
+                                                  <span
+                                                    key={opt.value}
+                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                                  >
+                                                    {opt.label}{' '}
+                                                    <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
+                                                </span>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
+                                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                        </div>
+                                      );
+                                    }
+                                    case 'FILE_UPLOAD': {
+                                      const items = toUploadItems(subRow.values[field.id] as any);
+                                      const uploadConfig = (field as any).uploadConfig || {};
+                                      const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+                                        ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+                                      );
+                                      const acceptAttr = allowedDisplay.length ? allowedDisplay.join(',') : undefined;
+                                      const maxed = uploadConfig.maxFiles ? items.length >= uploadConfig.maxFiles : false;
+                                      const dragActive = !!dragState[fieldPath];
+                                      return (
+                                        <div
+                                          key={field.id}
+                                          className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                                          data-field-path={fieldPath}
+                                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        >
+                                          <label>
+                                            {resolveFieldLabel(field, language, field.id)}
+                                            {field.required && <RequiredStar />}
+                                          </label>
+                                          <div className="ck-upload-row">
+                                            <div
+                                              role="button"
+                                              tabIndex={0}
+                                              aria-disabled={maxed || submitting}
+                                              className="ck-upload-dropzone"
+                                              onClick={() => {
+                                                if (maxed || submitting) return;
+                                                fileInputsRef.current[fieldPath]?.click();
+                                              }}
+                                              onKeyDown={e => {
+                                                if (maxed || submitting) return;
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                  e.preventDefault();
+                                                  fileInputsRef.current[fieldPath]?.click();
+                                                }
+                                              }}
+                                              onDragEnter={e => {
+                                                e.preventDefault();
+                                                if (submitting) return;
+                                                incrementDrag(fieldPath);
+                                              }}
+                                              onDragOver={e => e.preventDefault()}
+                                              onDragLeave={e => {
+                                                e.preventDefault();
+                                                if (submitting) return;
+                                                decrementDrag(fieldPath);
+                                              }}
+                                              onDrop={e =>
+                                                handleLineFileDrop({
+                                                  group: targetGroup,
+                                                  rowId: subRow.id,
+                                                  field,
+                                                  fieldPath,
+                                                  event: e
+                                                })
+                                              }
+                                              style={{
+                                                border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
+                                                borderRadius: 12,
+                                                padding: '10px 12px',
+                                                background: dragActive
+                                                  ? '#e0f2fe'
+                                                  : maxed || submitting
+                                                    ? '#f1f5f9'
+                                                    : '#f8fafc',
+                                                color: '#0f172a',
+                                                cursor: maxed || submitting ? 'not-allowed' : 'pointer',
+                                                transition: 'border-color 120ms ease, background 120ms ease',
+                                                boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none',
+                                                flex: 1,
+                                                minWidth: 0,
+                                                minHeight: 'var(--control-height)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: 10
+                                              }}
+                                            >
+                                              <UploadIcon />
+                                              {items.length ? <span className="pill">{items.length}</span> : null}
+                                              <span style={srOnly}>
+                                                {dragActive
+                                                  ? 'Release to upload files'
+                                                  : maxed
+                                                    ? 'Maximum files selected'
+                                                    : 'Click to browse'}
+                                              </span>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="ck-upload-files-btn"
+                                              onClick={() =>
+                                                openFileOverlay({
+                                                  scope: 'line',
+                                                  title: resolveFieldLabel(field, language, field.id),
+                                                  group: targetGroup,
+                                                  rowId: subRow.id,
+                                                  field,
+                                                  fieldPath
+                                                })
+                                              }
+                                              disabled={submitting}
+                                              style={withDisabled(buttonStyles.secondary, submitting)}
+                                            >
+                                              Files{items.length ? ` (${items.length})` : ''}
+                                            </button>
+                                          </div>
+                                          <div style={srOnly} aria-live="polite">
+                                            {uploadAnnouncements[fieldPath] || ''}
+                                          </div>
+                                          <input
+                                            ref={el => {
+                                              fileInputsRef.current[fieldPath] = el;
+                                            }}
+                                            type="file"
+                                            multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
+                                            accept={acceptAttr}
+                                            style={{ display: 'none' }}
+                                            onChange={e =>
+                                              handleLineFileInputChange({
+                                                group: targetGroup,
+                                                rowId: subRow.id,
+                                                field,
+                                                fieldPath,
+                                                list: e.target.files
+                                              })
+                                            }
+                                          />
+                                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                      </div>
+                                    );
+                                  }
+                                  default: {
+                                    const mapped = field.valueMap
+                                      ? resolveValueMapValue(field.valueMap, fid => {
+                                          if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
+                                          if (row.values.hasOwnProperty(fid)) return row.values[fid];
+                                          return values[fid];
+                                        })
+                                      : undefined;
+                                      const fieldValueRaw = field.valueMap ? mapped : (subRow.values[field.id] as string) || '';
+                                      const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                                    return (
+                                        <div
+                                          key={field.id}
+                                          className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                                            (field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
+                                          }`}
+                                          data-field-path={fieldPath}
+                                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        >
+                                        <label>
+                                          {resolveFieldLabel(field, language, field.id)}
+                                          {field.required && <RequiredStar />}
+                                        </label>
+                                        <input
+                                          type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
+                                          value={fieldValue}
+                                          onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
+                                          readOnly={!!field.valueMap}
+                                        />
+                                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                      </div>
+                                    );
+                                  }
+                                }
+                                };
+
+                                const visibleFields = (sub.fields || []).filter(field => {
+                                  const hideField = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                                  return !hideField;
+                                });
+
+                                return (
+                                  <GroupedPairedFields
+                                    contextPrefix={`sub:${q.id}:${subId}`}
+                                    fields={visibleFields}
+                                    language={language}
+                                    collapsedGroups={collapsedGroups}
+                                    toggleGroupCollapsed={toggleGroupCollapsed}
+                                    renderField={renderSubField}
+                                    hasError={(field: any) => !!errors[`${subKey}__${field.id}__${subRow.id}`]}
+                                  />
+                                );
+                              })()}
+                              <div className="line-actions">
+                                <button
+                                  type="button"
+                                  onClick={() => removeLineRow(subKey, subRow.id)}
+                                  style={buttonStyles.negative}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {orderedSubRows.length > 0 && (
+                        <div
+                            ref={el => {
+                              subgroupBottomRefs.current[subKey] = el;
+                            }}
+                            className="line-item-toolbar"
+                            style={{ marginTop: 12 }}
+                          >
+                            <div
+                              className="line-item-toolbar-actions"
+                              style={{
+                                display: 'flex',
+                                gap: 12,
+                                alignItems: 'flex-end',
+                                flex: 1,
+                                flexWrap: 'wrap',
+                                justifyContent: 'space-between'
+                              }}
+                            >
+                              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                {subSelectorCfg && (
+                                  <div className="section-selector" data-field-path={subSelectorCfg.id}>
+                                    <label>
+                                      {resolveSelectorLabel(subSelectorCfg, language)}
+                                      {subSelectorCfg.required && <RequiredStar />}
+                                    </label>
+                                    <select
+                                      value={subSelectorValue}
+                                      onChange={e => {
+                                        const nextValue = e.target.value;
+                                        setSubgroupSelectors(prev => {
+                                          if (prev[subKey] === nextValue) return prev;
+                                          return { ...prev, [subKey]: nextValue };
+                                        });
+                                      }}
+                                    >
+                                      <option value="">Select…</option>
+                                      {subSelectorOptions.map(opt => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                                {renderSubAddButton()}
+                                {subTotals.length ? (
+                                  <div className="line-item-totals">
+                                    {subTotals.map(t => (
+                                      <span key={t.key} className="pill">
+                                        {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div style={{ marginLeft: 'auto'}}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCollapsedSubgroups(prev => ({
+                                      ...prev,
+                                      [subKey]: !(prev[subKey] ?? true)
+                                    }))
+                                  }
+                                  style={buttonStyles.secondary}
+                                  aria-expanded={!collapsed}
+                                  aria-controls={`${subKey}-body`}
+                                >
+                                  {collapsed
+                                    ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
+                                    : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
+                                </button>
+                              </div>
+                            </div>
+                        </div>
+                        )}
+                        </div>
+                        </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {parentRows.length > 0 && (
+              <div className="line-item-toolbar">
+                {selectorCfg && (
+                  <div
+                    className="section-selector"
+                    data-field-path={selectorCfg.id}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 220 }}
+                  >
+                    <label style={{ fontWeight: 600 }}>
+                      {resolveSelectorLabel(selectorCfg, language)}
+                      {selectorCfg.required && <RequiredStar />}
+                    </label>
+                    <select
+                      value={selectorValue}
+                      onChange={e => {
+                        const nextValue = e.target.value;
+                        setValues(prev => {
+                          if (prev[selectorCfg.id] === nextValue) return prev;
+                          return { ...prev, [selectorCfg.id]: nextValue };
+                        });
+                      }}
+                    >
+                      <option value="">Select…</option>
+                      {selectorOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="line-item-toolbar-actions">
+                  {renderAddButton()}
+                  {groupTotals.length ? (
+                    <div className="line-item-totals">
+                      {groupTotals.map(t => (
+                        <span key={t.key} className="pill">
+                          {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+};

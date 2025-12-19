@@ -4,7 +4,6 @@ import {
   computeAllowedOptions,
   buildLocalizedOptions,
   shouldHideField,
-  validateRules,
   computeTotals,
   loadOptionsFromDataSource,
   optionKey,
@@ -16,24 +15,39 @@ import {
   FieldValue,
   LangCode,
   LineItemRowState,
-  LineItemSelectorConfig,
   OptionSet,
-  OptionFilter,
+  QuestionGroupConfig,
   VisibilityContext,
   WebFormDefinition,
   WebQuestionDefinition
 } from '../../types';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { FormErrors, LineItemState, OptionState } from '../types';
-import { isEmptyValue, toFileArray } from '../utils/values';
-
-interface LineOverlayState {
-  open: boolean;
-  options: { value: string; label: string }[];
-  groupId?: string;
-  anchorFieldId?: string;
-  selected?: string[];
-}
+import { isEmptyValue } from '../utils/values';
+import {
+  applyUploadConstraints,
+  describeUploadItem,
+  toDateInputValue,
+  toUploadItems
+} from './form/utils';
+import { buttonStyles, RequiredStar, srOnly, UploadIcon, withDisabled } from './form/ui';
+import { FileOverlay } from './form/overlays/FileOverlay';
+import { InfoOverlay } from './form/overlays/InfoOverlay';
+import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectOverlay';
+import { InfoTooltip } from './form/InfoTooltip';
+import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
+import { GroupedPairedFields } from './form/GroupedPairedFields';
+import { resolveGroupSectionKey } from './form/grouping';
+import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
+import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSelectors';
+import { FORM_VIEW_STYLES } from './form/styles';
+import { applyValueMapsToForm, resolveValueMapValue } from './form/valueMaps';
+import {
+  buildLineContextId,
+  parseSubgroupKey,
+  resolveSubgroupKey,
+  seedSubgroupDefaults
+} from '../app/lineItems';
 
 interface SubgroupOverlayState {
   open: boolean;
@@ -46,113 +60,23 @@ interface InfoOverlayState {
   text?: string;
 }
 
+interface FileOverlayState {
+  open: boolean;
+  title?: string;
+  scope?: 'top' | 'line';
+  // Top-level upload field
+  question?: WebQuestionDefinition;
+  // Line-item / subgroup upload field
+  group?: WebQuestionDefinition;
+  rowId?: string;
+  field?: any;
+  fieldPath?: string;
+}
+
 // keep context ids consistent with App.tsx so auto-generated rows from selection effects
 // can be reconciled when loading existing records
-const buildLineContextId = (groupId: string, rowId: string, fieldId?: string) => `${groupId}::${rowId}::${fieldId || 'field'}`;
-const buildSubgroupKey = (parentGroupId: string, parentRowId: string, subGroupId: string) =>
-  `${parentGroupId}::${parentRowId}::${subGroupId}`;
-
-const parseSubgroupKey = (key: string): { parentGroupId: string; parentRowId: string; subGroupId: string } | null => {
-  const parts = key.split('::');
-  if (parts.length !== 3) return null;
-  return { parentGroupId: parts[0], parentRowId: parts[1], subGroupId: parts[2] };
-};
-
-const resolveSubgroupKey = (sub?: { id?: string; label?: any }): string => {
-  if (!sub) return '';
-  if (sub.id) return sub.id;
-  if (typeof sub.label === 'string') return sub.label;
-  return sub.label?.en || sub.label?.fr || sub.label?.nl || '';
-};
-
-const seedSubgroupDefaults = (
-  lineItems: LineItemState,
-  group: WebQuestionDefinition,
-  parentRowId: string
-): LineItemState => {
-  if (!group.lineItemConfig?.subGroups?.length) return lineItems;
-  let next = lineItems;
-  group.lineItemConfig.subGroups.forEach(sub => {
-    const subKeyRaw =
-      sub.id ||
-      (typeof sub.label === 'string' ? sub.label : sub.label?.en || sub.label?.fr || sub.label?.nl) ||
-      '';
-    if (!subKeyRaw || sub.addMode === 'overlay') return;
-    const subKey = buildSubgroupKey(group.id, parentRowId, subKeyRaw);
-    const existing = next[subKey] || [];
-    if (existing.length) return;
-    const minRows = Math.max(1, sub.minRows || 1);
-    const newRows: LineItemRowState[] = [];
-    for (let i = 0; i < minRows; i += 1) {
-      newRows.push({
-        id: `${subKey}_${i}_${Math.random().toString(16).slice(2)}`,
-        values: {},
-        parentId: parentRowId,
-        parentGroupId: group.id
-      });
-    }
-    next = { ...next, [subKey]: newRows };
-  });
-  return next;
-};
 
 type StatusTone = 'info' | 'success' | 'error';
-
-const srOnly: React.CSSProperties = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-  border: 0
-};
-
-const InfoTooltip: React.FC<{
-  text?: string;
-  label?: string;
-  onOpen?: (title: string, text: string) => void;
-}> = ({ text, label, onOpen }) => {
-  if (!text) return null;
-  const normalizedLabel = (label || '').trim();
-  const title = normalizedLabel || 'Info';
-  const buttonText = normalizedLabel || 'i';
-  return (
-      <button
-        type="button"
-      className="info-button"
-      onClick={() => onOpen?.(title, text)}
-      aria-label={`Open ${title}`}
-    >
-      {buttonText}
-      </button>
-  );
-};
-
-const RequiredStar = () => (
-  <span className="required-star" aria-hidden="true" style={{ marginLeft: 4 }}>
-    *
-  </span>
-);
-
-const resolveSelectorLabel = (selector: LineItemSelectorConfig, language: LangCode): string => {
-  if (!selector) return '';
-  if (language === 'FR') return selector.labelFr || selector.labelEn || selector.id;
-  if (language === 'NL') return selector.labelNl || selector.labelEn || selector.id;
-  return selector.labelEn || selector.id;
-};
-
-const buildSelectorOptionSet = (selector?: LineItemSelectorConfig | null): OptionSet | null => {
-  if (!selector) return null;
-  const base = selector.options || [];
-  return {
-    en: base,
-    fr: selector.optionsFr && selector.optionsFr.length ? selector.optionsFr : base,
-    nl: selector.optionsNl && selector.optionsNl.length ? selector.optionsNl : base
-  };
-};
 
 const hasSelectionEffects = (field: any): boolean =>
   Array.isArray(field?.selectionEffects) && field.selectionEffects.length > 0;
@@ -218,142 +142,6 @@ interface FormViewProps {
   ) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }
-const formatFileSize = (size: number) => {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const normalizeExtensions = (extensions?: string[]) =>
-  (extensions || []).map(ext => {
-    const trimmed = ext.trim();
-    return (trimmed.startsWith('.') ? trimmed.slice(1) : trimmed).toLowerCase();
-  });
-
-const resolveValueMapValue = (
-  valueMap: OptionFilter,
-  getValue: (fieldId: string) => FieldValue
-): string => {
-  if (!valueMap?.optionMap || !valueMap.dependsOn) return '';
-  const dependsOn = Array.isArray(valueMap.dependsOn) ? valueMap.dependsOn : [valueMap.dependsOn];
-  const depValues = dependsOn.map(dep => toDependencyValue(getValue(dep)) ?? '');
-  const candidateKeys: string[] = [];
-  if (depValues.length > 1) candidateKeys.push(depValues.join('||'));
-  depValues.filter(Boolean).forEach(v => candidateKeys.push(v.toString()));
-  candidateKeys.push('*');
-  const matchKey = candidateKeys.find(key => valueMap.optionMap[key] !== undefined);
-  const values = (matchKey ? valueMap.optionMap[matchKey] : []) || [];
-  const unique = Array.from(new Set(values.map(v => (v ?? '').toString().trim()).filter(Boolean)));
-  return unique.join(', ');
-};
-
-const resolveDerivedValue = (
-  config: any,
-  getter: (fieldId: string) => FieldValue
-): FieldValue => {
-  if (!config) return undefined;
-  if (config.op === 'addDays') {
-    const base = getter(config.dependsOn);
-    if (!base) return '';
-    const baseDate = new Date(base as any);
-    if (isNaN(baseDate.getTime())) return '';
-    const offset = typeof config.offsetDays === 'number' ? config.offsetDays : Number(config.offsetDays || 0);
-    const result = new Date(baseDate);
-    result.setDate(result.getDate() + (isNaN(offset) ? 0 : offset));
-    return result.toISOString().slice(0, 10);
-  }
-  return undefined;
-};
-
-const applyUploadConstraints = (
-  question: WebQuestionDefinition,
-  existing: File[],
-  incoming: File[]
-): { files: File[]; errorMessage?: string } => {
-  if (!incoming.length) {
-    return { files: existing };
-  }
-  const maxFiles = question.uploadConfig?.maxFiles;
-  const allowedExtensions = normalizeExtensions(question.uploadConfig?.allowedExtensions);
-  const maxBytes = question.uploadConfig?.maxFileSizeMb ? question.uploadConfig.maxFileSizeMb * 1024 * 1024 : undefined;
-  const next = [...existing];
-  const errors: string[] = [];
-  incoming.forEach(file => {
-    const ext = (file.name.split('.').pop() || '').toLowerCase();
-    if (allowedExtensions.length && !allowedExtensions.includes(ext)) {
-      errors.push(`${file.name} is not an allowed file type.`);
-      return;
-    }
-    if (maxBytes && file.size > maxBytes) {
-      errors.push(`${file.name} exceeds ${question.uploadConfig?.maxFileSizeMb} MB.`);
-      return;
-    }
-    if (maxFiles && next.length >= maxFiles) {
-      errors.push(`Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} reached.`);
-      return;
-    }
-    next.push(file);
-  });
-  return { files: next, errorMessage: errors.join(' ') || undefined };
-};
-
-const applyValueMapsToLineRow = (
-  fields: any[],
-  rowValues: Record<string, FieldValue>,
-  topValues: Record<string, FieldValue>
-): Record<string, FieldValue> => {
-  const nextValues = { ...rowValues };
-  fields
-    .filter(field => field?.valueMap || field?.derivedValue)
-    .forEach(field => {
-      if (field.valueMap) {
-        const computed = resolveValueMapValue(field.valueMap, fieldId => {
-          if (fieldId === undefined || fieldId === null) return undefined;
-          if (rowValues.hasOwnProperty(fieldId)) return nextValues[fieldId];
-          return topValues[fieldId];
-        });
-        nextValues[field.id] = computed;
-      }
-      if (field.derivedValue) {
-        const derived = resolveDerivedValue(field.derivedValue, fid => {
-          if (fid === undefined || fid === null) return undefined;
-          if (rowValues.hasOwnProperty(fid)) return nextValues[fid];
-          return topValues[fid];
-        });
-        if (derived !== undefined) nextValues[field.id] = derived;
-      }
-    });
-  return nextValues;
-};
-
-const applyValueMapsToForm = (
-  definition: WebFormDefinition,
-  currentValues: Record<string, FieldValue>,
-  currentLineItems: LineItemState
-): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
-  let values = { ...currentValues };
-  let lineItems = { ...currentLineItems };
-
-  definition.questions.forEach(q => {
-    if (q.valueMap) {
-      values[q.id] = resolveValueMapValue(q.valueMap, fieldId => values[fieldId]);
-    }
-    if ((q as any).derivedValue) {
-      const derived = resolveDerivedValue((q as any).derivedValue, fieldId => values[fieldId]);
-      if (derived !== undefined) values[q.id] = derived;
-    }
-    if (q.type === 'LINE_ITEM_GROUP' && q.lineItemConfig?.fields) {
-      const rows = lineItems[q.id] || [];
-      const updatedRows = rows.map(row => ({
-        ...row,
-        values: applyValueMapsToLineRow(q.lineItemConfig!.fields, row.values, values)
-      }));
-      lineItems = { ...lineItems, [q.id]: updatedRows };
-    }
-  });
-
-  return { values, lineItems };
-};
 
 const FormView: React.FC<FormViewProps> = ({
   definition,
@@ -381,6 +169,7 @@ const FormView: React.FC<FormViewProps> = ({
   const [overlay, setOverlay] = useState<LineOverlayState>({ open: false, options: [], selected: [] });
   const [subgroupOverlay, setSubgroupOverlay] = useState<SubgroupOverlayState>({ open: false });
   const [infoOverlay, setInfoOverlay] = useState<InfoOverlayState>({ open: false });
+  const [fileOverlay, setFileOverlay] = useState<FileOverlayState>({ open: false });
   const [pendingScrollAnchor, setPendingScrollAnchor] = useState<string | null>(null);
   const [subgroupSelectors, setSubgroupSelectors] = useState<Record<string, string>>({});
   const [collapsedSubgroups, setCollapsedSubgroups] = useState<Record<string, boolean>>({});
@@ -395,6 +184,300 @@ const FormView: React.FC<FormViewProps> = ({
   const firstErrorRef = useRef<string | null>(null);
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
+  const choiceVariantLogRef = useRef<Record<string, string>>({});
+  const vvBottomRef = useRef<number>(-1);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const groupSections = useMemo(() => {
+    type GroupSection = {
+      key: string;
+      title?: string;
+      collapsible: boolean;
+      defaultCollapsed: boolean;
+      isHeader: boolean;
+      questions: WebQuestionDefinition[];
+      order: number;
+    };
+
+    const resolveGroupKey = (group?: QuestionGroupConfig): string => {
+      if (!group) return '__default__';
+      if (group.id) return group.id.toString();
+      if (group.header) return '__header__';
+      const rawTitle: any = group.title;
+      if (typeof rawTitle === 'string') {
+        const t = rawTitle.trim();
+        if (t) return `title:${t}`;
+      }
+      if (rawTitle && typeof rawTitle === 'object') {
+        const t = (rawTitle.en || rawTitle.fr || rawTitle.nl || '').toString().trim();
+        if (t) return `title:${t}`;
+      }
+      return '__default__';
+    };
+
+    const map = new Map<string, GroupSection>();
+    let order = 0;
+
+    (definition.questions || []).forEach(q => {
+      const legacyHeader = !!(q as any).header;
+      const group: QuestionGroupConfig | undefined =
+        (q as any).group ||
+        (legacyHeader
+          ? {
+              header: true,
+              title: { en: 'Header', fr: 'Header', nl: 'Header' },
+              collapsible: true
+            }
+          : undefined);
+
+      const isHeader = !!group?.header;
+      const key = resolveGroupKey(group);
+      const title = group?.title ? resolveLocalizedString(group.title as any, language, isHeader ? 'Header' : '') : undefined;
+      const collapsible = group?.collapsible !== undefined ? !!group.collapsible : !!title;
+      const defaultCollapsed = group?.defaultCollapsed !== undefined ? !!group.defaultCollapsed : false;
+
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          key,
+          title,
+          collapsible,
+          defaultCollapsed,
+          isHeader,
+          questions: [q],
+          order: order++
+        });
+        return;
+      }
+
+      existing.questions.push(q);
+      if (!existing.title && title) existing.title = title;
+      existing.isHeader = existing.isHeader || isHeader;
+      existing.collapsible = existing.collapsible || collapsible;
+      existing.defaultCollapsed = existing.defaultCollapsed || defaultCollapsed;
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.isHeader !== b.isHeader) return a.isHeader ? -1 : 1;
+      return a.order - b.order;
+    });
+  }, [definition.questions, language]);
+
+  const questionIdToGroupKey = useMemo(() => {
+    const map: Record<string, string> = {};
+    groupSections.forEach(section => {
+      section.questions.forEach(q => {
+        map[q.id] = section.key;
+      });
+    });
+    return map;
+  }, [groupSections]);
+
+  const nestedGroupMeta = useMemo(() => {
+    const collapsibleDefaults: Array<{ key: string; defaultCollapsed: boolean }> = [];
+    const lineFieldToGroupKey: Record<string, string> = {};
+    const subgroupFieldToGroupKey: Record<string, string> = {};
+
+    const pushSectionDefaults = (prefix: string, fields: any[]) => {
+      const sectionMeta = new Map<string, { defaultCollapsed: boolean; collapsible: boolean; titlePresent: boolean }>();
+      (fields || []).forEach(field => {
+        const group: QuestionGroupConfig | undefined = (field as any)?.group;
+        const sectionKey = resolveGroupSectionKey(group);
+        const titlePresent = !!(group && (group as any).title !== undefined && (group as any).title !== null && `${(group as any).title}`.trim());
+        const collapsible = group?.collapsible !== undefined ? !!group.collapsible : titlePresent;
+        const defaultCollapsed = group?.defaultCollapsed !== undefined ? !!group.defaultCollapsed : false;
+        const existing = sectionMeta.get(sectionKey);
+        if (!existing) {
+          sectionMeta.set(sectionKey, { collapsible, defaultCollapsed, titlePresent });
+        } else {
+          existing.collapsible = existing.collapsible || collapsible;
+          existing.defaultCollapsed = existing.defaultCollapsed || defaultCollapsed;
+          existing.titlePresent = existing.titlePresent || titlePresent;
+        }
+      });
+      sectionMeta.forEach((meta, sectionKey) => {
+        if (!meta.collapsible) return;
+        collapsibleDefaults.push({ key: `${prefix}:${sectionKey}`, defaultCollapsed: meta.defaultCollapsed });
+      });
+    };
+
+    (definition.questions || []).forEach(q => {
+      if (q.type !== 'LINE_ITEM_GROUP') return;
+
+      const fields = q.lineItemConfig?.fields || [];
+      fields.forEach(field => {
+        const sectionKey = resolveGroupSectionKey((field as any)?.group);
+        lineFieldToGroupKey[`${q.id}__${field.id}`] = `li:${q.id}:${sectionKey}`;
+      });
+      pushSectionDefaults(`li:${q.id}`, fields);
+
+      (q.lineItemConfig?.subGroups || []).forEach(sub => {
+        const subId = resolveSubgroupKey(sub as any);
+        if (!subId) return;
+        const subFields = (sub as any).fields || [];
+        subFields.forEach((field: any) => {
+          const sectionKey = resolveGroupSectionKey((field as any)?.group);
+          subgroupFieldToGroupKey[`${q.id}::${subId}__${field.id}`] = `sub:${q.id}:${subId}:${sectionKey}`;
+        });
+        pushSectionDefaults(`sub:${q.id}:${subId}`, subFields);
+      });
+    });
+
+    return { collapsibleDefaults, lineFieldToGroupKey, subgroupFieldToGroupKey };
+  }, [definition.questions]);
+
+  useEffect(() => {
+    setCollapsedGroups(prev => {
+      let changed = false;
+      const next = { ...prev };
+      groupSections.forEach(section => {
+        if (!section.collapsible) return;
+        if (next[section.key] === undefined) {
+          next[section.key] = !!section.defaultCollapsed;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [groupSections]);
+
+  useEffect(() => {
+    setCollapsedGroups(prev => {
+      let changed = false;
+      const next = { ...prev };
+      (nestedGroupMeta.collapsibleDefaults || []).forEach(entry => {
+        if (next[entry.key] === undefined) {
+          next[entry.key] = !!entry.defaultCollapsed;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [nestedGroupMeta.collapsibleDefaults]);
+
+  const toggleGroupCollapsed = useCallback((groupKey: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
+  }, []);
+
+  const renderChoiceControl = useCallback(
+    (args: {
+      fieldPath: string;
+      value: string;
+      options: OptionLike[];
+      required: boolean;
+      override?: string | null;
+      onChange: (next: string) => void;
+    }) => {
+      const { fieldPath, value, options, required, override, onChange } = args;
+      const decision = computeChoiceControlVariant(options, required, override);
+
+      const prev = choiceVariantLogRef.current[fieldPath];
+      if (prev !== decision.variant) {
+        choiceVariantLogRef.current[fieldPath] = decision.variant;
+        onDiagnostic?.('ui.choiceControl.variant', {
+          fieldPath,
+          variant: decision.variant,
+          optionCount: options.length,
+          required,
+          override: (override || 'auto').toString(),
+          booleanDetected: decision.booleanDetected
+        });
+      }
+
+      switch (decision.variant) {
+        case 'segmented': {
+          return (
+            <div className="ck-choice-control ck-segmented" role="radiogroup" aria-label="Options">
+              {options.map(opt => {
+                const active = value === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={active ? 'active' : undefined}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => {
+                      if (!required && active) {
+                        onChange('');
+                        return;
+                      }
+                      onChange(opt.value);
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        }
+        case 'radio': {
+          const name = `ck-radio-${fieldPath}`;
+          const noneLabel = resolveNoneLabel(language);
+          const radioOptions = required ? options : [{ value: '', label: noneLabel }, ...options];
+          return (
+            <div className="ck-choice-control ck-radio-list" role="radiogroup" aria-label="Options">
+              {radioOptions.map(opt => (
+                <label key={opt.value || '__none__'} className="ck-radio-row">
+                  <input
+                    type="radio"
+                    name={name}
+                    value={opt.value}
+                    checked={(value || '') === (opt.value || '')}
+                    onChange={e => onChange(e.target.value)}
+                  />
+                  <span>{opt.label}</span>
+                </label>
+              ))}
+            </div>
+          );
+        }
+        case 'switch': {
+          const map = decision.booleanMap;
+          if (!map) {
+            // fallback
+            return (
+              <select value={value || ''} onChange={e => onChange(e.target.value)}>
+                <option value="">Select…</option>
+                {options.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            );
+          }
+          const checked = value === map.trueValue;
+          return (
+            <div className="ck-choice-control ck-switch-control">
+              <label className="ck-switch" aria-label="Toggle">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={e => onChange(e.target.checked ? map.trueValue : map.falseValue)}
+                />
+                <span className="ck-switch-track" aria-hidden="true" />
+              </label>
+            </div>
+          );
+        }
+        case 'select':
+        default:
+          return (
+            <select value={value || ''} onChange={e => onChange(e.target.value)}>
+              <option value="">Select…</option>
+              {options.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          );
+      }
+    },
+    [language, onDiagnostic]
+  );
 
   const closeSubgroupOverlay = useCallback(() => {
     setSubgroupOverlay({ open: false });
@@ -429,6 +512,24 @@ const FormView: React.FC<FormViewProps> = ({
       }
       setInfoOverlay({ open: true, title, text });
       onDiagnostic?.('tooltip.overlay.open', { title });
+    },
+    [onDiagnostic, overlay.open, submitting]
+  );
+
+  const closeFileOverlay = useCallback(() => {
+    setFileOverlay({ open: false });
+    onDiagnostic?.('upload.overlay.close');
+  }, [onDiagnostic]);
+
+  const openFileOverlay = useCallback(
+    (next: Omit<FileOverlayState, 'open'>) => {
+      if (submitting) return;
+      // Close multi-add overlay if open to avoid stacking confusion.
+      if (overlay.open) {
+        setOverlay({ open: false, options: [], selected: [] });
+      }
+      setFileOverlay({ open: true, ...next });
+      onDiagnostic?.('upload.overlay.open', { scope: next.scope, title: next.title });
     },
     [onDiagnostic, overlay.open, submitting]
   );
@@ -499,14 +600,68 @@ const FormView: React.FC<FormViewProps> = ({
     };
   }, [onDiagnostic, pendingScrollAnchor]);
 
+  // iOS Safari / in-app browsers can "clip" fixed bottom bars due to dynamic toolbars.
+  // Use visualViewport to compute a bottom inset and expose it as a CSS variable.
   useEffect(() => {
-    const anyOpen = subgroupOverlay.open || infoOverlay.open;
+    if (typeof window === 'undefined') return;
+    if (typeof document === 'undefined') return;
+
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    if (!root) return;
+
+    if (!vv) {
+      root.style.setProperty('--vv-bottom', '0px');
+      return;
+    }
+
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const bottom = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+      root.style.setProperty('--vv-bottom', `${bottom}px`);
+      if (vvBottomRef.current !== bottom) {
+        vvBottomRef.current = bottom;
+        onDiagnostic?.('ui.viewport.vvBottom', {
+          bottomPx: bottom,
+          innerHeight: window.innerHeight,
+          vvHeight: vv.height,
+          vvOffsetTop: vv.offsetTop
+        });
+      }
+    };
+    const schedule = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(update);
+    };
+
+    schedule();
+    vv.addEventListener('resize', schedule);
+    vv.addEventListener('scroll', schedule);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('orientationchange', schedule);
+
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      vv.removeEventListener('resize', schedule);
+      vv.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('orientationchange', schedule);
+    };
+  }, [onDiagnostic]);
+
+  useEffect(() => {
+    const anyOpen = subgroupOverlay.open || infoOverlay.open || fileOverlay.open;
     if (!anyOpen) return;
     if (typeof document === 'undefined') return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (fileOverlay.open) {
+          closeFileOverlay();
+          return;
+        }
         if (infoOverlay.open) {
           closeInfoOverlay();
           return;
@@ -519,7 +674,14 @@ const FormView: React.FC<FormViewProps> = ({
       document.body.style.overflow = prevOverflow;
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [closeInfoOverlay, closeSubgroupOverlay, infoOverlay.open, subgroupOverlay.open]);
+  }, [
+    closeFileOverlay,
+    closeInfoOverlay,
+    closeSubgroupOverlay,
+    fileOverlay.open,
+    infoOverlay.open,
+    subgroupOverlay.open
+  ]);
   useEffect(() => {
     if (status && statusRef.current) {
       try {
@@ -619,9 +781,13 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [lineItems, collapsedSubgroups]);
 
-  const handleFileFieldChange = (question: WebQuestionDefinition, files: File[], errorMessage?: string) => {
+  const handleFileFieldChange = (
+    question: WebQuestionDefinition,
+    items: Array<string | File>,
+    errorMessage?: string
+  ) => {
     if (onStatusClear) onStatusClear();
-    setValues(prev => ({ ...prev, [question.id]: files as unknown as FieldValue }));
+    setValues(prev => ({ ...prev, [question.id]: items as unknown as FieldValue }));
     setErrors(prev => {
       const next = { ...prev };
       if (errorMessage) {
@@ -635,17 +801,17 @@ const FormView: React.FC<FormViewProps> = ({
 
   const processIncomingFiles = (question: WebQuestionDefinition, incoming: File[]) => {
     if (!incoming.length) return;
-    const existing = toFileArray(values[question.id]);
-    const { files, errorMessage } = applyUploadConstraints(question, existing, incoming);
-    handleFileFieldChange(question, files, errorMessage);
-    const accepted = Math.max(0, files.length - existing.length);
+    const existing = toUploadItems(values[question.id]);
+    const { items, errorMessage } = applyUploadConstraints(question, existing, incoming);
+    handleFileFieldChange(question, items, errorMessage);
+    const accepted = Math.max(0, items.length - existing.length);
     if (errorMessage) {
       announceUpload(question.id, errorMessage);
       onDiagnostic?.('upload.error', { questionId: question.id, error: errorMessage });
     } else if (accepted > 0) {
       announceUpload(
         question.id,
-        `Added ${accepted} file${accepted > 1 ? 's' : ''}. ${files.length} total selected.`
+        `Added ${accepted} file${accepted > 1 ? 's' : ''}. ${items.length} total selected.`
       );
     } else {
       announceUpload(question.id, 'Files unchanged.');
@@ -654,7 +820,7 @@ const FormView: React.FC<FormViewProps> = ({
       questionId: question.id,
       attempted: incoming.length,
       accepted: accepted,
-      total: files.length,
+      total: items.length,
       error: Boolean(errorMessage)
     });
   };
@@ -678,15 +844,15 @@ const FormView: React.FC<FormViewProps> = ({
   };
 
   const removeFile = (question: WebQuestionDefinition, index: number) => {
-    const existing = toFileArray(values[question.id]);
+    const existing = toUploadItems(values[question.id]);
     if (!existing.length) return;
     const removed = existing[index];
     const next = existing.filter((_, idx) => idx !== index);
     handleFileFieldChange(question, next);
-    onDiagnostic?.('upload.remove', { questionId: question.id, removed: removed?.name, remaining: next.length });
+    onDiagnostic?.('upload.remove', { questionId: question.id, removed: describeUploadItem(removed as any), remaining: next.length });
     announceUpload(
       question.id,
-      removed?.name ? `Removed ${removed.name}. ${next.length} remaining.` : `Removed file. ${next.length} remaining.`
+      removed ? `Removed ${describeUploadItem(removed as any)}. ${next.length} remaining.` : `Removed file. ${next.length} remaining.`
     );
   };
 
@@ -885,6 +1051,124 @@ const FormView: React.FC<FormViewProps> = ({
     }
   };
 
+  const processIncomingFilesForLineField = (args: {
+    group: WebQuestionDefinition;
+    rowId: string;
+    field: any;
+    fieldPath: string;
+    incoming: File[];
+  }) => {
+    const { group, rowId, field, fieldPath, incoming } = args;
+    if (!incoming.length) return;
+    const existingRows = lineItems[group.id] || [];
+    const currentRow = existingRows.find(r => r.id === rowId);
+    const existingFiles = toUploadItems((currentRow?.values || {})[field.id] as any);
+    const pseudo = { uploadConfig: field.uploadConfig } as unknown as WebQuestionDefinition;
+    const { items: files, errorMessage } = applyUploadConstraints(pseudo, existingFiles, incoming);
+
+    handleLineFieldChange(group, rowId, field, files as unknown as FieldValue);
+    setErrors(prev => {
+      const next = { ...prev };
+      if (errorMessage) {
+        next[fieldPath] = errorMessage;
+      } else {
+        delete next[fieldPath];
+      }
+      return next;
+    });
+
+    const accepted = Math.max(0, files.length - existingFiles.length);
+    if (errorMessage) {
+      announceUpload(fieldPath, errorMessage);
+      onDiagnostic?.('upload.error', { fieldPath, error: errorMessage, scope: 'line' });
+    } else if (accepted > 0) {
+      announceUpload(fieldPath, `Added ${accepted} file${accepted > 1 ? 's' : ''}. ${files.length} total selected.`);
+    } else {
+      announceUpload(fieldPath, 'Files unchanged.');
+    }
+    onDiagnostic?.('upload.add', {
+      fieldPath,
+      attempted: incoming.length,
+      accepted,
+      total: files.length,
+      error: Boolean(errorMessage),
+      scope: 'line'
+    });
+  };
+
+  const handleLineFileInputChange = (args: {
+    group: WebQuestionDefinition;
+    rowId: string;
+    field: any;
+    fieldPath: string;
+    list: FileList | null;
+  }) => {
+    const { group, rowId, field, fieldPath, list } = args;
+    if (!list || !list.length) {
+      resetNativeFileInput(fieldPath);
+      return;
+    }
+    processIncomingFilesForLineField({ group, rowId, field, fieldPath, incoming: Array.from(list) });
+    resetNativeFileInput(fieldPath);
+  };
+
+  const handleLineFileDrop = (args: {
+    group: WebQuestionDefinition;
+    rowId: string;
+    field: any;
+    fieldPath: string;
+    event: React.DragEvent<HTMLDivElement>;
+  }) => {
+    const { group, rowId, field, fieldPath, event } = args;
+    event.preventDefault();
+    if (submitting) return;
+    if (!event.dataTransfer?.files?.length) return;
+    processIncomingFilesForLineField({ group, rowId, field, fieldPath, incoming: Array.from(event.dataTransfer.files) });
+    onDiagnostic?.('upload.drop', { fieldPath, count: event.dataTransfer.files.length, scope: 'line' });
+    resetDrag(fieldPath);
+  };
+
+  const removeLineFile = (args: {
+    group: WebQuestionDefinition;
+    rowId: string;
+    field: any;
+    fieldPath: string;
+    index: number;
+  }) => {
+    const { group, rowId, field, fieldPath, index } = args;
+    const existingRows = lineItems[group.id] || [];
+    const currentRow = existingRows.find(r => r.id === rowId);
+    const existingFiles = toUploadItems((currentRow?.values || {})[field.id] as any);
+    if (!existingFiles.length) return;
+    const removed = existingFiles[index];
+    const next = existingFiles.filter((_, idx) => idx !== index);
+    handleLineFieldChange(group, rowId, field, next as unknown as FieldValue);
+    setErrors(prev => {
+      const copy = { ...prev };
+      delete copy[fieldPath];
+      return copy;
+    });
+    onDiagnostic?.('upload.remove', { fieldPath, removed: describeUploadItem(removed as any), remaining: next.length, scope: 'line' });
+    announceUpload(
+      fieldPath,
+      removed ? `Removed ${describeUploadItem(removed as any)}. ${next.length} remaining.` : `Removed file. ${next.length} remaining.`
+    );
+  };
+
+  const clearLineFiles = (args: { group: WebQuestionDefinition; rowId: string; field: any; fieldPath: string }) => {
+    const { group, rowId, field, fieldPath } = args;
+    handleLineFieldChange(group, rowId, field, [] as unknown as FieldValue);
+    setErrors(prev => {
+      const copy = { ...prev };
+      delete copy[fieldPath];
+      return copy;
+    });
+    resetDrag(fieldPath);
+    resetNativeFileInput(fieldPath);
+    announceUpload(fieldPath, 'Cleared all files.');
+    onDiagnostic?.('upload.clear', { fieldPath, scope: 'line' });
+  };
+
   const renderOptions = (q: WebQuestionDefinition): OptionSet => {
     ensureOptions(q);
     return optionState[optionKey(q.id)] || toOptionSet(q);
@@ -927,6 +1211,7 @@ const FormView: React.FC<FormViewProps> = ({
           getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
         });
     if (hidden) return null;
+    const forceStackedLabel = q.ui?.labelLayout === 'stacked';
 
     switch (q.type) {
       case 'TEXT':
@@ -934,11 +1219,14 @@ const FormView: React.FC<FormViewProps> = ({
       case 'NUMBER':
       case 'DATE':
         const mappedValue = q.valueMap ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId]) : undefined;
-        const inputValue = q.valueMap ? (mappedValue || '') : ((values[q.id] as string) || '');
+        const inputValueRaw = q.valueMap ? (mappedValue || '') : ((values[q.id] as string) || '');
+        const inputValue = q.type === 'DATE' ? toDateInputValue(inputValueRaw) : inputValueRaw;
         return (
           <div
             key={q.id}
-            className="field inline-field"
+            className={`${q.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+              forceStackedLabel ? ' ck-label-stacked' : ''
+            }`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
           >
@@ -969,7 +1257,7 @@ const FormView: React.FC<FormViewProps> = ({
         return (
           <div
             key={q.id}
-            className="field inline-field"
+            className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
           >
@@ -977,14 +1265,14 @@ const FormView: React.FC<FormViewProps> = ({
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
-            <select value={choiceValue || ''} onChange={e => handleFieldChange(q, e.target.value)}>
-              <option value="">Select…</option>
-              {opts.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            {renderChoiceControl({
+              fieldPath: q.id,
+              value: choiceValue || '',
+              options: opts,
+              required: !!q.required,
+              override: q.ui?.control,
+              onChange: next => handleFieldChange(q, next)
+            })}
             {(() => {
               const selected = opts.find(opt => opt.value === choiceValue);
               const fallbackLabel = resolveLabel(q, language);
@@ -996,11 +1284,13 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       case 'CHECKBOX': {
+        const hasAnyOption = !!((optionSet.en && optionSet.en.length) || (optionSet.fr && optionSet.fr.length) || (optionSet.nl && optionSet.nl.length));
+        const isConsentCheckbox = !q.dataSource && !hasAnyOption;
         const selected = Array.isArray(values[q.id]) ? (values[q.id] as string[]) : [];
         return (
           <div
             key={q.id}
-            className="field inline-field"
+            className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
           >
@@ -1008,6 +1298,17 @@ const FormView: React.FC<FormViewProps> = ({
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
+            {isConsentCheckbox ? (
+              <div className="ck-choice-control ck-consent-control">
+                <label className="ck-consent">
+                  <input
+                    type="checkbox"
+                    checked={!!values[q.id]}
+                    onChange={e => handleFieldChange(q, e.target.checked)}
+                  />
+                </label>
+              </div>
+            ) : (
             <div className="inline-options">
               {opts.map(opt => (
                 <label key={opt.value} className="inline">
@@ -1015,9 +1316,7 @@ const FormView: React.FC<FormViewProps> = ({
                     type="checkbox"
                     checked={selected.includes(opt.value)}
                     onChange={e => {
-                      const next = e.target.checked
-                        ? [...selected, opt.value]
-                        : selected.filter(v => v !== opt.value);
+                        const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
                       handleFieldChange(q, next);
                     }}
                   />
@@ -1025,6 +1324,7 @@ const FormView: React.FC<FormViewProps> = ({
                 </label>
               ))}
             </div>
+            )}
             {(() => {
               const withTooltips = opts.filter(opt => opt.tooltip && selected.includes(opt.value));
               if (!withTooltips.length) return null;
@@ -1045,13 +1345,13 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       case 'FILE_UPLOAD': {
-        const files = toFileArray(values[q.id]);
+        const items = toUploadItems(values[q.id]);
         const uploadConfig = q.uploadConfig || {};
         const allowedDisplay = (uploadConfig.allowedExtensions || []).map(ext =>
           ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
         );
         const acceptAttr = allowedDisplay.length ? allowedDisplay.join(',') : undefined;
-        const maxed = uploadConfig.maxFiles ? files.length >= uploadConfig.maxFiles : false;
+        const maxed = uploadConfig.maxFiles ? items.length >= uploadConfig.maxFiles : false;
         const helperParts: string[] = [];
         if (uploadConfig.maxFiles) {
           helperParts.push(`${uploadConfig.maxFiles} file${uploadConfig.maxFiles > 1 ? 's' : ''} max`);
@@ -1063,18 +1363,14 @@ const FormView: React.FC<FormViewProps> = ({
           helperParts.push(`Allowed: ${allowedDisplay.join(', ')}`);
         }
         const remainingSlots =
-          uploadConfig.maxFiles && uploadConfig.maxFiles > files.length
-            ? `${uploadConfig.maxFiles - files.length} slot${uploadConfig.maxFiles - files.length > 1 ? 's' : ''} remaining`
+          uploadConfig.maxFiles && uploadConfig.maxFiles > items.length
+            ? `${uploadConfig.maxFiles - items.length} slot${uploadConfig.maxFiles - items.length > 1 ? 's' : ''} remaining`
             : null;
         const dragActive = !!dragState[q.id];
-        const totalBytes = files.reduce((sum, file) => sum + (file?.size || 0), 0);
-        const selectionLabel = files.length
-          ? `${files.length} file${files.length > 1 ? 's' : ''} selected${totalBytes ? ` • ${formatFileSize(totalBytes)} total` : ''}`
-          : 'No files selected yet.';
         return (
           <div
             key={q.id}
-            className="field inline-field"
+            className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
           >
@@ -1082,57 +1378,78 @@ const FormView: React.FC<FormViewProps> = ({
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
-            <div
-              role="button"
-              tabIndex={0}
-              aria-disabled={maxed || submitting}
-              onClick={() => {
-                if (maxed || submitting) return;
-                fileInputsRef.current[q.id]?.click();
-              }}
-              onKeyDown={e => {
-                if (maxed || submitting) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
+            <div className="ck-upload-row">
+              <div
+                role="button"
+                tabIndex={0}
+                aria-disabled={maxed || submitting}
+                className="ck-upload-dropzone"
+                onClick={() => {
+                  if (maxed || submitting) return;
                   fileInputsRef.current[q.id]?.click();
+                }}
+                onKeyDown={e => {
+                  if (maxed || submitting) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    fileInputsRef.current[q.id]?.click();
+                  }
+                }}
+                onDragEnter={e => {
+                  e.preventDefault();
+                  if (submitting) return;
+                  incrementDrag(q.id);
+                }}
+                onDragOver={e => e.preventDefault()}
+                onDragLeave={e => {
+                  e.preventDefault();
+                  if (submitting) return;
+                  decrementDrag(q.id);
+                }}
+                onDrop={e => handleFileDrop(q, e)}
+                style={{
+                  border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
+                  borderRadius: 12,
+                  padding: '10px 12px',
+                  background: dragActive ? '#e0f2fe' : maxed || submitting ? '#f1f5f9' : '#f8fafc',
+                  color: '#0f172a',
+                  cursor: maxed || submitting ? 'not-allowed' : 'pointer',
+                  transition: 'border-color 120ms ease, background 120ms ease',
+                  boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none',
+                  flex: 1,
+                  minWidth: 0,
+                  minHeight: 'var(--control-height)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10
+                }}
+              >
+                <UploadIcon />
+                {items.length ? <span className="pill">{items.length}</span> : null}
+                <span style={srOnly}>
+                  {dragActive ? 'Release to upload files' : maxed ? 'Maximum files selected' : 'Click to browse'}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="ck-upload-files-btn"
+                onClick={() =>
+                  openFileOverlay({
+                    scope: 'top',
+                    title: resolveLabel(q, language),
+                    question: q,
+                    fieldPath: q.id
+                  })
                 }
-              }}
-              onDragEnter={e => {
-                e.preventDefault();
-                if (submitting) return;
-                incrementDrag(q.id);
-              }}
-              onDragOver={e => e.preventDefault()}
-              onDragLeave={e => {
-                e.preventDefault();
-                if (submitting) return;
-                decrementDrag(q.id);
-              }}
-              onDrop={e => handleFileDrop(q, e)}
-              style={{
-                border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
-                borderRadius: 12,
-                padding: '16px',
-                background: dragActive ? '#e0f2fe' : maxed || submitting ? '#f1f5f9' : '#f8fafc',
-                color: '#0f172a',
-                cursor: maxed || submitting ? 'not-allowed' : 'pointer',
-                marginBottom: 12,
-                transition: 'border-color 120ms ease, background 120ms ease',
-                boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none'
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                {dragActive ? 'Release to upload files' : maxed ? 'Maximum files selected' : 'Drag & drop files here or click to browse'}
-              </div>
-              <div className="muted" style={{ marginBottom: 6 }}>
-                {selectionLabel}
-              </div>
-              {remainingSlots && (
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {remainingSlots}
-                </div>
-              )}
+                disabled={submitting}
+                style={withDisabled(buttonStyles.secondary, submitting)}
+                title={helperParts.length ? helperParts.join(' | ') : undefined}
+              >
+                Files{items.length ? ` (${items.length})` : ''}
+              </button>
             </div>
+            {remainingSlots ? <div className="muted">{remainingSlots}</div> : null}
             <div style={srOnly} aria-live="polite">
               {uploadAnnouncements[q.id] || ''}
             </div>
@@ -1146,1335 +1463,59 @@ const FormView: React.FC<FormViewProps> = ({
               style={{ display: 'none' }}
               onChange={e => handleFileInputChange(q, e.target.files)}
             />
-            {files.length ? (
-              <ul
-                style={{
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: '0 0 12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8
-                }}
-              >
-                {files.map((file, idx) => (
-                  <li
-                    key={`${file.name}-${file.size}-${idx}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 12px',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 10
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 500 }}>{file.name}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        {formatFileSize(file.size)}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(q, idx)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#dc2626',
-                        cursor: 'pointer',
-                        fontWeight: 600
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="muted" style={{ marginBottom: 12 }}>
-                You haven't selected any files.
-              </div>
-            )}
-            {helperParts.length ? (
-              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>{helperParts.join(' | ')}</div>
-            ) : null}
-            {files.length ? (
-              <button
-                type="button"
-                onClick={() => clearFiles(q)}
-                style={{ ...buttonStyles.secondary, marginBottom: 12 }}
-              >
-                Clear files
-              </button>
-            ) : null}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
           </div>
         );
       }
       case 'LINE_ITEM_GROUP': {
-        const selectorCfg = q.lineItemConfig?.sectionSelector;
-        const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
-        const selectorOptions = selectorOptionSet
-          ? buildLocalizedOptions(selectorOptionSet, selectorOptionSet.en || [], language)
-          : [];
-        const selectorValue = selectorCfg ? ((values[selectorCfg.id] as string) || '') : '';
-
-        const renderAddButton = () => {
-          if (q.lineItemConfig?.addMode === 'overlay' && q.lineItemConfig.anchorFieldId) {
-            return (
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={async () => {
-                  if (submitting) return;
-                  const anchorField = (q.lineItemConfig?.fields || []).find(f => f.id === q.lineItemConfig?.anchorFieldId);
-                  if (!anchorField || anchorField.type !== 'CHOICE') {
-                    addLineItemRowManual(q.id);
-                    return;
-                  }
-                  const key = optionKey(anchorField.id, q.id);
-                  let opts = optionState[key];
-                  if (!opts && anchorField.dataSource) {
-                    const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
-                    if (loaded) {
-                      opts = loaded;
-                      setOptionState(prev => ({ ...prev, [key]: loaded }));
-                    }
-                  }
-                  if (!opts) {
-                    opts = {
-                      en: anchorField.options || [],
-                      fr: (anchorField as any).optionsFr || [],
-                      nl: (anchorField as any).optionsNl || []
-                    };
-                  }
-                  const dependencyIds = (
-                    Array.isArray(anchorField.optionFilter?.dependsOn)
-                      ? anchorField.optionFilter?.dependsOn
-                      : [anchorField.optionFilter?.dependsOn || '']
-                  ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-                  const depVals = dependencyIds.map(dep => toDependencyValue(values[dep]));
-                  const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-                  const localized = buildLocalizedOptions(opts, allowed, language);
-                  const deduped = Array.from(
-                    new Set(localized.map(opt => opt.value).filter(Boolean))
-                  );
-                  setOverlay({
-                    open: true,
-                    options: localized
-                      .filter(opt => deduped.includes(opt.value))
-                      .map(opt => ({ value: opt.value, label: opt.label })),
-                    groupId: q.id,
-                    anchorFieldId: anchorField.id,
-                    selected: []
-                  });
-                }}
-              >
-                {resolveLocalizedString(q.lineItemConfig?.addButtonLabel, language, 'Add lines')}
-              </button>
-            );
-          }
-          return (
-            <button type="button" disabled={submitting} onClick={() => addLineItemRowManual(q.id)}>
-              {resolveLocalizedString(q.lineItemConfig?.addButtonLabel, language, 'Add line')}
-            </button>
-          );
-        };
-
-        const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: lineItems[q.id] || [] }, language);
-        const parentRows = lineItems[q.id] || [];
-        const parentCount = parentRows.length;
-        const selectorControl =
-          selectorCfg && selectorOptions.length ? (
-            <div
-              className="section-selector"
-              data-field-path={selectorCfg.id}
-              style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}
-            >
-              <label style={{ fontWeight: 600 }}>
-                {resolveSelectorLabel(selectorCfg, language)}
-                {selectorCfg.required && <RequiredStar />}
-              </label>
-              <select
-                value={selectorValue}
-                onChange={e => {
-                  const nextVal = e.target.value;
-                  setValues(prev => {
-                    if (prev[selectorCfg.id] === nextVal) return prev;
-                    return { ...prev, [selectorCfg.id]: nextVal };
-                  });
-                }}
-              >
-                <option value="">Select…</option>
-                {selectorOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null;
         return (
-          <div key={q.id} className="card" data-field-path={q.id}>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <h3 style={{ margin: 0 }}>{resolveLabel(q, language)}</h3>
-              <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
-                {parentCount} item{parentCount === 1 ? '' : 's'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
-                {selectorControl}
-                {renderAddButton()}
-              </div>
-            </div>
-            {parentRows.map((row, rowIdx) => {
-              const groupCtx: VisibilityContext = {
-                getValue: fid => values[fid],
-                getLineValue: (_rowId, fid) => row.values[fid]
-              };
-              const ui = q.lineItemConfig?.ui;
-              const isProgressive =
-                ui?.mode === 'progressive' && Array.isArray(ui.collapsedFields) && ui.collapsedFields.length > 0;
-              const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
-              const collapseKey = `${q.id}::${row.id}`;
-              const rowCollapsed = isProgressive ? (collapsedRows[collapseKey] ?? defaultCollapsed) : false;
-
-              const collapsedFieldConfigs = isProgressive ? ui?.collapsedFields || [] : [];
-              const collapsedLabelMap: Record<string, boolean> = {};
-              const collapsedFieldOrder: string[] = [];
-              collapsedFieldConfigs.forEach(cfg => {
-                const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
-                if (!fid) return;
-                collapsedFieldOrder.push(fid);
-                collapsedLabelMap[fid] = cfg.showLabel !== undefined ? !!cfg.showLabel : true;
-              });
-
-              const allFields = q.lineItemConfig?.fields || [];
-              const subGroups = q.lineItemConfig?.subGroups || [];
-              const subIdToLabel: Record<string, string> = {};
-              subGroups.forEach(sub => {
-                const id = resolveSubgroupKey(sub);
-                if (!id) return;
-                const label = resolveLocalizedString(sub.label, language, id);
-                subIdToLabel[id] = label || id;
-              });
-              const subIds = Object.keys(subIdToLabel);
-              const fieldTriggeredSubgroupIdSet =
-                !rowCollapsed && subIds.length > 0
-                  ? allFields.reduce<Set<string>>((acc, field) => {
-                      const effects = Array.isArray((field as any).selectionEffects)
-                        ? ((field as any).selectionEffects as any[])
-                        : [];
-                      effects.forEach(e => {
-                        const gid = e?.groupId ? e.groupId.toString() : '';
-                        if (gid && subIdToLabel[gid] !== undefined) acc.add(gid);
-                      });
-                      return acc;
-                    }, new Set<string>())
-                  : new Set<string>();
-              const hasFieldTriggeredSubgroup = fieldTriggeredSubgroupIdSet.size > 0;
-              const fallbackSubIds =
-                !rowCollapsed && subIds.length ? subIds.filter(id => !fieldTriggeredSubgroupIdSet.has(id)) : [];
-              const collapsedFieldsOrdered = collapsedFieldOrder
-                .map(fid => allFields.find(f => f.id === fid))
-                .filter(Boolean) as any[];
-              const fieldsToRenderBase =
-                isProgressive && rowCollapsed
-                  ? collapsedFieldsOrdered.length
-                    ? collapsedFieldsOrdered
-                    : allFields
-                  : allFields;
-
-              const titleFieldId = (() => {
-                if (!isProgressive) return '';
-                const unlabeled = (collapsedFieldConfigs || [])
-                  .filter(cfg => cfg && cfg.showLabel === false)
-                  .map(cfg => (cfg?.fieldId ? cfg.fieldId.toString() : ''))
-                  .filter(Boolean);
-                return unlabeled.length === 1 ? unlabeled[0] : '';
-              })();
-
-              const titleField = titleFieldId ? (allFields.find(f => f.id === titleFieldId) as any) : undefined;
-              const titleHidden = titleField
-                ? shouldHideField(titleField.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
-                : true;
-              const showTitleControl = !!titleField && !titleHidden;
-
-              const fieldsToRender = showTitleControl
-                ? fieldsToRenderBase.filter((f: any) => f?.id !== titleFieldId)
-                : fieldsToRenderBase;
-
-              const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
-              const gateResult = (() => {
-                if (!isProgressive || !rowCollapsed) return { canExpand: true, reason: '' };
-                if (expandGate === 'always') return { canExpand: true, reason: '' };
-
-                const missing: string[] = [];
-                const invalid: string[] = [];
-                (collapsedFieldConfigs || []).forEach(cfg => {
-                  const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
-                  if (!fid) return;
-                  const field = allFields.find(f => f.id === fid);
-                  if (!field) return;
-                  const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
-                  if (hideField) return;
-
-                  const val = row.values[field.id];
-                  if (field.required && isEmptyValue(val as any)) {
-                    missing.push(field.id);
-                  }
-
-                  const rules = Array.isArray(field.validationRules)
-                    ? field.validationRules.filter(r => r?.then?.fieldId === field.id)
-                    : [];
-                  if (rules.length) {
-                    const isHidden = (fieldId: string) => {
-                      const target = allFields.find(f => f.id === fieldId);
-                      if (!target) return false;
-                      return shouldHideField(target.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
-                    };
-                    const ctx: any = {
-                      ...groupCtx,
-                      getValue: (fieldId: string) =>
-                        Object.prototype.hasOwnProperty.call(row.values || {}, fieldId) ? row.values[fieldId] : values[fieldId],
-                      language,
-                      phase: 'submit',
-                      isHidden
-                    };
-                    const errs = validateRules(rules, ctx);
-                    if (errs.length) {
-                      invalid.push(field.id);
-                    }
-                  }
-                });
-
-                const blocked = Array.from(new Set([...missing, ...invalid]));
-                if (!blocked.length) return { canExpand: true, reason: '' };
-                return { canExpand: false, reason: `Complete required fields to expand: ${blocked.join(', ')}` };
-              })();
-              const canExpand = gateResult.canExpand;
-              const rowHasError = errorIndex.rowErrors.has(collapseKey);
-              return (
-                <div
-                  key={row.id}
-                  className="line-item-row"
-                  data-row-anchor={`${q.id}__${row.id}`}
-                  style={{
-                    background:
-                      isProgressive && rowCollapsed && !canExpand
-                        ? '#f1f5f9'
-                        : rowIdx % 2 === 0
-                        ? '#ffffff'
-                        : '#f8fafc',
-                    padding: 12,
-                    borderRadius: 10,
-                    border: '1px solid #e5e7eb',
-                    outline: rowHasError ? '3px solid rgba(239, 68, 68, 0.55)' : undefined,
-                    outlineOffset: 2,
-                    marginBottom: 10
-                  }}
-                >
-                  {isProgressive ? (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-                      <div style={{ minWidth: 0 }}>
-                        {showTitleControl && titleField ? (
-                          <div style={{ maxWidth: 420 }}>
-                            {(() => {
-                              ensureLineOptions(q.id, titleField);
-                              const errorKey = `${q.id}__${titleField.id}__${row.id}`;
-                              const hideLabel = true;
-                              const labelStyle = hideLabel ? srOnly : undefined;
-                              const triggeredSubgroupIds = (() => {
-                                if (rowCollapsed) return [] as string[];
-                                if (!subIds.length) return [] as string[];
-                                const effects = Array.isArray((titleField as any).selectionEffects)
-                                  ? ((titleField as any).selectionEffects as any[])
-                                  : [];
-                                const hits = effects
-                                  .map(e => (e?.groupId !== undefined && e?.groupId !== null ? e.groupId.toString() : ''))
-                                  .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
-                                return Array.from(new Set(hits));
-                              })();
-                              const subgroupTriggerButtons =
-                                triggeredSubgroupIds.length && !rowCollapsed ? (
-                                  <div>
-                                    {triggeredSubgroupIds.map(subId => {
-                                      const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
-                                      const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
-                                      return (
-                                        <button
-                                          key={subId}
-                                          type="button"
-                                          style={{
-                                            ...buttonStyles.secondary,
-                                            borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
-                                            background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
-                                          }}
-                                          onClick={() => openSubgroupOverlay(fullSubKey)}
-                                        >
-                                          Open {subIdToLabel[subId] || subId}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                ) : null;
-
-                              if (titleField.type === 'CHOICE') {
-                                const optionSetField: OptionSet =
-                                  optionState[optionKey(titleField.id, q.id)] || {
-                                    en: titleField.options || [],
-                                    fr: (titleField as any).optionsFr || [],
-                                    nl: (titleField as any).optionsNl || []
-                                  };
-                                const dependencyIds = (
-                                  Array.isArray(titleField.optionFilter?.dependsOn)
-                                    ? titleField.optionFilter?.dependsOn
-                                    : [titleField.optionFilter?.dependsOn || '']
-                                ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
-                                const allowedField = computeAllowedOptions(
-                                  titleField.optionFilter,
-                                  optionSetField,
-                                  dependencyIds.map((dep: string) => toDependencyValue(row.values[dep] ?? values[dep]))
-                                );
-                                const rawVal = row.values[titleField.id];
-                                const choiceVal =
-                                  Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                                const allowedWithCurrent =
-                                  choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
-                                    ? [...allowedField, choiceVal]
-                                    : allowedField;
-                                const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language);
-                                return (
-                                  <div
-                                    className="field inline-field"
-                                    style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
-                                    data-field-path={errorKey}
-                                    data-has-error={errors[errorKey] ? 'true' : undefined}
-                                  >
-                                    <label style={labelStyle}>
-                                      {resolveFieldLabel(titleField, language, titleField.id)}
-                                      {titleField.required && <RequiredStar />}
-                                    </label>
-                                    <select
-                                      value={choiceVal || ''}
-                                      onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
-                                    >
-                                      <option value="">Select…</option>
-                                      {optsField.map(opt => (
-                                        <option key={opt.value} value={opt.value}>
-                                          {opt.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {subgroupTriggerButtons}
-                                    {(() => {
-                                      const selected = optsField.find(opt => opt.value === choiceVal);
-                                      if (!selected?.tooltip) return null;
-                                      const fallbackLabel = resolveFieldLabel(titleField, language, titleField.id);
-                                      const tooltipLabel = resolveLocalizedString(
-                                        titleField.dataSource?.tooltipLabel,
-                                        language,
-                                        fallbackLabel
-                                      );
-                                      return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
-                                    })()}
-                                    {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                                  </div>
-                                );
-                              }
-
-                              if (titleField.type === 'CHECKBOX') {
-                                const optionSetField: OptionSet =
-                                  optionState[optionKey(titleField.id, q.id)] || {
-                                    en: titleField.options || [],
-                                    fr: (titleField as any).optionsFr || [],
-                                    nl: (titleField as any).optionsNl || []
-                                  };
-                                const dependencyIds = (
-                                  Array.isArray(titleField.optionFilter?.dependsOn)
-                                    ? titleField.optionFilter?.dependsOn
-                                    : [titleField.optionFilter?.dependsOn || '']
-                                ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
-                                const allowedField = computeAllowedOptions(
-                                  titleField.optionFilter,
-                                  optionSetField,
-                                  dependencyIds.map((dep: string) => toDependencyValue(row.values[dep] ?? values[dep]))
-                                );
-                                const selected = Array.isArray(row.values[titleField.id]) ? (row.values[titleField.id] as string[]) : [];
-                                const allowedWithSelected = selected.reduce((acc, val) => {
-                                  if (val && !acc.includes(val)) acc.push(val);
-                                  return acc;
-                                }, [...allowedField]);
-                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language);
-                                return (
-                                  <div
-                                    className="field inline-field"
-                                    style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
-                                    data-field-path={errorKey}
-                                    data-has-error={errors[errorKey] ? 'true' : undefined}
-                                  >
-                                    <label style={labelStyle}>
-                                      {resolveFieldLabel(titleField, language, titleField.id)}
-                                      {titleField.required && <RequiredStar />}
-                                    </label>
-                                    <div className="inline-options">
-                                      {optsField.map(opt => (
-                                        <label key={opt.value} className="inline">
-                                          <input
-                                            type="checkbox"
-                                            checked={selected.includes(opt.value)}
-                                            onChange={e => {
-                                              const next = e.target.checked
-                                                ? [...selected, opt.value]
-                                                : selected.filter(v => v !== opt.value);
-                                              handleLineFieldChange(q, row.id, titleField, next);
-                                            }}
-                                          />
-                                          <span>{opt.label}</span>
-                                        </label>
-                                      ))}
-                                    </div>
-                                    {subgroupTriggerButtons}
-                                    {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                                  </div>
-                                );
-                              }
-
-                              const mapped = titleField.valueMap
-                                ? resolveValueMapValue(titleField.valueMap, fid => {
-                                    if (row.values.hasOwnProperty(fid)) return row.values[fid];
-                                    return values[fid];
-                                  })
-                                : undefined;
-                              const fieldValue = titleField.valueMap ? mapped : (row.values[titleField.id] as string) || '';
-                              return (
-                                <div
-                                  className="field inline-field"
-                                  style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
-                                  data-field-path={errorKey}
-                                  data-has-error={errors[errorKey] ? 'true' : undefined}
-                                >
-                                  <label style={labelStyle}>
-                                    {resolveFieldLabel(titleField, language, titleField.id)}
-                                    {titleField.required && <RequiredStar />}
-                                  </label>
-                                  <input
-                                    type={
-                                      titleField.type === 'NUMBER'
-                                        ? 'number'
-                                        : titleField.type === 'DATE'
-                                        ? 'date'
-                                        : 'text'
-                                    }
-                                    value={fieldValue}
-                                    onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
-                                    readOnly={!!titleField.valueMap}
-                                  />
-                                  {subgroupTriggerButtons}
-                                  {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        ) : null}
-                        {rowCollapsed && !canExpand ? (
-                          <div
-                            className="muted"
-                            style={{ fontSize: 12, fontWeight: 600, color: rowHasError ? '#b42318' : undefined }}
-                          >
-                            {rowHasError ? 'Needs attention · ' : ''}
-                            Fill the collapsed fields to unlock expand.
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="muted" style={{ fontSize: 12, fontWeight: 600, color: rowHasError ? '#b42318' : undefined }}>
-                        Row {rowIdx + 1}
-                        {rowHasError ? ' · Needs attention' : ''}
-                      </div>
-                    </div>
-                  ) : null}
-                  <div
-                    className={isProgressive && rowCollapsed ? 'collapsed-fields-grid' : undefined}
-                    style={
-                      isProgressive && rowCollapsed
-                        ? {
-                            display: 'grid',
-                            gridTemplateColumns:
-                              fieldsToRender.length === 2 ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(280px, 1fr))',
-                            gap: 12
-                          }
-                        : undefined
-                    }
-                  >
-                  {fieldsToRender.map(field => {
-                    ensureLineOptions(q.id, field);
-                    const optionSetField: OptionSet =
-                      optionState[optionKey(field.id, q.id)] || {
-                        en: field.options || [],
-                        fr: (field as any).optionsFr || [],
-                        nl: (field as any).optionsNl || []
-                      };
-                    const dependencyIds = (
-                      Array.isArray(field.optionFilter?.dependsOn)
-                        ? field.optionFilter?.dependsOn
-                        : [field.optionFilter?.dependsOn || '']
-                    ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
-                    const allowedField = computeAllowedOptions(
-                      field.optionFilter,
-                      optionSetField,
-                      dependencyIds.map((dep: string) => toDependencyValue(row.values[dep] ?? values[dep]))
-                    );
-                    const currentVal = row.values[field.id];
-                    const allowedWithCurrent =
-                      currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
-                        ? [...allowedField, currentVal]
-                        : allowedField;
-                    const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language);
-                    const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
-                    if (hideField) return null;
-                    const errorKey = `${q.id}__${field.id}__${row.id}`;
-                    const hideLabel = isProgressive && rowCollapsed && collapsedLabelMap[field.id] === false;
-                    const labelStyle = hideLabel ? srOnly : undefined;
-                    const triggeredSubgroupIds = (() => {
-                      if (rowCollapsed) return [] as string[];
-                      if (!subIds.length) return [] as string[];
-                      const effects = Array.isArray((field as any).selectionEffects)
-                        ? ((field as any).selectionEffects as any[])
-                        : [];
-                      const hits = effects
-                        .map(e => (e?.groupId !== undefined && e?.groupId !== null ? e.groupId.toString() : ''))
-                        .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
-                      return Array.from(new Set(hits));
-                    })();
-                    const subgroupTriggerButtons =
-                      triggeredSubgroupIds.length && !rowCollapsed ? (
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', alignSelf: 'center' }}>
-                          {triggeredSubgroupIds.map(subId => {
-                            const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
-                            const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
-                            return (
-                              <button
-                                key={subId}
-                                type="button"
-                                style={{
-                                  ...buttonStyles.secondary,
-                                  borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
-                                  background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
-                                }}
-                                onClick={() => openSubgroupOverlay(fullSubKey)}
-                              >
-                                Open {subIdToLabel[subId] || subId}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : null;
-                    switch (field.type) {
-                      case 'CHOICE': {
-                        const rawVal = row.values[field.id];
-                        const choiceVal =
-                          Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                        return (
-                          <div
-                            key={field.id}
-                            className="field inline-field"
-                            data-field-path={errorKey}
-                            data-has-error={errors[errorKey] ? 'true' : undefined}
-                          >
-                            <label style={labelStyle}>
-                              {resolveFieldLabel(field, language, field.id)}
-                              {field.required && <RequiredStar />}
-                            </label>
-                            <select
-                              value={choiceVal || ''}
-                              onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                            >
-                              <option value="">Select…</option>
-                              {optsField.map(opt => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                            {subgroupTriggerButtons}
-                            {(() => {
-                              const selected = optsField.find(opt => opt.value === choiceVal);
-                              if (!selected?.tooltip) return null;
-                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
-                              return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
-                            })()}
-                            {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                          </div>
-                        );
-                      }
-                      case 'CHECKBOX': {
-                        const selected = Array.isArray(row.values[field.id]) ? (row.values[field.id] as string[]) : [];
-                        const allowedWithSelected = selected.reduce((acc, val) => {
-                          if (val && !acc.includes(val)) acc.push(val);
-                          return acc;
-                        }, [...allowedField]);
-                        const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language);
-                        return (
-                          <div
-                            key={field.id}
-                            className="field inline-field"
-                            data-field-path={errorKey}
-                            data-has-error={errors[errorKey] ? 'true' : undefined}
-                          >
-                            <label style={labelStyle}>
-                              {resolveFieldLabel(field, language, field.id)}
-                              {field.required && <RequiredStar />}
-                            </label>
-                            <div className="inline-options">
-                              {optsField.map(opt => (
-                                <label key={opt.value} className="inline">
-                                  <input
-                                    type="checkbox"
-                                    checked={selected.includes(opt.value)}
-                                    onChange={e => {
-                                      const next = e.target.checked
-                                        ? [...selected, opt.value]
-                                        : selected.filter(v => v !== opt.value);
-                                      handleLineFieldChange(q, row.id, field, next);
-                                    }}
-                                  />
-                                  <span>{opt.label}</span>
-                                </label>
-                              ))}
-                            </div>
-                            {subgroupTriggerButtons}
-                            {(() => {
-                              const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
-                              if (!withTooltips.length) return null;
-                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
-                              return (
-                                <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                  {withTooltips.map(opt => (
-                                    <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                      {opt.label} <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
-                                    </span>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                            {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                          </div>
-                        );
-                      }
-                      default: {
-                        const mapped = field.valueMap
-                          ? resolveValueMapValue(field.valueMap, fid => {
-                              if (row.values.hasOwnProperty(fid)) return row.values[fid];
-                              return values[fid];
-                            })
-                          : undefined;
-                        const fieldValue = field.valueMap ? mapped : (row.values[field.id] as string) || '';
-                        return (
-                          <div
-                            key={field.id}
-                            className="field inline-field"
-                            data-field-path={errorKey}
-                            data-has-error={errors[errorKey] ? 'true' : undefined}
-                          >
-                            <label style={labelStyle}>
-                              {resolveFieldLabel(field, language, field.id)}
-                              {field.required && <RequiredStar />}
-                            </label>
-                            <input
-                              type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
-                              value={fieldValue}
-                              onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                              readOnly={!!field.valueMap}
-                            />
-                            {subgroupTriggerButtons}
-                            {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                          </div>
-                        );
-                      }
-                    }
-                  })}
-                  </div>
-                  {!rowCollapsed && fallbackSubIds.length ? (
-                    <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {fallbackSubIds.map(subId => {
-                        const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
-                        const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
-                        return (
-                          <button
-                            key={subId}
-                            type="button"
-                            style={{
-                              ...buttonStyles.secondary,
-                              borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
-                              background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
-                            }}
-                            onClick={() => openSubgroupOverlay(fullSubKey)}
-                          >
-                            Open {subIdToLabel[subId] || subId}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                  <div
-                    className="line-actions"
-                    style={
-                      isProgressive
-                        ? { justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }
-                        : undefined
-                    }
-                  >
-                    {isProgressive ? (
-                      <button
-                        type="button"
-                        aria-expanded={!rowCollapsed}
-                        aria-disabled={rowCollapsed && !canExpand}
-                        title={rowCollapsed && !canExpand ? gateResult.reason : undefined}
-                        onClick={() => {
-                          if (rowCollapsed && !canExpand) {
-                            onDiagnostic?.('edit.progressive.expand.blocked', {
-                              groupId: q.id,
-                              rowId: row.id,
-                              reason: gateResult.reason
-                            });
-                            return;
-                          }
-                          setCollapsedRows(prev => ({ ...prev, [collapseKey]: !rowCollapsed }));
-                          onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
-                        }}
-                        style={{
-                          ...buttonStyles.secondary,
-                          opacity: rowCollapsed && !canExpand ? 0.6 : 1,
-                          borderColor: rowHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
-                          background: rowHasError ? '#fff7f7' : buttonStyles.secondary.background
-                        }}
-                      >
-                        {rowCollapsed ? '▸ Expand' : '▾ Collapse'}
-                      </button>
-                    ) : null}
-                    <button type="button" onClick={() => removeLineRow(q.id, row.id)} style={buttonStyles.negative}>
-                      Remove
-                    </button>
-                  </div>
-                  {!isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
-                    const subLabelResolved = resolveLocalizedString(
-                      sub.label,
-                      language,
-                      sub.id ||
-                        (typeof sub.label === 'string'
-                          ? sub.label
-                          : sub.label?.en || sub.label?.fr || sub.label?.nl || '')
-                    );
-                    const subId = sub.id || subLabelResolved;
-                    if (!subId) return null;
-                    const subKey = buildSubgroupKey(q.id, row.id, subId);
-                    const collapsed = collapsedSubgroups[subKey] ?? true;
-                    const subRows = lineItems[subKey] || [];
-                    const orderedSubRows = [...subRows].sort((a, b) => {
-                      // keep auto-generated rows first, manual rows (no flag) at the bottom
-                      const aAuto = !!a.autoGenerated;
-                      const bAuto = !!b.autoGenerated;
-                      if (aAuto === bAuto) return 0;
-                      return aAuto ? -1 : 1;
-                    });
-                    const subTotals = computeTotals({ config: { ...sub, fields: sub.fields || [] }, rows: orderedSubRows }, language);
-                    const subSelectorCfg = sub.sectionSelector;
-                    const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
-                    const subSelectorOptions = subSelectorOptionSet
-                      ? buildLocalizedOptions(subSelectorOptionSet, subSelectorOptionSet.en || [], language)
-                      : [];
-                    const subSelectorValue = subgroupSelectors[subKey] || '';
-
-                    const renderSubAddButton = () => {
-                      if (sub.addMode === 'overlay' && sub.anchorFieldId) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const anchorField = (sub.fields || []).find(f => f.id === sub.anchorFieldId);
-                              if (!anchorField || anchorField.type !== 'CHOICE') {
-                                addLineItemRowManual(subKey);
-                                return;
-                              }
-                              const key = optionKey(anchorField.id, subKey);
-                              let opts = optionState[key];
-                              if (!opts && anchorField.dataSource) {
-                                const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
-                                if (loaded) {
-                                  opts = loaded;
-                                  setOptionState(prev => ({ ...prev, [key]: loaded }));
-                                }
-                              }
-                              if (!opts) {
-                                opts = {
-                                  en: anchorField.options || [],
-                                  fr: (anchorField as any).optionsFr || [],
-                                  nl: (anchorField as any).optionsNl || []
-                                };
-                              }
-                              const dependencyIds = (
-                                Array.isArray(anchorField.optionFilter?.dependsOn)
-                                  ? anchorField.optionFilter?.dependsOn
-                                  : [anchorField.optionFilter?.dependsOn || '']
-                              ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-                              const depVals = dependencyIds.map(dep =>
-                                toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorValue)
-                              );
-                              const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-                              const localized = buildLocalizedOptions(opts, allowed, language);
-                              const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
-                              setOverlay({
-                                open: true,
-                                options: localized
-                                  .filter(opt => deduped.includes(opt.value))
-                                  .map(opt => ({ value: opt.value, label: opt.label })),
-                                groupId: subKey,
-                                anchorFieldId: anchorField.id,
-                                selected: []
-                              });
-                            }}
-                          >
-                            {resolveLocalizedString(sub.addButtonLabel, language, 'Add lines')}
-                          </button>
-                        );
-                      }
-                      return (
-                        <button type="button" onClick={() => addLineItemRowManual(subKey)}>
-                          {resolveLocalizedString(sub.addButtonLabel, language, 'Add line')}
-                        </button>
-                      );
-                    };
-                    const subCount = orderedSubRows.length;
-                    const scrollSubgroupBottom = () => {
-                      const el = subgroupBottomRefs.current[subKey];
-                      if (!el) return;
-                      requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        });
-                      });
-                    };
-                    return (
-                      <div key={subKey} className="card" style={{ marginTop: 12, background: '#f8fafc' }}>
-                        <div
-                          className="subgroup-header"
-                          style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
-                        >
-                          <div style={{ textAlign: 'center', fontWeight: 700 }}>
-                            {subLabelResolved || subId}
-                            <span className="pill" style={{ marginLeft: 8, background: '#e2e8f0', color: '#334155' }}>
-                              {subCount} item{subCount === 1 ? '' : 's'}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
-                              {subSelectorCfg && (
-                                <div
-                                  className="section-selector"
-                                  data-field-path={subSelectorCfg.id}
-                                  style={{ minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4 }}
-                                >
-                                  <label style={{ fontWeight: 600 }}>
-                                    {resolveSelectorLabel(subSelectorCfg, language)}
-                                    {subSelectorCfg.required && <RequiredStar />}
-                                  </label>
-                                  <select
-                                    value={subSelectorValue}
-                                    onChange={e => {
-                                      const nextValue = e.target.value;
-                                      setSubgroupSelectors(prev => {
-                                        if (prev[subKey] === nextValue) return prev;
-                                        return { ...prev, [subKey]: nextValue };
-                                      });
-                                    }}
-                                  >
-                                    <option value="">Select…</option>
-                                    {subSelectorOptions.map(opt => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              )}
-                              {renderSubAddButton()}
-                            </div>
-                            <div style={{ marginLeft: 'auto' }}>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setCollapsedSubgroups(prev => ({
-                                    ...prev,
-                                    [subKey]: !(prev[subKey] ?? true)
-                                  }))
-                                }
-                                aria-expanded={!collapsed}
-                                aria-controls={`${subKey}-body`}
-                                style={buttonStyles.secondary}
-                              >
-                                {collapsed
-                                  ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
-                                  : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        {collapsed ? null : (
-                        <div id={`${subKey}-body`}>
-                        <div style={{ marginTop: 8 }}>
-                        {orderedSubRows.map((subRow, subIdx) => {
-                          const subCtx: VisibilityContext = {
-                            getValue: fid => values[fid],
-                            getLineValue: (_rowId, fid) => subRow.values[fid]
-                          };
-                          const subGroupDef: WebQuestionDefinition = {
-                            ...(q as any),
-                            id: subKey,
-                            lineItemConfig: { ...(sub as any), fields: sub.fields || [], subGroups: [] }
-                          };
-                          const targetGroup = subGroupDef;
-                          return (
-                            <div
-                              key={subRow.id}
-                              className="line-item-row"
-                              data-row-anchor={`${subKey}__${subRow.id}`}
-                              style={{
-                                background: subIdx % 2 === 0 ? '#ffffff' : '#f1f5f9',
-                                padding: 12,
-                                borderRadius: 10,
-                                border: '1px solid #e5e7eb',
-                                marginBottom: 10
-                              }}
-                            >
-                              {!subRow.autoGenerated && (
-                                <div style={{ marginBottom: 8 }}>
-                                  <span className="pill" style={{ background: '#eef2ff', color: '#312e81' }}>
-                                    Manual
-                                  </span>
-                                </div>
-                              )}
-                              {(sub.fields || []).map(field => {
-                                ensureLineOptions(subKey, field);
-                                const optionSetField: OptionSet =
-                                  optionState[optionKey(field.id, subKey)] || {
-                                    en: field.options || [],
-                                    fr: (field as any).optionsFr || [],
-                                    nl: (field as any).optionsNl || []
-                                  };
-                                const dependencyIds = (
-                                  Array.isArray(field.optionFilter?.dependsOn)
-                                    ? field.optionFilter?.dependsOn
-                                    : [field.optionFilter?.dependsOn || '']
-                                ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-                                const allowedField = computeAllowedOptions(
-                                  field.optionFilter,
-                                  optionSetField,
-                                  dependencyIds.map(dep => {
-                                    const selectorFallback =
-                                      subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
-                                    return toDependencyValue(
-                                      subRow.values[dep] ?? values[dep] ?? row.values[dep] ?? selectorFallback
-                                    );
-                                  })
-                                );
-                                const currentVal = subRow.values[field.id];
-                                const allowedWithCurrent =
-                                  currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
-                                    ? [...allowedField, currentVal]
-                                    : allowedField;
-                                const selectedSub = Array.isArray(subRow.values[field.id])
-                                  ? (subRow.values[field.id] as string[])
-                                  : null;
-                                const allowedWithSelection =
-                                  selectedSub && selectedSub.length
-                                    ? selectedSub.reduce((acc, val) => {
-                                        if (val && !acc.includes(val)) acc.push(val);
-                                        return acc;
-                                      }, [...allowedWithCurrent])
-                                    : allowedWithCurrent;
-                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language);
-                                const hideField = shouldHideField(field.visibility, subCtx, {
-                                  rowId: subRow.id,
-                                  linePrefix: subKey
-                                });
-                                if (hideField) return null;
-                                const errorKey = `${subKey}__${field.id}__${subRow.id}`;
-                                switch (field.type) {
-                                  case 'CHOICE': {
-                                    const rawVal = subRow.values[field.id];
-                                    const choiceVal =
-                                      Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                                    return (
-                                      <div
-                                        key={field.id}
-                                        className="field inline-field"
-                                        data-field-path={errorKey}
-                                        data-has-error={errors[errorKey] ? 'true' : undefined}
-                                      >
-                                        <label>
-                                          {resolveFieldLabel(field, language, field.id)}
-                                          {field.required && <RequiredStar />}
-                                        </label>
-                                        <select
-                                          value={choiceVal || ''}
-                                          onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                        >
-                                          <option value="">Select…</option>
-                                          {optsField.map(opt => (
-                                            <option key={opt.value} value={opt.value}>
-                                              {opt.label}
-                                            </option>
-                                          ))}
-                                        </select>
-                                        {(() => {
-                                          const selected = optsField.find(opt => opt.value === choiceVal);
-                                          if (!selected?.tooltip) return null;
-                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                                          const tooltipLabel = resolveLocalizedString(
-                                            field.dataSource?.tooltipLabel,
-                                            language,
-                                            fallbackLabel
-                                          );
-                                          return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
-                                        })()}
-                                        {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                                      </div>
-                                    );
-                                  }
-                                  case 'CHECKBOX': {
-                                    const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
-                                    return (
-                                      <div
-                                        key={field.id}
-                                        className="field inline-field"
-                                        data-field-path={errorKey}
-                                        data-has-error={errors[errorKey] ? 'true' : undefined}
-                                      >
-                                        <label>
-                                          {resolveFieldLabel(field, language, field.id)}
-                                          {field.required && <RequiredStar />}
-                                        </label>
-                                        <div className="inline-options">
-                                          {optsField.map(opt => (
-                                            <label key={opt.value} className="inline">
-                                              <input
-                                                type="checkbox"
-                                                checked={selected.includes(opt.value)}
-                                                onChange={e => {
-                                                  const next = e.target.checked
-                                                    ? [...selected, opt.value]
-                                                    : selected.filter(v => v !== opt.value);
-                                                  handleLineFieldChange(targetGroup, subRow.id, field, next);
-                                                }}
-                                              />
-                                              <span>{opt.label}</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                        {(() => {
-                                          const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
-                                          if (!withTooltips.length) return null;
-                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                                          const tooltipLabel = resolveLocalizedString(
-                                            field.dataSource?.tooltipLabel,
-                                            language,
-                                            fallbackLabel
-                                          );
-                                          return (
-                                            <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                              {withTooltips.map(opt => (
-                                                <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                  {opt.label}{' '}
-                                                  <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
-                                                </span>
-                                              ))}
-                                            </div>
-                                          );
-                                        })()}
-                                        {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                                      </div>
-                                    );
-                                  }
-                                  default: {
-                                    const mapped = field.valueMap
-                                      ? resolveValueMapValue(field.valueMap, fid => {
-                                          if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
-                                          if (row.values.hasOwnProperty(fid)) return row.values[fid];
-                                          return values[fid];
-                                        })
-                                      : undefined;
-                                    const fieldValue = field.valueMap ? mapped : (subRow.values[field.id] as string) || '';
-                                    return (
-                                      <div
-                                        key={field.id}
-                                        className="field inline-field"
-                                        data-field-path={errorKey}
-                                        data-has-error={errors[errorKey] ? 'true' : undefined}
-                                      >
-                                        <label>
-                                          {resolveFieldLabel(field, language, field.id)}
-                                          {field.required && <RequiredStar />}
-                                        </label>
-                                        <input
-                                          type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
-                                          value={fieldValue}
-                                          onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                          readOnly={!!field.valueMap}
-                                        />
-                                        {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                                      </div>
-                                    );
-                                  }
-                                }
-                              })}
-                              <div className="line-actions">
-                                <button
-                                  type="button"
-                                  onClick={() => removeLineRow(subKey, subRow.id)}
-                                  style={buttonStyles.negative}
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {orderedSubRows.length > 0 && (
-                        <div
-                            ref={el => {
-                              subgroupBottomRefs.current[subKey] = el;
-                            }}
-                            className="line-item-toolbar"
-                            style={{ marginTop: 12 }}
-                          >
-                            <div
-                              className="line-item-toolbar-actions"
-                              style={{
-                                display: 'flex',
-                                gap: 12,
-                                alignItems: 'flex-end',
-                                flex: 1,
-                                flexWrap: 'wrap',
-                                justifyContent: 'space-between'
-                              }}
-                            >
-                              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                                {subSelectorCfg && (
-                                  <div className="section-selector" data-field-path={subSelectorCfg.id}>
-                                    <label>
-                                      {resolveSelectorLabel(subSelectorCfg, language)}
-                                      {subSelectorCfg.required && <RequiredStar />}
-                                    </label>
-                                    <select
-                                      value={subSelectorValue}
-                                      onChange={e => {
-                                        const nextValue = e.target.value;
-                                        setSubgroupSelectors(prev => {
-                                          if (prev[subKey] === nextValue) return prev;
-                                          return { ...prev, [subKey]: nextValue };
-                                        });
-                                      }}
-                                    >
-                                      <option value="">Select…</option>
-                                      {subSelectorOptions.map(opt => (
-                                        <option key={opt.value} value={opt.value}>
-                                          {opt.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                )}
-                                {renderSubAddButton()}
-                                {subTotals.length ? (
-                                  <div className="line-item-totals">
-                                    {subTotals.map(t => (
-                                      <span key={t.key} className="pill">
-                                        {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                              <div style={{ marginLeft: 'auto'}}>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setCollapsedSubgroups(prev => ({
-                                      ...prev,
-                                      [subKey]: !(prev[subKey] ?? true)
-                                    }))
-                                  }
-                                  style={buttonStyles.secondary}
-                                  aria-expanded={!collapsed}
-                                  aria-controls={`${subKey}-body`}
-                                >
-                                  {collapsed
-                                    ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
-                                    : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
-                                </button>
-                              </div>
-                            </div>
-                        </div>
-                        )}
-                        </div>
-                        </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-            {parentRows.length > 0 && (
-              <div className="line-item-toolbar">
-                {selectorCfg && (
-                  <div
-                    className="section-selector"
-                    data-field-path={selectorCfg.id}
-                    style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 220 }}
-                  >
-                    <label style={{ fontWeight: 600 }}>
-                      {resolveSelectorLabel(selectorCfg, language)}
-                      {selectorCfg.required && <RequiredStar />}
-                    </label>
-                    <select
-                      value={selectorValue}
-                      onChange={e => {
-                        const nextValue = e.target.value;
-                        setValues(prev => {
-                          if (prev[selectorCfg.id] === nextValue) return prev;
-                          return { ...prev, [selectorCfg.id]: nextValue };
-                        });
-                      }}
-                    >
-                      <option value="">Select…</option>
-                      {selectorOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="line-item-toolbar-actions">
-                  {renderAddButton()}
-                  {groupTotals.length ? (
-                    <div className="line-item-totals">
-                      {groupTotals.map(t => (
-                        <span key={t.key} className="pill">
-                          {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            )}
-          </div>
+          <LineItemGroupQuestion
+            key={q.id}
+            q={q}
+            ctx={{
+              definition,
+              language,
+              values,
+              setValues,
+              lineItems,
+              setLineItems,
+              submitting,
+              errors,
+              setErrors,
+              optionState,
+              setOptionState,
+              ensureLineOptions,
+              renderChoiceControl,
+              openInfoOverlay,
+              openFileOverlay,
+              openSubgroupOverlay,
+              addLineItemRowManual,
+              removeLineRow,
+              handleLineFieldChange,
+              collapsedGroups,
+              toggleGroupCollapsed,
+              collapsedRows,
+              setCollapsedRows,
+              collapsedSubgroups,
+              setCollapsedSubgroups,
+              subgroupSelectors,
+              setSubgroupSelectors,
+              subgroupBottomRefs,
+              fileInputsRef,
+              dragState,
+              incrementDrag,
+              decrementDrag,
+              resetDrag,
+              uploadAnnouncements,
+              handleLineFileInputChange,
+              handleLineFileDrop,
+              removeLineFile,
+              clearLineFiles,
+              errorIndex,
+              setOverlay,
+              onDiagnostic
+            }}
+          />
         );
       }
       default:
@@ -2653,15 +1694,31 @@ const FormView: React.FC<FormViewProps> = ({
     const wasSame = firstErrorRef.current === firstKey;
     firstErrorRef.current = firstKey;
 
+    const expandGroupForQuestionId = (questionId: string): boolean => {
+      const groupKey = questionIdToGroupKey[questionId];
+      if (!groupKey) return false;
+      setCollapsedGroups(prev => (prev[groupKey] === false ? prev : { ...prev, [groupKey]: false }));
+      return true;
+    };
+
     const ensureMountedForError = (): boolean => {
       const parts = firstKey.split('__');
-      if (parts.length !== 3) return false;
+      if (parts.length !== 3) {
+        // Top-level question error: ensure its group card is expanded.
+        return expandGroupForQuestionId(firstKey);
+      }
       const prefix = parts[0];
+      const fieldId = parts[1];
       const rowId = parts[2];
       const subgroupInfo = parseSubgroupKey(prefix);
       if (subgroupInfo) {
+        expandGroupForQuestionId(subgroupInfo.parentGroupId);
         const collapseKey = `${subgroupInfo.parentGroupId}::${subgroupInfo.parentRowId}`;
         setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
+        const nestedKey = nestedGroupMeta.subgroupFieldToGroupKey[`${subgroupInfo.parentGroupId}::${subgroupInfo.subGroupId}__${fieldId}`];
+        if (nestedKey) {
+          setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
+        }
         if (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix) {
           openSubgroupOverlay(prefix);
           onDiagnostic?.('validation.navigate.openSubgroup', { key: firstKey, subKey: prefix });
@@ -2669,8 +1726,13 @@ const FormView: React.FC<FormViewProps> = ({
         return true;
       }
 
+      expandGroupForQuestionId(prefix);
       const collapseKey = `${prefix}::${rowId}`;
       setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
+      const nestedKey = nestedGroupMeta.lineFieldToGroupKey[`${prefix}__${fieldId}`];
+      if (nestedKey) {
+        setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
+      }
       return true;
     };
 
@@ -2700,45 +1762,16 @@ const FormView: React.FC<FormViewProps> = ({
       }
     });
     errorNavConsumedRef.current = errorNavRequestRef.current;
-  }, [errors, onDiagnostic, openSubgroupOverlay, subgroupOverlay.open, subgroupOverlay.subKey]);
-
-  const buttonBase: React.CSSProperties = {
-    padding: '10px 16px',
-    borderRadius: 10,
-    fontWeight: 700,
-    border: '1px solid transparent',
-    cursor: 'pointer'
-  };
-
-  const buttonStyles = {
-    primary: {
-      ...buttonBase,
-      background: '#2563eb',
-      borderColor: '#1d4ed8',
-      color: '#ffffff'
-    },
-    secondary: {
-      ...buttonBase,
-      background: '#ffffff',
-      borderColor: '#cbd5e1',
-      color: '#0f172a'
-    },
-    negative: {
-      ...buttonBase,
-      background: '#fff7f7',
-      borderColor: '#fecdd3',
-      color: '#b42318'
-    }
-  } as const;
-
-  const withDisabled = (style: React.CSSProperties, disabled?: boolean): React.CSSProperties =>
-    disabled
-      ? {
-          ...style,
-          opacity: 0.6,
-          cursor: 'not-allowed'
-        }
-      : style;
+  }, [
+    errors,
+    nestedGroupMeta.lineFieldToGroupKey,
+    nestedGroupMeta.subgroupFieldToGroupKey,
+    onDiagnostic,
+    openSubgroupOverlay,
+    questionIdToGroupKey,
+    subgroupOverlay.open,
+    subgroupOverlay.subKey
+  ]);
 
   const subgroupOverlayPortal = (() => {
     if (!subgroupOverlay.open || !subgroupOverlay.subKey) return null;
@@ -2861,7 +1894,7 @@ const FormView: React.FC<FormViewProps> = ({
         style={{
           position: 'fixed',
           inset: 0,
-          background: '#ffffff',
+      background: '#ffffff',
           zIndex: 10000,
           display: 'flex',
           flexDirection: 'column'
@@ -2875,21 +1908,28 @@ const FormView: React.FC<FormViewProps> = ({
             boxShadow: '0 10px 30px rgba(15,23,42,0.08)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button type="button" onClick={closeSubgroupOverlay} style={buttonStyles.negative}>
-              ← Back
-            </button>
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a' }}>{subLabel}</div>
-              <div className="muted" style={{ fontWeight: 600, marginTop: 4 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+              alignItems: 'center',
+              gap: 12
+            }}
+          >
+            <div />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontWeight: 900, fontSize: 40, color: '#0f172a', letterSpacing: -0.4 }}>{subLabel}</div>
+              <div className="muted" style={{ fontWeight: 700, marginTop: 8, fontSize: 24 }}>
                 {parentLabel}
                 {parentRowIdx >= 0 ? ` · Row ${parentRowIdx + 1}` : parsed?.parentRowId ? ` · ${parsed.parentRowId}` : ''}
                 {` · ${orderedRows.length} item${orderedRows.length === 1 ? '' : 's'}`}
               </div>
             </div>
-            <button type="button" onClick={closeSubgroupOverlay} style={buttonStyles.secondary}>
-              Close
-            </button>
+            <div style={{ justifySelf: 'end' }}>
+              <button type="button" onClick={closeSubgroupOverlay} style={buttonStyles.secondary}>
+                Close
+              </button>
+            </div>
           </div>
           <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
             <div
@@ -2967,7 +2007,7 @@ const FormView: React.FC<FormViewProps> = ({
                 getValue: fid => values[fid],
                 getLineValue: (_rowId, fid) => subRow.values[fid]
               };
-              return (
+  return (
                 <div
                   key={subRow.id}
                   className="line-item-row"
@@ -2987,168 +2027,326 @@ const FormView: React.FC<FormViewProps> = ({
                       </span>
                     </div>
                   )}
-                  {(subConfig?.fields || []).map(field => {
-                    ensureLineOptions(subKey, field);
-                    const optionSetField: OptionSet =
-                      optionState[optionKey(field.id, subKey)] || {
-                        en: field.options || [],
-                        fr: (field as any).optionsFr || [],
-                        nl: (field as any).optionsNl || []
-                      };
-                    const dependencyIds = (
-                      Array.isArray(field.optionFilter?.dependsOn)
-                        ? field.optionFilter?.dependsOn
-                        : [field.optionFilter?.dependsOn || '']
-                    ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-                    const allowedField = computeAllowedOptions(
-                      field.optionFilter,
-                      optionSetField,
-                      dependencyIds.map(dep => {
-                        const selectorFallback =
-                          subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
-                        return toDependencyValue(subRow.values[dep] ?? values[dep] ?? parentRowValues[dep] ?? selectorFallback);
-                      })
-                    );
-                    const currentVal = subRow.values[field.id];
-                    const allowedWithCurrent =
-                      currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
-                        ? [...allowedField, currentVal]
-                        : allowedField;
-                    const selectedSub = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : null;
-                    const allowedWithSelection =
-                      selectedSub && selectedSub.length
-                        ? selectedSub.reduce((acc, val) => {
-                            if (val && !acc.includes(val)) acc.push(val);
-                            return acc;
-                          }, [...allowedWithCurrent])
-                        : allowedWithCurrent;
-                    const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language);
-                    const hideField = shouldHideField(field.visibility, subCtx, {
-                      rowId: subRow.id,
-                      linePrefix: subKey
-                    });
-                    if (hideField) return null;
-                    const errorKey = `${subKey}__${field.id}__${subRow.id}`;
-                    switch (field.type) {
-                      case 'CHOICE': {
-                        const rawVal = subRow.values[field.id];
-                        const choiceVal =
-                          Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                        return (
-                          <div
-                            key={field.id}
-                            className="field inline-field"
-                            data-field-path={errorKey}
-                            data-has-error={errors[errorKey] ? 'true' : undefined}
-                          >
-                            <label>
-                              {resolveFieldLabel(field, language, field.id)}
-                              {field.required && <RequiredStar />}
-                            </label>
-                            <select
-                              value={choiceVal || ''}
-                              onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
+                  {(() => {
+                    const renderSubField = (field: any) => {
+                      ensureLineOptions(subKey, field);
+                      const optionSetField: OptionSet =
+                        optionState[optionKey(field.id, subKey)] || {
+                          en: field.options || [],
+                          fr: (field as any).optionsFr || [],
+                          nl: (field as any).optionsNl || []
+                        };
+                      const dependencyIds = (
+                        Array.isArray(field.optionFilter?.dependsOn)
+                          ? field.optionFilter?.dependsOn
+                          : [field.optionFilter?.dependsOn || '']
+                      ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                      const allowedField = computeAllowedOptions(
+                        field.optionFilter,
+                        optionSetField,
+                        dependencyIds.map((dep: string) => {
+                          const selectorFallback =
+                            subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
+                          return toDependencyValue(subRow.values[dep] ?? values[dep] ?? parentRowValues[dep] ?? selectorFallback);
+                        })
+                      );
+                      const currentVal = subRow.values[field.id];
+                      const allowedWithCurrent =
+                        currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
+                          ? [...allowedField, currentVal]
+                          : allowedField;
+                      const selectedSub = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : null;
+                      const allowedWithSelection =
+                        selectedSub && selectedSub.length
+                          ? selectedSub.reduce((acc, val) => {
+                              if (val && !acc.includes(val)) acc.push(val);
+                              return acc;
+                            }, [...allowedWithCurrent])
+                          : allowedWithCurrent;
+                      const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language);
+                      const hideField = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                      if (hideField) return null;
+                      const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
+                      const forceStackedSubFieldLabel = (field as any)?.ui?.labelLayout === 'stacked';
+
+                      switch (field.type) {
+                        case 'CHOICE': {
+                          const rawVal = subRow.values[field.id];
+                          const choiceVal =
+                            Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                          return (
+                            <div
+                              key={field.id}
+                              className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
                             >
-                              <option value="">Select…</option>
-                              {optsField.map(opt => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                            {(() => {
-                              const selected = optsField.find(opt => opt.value === choiceVal);
-                              if (!selected?.tooltip) return null;
-                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
-                              return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
-                            })()}
-                            {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                          </div>
-                        );
-                      }
-                      case 'CHECKBOX': {
-                        const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
-                        return (
-                          <div
-                            key={field.id}
-                            className="field inline-field"
-                            data-field-path={errorKey}
-                            data-has-error={errors[errorKey] ? 'true' : undefined}
-                          >
-                            <label>
-                              {resolveFieldLabel(field, language, field.id)}
-                              {field.required && <RequiredStar />}
-                            </label>
-                            <div className="inline-options">
-                              {optsField.map(opt => (
-                                <label key={opt.value} className="inline">
-                                  <input
-                                    type="checkbox"
-                                    checked={selected.includes(opt.value)}
-                                    onChange={e => {
-                                      const next = e.target.checked
-                                        ? [...selected, opt.value]
-                                        : selected.filter(v => v !== opt.value);
-                                      handleLineFieldChange(subGroupDef, subRow.id, field, next);
-                                    }}
-                                  />
-                                  <span>{opt.label}</span>
-                                </label>
-                              ))}
+                              <label>
+                                {resolveFieldLabel(field, language, field.id)}
+                                {field.required && <RequiredStar />}
+                              </label>
+                              {renderChoiceControl({
+                                fieldPath,
+                                value: choiceVal || '',
+                                options: optsField,
+                                required: !!field.required,
+                                override: (field as any)?.ui?.control,
+                                onChange: next => handleLineFieldChange(subGroupDef, subRow.id, field, next)
+                              })}
+                              {(() => {
+                                const selected = optsField.find(opt => opt.value === choiceVal);
+                                if (!selected?.tooltip) return null;
+                                const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                                const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
+                                return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
+                              })()}
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                             </div>
-                            {(() => {
-                              const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
-                              if (!withTooltips.length) return null;
-                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
-                              return (
-                                <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                  {withTooltips.map(opt => (
-                                    <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                      {opt.label}{' '}
-                                      <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
-                                    </span>
+                          );
+                        }
+                        case 'CHECKBOX': {
+                          const hasAnyOption =
+                            !!((optionSetField.en && optionSetField.en.length) ||
+                              ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                              ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                          const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
+                          const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
+                          return (
+                            <div
+                              key={field.id}
+                              className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            >
+                              <label>
+                                {resolveFieldLabel(field, language, field.id)}
+                                {field.required && <RequiredStar />}
+                              </label>
+                              {isConsentCheckbox ? (
+                                <div className="ck-choice-control ck-consent-control">
+                                  <label className="ck-consent">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!subRow.values[field.id]}
+                                      onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.checked)}
+                                    />
+                                  </label>
+                                </div>
+                              ) : (
+                                <div className="inline-options">
+                                  {optsField.map(opt => (
+                                    <label key={opt.value} className="inline">
+                                      <input
+                                        type="checkbox"
+                                        checked={selected.includes(opt.value)}
+                                        onChange={e => {
+                                          const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
+                                          handleLineFieldChange(subGroupDef, subRow.id, field, next);
+                                        }}
+                                      />
+                                      <span>{opt.label}</span>
+                                    </label>
                                   ))}
                                 </div>
-                              );
-                            })()}
-                            {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                          </div>
-                        );
+                              )}
+                              {(() => {
+                                const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
+                                if (!withTooltips.length) return null;
+                                const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                                const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
+                                return (
+                                  <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {withTooltips.map(opt => (
+                                      <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                        {opt.label}{' '}
+                                        <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
+                                      </span>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                            </div>
+                          );
+                        }
+                        case 'FILE_UPLOAD': {
+                          const items = toUploadItems(subRow.values[field.id] as any);
+                          const uploadConfig = (field as any).uploadConfig || {};
+                          const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+                            ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+                          );
+                          const acceptAttr = allowedDisplay.length ? allowedDisplay.join(',') : undefined;
+                          const maxed = uploadConfig.maxFiles ? items.length >= uploadConfig.maxFiles : false;
+                          const dragActive = !!dragState[fieldPath];
+                          return (
+                            <div
+                              key={field.id}
+                              className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            >
+                              <label>
+                                {resolveFieldLabel(field, language, field.id)}
+                                {field.required && <RequiredStar />}
+                              </label>
+                              <div className="ck-upload-row">
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={maxed || submitting}
+                                  className="ck-upload-dropzone"
+                                  onClick={() => {
+                                    if (maxed || submitting) return;
+                                    fileInputsRef.current[fieldPath]?.click();
+                                  }}
+                                  onKeyDown={e => {
+                                    if (maxed || submitting) return;
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      fileInputsRef.current[fieldPath]?.click();
+                                    }
+                                  }}
+                                  onDragEnter={e => {
+                                    e.preventDefault();
+                                    if (submitting) return;
+                                    incrementDrag(fieldPath);
+                                  }}
+                                  onDragOver={e => e.preventDefault()}
+                                  onDragLeave={e => {
+                                    e.preventDefault();
+                                    if (submitting) return;
+                                    decrementDrag(fieldPath);
+                                  }}
+                                  onDrop={e =>
+                                    handleLineFileDrop({ group: subGroupDef, rowId: subRow.id, field, fieldPath, event: e })
+                                  }
+                                  style={{
+                                    border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
+                                    borderRadius: 12,
+                                    padding: '10px 12px',
+                                    background: dragActive ? '#e0f2fe' : maxed || submitting ? '#f1f5f9' : '#f8fafc',
+                                    color: '#0f172a',
+                                    cursor: maxed || submitting ? 'not-allowed' : 'pointer',
+                                    transition: 'border-color 120ms ease, background 120ms ease',
+                                    boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none',
+                                    flex: 1,
+                                    minWidth: 0,
+                                    minHeight: 'var(--control-height)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 10
+                                  }}
+                                >
+                                  <UploadIcon />
+                                  {items.length ? <span className="pill">{items.length}</span> : null}
+                                  <span style={srOnly}>
+                                    {dragActive
+                                      ? 'Release to upload files'
+                                      : maxed
+                                        ? 'Maximum files selected'
+                                        : 'Click to browse'}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="ck-upload-files-btn"
+                                  onClick={() =>
+                                    openFileOverlay({
+                                      scope: 'line',
+                                      title: resolveFieldLabel(field, language, field.id),
+                                      group: subGroupDef,
+                                      rowId: subRow.id,
+                                      field,
+                                      fieldPath
+                                    })
+                                  }
+                                  disabled={submitting}
+                                  style={withDisabled(buttonStyles.secondary, submitting)}
+                                >
+                                  Files{items.length ? ` (${items.length})` : ''}
+                                </button>
+                              </div>
+                              <div style={srOnly} aria-live="polite">
+                                {uploadAnnouncements[fieldPath] || ''}
+                              </div>
+                              <input
+                                ref={el => {
+                                  fileInputsRef.current[fieldPath] = el;
+                                }}
+                                type="file"
+                                multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
+                                accept={acceptAttr}
+                                style={{ display: 'none' }}
+                                onChange={e =>
+                                  handleLineFileInputChange({
+                                    group: subGroupDef,
+                                    rowId: subRow.id,
+                                    field,
+                                    fieldPath,
+                                    list: e.target.files
+                                  })
+                                }
+                              />
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                            </div>
+                          );
+                        }
+                        default: {
+                          const mapped = field.valueMap
+                            ? resolveValueMapValue(field.valueMap, fid => {
+                                if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
+                                if (parentRowValues.hasOwnProperty(fid)) return parentRowValues[fid];
+                                return values[fid];
+                              })
+                            : undefined;
+                          const fieldValueRaw = field.valueMap ? mapped : (subRow.values[field.id] as string) || '';
+                          const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                          return (
+                            <div
+                              key={field.id}
+                              className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                                forceStackedSubFieldLabel ? ' ck-label-stacked' : ''
+                              }`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            >
+                              <label>
+                                {resolveFieldLabel(field, language, field.id)}
+                                {field.required && <RequiredStar />}
+                              </label>
+                              <input
+                                type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
+                                value={fieldValue}
+                                onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
+                                readOnly={!!field.valueMap}
+                              />
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                            </div>
+                          );
+                        }
                       }
-                      default: {
-                        const mapped = field.valueMap
-                          ? resolveValueMapValue(field.valueMap, fid => {
-                              if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
-                              if (parentRowValues.hasOwnProperty(fid)) return parentRowValues[fid];
-                              return values[fid];
-                            })
-                          : undefined;
-                        const fieldValue = field.valueMap ? mapped : (subRow.values[field.id] as string) || '';
-                        return (
-                          <div
-                            key={field.id}
-                            className="field inline-field"
-                            data-field-path={errorKey}
-                            data-has-error={errors[errorKey] ? 'true' : undefined}
-                          >
-                            <label>
-                              {resolveFieldLabel(field, language, field.id)}
-                              {field.required && <RequiredStar />}
-                            </label>
-                            <input
-                              type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
-                              value={fieldValue}
-                              onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
-                              readOnly={!!field.valueMap}
-                            />
-                            {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                          </div>
-                        );
-                      }
-                    }
-                  })}
+                    };
+
+                    const visibleFields = (subConfig?.fields || []).filter(field => {
+                      const hideField = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                      return !hideField;
+                    });
+
+                    const contextPrefix = parsed ? `sub:${parsed.parentGroupId}:${parsed.subGroupId}` : `sub:${subKey}`;
+
+                    return (
+                      <GroupedPairedFields
+                        contextPrefix={contextPrefix}
+                        fields={visibleFields}
+                        language={language}
+                        collapsedGroups={collapsedGroups}
+                        toggleGroupCollapsed={toggleGroupCollapsed}
+                        renderField={renderSubField}
+                        hasError={(field: any) => !!errors[`${subKey}__${field.id}__${subRow.id}`]}
+                      />
+                    );
+                  })()}
                   <div className="line-actions">
                     <button type="button" onClick={() => removeLineRow(subKey, subRow.id)} style={buttonStyles.negative}>
                       Remove
@@ -3167,148 +2365,106 @@ const FormView: React.FC<FormViewProps> = ({
     );
   })();
 
-  const infoOverlayPortal = (() => {
-    if (!infoOverlay.open || !infoOverlay.text) return null;
+  const fileOverlayPortal = (() => {
+    if (!fileOverlay.open) return null;
     if (typeof document === 'undefined') return null;
-    const title = infoOverlay.title || 'Info';
-    const text = infoOverlay.text || '';
-    return createPortal(
-      <div
-        className="webform-overlay"
-        role="dialog"
-        aria-modal="true"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: '#ffffff',
-          zIndex: 10020,
-          display: 'flex',
-          flexDirection: 'column'
-        }}
-      >
-        <div
-          style={{
-            padding: 16,
-            borderBottom: '1px solid #e5e7eb',
-            background: '#ffffff',
-            boxShadow: '0 10px 30px rgba(15,23,42,0.08)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button type="button" onClick={closeInfoOverlay} style={buttonStyles.negative}>
-              ← Back
-            </button>
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: '#0f172a' }}>{title}</div>
-            </div>
-            <button type="button" onClick={closeInfoOverlay} style={buttonStyles.secondary}>
-              Close
-            </button>
-          </div>
-        </div>
-        <div style={{ padding: 16, overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>
-          {text}
-        </div>
-      </div>,
-      document.body
+
+    const title = fileOverlay.title || 'Files';
+    const isTop = fileOverlay.scope === 'top' && !!fileOverlay.question;
+    const isLine =
+      fileOverlay.scope === 'line' &&
+      !!fileOverlay.group &&
+      !!fileOverlay.rowId &&
+      !!fileOverlay.field &&
+      !!fileOverlay.fieldPath;
+
+    if (!isTop && !isLine) return null;
+
+    const fieldPath = isTop ? (fileOverlay.question!.id || '') : (fileOverlay.fieldPath || '');
+    const uploadConfig: any = isTop ? (fileOverlay.question as any)?.uploadConfig || {} : (fileOverlay.field as any)?.uploadConfig || {};
+    const items = (() => {
+      if (isTop) return toUploadItems(values[(fileOverlay.question as any).id]);
+      const groupId = (fileOverlay.group as any).id;
+      const rowId = fileOverlay.rowId as string;
+      const fieldId = (fileOverlay.field as any).id;
+      const existingRows = lineItems[groupId] || [];
+      const row = existingRows.find(r => r.id === rowId);
+      return toUploadItems((row?.values || {})[fieldId] as any);
+    })();
+
+    const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
+
+    const onAdd = () => {
+      if (submitting) return;
+      if (maxed) return;
+      fileInputsRef.current[fieldPath]?.click();
+    };
+
+    const onClearAll = () => {
+      if (submitting) return;
+      if (isTop) {
+        clearFiles(fileOverlay.question!);
+      } else {
+        clearLineFiles({
+          group: fileOverlay.group!,
+          rowId: fileOverlay.rowId as string,
+          field: fileOverlay.field,
+          fieldPath: fileOverlay.fieldPath as string
+        });
+      }
+    };
+
+    const onRemoveAt = (idx: number) => {
+      if (submitting) return;
+      if (isTop) {
+        removeFile(fileOverlay.question!, idx);
+      } else {
+        removeLineFile({
+          group: fileOverlay.group!,
+          rowId: fileOverlay.rowId as string,
+          field: fileOverlay.field,
+          fieldPath: fileOverlay.fieldPath as string,
+          index: idx
+        });
+      }
+    };
+
+    return (
+      <FileOverlay
+        open={fileOverlay.open}
+        title={title}
+        submitting={submitting}
+        items={items}
+        uploadConfig={uploadConfig}
+        onAdd={onAdd}
+        onClearAll={onClearAll}
+        onRemoveAt={onRemoveAt}
+        onClose={closeFileOverlay}
+      />
     );
   })();
 
+  const infoOverlayPortal = (
+    <InfoOverlay
+      open={infoOverlay.open}
+      title={infoOverlay.title || 'Info'}
+      text={infoOverlay.text || ''}
+      onClose={closeInfoOverlay}
+    />
+  );
+
   return (
     <>
-      <style>{`
-        .form-card input,
-        .form-card select,
-        .form-card textarea {
-          font-size: 18px;
-          line-height: 1.5;
-        }
-        .form-card .line-item-table td,
-        .form-card .line-item-table th {
-          font-size: 18px;
-        }
-        .form-card .line-item-table input,
-        .form-card .line-item-table select,
-        .form-card .line-item-table textarea {
-          font-size: 18px;
-        }
-        .form-card .field.inline-field,
-        .webform-overlay .field.inline-field {
-          display: flex;
-          flex-direction: row;
-          flex-wrap: wrap;
-          gap: 8px 12px;
-          align-items: center;
-        }
-        .form-card .field.inline-field > label,
-        .webform-overlay .field.inline-field > label {
-          flex: 1 1 160px;
-          min-width: 120px;
-          max-width: 220px;
-          margin: 0;
-          font-weight: 800;
-          color: #0f172a;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-        .form-card .field.inline-field > input,
-        .form-card .field.inline-field > select,
-        .form-card .field.inline-field > textarea,
-        .form-card .field.inline-field > .inline-options,
-        .webform-overlay .field.inline-field > input,
-        .webform-overlay .field.inline-field > select,
-        .webform-overlay .field.inline-field > textarea,
-        .webform-overlay .field.inline-field > .inline-options {
-          flex: 2 1 260px;
-          min-width: 0;
-          width: 100%;
-        }
-        .form-card .field.inline-field > .error,
-        .webform-overlay .field.inline-field > .error {
-          flex-basis: 100%;
-          margin: 0;
-        }
-        .form-card .field[data-has-error="true"],
-        .webform-overlay .field[data-has-error="true"] {
-          outline: 3px solid rgba(239, 68, 68, 0.55);
-          outline-offset: 2px;
-          border-radius: 12px;
-          padding: 8px;
-          background: #fff7f7;
-        }
-        .form-card .info-button,
-        .webform-overlay .info-button {
-          border: 1px solid #cbd5e1;
-          background: #ffffff;
-          color: #0f172a;
-          border-radius: 10px;
-          padding: 10px 16px;
-          font-weight: 700;
-          cursor: pointer;
-          white-space: nowrap;
-          line-height: 1;
-        }
-        @media (max-width: 520px) {
-          .form-card .field.inline-field > label,
-          .webform-overlay .field.inline-field > label {
-            flex-basis: 100%;
-            max-width: none;
-          }
-          .form-card .collapsed-fields-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
-      <div className="card form-card">
+      <style>{FORM_VIEW_STYLES}</style>
+      <div className="ck-form-sections">
         {status ? (
           <div
             ref={statusRef}
             role={statusTone === 'error' ? 'alert' : 'status'}
             tabIndex={-1}
             style={{
-              padding: '10px 12px',
-              borderRadius: 12,
-              marginBottom: 12,
+              padding: '14px 16px',
+              borderRadius: 14,
               border:
                 statusTone === 'error'
                   ? '1px solid #fca5a5'
@@ -3322,109 +2478,167 @@ const FormView: React.FC<FormViewProps> = ({
                   ? '#dcfce7'
                   : '#e0f2fe',
               color: '#0f172a',
-              fontWeight: 600
+              fontWeight: 800
             }}
           >
             {status}
           </div>
         ) : null}
+
         <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
-          {definition.questions.filter(q => !q.header || q.type === 'LINE_ITEM_GROUP').map(renderQuestion)}
+          {groupSections.map(section => {
+            const visible = (section.questions || []).filter(
+              q =>
+                !shouldHideField(q.visibility, {
+                  getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
+                })
+            );
+            if (!visible.length) return null;
+
+            const isCollapsed = section.collapsible ? !!collapsedGroups[section.key] : false;
+
+            const sectionHasError = (() => {
+              const keys = Object.keys(errors || {});
+              if (!keys.length) return false;
+              for (const q of section.questions) {
+                if (keys.includes(q.id)) return true;
+                const prefix1 = `${q.id}__`;
+                const prefix2 = `${q.id}::`;
+                if (keys.some(k => k.startsWith(prefix1) || k.startsWith(prefix2))) return true;
+              }
+              return false;
+            })();
+
+            const isPairable = (q: WebQuestionDefinition): boolean => {
+              if (!q.pair) return false;
+              if (q.type === 'LINE_ITEM_GROUP') return false;
+              if (q.type === 'PARAGRAPH') return false;
+              return true;
+            };
+
+            const used = new Set<string>();
+            const rows: WebQuestionDefinition[][] = [];
+            for (let i = 0; i < visible.length; i++) {
+              const q = visible[i];
+              if (used.has(q.id)) continue;
+              const pairKey = q.pair ? q.pair.toString() : '';
+              if (!pairKey || !isPairable(q)) {
+                used.add(q.id);
+                rows.push([q]);
+                continue;
+              }
+              let match: WebQuestionDefinition | null = null;
+              for (let j = i + 1; j < visible.length; j++) {
+                const cand = visible[j];
+                if (used.has(cand.id)) continue;
+                if ((cand.pair ? cand.pair.toString() : '') === pairKey && isPairable(cand)) {
+                  match = cand;
+                  break;
+                }
+              }
+              if (match) {
+                used.add(q.id);
+                used.add(match.id);
+                rows.push([q, match]);
+              } else {
+                used.add(q.id);
+                rows.push([q]);
+              }
+            }
+
+            return (
+              <div
+                key={section.key}
+                className="card form-card ck-group-card"
+                data-group-key={section.key}
+                data-has-error={sectionHasError ? 'true' : undefined}
+              >
+                {section.title ? (
+                  section.collapsible ? (
+                    <button
+                      type="button"
+                      className="ck-group-header"
+                      onClick={() => toggleGroupCollapsed(section.key)}
+                      aria-expanded={!isCollapsed}
+                    >
+                      <div className="ck-group-title">{section.title}</div>
+                      <div className="ck-group-chevron">{isCollapsed ? '▸' : '▾'}</div>
+                    </button>
+                  ) : (
+                    <div className="ck-group-header">
+                      <div className="ck-group-title">{section.title}</div>
+      </div>
+                  )
+                ) : null}
+
+                {!isCollapsed && (
+                  <div className="ck-group-body">
+                    <div className="ck-form-grid">
+                      {rows.map(row => {
+                        if (row.length === 2) {
+                          const hasDate = row[0].type === 'DATE' || row[1].type === 'DATE';
+                          return (
+                            <div
+                              key={`${row[0].id}__${row[1].id}`}
+                              className={`ck-pair-grid${hasDate ? ' ck-pair-has-date' : ''}`}
+                            >
+                              {renderQuestion(row[0])}
+                              {renderQuestion(row[1])}
+                            </div>
+                          );
+                        }
+                        return renderQuestion(row[0]);
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </fieldset>
       </div>
-      <div
-        className="sticky-submit"
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}
-      >
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={submitting}
-          style={withDisabled(buttonStyles.negative, submitting)}
+      <div className="sticky-submit">
+        <div
+          className="sticky-submit-inner"
+          style={{
+            maxWidth: 1100,
+            margin: '0 auto',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12
+          }}
         >
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={submitting}
+            style={withDisabled(buttonStyles.negative, submitting)}
+          >
           Back
         </button>
         <button
           type="button"
-          onClick={() => {
-            errorNavRequestRef.current += 1;
-            onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current });
-            onSubmit();
-          }}
+            onClick={() => {
+              errorNavRequestRef.current += 1;
+              onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current });
+              onSubmit();
+            }}
           disabled={submitting}
           style={withDisabled(buttonStyles.primary, submitting)}
         >
           {submitting ? 'Submitting…' : 'Submit'}
         </button>
-      </div>
-      {overlay.open && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 11000
-          }}
-        >
-          <div style={{ background: '#fff', borderRadius: 12, padding: 16, width: '420px', maxWidth: '90%' }}>
-            <h3 style={{ marginTop: 0 }}>Select lines</h3>
-            <div style={{ maxHeight: 320, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {overlay.options.map(opt => (
-                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    value={opt.value}
-                    checked={overlay.selected?.includes(opt.value) || false}
-                    disabled={submitting}
-                    onChange={e => {
-                      setOverlay(prev => {
-                        const nextSelected = new Set(prev.selected || []);
-                        if (e.target.checked) {
-                          nextSelected.add(opt.value);
-                        } else {
-                          nextSelected.delete(opt.value);
-                        }
-                        return { ...prev, selected: Array.from(nextSelected) };
-                      });
-                    }}
-                  />
-                  <span>{opt.label}</span>
-                </label>
-              ))}
-              {!overlay.options.length && <div className="muted">No options available.</div>}
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 12 }}>
-              <button
-                type="button"
-                onClick={() => setOverlay({ open: false, options: [], selected: [] })}
-                style={buttonStyles.secondary}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (submitting) return;
-                  if (overlay.groupId && overlay.anchorFieldId) {
-                    (overlay.selected || []).forEach(val =>
-                      addLineItemRowManual(overlay.groupId!, { [overlay.anchorFieldId!]: val })
-                    );
-                  }
-                  setOverlay({ open: false, options: [], selected: [] });
-                }}
-                disabled={submitting}
-                style={withDisabled(buttonStyles.primary, submitting)}
-              >
-                Add
-              </button>
-            </div>
-          </div>
         </div>
-      )}
+      </div>
+      <LineSelectOverlay
+        overlay={overlay}
+        setOverlay={setOverlay}
+        submitting={submitting}
+        addLineItemRowManual={addLineItemRowManual}
+      />
       {subgroupOverlayPortal}
+      {fileOverlayPortal}
       {infoOverlayPortal}
     </>
   );

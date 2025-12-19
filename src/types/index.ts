@@ -1,5 +1,29 @@
 export type BaseQuestionType = 'DATE' | 'TEXT' | 'PARAGRAPH' | 'NUMBER' | 'CHOICE' | 'CHECKBOX';
 export type QuestionType = BaseQuestionType | 'FILE_UPLOAD' | 'LINE_ITEM_GROUP';
+// Line item fields cannot themselves be nested LINE_ITEM_GROUPs, but they can support FILE_UPLOAD.
+export type LineItemFieldType = BaseQuestionType | 'FILE_UPLOAD';
+
+export type ChoiceControl = 'auto' | 'select' | 'radio' | 'segmented' | 'switch';
+
+export type LabelLayout = 'auto' | 'stacked';
+
+export interface QuestionUiConfig {
+  /**
+   * Control variant for single-choice questions.
+   * - auto: choose based on option count / boolean detection
+   * - select: native dropdown
+   * - radio: radio list
+   * - segmented: iOS-like segmented control (best for <= 3 options)
+   * - switch: iOS switch (best for boolean / non-required fields)
+   */
+  control?: ChoiceControl;
+  /**
+   * Label/control layout hint.
+   * - auto: default behavior (inline on full-width rows; stacked in 2-up grids)
+   * - stacked: force label above control even for full-width rows
+   */
+  labelLayout?: LabelLayout;
+}
 
 export interface FileUploadConfig {
   destinationFolderId?: string;
@@ -119,11 +143,21 @@ export interface LineItemGroupUiConfig {
 
 export interface LineItemFieldConfig {
   id: string;
-  type: BaseQuestionType;
+  type: LineItemFieldType;
   labelEn: string;
   labelFr: string;
   labelNl: string;
   required: boolean;
+  ui?: QuestionUiConfig;
+  /**
+   * Optional group card configuration for the edit view (works inside line item rows + subgroup overlays).
+   */
+  group?: QuestionGroupConfig;
+  /**
+   * Optional "pair key" that controls 2-up layout in the edit view.
+   * Fields with the same pair key render next to each other; unpaired fields take the full row.
+   */
+  pair?: string;
   options: string[];
   optionsFr: string[];
   optionsNl: string[];
@@ -135,6 +169,7 @@ export interface LineItemFieldConfig {
   autoIncrement?: AutoIncrementConfig;
   valueMap?: ValueMapConfig; // readonly derived value for TEXT fields
   derivedValue?: DerivedValueConfig; // computed value (e.g., add days)
+  uploadConfig?: FileUploadConfig;
 }
 
 export interface LineItemSelectorConfig {
@@ -242,6 +277,33 @@ export interface DataSourceConfig {
   tooltipLabel?: LocalizedString | string; // optional localized label for tooltip trigger/header
 }
 
+export interface QuestionGroupConfig {
+  /**
+   * Optional stable identifier for this group (recommended if you have multiple groups).
+   * If omitted, the UI will fall back to grouping by title (or "header" for header groups).
+   */
+  id?: string;
+  /**
+   * Marks this as the "header group" (fields previously rendered in the sticky header).
+   * This group is rendered in the form body as a collapsible card.
+   */
+  header?: boolean;
+  /**
+   * Optional title rendered at the top of the group card.
+   * Can be localized (en/fr/nl) or a plain string.
+   */
+  title?: LocalizedString | string;
+  /**
+   * Whether this group card can be collapsed/expanded.
+   * Defaults to true when a title is present.
+   */
+  collapsible?: boolean;
+  /**
+   * Initial collapsed state for collapsible groups.
+   */
+  defaultCollapsed?: boolean;
+}
+
 export interface QuestionConfig {
   id: string;
   type: QuestionType;
@@ -249,10 +311,21 @@ export interface QuestionConfig {
   qFr: string;
   qNl: string;
   required: boolean;
+  ui?: QuestionUiConfig;
   /**
+   * @deprecated Replaced by `group: { header: true, title: "Header" }` (rendered in the form body).
    * When true, this field is rendered in the sticky header area of the edit view (still editable).
    */
   header?: boolean;
+  /**
+   * Optional group card configuration for the edit view.
+   */
+  group?: QuestionGroupConfig;
+  /**
+   * Optional "pair key" that controls 2-up layout in the edit view.
+   * Fields with the same pair key render next to each other; unpaired fields take the full row.
+   */
+  pair?: string;
   listView?: boolean;
   options: string[];      // English options
   optionsFr: string[];    // French options
@@ -298,10 +371,21 @@ export interface WebQuestionDefinition {
     nl: string;
   };
   required: boolean;
+  ui?: QuestionUiConfig;
   /**
+   * @deprecated Replaced by `group: { header: true, title: "Header" }` (rendered in the form body).
    * When true, this field is rendered in the sticky header area of the edit view (still editable).
    */
   header?: boolean;
+  /**
+   * Optional group card configuration for the edit view.
+   */
+  group?: QuestionGroupConfig;
+  /**
+   * Optional "pair key" that controls 2-up layout in the edit view.
+   * Fields with the same pair key render next to each other; unpaired fields take the full row.
+   */
+  pair?: string;
   listView?: boolean;
   options?: {
     en: string[];

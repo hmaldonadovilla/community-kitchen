@@ -44,16 +44,35 @@ This project uses TypeScript. You need to build the script before using it in Go
    - **Form ID / URLs**: Leave these blank. The script will fill them in.
 2. **Config Sheets**: Create new sheets (tabs) for each form.
    - Copy the header row from an example sheet (includes `Config (JSON/REF)` for line items or file upload settings).
-   - **Header fields (always visible while editing)**: In a question’s `Config (JSON/REF)` cell, add `"header": true` to pin that question in the sticky header row of the edit view (label + value on the same row). Example:
+   - **Group cards (collapsible sections)**: In a question’s `Config (JSON/REF)` cell, you can set a `group` to render fields together inside a card section in the **form body** (collapsible if you want). Example (a “Header” section rendered as a collapsible card):
 
      ```json
-     { "header": true }
+     {
+       "group": { "header": true, "title": "Header", "collapsible": true, "defaultCollapsed": false }
+     }
+     ```
+
+     Notes:
+     - The app header only contains **form title**, **build number**, **language selector**, and **burger menu**.
+     - Legacy `"header": true` is deprecated but still supported; it is mapped to `group: { header: true, title: "Header", collapsible: true }`.
+
+   - **Field pairing (2‑up layout)**: Use `pair` to control which fields appear next to each other on the same row. If `pair` is not set (or no matching pair is found), the field takes the full row.
+
+     ```json
+     { "pair": "qty_temp" }
+     ```
+
+   - **Label/control layout override**: Default behavior is label+control inline on full-width rows, and stacked label+control inside 2-up grids. To force stacked label+control even when a field takes the full row:
+
+     ```json
+     { "ui": { "labelLayout": "stacked" } }
      ```
 
    - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON. Lower priorities win; when nothing is specified we fall back to `updatedAt desc`.
    - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
    - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
-   - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN/FR/NL, Required?, Options EN/FR/NL). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX.
+   - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
+     - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.
      - Progressive disclosure (collapsed-by-default rows): in the LINE_ITEM_GROUP JSON, add a `ui` block. The collapsed view renders only `collapsedFields` (editable). The expand toggle is gated by `expandGate`:
 
        ```json
@@ -145,8 +164,27 @@ This project uses TypeScript. You need to build the script before using it in Go
       ]
       ```
 
-   - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`. The React UI renders drag-and-drop upload zones that respect those caps, highlight remaining slots, and announce changes for screen readers; volunteers can still click to browse if drag/drop is unavailable. When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
-   - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, language)` Apps Script function (to be added by you) should return an array of options. Use this when options need to stay in sync with another form or sheet.
+   - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`. The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
+     - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).
+     - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
+   - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, locale, projection, limit, pageToken)` Apps Script function is included in `dist/Code.js` and used by the web UI. Use this when options need to stay in sync with another form or sheet.
+   - **Choice UI controls (iOS-style)**: For `CHOICE` questions (and line-item `CHOICE` fields), you can optionally set `ui.control` in the Config JSON to influence which control is rendered:
+     - `auto` (default): `<= 3` options → segmented, `<= 6` → radio list, else → native dropdown. Boolean-like non-required choices (e.g., YES/NO) may render as an iOS switch.
+     - `select`, `radio`, `segmented`, `switch`: force a specific variant.
+
+     Example:
+
+     ```json
+     { "ui": { "control": "segmented" } }
+     ```
+
+   - **Label/control layout override**: For any field (top-level, line-item, subgroup), you can force the label to be stacked above the control:
+
+     ```json
+     { "ui": { "labelLayout": "stacked" } }
+     ```
+
+   - **Consent checkbox**: A `CHECKBOX` field with **no options** (and no `dataSource`) is treated as a consent boolean and rendered as a **single checkbox**. The stored value is a boolean; when `required: true`, the checkbox must be checked to submit.
    - **Auto-increment IDs**: For `TEXT` questions that should generate IDs (e.g., “Meal Preparation #”), add:
 
      ```json

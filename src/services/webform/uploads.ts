@@ -31,6 +31,26 @@ export class UploadService {
     const urls: string[] = [];
 
     limitedFiles.forEach(file => {
+      // Preserve already-uploaded URLs (e.g., when editing an existing record)
+      if (typeof file === 'string') {
+        const raw = file.toString().trim();
+        if (raw) {
+          raw
+            .split(',')
+            .map(part => part.trim())
+            .filter(Boolean)
+            .forEach(url => urls.push(url));
+        }
+        return;
+      }
+      if (file && typeof file === 'object' && typeof (file as any).url === 'string') {
+        const url = ((file as any).url as string).trim();
+        if (url) {
+          urls.push(url);
+          return;
+        }
+      }
+
       const blob = toBlob(file);
       if (!blob) return;
 
@@ -58,7 +78,15 @@ export class UploadService {
       urls.push(created.getUrl());
     });
 
-    return urls.join(', ');
+    // De-dupe while preserving order
+    const seen = new Set<string>();
+    const deduped = urls.filter(url => {
+      if (!url) return false;
+      if (seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    });
+    return deduped.join(', ');
   }
 
   private getUploadFolder(uploadConfig?: QuestionConfig['uploadConfig']): GoogleAppsScript.Drive.Folder {

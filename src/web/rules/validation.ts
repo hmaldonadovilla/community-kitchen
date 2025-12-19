@@ -50,6 +50,7 @@ export function checkRule(
     const hasValue = values.some(v => {
       if (v === undefined || v === null) return false;
       if (typeof v === 'string') return v.trim() !== '';
+      if (typeof v === 'boolean') return v === true;
       return true;
     });
     if (!hasValue) {

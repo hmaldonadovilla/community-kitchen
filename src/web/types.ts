@@ -7,6 +7,7 @@ import {
   LineItemSelectorConfig,
   LocalizedString,
   OptionFilter,
+  QuestionGroupConfig,
   ValidationRule,
   VisibilityConfig,
   WebFormDefinition,
@@ -19,8 +20,10 @@ export type LangCode = 'EN' | 'FR' | 'NL' | string;
 export type FieldValue =
   | string
   | number
+  | boolean
   | string[]
   | File[]
+  | (string | File)[]
   | FileList
   | Record<string, FieldValue>[]
   | null
@@ -82,6 +85,7 @@ export {
   WebQuestionDefinition,
   LocalizedString,
   OptionFilter,
+  QuestionGroupConfig,
   VisibilityConfig,
   ValidationRule,
   ListViewConfig,
