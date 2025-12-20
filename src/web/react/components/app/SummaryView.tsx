@@ -32,7 +32,11 @@ const formatDateTime = (value?: string | null) => {
   try {
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return value;
-    return parsed.toLocaleString();
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
+    // Force dd/mm/yyyy formatting while keeping the user's local timezone for the time components.
+    return `${pad2(parsed.getDate())}/${pad2(parsed.getMonth() + 1)}/${parsed.getFullYear()}, ${pad2(parsed.getHours())}:${pad2(
+      parsed.getMinutes()
+    )}:${pad2(parsed.getSeconds())}`;
   } catch (_) {
     return value;
   }

@@ -57,6 +57,16 @@ const ListView: React.FC<ListViewProps> = ({
     [definition]
   );
 
+  const questionTypeById = useMemo(() => {
+    const map: Record<string, string> = {};
+    (definition.questions || []).forEach(q => {
+      const id = (q?.id || '').toString();
+      if (!id) return;
+      map[id] = q.type;
+    });
+    return map;
+  }, [definition.questions]);
+
   const projection = useMemo(() => {
     const meta = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
     const ids = new Set<string>();
@@ -272,10 +282,22 @@ const ListView: React.FC<ListViewProps> = ({
 
   const formatDate = (value: any): string | null => {
     if (value === undefined || value === null || value === '') return null;
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
+
+    // Date-only: YYYY-MM-DD -> DD/MM/YYYY
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      const ymd = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (ymd) return `${ymd[3]}/${ymd[2]}/${ymd[1]}`;
+    }
+
+    // Date-time: keep user's timezone but force dd/mm/yyyy display
     const candidate = typeof value === 'number' ? value : `${value}`;
     const date = new Date(candidate);
     if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}, ${pad2(date.getHours())}:${pad2(
+      date.getMinutes()
+    )}:${pad2(date.getSeconds())}`;
   };
 
   const splitUrlList = (raw: string): string[] => {
@@ -331,7 +353,9 @@ const ListView: React.FC<ListViewProps> = ({
     const value = parsed !== null ? parsed : raw;
     const isArray = Array.isArray(value);
     const isScalar = typeof value === 'string' || typeof value === 'number';
-    const dateText = isScalar ? formatDate(raw) : null;
+    const fieldType =
+      fieldId === 'createdAt' || fieldId === 'updatedAt' ? 'DATETIME' : (questionTypeById[fieldId] || '');
+    const dateText = isScalar && (fieldType === 'DATETIME' || fieldType === 'DATE') ? formatDate(raw) : null;
     const text = dateText || (isArray ? summarizeArray(value) : `${value}`);
     const title = dateText ? `${raw}` : text;
     if (typeof value === 'string') {
