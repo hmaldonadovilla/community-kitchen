@@ -83,6 +83,15 @@ export const FORM_VIEW_STYLES = `
           flex: 1 1 260px;
           min-width: 0;
         }
+        /* Progressive row title (auto addMode anchor): render as plain label text, not a disabled input. */
+        .ck-row-title {
+          font-size: var(--ck-font-group-title);
+          font-weight: 900;
+          color: var(--text);
+          line-height: 1.1;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
 
         /* Field-level action buttons (subgroup + info) */
         .ck-field-actions {

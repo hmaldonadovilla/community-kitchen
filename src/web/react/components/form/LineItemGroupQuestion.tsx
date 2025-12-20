@@ -248,28 +248,19 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     rows: any[];
     changed: boolean;
     contextId: string;
-    suppressedManual: number;
     desiredCount: number;
   } => {
     const { currentRows, targetKey, anchorFieldId, desired, depVals, selectorId, selectorValue } = args;
     const autoPrefix = `${AUTO_CONTEXT_PREFIX}:${targetKey}:`;
     const contextId = `${autoPrefix}${depVals.map(v => (v === undefined || v === null ? '' : v.toString())).join('||')}`;
 
-    const manualAnchorKeys = new Set<string>();
-    currentRows.forEach(r => {
-      const source = parseRowSource((r.values as any)?.[ROW_SOURCE_KEY]);
-      if (source !== 'manual') return;
-      const key = normalizeAnchorKey((r.values as any)?.[anchorFieldId]);
-      if (key) manualAnchorKeys.add(key);
-    });
-
-    const desiredFiltered = desired.filter(key => !manualAnchorKeys.has(key));
-    const suppressedManual = desired.length - desiredFiltered.length;
-    const remaining = new Set(desiredFiltered);
+    const remaining = new Set(desired);
 
     const nextRows: any[] = [];
     currentRows.forEach(row => {
-      const isAutoContext = typeof row.effectContextId === 'string' && row.effectContextId.startsWith(autoPrefix);
+      const isAutoContext =
+        (typeof row.effectContextId === 'string' && row.effectContextId.startsWith(autoPrefix)) ||
+        parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]) === 'auto';
       if (!isAutoContext) {
         nextRows.push(row);
         return;
@@ -316,7 +307,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     });
 
     // Append missing desired keys in desired order.
-    desiredFiltered.forEach(key => {
+    desired.forEach(key => {
       if (!remaining.has(key)) return;
       remaining.delete(key);
       const nextValues: Record<string, FieldValue> = {
@@ -335,7 +326,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     });
 
     const changed = nextRows.length !== currentRows.length || nextRows.some((row, idx) => row !== currentRows[idx]);
-    return { rows: nextRows, changed, contextId, suppressedManual, desiredCount: desired.length };
+    return { rows: nextRows, changed, contextId, desiredCount: desired.length };
   };
 
   // Auto addMode: when dependsOn fields are valid, auto-create one row per allowed anchor option.
@@ -382,7 +373,6 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
         anchorFieldId: anchorField.id,
         valid,
         desiredCount: res.desiredCount,
-        suppressedManual: res.suppressedManual,
         nextRowCount: res.rows.length,
         contextId: res.contextId
       });
@@ -604,13 +594,19 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
             </div>
           ) : null;
         return (
-          <div key={q.id} className="card ck-full-width" data-field-path={q.id}>
+            <div
+              key={q.id}
+              className="card ck-full-width"
+              data-field-path={q.id}
+              data-has-error={errors[q.id] ? 'true' : undefined}
+            >
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <h3 style={{ margin: 0 }}>{resolveLabel(q, language)}</h3>
               <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
                 {parentCount} item{parentCount === 1 ? '' : 's'}
               </span>
             </div>
+              {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
                 {selectorControl}
@@ -675,8 +671,23 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                     : allFields
                   : allFields;
 
+              const addMode = (q.lineItemConfig as any)?.addMode;
+              const anchorFieldId =
+                q.lineItemConfig?.anchorFieldId !== undefined && q.lineItemConfig?.anchorFieldId !== null
+                  ? q.lineItemConfig?.anchorFieldId.toString()
+                  : '';
+              const anchorField = anchorFieldId ? (allFields.find(f => f.id === anchorFieldId) as any) : undefined;
+              const wantsAnchorTitle =
+                !!anchorField &&
+                isProgressive &&
+                addMode === 'auto' &&
+                ((ui?.expandGate || 'collapsedFieldsValid') as any) === 'collapsedFieldsValid';
+              const rowSource = parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]);
+              const lockAnchor = wantsAnchorTitle && rowSource === 'auto';
+
               const titleFieldId = (() => {
                 if (!isProgressive) return '';
+                if (wantsAnchorTitle) return anchorFieldId;
                 const unlabeled = (collapsedFieldConfigs || [])
                   .filter(cfg => cfg && cfg.showLabel === false)
                   .map(cfg => (cfg?.fieldId ? cfg.fieldId.toString() : ''))
@@ -689,6 +700,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                 ? shouldHideField(titleField.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
                 : true;
               const showTitleControl = !!titleField && !titleHidden;
+              const isAnchorTitle = wantsAnchorTitle && !!titleField && titleField.id === anchorFieldId;
+              const titleLocked = isAnchorTitle && lockAnchor;
 
               const fieldsToRender = showTitleControl
                 ? fieldsToRenderBase.filter((f: any) => f?.id !== titleFieldId)
@@ -868,6 +881,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     ? [...allowedField, choiceVal]
                                     : allowedField;
                                 const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language);
+                                const selectedOpt = optsField.find(opt => opt.value === choiceVal);
+                                const displayLabel = (selectedOpt?.label || choiceVal || '').toString();
                                 return (
                                   <div
                                     className={`field inline-field${titleField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
@@ -880,22 +895,25 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       {titleField.required && <RequiredStar />}
                                     </label>
                                     <div className="ck-control-row">
-                                      <select
-                                        value={choiceVal || ''}
-                                        onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
-                                      >
-                                        <option value="">Select…</option>
-                                        {optsField.map(opt => (
-                                          <option key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                          </option>
-                                        ))}
-                                      </select>
+                                      {titleLocked ? (
+                                        <div className="ck-row-title">{displayLabel || '—'}</div>
+                                      ) : (
+                                        <select
+                                          value={choiceVal || ''}
+                                          onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
+                                        >
+                                          <option value="">Select…</option>
+                                          {optsField.map(opt => (
+                                            <option key={opt.value} value={opt.value}>
+                                              {opt.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      )}
                                       {(() => {
-                                        const selected = optsField.find(opt => opt.value === choiceVal);
-                                        const tooltipNode = selected?.tooltip ? (
+                                        const tooltipNode = selectedOpt?.tooltip ? (
                                           <InfoTooltip
-                                            text={selected.tooltip}
+                                            text={selectedOpt.tooltip}
                                             label={resolveLocalizedString(
                                               titleField.dataSource?.tooltipLabel,
                                               language,
@@ -954,6 +972,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           <input
                                             type="checkbox"
                                             checked={selected.includes(opt.value)}
+                                            disabled={titleLocked}
                                             onChange={e => {
                                               const next = e.target.checked
                                                 ? [...selected, opt.value]
@@ -1002,7 +1021,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     }
                                     value={fieldValue}
                                     onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
-                                    readOnly={!!titleField.valueMap}
+                                    readOnly={!!titleField.valueMap || titleLocked}
+                                    disabled={titleLocked}
                                   />
                                   {subgroupTriggerNodes.length ? (
                                     <div className="ck-field-actions">{subgroupTriggerNodes}</div>

@@ -1017,6 +1017,7 @@ const FormView: React.FC<FormViewProps> = ({
     setValues(nextValues);
     setErrors(prev => {
       const next = { ...prev };
+      delete next[group.id];
       delete next[`${group.id}__${field.id}__${rowId}`];
       return next;
     });

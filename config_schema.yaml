@@ -352,6 +352,7 @@ components:
             Controls when the expand toggle is enabled.
             - collapsedFieldsValid: enabled only when collapsedFields are filled and pass configured validation/visibility rules
             - always: always enabled
+            When combined with `addMode: auto`, rows that are still gated/disabled are ignored during submit validation, and required LINE_ITEM_GROUP questions require at least one enabled+valid row.
         defaultCollapsed:
           type: boolean
           description: Default collapsed state for each row. When omitted and mode=progressive, defaults to true.
