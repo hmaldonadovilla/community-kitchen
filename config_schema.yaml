@@ -485,6 +485,42 @@ components:
               description: Informational flag to mark the field as system-managed/hidden in UI.
           description: Prefill a DATE field with today’s date (local time).
         - type: object
+          required: [op, dependsOn]
+          properties:
+            op:
+              type: string
+              enum: [copy]
+              description: Copy the value from another field (useful for numeric defaults).
+            dependsOn:
+              type: string
+              description: ID of the source field whose value should be copied into the target.
+            applyOn:
+              type: string
+              enum: [change, blur]
+              description: |
+                When to apply the derived value during editing.
+                - blur: default for copy (avoids mid-typing updates; applies when the user leaves the field)
+                - change: apply on every keystroke/change
+            when:
+              type: string
+              enum: [always, empty]
+              description: |
+                When to apply the derived value.
+                - empty: default for copy (behaves like a default; allows user overrides)
+                - always: keep the target in sync with the source field
+            copyMode:
+              type: string
+              enum: [replace, allowIncrease, allowDecrease]
+              description: |
+                Optional copy mode for numeric values (only applies when `when: "always"`):
+                - replace: direct copy (default)
+                - allowIncrease: user can increase above source, but never below it (clamps to source on blur)
+                - allowDecrease: user can decrease below source, but never above it (clamps to source on blur)
+            hidden:
+              type: boolean
+              description: Informational flag to mark the field as system-managed/hidden in UI.
+          description: Copy a field value from another field (typically for NUMBER defaults).
+        - type: object
           required: [op, thresholds]
           properties:
             op:
@@ -993,11 +1029,21 @@ components:
               type: boolean
               description: If true, target field must have a value when the condition matches.
             min:
-              type: number
+              oneOf:
+                - type: number
+                - type: string
               description: Enforce target numeric value >= min.
+            minFieldId:
+              type: string
+              description: Enforce target numeric value >= the numeric value of another field (skips if the referenced field is empty/non-numeric). If both `min` and `minFieldId` are set, `min` wins.
             max:
-              type: number
+              oneOf:
+                - type: number
+                - type: string
               description: Enforce target numeric value <= max.
+            maxFieldId:
+              type: string
+              description: Enforce target numeric value <= the numeric value of another field (skips if the referenced field is empty/non-numeric). If both `max` and `maxFieldId` are set, `max` wins.
             allowed:
               type: array
               items:

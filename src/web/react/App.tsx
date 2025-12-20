@@ -44,13 +44,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [values, setValues] = useState<Record<string, FieldValue>>(() => {
     const normalized = normalizeRecordValues(definition, record?.values);
     const initialLineItems = buildInitialLineItems(definition, record?.values);
-    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
     return mapped.values;
   });
   const [lineItems, setLineItems] = useState<LineItemState>(() => {
     const normalized = normalizeRecordValues(definition, record?.values);
     const initialLineItems = buildInitialLineItems(definition, record?.values);
-    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
     return mapped.lineItems;
   });
   const [view, setView] = useState<View>('list');
@@ -114,7 +114,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       if (!snapshot || !id) return;
       const normalized = normalizeRecordValues(definition, snapshot.values || {});
       const initialLineItems = buildInitialLineItems(definition, normalized);
-      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
       setValues(mapped.values);
       setLineItems(mapped.lineItems);
       setErrors({});
@@ -466,7 +466,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const handleSubmitAnother = useCallback(() => {
     const normalized = normalizeRecordValues(definition);
     const initialLineItems = buildInitialLineItems(definition);
-    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems);
+    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
     setValues(mapped.values);
     setLineItems(mapped.lineItems);
     setErrors({});
@@ -578,10 +578,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     });
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => {
     clearStatus();
     logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length });
-    const nextErrors = validateForm({ definition, language, values, lineItems });
+    const nextErrors = validateForm({
+      definition,
+      language,
+      values,
+      lineItems,
+      collapsedRows: submitUi?.collapsedRows,
+      collapsedSubgroups: submitUi?.collapsedSubgroups
+    });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       setStatus('Please fix validation errors.');
@@ -602,7 +609,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language,
         values,
         lineItems,
-        existingRecordId
+        existingRecordId,
+        collapsedRows: submitUi?.collapsedRows,
+        collapsedSubgroups: submitUi?.collapsedSubgroups
       });
       const payloadValues = (payload as any).values as Record<string, any> | undefined;
       if (payloadValues) {

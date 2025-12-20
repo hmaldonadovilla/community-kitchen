@@ -3,6 +3,12 @@ import { LineItemState } from '../types';
 import { resolveSubgroupKey } from './lineItems';
 import { isEmptyValue } from '../utils/values';
 
+export type ApplyValueMapsMode = 'change' | 'blur' | 'init' | 'submit';
+
+export type ApplyValueMapsOptions = {
+  mode?: ApplyValueMapsMode;
+};
+
 const derivedDebugEnabled = (): boolean => Boolean((globalThis as any)?.__WEB_FORM_DEBUG__);
 
 const derivedLog = (event: string, payload?: Record<string, unknown>) => {
@@ -85,9 +91,64 @@ const resolveDerivedWhen = (config: any): 'always' | 'empty' => {
   if (raw === 'empty') return 'empty';
   // Defaults:
   // - addDays: always (computed field)
-  // - today/timeOfDayMap: empty (prefill/default behavior)
+  // - today/timeOfDayMap/copy: empty (prefill/default behavior)
   const op = (config?.op || '').toString();
   return op === 'addDays' ? 'always' : 'empty';
+};
+
+const resolveDerivedApplyOn = (config: any): 'change' | 'blur' => {
+  const raw = (config?.applyOn || '').toString().trim().toLowerCase();
+  if (raw === 'change' || raw === 'blur') return raw;
+  // Defaults:
+  // - copy: blur (avoid mid-typing churn)
+  // - everything else: change
+  return (config?.op || '').toString() === 'copy' ? 'blur' : 'change';
+};
+
+const toFiniteNumber = (raw: unknown): number | null => {
+  if (raw === undefined || raw === null) return null;
+  const scalar = Array.isArray(raw)
+    ? raw.find(v => v !== undefined && v !== null && (typeof v !== 'string' || v.trim() !== '')) ?? raw[0]
+    : raw;
+  if (scalar === undefined || scalar === null) return null;
+  if (typeof scalar === 'boolean') return null;
+  if (scalar instanceof Date) return null;
+  if (typeof scalar === 'string') {
+    const s = scalar.trim();
+    if (!s) return null;
+    const normalized = s.includes(',') && !s.includes('.') ? s.replace(',', '.') : s;
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(scalar);
+  return Number.isFinite(n) ? n : null;
+};
+
+const resolveCopyMode = (config: any): 'replace' | 'allowIncrease' | 'allowDecrease' => {
+  const raw = (config?.copyMode || config?.mode || '').toString().trim();
+  const key = raw.toLowerCase();
+  if (key === 'allowincrease' || key === 'allow_increase' || key === 'increase' || key === 'min') return 'allowIncrease';
+  if (key === 'allowdecrease' || key === 'allow_decrease' || key === 'decrease' || key === 'max') return 'allowDecrease';
+  return 'replace';
+};
+
+const computeCopyValue = (args: { config: any; current: FieldValue; source: FieldValue }): FieldValue | undefined => {
+  const { config, current, source } = args;
+  const when = resolveDerivedWhen(config);
+  const currentEmpty = isEmptyValue(current);
+  if (when === 'empty' && !currentEmpty) return undefined;
+
+  const mode = resolveCopyMode(config);
+  if (when === 'always' && mode !== 'replace') {
+    const srcNum = toFiniteNumber(source);
+    if (srcNum === null) return source;
+    const curNum = toFiniteNumber(current);
+    if (curNum === null) return srcNum;
+    if (mode === 'allowIncrease') return Math.max(curNum, srcNum);
+    if (mode === 'allowDecrease') return Math.min(curNum, srcNum);
+  }
+
+  return source;
 };
 
 export const resolveValueMapValue = (valueMap: OptionFilter, getValue: (fieldId: string) => FieldValue): string => {
@@ -150,15 +211,22 @@ export const resolveDerivedValue = (config: any, getter: (fieldId: string) => Fi
     if (match) return match.value;
     return fallback ?? '';
   }
+  if (config.op === 'copy') {
+    const sourceId = config.dependsOn !== undefined && config.dependsOn !== null ? config.dependsOn.toString().trim() : '';
+    if (!sourceId) return undefined;
+    return getter(sourceId);
+  }
   return undefined;
 };
 
 export const applyValueMapsToLineRow = (
   fields: any[],
   rowValues: Record<string, FieldValue>,
-  topValues: Record<string, FieldValue>
+  topValues: Record<string, FieldValue>,
+  options?: ApplyValueMapsOptions
 ): Record<string, FieldValue> => {
   const nextValues = { ...rowValues };
+  const mode: ApplyValueMapsMode = options?.mode || 'change';
   fields
     .filter(field => field?.valueMap || field?.derivedValue)
     .forEach(field => {
@@ -171,7 +239,28 @@ export const applyValueMapsToLineRow = (
         nextValues[field.id] = computed;
       }
       if (field.derivedValue) {
+        const applyOn = resolveDerivedApplyOn(field.derivedValue);
+        if (mode === 'change' && applyOn === 'blur') return;
+
         const when = resolveDerivedWhen(field.derivedValue);
+        if (field.derivedValue?.op === 'copy') {
+          const sourceId = (field.derivedValue?.dependsOn || '').toString().trim();
+          if (!sourceId) return;
+          const source = Object.prototype.hasOwnProperty.call(rowValues, sourceId) ? nextValues[sourceId] : topValues[sourceId];
+          const derived = computeCopyValue({ config: field.derivedValue, current: nextValues[field.id], source });
+          if (derived !== undefined && derived !== nextValues[field.id]) {
+            nextValues[field.id] = derived;
+            derivedLog('line.set', {
+              fieldId: field.id,
+              op: 'copy',
+              when,
+              applyOn,
+              copyMode: resolveCopyMode(field.derivedValue)
+            });
+          }
+          return;
+        }
+
         if (when === 'empty' && !isEmptyValue(nextValues[field.id])) return;
         const derived = resolveDerivedValue(field.derivedValue, fid => {
           if (fid === undefined || fid === null) return undefined;
@@ -180,7 +269,7 @@ export const applyValueMapsToLineRow = (
         });
         if (derived !== undefined && derived !== nextValues[field.id]) {
           nextValues[field.id] = derived;
-          derivedLog('line.set', { fieldId: field.id, op: field.derivedValue?.op || null, when });
+          derivedLog('line.set', { fieldId: field.id, op: field.derivedValue?.op || null, when, applyOn });
         }
       }
     });
@@ -190,16 +279,33 @@ export const applyValueMapsToLineRow = (
 export const applyValueMapsToForm = (
   definition: WebFormDefinition,
   currentValues: Record<string, FieldValue>,
-  currentLineItems: LineItemState
+  currentLineItems: LineItemState,
+  options?: ApplyValueMapsOptions
 ): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
   let values = { ...currentValues };
   let lineItems = { ...currentLineItems };
+  const mode: ApplyValueMapsMode = options?.mode || 'change';
 
   definition.questions.forEach(q => {
     if ((q as any).valueMap) {
       values[q.id] = resolveValueMapValue((q as any).valueMap, fieldId => values[fieldId]);
     }
     if ((q as any).derivedValue) {
+      const applyOn = resolveDerivedApplyOn((q as any).derivedValue);
+      if (mode === 'change' && applyOn === 'blur') {
+        // skip blur-only derived values during typing
+      } else if ((q as any).derivedValue?.op === 'copy') {
+        const when = resolveDerivedWhen((q as any).derivedValue);
+        const sourceId = (((q as any).derivedValue?.dependsOn || '') as any).toString().trim();
+        if (sourceId) {
+          const source = values[sourceId];
+          const derived = computeCopyValue({ config: (q as any).derivedValue, current: values[q.id], source });
+          if (derived !== undefined && derived !== values[q.id]) {
+            values[q.id] = derived;
+            derivedLog('top.set', { fieldId: q.id, op: 'copy', when, applyOn, copyMode: resolveCopyMode((q as any).derivedValue) });
+          }
+        }
+      } else {
       const when = resolveDerivedWhen((q as any).derivedValue);
       if (when === 'empty' && !isEmptyValue(values[q.id])) {
         // allow user override / preserve stored values
@@ -207,15 +313,16 @@ export const applyValueMapsToForm = (
       const derived = resolveDerivedValue((q as any).derivedValue, fieldId => values[fieldId]);
         if (derived !== undefined && derived !== values[q.id]) {
           values[q.id] = derived;
-          derivedLog('top.set', { fieldId: q.id, op: (q as any).derivedValue?.op || null, when });
+          derivedLog('top.set', { fieldId: q.id, op: (q as any).derivedValue?.op || null, when, applyOn });
         }
+      }
       }
     }
     if (q.type === 'LINE_ITEM_GROUP' && q.lineItemConfig?.fields) {
       const rows = lineItems[q.id] || [];
       const updatedRows = rows.map(row => ({
         ...row,
-        values: applyValueMapsToLineRow(q.lineItemConfig!.fields, row.values, values)
+        values: applyValueMapsToLineRow(q.lineItemConfig!.fields, row.values, values, options)
       }));
       lineItems = { ...lineItems, [q.id]: updatedRows };
 
@@ -229,7 +336,7 @@ export const applyValueMapsToForm = (
             const subRows = lineItems[subgroupKey] || [];
             const updatedSubRows = subRows.map(subRow => ({
               ...subRow,
-              values: applyValueMapsToLineRow((sub as any).fields || [], subRow.values, { ...values, ...row.values })
+              values: applyValueMapsToLineRow((sub as any).fields || [], subRow.values, { ...values, ...row.values }, options)
             }));
             lineItems = { ...lineItems, [subgroupKey]: updatedSubRows };
           });

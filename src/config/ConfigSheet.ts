@@ -1427,6 +1427,27 @@ export class ConfigSheet {
       return cfg as DerivedValueConfig;
     }
 
+    if (op === 'copy') {
+      const dependsOn = raw.dependsOn ? raw.dependsOn.toString().trim() : '';
+      if (!dependsOn) return undefined;
+      const cfg: any = { op: 'copy', dependsOn };
+      const applyOnRaw = raw.applyOn !== undefined && raw.applyOn !== null ? raw.applyOn.toString().trim().toLowerCase() : '';
+      if (applyOnRaw === 'change' || applyOnRaw === 'blur') cfg.applyOn = applyOnRaw;
+      const copyModeRaw =
+        raw.copyMode !== undefined && raw.copyMode !== null
+          ? raw.copyMode.toString().trim()
+          : raw.mode !== undefined && raw.mode !== null
+            ? raw.mode.toString().trim()
+            : '';
+      const copyMode = copyModeRaw.toLowerCase();
+      if (copyMode === 'replace' || copyMode === 'allowincrease' || copyMode === 'allowdecrease') {
+        cfg.copyMode = copyMode === 'allowincrease' ? 'allowIncrease' : copyMode === 'allowdecrease' ? 'allowDecrease' : 'replace';
+      }
+      if (when) cfg.when = when;
+      if (hidden !== undefined) cfg.hidden = hidden;
+      return cfg as DerivedValueConfig;
+    }
+
     return undefined;
   }
 }

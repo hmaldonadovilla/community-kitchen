@@ -41,6 +41,7 @@ import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { resolveGroupSectionKey } from './form/grouping';
 import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSelectors';
+import { NumberStepper } from './form/NumberStepper';
 import { FORM_VIEW_STYLES } from './form/styles';
 import { applyValueMapsToForm, resolveValueMapValue } from './form/valueMaps';
 import {
@@ -120,7 +121,7 @@ interface FormViewProps {
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
   lineItems: LineItemState;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
-  onSubmit: () => Promise<void>;
+  onSubmit: (ctx: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => Promise<void>;
   onBack: () => void;
   submitting: boolean;
   errors: FormErrors;
@@ -188,6 +189,127 @@ const FormView: React.FC<FormViewProps> = ({
   const choiceVariantLogRef = useRef<Record<string, string>>({});
   const vvBottomRef = useRef<number>(-1);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const valuesRef = useRef(values);
+  const lineItemsRef = useRef(lineItems);
+
+  useEffect(() => {
+    valuesRef.current = values;
+    lineItemsRef.current = lineItems;
+  }, [values, lineItems]);
+
+  const hasCopyDerived = useMemo(() => {
+    const hasInFields = (fields: any[]): boolean =>
+      Array.isArray(fields) && fields.some(f => f && f.derivedValue && (f.derivedValue.op || '').toString() === 'copy');
+    return (definition.questions || []).some(q => {
+      if ((q as any).derivedValue && ((q as any).derivedValue.op || '').toString() === 'copy') return true;
+      if (q.type !== 'LINE_ITEM_GROUP') return false;
+      if (hasInFields(q.lineItemConfig?.fields || [])) return true;
+      const subs = q.lineItemConfig?.subGroups || [];
+      return subs.some(sub => hasInFields(((sub as any).fields || []) as any[]));
+    });
+  }, [definition.questions]);
+
+  const blurRecomputeTimerRef = useRef<number | null>(null);
+
+  const shallowEqualFieldValue = (a: FieldValue, b: FieldValue): boolean => {
+    if (a === b) return true;
+    if (Array.isArray(a) || Array.isArray(b)) {
+      const aa = Array.isArray(a) ? a : [a];
+      const bb = Array.isArray(b) ? b : [b];
+      if (aa.length !== bb.length) return false;
+      for (let i = 0; i < aa.length; i += 1) {
+        if ((aa[i] as any) !== (bb[i] as any)) return false;
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const diffValues = (a: Record<string, FieldValue>, b: Record<string, FieldValue>): string[] => {
+    const changed: string[] = [];
+    const keys = Array.from(new Set([...Object.keys(a || {}), ...Object.keys(b || {})]));
+    keys.forEach(k => {
+      if (!shallowEqualFieldValue((a as any)[k], (b as any)[k])) changed.push(k);
+    });
+    return changed;
+  };
+
+  const lineItemsEqual = (a: LineItemState, b: LineItemState): boolean => {
+    if (a === b) return true;
+    const keys = Array.from(new Set([...Object.keys(a || {}), ...Object.keys(b || {})]));
+    for (const key of keys) {
+      const ra = (a as any)[key] || [];
+      const rb = (b as any)[key] || [];
+      if (ra.length !== rb.length) return false;
+      for (let i = 0; i < ra.length; i += 1) {
+        const rowA = ra[i];
+        const rowB = rb[i];
+        if (!rowA || !rowB) return false;
+        if (rowA.id !== rowB.id) return false;
+        const va = rowA.values || {};
+        const vb = rowB.values || {};
+        const vKeys = Array.from(new Set([...Object.keys(va), ...Object.keys(vb)]));
+        for (const fid of vKeys) {
+          if (!shallowEqualFieldValue((va as any)[fid], (vb as any)[fid])) return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  const recomputeDerivedOnBlur = useCallback(
+    (meta?: { fieldPath?: string; tag?: string }) => {
+      if (!hasCopyDerived) return;
+      const currentValues = valuesRef.current;
+      const currentLineItems = lineItemsRef.current;
+      const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(definition, currentValues, currentLineItems, {
+        mode: 'blur'
+      });
+
+      const changedFields = diffValues(currentValues, nextValues);
+      const lineChanged = !lineItemsEqual(currentLineItems, nextLineItems);
+      if (!changedFields.length && !lineChanged) return;
+
+      if (changedFields.length) setValues(nextValues);
+      if (lineChanged) setLineItems(nextLineItems);
+      onDiagnostic?.('derived.blur.apply', {
+        fieldPath: meta?.fieldPath,
+        tag: meta?.tag,
+        changedCount: changedFields.length,
+        changedFields: changedFields.slice(0, 12),
+        lineItemsChanged: lineChanged
+      });
+    },
+    [definition, hasCopyDerived, onDiagnostic, setLineItems, setValues]
+  );
+
+  useEffect(() => {
+    if (!hasCopyDerived) return;
+    const handler = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const tag = target.tagName ? target.tagName.toLowerCase() : '';
+      if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
+      const root = target.closest('.form-card') || target.closest('.webform-overlay');
+      if (!root) return;
+      const fieldPath = (target.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
+      if (blurRecomputeTimerRef.current !== null) {
+        window.clearTimeout(blurRecomputeTimerRef.current);
+      }
+      blurRecomputeTimerRef.current = window.setTimeout(() => {
+        blurRecomputeTimerRef.current = null;
+        recomputeDerivedOnBlur({ fieldPath, tag });
+      }, 0);
+    };
+    document.addEventListener('focusout', handler, true);
+    return () => {
+      document.removeEventListener('focusout', handler, true);
+      if (blurRecomputeTimerRef.current !== null) {
+        window.clearTimeout(blurRecomputeTimerRef.current);
+        blurRecomputeTimerRef.current = null;
+      }
+    };
+  }, [hasCopyDerived, recomputeDerivedOnBlur]);
 
   const groupSections = useMemo(() => {
     type GroupSection = {
@@ -919,7 +1041,9 @@ const FormView: React.FC<FormViewProps> = ({
       };
       const nextWithRow = { ...prev, [groupId]: [...current, row] };
       const nextLineItems = groupDef ? seedSubgroupDefaults(nextWithRow, groupDef, row.id) : nextWithRow;
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems);
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+        mode: 'init'
+      });
       setValues(nextValues);
       return recomputed;
     });
@@ -962,7 +1086,9 @@ const FormView: React.FC<FormViewProps> = ({
           return nextSel;
         });
       }
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems);
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+        mode: 'init'
+      });
       setValues(nextValues);
       return recomputed;
     });
@@ -985,7 +1111,9 @@ const FormView: React.FC<FormViewProps> = ({
   const handleFieldChange = (q: WebQuestionDefinition, value: FieldValue) => {
     if (onStatusClear) onStatusClear();
     const baseValues = { ...values, [q.id]: value };
-    const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(definition, baseValues, lineItems);
+    const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(definition, baseValues, lineItems, {
+      mode: 'change'
+    });
     setValues(nextValues);
     if (nextLineItems !== lineItems) {
       setLineItems(nextLineItems);
@@ -1009,11 +1137,9 @@ const FormView: React.FC<FormViewProps> = ({
       row.id === rowId ? { ...row, values: nextRowValues } : row
     );
     let updatedLineItems: LineItemState = { ...lineItems, [group.id]: nextRows };
-    const { values: nextValues, lineItems: finalLineItems } = applyValueMapsToForm(
-      definition,
-      values,
-      updatedLineItems
-    );
+    const { values: nextValues, lineItems: finalLineItems } = applyValueMapsToForm(definition, values, updatedLineItems, {
+      mode: 'change'
+    });
     setLineItems(finalLineItems);
     setValues(nextValues);
     setErrors(prev => {
@@ -1231,6 +1357,31 @@ const FormView: React.FC<FormViewProps> = ({
         const mappedValue = q.valueMap ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId]) : undefined;
         const inputValueRaw = q.valueMap ? (mappedValue || '') : ((values[q.id] as string) || '');
         const inputValue = q.type === 'DATE' ? toDateInputValue(inputValueRaw) : inputValueRaw;
+        if (q.type === 'NUMBER') {
+          const numberText =
+            inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString();
+          return (
+            <div
+              key={q.id}
+              className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+              data-field-path={q.id}
+              data-has-error={errors[q.id] ? 'true' : undefined}
+            >
+              <label>
+                {resolveFieldLabel(q, language, q.id)}
+                {(q as any).required && <RequiredStar />}
+              </label>
+              <NumberStepper
+                value={numberText}
+                disabled={submitting}
+                readOnly={!!q.valueMap}
+                ariaLabel={resolveFieldLabel(q, language, q.id)}
+                onChange={next => handleFieldChange(q, next)}
+              />
+              {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+            </div>
+          );
+        }
         return (
           <div
             key={q.id}
@@ -1389,42 +1540,42 @@ const FormView: React.FC<FormViewProps> = ({
               {q.required && <RequiredStar />}
             </label>
             <div className="ck-upload-row">
-              <div
-                role="button"
-                tabIndex={0}
+            <div
+              role="button"
+              tabIndex={0}
                 aria-disabled={maxed || submitting}
                 className="ck-upload-dropzone"
-                onClick={() => {
+              onClick={() => {
                   if (maxed || submitting) return;
+                fileInputsRef.current[q.id]?.click();
+              }}
+              onKeyDown={e => {
+                  if (maxed || submitting) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
                   fileInputsRef.current[q.id]?.click();
-                }}
-                onKeyDown={e => {
-                  if (maxed || submitting) return;
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    fileInputsRef.current[q.id]?.click();
-                  }
-                }}
-                onDragEnter={e => {
-                  e.preventDefault();
+                }
+              }}
+              onDragEnter={e => {
+                e.preventDefault();
                   if (submitting) return;
-                  incrementDrag(q.id);
-                }}
-                onDragOver={e => e.preventDefault()}
-                onDragLeave={e => {
-                  e.preventDefault();
+                incrementDrag(q.id);
+              }}
+              onDragOver={e => e.preventDefault()}
+              onDragLeave={e => {
+                e.preventDefault();
                   if (submitting) return;
-                  decrementDrag(q.id);
-                }}
-                onDrop={e => handleFileDrop(q, e)}
-                style={{
-                  border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
-                  borderRadius: 12,
+                decrementDrag(q.id);
+              }}
+              onDrop={e => handleFileDrop(q, e)}
+              style={{
+                border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
+                borderRadius: 12,
                   padding: '10px 12px',
                   background: dragActive ? '#e0f2fe' : maxed || submitting ? '#f1f5f9' : '#f8fafc',
-                  color: '#0f172a',
+                color: '#0f172a',
                   cursor: maxed || submitting ? 'not-allowed' : 'pointer',
-                  transition: 'border-color 120ms ease, background 120ms ease',
+                transition: 'border-color 120ms ease, background 120ms ease',
                   boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none',
                   flex: 1,
                   minWidth: 0,
@@ -1458,7 +1609,7 @@ const FormView: React.FC<FormViewProps> = ({
               >
                 Files{items.length ? ` (${items.length})` : ''}
               </button>
-            </div>
+              </div>
             {remainingSlots ? <div className="muted">{remainingSlots}</div> : null}
             <div style={srOnly} aria-live="polite">
               {uploadAnnouncements[q.id] || ''}
@@ -1478,7 +1629,7 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       case 'LINE_ITEM_GROUP': {
-        return (
+            return (
           <LineItemGroupQuestion
             key={q.id}
             q={q}
@@ -1552,7 +1703,7 @@ const FormView: React.FC<FormViewProps> = ({
     });
     if (!pendingDefaults.length) return;
     const applied: typeof pendingDefaults = [];
-    setValues(prev => {
+                  setValues(prev => {
       let changed = false;
       const next = { ...prev };
       pendingDefaults.forEach(({ question, value }) => {
@@ -1597,22 +1748,22 @@ const FormView: React.FC<FormViewProps> = ({
           (group.lineItemConfig?.fields || [])
             .filter(field => field.type === 'CHOICE')
             .forEach(field => {
-              const optionSetField: OptionSet =
+                    const optionSetField: OptionSet =
                 optionState[optionKey(field.id, group.id)] || {
-                  en: field.options || [],
-                  fr: (field as any).optionsFr || [],
-                  nl: (field as any).optionsNl || []
-                };
-              const dependencyIds = (
-                Array.isArray(field.optionFilter?.dependsOn)
-                  ? field.optionFilter?.dependsOn
-                  : [field.optionFilter?.dependsOn || '']
-              ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-              const allowedField = computeAllowedOptions(
-                field.optionFilter,
-                optionSetField,
-                dependencyIds.map(dep => toDependencyValue(row.values[dep] ?? values[dep]))
-              );
+                        en: field.options || [],
+                        fr: (field as any).optionsFr || [],
+                        nl: (field as any).optionsNl || []
+                      };
+                    const dependencyIds = (
+                      Array.isArray(field.optionFilter?.dependsOn)
+                        ? field.optionFilter?.dependsOn
+                        : [field.optionFilter?.dependsOn || '']
+                    ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
+                    const allowedField = computeAllowedOptions(
+                      field.optionFilter,
+                      optionSetField,
+                      dependencyIds.map(dep => toDependencyValue(row.values[dep] ?? values[dep]))
+                    );
               const optsField = buildLocalizedOptions(optionSetField, allowedField, language);
               const currentValue = row.values[field.id];
               if (optsField.length === 1 && isEmptyValue(currentValue) && currentValue !== optsField[0].value) {
@@ -1805,21 +1956,21 @@ const FormView: React.FC<FormViewProps> = ({
 
     const rows = lineItems[subKey] || [];
     const orderedRows = [...rows].sort((a, b) => {
-      const aAuto = !!a.autoGenerated;
-      const bAuto = !!b.autoGenerated;
-      if (aAuto === bAuto) return 0;
-      return aAuto ? -1 : 1;
-    });
+                      const aAuto = !!a.autoGenerated;
+                      const bAuto = !!b.autoGenerated;
+                      if (aAuto === bAuto) return 0;
+                      return aAuto ? -1 : 1;
+                    });
 
     const totalsCfg = subConfig ? { ...subConfig, fields: subConfig.fields || [] } : undefined;
     const totals = totalsCfg ? computeTotals({ config: totalsCfg as any, rows: orderedRows }, language) : [];
 
     const subSelectorCfg = subConfig?.sectionSelector;
-    const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
-    const subSelectorOptions = subSelectorOptionSet
-      ? buildLocalizedOptions(subSelectorOptionSet, subSelectorOptionSet.en || [], language)
-      : [];
-    const subSelectorValue = subgroupSelectors[subKey] || '';
+                    const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
+                    const subSelectorOptions = subSelectorOptionSet
+                      ? buildLocalizedOptions(subSelectorOptionSet, subSelectorOptionSet.en || [], language)
+                      : [];
+                    const subSelectorValue = subgroupSelectors[subKey] || '';
 
     const renderAddButton = () => {
       if (!subConfig) {
@@ -1831,64 +1982,64 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       if (subConfig.addMode === 'overlay' && subConfig.anchorFieldId) {
-        return (
-          <button
-            type="button"
+                        return (
+                          <button
+                            type="button"
             style={buttonStyles.secondary}
-            onClick={async () => {
+                            onClick={async () => {
               const anchorField = (subConfig.fields || []).find(f => f.id === subConfig.anchorFieldId);
-              if (!anchorField || anchorField.type !== 'CHOICE') {
+                              if (!anchorField || anchorField.type !== 'CHOICE') {
                 addLineItemRowManual(subKey);
-                return;
-              }
-              const key = optionKey(anchorField.id, subKey);
-              let opts = optionState[key];
-              if (!opts && anchorField.dataSource) {
-                const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
-                if (loaded) {
-                  opts = loaded;
-                  setOptionState(prev => ({ ...prev, [key]: loaded }));
-                }
-              }
-              if (!opts) {
-                opts = {
-                  en: anchorField.options || [],
-                  fr: (anchorField as any).optionsFr || [],
-                  nl: (anchorField as any).optionsNl || []
-                };
-              }
-              const dependencyIds = (
-                Array.isArray(anchorField.optionFilter?.dependsOn)
-                  ? anchorField.optionFilter?.dependsOn
-                  : [anchorField.optionFilter?.dependsOn || '']
-              ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
+                                return;
+                              }
+                              const key = optionKey(anchorField.id, subKey);
+                              let opts = optionState[key];
+                              if (!opts && anchorField.dataSource) {
+                                const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                                if (loaded) {
+                                  opts = loaded;
+                                  setOptionState(prev => ({ ...prev, [key]: loaded }));
+                                }
+                              }
+                              if (!opts) {
+                                opts = {
+                                  en: anchorField.options || [],
+                                  fr: (anchorField as any).optionsFr || [],
+                                  nl: (anchorField as any).optionsNl || []
+                                };
+                              }
+                              const dependencyIds = (
+                                Array.isArray(anchorField.optionFilter?.dependsOn)
+                                  ? anchorField.optionFilter?.dependsOn
+                                  : [anchorField.optionFilter?.dependsOn || '']
+                              ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
               const depVals = dependencyIds.map(dep => toDependencyValue(parentRowValues[dep] ?? values[dep] ?? subSelectorValue));
-              const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-              const localized = buildLocalizedOptions(opts, allowed, language);
-              const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
-              setOverlay({
-                open: true,
-                options: localized
-                  .filter(opt => deduped.includes(opt.value))
-                  .map(opt => ({ value: opt.value, label: opt.label })),
-                groupId: subKey,
-                anchorFieldId: anchorField.id,
-                selected: []
-              });
-            }}
-          >
+                              const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
+                              const localized = buildLocalizedOptions(opts, allowed, language);
+                              const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
+                              setOverlay({
+                                open: true,
+                                options: localized
+                                  .filter(opt => deduped.includes(opt.value))
+                                  .map(opt => ({ value: opt.value, label: opt.label })),
+                                groupId: subKey,
+                                anchorFieldId: anchorField.id,
+                                selected: []
+                              });
+                            }}
+                          >
             <PlusIcon />
             {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add lines')}
-          </button>
-        );
-      }
-      return (
+                          </button>
+                        );
+                      }
+                      return (
         <button type="button" onClick={() => addLineItemRowManual(subKey)} style={buttonStyles.secondary}>
           <PlusIcon />
           {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line')}
-        </button>
-      );
-    };
+                        </button>
+                      );
+                    };
 
     const subGroupDef: WebQuestionDefinition | null =
       parentGroup && subConfig
@@ -1936,7 +2087,7 @@ const FormView: React.FC<FormViewProps> = ({
                 {parentLabel}
                 {parentRowIdx >= 0 ? ` · Row ${parentRowIdx + 1}` : parsed?.parentRowId ? ` · ${parsed.parentRowId}` : ''}
                 {` · ${orderedRows.length} item${orderedRows.length === 1 ? '' : 's'}`}
-              </div>
+                          </div>
             </div>
             <div style={{ justifySelf: 'end' }}>
               <button type="button" onClick={closeSubgroupOverlay} style={buttonStyles.secondary}>
@@ -1957,33 +2108,33 @@ const FormView: React.FC<FormViewProps> = ({
             >
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 {subSelectorCfg && subSelectorOptions.length ? (
-                  <div
-                    className="section-selector"
-                    data-field-path={subSelectorCfg.id}
+                                <div
+                                  className="section-selector"
+                                  data-field-path={subSelectorCfg.id}
                     style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}
-                  >
+                                >
                     <label style={{ fontWeight: 700 }}>{resolveSelectorLabel(subSelectorCfg, language)}</label>
-                    <select
-                      value={subSelectorValue}
-                      onChange={e => {
-                        const nextValue = e.target.value;
-                        setSubgroupSelectors(prev => {
-                          if (prev[subKey] === nextValue) return prev;
-                          return { ...prev, [subKey]: nextValue };
-                        });
-                      }}
-                    >
-                      <option value="">Select…</option>
-                      {subSelectorOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                                  <select
+                                    value={subSelectorValue}
+                                    onChange={e => {
+                                      const nextValue = e.target.value;
+                                      setSubgroupSelectors(prev => {
+                                        if (prev[subKey] === nextValue) return prev;
+                                        return { ...prev, [subKey]: nextValue };
+                                      });
+                                    }}
+                                  >
+                                    <option value="">Select…</option>
+                                    {subSelectorOptions.map(opt => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
                 ) : null}
                 {renderAddButton()}
-              </div>
+                            </div>
               {totals.length ? (
                 <div className="line-item-totals" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {totals.map(t => (
@@ -1991,11 +2142,11 @@ const FormView: React.FC<FormViewProps> = ({
                       {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
                     </span>
                   ))}
-                </div>
+                            </div>
               ) : null}
-            </div>
+                          </div>
           </fieldset>
-        </div>
+                        </div>
         <fieldset
           disabled={submitting}
           style={{
@@ -2066,23 +2217,23 @@ const FormView: React.FC<FormViewProps> = ({
                 return rawVal === undefined || rawVal === null ? '' : rawVal.toString();
               })();
 
-              const subCtx: VisibilityContext = {
-                getValue: fid => values[fid],
-                getLineValue: (_rowId, fid) => subRow.values[fid]
-              };
-  return (
-                <div
-                  key={subRow.id}
-                  className="line-item-row"
+                          const subCtx: VisibilityContext = {
+                            getValue: fid => values[fid],
+                            getLineValue: (_rowId, fid) => subRow.values[fid]
+                          };
+                          return (
+                            <div
+                              key={subRow.id}
+                              className="line-item-row"
                   data-row-anchor={`${subKey}__${subRow.id}`}
-                  style={{
+                              style={{
                     background: subIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                    padding: 12,
-                    borderRadius: 10,
-                    border: '1px solid #e5e7eb',
-                    marginBottom: 10
-                  }}
-                >
+                                padding: 12,
+                                borderRadius: 10,
+                                border: '1px solid #e5e7eb',
+                                marginBottom: 10
+                              }}
+                            >
                   {showAnchorTitle ? (
                     <div style={{ marginBottom: rowDisclaimerText ? 6 : 10 }}>
                       <div className="ck-row-title">{anchorTitleLabel || '—'}</div>
@@ -2094,70 +2245,70 @@ const FormView: React.FC<FormViewProps> = ({
                     </div>
                   ) : null}
                   {!isAutoRow && !rowDisclaimerText && (
-                    <div style={{ marginBottom: 8 }}>
-                      <span className="pill" style={{ background: '#eef2ff', color: '#312e81' }}>
+                                <div style={{ marginBottom: 8 }}>
+                                  <span className="pill" style={{ background: '#eef2ff', color: '#312e81' }}>
                         {resolveLocalizedString({ en: 'Manual', fr: 'Manuel', nl: 'Handmatig' }, language, 'Manual')}
-                      </span>
-                    </div>
-                  )}
+                                  </span>
+                                </div>
+                              )}
                   {(() => {
                     const renderSubField = (field: any) => {
-                      ensureLineOptions(subKey, field);
-                      const optionSetField: OptionSet =
-                        optionState[optionKey(field.id, subKey)] || {
-                          en: field.options || [],
-                          fr: (field as any).optionsFr || [],
-                          nl: (field as any).optionsNl || []
-                        };
-                      const dependencyIds = (
-                        Array.isArray(field.optionFilter?.dependsOn)
-                          ? field.optionFilter?.dependsOn
-                          : [field.optionFilter?.dependsOn || '']
+                                ensureLineOptions(subKey, field);
+                                const optionSetField: OptionSet =
+                                  optionState[optionKey(field.id, subKey)] || {
+                                    en: field.options || [],
+                                    fr: (field as any).optionsFr || [],
+                                    nl: (field as any).optionsNl || []
+                                  };
+                                const dependencyIds = (
+                                  Array.isArray(field.optionFilter?.dependsOn)
+                                    ? field.optionFilter?.dependsOn
+                                    : [field.optionFilter?.dependsOn || '']
                       ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
-                      const allowedField = computeAllowedOptions(
-                        field.optionFilter,
-                        optionSetField,
+                                const allowedField = computeAllowedOptions(
+                                  field.optionFilter,
+                                  optionSetField,
                         dependencyIds.map((dep: string) => {
-                          const selectorFallback =
-                            subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
+                                    const selectorFallback =
+                                      subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
                           return toDependencyValue(subRow.values[dep] ?? values[dep] ?? parentRowValues[dep] ?? selectorFallback);
-                        })
-                      );
-                      const currentVal = subRow.values[field.id];
-                      const allowedWithCurrent =
-                        currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
-                          ? [...allowedField, currentVal]
-                          : allowedField;
+                                  })
+                                );
+                                const currentVal = subRow.values[field.id];
+                                const allowedWithCurrent =
+                                  currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
+                                    ? [...allowedField, currentVal]
+                                    : allowedField;
                       const selectedSub = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : null;
-                      const allowedWithSelection =
-                        selectedSub && selectedSub.length
-                          ? selectedSub.reduce((acc, val) => {
-                              if (val && !acc.includes(val)) acc.push(val);
-                              return acc;
-                            }, [...allowedWithCurrent])
-                          : allowedWithCurrent;
-                      const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language);
+                                const allowedWithSelection =
+                                  selectedSub && selectedSub.length
+                                    ? selectedSub.reduce((acc, val) => {
+                                        if (val && !acc.includes(val)) acc.push(val);
+                                        return acc;
+                                      }, [...allowedWithCurrent])
+                                    : allowedWithCurrent;
+                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language);
                       const hideField = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
-                      if (hideField) return null;
+                                if (hideField) return null;
                       const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
                       const forceStackedSubFieldLabel = (field as any)?.ui?.labelLayout === 'stacked';
 
-                      switch (field.type) {
-                        case 'CHOICE': {
-                          const rawVal = subRow.values[field.id];
-                          const choiceVal =
-                            Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                          return (
+                                switch (field.type) {
+                                  case 'CHOICE': {
+                                    const rawVal = subRow.values[field.id];
+                                    const choiceVal =
+                                      Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                                    return (
                             <div
                               key={field.id}
                               className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                             >
-                              <label>
-                                {resolveFieldLabel(field, language, field.id)}
-                                {field.required && <RequiredStar />}
-                              </label>
+                                        <label>
+                                          {resolveFieldLabel(field, language, field.id)}
+                                          {field.required && <RequiredStar />}
+                                        </label>
                               {renderChoiceControl({
                                 fieldPath,
                                 value: choiceVal || '',
@@ -2166,35 +2317,35 @@ const FormView: React.FC<FormViewProps> = ({
                                 override: (field as any)?.ui?.control,
                                 onChange: next => handleLineFieldChange(subGroupDef, subRow.id, field, next)
                               })}
-                              {(() => {
-                                const selected = optsField.find(opt => opt.value === choiceVal);
-                                if (!selected?.tooltip) return null;
-                                const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                                        {(() => {
+                                          const selected = optsField.find(opt => opt.value === choiceVal);
+                                          if (!selected?.tooltip) return null;
+                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
                                 const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
                                 return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
-                              })()}
+                                        })()}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                            </div>
-                          );
-                        }
-                        case 'CHECKBOX': {
+                                      </div>
+                                    );
+                                  }
+                                  case 'CHECKBOX': {
                           const hasAnyOption =
                             !!((optionSetField.en && optionSetField.en.length) ||
                               ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
                               ((optionSetField as any).nl && (optionSetField as any).nl.length));
                           const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
-                          const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
-                          return (
+                                    const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
+                                    return (
                             <div
                               key={field.id}
                               className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                             >
-                              <label>
-                                {resolveFieldLabel(field, language, field.id)}
-                                {field.required && <RequiredStar />}
-                              </label>
+                                        <label>
+                                          {resolveFieldLabel(field, language, field.id)}
+                                          {field.required && <RequiredStar />}
+                                        </label>
                               {isConsentCheckbox ? (
                                 <div className="ck-choice-control ck-consent-control">
                                   <label className="ck-consent">
@@ -2206,42 +2357,42 @@ const FormView: React.FC<FormViewProps> = ({
                                   </label>
                                 </div>
                               ) : (
-                                <div className="inline-options">
-                                  {optsField.map(opt => (
-                                    <label key={opt.value} className="inline">
-                                      <input
-                                        type="checkbox"
-                                        checked={selected.includes(opt.value)}
-                                        onChange={e => {
+                                        <div className="inline-options">
+                                          {optsField.map(opt => (
+                                            <label key={opt.value} className="inline">
+                                              <input
+                                                type="checkbox"
+                                                checked={selected.includes(opt.value)}
+                                                onChange={e => {
                                           const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
                                           handleLineFieldChange(subGroupDef, subRow.id, field, next);
-                                        }}
-                                      />
-                                      <span>{opt.label}</span>
-                                    </label>
-                                  ))}
-                                </div>
+                                                }}
+                                              />
+                                              <span>{opt.label}</span>
+                                            </label>
+                                          ))}
+                                        </div>
                               )}
-                              {(() => {
-                                const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
-                                if (!withTooltips.length) return null;
-                                const fallbackLabel = resolveFieldLabel(field, language, field.id);
+                                        {(() => {
+                                          const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
+                                          if (!withTooltips.length) return null;
+                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
                                 const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
-                                return (
-                                  <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {withTooltips.map(opt => (
+                                          return (
+                                            <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                              {withTooltips.map(opt => (
                                       <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                         {opt.label}{' '}
                                         <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
-                                      </span>
-                                    ))}
-                                  </div>
-                                );
-                              })()}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                            </div>
-                          );
-                        }
+                                      </div>
+                                    );
+                                  }
                         case 'FILE_UPLOAD': {
                           const items = toUploadItems(subRow.values[field.id] as any);
                           const uploadConfig = (field as any).uploadConfig || {};
@@ -2251,17 +2402,17 @@ const FormView: React.FC<FormViewProps> = ({
                           const acceptAttr = allowedDisplay.length ? allowedDisplay.join(',') : undefined;
                           const maxed = uploadConfig.maxFiles ? items.length >= uploadConfig.maxFiles : false;
                           const dragActive = !!dragState[fieldPath];
-                          return (
+                                    return (
                             <div
                               key={field.id}
                               className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                             >
-                              <label>
-                                {resolveFieldLabel(field, language, field.id)}
-                                {field.required && <RequiredStar />}
-                              </label>
+                                        <label>
+                                          {resolveFieldLabel(field, language, field.id)}
+                                          {field.required && <RequiredStar />}
+                                        </label>
                               <div className="ck-upload-row">
                                 <div
                                   role="button"
@@ -2293,7 +2444,7 @@ const FormView: React.FC<FormViewProps> = ({
                                   onDrop={e =>
                                     handleLineFileDrop({ group: subGroupDef, rowId: subRow.id, field, fieldPath, event: e })
                                   }
-                                  style={{
+                              style={{
                                     border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
                                     borderRadius: 12,
                                     padding: '10px 12px',
@@ -2302,7 +2453,7 @@ const FormView: React.FC<FormViewProps> = ({
                                     cursor: maxed || submitting ? 'not-allowed' : 'pointer',
                                     transition: 'border-color 120ms ease, background 120ms ease',
                                     boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none',
-                                    flex: 1,
+                                flex: 1,
                                     minWidth: 0,
                                     minHeight: 'var(--control-height)',
                                     display: 'flex',
@@ -2319,8 +2470,8 @@ const FormView: React.FC<FormViewProps> = ({
                                       : maxed
                                         ? 'Maximum files selected'
                                         : 'Click to browse'}
-                                  </span>
-                                </div>
+                                      </span>
+                                  </div>
                                 <button
                                   type="button"
                                   className="ck-upload-files-btn"
@@ -2342,7 +2493,7 @@ const FormView: React.FC<FormViewProps> = ({
                               </div>
                               <div style={srOnly} aria-live="polite">
                                 {uploadAnnouncements[fieldPath] || ''}
-                              </div>
+                            </div>
                               <input
                                 ref={el => {
                                   fileInputsRef.current[fieldPath] = el;
@@ -2362,8 +2513,8 @@ const FormView: React.FC<FormViewProps> = ({
                                 }
                               />
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                            </div>
-                          );
+                      </div>
+                    );
                         }
                         default: {
                           const mapped = field.valueMap
@@ -2387,7 +2538,7 @@ const FormView: React.FC<FormViewProps> = ({
                               <label>
                                 {resolveFieldLabel(field, language, field.id)}
                                 {field.required && <RequiredStar />}
-                              </label>
+                    </label>
                               <input
                                 type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
                                 value={fieldValue}
@@ -2395,9 +2546,9 @@ const FormView: React.FC<FormViewProps> = ({
                                 readOnly={!!field.valueMap}
                               />
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                            </div>
-                          );
-                        }
+          </div>
+        );
+      }
                       }
                     };
 
@@ -2679,8 +2830,8 @@ const FormView: React.FC<FormViewProps> = ({
                   <div className="ck-group-header">
                     <div className="ck-group-title">{section.title}</div>
                     {section.collapsible ? (
-                      <button
-                        type="button"
+        <button
+          type="button"
                         className={`ck-progress-pill ${requiredProgressClass}`}
                         onClick={() => toggleGroupCollapsed(section.key)}
                         aria-expanded={!isCollapsed}
@@ -2691,9 +2842,9 @@ const FormView: React.FC<FormViewProps> = ({
                           {requiredProgress.numerator}/{requiredProgress.totalRequired}
                         </span>
                         <span className="ck-progress-caret">{isCollapsed ? '▸' : '▾'}</span>
-                      </button>
+        </button>
                     ) : null}
-                  </div>
+      </div>
                 ) : null}
 
                 {!isCollapsed && (
@@ -2734,28 +2885,28 @@ const FormView: React.FC<FormViewProps> = ({
             gap: 12
           }}
         >
-          <button
-            type="button"
+              <button
+                type="button"
             onClick={onBack}
             disabled={submitting}
             style={withDisabled(buttonStyles.secondary, submitting)}
-          >
+              >
           Back
-        </button>
-        <button
-          type="button"
-            onClick={() => {
+              </button>
+              <button
+                type="button"
+                onClick={() => {
               errorNavRequestRef.current += 1;
               onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current });
-              onSubmit();
+              void onSubmit({ collapsedRows, collapsedSubgroups });
             }}
           disabled={submitting}
           style={withDisabled(buttonStyles.primary, submitting)}
         >
           {submitting ? 'Submitting…' : 'Submit'}
-        </button>
-        </div>
-      </div>
+              </button>
+            </div>
+          </div>
       <LineSelectOverlay
         overlay={overlay}
         setOverlay={setOverlay}

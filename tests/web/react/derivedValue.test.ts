@@ -106,6 +106,84 @@ describe('derivedValue', () => {
     const { values } = applyValueMapsToForm(definition, { BASE: '2025-01-01', EXP: '2025-01-10' } as any, {} as any);
     expect(values.EXP).toBe('2025-01-03');
   });
+
+  it('copy prefills from dependsOn when empty (default when=empty)', () => {
+    const definition: any = {
+      questions: [
+        { id: 'A', type: 'NUMBER' },
+        { id: 'B', type: 'NUMBER', derivedValue: { op: 'copy', dependsOn: 'A' } }
+      ]
+    };
+
+    const { values } = applyValueMapsToForm(definition, { A: 20, B: '' } as any, {} as any, { mode: 'blur' });
+    expect(values.B).toBe(20);
+  });
+
+  it('copy does not override a non-empty value by default', () => {
+    const definition: any = {
+      questions: [
+        { id: 'A', type: 'NUMBER' },
+        { id: 'B', type: 'NUMBER', derivedValue: { op: 'copy', dependsOn: 'A' } }
+      ]
+    };
+
+    const { values } = applyValueMapsToForm(definition, { A: 20, B: 25 } as any, {} as any, { mode: 'blur' });
+    expect(values.B).toBe(25);
+  });
+
+  it('copy does not apply during mode=change when applyOn=blur (prevents mid-typing updates)', () => {
+    const definition: any = {
+      questions: [
+        { id: 'QTY', type: 'NUMBER' },
+        { id: 'ACTUAL', type: 'NUMBER', derivedValue: { op: 'copy', dependsOn: 'QTY', applyOn: 'blur' } }
+      ]
+    };
+
+    const { values } = applyValueMapsToForm(definition, { QTY: 2, ACTUAL: '' } as any, {} as any, { mode: 'change' });
+    expect(values.ACTUAL).toBe('');
+  });
+
+  it('copy overrides when when=always', () => {
+    const definition: any = {
+      questions: [
+        { id: 'A', type: 'NUMBER' },
+        { id: 'B', type: 'NUMBER', derivedValue: { op: 'copy', dependsOn: 'A', when: 'always' } }
+      ]
+    };
+
+    const { values } = applyValueMapsToForm(definition, { A: 20, B: 25 } as any, {} as any, { mode: 'blur' });
+    expect(values.B).toBe(20);
+  });
+
+  it('copyMode=allowIncrease clamps numeric values to never go below the source (when=always)', () => {
+    const definition: any = {
+      questions: [
+        { id: 'QTY', type: 'NUMBER' },
+        { id: 'ACTUAL', type: 'NUMBER', derivedValue: { op: 'copy', dependsOn: 'QTY', when: 'always', copyMode: 'allowIncrease' } }
+      ]
+    };
+
+    const a = applyValueMapsToForm(definition, { QTY: 20, ACTUAL: 25 } as any, {} as any, { mode: 'blur' });
+    expect(a.values.ACTUAL).toBe(25);
+
+    const b = applyValueMapsToForm(definition, { QTY: 20, ACTUAL: 15 } as any, {} as any, { mode: 'blur' });
+    expect(b.values.ACTUAL).toBe(20);
+  });
+
+  it('copyMode=allowDecrease clamps numeric values to never go above the source (when=always)', () => {
+    const definition: any = {
+      questions: [
+        { id: 'QTY', type: 'NUMBER' },
+        { id: 'ACTUAL', type: 'NUMBER', derivedValue: { op: 'copy', dependsOn: 'QTY', when: 'always', copyMode: 'allowDecrease' } }
+      ]
+    };
+
+    const a = applyValueMapsToForm(definition, { QTY: 20, ACTUAL: 15 } as any, {} as any, { mode: 'blur' });
+    expect(a.values.ACTUAL).toBe(15);
+
+    const b = applyValueMapsToForm(definition, { QTY: 20, ACTUAL: 25 } as any, {} as any, { mode: 'blur' });
+    expect(b.values.ACTUAL).toBe(20);
+  });
 });
 
 

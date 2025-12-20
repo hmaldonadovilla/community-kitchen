@@ -74,7 +74,27 @@ export interface ValidationRule {
     fieldId: string;
     required?: boolean;
     min?: number | string;
+    /**
+     * Optional cross-field numeric constraint: interpret the target numeric value as needing to be >=
+     * the numeric value of another field.
+     *
+     * Notes:
+     * - The referenced field is resolved in the current scope (line-item first, then parent/top).
+     * - If the referenced field is empty or not numeric, the constraint is skipped.
+     * - If both `min` and `minFieldId` are provided, `min` wins.
+     */
+    minFieldId?: string;
     max?: number | string;
+    /**
+     * Optional cross-field numeric constraint: interpret the target numeric value as needing to be <=
+     * the numeric value of another field.
+     *
+     * Notes:
+     * - The referenced field is resolved in the current scope (line-item first, then parent/top).
+     * - If the referenced field is empty or not numeric, the constraint is skipped.
+     * - If both `max` and `maxFieldId` are provided, `max` wins.
+     */
+    maxFieldId?: string;
     allowed?: string[];
     disallowed?: string[];
   };
@@ -159,7 +179,45 @@ export interface DerivedValueTimeOfDayMapConfig {
   hidden?: boolean;
 }
 
-export type DerivedValueConfig = DerivedValueAddDaysConfig | DerivedValueTodayConfig | DerivedValueTimeOfDayMapConfig;
+export interface DerivedValueCopyConfig {
+  op: 'copy';
+  /**
+   * Field ID whose value is copied into the target field.
+   *
+   * Useful for "defaulting" numeric fields (or other scalar values) from another input.
+   */
+  dependsOn: string;
+  /**
+   * When to apply the derived value:
+   * - empty: default for copy (behaves like a default; allows user overrides)
+   * - always: keep in sync with the source field
+   */
+  when?: DerivedValueWhen;
+  /**
+   * Control when the derived value is applied during editing.
+   * - change: apply on every onChange (default for most derived ops)
+   * - blur: apply only after the user leaves the input (prevents mid-typing churn)
+   *
+   * Defaults to "blur" for `copy`.
+   */
+  applyOn?: 'change' | 'blur';
+  /**
+   * Copy mode:
+   * - replace: behave like a direct copy (default)
+   * - allowIncrease: for numeric values, allow the user to increase above the source, but never below it
+   * - allowDecrease: for numeric values, allow the user to decrease below the source, but never above it
+   *
+   * Only applies when `when: "always"` and both source + target are numeric.
+   */
+  copyMode?: 'replace' | 'allowIncrease' | 'allowDecrease';
+  hidden?: boolean;
+}
+
+export type DerivedValueConfig =
+  | DerivedValueAddDaysConfig
+  | DerivedValueTodayConfig
+  | DerivedValueTimeOfDayMapConfig
+  | DerivedValueCopyConfig;
 
 export interface AutoIncrementConfig {
   prefix?: string;

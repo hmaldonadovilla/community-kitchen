@@ -11,6 +11,23 @@ describe('validation rules', () => {
     expect(checkRule('5', { fieldId: 'x', max: 2 }, 'EN', undefined)).toContain('<=');
   });
 
+  it('does not apply min/max to empty values when not required', () => {
+    expect(checkRule('', { fieldId: 'x', min: 2 }, 'EN', undefined)).toBe('');
+    expect(checkRule('', { fieldId: 'x', max: 2 }, 'EN', undefined)).toBe('');
+  });
+
+  it('supports min/max derived from another field (minFieldId/maxFieldId)', () => {
+    const msg = checkRule(
+      '19',
+      { fieldId: 'B', minFieldId: 'A' } as any,
+      'EN',
+      undefined,
+      (id: string) => (id === 'A' ? 20 : undefined)
+    );
+    expect(msg).toContain('20');
+    expect(msg).toContain('>=');
+  });
+
   it('validateRules respects when/hide', () => {
     const rules = [
       {
@@ -24,5 +41,21 @@ describe('validation rules', () => {
       isHidden: () => false
     });
     expect(errors[0].fieldId).toBe('b');
+  });
+
+  it('validateRules can enforce minFieldId cross-field comparisons', () => {
+    const rules = [
+      {
+        when: { fieldId: 'A' }, // always applies
+        then: { fieldId: 'B', minFieldId: 'A' }
+      }
+    ];
+    const errors = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 20 : id === 'B' ? 19 : ''),
+      isHidden: () => false
+    } as any);
+    expect(errors.length).toBe(1);
+    expect(errors[0].fieldId).toBe('B');
   });
 });

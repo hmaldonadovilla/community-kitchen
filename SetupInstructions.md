@@ -271,7 +271,7 @@ This project uses TypeScript. You need to build the script before using it in Go
         ] }
         ```
 
-        Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`. Actions: `required` true/false, `min`, `max`, `allowed`, `disallowed`.
+        Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`. Actions: `required` true/false, `min`, `max`, `minFieldId`, `maxFieldId`, `allowed`, `disallowed`.
       - Scope rules to follow-up only: add `"phase": "followup"` to a rule when it should only block follow-up actions (e.g., require `FINAL_QTY` during follow-up but keep it optional on submit).
 
     - Computed fields (`derivedValue`):
@@ -293,6 +293,9 @@ This project uses TypeScript. You need to build the script before using it in Go
             - `addDays`: date math (offset can be negative). Defaults to `"when": "always"` (recomputes when dependencies change).
             - `today`: prefill a DATE field with today’s local date. Defaults to `"when": "empty"` (only sets when the target is empty).
             - `timeOfDayMap`: map time-of-day to a value via thresholds. Defaults to `"when": "empty"`.
+            - `copy`: copy another field’s value into the target. Defaults to `"when": "empty"` (behaves like a default; allows user overrides) and applies on `"applyOn": "blur"` (so it doesn’t change mid-typing).
+              - Optional: `"applyOn": "change"` to apply on every keystroke/change.
+              - Optional: `"copyMode": "allowIncrease" | "allowDecrease"` (only with `"when": "always"`) to allow operator overrides in one direction and clamp back to the source value on blur.
 
           - Example: prefill a DATE field with today (local):
 
@@ -317,6 +320,28 @@ This project uses TypeScript. You need to build the script before using it in Go
             ```
 
           - Tip: If you want a computed value to behave like a default (allow user overrides), set `"when": "empty"`. If you want it to stay in sync with dependencies, set `"when": "always"`.
+
+          - Example: copy a NUMBER default from another NUMBER field:
+
+            ```json
+            { "derivedValue": { "op": "copy", "dependsOn": "FIELD_A" } }
+            ```
+
+          - Example: copy but allow increases only (never below the source):
+
+            ```json
+            { "derivedValue": { "op": "copy", "dependsOn": "QTY", "when": "always", "copyMode": "allowIncrease" } }
+            ```
+
+      - Example: cross-field numeric validation (B must be >= A):
+
+        ```json
+        {
+          "validationRules": [
+            { "when": { "fieldId": "A" }, "then": { "fieldId": "B", "minFieldId": "A" }, "message": "B must be at least A." }
+          ]
+        }
+        ```
 
         Validation messages can be localized. `message` accepts a string or an object keyed by language (EN/FR/NL) and falls back to English. Example:
 

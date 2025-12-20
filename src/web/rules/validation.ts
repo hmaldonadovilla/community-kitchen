@@ -3,6 +3,17 @@ import { resolveLocalizedString } from '../i18n';
 import { FieldValue, LangCode, LocalizedString, ThenConfig, ValidationError, VisibilityContext } from '../types';
 import { matchesWhen } from './visibility';
 
+const validationDebugEnabled = (): boolean => Boolean((globalThis as any)?.__WEB_FORM_DEBUG__);
+
+const validationLog = (event: string, payload?: Record<string, unknown>) => {
+  if (!validationDebugEnabled() || typeof console === 'undefined' || typeof console.info !== 'function') return;
+  try {
+    console.info('[ReactForm][Validation]', event, payload || {});
+  } catch (_) {
+    // ignore
+  }
+};
+
 const defaultRuleMessages = {
   required: {
     en: 'This field is required.',
@@ -27,6 +38,25 @@ const withLimitMessage = (prefix: string, limit: number | string) => ({
   nl: `${prefix} ${limit}.`
 });
 
+const toFiniteNumber = (raw: unknown): number | null => {
+  if (raw === undefined || raw === null) return null;
+  const scalar = Array.isArray(raw)
+    ? raw.find(v => v !== undefined && v !== null && (typeof v !== 'string' || v.trim() !== '')) ?? raw[0]
+    : raw;
+  if (scalar === undefined || scalar === null) return null;
+  if (typeof scalar === 'boolean') return null;
+  if (scalar instanceof Date) return null;
+  if (typeof scalar === 'string') {
+    const s = scalar.trim();
+    if (!s) return null;
+    const normalized = s.includes(',') && !s.includes('.') ? s.replace(',', '.') : s;
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(scalar);
+  return Number.isFinite(n) ? n : null;
+};
+
 export interface ValidationContext extends VisibilityContext {
   language: LangCode;
   /**
@@ -41,7 +71,8 @@ export function checkRule(
   value: FieldValue,
   thenCfg: ThenConfig,
   language: LangCode,
-  message?: LocalizedString
+  message?: LocalizedString,
+  getValue?: (fieldId: string) => FieldValue
 ): string {
   const values = Array.isArray(value) ? value : [value];
   const customMessage = message ? resolveLocalizedString(message, language, '') : '';
@@ -58,26 +89,60 @@ export function checkRule(
     }
   }
 
-  if (thenCfg?.min !== undefined) {
-    const minVal = Number(thenCfg.min);
-    const numVals = values.map(v => Number(v)).filter(v => !isNaN(v));
-    if (numVals.some(v => v < minVal)) {
-      return (
-        customMessage ||
-        resolveLocalizedString(withLimitMessage('Value must be >=', thenCfg.min), language, 'Value must be >= ' + thenCfg.min + '.')
-      );
+  const numVals = values.map(v => toFiniteNumber(v)).filter((v): v is number => typeof v === 'number');
+
+  const resolveMinSpec = (): { limit: number; label: number | string; source?: string } | null => {
+    if (thenCfg?.min !== undefined) {
+      const n = toFiniteNumber(thenCfg.min);
+      if (n === null) return null;
+      return { limit: n, label: thenCfg.min as any, source: 'min' };
     }
+    const minFieldId = (thenCfg as any)?.minFieldId;
+    if (minFieldId && typeof minFieldId === 'string' && minFieldId.trim() && typeof getValue === 'function') {
+      const raw = getValue(minFieldId.trim());
+      const n = toFiniteNumber(raw);
+      if (n === null) return null;
+      return { limit: n, label: n, source: `minFieldId:${minFieldId.trim()}` };
+    }
+    return null;
+  };
+
+  const resolveMaxSpec = (): { limit: number; label: number | string; source?: string } | null => {
+    if (thenCfg?.max !== undefined) {
+      const n = toFiniteNumber(thenCfg.max);
+      if (n === null) return null;
+      return { limit: n, label: thenCfg.max as any, source: 'max' };
+    }
+    const maxFieldId = (thenCfg as any)?.maxFieldId;
+    if (maxFieldId && typeof maxFieldId === 'string' && maxFieldId.trim() && typeof getValue === 'function') {
+      const raw = getValue(maxFieldId.trim());
+      const n = toFiniteNumber(raw);
+      if (n === null) return null;
+      return { limit: n, label: n, source: `maxFieldId:${maxFieldId.trim()}` };
+    }
+    return null;
+  };
+
+  const minSpec = resolveMinSpec();
+  if (minSpec && numVals.length && numVals.some(v => v < minSpec.limit)) {
+    if (minSpec.source && minSpec.source.startsWith('minFieldId:')) {
+      validationLog('minFieldId.fail', { minSpec, value });
+    }
+    return (
+      customMessage ||
+      resolveLocalizedString(withLimitMessage('Value must be >=', minSpec.label), language, 'Value must be >= ' + minSpec.label + '.')
+    );
   }
 
-  if (thenCfg?.max !== undefined) {
-    const maxVal = Number(thenCfg.max);
-    const numVals = values.map(v => Number(v)).filter(v => !isNaN(v));
-    if (numVals.some(v => v > maxVal)) {
-      return (
-        customMessage ||
-        resolveLocalizedString(withLimitMessage('Value must be <=', thenCfg.max), language, 'Value must be <= ' + thenCfg.max + '.')
-      );
+  const maxSpec = resolveMaxSpec();
+  if (maxSpec && numVals.length && numVals.some(v => v > maxSpec.limit)) {
+    if (maxSpec.source && maxSpec.source.startsWith('maxFieldId:')) {
+      validationLog('maxFieldId.fail', { maxSpec, value });
     }
+    return (
+      customMessage ||
+      resolveLocalizedString(withLimitMessage('Value must be <=', maxSpec.label), language, 'Value must be <= ' + maxSpec.label + '.')
+    );
   }
 
   if (thenCfg?.allowed?.length && !values.every(v => thenCfg.allowed?.includes(v as string))) {
@@ -102,7 +167,7 @@ export function validateRules(rules: ValidationRule[], ctx: ValidationContext): 
     if (!matchesWhen(whenValue, rule.when)) return;
     if (ctx.isHidden && ctx.isHidden(rule.then.fieldId)) return;
     const targetVal = ctx.getValue(rule.then.fieldId);
-    const msg = checkRule(targetVal, rule.then, ctx.language, rule.message);
+    const msg = checkRule(targetVal, rule.then, ctx.language, rule.message, ctx.getValue);
     if (msg) {
       errors.push({
         fieldId: rule.then.fieldId,

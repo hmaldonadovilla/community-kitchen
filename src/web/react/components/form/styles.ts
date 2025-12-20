@@ -60,14 +60,62 @@ export const FORM_VIEW_STYLES = `
         .form-card .field.inline-field > textarea,
         .form-card .field.inline-field > .inline-options,
         .form-card .field.inline-field > .ck-choice-control,
+        .form-card .field.inline-field > .ck-number-stepper,
         .webform-overlay .field.inline-field > input,
         .webform-overlay .field.inline-field > select,
         .webform-overlay .field.inline-field > textarea,
         .webform-overlay .field.inline-field > .inline-options,
-        .webform-overlay .field.inline-field > .ck-choice-control {
+        .webform-overlay .field.inline-field > .ck-choice-control,
+        .webform-overlay .field.inline-field > .ck-number-stepper {
           flex: 2 1 260px;
           min-width: 0;
           width: 100%;
+        }
+
+        /* Number stepper: + / − buttons inside the same control width (no layout expansion). */
+        .ck-number-stepper {
+          position: relative;
+          width: 100%;
+          min-width: 0;
+        }
+        .ck-number-stepper input[type="number"] {
+          width: 100%;
+          padding-left: 68px;
+          padding-right: 68px;
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+        .ck-number-stepper-btn {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 54px;
+          height: calc(var(--control-height) - 18px);
+          min-height: 0;
+          border-radius: 12px;
+          border: 1px solid rgba(60, 60, 67, 0.18);
+          background: rgba(120, 120, 128, 0.10);
+          color: var(--text);
+          font-size: 34px;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          padding: 0;
+          user-select: none;
+          -webkit-user-select: none;
+          touch-action: manipulation;
+        }
+        .ck-number-stepper-btn:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .ck-number-stepper-btn.minus {
+          left: 8px;
+        }
+        .ck-number-stepper-btn.plus {
+          right: 8px;
         }
 
         /* Control row: keep the main control + its action buttons (subgroup/info) on the same line when possible. */
@@ -294,23 +342,29 @@ export const FORM_VIEW_STYLES = `
         .ck-line-grid > .field.inline-field > textarea,
         .ck-line-grid > .field.inline-field > .inline-options,
         .ck-line-grid > .field.inline-field > .ck-choice-control,
+        .ck-line-grid > .field.inline-field > .ck-number-stepper,
         .ck-pair-grid > .field.inline-field > input,
         .ck-pair-grid > .field.inline-field > select,
         .ck-pair-grid > .field.inline-field > textarea,
         .ck-pair-grid > .field.inline-field > .inline-options,
         .ck-pair-grid > .field.inline-field > .ck-choice-control,
+        .ck-pair-grid > .field.inline-field > .ck-number-stepper,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > input,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > select,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > textarea,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .inline-options,
-        .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .ck-choice-control {
+        .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .ck-choice-control,
+        .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .ck-number-stepper {
           width: 100%;
           min-width: 0;
         }
         /* Numbers shouldn't look like giant empty boxes; keep them content-sized in grids. */
         .ck-line-grid > .field.inline-field > input[type="number"],
         .ck-pair-grid > .field.inline-field > input[type="number"],
-        .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > input[type="number"] {
+        .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > input[type="number"],
+        .ck-line-grid > .field.inline-field > .ck-number-stepper,
+        .ck-pair-grid > .field.inline-field > .ck-number-stepper,
+        .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .ck-number-stepper {
           width: min(100%, 12ch);
           justify-self: start;
           text-align: right;

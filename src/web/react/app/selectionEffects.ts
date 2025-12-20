@@ -97,7 +97,9 @@ export const runSelectionEffects = (args: {
               nextLineItems = seedSubgroupDefaults(nextLineItems, parentGroup, newRow.id);
             }
           }
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems);
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+            mode: 'change'
+          });
           setValues(nextValues);
           return recomputed;
         });
@@ -164,7 +166,9 @@ export const runSelectionEffects = (args: {
           });
 
           const next: LineItemState = { ...prev, [targetKey]: [...keepRows, ...rebuiltAuto] };
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next);
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
+            mode: 'change'
+          });
           setValues(nextValues);
           return recomputed;
         });
@@ -187,7 +191,9 @@ export const runSelectionEffects = (args: {
               }
             });
           }
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next);
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
+            mode: 'change'
+          });
           setValues(nextValues);
           return recomputed;
         });

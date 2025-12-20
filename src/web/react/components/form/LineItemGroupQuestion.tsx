@@ -26,6 +26,7 @@ import { buttonStyles, PlusIcon, RequiredStar, srOnly, UploadIcon, withDisabled 
 import { GroupedPairedFields } from './GroupedPairedFields';
 import { InfoTooltip } from './InfoTooltip';
 import { LineOverlayState } from './overlays/LineSelectOverlay';
+import { NumberStepper } from './NumberStepper';
 import { resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorLabel } from './lineItemSelectors';
 import {
@@ -366,7 +367,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
       const res = reconcileAutoRows({ currentRows, ...spec });
       if (!res.changed) return prev;
       const nextState = { ...prev, [q.id]: res.rows };
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextState);
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextState, {
+        mode: 'change'
+      });
       setValues(nextValues);
       onDiagnostic?.('ui.lineItems.autoAdd.apply', {
         targetKey: q.id,
@@ -461,7 +464,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
         changedCount += 1;
       });
       if (next === prev) return prev;
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next as any);
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next as any, {
+        mode: 'change'
+      });
       setValues(nextValues);
       onDiagnostic?.('ui.lineItems.autoAdd.applyBatch', {
         parentGroupId: q.id,
@@ -1431,6 +1436,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           : undefined;
                           const fieldValueRaw = field.valueMap ? mapped : (row.values[field.id] as string) || '';
                           const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                          const numberText =
+                            field.type === 'NUMBER'
+                              ? fieldValue === undefined || fieldValue === null
+                                ? ''
+                                : (fieldValue as any).toString()
+                              : '';
                         return (
                             <div
                               key={field.id}
@@ -1444,12 +1455,22 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               {resolveFieldLabel(field, language, field.id)}
                               {field.required && <RequiredStar />}
                             </label>
-                            <input
-                              type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
-                              value={fieldValue}
-                              onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                              readOnly={!!field.valueMap}
-                            />
+                            {field.type === 'NUMBER' ? (
+                              <NumberStepper
+                                value={numberText}
+                                disabled={submitting}
+                                readOnly={!!field.valueMap}
+                                ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                onChange={next => handleLineFieldChange(q, row.id, field, next)}
+                              />
+                            ) : (
+                              <input
+                                type={field.type === 'DATE' ? 'date' : 'text'}
+                                value={fieldValue}
+                                onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
+                                readOnly={!!field.valueMap}
+                              />
+                            )}
                               {subgroupTriggerNodes.length ? (
                                 <div className="ck-field-actions">{subgroupTriggerNodes}</div>
                               ) : null}
@@ -2051,6 +2072,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       : undefined;
                                       const fieldValueRaw = field.valueMap ? mapped : (subRow.values[field.id] as string) || '';
                                       const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                                      const numberText =
+                                        field.type === 'NUMBER'
+                                          ? fieldValue === undefined || fieldValue === null
+                                            ? ''
+                                            : (fieldValue as any).toString()
+                                          : '';
                                     return (
                                         <div
                                           key={field.id}
@@ -2064,12 +2091,22 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           {resolveFieldLabel(field, language, field.id)}
                                           {field.required && <RequiredStar />}
                                         </label>
-                                        <input
-                                          type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
-                                          value={fieldValue}
-                                          onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                          readOnly={!!field.valueMap}
-                                        />
+                                        {field.type === 'NUMBER' ? (
+                                          <NumberStepper
+                                            value={numberText}
+                                            disabled={submitting}
+                                            readOnly={!!field.valueMap}
+                                            ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                            onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
+                                          />
+                                        ) : (
+                                          <input
+                                            type={field.type === 'DATE' ? 'date' : 'text'}
+                                            value={fieldValue}
+                                            onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
+                                            readOnly={!!field.valueMap}
+                                          />
+                                        )}
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                                       </div>
                                     );

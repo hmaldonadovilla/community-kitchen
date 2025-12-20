@@ -9,35 +9,43 @@ import { buildSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
 
-const isLineItemRowDisabledByExpandGate = (args: {
-  group: any;
-  row: any;
-  values: Record<string, FieldValue>;
+const isRowDisabledByExpandGate = (args: {
+  ui: any;
+  fields: any[];
+  row: { id: string; values: Record<string, FieldValue> };
+  topValues: Record<string, FieldValue>;
   language: LangCode;
+  linePrefix: string;
+  rowCollapsed: boolean;
 }): boolean => {
-  const { group, row, values, language } = args;
-  const ui = (group?.lineItemConfig as any)?.ui;
-  const isProgressive =
-    ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
+  const { ui, fields, row, topValues, language, linePrefix, rowCollapsed } = args;
+  const isProgressive = ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
   const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
   const collapsedFieldConfigs = isProgressive ? (ui?.collapsedFields || []) : [];
   if (!isProgressive) return false;
   if (expandGate === 'always') return false;
   if (!collapsedFieldConfigs.length) return false;
+  if (!rowCollapsed) return false; // Only treat a row as "disabled" when it is actually collapsed in the UI.
 
   const groupCtx: VisibilityContext = {
-    getValue: fid => values[fid],
+    getValue: fid => topValues[fid],
     getLineValue: (_rowId, fid) => (row?.values || {})[fid]
+  };
+
+  const isHidden = (fieldId: string) => {
+    const target = (fields || []).find((f: any) => f?.id === fieldId) as any;
+    if (!target) return false;
+    return shouldHideField(target.visibility, groupCtx, { rowId: row?.id, linePrefix });
   };
 
   const blocked: string[] = [];
   collapsedFieldConfigs.forEach((cfg: any) => {
     const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
     if (!fid) return;
-    const field = (group?.lineItemConfig?.fields || []).find((f: any) => f?.id === fid) as any;
+    const field = (fields || []).find((f: any) => f?.id === fid) as any;
     if (!field) return;
 
-    const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row?.id, linePrefix: group?.id });
+    const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row?.id, linePrefix });
     if (hideField) return;
 
     const val = (row?.values || {})[field.id];
@@ -50,23 +58,16 @@ const isLineItemRowDisabledByExpandGate = (args: {
       ? field.validationRules.filter((r: any) => r?.then?.fieldId === field.id)
       : [];
     if (!rules.length) return;
-    const isHidden = (fieldId: string) => {
-      const target = (group?.lineItemConfig?.fields || []).find((f: any) => f?.id === fieldId) as any;
-      if (!target) return false;
-      return shouldHideField(target.visibility, groupCtx, { rowId: row?.id, linePrefix: group?.id });
-    };
     const rulesCtx: any = {
       ...groupCtx,
       getValue: (fieldId: string) =>
-        Object.prototype.hasOwnProperty.call(row?.values || {}, fieldId) ? (row?.values || {})[fieldId] : values[fieldId],
+        Object.prototype.hasOwnProperty.call(row?.values || {}, fieldId) ? (row?.values || {})[fieldId] : topValues[fieldId],
       language,
       phase: 'submit',
       isHidden
     };
     const errs = validateRules(rules, rulesCtx);
-    if (errs.length) {
-      blocked.push(field.id);
-    }
+    if (errs.length) blocked.push(field.id);
   });
 
   return Array.from(new Set(blocked)).length > 0;
@@ -77,8 +78,10 @@ export const validateForm = (args: {
   language: LangCode;
   values: Record<string, FieldValue>;
   lineItems: LineItemState;
+  collapsedRows?: Record<string, boolean>;
+  collapsedSubgroups?: Record<string, boolean>;
 }): FormErrors => {
-  const { definition, language, values, lineItems } = args;
+  const { definition, language, values, lineItems, collapsedRows } = args;
   const ctx = buildValidationContext(values, lineItems);
   const allErrors: FormErrors = {};
 
@@ -98,22 +101,46 @@ export const validateForm = (args: {
       const isProgressive =
         ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
       const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
+      const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
 
       let hasAtLeastOneValidEnabledRow = false;
+      let hasAnyRow = false;
+      let hasAnyNonDisabledRow = false;
 
       rows.forEach(row => {
-        // Skip "disabled" rows: progressive + expandGate=collapsedFieldsValid where collapsed fields aren't valid yet.
-        if (isLineItemRowDisabledByExpandGate({ group: q, row, values, language })) return;
+        hasAnyRow = true;
+        const collapseKey = `${q.id}::${row.id}`;
+        const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
+        // Skip "disabled" rows: collapsed + progressive + expandGate=collapsedFieldsValid where collapsed fields aren't valid yet.
+        if (
+          isRowDisabledByExpandGate({
+            ui,
+            fields: q.lineItemConfig?.fields || [],
+            row: row as any,
+            topValues: values,
+            language,
+            linePrefix: q.id,
+            rowCollapsed
+          })
+        ) {
+          return;
+        }
+        hasAnyNonDisabledRow = true;
         let rowValid = true;
         const groupCtx: VisibilityContext = {
           getValue: fid => values[fid],
           getLineValue: (_rowId, fid) => row.values[fid]
+        };
+        const getRowValue = (fieldId: string): FieldValue => {
+          if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
+          return values[fieldId];
         };
 
         q.lineItemConfig?.fields.forEach(field => {
           if (field.validationRules && field.validationRules.length) {
             const errs = validateRules(field.validationRules, {
               ...groupCtx,
+              getValue: getRowValue,
               language,
               phase: 'submit',
               isHidden: () => shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
@@ -143,15 +170,43 @@ export const validateForm = (args: {
             if (!subId) return;
             const subKey = buildSubgroupKey(q.id, row.id, subId);
             const subRows = lineItems[subKey] || [];
+            const subUi = (sub as any)?.ui;
+            const isSubProgressive =
+              subUi?.mode === 'progressive' &&
+              Array.isArray(subUi?.collapsedFields) &&
+              (subUi?.collapsedFields || []).length > 0;
+            const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
             subRows.forEach(subRow => {
+              const subCollapseKey = `${subKey}::${subRow.id}`;
+              const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
+              // Skip disabled subgroup rows only when they are collapsed and gated.
+              if (
+                isRowDisabledByExpandGate({
+                  ui: subUi,
+                  fields: (sub as any).fields || [],
+                  row: subRow as any,
+                  topValues: { ...values, ...(row.values || {}) },
+                  language,
+                  linePrefix: subKey,
+                  rowCollapsed: subRowCollapsed
+                })
+              ) {
+                return;
+              }
               const subCtx: VisibilityContext = {
                 getValue: fid => values[fid],
                 getLineValue: (_rowId, fid) => subRow.values[fid]
+              };
+              const getSubValue = (fieldId: string): FieldValue => {
+                if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fieldId)) return (subRow.values || {})[fieldId];
+                if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
+                return values[fieldId];
               };
               (sub as any).fields?.forEach((field: any) => {
                 if (field.validationRules && field.validationRules.length) {
                   const errs = validateRules(field.validationRules, {
                     ...subCtx,
+                    getValue: getSubValue,
                     language,
                     phase: 'submit',
                     isHidden: () => shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey })
@@ -185,7 +240,9 @@ export const validateForm = (args: {
       if ((q as any).required && !questionHidden && !hasAtLeastOneValidEnabledRow) {
         allErrors[q.id] =
           isProgressive && expandGate === 'collapsedFieldsValid'
-            ? 'Complete at least one row (fill the collapsed fields).'
+            ? !hasAnyRow || !hasAnyNonDisabledRow
+              ? 'Complete at least one row (fill the collapsed fields).'
+              : 'Complete at least one valid row.'
             : 'At least one line item is required.';
       }
     } else if ((q as any).required && !questionHidden && isEmptyValue(values[q.id])) {
@@ -203,9 +260,11 @@ export const buildSubmissionPayload = async (args: {
   values: Record<string, FieldValue>;
   lineItems: LineItemState;
   existingRecordId?: string;
+  collapsedRows?: Record<string, boolean>;
+  collapsedSubgroups?: Record<string, boolean>;
 }): Promise<SubmissionPayload> => {
-  const { definition, formKey, language, values, lineItems, existingRecordId } = args;
-  const recomputed = applyValueMapsToForm(definition, values, lineItems);
+  const { definition, formKey, language, values, lineItems, existingRecordId, collapsedRows } = args;
+  const recomputed = applyValueMapsToForm(definition, values, lineItems, { mode: 'submit' });
   const payloadValues: Record<string, any> = { ...recomputed.values };
 
   for (const q of definition.questions) {
@@ -217,10 +276,24 @@ export const buildSubmissionPayload = async (args: {
 
   for (const q of definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP')) {
     const rows = recomputed.lineItems[q.id] || [];
-    // Do not persist "disabled" (gated) rows (progressive + expandGate=collapsedFieldsValid where collapsed fields aren't valid yet).
-    const rowsToSave = rows.filter(
-      row => !isLineItemRowDisabledByExpandGate({ group: q, row, values: recomputed.values, language })
-    );
+    const ui = (q.lineItemConfig as any)?.ui;
+    const isProgressive =
+      ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
+    const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
+    // Do not persist "disabled" rows: collapsed + progressive + expandGate=collapsedFieldsValid where collapsed fields aren't valid yet.
+    const rowsToSave = rows.filter(row => {
+      const collapseKey = `${q.id}::${row.id}`;
+      const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
+      return !isRowDisabledByExpandGate({
+        ui,
+        fields: q.lineItemConfig?.fields || [],
+        row: row as any,
+        topValues: recomputed.values,
+        language,
+        linePrefix: q.id,
+        rowCollapsed
+      });
+    });
     const lineFields = q.lineItemConfig?.fields || [];
     const lineFileFields = lineFields.filter(f => (f as any).type === 'FILE_UPLOAD');
     const subGroups = q.lineItemConfig?.subGroups || [];
@@ -238,10 +311,29 @@ export const buildSubmissionPayload = async (args: {
           if (!key) continue;
           const childKey = buildSubgroupKey(q.id, row.id, key);
           const childRows = recomputed.lineItems[childKey] || [];
+          const subUi = (sub as any)?.ui;
+          const isSubProgressive =
+            subUi?.mode === 'progressive' &&
+            Array.isArray(subUi?.collapsedFields) &&
+            (subUi?.collapsedFields || []).length > 0;
+          const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
+          const subRowsToSave = childRows.filter(cr => {
+            const subCollapseKey = `${childKey}::${cr.id}`;
+            const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
+            return !isRowDisabledByExpandGate({
+              ui: subUi,
+              fields: (sub as any).fields || [],
+              row: cr as any,
+              topValues: { ...(recomputed.values || {}), ...(row.values || {}) },
+              language,
+              linePrefix: childKey,
+              rowCollapsed: subRowCollapsed
+            });
+          });
           const subFields = (sub as any).fields || [];
           const subFileFields = subFields.filter((f: any) => f?.type === 'FILE_UPLOAD');
           base[key] = await Promise.all(
-            childRows.map(async cr => {
+            subRowsToSave.map(async cr => {
               const child: Record<string, any> = { ...(cr.values || {}) };
               for (const f of subFileFields) {
                 child[f.id] = await buildMaybeFilePayload(child[f.id], (f as any).uploadConfig?.maxFiles);
