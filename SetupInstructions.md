@@ -108,7 +108,23 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        Put the rule JSON on that line-item field (either inline in `fields[]` or in the line-item ref sheet’s Config column).
-    - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
+     - Row disclaimers (per-row hints): in the LINE_ITEM_GROUP (or subgroup) JSON, you can optionally add `ui.rowDisclaimer` to show a localized disclaimer at the top of each row. It supports simple placeholders using row field ids and `__ckRowSource`:
+
+       ```json
+       {
+         "ui": {
+           "rowDisclaimer": {
+             "cases": [
+               { "when": { "fieldId": "__ckRowSource", "equals": "auto" }, "text": { "en": "Auto-generated", "fr": "Auto-généré", "nl": "Automatisch" } },
+               { "when": { "fieldId": "__ckRowSource", "equals": "manual" }, "text": { "en": "Manual row", "fr": "Ligne manuelle", "nl": "Handmatig" } }
+             ]
+           }
+         }
+       }
+       ```
+
+       - Placeholders: `{{FIELD_ID}}`, `{{__ckRowSource}}` (auto/manual), `{{__ckRowSourceLabel}}` (localized).
+     - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
 
        ```json
        {
@@ -126,6 +142,7 @@ This project uses TypeScript. You need to build the script before using it in Go
     - Auto add flow (no overlay): use `addMode: "auto"` with `anchorFieldId` pointing to a CHOICE line-item field that has an `optionFilter.dependsOn` (one or more controlling fields). When all `dependsOn` fields are filled, the form will automatically create one row per allowed anchor option (same filtering logic as overlay). If the controlling fields change later, auto-generated rows are recomputed and overwritten; manual rows are preserved.
       - Progressive + expand gate: if you also set `"ui": { "mode": "progressive", "expandGate": "collapsedFieldsValid", "collapsedFields": [...] }` then:
         - Auto-generated rows treat the anchor field as the row title and it is not editable (it’s system-selected).
+        - Auto-generated rows created by `addLineItemsFromDataSource` selection effects also lock the anchor field and render it as the row title when `anchorFieldId` is set (works for subgroups too).
         - Rows that are still “disabled” (collapsed fields not yet valid) are ignored for validation, so you can submit with unfinished rows.
         - If the LINE_ITEM_GROUP question is marked `required: true`, at least one enabled+valid row is still required (disabled rows don’t satisfy required).
      - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). Submitted payloads contain an array of parents, each with a child array keyed by the subgroup id/label. Default mode renders inline subgroup sections with Show/Hide. Progressive mode (`ui.mode: "progressive"`) edits subgroups via a full-page overlay opened from “Open …” buttons next to triggering fields (selection effects) plus fallback “Open …” buttons for remaining subgroups.
@@ -257,20 +274,20 @@ This project uses TypeScript. You need to build the script before using it in Go
         Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`. Actions: `required` true/false, `min`, `max`, `allowed`, `disallowed`.
       - Scope rules to follow-up only: add `"phase": "followup"` to a rule when it should only block follow-up actions (e.g., require `FINAL_QTY` during follow-up but keep it optional on submit).
 
-      - Computed fields (`derivedValue`):
+    - Computed fields (`derivedValue`):
           - Use when a value should be computed automatically (optionally hidden/system-managed).
-          - Add in Config JSON (works for main or line-item fields):
+      - Add in Config JSON (works for main or line-item fields):
 
-            ```json
-            {
-              "derivedValue": {
+        ```json
+        {
+          "derivedValue": {
                 "op": "addDays",
-                "dependsOn": "MEAL_DATE",
-                "offsetDays": 2,
-                "hidden": true
-              }
-            }
-            ```
+            "dependsOn": "MEAL_DATE",
+            "offsetDays": 2,
+            "hidden": true
+          }
+        }
+        ```
 
           - Supported ops:
             - `addDays`: date math (offset can be negative). Defaults to `"when": "always"` (recomputes when dependencies change).

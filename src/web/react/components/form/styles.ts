@@ -92,6 +92,15 @@ export const FORM_VIEW_STYLES = `
           overflow-wrap: anywhere;
           word-break: break-word;
         }
+        .ck-row-disclaimer {
+          margin-top: 6px;
+          font-size: var(--ck-font-label);
+          font-weight: 700;
+          color: rgba(15, 23, 42, 0.62);
+          line-height: 1.2;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
 
         /* Field-level action buttons (subgroup + info) */
         .ck-field-actions {

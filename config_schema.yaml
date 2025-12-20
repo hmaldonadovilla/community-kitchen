@@ -356,6 +356,42 @@ components:
         defaultCollapsed:
           type: boolean
           description: Default collapsed state for each row. When omitted and mode=progressive, defaults to true.
+        rowDisclaimer:
+          $ref: '#/components/schemas/RowDisclaimerConfig'
+          description: |
+            Optional per-row disclaimer shown in the UI (works for both line item groups and subgroups).
+            Supports localization and simple template interpolation using row field values.
+
+            - Use `{{FIELD_ID}}` to insert a row field value.
+            - Includes `{{__ckRowSource}}` (auto/manual) and `{{__ckRowSourceLabel}}` (localized).
+
+    RowDisclaimerRule:
+      type: object
+      required: [text]
+      properties:
+        when:
+          $ref: '#/components/schemas/VisibilityCondition'
+          description: Optional condition evaluated against the current row values.
+        text:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Disclaimer text (supports placeholders like {{FIELD_ID}}).
+
+    RowDisclaimerConfig:
+      oneOf:
+        - $ref: '#/components/schemas/LocalizedString'
+        - type: object
+          properties:
+            template:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Default disclaimer template (supports placeholders).
+            cases:
+              type: array
+              items:
+                $ref: '#/components/schemas/RowDisclaimerRule'
+              description: Ordered list of conditional disclaimer rules; first match wins.
+            fallback:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Fallback disclaimer when no cases match and no template is set.
 
     OptionFilter:
       type: object

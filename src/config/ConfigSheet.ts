@@ -1035,12 +1035,52 @@ export class ConfigSheet {
     const defaultCollapsed =
       rawUi.defaultCollapsed !== undefined && rawUi.defaultCollapsed !== null ? !!rawUi.defaultCollapsed : undefined;
 
+    const rowDisclaimer = this.normalizeRowDisclaimer(rawUi.rowDisclaimer ?? rawUi.row_disclaimer ?? rawUi.disclaimer);
+
     const cfg: LineItemGroupUiConfig = {};
     if (mode) cfg.mode = mode;
     if (collapsedFields && collapsedFields.length) cfg.collapsedFields = collapsedFields;
     if (expandGate) cfg.expandGate = expandGate;
     if (defaultCollapsed !== undefined) cfg.defaultCollapsed = defaultCollapsed;
+    if (rowDisclaimer) (cfg as any).rowDisclaimer = rowDisclaimer;
     return Object.keys(cfg).length ? cfg : undefined;
+  }
+
+  private static normalizeRowDisclaimer(raw: any): any | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw === 'string') {
+      const s = raw.toString().trim();
+      return s ? s : undefined;
+    }
+    if (typeof raw !== 'object') return undefined;
+
+    // Support LocalizedString objects directly (e.g., { en: "...", fr: "...", nl: "..." }).
+    const hasTemplateShape =
+      Object.prototype.hasOwnProperty.call(raw, 'template') ||
+      Object.prototype.hasOwnProperty.call(raw, 'cases') ||
+      Object.prototype.hasOwnProperty.call(raw, 'fallback');
+    if (!hasTemplateShape) {
+      const hasAnyLocale =
+        typeof (raw as any).en === 'string' || typeof (raw as any).fr === 'string' || typeof (raw as any).nl === 'string';
+      return hasAnyLocale ? raw : undefined;
+    }
+
+    const cfg: any = {};
+    if ((raw as any).template !== undefined) cfg.template = (raw as any).template;
+    if ((raw as any).fallback !== undefined) cfg.fallback = (raw as any).fallback;
+    if (Array.isArray((raw as any).cases)) {
+      cfg.cases = (raw as any).cases
+        .map((c: any) => {
+          if (!c || typeof c !== 'object') return null;
+          if (!c.text) return null;
+          const out: any = { text: c.text };
+          if (c.when && typeof c.when === 'object' && c.when.fieldId) out.when = c.when;
+          return out;
+        })
+        .filter(Boolean);
+    }
+    const hasAny = Object.keys(cfg).some(k => (cfg as any)[k] !== undefined);
+    return hasAny ? cfg : undefined;
   }
 
   private static parseLineItemConfig(

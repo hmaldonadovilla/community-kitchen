@@ -198,7 +198,44 @@ export interface LineItemGroupUiConfig {
    * Default collapsed state for each row. When omitted and mode=progressive, defaults to true.
    */
   defaultCollapsed?: boolean;
+  /**
+   * Optional per-row disclaimer shown in the UI (works for both line item groups and subgroups).
+   * Supports localization and simple template interpolation using row field values.
+   *
+   * Placeholders: use `{{FIELD_ID}}` to insert the row's field value.
+   * Includes `{{__ckRowSource}}` (auto/manual) and `{{__ckRowSourceLabel}}` (localized).
+   */
+  rowDisclaimer?: RowDisclaimerConfig;
 }
+
+export interface RowDisclaimerRule {
+  /**
+   * Optional condition evaluated against the current row values.
+   * - fieldId is required; comparisons use the raw row value (arrays use first element).
+   */
+  when?: VisibilityCondition;
+  /**
+   * Localized disclaimer text (supports placeholders like {{FIELD_ID}}).
+   */
+  text: LocalizedString;
+}
+
+export type RowDisclaimerConfig =
+  | LocalizedString
+  | {
+      /**
+       * Optional default template (supports placeholders like {{FIELD_ID}}).
+       */
+      template?: LocalizedString;
+      /**
+       * Optional ordered list of conditional disclaimer rules; first match wins.
+       */
+      cases?: RowDisclaimerRule[];
+      /**
+       * Optional fallback text when no cases match and no template is set.
+       */
+      fallback?: LocalizedString;
+    };
 
 export interface LineItemFieldConfig {
   id: string;
