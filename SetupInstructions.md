@@ -258,21 +258,48 @@ This project uses TypeScript. You need to build the script before using it in Go
       - Scope rules to follow-up only: add `"phase": "followup"` to a rule when it should only block follow-up actions (e.g., require `FINAL_QTY` during follow-up but keep it optional on submit).
 
       - Computed fields (`derivedValue`):
-          - Use when a value should auto-calc from another field (e.g., expiration date = meal prep date + 2 days), optionally hidden.
+          - Use when a value should be computed automatically (optionally hidden/system-managed).
           - Add in Config JSON (works for main or line-item fields):
 
             ```json
             {
               "derivedValue": {
-                "dependsOn": "MEAL_DATE",
                 "op": "addDays",
+                "dependsOn": "MEAL_DATE",
                 "offsetDays": 2,
                 "hidden": true
               }
             }
             ```
 
-          - Supported op: `addDays` (offset can be negative). The value is recomputed when dependencies change and is stored with the submission; use `visibility` to hide if needed.
+          - Supported ops:
+            - `addDays`: date math (offset can be negative). Defaults to `"when": "always"` (recomputes when dependencies change).
+            - `today`: prefill a DATE field with today’s local date. Defaults to `"when": "empty"` (only sets when the target is empty).
+            - `timeOfDayMap`: map time-of-day to a value via thresholds. Defaults to `"when": "empty"`.
+
+          - Example: prefill a DATE field with today (local):
+
+            ```json
+            { "derivedValue": { "op": "today" } }
+            ```
+
+          - Example: map time-of-day to a label (uses current time):
+
+            ```json
+            {
+              "derivedValue": {
+                "op": "timeOfDayMap",
+                "thresholds": [
+                  { "before": "10h", "value": "Before 10" },
+                  { "before": "12h", "value": "Still morning" },
+                  { "before": "15h", "value": "Getting closer to tea time" },
+                  { "value": "out of office" }
+                ]
+              }
+            }
+            ```
+
+          - Tip: If you want a computed value to behave like a default (allow user overrides), set `"when": "empty"`. If you want it to stay in sync with dependencies, set `"when": "always"`.
 
         Validation messages can be localized. `message` accepts a string or an object keyed by language (EN/FR/NL) and falls back to English. Example:
 

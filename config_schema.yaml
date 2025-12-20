@@ -405,25 +405,88 @@ components:
           "*": [None]
 
     DerivedValueConfig:
-      type: object
-      properties:
-        dependsOn:
-          type: string
-          description: ID of the source field to base the calculation on.
-        op:
-          type: string
-          enum: [addDays]
-          description: Supported operation (currently addDays).
-        offsetDays:
-          type: integer
-          description: Number of days to add (can be negative).
-        hidden:
-          type: boolean
-          description: Informational flag to mark the field as system-managed/hidden in UI.
-      required:
-        - dependsOn
-        - op
-      description: Compute a field value automatically (e.g., expiration date = prep date + 2 days).
+      oneOf:
+        - type: object
+          required: [op, dependsOn]
+          properties:
+            op:
+              type: string
+              enum: [addDays]
+              description: Add (or subtract) days from a base date field.
+            dependsOn:
+              type: string
+              description: ID of the source field to base the calculation on (a DATE value or parseable date string).
+            offsetDays:
+              type: integer
+              description: Number of days to add (can be negative).
+            when:
+              type: string
+              enum: [always, empty]
+              description: |
+                When to apply the derived value.
+                - always: recompute on every change (default for addDays)
+                - empty: only set when the target field is empty (allows user overrides)
+            hidden:
+              type: boolean
+              description: Informational flag to mark the field as system-managed/hidden in UI.
+          description: Compute a date field automatically (e.g., expiration date = prep date + 2 days).
+        - type: object
+          required: [op]
+          properties:
+            op:
+              type: string
+              enum: [today]
+              description: Prefill a DATE field with the current local date (YYYY-MM-DD).
+            when:
+              type: string
+              enum: [always, empty]
+              description: |
+                When to apply the derived value.
+                - empty: default for today (prefill behavior)
+                - always: recompute on every change
+            hidden:
+              type: boolean
+              description: Informational flag to mark the field as system-managed/hidden in UI.
+          description: Prefill a DATE field with today’s date (local time).
+        - type: object
+          required: [op, thresholds]
+          properties:
+            op:
+              type: string
+              enum: [timeOfDayMap]
+              description: Map the current time-of-day (or a source date/time field) into a target value using thresholds.
+            dependsOn:
+              type: string
+              description: Optional source field ID used to read a date/time value. When omitted, current time ("now") is used.
+            thresholds:
+              type: array
+              description: |
+                Threshold mapping evaluated in ascending order: the first entry where current time-of-day < before wins.
+                The last entry may omit `before` to act as the fallback.
+              items:
+                type: object
+                properties:
+                  before:
+                    oneOf:
+                      - type: string
+                        description: Threshold time (local) such as "10h", "12:30".
+                      - type: integer
+                        description: Threshold hour (e.g., 10 means 10h; values > 24 are treated as minutes since midnight).
+                  value:
+                    type: string
+                    description: Value to set on the target field when the threshold matches.
+                required: [value]
+            when:
+              type: string
+              enum: [always, empty]
+              description: |
+                When to apply the derived value.
+                - empty: default for timeOfDayMap (prefill/default behavior)
+                - always: recompute on every change
+            hidden:
+              type: boolean
+              description: Informational flag to mark the field as system-managed/hidden in UI.
+          description: Map time-of-day to a value (e.g., auto-select SHIFT or a status label).
 
     DataSourceConfig:
       type: object

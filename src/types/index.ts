@@ -88,19 +88,78 @@ export interface ValidationRule {
   phase?: 'submit' | 'followup' | 'both';
 }
 
-export interface DerivedValueConfig {
+export type DerivedValueWhen = 'always' | 'empty';
+
+export interface DerivedValueAddDaysConfig {
+  op: 'addDays';
+  /**
+   * Field ID whose value is used as the base date.
+   */
   dependsOn: string;
   /**
-   * Currently supported: addDays
+   * Number of days to add (can be negative).
    */
-  op: 'addDays';
   offsetDays?: number;
+  /**
+   * When to apply the derived value:
+   * - always: recompute on every change (default for addDays)
+   * - empty: only set when the target field is empty (allows user overrides)
+   */
+  when?: DerivedValueWhen;
   /**
    * Optional flag to indicate the field is system-managed and may be hidden in UI.
    * (Hiding still uses existing visibility config; this flag is informational.)
    */
   hidden?: boolean;
 }
+
+export interface DerivedValueTodayConfig {
+  op: 'today';
+  /**
+   * When to apply the derived value:
+   * - empty: default for today (prefill behavior)
+   * - always: recompute on every change
+   */
+  when?: DerivedValueWhen;
+  hidden?: boolean;
+}
+
+export interface TimeOfDayThreshold {
+  /**
+   * Threshold time (local) before which this value applies.
+   * Examples: "10h", "12:30", 15 (treated as 15h).
+   * When omitted, this entry acts as the fallback value.
+   */
+  before?: string | number;
+  /**
+   * Value to set on the target field when the threshold matches.
+   */
+  value: string;
+}
+
+export interface DerivedValueTimeOfDayMapConfig {
+  op: 'timeOfDayMap';
+  /**
+   * Optional source field ID used to read a date/time value.
+   * When omitted, the current time ("now") is used.
+   */
+  dependsOn?: string;
+  /**
+   * Threshold mapping evaluated in ascending order: the first entry where
+   * current time-of-day < before wins. The last entry may omit "before" to act
+   * as a fallback.
+   */
+  thresholds: TimeOfDayThreshold[];
+  /**
+   * When to apply the derived value:
+   * - empty: default for timeOfDayMap (prefill/default behavior)
+   * - always: recompute on every change
+   */
+  when?: DerivedValueWhen;
+  hidden?: boolean;
+}
+
+export type DerivedValueConfig = DerivedValueAddDaysConfig | DerivedValueTodayConfig | DerivedValueTimeOfDayMapConfig;
 
 export interface AutoIncrementConfig {
   prefix?: string;

@@ -1316,16 +1316,77 @@ export class ConfigSheet {
 
   private static normalizeDerivedValue(raw: any): DerivedValueConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
-    const dependsOn = raw.dependsOn ? raw.dependsOn.toString() : '';
-    if (!dependsOn) return undefined;
     const op = raw.op ? raw.op.toString() : 'addDays';
-    if (op !== 'addDays') return undefined;
-    const cfg: DerivedValueConfig = { dependsOn, op: 'addDays' };
-    if (raw.offsetDays !== undefined && raw.offsetDays !== null) {
-      const num = Number(raw.offsetDays);
-      if (!isNaN(num)) cfg.offsetDays = num;
+    const whenRaw = raw.when !== undefined && raw.when !== null ? raw.when.toString().trim().toLowerCase() : '';
+    const when = whenRaw === 'empty' || whenRaw === 'always' ? (whenRaw as any) : undefined;
+    const hidden = raw.hidden !== undefined ? Boolean(raw.hidden) : undefined;
+
+    if (op === 'addDays') {
+      const dependsOn = raw.dependsOn ? raw.dependsOn.toString().trim() : '';
+      if (!dependsOn) return undefined;
+      const cfg: any = { op: 'addDays', dependsOn };
+      if (raw.offsetDays !== undefined && raw.offsetDays !== null) {
+        const num = Number(raw.offsetDays);
+        if (!isNaN(num)) cfg.offsetDays = num;
+      }
+      if (when) cfg.when = when;
+      if (hidden !== undefined) cfg.hidden = hidden;
+      return cfg as DerivedValueConfig;
     }
-    if (raw.hidden !== undefined) cfg.hidden = Boolean(raw.hidden);
-    return cfg;
+
+    if (op === 'today') {
+      const cfg: any = { op: 'today' };
+      if (when) cfg.when = when;
+      if (hidden !== undefined) cfg.hidden = hidden;
+      return cfg as DerivedValueConfig;
+    }
+
+    if (op === 'timeOfDayMap') {
+      const dependsOn = raw.dependsOn ? raw.dependsOn.toString().trim() : '';
+      const thresholdsRaw = raw.thresholds ?? raw.map ?? raw.mapping ?? raw.timeMap;
+      if (!Array.isArray(thresholdsRaw)) return undefined;
+
+      const thresholds: any[] = [];
+      thresholdsRaw.forEach((entry: any) => {
+        if (entry === undefined || entry === null) return;
+        if (typeof entry === 'string') {
+          const v = entry.toString().trim();
+          if (v) thresholds.push({ value: v });
+          return;
+        }
+        if (Array.isArray(entry)) {
+          const before = entry.length >= 1 ? entry[0] : undefined;
+          const value = entry.length >= 2 ? entry[1] : undefined;
+          const v = value !== undefined && value !== null ? value.toString().trim() : '';
+          if (!v) return;
+          const b = before !== undefined && before !== null ? before : undefined;
+          thresholds.push(b === undefined ? { value: v } : { before: b, value: v });
+          return;
+        }
+        if (typeof entry === 'object') {
+          const v = entry.value !== undefined && entry.value !== null ? entry.value.toString().trim() : '';
+          if (!v) return;
+          const b =
+            entry.before !== undefined && entry.before !== null
+              ? entry.before
+              : entry.at !== undefined && entry.at !== null
+                ? entry.at
+                : entry.until !== undefined && entry.until !== null
+                  ? entry.until
+                  : undefined;
+          thresholds.push(b === undefined ? { value: v } : { before: b, value: v });
+        }
+      });
+
+      if (!thresholds.length) return undefined;
+
+      const cfg: any = { op: 'timeOfDayMap', thresholds };
+      if (dependsOn) cfg.dependsOn = dependsOn;
+      if (when) cfg.when = when;
+      if (hidden !== undefined) cfg.hidden = hidden;
+      return cfg as DerivedValueConfig;
+    }
+
+    return undefined;
   }
 }
