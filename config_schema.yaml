@@ -241,8 +241,12 @@ components:
           description: ID of the line-item field used as anchor when bulk-adding rows.
         addMode:
           type: string
-          enum: [overlay, inline]
-          description: Use `overlay` to open a multi-select overlay for anchor choices when adding rows.
+          enum: [overlay, inline, auto]
+          description: |
+            How rows are added for this line-item group.
+            - overlay: open a multi-select overlay for the anchor CHOICE field, then create one row per selected value.
+            - auto: automatically add/recompute rows when the anchor field's `optionFilter.dependsOn` fields are filled (one row per allowed anchor option). Auto-generated rows are overwritten when dependencies change, while manual rows are preserved.
+            - inline: default; show a simple "Add line" button and create an empty row per click.
         sectionSelector:
           $ref: '#/components/schemas/LineItemSelectorConfig'
           description: Optional selector rendered above the line items to scope filters/validation rules (options can come from a REF tab).

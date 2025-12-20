@@ -92,7 +92,7 @@ export const seedSubgroupDefaults = (
   let next = lineItems;
   group.lineItemConfig.subGroups.forEach(sub => {
     const subKeyRaw = resolveSubgroupKey(sub as any);
-    if (!subKeyRaw || (sub as any).addMode === 'overlay') return;
+    if (!subKeyRaw || (sub as any).addMode === 'overlay' || (sub as any).addMode === 'auto') return;
     const subKey = buildSubgroupKey(group.id, parentRowId, subKeyRaw);
     const existing = next[subKey] || [];
     if (existing.length) return;
@@ -193,7 +193,7 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
         return { id: rowId, values };
       });
 
-      if (!parsedRows.length && q.lineItemConfig?.addMode !== 'overlay') {
+      if (!parsedRows.length && q.lineItemConfig?.addMode !== 'overlay' && q.lineItemConfig?.addMode !== 'auto') {
         const minRows = Math.max(1, q.lineItemConfig?.minRows || 1);
         for (let i = 0; i < minRows; i += 1) {
           const newRowId = `${q.id}_${i}_${Math.random().toString(16).slice(2)}`;

@@ -28,7 +28,14 @@ import { InfoTooltip } from './InfoTooltip';
 import { LineOverlayState } from './overlays/LineSelectOverlay';
 import { resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorLabel } from './lineItemSelectors';
-import { buildSubgroupKey, resolveSubgroupKey } from '../../app/lineItems';
+import {
+  ROW_SOURCE_AUTO,
+  ROW_SOURCE_KEY,
+  buildSubgroupKey,
+  parseRowSource,
+  resolveSubgroupKey
+} from '../../app/lineItems';
+import { applyValueMapsToForm } from '../../app/valueMaps';
 
 export interface ErrorIndex {
   rowErrors: Set<string>;
@@ -130,10 +137,12 @@ export interface LineItemGroupQuestionCtx {
 
 export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: LineItemGroupQuestionCtx }> = ({ q, ctx }) => {
   const {
+    definition,
     language,
     values,
     setValues,
     lineItems,
+    setLineItems,
     submitting,
     errors,
     optionState,
@@ -166,6 +175,323 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     setOverlay,
     onDiagnostic
   } = ctx;
+
+  const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
+
+  const normalizeAnchorKey = (raw: any): string => {
+    if (raw === undefined || raw === null) return '';
+    if (Array.isArray(raw)) {
+      const first = raw[0];
+      return first === undefined || first === null ? '' : first.toString().trim();
+    }
+    return raw.toString().trim();
+  };
+
+  const buildOptionSetForLineField = (field: any, groupKey: string): OptionSet => {
+    const key = optionKey(field.id, groupKey);
+    const fromState = optionState[key];
+    if (fromState) return fromState;
+    return {
+      en: field.options || [],
+      fr: (field as any).optionsFr || [],
+      nl: (field as any).optionsNl || []
+    };
+  };
+
+  const resolveDependsOnIds = (field: any): string[] => {
+    const raw = field?.optionFilter?.dependsOn;
+    const ids = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    return ids.map((id: any) => (id ?? '').toString().trim()).filter(Boolean);
+  };
+
+  const isValidDependencyValue = (raw: any): boolean => {
+    const dep = toDependencyValue(raw as any);
+    if (dep === undefined || dep === null) return false;
+    if (typeof dep === 'number') return Number.isFinite(dep);
+    return dep.toString().trim() !== '';
+  };
+
+  const computeAutoDesired = (args: {
+    groupKey: string;
+    anchorField: any;
+    dependencyIds: string[];
+    getDependencyRaw: (depId: string) => any;
+  }): { valid: boolean; desired: string[]; depVals: (string | number | null | undefined)[] } => {
+    const { groupKey, anchorField, dependencyIds, getDependencyRaw } = args;
+    const depRawVals = dependencyIds.map(depId => getDependencyRaw(depId));
+    const depVals = depRawVals.map(v => toDependencyValue(v as any));
+    const valid = dependencyIds.length > 0 && depRawVals.every(isValidDependencyValue);
+    if (!valid) return { valid: false, desired: [], depVals };
+    const opts = buildOptionSetForLineField(anchorField, groupKey);
+    const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
+    const localized = buildLocalizedOptions(opts, allowed, language);
+    const seen = new Set<string>();
+    const desired: string[] = [];
+    localized.forEach(opt => {
+      const key = (opt?.value ?? '').toString().trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      desired.push(key);
+    });
+    return { valid: true, desired, depVals };
+  };
+
+  const reconcileAutoRows = (args: {
+    currentRows: any[];
+    targetKey: string;
+    anchorFieldId: string;
+    desired: string[];
+    depVals: (string | number | null | undefined)[];
+    selectorId?: string;
+    selectorValue?: FieldValue;
+  }): {
+    rows: any[];
+    changed: boolean;
+    contextId: string;
+    suppressedManual: number;
+    desiredCount: number;
+  } => {
+    const { currentRows, targetKey, anchorFieldId, desired, depVals, selectorId, selectorValue } = args;
+    const autoPrefix = `${AUTO_CONTEXT_PREFIX}:${targetKey}:`;
+    const contextId = `${autoPrefix}${depVals.map(v => (v === undefined || v === null ? '' : v.toString())).join('||')}`;
+
+    const manualAnchorKeys = new Set<string>();
+    currentRows.forEach(r => {
+      const source = parseRowSource((r.values as any)?.[ROW_SOURCE_KEY]);
+      if (source !== 'manual') return;
+      const key = normalizeAnchorKey((r.values as any)?.[anchorFieldId]);
+      if (key) manualAnchorKeys.add(key);
+    });
+
+    const desiredFiltered = desired.filter(key => !manualAnchorKeys.has(key));
+    const suppressedManual = desired.length - desiredFiltered.length;
+    const remaining = new Set(desiredFiltered);
+
+    const nextRows: any[] = [];
+    currentRows.forEach(row => {
+      const isAutoContext = typeof row.effectContextId === 'string' && row.effectContextId.startsWith(autoPrefix);
+      if (!isAutoContext) {
+        nextRows.push(row);
+        return;
+      }
+
+      const key = normalizeAnchorKey((row.values as any)?.[anchorFieldId]);
+      if (!key || !remaining.has(key)) {
+        // Drop auto rows that are no longer desired.
+        return;
+      }
+      remaining.delete(key);
+
+      const nextValues: Record<string, FieldValue> = { ...(row.values || {}) };
+      let valuesChanged = false;
+      if (normalizeAnchorKey((nextValues as any)[anchorFieldId]) !== key) {
+        nextValues[anchorFieldId] = key;
+        valuesChanged = true;
+      }
+      if (parseRowSource((nextValues as any)[ROW_SOURCE_KEY]) !== 'auto') {
+        nextValues[ROW_SOURCE_KEY] = ROW_SOURCE_AUTO;
+        valuesChanged = true;
+      }
+      if (
+        selectorId &&
+        selectorValue !== undefined &&
+        selectorValue !== null &&
+        (nextValues as any)[selectorId] === undefined
+      ) {
+        nextValues[selectorId] = selectorValue;
+        valuesChanged = true;
+      }
+
+      const metaChanged = row.autoGenerated !== true || row.effectContextId !== contextId;
+      if (valuesChanged || metaChanged) {
+        nextRows.push({
+          ...row,
+          values: nextValues,
+          autoGenerated: true,
+          effectContextId: contextId
+        });
+      } else {
+        nextRows.push(row);
+      }
+    });
+
+    // Append missing desired keys in desired order.
+    desiredFiltered.forEach(key => {
+      if (!remaining.has(key)) return;
+      remaining.delete(key);
+      const nextValues: Record<string, FieldValue> = {
+        [anchorFieldId]: key,
+        [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO
+      };
+      if (selectorId && selectorValue !== undefined && selectorValue !== null) {
+        nextValues[selectorId] = selectorValue;
+      }
+      nextRows.push({
+        id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
+        values: nextValues,
+        autoGenerated: true,
+        effectContextId: contextId
+      });
+    });
+
+    const changed = nextRows.length !== currentRows.length || nextRows.some((row, idx) => row !== currentRows[idx]);
+    return { rows: nextRows, changed, contextId, suppressedManual, desiredCount: desired.length };
+  };
+
+  // Auto addMode: when dependsOn fields are valid, auto-create one row per allowed anchor option.
+  React.useEffect(() => {
+    if (submitting) return;
+    const cfg = q.lineItemConfig;
+    if (!cfg || cfg.addMode !== 'auto' || !cfg.anchorFieldId) return;
+    const anchorField = (cfg.fields || []).find(f => f.id === cfg.anchorFieldId);
+    if (!anchorField || anchorField.type !== 'CHOICE') return;
+    const dependencyIds = resolveDependsOnIds(anchorField);
+    if (!dependencyIds.length) return;
+
+    // Ensure anchor options are loaded so allowed values can be computed.
+    ensureLineOptions(q.id, anchorField);
+
+    const { valid, desired, depVals } = computeAutoDesired({
+      groupKey: q.id,
+      anchorField,
+      dependencyIds,
+      getDependencyRaw: depId => values[depId]
+    });
+
+    const selectorId = cfg.sectionSelector?.id;
+    const selectorValue = selectorId ? (values as any)[selectorId] : undefined;
+
+    const spec = {
+      targetKey: q.id,
+      anchorFieldId: anchorField.id,
+      desired: valid ? desired : [],
+      depVals,
+      selectorId,
+      selectorValue
+    };
+
+    setLineItems(prev => {
+      const currentRows = prev[q.id] || [];
+      const res = reconcileAutoRows({ currentRows, ...spec });
+      if (!res.changed) return prev;
+      const nextState = { ...prev, [q.id]: res.rows };
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextState);
+      setValues(nextValues);
+      onDiagnostic?.('ui.lineItems.autoAdd.apply', {
+        targetKey: q.id,
+        anchorFieldId: anchorField.id,
+        valid,
+        desiredCount: res.desiredCount,
+        suppressedManual: res.suppressedManual,
+        nextRowCount: res.rows.length,
+        contextId: res.contextId
+      });
+      return recomputed;
+    });
+  }, [
+    submitting,
+    q,
+    values,
+    language,
+    optionState,
+    lineItems,
+    ensureLineOptions,
+    setLineItems,
+    setValues
+  ]);
+
+  // Auto addMode for subgroups (per parent row).
+  React.useEffect(() => {
+    if (submitting) return;
+    const parentCfg = q.lineItemConfig;
+    if (!parentCfg?.subGroups?.length) return;
+    const parentRows = lineItems[q.id] || [];
+    if (!parentRows.length) return;
+
+    const autoSubs = parentCfg.subGroups.filter(sub => (sub as any).addMode === 'auto' && (sub as any).anchorFieldId);
+    if (!autoSubs.length) return;
+    const specs: Array<{
+      targetKey: string;
+      anchorFieldId: string;
+      desired: string[];
+      depVals: (string | number | null | undefined)[];
+      selectorId?: string;
+      selectorValue?: FieldValue;
+    }> = [];
+
+    autoSubs.forEach(sub => {
+      const subId = resolveSubgroupKey(sub as any);
+      if (!subId) return;
+      const anchorField = ((sub as any).fields || []).find((f: any) => f.id === (sub as any).anchorFieldId);
+      if (!anchorField || anchorField.type !== 'CHOICE') return;
+      const dependencyIds = resolveDependsOnIds(anchorField);
+      if (!dependencyIds.length) return;
+
+      parentRows.forEach(row => {
+        const subKey = buildSubgroupKey(q.id, row.id, subId);
+        ensureLineOptions(subKey, anchorField);
+
+        const selectorId = (sub as any).sectionSelector?.id;
+        const selectorValue = selectorId ? (subgroupSelectors as any)[subKey] : undefined;
+
+        const { valid, desired, depVals } = computeAutoDesired({
+          groupKey: subKey,
+          anchorField,
+          dependencyIds,
+          getDependencyRaw: depId => {
+            if (selectorId && depId === selectorId) return selectorValue;
+            const fromRow = row.values ? (row.values as any)[depId] : undefined;
+            if (fromRow !== undefined && fromRow !== null && fromRow !== '') return fromRow;
+            return (values as any)[depId];
+          }
+        });
+
+        specs.push({
+          targetKey: subKey,
+          anchorFieldId: anchorField.id,
+          desired: valid ? desired : [],
+          depVals,
+          selectorId,
+          selectorValue
+        });
+      });
+    });
+
+    if (!specs.length) return;
+
+    setLineItems(prev => {
+      let next: any = prev;
+      let changedCount = 0;
+      specs.forEach(spec => {
+        const currentRows = (next[spec.targetKey] || prev[spec.targetKey] || []) as any[];
+        const res = reconcileAutoRows({ currentRows, ...spec });
+        if (!res.changed) return;
+        if (next === prev) next = { ...prev };
+        (next as any)[spec.targetKey] = res.rows;
+        changedCount += 1;
+      });
+      if (next === prev) return prev;
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next as any);
+      setValues(nextValues);
+      onDiagnostic?.('ui.lineItems.autoAdd.applyBatch', {
+        parentGroupId: q.id,
+        specCount: specs.length,
+        changedCount
+      });
+      return recomputed;
+    });
+  }, [
+    submitting,
+    q,
+    values,
+    language,
+    optionState,
+    lineItems,
+    subgroupSelectors,
+    ensureLineOptions,
+    setLineItems,
+    setValues
+  ]);
 
         const selectorCfg = q.lineItemConfig?.sectionSelector;
         const selectorOptionSet = buildSelectorOptionSet(selectorCfg);

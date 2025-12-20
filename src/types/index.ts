@@ -203,7 +203,7 @@ export interface LineItemGroupConfig {
     nl?: string;
   };
   anchorFieldId?: string; // field to drive overlay multi-add
-  addMode?: 'overlay' | 'inline';
+  addMode?: 'overlay' | 'inline' | 'auto';
   sectionSelector?: LineItemSelectorConfig;
   totals?: LineItemTotalConfig[];
   fields: LineItemFieldConfig[];
