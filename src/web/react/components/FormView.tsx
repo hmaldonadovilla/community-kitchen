@@ -30,7 +30,7 @@ import {
   toDateInputValue,
   toUploadItems
 } from './form/utils';
-import { buttonStyles, RequiredStar, srOnly, UploadIcon, withDisabled } from './form/ui';
+import { buttonStyles, PlusIcon, RequiredStar, srOnly, UploadIcon, withDisabled } from './form/ui';
 import { FileOverlay } from './form/overlays/FileOverlay';
 import { InfoOverlay } from './form/overlays/InfoOverlay';
 import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectOverlay';
@@ -355,9 +355,16 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [nestedGroupMeta.collapsibleDefaults]);
 
-  const toggleGroupCollapsed = useCallback((groupKey: string) => {
-    setCollapsedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
-  }, []);
+  const toggleGroupCollapsed = useCallback(
+    (groupKey: string) => {
+      setCollapsedGroups(prev => {
+        const nextCollapsed = !prev[groupKey];
+        onDiagnostic?.('ui.group.toggle', { groupKey, collapsed: nextCollapsed });
+        return { ...prev, [groupKey]: nextCollapsed };
+      });
+    },
+    [onDiagnostic]
+  );
 
   const renderChoiceControl = useCallback(
     (args: {
@@ -397,6 +404,7 @@ const FormView: React.FC<FormViewProps> = ({
                     className={active ? 'active' : undefined}
                     role="radio"
                     aria-checked={active}
+                    title={opt.label}
                     onClick={() => {
                       if (!required && active) {
                         onChange('');
@@ -1814,7 +1822,8 @@ const FormView: React.FC<FormViewProps> = ({
     const renderAddButton = () => {
       if (!subConfig) {
         return (
-          <button type="button" onClick={() => addLineItemRowManual(subKey)} style={buttonStyles.primary}>
+          <button type="button" onClick={() => addLineItemRowManual(subKey)} style={buttonStyles.secondary}>
+            <PlusIcon />
             Add line
           </button>
         );
@@ -1823,7 +1832,7 @@ const FormView: React.FC<FormViewProps> = ({
         return (
           <button
             type="button"
-            style={buttonStyles.primary}
+            style={buttonStyles.secondary}
             onClick={async () => {
               const anchorField = (subConfig.fields || []).find(f => f.id === subConfig.anchorFieldId);
               if (!anchorField || anchorField.type !== 'CHOICE') {
@@ -1866,12 +1875,14 @@ const FormView: React.FC<FormViewProps> = ({
               });
             }}
           >
+            <PlusIcon />
             {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add lines')}
           </button>
         );
       }
       return (
-        <button type="button" onClick={() => addLineItemRowManual(subKey)} style={buttonStyles.primary}>
+        <button type="button" onClick={() => addLineItemRowManual(subKey)} style={buttonStyles.secondary}>
+          <PlusIcon />
           {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line')}
         </button>
       );
@@ -2344,6 +2355,17 @@ const FormView: React.FC<FormViewProps> = ({
                         toggleGroupCollapsed={toggleGroupCollapsed}
                         renderField={renderSubField}
                         hasError={(field: any) => !!errors[`${subKey}__${field.id}__${subRow.id}`]}
+                        isComplete={(field: any) => {
+                          const mapped = field.valueMap
+                            ? resolveValueMapValue(field.valueMap, (fid: string) => {
+                                if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fid)) return subRow.values[fid];
+                                if (Object.prototype.hasOwnProperty.call(parentRowValues || {}, fid)) return parentRowValues[fid];
+                                return values[fid];
+                              })
+                            : undefined;
+                          const raw = field.valueMap ? mapped : (subRow.values || {})[field.id];
+                          return !isEmptyValue(raw as any);
+                        }}
                       />
                     );
                   })()}
@@ -2497,6 +2519,42 @@ const FormView: React.FC<FormViewProps> = ({
 
             const isCollapsed = section.collapsible ? !!collapsedGroups[section.key] : false;
 
+            const requiredProgress = (() => {
+              const isComplete = (q: WebQuestionDefinition): boolean => {
+                if (q.type === 'LINE_ITEM_GROUP') {
+                  const rows = (lineItems[q.id] || []) as any[];
+                  return rows.length > 0;
+                }
+                const mappedValue = (q as any).valueMap
+                  ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId])
+                  : undefined;
+                const raw = (q as any).valueMap ? mappedValue : (values[q.id] as any);
+                return !isEmptyValue(raw as any);
+              };
+
+              // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
+              const requiredQs = visible.filter(q => !!q.required);
+              const optionalQs = visible.filter(q => !q.required);
+
+              const totalRequired = requiredQs.length;
+              const requiredComplete = requiredQs.reduce((acc, q) => (isComplete(q) ? acc + 1 : acc), 0);
+
+              const optionalComplete =
+                totalRequired > 0 && requiredComplete >= totalRequired
+                  ? optionalQs.reduce((acc, q) => (isComplete(q) ? acc + 1 : acc), 0)
+                  : 0;
+
+              const numerator = requiredComplete + optionalComplete;
+              return { numerator, requiredComplete, totalRequired };
+            })();
+
+            const requiredProgressClass =
+              requiredProgress.totalRequired > 0
+                ? requiredProgress.requiredComplete >= requiredProgress.totalRequired
+                  ? 'ck-progress-good'
+                  : 'ck-progress-bad'
+                : 'ck-progress-neutral';
+
             const sectionHasError = (() => {
               const keys = Object.keys(errors || {});
               if (!keys.length) return false;
@@ -2554,21 +2612,24 @@ const FormView: React.FC<FormViewProps> = ({
                 data-has-error={sectionHasError ? 'true' : undefined}
               >
                 {section.title ? (
-                  section.collapsible ? (
-                    <button
-                      type="button"
-                      className="ck-group-header"
-                      onClick={() => toggleGroupCollapsed(section.key)}
-                      aria-expanded={!isCollapsed}
-                    >
-                      <div className="ck-group-title">{section.title}</div>
-                      <div className="ck-group-chevron">{isCollapsed ? '▸' : '▾'}</div>
-                    </button>
-                  ) : (
-                    <div className="ck-group-header">
-                      <div className="ck-group-title">{section.title}</div>
-      </div>
-                  )
+                  <div className="ck-group-header">
+                    <div className="ck-group-title">{section.title}</div>
+                    {section.collapsible ? (
+                      <button
+                        type="button"
+                        className={`ck-progress-pill ${requiredProgressClass}`}
+                        onClick={() => toggleGroupCollapsed(section.key)}
+                        aria-expanded={!isCollapsed}
+                        aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} section ${section.title} (${requiredProgress.numerator}/${requiredProgress.totalRequired})`}
+                        title={`${requiredProgress.numerator}/${requiredProgress.totalRequired}`}
+                      >
+                        <span>
+                          {requiredProgress.numerator}/{requiredProgress.totalRequired}
+                        </span>
+                        <span className="ck-progress-caret">{isCollapsed ? '▸' : '▾'}</span>
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 {!isCollapsed && (
@@ -2613,7 +2674,7 @@ const FormView: React.FC<FormViewProps> = ({
             type="button"
             onClick={onBack}
             disabled={submitting}
-            style={withDisabled(buttonStyles.negative, submitting)}
+            style={withDisabled(buttonStyles.secondary, submitting)}
           >
           Back
         </button>

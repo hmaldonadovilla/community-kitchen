@@ -17,8 +17,14 @@ export const FORM_VIEW_STYLES = `
         .form-card input,
         .form-card select,
         .form-card textarea {
-          font-size: 36px;
-          line-height: 1.5;
+          font-size: var(--ck-font-control);
+          line-height: 1.4;
+        }
+        /* Numeric fields: align values to the right for better scanability (especially in 2-up grids). */
+        .form-card input[type="number"],
+        .webform-overlay input[type="number"] {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
         }
         .form-card .line-item-table td,
         .form-card .line-item-table th {
@@ -44,6 +50,7 @@ export const FORM_VIEW_STYLES = `
           max-width: 220px;
           margin: 0;
           font-weight: 800;
+          font-size: var(--ck-font-label);
           color: var(--text);
           overflow-wrap: anywhere;
           word-break: break-word;
@@ -61,6 +68,34 @@ export const FORM_VIEW_STYLES = `
           flex: 2 1 260px;
           min-width: 0;
           width: 100%;
+        }
+
+        /* Control row: keep the main control + its action buttons (subgroup/info) on the same line when possible. */
+        .ck-control-row {
+          display: flex;
+          align-items: stretch;
+          gap: 10px;
+          flex-wrap: nowrap;
+          width: 100%;
+          min-width: 0;
+        }
+        .ck-control-row > :first-child {
+          flex: 1 1 260px;
+          min-width: 0;
+        }
+
+        /* Field-level action buttons (subgroup + info) */
+        .ck-field-actions {
+          display: inline-flex;
+          align-items: stretch;
+          gap: 10px;
+          flex-wrap: nowrap;
+          flex: 0 0 auto;
+          min-width: 0;
+        }
+        .ck-field-actions > button,
+        .ck-field-actions > .info-button {
+          min-height: var(--control-height);
         }
         .form-card .field.inline-field > .error,
         .webform-overlay .field.inline-field > .error {
@@ -114,7 +149,7 @@ export const FORM_VIEW_STYLES = `
         .ck-line-grid > .field.inline-field.ck-label-stacked > label,
         .ck-pair-grid > .field.inline-field.ck-label-stacked > label,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field.ck-label-stacked > label {
-          min-height: 2.6em;
+          min-height: 2.4em;
         }
         .form-card .field[data-has-error="true"],
         .webform-overlay .field[data-has-error="true"] {
@@ -126,30 +161,26 @@ export const FORM_VIEW_STYLES = `
         }
         .form-card .info-button,
         .webform-overlay .info-button {
-          border: 1px solid var(--border);
-          background: rgba(118, 118, 128, 0.12);
-          color: var(--text);
+          border: 1px solid var(--ck-secondary-border);
+          background: var(--ck-secondary-bg);
+          color: var(--ck-secondary-text);
           border-radius: 12px;
-          padding: 13px 18px;
-          font-weight: 700;
-          cursor: pointer;
-          white-space: nowrap;
-          line-height: 1;
-        }
-        /* When an info button is rendered inline next to a control, match control height. */
-        .form-card .field.inline-field > .info-button,
-        .webform-overlay .field.inline-field > .info-button {
-          min-height: var(--control-height);
           padding: 0 18px;
+          min-height: var(--control-height);
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          font-weight: 700;
+          font-size: var(--ck-font-control);
+          cursor: pointer;
+          white-space: nowrap;
+          line-height: 1;
         }
 
         .ck-segmented {
           display: inline-flex;
           width: 100%;
-          max-width: 520px;
+          max-width: none;
           align-items: stretch;
           gap: 2px;
           padding: 2px;
@@ -157,6 +188,7 @@ export const FORM_VIEW_STYLES = `
           border-radius: 12px;
           background: rgba(118, 118, 128, 0.12);
           min-height: var(--control-height);
+          box-sizing: border-box;
         }
         .ck-segmented button {
           flex: 1 1 0;
@@ -164,13 +196,19 @@ export const FORM_VIEW_STYLES = `
           border: none;
           background: transparent;
           border-radius: 10px;
-          padding: 16px 12px;
+          padding: 10px 12px;
+          font-size: var(--ck-font-control);
           font-weight: 800;
           color: var(--text);
-          line-height: 1;
+          line-height: 1.1;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          min-width: 0;
+          /* Allow long labels (e.g., Customer) to wrap instead of truncating */
+          white-space: normal;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
         .ck-segmented button.active {
           background: var(--card);
@@ -227,8 +265,9 @@ export const FORM_VIEW_STYLES = `
         .ck-line-grid > .field.inline-field > label,
         .ck-pair-grid > .field.inline-field > label,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > label {
-          /* Reserve up to ~2 lines so controls in the same row start together */
-          min-height: 2.6em;
+          /* Reserve some space for 2-line labels, but avoid large gaps for short labels */
+          line-height: 1.2;
+          min-height: 2.4em;
           max-width: none;
           margin: 0;
         }
@@ -319,12 +358,17 @@ export const FORM_VIEW_STYLES = `
           min-height: var(--control-height);
         }
         .ck-consent input[type="checkbox"] {
-          width: 28px;
-          height: 28px;
+          width: 40px;
+          height: 40px;
           accent-color: var(--accent);
-          transform: scale(1.35);
-          transform-origin: left center;
           margin: 0;
+        }
+
+        /* Native selects can render shorter on iOS; force them to match the global control height. */
+        .form-card select,
+        .webform-overlay select {
+          min-height: var(--control-height);
+          height: var(--control-height);
         }
 
         /* Date inputs can be surprisingly wide on iOS; ensure they always shrink within 2-up grids. */
@@ -337,11 +381,13 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
           inline-size: 100%;
           box-sizing: border-box;
+          text-align: left;
         }
         .form-card input[type="date"]::-webkit-date-and-time-value,
         .webform-overlay input[type="date"]::-webkit-date-and-time-value {
           min-width: 0;
           max-width: 100%;
+          text-align: left;
         }
         .form-card input[type="date"]::-webkit-calendar-picker-indicator,
         .webform-overlay input[type="date"]::-webkit-calendar-picker-indicator {
@@ -375,22 +421,69 @@ export const FORM_VIEW_STYLES = `
           background: transparent;
           text-align: left;
           border-bottom: 1px solid var(--border);
-          cursor: pointer;
+          cursor: default;
         }
         .ck-group-title {
-          font-size: 32px;
+          font-size: var(--ck-font-group-title);
           font-weight: 900;
           /* Distinguish group titles from field labels */
           color: rgba(15, 23, 42, 0.72);
           letter-spacing: -0.2px;
         }
+        .ck-progress-pill {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 14px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          background: rgba(118, 118, 128, 0.12);
+          color: rgba(15, 23, 42, 0.72);
+          font-weight: 900;
+          font-size: var(--ck-font-pill);
+          line-height: 1;
+          white-space: nowrap;
+          min-height: 56px;
+          cursor: pointer;
+        }
+        .ck-progress-pill:active {
+          transform: translateY(1px);
+        }
+        .ck-progress-pill[aria-disabled="true"] {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .ck-progress-pill[data-has-error="true"] {
+          box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18);
+        }
+        .ck-progress-pill .ck-progress-caret {
+          font-size: var(--ck-font-caret);
+          font-weight: 900;
+          opacity: 0.8;
+        }
+        .ck-progress-pill.ck-progress-good {
+          background: #dcfce7;
+          border-color: rgba(22, 163, 74, 0.28);
+          color: #166534;
+        }
+        .ck-progress-pill.ck-progress-bad {
+          background: #fee2e2;
+          border-color: rgba(220, 38, 38, 0.28);
+          color: #b91c1c;
+        }
+        .ck-progress-pill.ck-progress-neutral {
+          background: rgba(118, 118, 128, 0.12);
+          border-color: var(--border);
+          color: rgba(15, 23, 42, 0.72);
+        }
         .ck-group-chevron {
           flex: 0 0 auto;
-          font-size: 36px;
+          font-size: 44px;
           font-weight: 900;
           color: rgba(15, 23, 42, 0.6);
-          width: 56px;
-          height: 56px;
+          width: 64px;
+          height: 64px;
           padding: 0;
           box-sizing: border-box;
           border-radius: 999px;
@@ -406,6 +499,14 @@ export const FORM_VIEW_STYLES = `
         }
 
         @media (max-width: 520px) {
+          /* On very narrow viewports, allow control rows to wrap (select + buttons). */
+          .ck-control-row {
+            flex-wrap: wrap;
+          }
+          .ck-field-actions {
+            flex-wrap: wrap;
+          }
+
           /* iOS date inputs are very wide; if a paired row contains a DATE field, stack it on mobile to prevent overflow. */
           .ck-pair-grid.ck-pair-has-date {
             grid-template-columns: 1fr;

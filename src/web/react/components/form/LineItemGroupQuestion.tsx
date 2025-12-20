@@ -22,7 +22,7 @@ import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { FormErrors, LineItemState, OptionState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
 import { toDateInputValue, toUploadItems } from './utils';
-import { buttonStyles, RequiredStar, srOnly, UploadIcon, withDisabled } from './ui';
+import { buttonStyles, PlusIcon, RequiredStar, srOnly, UploadIcon, withDisabled } from './ui';
 import { GroupedPairedFields } from './GroupedPairedFields';
 import { InfoTooltip } from './InfoTooltip';
 import { LineOverlayState } from './overlays/LineSelectOverlay';
@@ -180,6 +180,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               <button
                 type="button"
                 disabled={submitting}
+                style={withDisabled(buttonStyles.secondary, submitting)}
                 onClick={async () => {
                   if (submitting) return;
                   const anchorField = (q.lineItemConfig?.fields || []).find(f => f.id === q.lineItemConfig?.anchorFieldId);
@@ -225,12 +226,19 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                   });
                 }}
               >
+                <PlusIcon />
                 {resolveLocalizedString(q.lineItemConfig?.addButtonLabel, language, 'Add lines')}
               </button>
             );
           }
           return (
-            <button type="button" disabled={submitting} onClick={() => addLineItemRowManual(q.id)}>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => addLineItemRowManual(q.id)}
+              style={withDisabled(buttonStyles.secondary, submitting)}
+            >
+              <PlusIcon />
               {resolveLocalizedString(q.lineItemConfig?.addButtonLabel, language, 'Add line')}
             </button>
           );
@@ -410,6 +418,42 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               })();
               const canExpand = gateResult.canExpand;
               const rowHasError = errorIndex.rowErrors.has(collapseKey);
+              const requiredRowProgress = (() => {
+                let totalRequired = 0;
+                let requiredComplete = 0;
+                let optionalComplete = 0;
+
+                (allFields || []).forEach((field: any) => {
+                  const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+                  if (hideField) return;
+
+                  const mapped = field.valueMap
+                    ? resolveValueMapValue(field.valueMap, (fid: string) => {
+                        if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
+                        return values[fid];
+                      })
+                    : undefined;
+                  const raw = field.valueMap ? mapped : (row.values || {})[field.id];
+                  const filled = !isEmptyValue(raw as any);
+
+                  if (!!field.required) {
+                    totalRequired += 1;
+                    if (filled) requiredComplete += 1;
+                  } else {
+                    if (filled) optionalComplete += 1;
+                  }
+                });
+
+                const includeOptional = totalRequired > 0 && requiredComplete >= totalRequired;
+                const numerator = requiredComplete + (includeOptional ? optionalComplete : 0);
+                return { numerator, requiredComplete, totalRequired };
+              })();
+              const requiredRowProgressClass =
+                requiredRowProgress.totalRequired > 0
+                  ? requiredRowProgress.requiredComplete >= requiredRowProgress.totalRequired
+                    ? 'ck-progress-good'
+                    : 'ck-progress-bad'
+                  : 'ck-progress-neutral';
               return (
                 <div
                   key={row.id}
@@ -451,10 +495,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
                                 return Array.from(new Set(hits));
                               })();
-                              const subgroupTriggerButtons =
-                                triggeredSubgroupIds.length && !rowCollapsed ? (
-                                  <div>
-                                    {triggeredSubgroupIds.map(subId => {
+                              const subgroupTriggerNodes =
+                                triggeredSubgroupIds.length && !rowCollapsed
+                                  ? triggeredSubgroupIds.map(subId => {
                                       const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
                                       const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
                                       return (
@@ -471,9 +514,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           {subIdToLabel[subId] || subId}
                                         </button>
                                       );
-                                    })}
-                                  </div>
-                                ) : null;
+                                    })
+                                  : [];
 
                               if (titleField.type === 'CHOICE') {
                                 const optionSetField: OptionSet =
@@ -511,29 +553,36 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       {resolveFieldLabel(titleField, language, titleField.id)}
                                       {titleField.required && <RequiredStar />}
                                     </label>
-                                    <select
-                                      value={choiceVal || ''}
-                                      onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
-                                    >
-                                      <option value="">Select…</option>
-                                      {optsField.map(opt => (
-                                        <option key={opt.value} value={opt.value}>
-                                          {opt.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {subgroupTriggerButtons}
-                                    {(() => {
-                                      const selected = optsField.find(opt => opt.value === choiceVal);
-                                      if (!selected?.tooltip) return null;
-                                      const fallbackLabel = resolveFieldLabel(titleField, language, titleField.id);
-                                      const tooltipLabel = resolveLocalizedString(
-                                        titleField.dataSource?.tooltipLabel,
-                                        language,
-                                        fallbackLabel
-                                      );
-                                      return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
-                                    })()}
+                                    <div className="ck-control-row">
+                                      <select
+                                        value={choiceVal || ''}
+                                        onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
+                                      >
+                                        <option value="">Select…</option>
+                                        {optsField.map(opt => (
+                                          <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {(() => {
+                                        const selected = optsField.find(opt => opt.value === choiceVal);
+                                        const tooltipNode = selected?.tooltip ? (
+                                          <InfoTooltip
+                                            text={selected.tooltip}
+                                            label={resolveLocalizedString(
+                                              titleField.dataSource?.tooltipLabel,
+                                              language,
+                                              resolveFieldLabel(titleField, language, titleField.id)
+                                            )}
+                                            onOpen={openInfoOverlay}
+                                          />
+                                        ) : null;
+                                        const actionNodes = tooltipNode ? [...subgroupTriggerNodes, tooltipNode] : subgroupTriggerNodes;
+                                        if (!actionNodes.length) return null;
+                                        return <div className="ck-field-actions">{actionNodes}</div>;
+                                      })()}
+                                    </div>
                                     {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                   </div>
                                 );
@@ -590,7 +639,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                         </label>
                                       ))}
                                     </div>
-                                    {subgroupTriggerButtons}
+                                    {subgroupTriggerNodes.length ? (
+                                      <div className="ck-field-actions">{subgroupTriggerNodes}</div>
+                                    ) : null}
                                     {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                   </div>
                                 );
@@ -627,7 +678,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
                                     readOnly={!!titleField.valueMap}
                                   />
-                                  {subgroupTriggerButtons}
+                                  {subgroupTriggerNodes.length ? (
+                                    <div className="ck-field-actions">{subgroupTriggerNodes}</div>
+                                  ) : null}
                                   {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                 </div>
                               );
@@ -654,11 +707,16 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         </div>
                         <button
                           type="button"
-                          className="ck-group-chevron"
-                          aria-label={rowCollapsed ? 'Expand row' : 'Collapse row'}
+                          className={`ck-progress-pill ${requiredRowProgressClass}`}
+                          data-has-error={rowHasError ? 'true' : undefined}
+                          aria-label={`${rowCollapsed ? 'Expand' : 'Collapse'} row ${rowIdx + 1} (${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired})`}
                           aria-expanded={!rowCollapsed}
                           aria-disabled={rowCollapsed && !canExpand}
-                          title={rowCollapsed && !canExpand ? gateResult.reason : rowCollapsed ? 'Expand' : 'Collapse'}
+                          title={
+                            rowCollapsed && !canExpand
+                              ? gateResult.reason
+                              : `${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired}`
+                          }
                           onClick={() => {
                             if (rowCollapsed && !canExpand) {
                               onDiagnostic?.('edit.progressive.expand.blocked', {
@@ -671,13 +729,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             setCollapsedRows(prev => ({ ...prev, [collapseKey]: !rowCollapsed }));
                             onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
                           }}
-                          style={{
-                            opacity: rowCollapsed && !canExpand ? 0.6 : 1,
-                            borderColor: rowHasError ? '#ef4444' : undefined,
-                            background: rowHasError ? '#fff7f7' : undefined
-                          }}
                         >
-                          {rowCollapsed ? '▸' : '▾'}
+                          <span>
+                            {requiredRowProgress.numerator}/{requiredRowProgress.totalRequired}
+                          </span>
+                          <span className="ck-progress-caret">{rowCollapsed ? '▸' : '▾'}</span>
                         </button>
                       </div>
                     </div>
@@ -725,10 +781,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
                         return Array.from(new Set(hits));
                       })();
-                      const subgroupTriggerButtons =
-                        triggeredSubgroupIds.length && !rowCollapsed ? (
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', alignSelf: 'center' }}>
-                            {triggeredSubgroupIds.map(subId => {
+                      const subgroupTriggerNodes =
+                        triggeredSubgroupIds.length && !rowCollapsed
+                          ? triggeredSubgroupIds.map(subId => {
                               const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
                               const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
                               return (
@@ -745,9 +800,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   {subIdToLabel[subId] || subId}
                                 </button>
                               );
-                            })}
-                          </div>
-                        ) : null;
+                            })
+                          : [];
 
                     switch (field.type) {
                       case 'CHOICE': {
@@ -765,22 +819,33 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               {resolveFieldLabel(field, language, field.id)}
                               {field.required && <RequiredStar />}
                             </label>
-                              {renderChoiceControl({
-                                fieldPath,
-                                value: choiceVal || '',
-                                options: optsField,
-                                required: !!field.required,
-                                override: (field as any)?.ui?.control,
-                                onChange: next => handleLineFieldChange(q, row.id, field, next)
-                              })}
-                              {subgroupTriggerButtons}
-                            {(() => {
-                              const selected = optsField.find(opt => opt.value === choiceVal);
-                              if (!selected?.tooltip) return null;
-                              const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                              const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
-                                return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
-                            })()}
+                              <div className="ck-control-row">
+                                {renderChoiceControl({
+                                  fieldPath,
+                                  value: choiceVal || '',
+                                  options: optsField,
+                                  required: !!field.required,
+                                  override: (field as any)?.ui?.control,
+                                  onChange: next => handleLineFieldChange(q, row.id, field, next)
+                                })}
+                                {(() => {
+                                  const selected = optsField.find(opt => opt.value === choiceVal);
+                                  const tooltipNode = selected?.tooltip ? (
+                                    <InfoTooltip
+                                      text={selected.tooltip}
+                                      label={resolveLocalizedString(
+                                        field.dataSource?.tooltipLabel,
+                                        language,
+                                        resolveFieldLabel(field, language, field.id)
+                                      )}
+                                      onOpen={openInfoOverlay}
+                                    />
+                                  ) : null;
+                                  const actionNodes = tooltipNode ? [...subgroupTriggerNodes, tooltipNode] : subgroupTriggerNodes;
+                                  if (!actionNodes.length) return null;
+                                  return <div className="ck-field-actions">{actionNodes}</div>;
+                                })()}
+                              </div>
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           </div>
                         );
@@ -837,7 +902,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               ))}
                             </div>
                               )}
-                              {subgroupTriggerButtons}
+                              {subgroupTriggerNodes.length ? (
+                                <div className="ck-field-actions">{subgroupTriggerNodes}</div>
+                              ) : null}
                             {(() => {
                               const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
                               if (!withTooltips.length) return null;
@@ -969,7 +1036,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 >
                                   Files{items.length ? ` (${items.length})` : ''}
                                 </button>
-                                {subgroupTriggerButtons}
+                                {subgroupTriggerNodes.length ? (
+                                  <div className="ck-field-actions">{subgroupTriggerNodes}</div>
+                                ) : null}
                               </div>
                               {remainingSlots ? <div className="muted">{remainingSlots}</div> : null}
                               <div style={srOnly} aria-live="polite">
@@ -1019,7 +1088,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                               readOnly={!!field.valueMap}
                             />
-                              {subgroupTriggerButtons}
+                              {subgroupTriggerNodes.length ? (
+                                <div className="ck-field-actions">{subgroupTriggerNodes}</div>
+                              ) : null}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           </div>
                         );
@@ -1059,6 +1130,16 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         toggleGroupCollapsed={toggleGroupCollapsed}
                         renderField={renderLineItemField}
                         hasError={(field: any) => !!errors[`${q.id}__${field.id}__${row.id}`]}
+                        isComplete={(field: any) => {
+                          const mapped = field.valueMap
+                            ? resolveValueMapValue(field.valueMap, (fid: string) => {
+                                if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
+                                return values[fid];
+                              })
+                            : undefined;
+                          const raw = field.valueMap ? mapped : (row.values || {})[field.id];
+                          return !isEmptyValue(raw as any);
+                        }}
                       />
                     );
                   })()}
@@ -1130,6 +1211,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         return (
                           <button
                             type="button"
+                            style={buttonStyles.secondary}
                             onClick={async () => {
                               const anchorField = (sub.fields || []).find(f => f.id === sub.anchorFieldId);
                               if (!anchorField || anchorField.type !== 'CHOICE') {
@@ -1174,12 +1256,14 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               });
                             }}
                           >
+                            <PlusIcon />
                             {resolveLocalizedString(sub.addButtonLabel, language, 'Add lines')}
                           </button>
                         );
                       }
                       return (
-                        <button type="button" onClick={() => addLineItemRowManual(subKey)}>
+                        <button type="button" onClick={() => addLineItemRowManual(subKey)} style={buttonStyles.secondary}>
+                          <PlusIcon />
                           {resolveLocalizedString(sub.addButtonLabel, language, 'Add line')}
                         </button>
                       );
@@ -1645,6 +1729,17 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     toggleGroupCollapsed={toggleGroupCollapsed}
                                     renderField={renderSubField}
                                     hasError={(field: any) => !!errors[`${subKey}__${field.id}__${subRow.id}`]}
+                                    isComplete={(field: any) => {
+                                      const mapped = field.valueMap
+                                        ? resolveValueMapValue(field.valueMap, (fid: string) => {
+                                            if ((subRow.values || {}).hasOwnProperty(fid)) return (subRow.values || {})[fid];
+                                            if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
+                                            return values[fid];
+                                          })
+                                        : undefined;
+                                      const raw = field.valueMap ? mapped : (subRow.values || {})[field.id];
+                                      return !isEmptyValue(raw as any);
+                                    }}
                                   />
                                 );
                               })()}

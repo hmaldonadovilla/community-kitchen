@@ -250,12 +250,15 @@ export const SummaryView: React.FC<{
                 type="button"
                 onClick={() => setSummaryActionsOpen(open => !open)}
                 style={{
-                  padding: '10px 12px',
-                  borderRadius: 10,
-                  border: '1px solid #1d4ed8',
-                  background: '#2563eb',
-                  color: '#fff',
-                  fontWeight: 700
+                  border: '1px solid var(--ck-secondary-border)',
+                  background: 'var(--ck-secondary-bg)',
+                  color: 'var(--ck-secondary-text)',
+                  borderRadius: 14,
+                  padding: '18px 22px',
+                  cursor: 'pointer',
+                  fontWeight: 900,
+                  fontSize: 28,
+                  minHeight: 'var(--control-height)'
                 }}
               >
                 ☰ Actions
@@ -265,17 +268,18 @@ export const SummaryView: React.FC<{
                   style={{
                     position: 'absolute',
                     right: 0,
-                    top: 46,
+                    top: '100%',
+                    marginTop: 8,
                     background: '#fff',
                     border: '1px solid #e5e7eb',
-                    borderRadius: 12,
-                    boxShadow: '0 12px 30px rgba(15,23,42,0.12)',
-                    padding: 10,
+                    borderRadius: 16,
+                    boxShadow: '0 14px 36px rgba(15,23,42,0.16)',
+                    padding: 14,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 8,
+                    gap: 10,
                     zIndex: 5,
-                    minWidth: 150
+                    minWidth: 240
                   }}
                 >
                   <button
@@ -283,6 +287,17 @@ export const SummaryView: React.FC<{
                     onClick={() => {
                       setSummaryActionsOpen(false);
                       onEdit();
+                    }}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: 12,
+                      border: '1px solid var(--ck-secondary-border)',
+                      background: 'var(--ck-secondary-bg)',
+                      color: 'var(--ck-secondary-text)',
+                      fontWeight: 900,
+                      fontSize: 28,
+                      textAlign: 'left',
+                      minHeight: 'var(--control-height)'
                     }}
                   >
                     Edit
@@ -294,6 +309,17 @@ export const SummaryView: React.FC<{
                       onFollowup();
                     }}
                     disabled={!summaryRecordId}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: 12,
+                      border: '1px solid var(--ck-secondary-border)',
+                      background: 'var(--ck-secondary-bg)',
+                      color: 'var(--ck-secondary-text)',
+                      fontWeight: 900,
+                      fontSize: 28,
+                      textAlign: 'left',
+                      minHeight: 'var(--control-height)'
+                    }}
                   >
                     Follow-up
                   </button>
@@ -302,6 +328,17 @@ export const SummaryView: React.FC<{
                     onClick={() => {
                       setSummaryActionsOpen(false);
                       onDuplicate();
+                    }}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: 12,
+                      border: '1px solid var(--ck-secondary-border)',
+                      background: 'var(--ck-secondary-bg)',
+                      color: 'var(--ck-secondary-text)',
+                      fontWeight: 900,
+                      fontSize: 28,
+                      textAlign: 'left',
+                      minHeight: 'var(--control-height)'
                     }}
                   >
                     Create copy

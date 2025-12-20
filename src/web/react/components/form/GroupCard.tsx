@@ -7,6 +7,7 @@ export type GroupCardProps = {
   collapsible?: boolean;
   collapsed?: boolean;
   hasError?: boolean;
+  progress?: { complete: number; total: number } | null;
   onToggleCollapsed?: () => void;
   children: React.ReactNode;
 };
@@ -18,11 +19,16 @@ export const GroupCard: React.FC<GroupCardProps> = ({
   collapsible = false,
   collapsed = false,
   hasError = false,
+  progress = null,
   onToggleCollapsed,
   children
 }) => {
   const resolvedTitle = (title || '').toString().trim();
   const showHeader = !!resolvedTitle;
+  const complete = progress?.complete ?? 0;
+  const total = progress?.total ?? 0;
+  const progressClass =
+    total > 0 ? (complete >= total ? 'ck-progress-good' : 'ck-progress-bad') : 'ck-progress-neutral';
 
   if (!showHeader) {
     return (
@@ -34,21 +40,24 @@ export const GroupCard: React.FC<GroupCardProps> = ({
 
   return (
     <div className={className} data-group-key={groupKey} data-has-error={hasError ? 'true' : undefined}>
-      {collapsible ? (
-        <button
-          type="button"
-          className="ck-group-header"
-          onClick={onToggleCollapsed}
-          aria-expanded={!collapsed}
-        >
-          <div className="ck-group-title">{resolvedTitle}</div>
-          <div className="ck-group-chevron">{collapsed ? '▸' : '▾'}</div>
-        </button>
-      ) : (
-        <div className="ck-group-header">
-          <div className="ck-group-title">{resolvedTitle}</div>
-        </div>
-      )}
+      <div className="ck-group-header">
+        <div className="ck-group-title">{resolvedTitle}</div>
+        {collapsible ? (
+          <button
+            type="button"
+            className={`ck-progress-pill ${progressClass}`}
+            onClick={onToggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={`${collapsed ? 'Expand' : 'Collapse'} section ${resolvedTitle} (${complete}/${total} required complete)`}
+            title={`${complete}/${total} required complete`}
+          >
+            <span>
+              {complete}/{total}
+            </span>
+            <span className="ck-progress-caret">{collapsed ? '▸' : '▾'}</span>
+          </button>
+        ) : null}
+      </div>
       {!collapsed && <div className="ck-group-body">{children}</div>}
     </div>
   );

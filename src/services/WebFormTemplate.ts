@@ -59,7 +59,29 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
 <html>
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <script>
+      // iOS sometimes renders this Apps Script web app with a desktop-like base viewport (e.g., 980px wide),
+      // which makes the UI effectively smaller and can trigger focus-zoom on inputs. Detect that early and
+      // opt into a sizing compensation mode via a CSS class.
+      (function () {
+        try {
+          var ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+          var isiOS = /iPad|iPhone|iPod/i.test(ua);
+          if (!isiOS) return;
+          var vv = window.visualViewport;
+          var scrW = (window.screen && window.screen.width) ? window.screen.width : 0;
+          if (vv && typeof vv.width === 'number' && scrW > 0 && vv.width > scrW * 1.3) {
+            document.documentElement.classList.add('ck-ios-basescale');
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
+    </script>
     <style>
       :root {
         /* iOS "grouped" look */
@@ -72,6 +94,11 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         --danger: #ff3b30;
         --success: #34c759;
 
+        /* Secondary/tinted button surface (subgroup / tooltip / files) - distinct from input surfaces like segmented controls */
+        --ck-secondary-bg: rgba(0, 122, 255, 0.12);
+        --ck-secondary-border: rgba(0, 122, 255, 0.24);
+        --ck-secondary-text: var(--accent);
+
         --radius-card: 26px;
         --radius-control: 18px;
         --control-height: 96px;
@@ -79,6 +106,14 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         --safe-top: env(safe-area-inset-top, 0px);
         /* visualViewport-driven inset (Safari bottom UI / in-app browsers) */
         --vv-bottom: 0px;
+
+        /* Typography tokens (keep labels + controls uniform) */
+        --ck-font-base: 32px;
+        --ck-font-label: 32px;
+        --ck-font-control: 32px;
+        --ck-font-group-title: 36px;
+        --ck-font-pill: 26px;
+        --ck-font-caret: 38px;
       }
       * { box-sizing: border-box; }
       html {
@@ -93,8 +128,19 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         -moz-osx-font-smoothing: grayscale;
         background: var(--bg);
         color: var(--text);
-        font-size: 32px;
+        font-size: var(--ck-font-base);
         min-height: 100vh;
+      }
+      /* iOS base-scale compensation: if we start in a desktop-like 980px viewport, the whole page is effectively
+         scaled down (~0.4 on iPhone). Boost *token values* so labels/controls remain uniform and iOS doesn't zoom. */
+      html.ck-ios-basescale {
+        --control-height: 120px;
+        --ck-font-base: 40px;
+        --ck-font-label: 40px;
+        --ck-font-control: 40px;
+        --ck-font-group-title: 46px;
+        --ck-font-pill: 34px;
+        --ck-font-caret: 44px;
       }
       @supports (min-height: 100dvh) {
         body { min-height: 100dvh; }
@@ -129,7 +175,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
       .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
       .field label { font-weight: 700; }
       input, select, textarea, button {
-        font-size: 32px;
+        font-size: var(--ck-font-control);
         font-family: inherit;
       }
       input[type="text"], input[type="number"], input[type="date"], input[type="file"], select, textarea {
@@ -150,7 +196,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
       }
       button:disabled { opacity: 0.6; cursor: not-allowed; }
       .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
-      .muted { color: var(--muted); font-size: 20px; }
+      .muted { color: var(--muted); font-size: 0.7em; }
       .status { margin-top: 8px; padding: 8px 10px; background: rgba(118,118,128,0.12); border: 1px solid var(--border); border-radius: 12px; }
       .inline-options { display: flex; gap: 10px; flex-wrap: wrap; }
       .inline { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }

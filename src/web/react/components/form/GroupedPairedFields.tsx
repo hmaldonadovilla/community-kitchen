@@ -12,6 +12,7 @@ export type GroupedPairedFieldsProps = {
   toggleGroupCollapsed: (groupKey: string) => void;
   renderField: (field: any) => React.ReactNode;
   hasError: (field: any) => boolean;
+  isComplete?: (field: any) => boolean;
 };
 
 export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
@@ -21,7 +22,8 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
   collapsedGroups,
   toggleGroupCollapsed,
   renderField,
-  hasError
+  hasError,
+  isComplete
 }) => {
   if (!fields || !fields.length) return null;
 
@@ -111,6 +113,19 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
         const instanceKey = `${contextPrefix}:${section.key}`;
         const collapsed = section.collapsible ? !!collapsedGroups[instanceKey] : false;
         const sectionHasError = section.fields.some(f => hasError(f));
+        // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
+        const requiredFields = section.fields.filter(f => !!(f as any)?.required);
+        const totalRequired = requiredFields.length;
+        const requiredComplete =
+          typeof isComplete === 'function'
+            ? requiredFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
+            : 0;
+        const optionalFields = section.fields.filter(f => !(f as any)?.required);
+        const optionalComplete =
+          typeof isComplete === 'function' && totalRequired > 0 && requiredComplete >= totalRequired
+            ? optionalFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
+            : 0;
+        const numerator = requiredComplete + optionalComplete;
         const rows = buildRows(section.fields);
 
         const body = (
@@ -138,6 +153,7 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
             collapsed={collapsed}
             hasError={sectionHasError}
             onToggleCollapsed={section.collapsible ? () => toggleGroupCollapsed(instanceKey) : undefined}
+            progress={typeof isComplete === 'function' ? { complete: numerator, total: totalRequired } : null}
           >
             {body}
           </GroupCard>

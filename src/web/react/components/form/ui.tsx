@@ -34,6 +34,21 @@ export const UploadIcon: React.FC<{ size?: number }> = ({ size = 28 }) => (
   </svg>
 );
 
+export const PlusIcon: React.FC<{ size?: number }> = ({ size = 28 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M12 5v14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const buttonBase: React.CSSProperties = {
   padding: '14px 22px',
   minHeight: 'var(--control-height)',
@@ -57,9 +72,9 @@ export const buttonStyles = {
   },
   secondary: {
     ...buttonBase,
-    background: 'rgba(118, 118, 128, 0.12)',
-    borderColor: 'var(--border)',
-    color: 'var(--text)'
+    background: 'var(--ck-secondary-bg)',
+    borderColor: 'var(--ck-secondary-border)',
+    color: 'var(--ck-secondary-text)'
   },
   negative: {
     ...buttonBase,

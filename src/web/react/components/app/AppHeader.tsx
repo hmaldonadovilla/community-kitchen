@@ -58,15 +58,19 @@ export const AppHeader: React.FC<{
             onClick={() => setActionsOpen(open => !open)}
             aria-label="Menu"
             style={{
-              border: '1px solid #475569',
-              background: '#1e293b',
-              color: '#fff',
-              borderRadius: 12,
-              padding: isMobile ? '16px 18px' : '13px 15px',
+              border: '1px solid var(--ck-secondary-border)',
+              background: 'var(--ck-secondary-bg)',
+              color: 'var(--ck-secondary-text)',
+              borderRadius: 14,
+              padding: isMobile ? '18px 22px' : '16px 20px',
               cursor: 'pointer',
               fontWeight: 800,
-              fontSize: isMobile ? 24 : 20,
-              minWidth: isMobile ? 70 : 58
+              fontSize: isMobile ? 30 : 26,
+              minWidth: isMobile ? 86 : 74,
+              minHeight: 'var(--control-height)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           >
             ☰
@@ -80,13 +84,13 @@ export const AppHeader: React.FC<{
                 marginTop: 8,
                 background: '#fff',
                 border: '1px solid #e5e7eb',
-                borderRadius: 12,
+                borderRadius: 16,
                 boxShadow: '0 14px 36px rgba(15,23,42,0.16)',
-                padding: 10,
+                padding: 14,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 8,
-                minWidth: 180,
+                gap: 10,
+                minWidth: 240,
                 zIndex: 8
               }}
             >
@@ -97,13 +101,15 @@ export const AppHeader: React.FC<{
                   onRefresh();
                 }}
                 style={{
-                  padding: '10px 12px',
-                  borderRadius: 10,
-                  border: '1px solid #e5e7eb',
-                  background: '#f8fafc',
-                  fontWeight: 700,
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  border: '1px solid var(--ck-secondary-border)',
+                  background: 'var(--ck-secondary-bg)',
+                  color: 'var(--ck-secondary-text)',
+                  fontWeight: 800,
+                  fontSize: 28,
                   textAlign: 'left',
-                  color: '#0f172a'
+                  minHeight: 'var(--control-height)'
                 }}
               >
                 ⟳ Refresh
@@ -115,13 +121,15 @@ export const AppHeader: React.FC<{
                   onHome();
                 }}
                 style={{
-                  padding: '10px 12px',
-                  borderRadius: 10,
-                  border: '1px solid #e5e7eb',
-                  background: '#f8fafc',
-                  fontWeight: 700,
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  border: '1px solid var(--ck-secondary-border)',
+                  background: 'var(--ck-secondary-bg)',
+                  color: 'var(--ck-secondary-text)',
+                  fontWeight: 800,
+                  fontSize: 28,
                   textAlign: 'left',
-                  color: '#0f172a'
+                  minHeight: 'var(--control-height)'
                 }}
               >
                 Home
@@ -133,13 +141,15 @@ export const AppHeader: React.FC<{
                   onNew();
                 }}
                 style={{
-                  padding: '10px 12px',
-                  borderRadius: 10,
-                  border: '1px solid #1d4ed8',
-                  background: '#2563eb',
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  border: '1px solid transparent',
+                  background: 'var(--accent)',
                   color: '#fff',
-                  fontWeight: 700,
-                  textAlign: 'left'
+                  fontWeight: 900,
+                  fontSize: 28,
+                  textAlign: 'left',
+                  minHeight: 'var(--control-height)'
                 }}
               >
                 New
@@ -151,8 +161,12 @@ export const AppHeader: React.FC<{
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
           <label
             htmlFor="language-select"
-            className="muted"
-            style={{ fontWeight: 800, fontSize: isMobile ? 26 : 22, whiteSpace: 'nowrap' }}
+            style={{
+              fontWeight: 800,
+              fontSize: 'var(--ck-font-label)',
+              color: 'var(--muted)',
+              whiteSpace: 'nowrap'
+            }}
           >
             Language:
           </label>

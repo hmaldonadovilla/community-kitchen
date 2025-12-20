@@ -236,7 +236,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       if (typeof window === 'undefined') return;
       const widthBased = window.innerWidth <= 900;
       const shortBased = window.innerHeight <= 520;
-      const landscapeBased = window.innerWidth > window.innerHeight;
+      // Use media query for orientation so the on-screen keyboard (which shrinks innerHeight)
+      // doesn't accidentally flip us into "landscape/compact" mode while typing in portrait.
+      const landscapeBased =
+        typeof window.matchMedia === 'function'
+          ? window.matchMedia('(orientation: landscape)').matches
+          : window.innerWidth > window.innerHeight;
       const uaBased = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       const mobile = widthBased || uaBased;
       setIsMobile(mobile);
@@ -249,6 +254,214 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
     return undefined;
   }, []);
+
+  useEffect(() => {
+    // iOS Safari/WebViews can still auto-zoom/re-scale on focus in some contexts.
+    // Re-apply the viewport constraints on focus so typing doesn't change the page scale.
+    if (typeof document === 'undefined') return;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isiOS = /iPad|iPhone|iPod/i.test(ua);
+    if (!isiOS) return;
+
+    const desired =
+      'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+    const relaxed = 'width=device-width, initial-scale=1, viewport-fit=cover';
+
+    const setViewport = (content: string) => {
+      const metas = Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="viewport"]'));
+      if (!metas.length) {
+        const created = document.createElement('meta');
+        created.setAttribute('name', 'viewport');
+        created.setAttribute('content', content);
+        document.head?.appendChild(created);
+        return;
+      }
+      metas.forEach(m => {
+        if (m.getAttribute('content') !== content) m.setAttribute('content', content);
+      });
+    };
+
+    const applyDesired = () => setViewport(desired);
+    const applyRelaxed = () => setViewport(relaxed);
+
+    const getViewportContents = (): string[] =>
+      Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="viewport"]')).map(m => m.getAttribute('content') || '');
+
+    const debugLog = (event: string, payload?: Record<string, unknown>) => {
+      if (!debugEnabled || typeof console === 'undefined' || typeof console.info !== 'function') return;
+      try {
+        console.info('[ReactForm][iOSZoom]', event, payload || {});
+      } catch (_) {
+        // ignore logging failures
+      }
+    };
+
+    const getElFontSizePx = (el: HTMLElement | null): number | null => {
+      if (!el || typeof globalThis.getComputedStyle !== 'function') return null;
+      const v = globalThis.getComputedStyle(el).fontSize || '';
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const snapshotViewport = (label: string, el?: HTMLElement | null) => {
+      const vv = globalThis.visualViewport || null;
+      const scr = typeof globalThis.screen !== 'undefined' ? globalThis.screen : null;
+      debugLog(label, {
+        tag: el?.tagName,
+        type: (el as HTMLInputElement | null)?.getAttribute?.('type') || undefined,
+        fontSizePx: getElFontSizePx(el || null),
+        vvScale: vv ? vv.scale : undefined,
+        vvW: vv ? vv.width : undefined,
+        vvH: vv ? vv.height : undefined,
+        screenW: scr ? scr.width : undefined,
+        screenH: scr ? scr.height : undefined,
+        innerW: typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : undefined,
+        innerH: typeof globalThis.innerHeight === 'number' ? globalThis.innerHeight : undefined,
+        dpr: typeof globalThis.devicePixelRatio === 'number' ? globalThis.devicePixelRatio : undefined,
+        viewportMeta: getViewportContents()
+      });
+    };
+
+    applyDesired();
+
+    const BASESCALE_CLASS = 'ck-ios-basescale';
+    const computeBaseScaleMode = (): boolean => {
+      const v = globalThis.visualViewport;
+      const scrW = globalThis.screen?.width;
+      if (!v || typeof v.width !== 'number' || typeof scrW !== 'number' || scrW <= 0) return false;
+      return v.width > scrW * 1.3;
+    };
+    const updateBaseScaleClass = (label: string): boolean => {
+      const mode = computeBaseScaleMode();
+      const root = document.documentElement;
+      const had = root.classList.contains(BASESCALE_CLASS);
+      if (mode && !had) root.classList.add(BASESCALE_CLASS);
+      if (!mode && had) root.classList.remove(BASESCALE_CLASS);
+      if (mode !== had) snapshotViewport(`basescale.${mode ? 'on' : 'off'}.${label}`, null);
+      return mode;
+    };
+    // Ensure the class is applied even if the early inline script didn't run (or measurements changed).
+    updateBaseScaleClass('init');
+
+    const isFormControl = (target: EventTarget | null): boolean => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    };
+
+    const reapplySoon = () => {
+      // Some WebViews mutate the viewport meta during/after focus; schedule a few re-applies to win the race.
+      globalThis.setTimeout(applyDesired, 0);
+      globalThis.setTimeout(applyDesired, 60);
+      globalThis.setTimeout(applyDesired, 150);
+      // Keyboard animation can take longer; keep one later re-apply.
+      globalThis.setTimeout(applyDesired, 450);
+    };
+
+    const onPreFocus = (e: Event) => {
+      if (!isFormControl(e.target)) return;
+      applyDesired();
+      updateBaseScaleClass('prefocus');
+      reapplySoon();
+    };
+
+    const onFocusIn = (e: Event) => {
+      if (!isFormControl(e.target)) return;
+      applyDesired();
+      updateBaseScaleClass('focusin');
+      const el = e.target as HTMLElement;
+      snapshotViewport('focusin', el);
+      // iOS sometimes applies its zoom/viewport changes slightly after focus (keyboard animation).
+      globalThis.setTimeout(() => snapshotViewport('focusin.after250', el), 250);
+      globalThis.setTimeout(() => snapshotViewport('focusin.after800', el), 800);
+      reapplySoon();
+    };
+
+    let lastResetAt = 0;
+    const forceReset = (reason: string, el?: HTMLElement | null) => {
+      const now = Date.now();
+      if (now - lastResetAt < 700) return;
+      lastResetAt = now;
+      // Try to snap back to scale=1 by toggling viewport meta content.
+      snapshotViewport(`reset.start.${reason}`, el || null);
+      applyRelaxed();
+      globalThis.setTimeout(applyDesired, 0);
+      globalThis.setTimeout(applyDesired, 60);
+      globalThis.setTimeout(applyDesired, 150);
+      globalThis.setTimeout(() => snapshotViewport(`reset.end.${reason}`, el || null), 250);
+    };
+
+    const onFocusOut = (e: Event) => {
+      if (!isFormControl(e.target)) return;
+      const el = e.target as HTMLElement;
+      snapshotViewport('focusout', el);
+      globalThis.setTimeout(() => snapshotViewport('focusout.after250', el), 250);
+      globalThis.setTimeout(() => snapshotViewport('focusout.after800', el), 800);
+      const baseScaleMode = updateBaseScaleClass('focusout');
+      // If we're in the "980px base viewport" mode, meta viewport toggling doesn't reliably change it.
+      // Instead we compensate via CSS sizing (ck-ios-basescale). Don't spam viewport resets on every blur.
+      if (baseScaleMode) {
+        applyDesired();
+        return;
+      }
+      // If iOS zoomed the page, try to reset after blur.
+      const vv = globalThis.visualViewport || null;
+      const looksZoomedByScale = !!(vv && typeof vv.scale === 'number' && vv.scale > 1.01);
+      if (looksZoomedByScale) {
+        forceReset('blurZoomed', e.target as HTMLElement);
+      } else {
+        applyDesired();
+        reapplySoon();
+      }
+    };
+
+    const vv = globalThis.visualViewport || null;
+    const onVvResize = () => {
+      // Keyboard open/close triggers visualViewport resize; if scale drifted, try to reset.
+      const v = globalThis.visualViewport;
+      if (!v) return;
+      const looksZoomedByScale = typeof v.scale === 'number' && v.scale > 1.01;
+      const baseScaleMode = updateBaseScaleClass('vvresize');
+      // Avoid noisy logs/resets in base-scale mode; compensation is CSS-driven there.
+      if (baseScaleMode) {
+        if (!looksZoomedByScale) applyDesired();
+        return;
+      }
+      if (looksZoomedByScale) {
+        forceReset('vvResizeZoomed');
+      } else {
+        applyDesired();
+      }
+    };
+
+    const maybeFixInitialBaseScale = (label: string) => {
+      // Just re-check class application (measurements can stabilize after load).
+      updateBaseScaleClass(`init.${label}`);
+    };
+
+    // Apply before focus happens (best-effort) and again on focus.
+    const preFocusOpts: AddEventListenerOptions = { capture: true, passive: true };
+    document.addEventListener('pointerdown', onPreFocus, preFocusOpts);
+    document.addEventListener('touchstart', onPreFocus, preFocusOpts);
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    vv?.addEventListener?.('resize', onVvResize);
+
+    // Also try to normalize the base scale shortly after mount. This prevents the
+    // "everything is small until first focus, then it zooms and stays" behavior.
+    globalThis.setTimeout(() => maybeFixInitialBaseScale('t0'), 0);
+    globalThis.setTimeout(() => maybeFixInitialBaseScale('t250'), 250);
+    globalThis.setTimeout(() => maybeFixInitialBaseScale('t900'), 900);
+
+    return () => {
+      document.removeEventListener('pointerdown', onPreFocus, preFocusOpts);
+      document.removeEventListener('touchstart', onPreFocus, preFocusOpts);
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+      vv?.removeEventListener?.('resize', onVvResize);
+    };
+  }, [debugEnabled]);
 
   const handleSubmitAnother = useCallback(() => {
     const normalized = normalizeRecordValues(definition);

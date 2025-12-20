@@ -55,6 +55,7 @@ This project uses TypeScript. You need to build the script before using it in Go
      Notes:
      - The app header only contains **form title**, **build number**, **language selector**, and **burger menu**.
      - Legacy `"header": true` is deprecated but still supported; it is mapped to `group: { header: true, title: "Header", collapsible: true }`.
+     - When `group.collapsible` is enabled, the section header shows a **progress pill** `completed/required` (required fields only). Clicking the pill expands/collapses the section.
 
    - **Field pairing (2‑up layout)**: Use `pair` to control which fields appear next to each other on the same row. If `pair` is not set (or no matching pair is found), the field takes the full row.
 
@@ -74,6 +75,7 @@ This project uses TypeScript. You need to build the script before using it in Go
    - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
      - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.
      - Progressive disclosure (collapsed-by-default rows): in the LINE_ITEM_GROUP JSON, add a `ui` block. The collapsed view renders only `collapsedFields` (editable). The expand toggle is gated by `expandGate`:
+        - The expand/collapse control is also a **progress pill** `completed/required` for required fields within that row.
 
        ```json
        {
