@@ -139,54 +139,54 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
-    - Auto add flow (no overlay): use `addMode: "auto"` with `anchorFieldId` pointing to a CHOICE line-item field that has an `optionFilter.dependsOn` (one or more controlling fields). When all `dependsOn` fields are filled, the form will automatically create one row per allowed anchor option (same filtering logic as overlay). If the controlling fields change later, auto-generated rows are recomputed and overwritten; manual rows are preserved.
-      - Progressive + expand gate: if you also set `"ui": { "mode": "progressive", "expandGate": "collapsedFieldsValid", "collapsedFields": [...] }` then:
-        - Auto-generated rows treat the anchor field as the row title and it is not editable (it’s system-selected).
-        - Auto-generated rows created by `addLineItemsFromDataSource` selection effects also lock the anchor field and render it as the row title when `anchorFieldId` is set (works for subgroups too).
-        - Rows that are still “disabled” (collapsed fields not yet valid) are ignored for validation, so you can submit with unfinished rows.
-        - If the LINE_ITEM_GROUP question is marked `required: true`, at least one enabled+valid row is still required (disabled rows don’t satisfy required).
+     - Auto add flow (no overlay): use `addMode: "auto"` with `anchorFieldId` pointing to a CHOICE line-item field that has an `optionFilter.dependsOn` (one or more controlling fields). When all `dependsOn` fields are filled, the form will automatically create one row per allowed anchor option (same filtering logic as overlay). If the controlling fields change later, auto-generated rows are recomputed and overwritten; manual rows are preserved.
+       - Progressive + expand gate: if you also set `"ui": { "mode": "progressive", "expandGate": "collapsedFieldsValid", "collapsedFields": [...] }` then:
+         - Auto-generated rows treat the anchor field as the row title and it is not editable (it’s system-selected).
+         - Auto-generated rows created by `addLineItemsFromDataSource` selection effects also lock the anchor field and render it as the row title when `anchorFieldId` is set (works for subgroups too).
+         - Rows that are still “disabled” (collapsed fields not yet valid) are ignored for validation, so you can submit with unfinished rows.
+         - If the LINE_ITEM_GROUP question is marked `required: true`, at least one enabled+valid row is still required (disabled rows don’t satisfy required).
      - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). Submitted payloads contain an array of parents, each with a child array keyed by the subgroup id/label. Default mode renders inline subgroup sections with Show/Hide. Progressive mode (`ui.mode: "progressive"`) edits subgroups via a full-page overlay opened from “Open …” buttons next to triggering fields (selection effects) plus fallback “Open …” buttons for remaining subgroups.
        Example config:
 
-      ```json
-      {
-        "lineItemConfig": {
-          "fields": [
-            { "id": "RECIPE", "type": "TEXT", "labelEn": "Recipe" },
-            { "id": "NUMBER_OF_PORTIONS", "type": "NUMBER", "labelEn": "Portions" },
-            { "id": "DISH_TYPE", "type": "CHOICE", "labelEn": "Dish type", "options": ["Lunch","Dinner"] }
-          ],
-          "subGroups": [
-            {
-              "id": "INGREDIENTS",
-              "label": { "en": "Ingredients", "fr": "Ingrédients", "nl": "Ingrediënten" },
-              "fields": [
-                { "id": "ING", "type": "TEXT", "labelEn": "Ingredient", "required": true },
-                { "id": "QTY", "type": "NUMBER", "labelEn": "Qty" },
-                { "id": "UNIT", "type": "CHOICE", "labelEn": "Unit", "options": ["g","kg","bag","unit"] },
-                { "id": "ALLERGEN", "type": "TEXT", "labelEn": "Allergen" }
-              ]
-            }
-          ]
-        }
-      }
-      ```
+       ```json
+       {
+         "lineItemConfig": {
+           "fields": [
+             { "id": "RECIPE", "type": "TEXT", "labelEn": "Recipe" },
+             { "id": "NUMBER_OF_PORTIONS", "type": "NUMBER", "labelEn": "Portions" },
+             { "id": "DISH_TYPE", "type": "CHOICE", "labelEn": "Dish type", "options": ["Lunch","Dinner"] }
+           ],
+           "subGroups": [
+             {
+               "id": "INGREDIENTS",
+               "label": { "en": "Ingredients", "fr": "Ingrédients", "nl": "Ingrediënten" },
+               "fields": [
+                 { "id": "ING", "type": "TEXT", "labelEn": "Ingredient", "required": true },
+                 { "id": "QTY", "type": "NUMBER", "labelEn": "Qty" },
+                 { "id": "UNIT", "type": "CHOICE", "labelEn": "Unit", "options": ["g","kg","bag","unit"] },
+                 { "id": "ALLERGEN", "type": "TEXT", "labelEn": "Allergen" }
+               ]
+             }
+           ]
+         }
+       }
+       ```
 
-      Result shape on submit (summary/PDF use this shape):
+       Result shape on submit (summary/PDF use this shape):
 
-      ```json
-      [
-        {
-          "RECIPE": "Vegetables Bulgur",
-          "NUMBER_OF_PORTIONS": 4,
-          "DISH_TYPE": "Lunch",
-          "INGREDIENTS": [
-            { "ING": "Bulgur (wheat)", "QTY": "14.40", "UNIT": "kg", "ALLERGEN": "GLUTEN" },
-            { "ING": "Couscous mix (frozen)", "QTY": "8", "UNIT": "bag", "ALLERGEN": "GLUTEN" }
-          ]
-        }
-      ]
-      ```
+       ```json
+       [
+         {
+           "RECIPE": "Vegetables Bulgur",
+           "NUMBER_OF_PORTIONS": 4,
+           "DISH_TYPE": "Lunch",
+           "INGREDIENTS": [
+             { "ING": "Bulgur (wheat)", "QTY": "14.40", "UNIT": "kg", "ALLERGEN": "GLUTEN" },
+             { "ING": "Couscous mix (frozen)", "QTY": "8", "UNIT": "bag", "ALLERGEN": "GLUTEN" }
+           ]
+         }
+       ]
+       ```
 
    - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`. The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
      - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).
@@ -221,7 +221,19 @@ This project uses TypeScript. You need to build the script before using it in Go
      ```
 
      Leave the field empty in the UI and the backend will emit `MP-AA000001`, `MP-AA000002`, etc. Counters are stored in script properties, so numbering persists across deployments. Use `"propertyKey": "MEAL_RUN"` when you need isolated counters within the same form.
-   - **Selection effects (auto line items)**: Add `selectionEffects` to a CHOICE/CHECKBOX config to spawn line items automatically when certain values are picked. Example:
+   - **Default values (`defaultValue`)**: To prefill a field on **new records / new rows**, add `defaultValue` in the field JSON.
+     - This is only applied when the field is **missing from the payload**, so it **does not override user edits** once the field exists.
+     - Works for **top-level fields** and **line-item / subgroup fields**.
+
+    ```json
+    { "defaultValue": "no" }
+    ```
+
+    - Notes:
+      - For `CHOICE`, use the stored option value (usually the EN option string).
+      - For consent `CHECKBOX` (no options + no `dataSource`), use `true/false`.
+      - For multi-select `CHECKBOX`, use an array: `{ "defaultValue": ["A", "B"] }`.
+    - **Selection effects (auto line items)**: Add `selectionEffects` to a CHOICE/CHECKBOX config to spawn line items automatically when certain values are picked. Example:
 
       ```json
       {
@@ -237,7 +249,27 @@ This project uses TypeScript. You need to build the script before using it in Go
       ```
 
       This will add a row to the `DELIVERY_LINES` line-item group when the value "Add lines" is selected, pre-filling the `ITEM_UNIT` field with "Crate".
-   - **Filters & rules**: For CHOICE/CHECKBOX fields, add `optionFilter` in the JSON to filter options based on another field, and `validationRules` to enforce dependencies (works in main form and line items).
+      - You can also **copy values** into the new row using reference strings in `preset`:
+        - `$row.FIELD_ID` copies from the originating **line-item row** (when the effect is triggered inside a line item)
+        - `$top.FIELD_ID` copies from **top-level** record values
+
+      ```json
+      {
+        "selectionEffects": [
+          {
+            "type": "addLineItems",
+            "groupId": "MP_LINES",
+            "triggerValues": ["Yes"],
+            "preset": {
+              "MEAL_TYPE": "$row.MEAL_TYPE",
+              "SERVICE_DATE": "$top.MEAL_DATE"
+            }
+          }
+        ]
+      }
+      ```
+
+    - **Filters & rules**: For CHOICE/CHECKBOX fields, add `optionFilter` in the JSON to filter options based on another field, and `validationRules` to enforce dependencies (works in main form and line items).
       - Example (main form filter):
 
         ```json
@@ -370,63 +402,63 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```
 
        The same operators (`equals`, `greaterThan`, `lessThan`) and actions (`required`, `min`, `max`, `allowed`, `disallowed`) work inside line items.
-   - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
-   - **Post-submit views (summary/follow-up)**: The React app shows a submission summary with the record ID (copy button), timestamps, status, and quick CTAs for “Go to follow-up” / “Submit another”. Follow-up actions stay disabled until a record is selected, display the current status + last updated timestamp, and highlight the configured status transitions so operators always know what each button does. Configure the follow-up behavior in code (PDF/email templates, destination folders, recipients) just like before.
-   - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; search/sort run client-side on the loaded rows (totalCount is capped at 200).
-   - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
-   - **Quick recipe for the new features**:
-     - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
+    - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
+    - **Post-submit views (summary/follow-up)**: The React app shows a submission summary with the record ID (copy button), timestamps, status, and quick CTAs for “Go to follow-up” / “Submit another”. Follow-up actions stay disabled until a record is selected, display the current status + last updated timestamp, and highlight the configured status transitions so operators always know what each button does. Configure the follow-up behavior in code (PDF/email templates, destination folders, recipients) just like before.
+    - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; search/sort run client-side on the loaded rows (totalCount is capped at 200).
+    - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
+    - **Quick recipe for the new features**:
+      - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
 
-       ```json
-       {
-         "sectionSelector": {
-           "id": "ITEM_FILTER",
-           "labelEn": "Category",
-           "optionsRef": "REF:SelectorOptions" // or inline: "options": ["Veg", "Dairy"], "optionsFr": [...]
-         },
-         "fields": [ ...your existing line-item fields... ]
-       }
-       ```
+        ```json
+        {
+          "sectionSelector": {
+            "id": "ITEM_FILTER",
+            "labelEn": "Category",
+            "optionsRef": "REF:SelectorOptions" // or inline: "options": ["Veg", "Dairy"], "optionsFr": [...]
+          },
+          "fields": [ ...your existing line-item fields... ]
+        }
+        ```
 
-       Use `ITEM_FILTER` in line-item `optionFilter.dependsOn` or validation `when.fieldId` so options/rules react to the selector.
-     - *Totals under line items*: In the same LINE_ITEM_GROUP JSON, append:
+        Use `ITEM_FILTER` in line-item `optionFilter.dependsOn` or validation `when.fieldId` so options/rules react to the selector.
+      - *Totals under line items*: In the same LINE_ITEM_GROUP JSON, append:
 
-       ```json
-       "totals": [
-         { "type": "count", "label": { "en": "Items" } },
-         { "type": "sum", "fieldId": "QTY", "label": { "en": "Total qty" }, "decimalPlaces": 1 }
-       ]
-       ```
+        ```json
+        "totals": [
+          { "type": "count", "label": { "en": "Items" } },
+          { "type": "sum", "fieldId": "QTY", "label": { "en": "Total qty" }, "decimalPlaces": 1 }
+        ]
+        ```
 
-       `count` tallies visible rows; `sum` adds a numeric line-item field (`fieldId` required).
-     - *Show/hide logic*: Add `visibility` wherever you configure the field (Config JSON for main questions; line-item field Config column or inline field JSON):
+        `count` tallies visible rows; `sum` adds a numeric line-item field (`fieldId` required).
+      - *Show/hide logic*: Add `visibility` wherever you configure the field (Config JSON for main questions; line-item field Config column or inline field JSON):
 
-       ```json
-       { "visibility": { "showWhen": { "fieldId": "Supplier", "equals": "Local" } } }
-       ```
+        ```json
+        { "visibility": { "showWhen": { "fieldId": "Supplier", "equals": "Local" } } }
+        ```
 
-       Supports `showWhen`/`hideWhen` with `equals`, `greaterThan`, `lessThan`. Line-item fields can reference top-level or sibling fields (including `sectionSelector`).
-     - *Clear-on-change reset*: On a controlling question add `clearOnChange: true` in Config JSON. When that field changes, all other fields and line items clear, then filters/visibility reapply. Handy for “mode” or “category” selectors.
-     - *List view (start on list)*: Add a `List View?` column to the config sheet and mark `TRUE` on the fields you want to display in the list. If at least one is `TRUE`, the form definition includes `listView` and `startRoute: "list"` so the app opens in list mode showing those fields plus `createdAt`/`updatedAt` with pagination.
-     - *Data sources (options/prefill from sheets/tabs)*: For CHOICE/CHECKBOX questions (or line-item fields via field JSON), set `dataSource`:
+        Supports `showWhen`/`hideWhen` with `equals`, `greaterThan`, `lessThan`. Line-item fields can reference top-level or sibling fields (including `sectionSelector`).
+      - *Clear-on-change reset*: On a controlling question add `clearOnChange: true` in Config JSON. When that field changes, all other fields and line items clear, then filters/visibility reapply. Handy for “mode” or “category” selectors.
+      - *List view (start on list)*: Add a `List View?` column to the config sheet and mark `TRUE` on the fields you want to display in the list. If at least one is `TRUE`, the form definition includes `listView` and `startRoute: "list"` so the app opens in list mode showing those fields plus `createdAt`/`updatedAt` with pagination.
+      - *Data sources (options/prefill from sheets/tabs)*: For CHOICE/CHECKBOX questions (or line-item fields via field JSON), set `dataSource`:
 
-       ```json
-       {
-         "dataSource": {
-           "id": "1abcDEFsheetId::Products",    // or "Products" for same spreadsheet tab
-           "projection": ["name_en"],
-           "localeKey": "locale",               // optional column used to filter by locale
-           "mapping": { "name_en": "value" },   // optional source->target remap
-           "limit": 100,
-           "mode": "options"
-         }
-       }
-       ```
+        ```json
+        {
+          "dataSource": {
+            "id": "1abcDEFsheetId::Products",    // or "Products" for same spreadsheet tab
+            "projection": ["name_en"],
+            "localeKey": "locale",               // optional column used to filter by locale
+            "mapping": { "name_en": "value" },   // optional source->target remap
+            "limit": 100,
+            "mode": "options"
+          }
+        }
+        ```
 
-   - *Tooltips from data sources*: Add `"tooltipField": "column_name"` inside `dataSource` to show tooltip overlays for each option (works for line-item fields too). Inline option metadata is supported as a fallback. You can customize the overlay title/trigger text per field with `"tooltipLabel": { "en": "Recipe instructions", "fr": "Instructions", "nl": "Instructies" }`; the label is localized automatically in form and summary.
-   - *Readonly TEXT value maps*: Add `valueMap` with `dependsOn` and `optionMap` to auto-fill a readonly TEXT field (arrays join with `","`). Example: `{"valueMap":{"dependsOn":"ING","optionMap":{"Pesto":["Milk","Peanuts"],"*":["None"]}}}`.
-   - *Consolidated aggregation (summary + PDF)*: Unique values are shown automatically in the summary view and can be referenced in PDF/email templates with placeholders. Use `{{CONSOLIDATED(GROUP.FIELD)}}` for parent groups, and `{{CONSOLIDATED(GROUP.SUBGROUP.FIELD)}}` for nested subgroups (IDs are uppercase; dotted paths match the JSON shape above). Example: `{{CONSOLIDATED(MP_DISHES.INGREDIENTS.ALLERGEN)}}` renders the unique allergens across all ingredient rows.
-   - *ITEM_FILTER visibility*: The section selector (`ITEM_FILTER`) remains available for filters/visibility but is hidden in the summary view (including inside subgroups).
+    - *Tooltips from data sources*: Add `"tooltipField": "column_name"` inside `dataSource` to show tooltip overlays for each option (works for line-item fields too). Inline option metadata is supported as a fallback. You can customize the overlay title/trigger text per field with `"tooltipLabel": { "en": "Recipe instructions", "fr": "Instructions", "nl": "Instructies" }`; the label is localized automatically in form and summary.
+    - *Readonly TEXT value maps*: Add `valueMap` with `dependsOn` and `optionMap` to auto-fill a readonly TEXT field (arrays join with `","`). Example: `{"valueMap":{"dependsOn":"ING","optionMap":{"Pesto":["Milk","Peanuts"],"*":["None"]}}}`.
+    - *Consolidated aggregation (summary + PDF)*: Unique values are shown automatically in the summary view and can be referenced in PDF/email templates with placeholders. Use `{{CONSOLIDATED(GROUP.FIELD)}}` for parent groups, and `{{CONSOLIDATED(GROUP.SUBGROUP.FIELD)}}` for nested subgroups (IDs are uppercase; dotted paths match the JSON shape above). Example: `{{CONSOLIDATED(MP_DISHES.INGREDIENTS.ALLERGEN)}}` renders the unique allergens across all ingredient rows.
+    - *ITEM_FILTER visibility*: The section selector (`ITEM_FILTER`) remains available for filters/visibility but is hidden in the summary view (including inside subgroups).
 
        The backend `fetchDataSource` reads that tab (or external sheet id + tab) with projection, locale filtering, and mapping. For prefilling line items, include the `mapping` that matches source columns to target field ids.
 

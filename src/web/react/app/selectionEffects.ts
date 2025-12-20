@@ -54,7 +54,7 @@ export const runSelectionEffects = (args: {
     {
       addLineItemRow: (
         groupId: string,
-        preset?: Record<string, string | number>,
+        preset?: Record<string, any>,
         meta?: { effectContextId?: string; auto?: boolean }
       ) => {
         setLineItems(prev => {
@@ -68,12 +68,8 @@ export const runSelectionEffects = (args: {
           const selectorValue = selectorId && Object.prototype.hasOwnProperty.call(values, selectorId) ? (values as any)[selectorId] : undefined;
           const presetValues: Record<string, FieldValue> = {};
           Object.entries(preset || {}).forEach(([key, raw]) => {
-            if (Array.isArray(raw)) {
-              const first = raw[0];
-              if (first !== undefined) presetValues[key] = first as FieldValue;
-            } else {
-              presetValues[key] = raw as FieldValue;
-            }
+            if (raw === undefined || raw === null) return;
+            presetValues[key] = raw as FieldValue;
           });
           if (meta?.auto === true) {
             presetValues[ROW_SOURCE_KEY] = ROW_SOURCE_AUTO;
@@ -200,7 +196,7 @@ export const runSelectionEffects = (args: {
         logEvent?.('lineItems.cleared', { groupId });
       }
     },
-    opts
+    opts ? { ...opts, topValues: values } : { topValues: values }
   );
 };
 

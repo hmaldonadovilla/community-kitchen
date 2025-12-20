@@ -3,6 +3,7 @@ import {
   BaseQuestionType,
   ChoiceControl,
   DataSourceConfig,
+  DefaultValue,
   DerivedValueConfig,
   FileUploadConfig,
   LineItemFieldType,
@@ -157,6 +158,7 @@ export class ConfigSheet {
       const listViewSort = listViewFlag ? this.parseListViewSort(rawConfig) : undefined;
       const autoIncrement = type === 'TEXT' ? this.parseAutoIncrement(rawConfig) : undefined;
       const derivedValue = this.parseDerivedValue(rawConfig);
+      const defaultValue = this.parseDefaultValue(rawConfig);
 
       return {
         id: row[0] ? row[0].toString() : '',
@@ -165,6 +167,7 @@ export class ConfigSheet {
         qFr: row[idxQFr],
         qNl: row[idxQNl],
         required: !!row[idxRequired],
+        defaultValue,
         ui,
         header,
         group:
@@ -655,6 +658,37 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static parseDefaultValue(rawConfig?: string): DefaultValue | undefined {
+    const parsed = this.safeParseObject(rawConfig || '');
+    if (!parsed) return undefined;
+    const candidate =
+      (parsed as any).defaultValue !== undefined
+        ? (parsed as any).defaultValue
+        : (parsed as any).default !== undefined
+        ? (parsed as any).default
+        : undefined;
+    return this.normalizeDefaultValue(candidate);
+  }
+
+  private static normalizeDefaultValue(raw: any): DefaultValue | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (Array.isArray(raw)) {
+      const items = raw
+        .map(v => (v === undefined || v === null ? '' : v.toString().trim()))
+        .filter(Boolean);
+      return items;
+    }
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') return raw.toString().trim();
+    try {
+      const s = raw.toString();
+      return s ? s.toString().trim() : undefined;
+    } catch (_) {
+      return undefined;
+    }
+  }
+
   private static normalizeSelectionEffects(rawEffects: any): SelectionEffect[] | undefined {
     if (!Array.isArray(rawEffects)) return undefined;
     const effects: SelectionEffect[] = [];
@@ -673,11 +707,25 @@ export class ConfigSheet {
         if (triggers.length) normalized.triggerValues = triggers;
       }
       if (effect.preset && typeof effect.preset === 'object') {
-        const preset: Record<string, string | number> = {};
+        const preset: Record<string, any> = {};
         Object.keys(effect.preset).forEach(key => {
           const val = effect.preset[key];
           if (val === undefined || val === null) return;
-          preset[key.toString()] = typeof val === 'number' ? val : val.toString();
+          if (typeof val === 'number') {
+            preset[key.toString()] = val;
+            return;
+          }
+          if (typeof val === 'boolean') {
+            preset[key.toString()] = val;
+            return;
+          }
+          if (Array.isArray(val)) {
+            preset[key.toString()] = val
+              .map(v => (v === undefined || v === null ? '' : v.toString().trim()))
+              .filter(Boolean);
+            return;
+          }
+          preset[key.toString()] = val.toString();
         });
         if (Object.keys(preset).length) normalized.preset = preset;
       }
@@ -1220,6 +1268,7 @@ export class ConfigSheet {
         const selectionEffects = this.parseSelectionEffects(rawConfig);
         const valueMap = this.parseValueMap(rawConfig);
         const derivedValue = this.parseDerivedValue(rawConfig);
+        const defaultValue = this.parseDefaultValue(rawConfig);
       const ui = this.parseQuestionUi([rawConfig]);
       const group = this.parseQuestionGroup([rawConfig]);
       const pair = this.parsePairKey([rawConfig]);
@@ -1234,6 +1283,7 @@ export class ConfigSheet {
         labelFr: row[3] || '',
         labelNl: row[4] || '',
         required: !!row[5],
+        defaultValue,
         group,
         pair,
         ui,
@@ -1275,6 +1325,7 @@ export class ConfigSheet {
         ? field.pairWith
         : undefined;
     const pair = pairCandidate !== undefined && pairCandidate !== null ? pairCandidate.toString().trim() : undefined;
+    const defaultValue = this.normalizeDefaultValue(field?.defaultValue ?? field?.default);
     return {
       id: field?.id || `LI${idx + 1}`,
       type: baseType,
@@ -1282,6 +1333,7 @@ export class ConfigSheet {
       labelFr: field?.labelFr || '',
       labelNl: field?.labelNl || '',
       required: !!field?.required,
+      defaultValue,
       group,
       pair: pair || undefined,
       ui,

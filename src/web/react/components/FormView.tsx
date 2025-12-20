@@ -1355,7 +1355,7 @@ const FormView: React.FC<FormViewProps> = ({
       case 'NUMBER':
       case 'DATE':
         const mappedValue = q.valueMap ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId]) : undefined;
-        const inputValueRaw = q.valueMap ? (mappedValue || '') : ((values[q.id] as string) || '');
+        const inputValueRaw = q.valueMap ? (mappedValue || '') : ((values[q.id] as any) ?? '');
         const inputValue = q.type === 'DATE' ? toDateInputValue(inputValueRaw) : inputValueRaw;
         if (q.type === 'NUMBER') {
           const numberText =
@@ -2524,7 +2524,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 return values[fid];
                               })
                             : undefined;
-                          const fieldValueRaw = field.valueMap ? mapped : (subRow.values[field.id] as string) || '';
+                          const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
                           const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
                           return (
                             <div

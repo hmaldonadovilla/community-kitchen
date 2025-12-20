@@ -1,11 +1,11 @@
-import { SelectionEffect, WebFormDefinition, WebQuestionDefinition } from '../../types';
+import { PresetValue, SelectionEffect, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LangCode } from '../types';
 import { fetchDataSource } from '../data/dataSources';
 
 interface EffectContext {
   addLineItemRow: (
     groupId: string,
-    preset?: Record<string, string | number>,
+    preset?: Record<string, PresetValue>,
     meta?: { effectContextId?: string; auto?: boolean }
   ) => void;
   clearLineItems?: (groupId: string, contextId?: string) => void;
@@ -18,6 +18,10 @@ interface EffectContext {
 
 export interface SelectionEffectOptions {
   contextId?: string;
+  /**
+   * Snapshot of current top-level form values (used for preset references like `$top.FIELD_ID`).
+   */
+  topValues?: Record<string, any>;
   lineItem?: {
     groupId: string;
     rowId?: string;
@@ -78,11 +82,13 @@ export function handleSelectionEffects(
     }
     if (!match) return;
     if (effect.type === 'addLineItems') {
-      ctx.addLineItemRow(effect.groupId, effect.preset);
+      const resolvedPreset = resolveAddLineItemsPreset(effect.preset as any, options);
+      ctx.addLineItemRow(effect.groupId, resolvedPreset);
       if (debug && typeof console !== 'undefined') {
         console.info('[SelectionEffects] addLineItems dispatched', {
           groupId: effect.groupId,
-          preset: effect.preset
+          preset: effect.preset,
+          resolvedPreset
         });
       }
       return;
@@ -142,6 +148,7 @@ interface SelectionDiffPreview {
 
 const selectionEffectState = new Map<string, SelectionEffectCache>();
 const ROW_CONTEXT_PREFIX = '$row.';
+const TOP_CONTEXT_PREFIX = '$top.';
 const ROW_CONTEXT_KEY = '__ckRowContext';
 
 function getStateKey(question: WebQuestionDefinition): string {
@@ -172,6 +179,55 @@ function getContextMap(
 function normalizeString(val: any): string {
   if (val === undefined || val === null) return '';
   return val.toString().trim();
+}
+
+function asPresetValue(raw: any): PresetValue | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === 'string') return raw.toString();
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'boolean') return raw;
+  if (Array.isArray(raw)) {
+    return raw
+      .map(v => (v === undefined || v === null ? '' : v.toString().trim()))
+      .filter(Boolean);
+  }
+  try {
+    return raw.toString();
+  } catch (_) {
+    return undefined;
+  }
+}
+
+function resolvePresetValue(raw: any, options?: SelectionEffectOptions): PresetValue | undefined {
+  if (typeof raw !== 'string') return asPresetValue(raw);
+  const s = raw.toString().trim();
+  if (s.startsWith(ROW_CONTEXT_PREFIX)) {
+    const fieldId = s.slice(ROW_CONTEXT_PREFIX.length).trim();
+    if (!fieldId) return undefined;
+    const val = options?.lineItem?.rowValues ? (options.lineItem.rowValues as any)[fieldId] : undefined;
+    return asPresetValue(val);
+  }
+  if (s.startsWith(TOP_CONTEXT_PREFIX)) {
+    const fieldId = s.slice(TOP_CONTEXT_PREFIX.length).trim();
+    if (!fieldId) return undefined;
+    const val = options?.topValues ? (options.topValues as any)[fieldId] : undefined;
+    return asPresetValue(val);
+  }
+  return asPresetValue(raw);
+}
+
+function resolveAddLineItemsPreset(
+  preset: Record<string, any> | undefined,
+  options?: SelectionEffectOptions
+): Record<string, PresetValue> | undefined {
+  if (!preset || typeof preset !== 'object') return undefined;
+  const resolved: Record<string, PresetValue> = {};
+  Object.keys(preset).forEach(key => {
+    const val = resolvePresetValue((preset as any)[key], options);
+    if (val === undefined) return;
+    resolved[key.toString()] = val;
+  });
+  return Object.keys(resolved).length ? resolved : undefined;
 }
 
 function normalizeSelectionValues(value: string | string[] | null | undefined): string[] {

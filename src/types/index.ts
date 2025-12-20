@@ -3,6 +3,25 @@ export type QuestionType = BaseQuestionType | 'FILE_UPLOAD' | 'LINE_ITEM_GROUP';
 // Line item fields cannot themselves be nested LINE_ITEM_GROUPs, but they can support FILE_UPLOAD.
 export type LineItemFieldType = BaseQuestionType | 'FILE_UPLOAD';
 
+/**
+ * Config-level default values (stored payload values, not localized labels).
+ *
+ * Notes:
+ * - For CHOICE: use the underlying option value (typically the EN option key).
+ * - For CHECKBOX:
+ *   - consent checkbox (no options + no dataSource): use boolean
+ *   - multi-select checkbox: use string[] (or a single string for one default option)
+ */
+export type DefaultValue = string | number | boolean | string[];
+
+/**
+ * SelectionEffect preset values for `addLineItems`.
+ *
+ * These can be literal values (string/number/boolean/string[]) or special reference strings
+ * like `$row.FIELD_ID` / `$top.FIELD_ID` (resolved at runtime).
+ */
+export type PresetValue = string | number | boolean | string[];
+
 export type ChoiceControl = 'auto' | 'select' | 'radio' | 'segmented' | 'switch';
 
 export type LabelLayout = 'auto' | 'stacked';
@@ -302,6 +321,13 @@ export interface LineItemFieldConfig {
   labelFr: string;
   labelNl: string;
   required: boolean;
+  /**
+   * Optional default value used when creating new rows (manual/auto/selectionEffect) or when the field is missing.
+   *
+   * This is applied only when the row value is missing (not present), so it does not override user edits.
+   * For dynamic prefills, prefer `derivedValue`.
+   */
+  defaultValue?: DefaultValue;
   ui?: QuestionUiConfig;
   /**
    * Optional group card configuration for the edit view (works inside line item rows + subgroup overlays).
@@ -367,7 +393,7 @@ export interface LineItemGroupConfig {
 export interface SelectionEffect {
   type: 'addLineItems' | 'addLineItemsFromDataSource';
   groupId: string; // target line item group
-  preset?: Record<string, string | number>; // preset field values for simple addLineItems
+  preset?: Record<string, PresetValue>; // preset field values for simple addLineItems (supports $row./$top. references)
   triggerValues?: string[]; // which choice/checkbox values trigger this effect (defaults to any)
   dataSource?: DataSourceConfig; // optional override source for data-driven effects
   lookupField?: string; // column/field used to match the selected value
@@ -465,6 +491,13 @@ export interface QuestionConfig {
   qFr: string;
   qNl: string;
   required: boolean;
+  /**
+   * Optional default value used when creating a new record (or when the field is missing in a saved record).
+   *
+   * This is applied only when the field has no value in the payload (i.e., missing), so it does not override user edits.
+   * For dynamic prefills, prefer `derivedValue`.
+   */
+  defaultValue?: DefaultValue;
   ui?: QuestionUiConfig;
   /**
    * @deprecated Replaced by `group: { header: true, title: "Header" }` (rendered in the form body).
@@ -525,6 +558,13 @@ export interface WebQuestionDefinition {
     nl: string;
   };
   required: boolean;
+  /**
+   * Optional default value used when creating a new record (or when the field is missing in a saved record).
+   *
+   * This is applied only when the field is missing from the payload, so it does not override user edits.
+   * For dynamic prefills, prefer `derivedValue`.
+   */
+  defaultValue?: DefaultValue;
   ui?: QuestionUiConfig;
   /**
    * @deprecated Replaced by `group: { header: true, title: "Header" }` (rendered in the form body).

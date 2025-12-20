@@ -29,6 +29,12 @@ components:
         required:
           type: boolean
           description: Whether the question is mandatory.
+        defaultValue:
+          $ref: '#/components/schemas/DefaultValue'
+          description: |
+            Optional default value used when creating a new record (or when the field is missing in a saved record).
+            This only applies when the field is missing from the payload, so it does not override user edits.
+            For dynamic prefills, prefer `derivedValue`.
         ui:
           $ref: '#/components/schemas/QuestionUiConfig'
           description: |
@@ -146,6 +152,23 @@ components:
       description: |
         Upload settings consumed by FILE_UPLOAD questions. The React UI renders drag-and-drop dropzones that enforce these caps, show remaining slots + total size, and announce state changes for assistive tech. When `CK_DEBUG` (and thus `__WEB_FORM_DEBUG__`) is enabled the form also emits `[ReactForm] upload.*` diagnostics in DevTools for every add/drop/remove.
 
+    DefaultValue:
+      oneOf:
+        - type: string
+        - type: number
+        - type: boolean
+        - type: array
+          items:
+            type: string
+      description: |
+        Default value used to prefill a field when it is missing from the payload (new record/new row).
+        Does not override user edits once the field exists in the payload.
+        Notes:
+        - CHOICE: use the stored option value (usually the EN option string).
+        - CHECKBOX:
+          - consent checkbox (no options + no dataSource): boolean
+          - multi-select checkbox: array of strings (or a comma-separated string for convenience).
+
     LineItemFieldConfig:
       type: object
       properties:
@@ -163,6 +186,12 @@ components:
           type: string
         required:
           type: boolean
+        defaultValue:
+          $ref: '#/components/schemas/DefaultValue'
+          description: |
+            Optional default value used when creating a new row (manual/auto/selectionEffect) or when the field is missing.
+            This only applies when the field is missing from the row payload, so it does not override user edits.
+            For dynamic prefills, prefer `derivedValue`.
         ui:
           $ref: '#/components/schemas/QuestionUiConfig'
           description: Optional UI hints for how this line item field should render (e.g., use segmented/radio/select for CHOICE).
@@ -871,8 +900,18 @@ components:
         preset:
           type: object
           additionalProperties:
-            type: [string, number]
-          description: Optional preset values for line-item fields when rows are added.
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+              - type: array
+                items:
+                  type: string
+          description: |
+            Optional preset values for line-item fields when rows are added.
+            Supports reference strings:
+            - `$row.FIELD_ID`: copy from the originating line-item row (when the effect is triggered inside a line item)
+            - `$top.FIELD_ID`: copy from the top-level record values
         triggerValues:
           type: array
           items:

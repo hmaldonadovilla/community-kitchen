@@ -155,8 +155,7 @@ export const validateForm = (args: {
             const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
             if (hideField) return;
             const val = row.values[field.id];
-            const hasValue = Array.isArray(val) ? val.length > 0 : !!(val && val.toString().trim());
-            if (!hasValue) {
+            if (isEmptyValue(val as any)) {
               allErrors[`${q.id}__${field.id}__${row.id}`] = resolveFieldLabel(field, language, 'Required') + ' is required';
               rowValid = false;
             }
@@ -221,8 +220,7 @@ export const validateForm = (args: {
                   const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
                   if (hide) return;
                   const val = subRow.values[field.id];
-                  const hasValue = Array.isArray(val) ? val.length > 0 : !!(val && val.toString().trim());
-                  if (!hasValue) {
+                  if (isEmptyValue(val as any)) {
                     allErrors[`${subKey}__${field.id}__${subRow.id}`] =
                       resolveFieldLabel(field, language, 'Required') + ' is required';
                     rowValid = false;

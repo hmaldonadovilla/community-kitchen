@@ -45,6 +45,7 @@ export class DefinitionBuilder {
         nl: q.qNl
       },
       required: q.required,
+      defaultValue: q.defaultValue,
       ui: q.ui,
       header: q.header,
       group: q.group,

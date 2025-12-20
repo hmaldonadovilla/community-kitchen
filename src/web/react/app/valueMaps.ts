@@ -20,6 +20,15 @@ const derivedLog = (event: string, payload?: Record<string, unknown>) => {
   }
 };
 
+const defaultLog = (event: string, payload?: Record<string, unknown>) => {
+  if (!derivedDebugEnabled() || typeof console === 'undefined' || typeof console.info !== 'function') return;
+  try {
+    console.info('[ReactForm][DefaultValue]', event, payload || {});
+  } catch (_) {
+    // ignore
+  }
+};
+
 const pad2 = (n: number): string => n.toString().padStart(2, '0');
 
 const formatLocalYmd = (d: Date): string => {
@@ -103,6 +112,84 @@ const resolveDerivedApplyOn = (config: any): 'change' | 'blur' => {
   // - copy: blur (avoid mid-typing churn)
   // - everything else: change
   return (config?.op || '').toString() === 'copy' ? 'blur' : 'change';
+};
+
+const coerceConsentBoolean = (raw: any): boolean => {
+  if (raw === undefined || raw === null) return false;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+  if (Array.isArray(raw)) return raw.length > 0;
+  const s = raw.toString().trim().toLowerCase();
+  if (!s) return false;
+  if (s === 'false' || s === '0' || s === 'no' || s === 'n') return false;
+  return true;
+};
+
+const coerceDefaultValue = (args: {
+  type: string;
+  raw: any;
+  hasAnyOption?: boolean;
+  hasDataSource?: boolean;
+}): FieldValue | undefined => {
+  const { type, raw, hasAnyOption = false, hasDataSource = false } = args;
+  if (raw === undefined) return undefined;
+
+  if (type === 'CHECKBOX') {
+    const isConsent = !hasDataSource && !hasAnyOption;
+    if (isConsent) return coerceConsentBoolean(raw);
+
+    if (Array.isArray(raw)) {
+      const items = raw
+        .map(v => (v === undefined || v === null ? '' : v.toString().trim()))
+        .filter(Boolean);
+      return items;
+    }
+    if (typeof raw === 'string') {
+      const s = raw.toString().trim();
+      if (!s) return [];
+      // Support either a single option value or a comma-separated list.
+      if (s.includes(',')) {
+        return s
+          .split(',')
+          .map(part => part.trim())
+          .filter(Boolean);
+      }
+      return [s];
+    }
+    return [];
+  }
+
+  if (type === 'NUMBER') {
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') {
+      const s = raw.trim();
+      if (!s) return '';
+      const normalized = s.includes(',') && !s.includes('.') ? s.replace(',', '.') : s;
+      const n = Number(normalized);
+      return Number.isFinite(n) ? n : s;
+    }
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : raw?.toString?.();
+  }
+
+  if (type === 'DATE') {
+    if (typeof raw === 'string') return raw.toString().trim();
+    return raw?.toString?.();
+  }
+
+  if (type === 'LINE_ITEM_GROUP' || type === 'FILE_UPLOAD') {
+    return undefined;
+  }
+
+  if (typeof raw === 'boolean') return raw ? 'true' : 'false';
+  if (typeof raw === 'number') return raw;
+  if (Array.isArray(raw)) {
+    // For non-checkbox fields, collapse arrays to first scalar.
+    const first = raw[0];
+    return first === undefined || first === null ? undefined : first.toString();
+  }
+  if (typeof raw === 'string') return raw.toString().trim();
+  return raw?.toString?.();
 };
 
 const toFiniteNumber = (raw: unknown): number | null => {
@@ -227,6 +314,7 @@ export const applyValueMapsToLineRow = (
 ): Record<string, FieldValue> => {
   const nextValues = { ...rowValues };
   const mode: ApplyValueMapsMode = options?.mode || 'change';
+
   fields
     .filter(field => field?.valueMap || field?.derivedValue)
     .forEach(field => {
@@ -273,6 +361,24 @@ export const applyValueMapsToLineRow = (
         }
       }
     });
+
+  // Apply default values only when the field is missing from the row payload (does not override edits).
+  fields.forEach(field => {
+    if (!field || field.defaultValue === undefined) return;
+    if (Object.prototype.hasOwnProperty.call(nextValues, field.id)) return;
+    const hasAnyOption =
+      Array.isArray(field.options) ? field.options.length > 0 : !!(field.optionsEn?.length || field.optionsFr?.length || field.optionsNl?.length);
+    const coerced = coerceDefaultValue({
+      type: (field.type || '').toString(),
+      raw: field.defaultValue,
+      hasAnyOption,
+      hasDataSource: !!field.dataSource
+    });
+    if (coerced !== undefined) {
+      nextValues[field.id] = coerced;
+      defaultLog('line.set', { fieldId: field.id, type: field.type || null });
+    }
+  });
   return nextValues;
 };
 
@@ -318,6 +424,23 @@ export const applyValueMapsToForm = (
       }
       }
     }
+
+    // Apply default values only when the field is missing from the payload (does not override edits).
+    if ((q as any).defaultValue !== undefined && !Object.prototype.hasOwnProperty.call(values, q.id)) {
+      const opts = (q as any).options;
+      const hasAnyOption = !!(opts?.en?.length || opts?.fr?.length || opts?.nl?.length);
+      const coerced = coerceDefaultValue({
+        type: (q as any).type || '',
+        raw: (q as any).defaultValue,
+        hasAnyOption,
+        hasDataSource: !!(q as any).dataSource
+      });
+      if (coerced !== undefined) {
+        values[q.id] = coerced;
+        defaultLog('top.set', { fieldId: q.id, type: (q as any).type || null });
+      }
+    }
+
     if (q.type === 'LINE_ITEM_GROUP' && q.lineItemConfig?.fields) {
       const rows = lineItems[q.id] || [];
       const updatedRows = rows.map(row => ({

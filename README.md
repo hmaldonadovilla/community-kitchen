@@ -14,6 +14,7 @@ A Google Apps Script project to digitize AFSCA compliance documentation for a co
 - **Localized Sorting & Tooltips**: All option lists sort alphabetically per language; options can show tooltips from data sources (with inline fallback).
 - **Derived TEXT Maps**: TEXT fields (and line-item fields) can be readonly value-maps that derive their content from another field via `optionMap`.
 - **Computed Fields**: `derivedValue` can auto-calculate fields (e.g., expiration date = prep date + 2 days), prefill DATE fields with today, map time-of-day into a default value, or copy a default value from another field (e.g., NUMBER defaults), and keep them hidden/system-managed.
+- **Default Values**: `defaultValue` can prefill fields on new records/new rows (top-level + line items) without overriding user edits. `selectionEffects.type="addLineItems"` presets can reference `$row.FIELD_ID` and `$top.FIELD_ID` to copy values into newly created rows.
 - **Nested Line Items**: Line-item groups support child subgroups (e.g., Dish headers with Ingredients sub-rows) with option filters, selection effects, and totals.
 - **Consolidated Outputs**: Summary view and PDF placeholders support consolidated aggregations, including subgroup paths (e.g., `{{CONSOLIDATED(MP_DISHES.INGREDIENTS.ALLERGEN)}}`). `ITEM_FILTER` is hidden in summary.
 - **Unified Shell & Navigation**: Sticky header across List, Summary, Form, and Follow-up with a home button (always returns to List on refresh) and top-right language selector for mobile-friendly navigation.

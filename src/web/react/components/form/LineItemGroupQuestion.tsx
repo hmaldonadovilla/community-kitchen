@@ -1013,7 +1013,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     return values[fid];
                                   })
                                 : undefined;
-                              const fieldValueRaw = titleField.valueMap ? mapped : (row.values[titleField.id] as string) || '';
+                              const fieldValueRaw = titleField.valueMap ? mapped : ((row.values[titleField.id] as any) ?? '');
                               const fieldValue = titleField.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
                               return (
                                 <div
@@ -1434,7 +1434,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               return values[fid];
                             })
                           : undefined;
-                          const fieldValueRaw = field.valueMap ? mapped : (row.values[field.id] as string) || '';
+                          const fieldValueRaw = field.valueMap ? mapped : ((row.values[field.id] as any) ?? '');
                           const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
                           const numberText =
                             field.type === 'NUMBER'
@@ -2070,7 +2070,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           return values[fid];
                                         })
                                       : undefined;
-                                      const fieldValueRaw = field.valueMap ? mapped : (subRow.values[field.id] as string) || '';
+                                      const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
                                       const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
                                       const numberText =
                                         field.type === 'NUMBER'
