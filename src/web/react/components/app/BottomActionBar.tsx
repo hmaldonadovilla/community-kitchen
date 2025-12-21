@@ -64,6 +64,7 @@ const CheckIcon: React.FC = () => (
 export const BottomActionBar: React.FC<{
   view: View;
   submitting: boolean;
+  readOnly?: boolean;
   canCopy: boolean;
   onHome: () => void;
   onCreateNew: () => void;
@@ -71,13 +72,13 @@ export const BottomActionBar: React.FC<{
   onEdit: () => void;
   onSummary: () => void;
   onSubmit: () => void;
-}> = ({ view, submitting, canCopy, onHome, onCreateNew, onCreateCopy, onEdit, onSummary, onSubmit }) => {
+}> = ({ view, submitting, readOnly, canCopy, onHome, onCreateNew, onCreateCopy, onEdit, onSummary, onSubmit }) => {
   const [createOpen, setCreateOpen] = useState(false);
 
   const showCreateMenu = useMemo(() => view === 'summary' || view === 'form', [view]);
   const showEdit = useMemo(() => view === 'summary', [view]);
   const showSummary = useMemo(() => view === 'form', [view]);
-  const showSubmit = useMemo(() => view === 'form', [view]);
+  const showSubmit = useMemo(() => view === 'form' && !readOnly, [readOnly, view]);
 
   useEffect(() => {
     // Close transient UI when navigating between views.

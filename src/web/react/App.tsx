@@ -10,14 +10,29 @@ import {
   WebQuestionDefinition,
   WebFormSubmission
 } from '../types';
-import { BootstrapContext, submit, triggerFollowup, ListResponse, ListItem, fetchRecordById, fetchRecordByRowNumber } from './api';
+import {
+  BootstrapContext,
+  submit,
+  triggerFollowup,
+  uploadFilesApi,
+  ListResponse,
+  ListItem,
+  fetchRecordById,
+  fetchRecordByRowNumber
+} from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
 import { AppHeader } from './components/app/AppHeader';
 import { BottomActionBar } from './components/app/BottomActionBar';
 import { SummaryView } from './components/app/SummaryView';
 import { FormErrors, LineItemState, OptionState, View } from './types';
-import { buildSubmissionPayload, computeUrlOnlyUploadUpdates, resolveExistingRecordId, validateForm } from './app/submission';
+import {
+  buildDraftPayload,
+  buildSubmissionPayload,
+  computeUrlOnlyUploadUpdates,
+  resolveExistingRecordId,
+  validateForm
+} from './app/submission';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { detectDebug } from './app/utils';
 import {
@@ -27,6 +42,7 @@ import {
 } from './app/lineItems';
 import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm } from './app/valueMaps';
+import { buildFilePayload } from './app/filePayload';
 import packageJson from '../../../package.json';
 
 type SubmissionMeta = {
@@ -35,6 +51,8 @@ type SubmissionMeta = {
   updatedAt?: string;
   status?: string | null;
 };
+
+type DraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused';
 
 // Build marker to verify deployed bundle version in UI
 const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
@@ -96,6 +114,50 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   const formSubmitActionRef = useRef<(() => void) | null>(null);
   const vvBottomRef = useRef<number>(-1);
+  const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
+    phase: 'idle'
+  }));
+
+  const autoSaveTimerRef = useRef<number | null>(null);
+  const autoSaveDirtyRef = useRef<boolean>(false);
+  const autoSaveInFlightRef = useRef<boolean>(false);
+  const autoSaveQueuedRef = useRef<boolean>(false);
+  const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
+
+  // Keep latest values in refs so autosave can run without stale closures.
+  const viewRef = useRef<View>(view);
+  const submittingRef = useRef<boolean>(submitting);
+  const valuesRef = useRef<Record<string, FieldValue>>(values);
+  const lineItemsRef = useRef<LineItemState>(lineItems);
+  const languageRef = useRef<LangCode>(language);
+  const selectedRecordIdRef = useRef<string>(selectedRecordId);
+  const selectedRecordSnapshotRef = useRef<WebFormSubmission | null>(selectedRecordSnapshot);
+  const lastSubmissionMetaRef = useRef<SubmissionMeta | null>(lastSubmissionMeta);
+
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  useEffect(() => {
+    submittingRef.current = submitting;
+  }, [submitting]);
+  useEffect(() => {
+    valuesRef.current = values;
+  }, [values]);
+  useEffect(() => {
+    lineItemsRef.current = lineItems;
+  }, [lineItems]);
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+  useEffect(() => {
+    selectedRecordIdRef.current = selectedRecordId;
+  }, [selectedRecordId]);
+  useEffect(() => {
+    selectedRecordSnapshotRef.current = selectedRecordSnapshot;
+  }, [selectedRecordSnapshot]);
+  useEffect(() => {
+    lastSubmissionMetaRef.current = lastSubmissionMeta;
+  }, [lastSubmissionMeta]);
 
   const [listCache, setListCache] = useState<{ response: ListResponse | null; records: Record<string, WebFormSubmission> }>(() => {
     const globalAny = globalThis as any;
@@ -105,12 +167,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     return { response, records };
   });
   const [listRefreshToken, setListRefreshToken] = useState(0);
-  const invalidateListCache = () => {
+  const invalidateListCache = useCallback(() => {
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
     // back to the list does not reintroduce slow record fetches.
     setListCache(prev => ({ response: null, records: prev.records }));
     setListRefreshToken(token => token + 1);
-  };
+  }, []);
 
   const applyRecordSnapshot = useCallback(
     (snapshot: WebFormSubmission) => {
@@ -119,6 +181,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const normalized = normalizeRecordValues(definition, snapshot.values || {});
       const initialLineItems = buildInitialLineItems(definition, normalized);
       const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
+      // Avoid autosaving immediately due to state hydration from a server snapshot.
+      autoSaveDirtyRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+      lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
       setValues(mapped.values);
       setLineItems(mapped.lineItems);
       setErrors({});
@@ -540,9 +610,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, [debugEnabled]);
 
   const handleSubmitAnother = useCallback(() => {
+    autoSaveDirtyRef.current = false;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setDraftSave({ phase: 'idle' });
     const normalized = normalizeRecordValues(definition);
     const initialLineItems = buildInitialLineItems(definition);
     const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
+    lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
     setValues(mapped.values);
     setLineItems(mapped.lineItems);
     setErrors({});
@@ -563,7 +640,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   const handleDuplicateCurrent = useCallback(() => {
     // Preserve current values/line items but clear record context so the next submit creates a new record.
+    autoSaveDirtyRef.current = false;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setDraftSave({ phase: 'idle' });
     const cleared = clearAutoIncrementFields(definition, values, lineItems);
+    lastAutoSaveSeenRef.current = { values: cleared.values, lineItems: cleared.lineItems };
     setValues(cleared.values);
     setLineItems(cleared.lineItems);
     setSelectedRecordId('');
@@ -575,7 +659,343 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setView('form');
   }, [definition, values, lineItems]);
 
+  const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
+  const autoSaveDebounceMs = (() => {
+    const raw = definition.autoSave?.debounceMs;
+    const n = raw === undefined || raw === null ? NaN : Number(raw);
+    if (!Number.isFinite(n)) return 2000;
+    return Math.max(300, Math.min(60000, Math.floor(n)));
+  })();
+  const autoSaveStatusValue = (definition.autoSave?.status || 'In progress').toString();
+
+  const isClosedRecord = (() => {
+    const raw =
+      (lastSubmissionMeta?.status || selectedRecordSnapshot?.status || '').toString();
+    return raw.trim().toLowerCase() === 'closed';
+  })();
+
+  const performAutoSave = useCallback(
+    async (reason: string) => {
+      if (!autoSaveEnabled) return;
+      if (viewRef.current !== 'form') return;
+      if (submittingRef.current) return;
+
+      const statusRaw =
+        ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
+        '';
+      if (statusRaw.trim().toLowerCase() === 'closed') {
+        setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: 'Closed (read-only)' }));
+        return;
+      }
+
+      if (!autoSaveDirtyRef.current) return;
+      if (autoSaveInFlightRef.current) {
+        autoSaveQueuedRef.current = true;
+        return;
+      }
+
+      autoSaveInFlightRef.current = true;
+      autoSaveQueuedRef.current = false;
+      // Clear the dirty flag for this attempt; it will be re-set by the change effect if edits continue.
+      autoSaveDirtyRef.current = false;
+
+      setDraftSave({ phase: 'saving' });
+      logEvent('autosave.begin', { reason, debounceMs: autoSaveDebounceMs });
+
+      try {
+        const existingRecordId = resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        });
+
+        const payload = buildDraftPayload({
+          definition,
+          formKey,
+          language: languageRef.current,
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current,
+          existingRecordId
+        }) as any;
+        payload.__ckSaveMode = 'draft';
+        payload.__ckStatus = autoSaveStatusValue;
+
+        const res = await submit(payload);
+        const ok = !!res?.success;
+        const msg = (res?.message || '').toString();
+        if (!ok) {
+          const errText = msg || 'Autosave failed.';
+          // If the server rejects because the record was closed, lock the UI.
+          if (errText.toLowerCase().includes('closed')) {
+            setLastSubmissionMeta(prev => ({ ...(prev || {}), status: 'Closed' }));
+            setDraftSave({ phase: 'paused', message: 'Closed (read-only)' });
+            return;
+          }
+          autoSaveDirtyRef.current = true;
+          setDraftSave({ phase: 'error', message: errText });
+          logEvent('autosave.error', { reason, message: errText });
+          return;
+        }
+
+        const newId = (res?.meta?.id || existingRecordId || '').toString();
+        const updatedAt = (res?.meta?.updatedAt || '').toString();
+        if (newId) setSelectedRecordId(newId);
+        setLastSubmissionMeta(prev => ({
+          ...(prev || {}),
+          id: newId || prev?.id,
+          createdAt: res?.meta?.createdAt || prev?.createdAt,
+          updatedAt: updatedAt || prev?.updatedAt,
+          status: autoSaveStatusValue
+        }));
+        setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
+        invalidateListCache();
+        logEvent('autosave.success', { reason, recordId: newId || null, updatedAt: updatedAt || null });
+      } catch (err: any) {
+        const errText = (err?.message || err?.toString?.() || 'Autosave failed.').toString();
+        autoSaveDirtyRef.current = true;
+        setDraftSave({ phase: 'error', message: errText });
+        logEvent('autosave.exception', { reason, message: errText });
+      } finally {
+        autoSaveInFlightRef.current = false;
+        if (autoSaveQueuedRef.current && viewRef.current === 'form' && !submittingRef.current) {
+          autoSaveQueuedRef.current = false;
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          autoSaveTimerRef.current = globalThis.setTimeout(() => {
+            void performAutoSave('queued');
+          }, autoSaveDebounceMs) as any;
+        }
+      }
+    },
+    [autoSaveDebounceMs, autoSaveEnabled, autoSaveStatusValue, definition, formKey, invalidateListCache, logEvent]
+  );
+
+  // Debounced autosave trigger on edits.
   useEffect(() => {
+    if (!autoSaveEnabled) return;
+    // Only trigger autosave when the actual form data changes.
+    const prevSeen = lastAutoSaveSeenRef.current;
+    const changed = !prevSeen || prevSeen.values !== values || prevSeen.lineItems !== lineItems;
+    lastAutoSaveSeenRef.current = { values, lineItems };
+    if (!changed) return;
+
+    if (view !== 'form') return;
+    if (submitting) return;
+    if (isClosedRecord) {
+      setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: 'Closed (read-only)' }));
+      return;
+    }
+
+    autoSaveDirtyRef.current = true;
+    setDraftSave(prev => {
+      if (prev.phase === 'saving') return prev;
+      if (prev.phase === 'dirty') return prev;
+      return { phase: 'dirty' };
+    });
+
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    autoSaveTimerRef.current = globalThis.setTimeout(() => {
+      void performAutoSave('debounced');
+    }, autoSaveDebounceMs) as any;
+    return () => {
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [autoSaveDebounceMs, autoSaveEnabled, isClosedRecord, performAutoSave, submitting, view, values, lineItems]);
+
+  const uploadFieldUrls = useCallback(
+    async (args: {
+      scope: 'top' | 'line';
+      fieldPath: string;
+      questionId?: string;
+      groupId?: string;
+      rowId?: string;
+      fieldId?: string;
+      items: Array<string | File>;
+      uploadConfig?: any;
+    }): Promise<{ success: boolean; message?: string }> => {
+      if (viewRef.current !== 'form') return { success: false, message: 'Not in form view.' };
+      if (submittingRef.current) return { success: false, message: 'Submitting.' };
+      if (isClosedRecord) return { success: false, message: 'Closed (read-only).' };
+
+      // Ensure we don't have a pending debounced draft save that might race with this sequence.
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+
+      const isFile = (v: any): v is File => {
+        try {
+          return typeof File !== 'undefined' && v instanceof File;
+        } catch (_) {
+          return false;
+        }
+      };
+
+      const splitUrlList = (raw: string): string[] => {
+        const trimmed = (raw || '').toString().trim();
+        if (!trimmed) return [];
+        const commaParts = trimmed
+          .split(',')
+          .map(p => p.trim())
+          .filter(Boolean);
+        if (commaParts.length > 1) return commaParts;
+        const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
+        if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
+        return [trimmed];
+      };
+
+      // Step 1: ensure we have a record id saved to the destination tab before uploading (prevents orphan uploads).
+      let recordId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+
+      if (!recordId) {
+        try {
+          setDraftSave({ phase: 'saving' });
+          const draft = buildDraftPayload({
+            definition,
+            formKey,
+            language: languageRef.current,
+            values: valuesRef.current,
+            lineItems: lineItemsRef.current
+          }) as any;
+          draft.__ckSaveMode = 'draft';
+          draft.__ckStatus = autoSaveStatusValue;
+          const res = await submit(draft);
+          if (!res?.success) {
+            const msg = (res?.message || 'Failed to create draft record.').toString();
+            setDraftSave({ phase: 'error', message: msg });
+            return { success: false, message: msg };
+          }
+          recordId = (res?.meta?.id || '').toString();
+          if (!recordId) {
+            const msg = 'Failed to create draft record id.';
+            setDraftSave({ phase: 'error', message: msg });
+            return { success: false, message: msg };
+          }
+          setSelectedRecordId(recordId);
+          setLastSubmissionMeta(prev => ({
+            ...(prev || {}),
+            id: recordId,
+            createdAt: res?.meta?.createdAt || prev?.createdAt,
+            updatedAt: res?.meta?.updatedAt || prev?.updatedAt,
+            status: autoSaveStatusValue
+          }));
+          setDraftSave({ phase: 'saved', updatedAt: (res?.meta?.updatedAt || '').toString() || undefined });
+          invalidateListCache();
+          logEvent('upload.ensureRecord.saved', { recordId, fieldPath: args.fieldPath });
+        } catch (err: any) {
+          const msg = (err?.message || err?.toString?.() || 'Failed to create draft record.').toString();
+          setDraftSave({ phase: 'error', message: msg });
+          return { success: false, message: msg };
+        }
+      }
+
+      // Step 2: upload file payloads to Drive and get final URL list.
+      const existingUrls = (args.items || []).filter((it): it is string => typeof it === 'string').filter(Boolean);
+      const fileItems = (args.items || []).filter(isFile);
+      if (!fileItems.length) {
+        // Nothing new to upload (e.g., only URLs).
+        return { success: true };
+      }
+
+      try {
+        const payloads = await buildFilePayload(fileItems, undefined);
+        const uploadRes = await uploadFilesApi([...existingUrls, ...payloads], args.uploadConfig);
+        if (!uploadRes?.success) {
+          const msg = (uploadRes?.message || 'Failed to upload files.').toString();
+          logEvent('upload.files.error', { fieldPath: args.fieldPath, message: msg });
+          return { success: false, message: msg };
+        }
+        const urls = splitUrlList(uploadRes?.urls || '');
+        if (!urls.length) {
+          const msg = 'Upload returned no URLs.';
+          logEvent('upload.files.empty', { fieldPath: args.fieldPath });
+          return { success: false, message: msg };
+        }
+
+        // Step 3: update local state with URL(s) (remove File objects), then save draft again to persist URL(s) to the sheet.
+        const nextValues =
+          args.scope === 'top' && args.questionId
+            ? { ...valuesRef.current, [args.questionId]: urls }
+            : valuesRef.current;
+
+        const nextLineItems =
+          args.scope === 'line' && args.groupId && args.rowId && args.fieldId
+            ? (() => {
+                const current = lineItemsRef.current;
+                const rows = current[args.groupId!] || [];
+                const nextRows = rows.map(r =>
+                  r.id === args.rowId ? { ...r, values: { ...(r.values || {}), [args.fieldId!]: urls } } : r
+                );
+                return { ...current, [args.groupId!]: nextRows };
+              })()
+            : lineItemsRef.current;
+
+        if (args.scope === 'top' && args.questionId) {
+          setValues(nextValues);
+        }
+        if (args.scope === 'line' && args.groupId) {
+          setLineItems(nextLineItems);
+        }
+
+        const draft2 = buildDraftPayload({
+          definition,
+          formKey,
+          language: languageRef.current,
+          values: nextValues,
+          lineItems: nextLineItems,
+          existingRecordId: recordId
+        }) as any;
+        draft2.__ckSaveMode = 'draft';
+        draft2.__ckStatus = autoSaveStatusValue;
+
+        const res2 = await submit(draft2);
+        if (!res2?.success) {
+          const msg = (res2?.message || 'Failed to save uploaded file URLs.').toString();
+          logEvent('upload.saveUrls.error', { fieldPath: args.fieldPath, recordId, message: msg });
+          setDraftSave({ phase: 'error', message: msg });
+          return { success: false, message: msg };
+        }
+
+        setLastSubmissionMeta(prev => ({
+          ...(prev || {}),
+          id: recordId,
+          updatedAt: (res2?.meta?.updatedAt || prev?.updatedAt) as any,
+          status: autoSaveStatusValue
+        }));
+        setDraftSave({ phase: 'saved', updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined });
+        invalidateListCache();
+        logEvent('upload.saveUrls.success', { fieldPath: args.fieldPath, recordId, urls: urls.length });
+        return { success: true };
+      } catch (err: any) {
+        const msg = (err?.message || err?.toString?.() || 'Failed to upload files.').toString();
+        logEvent('upload.files.exception', { fieldPath: args.fieldPath, message: msg });
+        return { success: false, message: msg };
+      }
+    },
+    [autoSaveStatusValue, definition, formKey, invalidateListCache, isClosedRecord, logEvent]
+  );
+
+  useEffect(() => {
+    // Avoid autosaving due to initial bootstrap hydration.
+    autoSaveDirtyRef.current = false;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setDraftSave({ phase: 'idle' });
     if (record?.values) {
       const normalizedValues = normalizeRecordValues(definition, record.values);
       const initialLineItems = buildInitialLineItems(definition, normalizedValues);
@@ -584,6 +1004,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         normalizedValues,
         initialLineItems
       );
+      lastAutoSaveSeenRef.current = { values: mappedValues, lineItems: mappedLineItems };
       setValues(mappedValues);
       setLineItems(mappedLineItems);
     }
@@ -656,6 +1077,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }
 
   const handleSubmit = async (submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => {
+    if (isClosedRecord) {
+      setStatus('Record is Closed and read-only.');
+      setStatusLevel('info');
+      logEvent('submit.blocked.closed');
+      return;
+    }
     clearStatus();
     logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length });
     const nextErrors = validateForm({
@@ -830,6 +1257,53 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   };
 
   const currentRecord = selectedRecordSnapshot || (selectedRecordId ? listCache.records[selectedRecordId] : null);
+  const draftBanner = (() => {
+    if (isClosedRecord) {
+      return (
+        <output
+          style={{
+            padding: '12px 14px',
+            borderRadius: 14,
+            border: '1px solid rgba(15, 23, 42, 0.14)',
+            background: 'rgba(118,118,128,0.08)',
+            fontWeight: 700
+          }}
+          aria-live="polite"
+        >
+          Closed (read-only)
+        </output>
+      );
+    }
+
+    if (!autoSaveEnabled) return null;
+    if (draftSave.phase === 'idle') return null;
+
+    let text: string | null = null;
+    if (draftSave.phase === 'saving') text = 'Saving draft…';
+    else if (draftSave.phase === 'saved') text = 'Draft saved.';
+    else if (draftSave.phase === 'dirty') text = 'Draft has unsaved changes.';
+    else if (draftSave.phase === 'paused') text = draftSave.message || 'Draft autosave paused.';
+    else if (draftSave.phase === 'error') text = `Draft save failed: ${draftSave.message || 'Unknown error'}`;
+
+    if (!text) return null;
+    const isError = draftSave.phase === 'error';
+
+    return (
+      <output
+        style={{
+          padding: '10px 14px',
+          borderRadius: 14,
+          border: isError ? '1px solid #fca5a5' : '1px solid rgba(15, 23, 42, 0.12)',
+          background: isError ? '#fee2e2' : 'rgba(118,118,128,0.06)',
+          color: '#0f172a',
+          fontWeight: 700
+        }}
+        aria-live="polite"
+      >
+        {text}
+      </output>
+    );
+  })();
 
   return (
     <div
@@ -855,6 +1329,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
       {view === 'form' && (
         <>
+          {draftBanner}
           <FormView
             definition={definition}
             language={language}
@@ -864,7 +1339,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             setLineItems={setLineItems}
             onSubmit={handleSubmit}
             submitActionRef={formSubmitActionRef}
-            submitting={submitting}
+            submitting={submitting || isClosedRecord}
             errors={errors}
             setErrors={setErrors}
             status={status}
@@ -877,6 +1352,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             externalScrollAnchor={externalScrollAnchor}
             onExternalScrollConsumed={() => setExternalScrollAnchor(null)}
             onSelectionEffect={runSelectionEffects}
+            onUploadFiles={uploadFieldUrls}
             onDiagnostic={logEvent}
           />
         </>
@@ -896,6 +1372,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           recordLoadingId={recordLoadingId}
           currentRecord={currentRecord}
           isMobile={isMobile}
+          onDuplicate={handleDuplicateCurrent}
         />
       )}
       {view === 'list' && (
@@ -920,6 +1397,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       <BottomActionBar
         view={view}
         submitting={submitting}
+        readOnly={view === 'form' && isClosedRecord}
         canCopy={view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id)}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}

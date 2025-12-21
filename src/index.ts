@@ -104,6 +104,12 @@ export function saveSubmissionWithId(formObject: WebFormSubmission): { success: 
   return service.saveSubmissionWithId(formObject);
 }
 
+export function uploadFiles(files: any, uploadConfig?: any): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.uploadFiles(files, uploadConfig);
+}
+
 export function triggerFollowupAction(formKey: string, recordId: string, action: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

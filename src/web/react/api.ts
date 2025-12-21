@@ -50,6 +50,12 @@ export interface DataSourceResponse {
   totalCount?: number;
 }
 
+export interface UploadFilesResult {
+  success: boolean;
+  urls: string;
+  message?: string;
+}
+
 type Runner = typeof google.script.run;
 
 const getRunner = (): Runner | null => {
@@ -110,6 +116,9 @@ export const triggerFollowup = (
   recordId: string,
   action: string
 ): Promise<FollowupActionResult> => runAppsScript<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action);
+
+export const uploadFilesApi = (files: any, uploadConfig?: any): Promise<UploadFilesResult> =>
+  runAppsScript<UploadFilesResult>('uploadFiles', files, uploadConfig);
 
 export interface BootstrapContext {
   definition: WebFormDefinition;

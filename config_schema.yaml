@@ -678,6 +678,24 @@ components:
           items:
             type: string
             enum: [createdAt, updatedAt, status, pdfUrl]
+        autoSave:
+          type: object
+          description: |
+            Optional draft autosave behavior for the React edit view.
+
+            - Saves in the background after a debounce when form values change.
+            - No validation is required for draft saves.
+            - Writes Status to "In progress" (unless the record is already Closed).
+          properties:
+            enabled:
+              type: boolean
+              description: Enable draft autosave.
+            debounceMs:
+              type: number
+              description: Debounce interval (ms) before sending a background save. Default 2000.
+            status:
+              type: string
+              description: Status value written during autosave. Default "In progress".
       additionalProperties: true
 
     TemplateIdMap:

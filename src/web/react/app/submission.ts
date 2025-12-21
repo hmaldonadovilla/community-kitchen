@@ -363,6 +363,116 @@ export const buildSubmissionPayload = async (args: {
   return submission;
 };
 
+const toUrlOnlyUploadString = (raw: any): string => {
+  if (raw === undefined || raw === null) return '';
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) {
+    const urls: string[] = [];
+    raw.forEach(item => {
+      if (!item) return;
+      if (typeof item === 'string') {
+        item
+          .split(',')
+          .map(p => p.trim())
+          .filter(Boolean)
+          .forEach(u => urls.push(u));
+        return;
+      }
+      if (typeof item === 'object' && typeof (item as any).url === 'string') {
+        const u = ((item as any).url as string).trim();
+        if (u) urls.push(u);
+      }
+    });
+    const seen = new Set<string>();
+    const deduped = urls.filter(u => {
+      if (!u) return false;
+      if (seen.has(u)) return false;
+      seen.add(u);
+      return true;
+    });
+    return deduped.join(', ');
+  }
+  if (typeof raw === 'object' && typeof (raw as any).url === 'string') {
+    return ((raw as any).url as string).trim();
+  }
+  return '';
+};
+
+/**
+ * Build a "draft save" payload for autosave:
+ * - No validation required.
+ * - Does NOT convert Files to base64 payloads (so it won't upload files).
+ * - Persists only URL/string values for FILE_UPLOAD fields.
+ */
+export const buildDraftPayload = (args: {
+  definition: WebFormDefinition;
+  formKey: string;
+  language: LangCode;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  existingRecordId?: string;
+}): SubmissionPayload => {
+  const { definition, formKey, language, values, lineItems, existingRecordId } = args;
+  const recomputed = applyValueMapsToForm(definition, values, lineItems, { mode: 'change' });
+  const payloadValues: Record<string, any> = { ...recomputed.values };
+
+  // Sanitize top-level uploads
+  for (const q of definition.questions) {
+    if (q.type === 'FILE_UPLOAD') {
+      payloadValues[q.id] = toUrlOnlyUploadString(recomputed.values[q.id]);
+    }
+  }
+
+  // Serialize line item groups (and sanitize any nested FILE_UPLOAD fields to URL-only strings)
+  for (const q of definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP')) {
+    const rows = recomputed.lineItems[q.id] || [];
+    const lineFields = q.lineItemConfig?.fields || [];
+    const lineFileFields = lineFields.filter(f => (f as any).type === 'FILE_UPLOAD');
+    const subGroups = q.lineItemConfig?.subGroups || [];
+
+    const serialized = rows.map(row => {
+      const base: Record<string, any> = { ...(row.values || {}) };
+      lineFileFields.forEach(f => {
+        base[f.id] = toUrlOnlyUploadString(base[f.id]);
+      });
+
+      for (const sub of subGroups) {
+        const key = resolveSubgroupKey(sub as any);
+        if (!key) continue;
+        const childKey = buildSubgroupKey(q.id, row.id, key);
+        const childRows = recomputed.lineItems[childKey] || [];
+        const subFields = (sub as any).fields || [];
+        const subFileFields = subFields.filter((f: any) => f?.type === 'FILE_UPLOAD');
+        base[key] = childRows.map(cr => {
+          const child: Record<string, any> = { ...(cr.values || {}) };
+          subFileFields.forEach((f: any) => {
+            child[f.id] = toUrlOnlyUploadString(child[f.id]);
+          });
+          return child;
+        });
+      }
+
+      return base;
+    });
+
+    payloadValues[q.id] = serialized;
+    payloadValues[`${q.id}_json`] = JSON.stringify(serialized);
+  }
+
+  const submission: SubmissionPayload = {
+    formKey,
+    language,
+    values: payloadValues,
+    ...payloadValues
+  };
+
+  if (existingRecordId) {
+    submission.id = existingRecordId;
+  }
+
+  return submission;
+};
+
 export const computeUrlOnlyUploadUpdates = (
   definition: WebFormDefinition,
   payloadValues: Record<string, any>

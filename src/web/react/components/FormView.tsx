@@ -152,6 +152,24 @@ interface FormViewProps {
       forceContextReset?: boolean;
     }
   ) => void;
+  /**
+   * Optional immediate upload hook. Used to upload FILE_UPLOAD fields as soon as the user adds files.
+   * The handler should:
+   * - ensure the record exists (create draft if needed),
+   * - upload the File(s) to Drive,
+   * - update the field value to the resulting URL(s),
+   * - and persist the URL(s) (draft save).
+   */
+  onUploadFiles?: (args: {
+    scope: 'top' | 'line';
+    fieldPath: string;
+    questionId?: string;
+    groupId?: string;
+    rowId?: string;
+    fieldId?: string;
+    items: Array<string | File>;
+    uploadConfig?: any;
+  }) => Promise<{ success: boolean; message?: string }>;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
@@ -177,6 +195,7 @@ const FormView: React.FC<FormViewProps> = ({
   externalScrollAnchor,
   onExternalScrollConsumed,
   onSelectionEffect,
+  onUploadFiles,
   onDiagnostic
 }) => {
   const ROW_SOURCE_KEY = '__ckRowSource';
@@ -996,6 +1015,24 @@ const FormView: React.FC<FormViewProps> = ({
       total: items.length,
       error: Boolean(errorMessage)
     });
+
+    // Immediate upload: upload accepted files now, then persist URLs via draft save (handled by App).
+    if (onUploadFiles && accepted > 0) {
+      announceUpload(question.id, `Uploading ${accepted} file${accepted > 1 ? 's' : ''}…`);
+      void onUploadFiles({
+        scope: 'top',
+        fieldPath: question.id,
+        questionId: question.id,
+        items,
+        uploadConfig: (question as any)?.uploadConfig
+      }).then(res => {
+        if (!res?.success) {
+          announceUpload(question.id, res?.message || 'Upload failed.');
+          return;
+        }
+        announceUpload(question.id, 'Uploaded.');
+      });
+    }
   };
 
   const handleFileInputChange = (question: WebQuestionDefinition, list: FileList | null) => {
@@ -1272,6 +1309,26 @@ const FormView: React.FC<FormViewProps> = ({
       error: Boolean(errorMessage),
       scope: 'line'
     });
+
+    // Immediate upload: upload accepted files now, then persist URLs via draft save (handled by App).
+    if (onUploadFiles && accepted > 0) {
+      announceUpload(fieldPath, `Uploading ${accepted} file${accepted > 1 ? 's' : ''}…`);
+      void onUploadFiles({
+        scope: 'line',
+        fieldPath,
+        groupId: group.id,
+        rowId,
+        fieldId: field.id,
+        items: files,
+        uploadConfig: field.uploadConfig
+      }).then(res => {
+        if (!res?.success) {
+          announceUpload(fieldPath, res?.message || 'Upload failed.');
+          return;
+        }
+        announceUpload(fieldPath, 'Uploaded.');
+      });
+    }
   };
 
   const handleLineFileInputChange = (args: {

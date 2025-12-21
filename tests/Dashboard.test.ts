@@ -76,4 +76,30 @@ describe('Dashboard', () => {
     const forms = dashboard.getForms();
     expect(forms[0].listViewMetaColumns).toEqual(['createdAt', 'status', 'pdfUrl']);
   });
+
+  test('getForms parses autosave config from dashboard config', () => {
+    const configJson = JSON.stringify({
+      autoSave: { enabled: true, debounceMs: 1500, status: 'In progress' }
+    });
+    const mockData = [
+      [],
+      [],
+      [
+        'Form Title',
+        'Configuration Sheet Name',
+        'Destination Tab Name',
+        'Description',
+        'Web App URL (?form=ConfigSheetName)',
+        'Follow-up Config (JSON)'
+      ],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].autoSave).toBeDefined();
+    expect(forms[0].autoSave?.enabled).toBe(true);
+    expect(forms[0].autoSave?.debounceMs).toBe(1500);
+    expect(forms[0].autoSave?.status).toBe('In progress');
+  });
 });

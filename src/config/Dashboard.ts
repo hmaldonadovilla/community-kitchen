@@ -1,4 +1,5 @@
 import {
+  AutoSaveConfig,
   FollowupConfig,
   FollowupStatusConfig,
   EmailRecipientEntry,
@@ -105,6 +106,7 @@ export class Dashboard {
       const dashboardConfig = colFollowup >= 0 ? this.parseDashboardConfig(row[colFollowup]) : undefined;
       const followupConfig = dashboardConfig?.followup;
       const listViewMetaColumns = dashboardConfig?.listViewMetaColumns;
+      const autoSave = dashboardConfig?.autoSave;
       if (title && configSheetName) {
         forms.push({
           title,
@@ -115,7 +117,8 @@ export class Dashboard {
           formId,
           rowIndex: dataStartRow + index,
           followupConfig,
-          listViewMetaColumns
+          listViewMetaColumns,
+          autoSave
         });
       }
     });
@@ -140,7 +143,9 @@ export class Dashboard {
     return this.resolveWebAppUrl();
   }
 
-  private parseDashboardConfig(raw: any): { followup?: FollowupConfig; listViewMetaColumns?: string[] } | undefined {
+  private parseDashboardConfig(
+    raw: any
+  ): { followup?: FollowupConfig; listViewMetaColumns?: string[]; autoSave?: AutoSaveConfig } | undefined {
     if (!raw || (typeof raw === 'string' && raw.trim() === '')) return undefined;
     const value = raw.toString().trim();
     let parsed: any;
@@ -155,8 +160,28 @@ export class Dashboard {
     const listViewMetaColumns = this.normalizeListViewMetaColumns(
       parsed.listViewMetaColumns || parsed.listViewDefaults || parsed.defaultListFields
     );
-    if (!followup && (!listViewMetaColumns || !listViewMetaColumns.length)) return undefined;
-    return { followup, listViewMetaColumns };
+    const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
+    if (!followup && (!listViewMetaColumns || !listViewMetaColumns.length) && !autoSave) return undefined;
+    return { followup, listViewMetaColumns, autoSave };
+  }
+
+  private normalizeAutoSave(value: any): AutoSaveConfig | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'boolean') return { enabled: value };
+    if (typeof value !== 'object') return undefined;
+    const cfg: AutoSaveConfig = {};
+    if ((value as any).enabled !== undefined) cfg.enabled = Boolean((value as any).enabled);
+    if ((value as any).debounceMs !== undefined && (value as any).debounceMs !== null) {
+      const n = Number((value as any).debounceMs);
+      if (Number.isFinite(n)) {
+        cfg.debounceMs = Math.max(300, Math.min(60000, n));
+      }
+    }
+    if ((value as any).status !== undefined && (value as any).status !== null) {
+      const s = (value as any).status.toString().trim();
+      if (s) cfg.status = s;
+    }
+    return Object.keys(cfg).length ? cfg : undefined;
   }
 
   private buildFollowupConfig(source: any): FollowupConfig | undefined {

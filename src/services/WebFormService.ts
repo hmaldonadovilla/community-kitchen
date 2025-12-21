@@ -29,6 +29,7 @@ export class WebFormService {
   private submissions: SubmissionService;
   private listing: ListingService;
   private followups: FollowupService;
+  private uploads: UploadService;
 
   constructor(ss: GoogleAppsScript.Spreadsheet.Spreadsheet) {
     this.ss = ss;
@@ -38,6 +39,7 @@ export class WebFormService {
     const cachePrefix = CacheEtagManager.computeCachePrefix(docProps);
     this.cacheManager = new CacheEtagManager(cache, docProps, cachePrefix);
     const uploads = new UploadService(ss);
+    this.uploads = uploads;
     this.definitionBuilder = new DefinitionBuilder(ss, this.dashboard);
     this.dataSources = new DataSourceService(ss);
     this.submissions = new SubmissionService(ss, uploads, this.cacheManager, docProps);
@@ -197,6 +199,20 @@ export class WebFormService {
   ): FollowupActionResult {
     const { form, questions } = this.getFormContext(formKey);
     return this.followups.triggerFollowupAction(form, questions, recordId, action);
+  }
+
+  /**
+   * Upload files to Drive and return the resulting URL list string (comma-separated).
+   * This does not write anything to the destination tab; the caller should save the URLs via saveSubmissionWithId.
+   */
+  public uploadFiles(files: any, uploadConfig?: any): { success: boolean; urls: string; message?: string } {
+    try {
+      const urls = this.uploads.saveFiles(files, uploadConfig);
+      return { success: true, urls: urls || '' };
+    } catch (err: any) {
+      debugLog('uploadFiles.error', { message: err?.message || err?.toString?.() || 'unknown' });
+      return { success: false, urls: '', message: 'Failed to upload files.' };
+    }
   }
 
   private getFormContext(formKey?: string): { form: FormConfig; questions: QuestionConfig[] } {

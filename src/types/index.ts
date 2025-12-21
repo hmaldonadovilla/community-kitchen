@@ -443,6 +443,21 @@ export interface FollowupConfig {
   statusTransitions?: FollowupStatusConfig;
 }
 
+export interface AutoSaveConfig {
+  /**
+   * Enable draft autosave while editing in the React web app.
+   */
+  enabled?: boolean;
+  /**
+   * Debounce interval before sending a background save. Defaults to 2000ms.
+   */
+  debounceMs?: number;
+  /**
+   * Status value written to the sheet when autosaving drafts. Defaults to "In progress".
+   */
+  status?: string;
+}
+
 export interface DataSourceConfig {
   id: string;
   ref?: string; // optional reference key used by backend
@@ -542,6 +557,11 @@ export interface FormConfig {
   rowIndex: number;
   followupConfig?: FollowupConfig;
   listViewMetaColumns?: string[];
+  /**
+   * Optional draft autosave behavior for the web edit view.
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  autoSave?: AutoSaveConfig;
 }
 
 export interface FormResult {
@@ -611,6 +631,10 @@ export interface WebFormDefinition {
   dedupRules?: DedupRule[];
   startRoute?: 'list' | 'form' | 'summary' | string;
   followup?: FollowupConfig;
+  /**
+   * Optional draft autosave behavior for the web edit view.
+   */
+  autoSave?: AutoSaveConfig;
 }
 
 export interface WebFormSubmission {

@@ -120,6 +120,49 @@ export class SubmissionService {
     setIf(columns.createdAt, createdAtVal);
     setIf(columns.updatedAt, updatedAtVal);
 
+    // Draft autosave: write status + protect closed records from background saves.
+    const saveMode = ((formObject as any).__ckSaveMode || '').toString().trim().toLowerCase();
+    if (saveMode === 'draft') {
+      const statusValueRaw =
+        ((formObject as any).__ckStatus || form.autoSave?.status || 'In progress')?.toString?.() || 'In progress';
+      const statusValue = statusValueRaw.toString().trim() || 'In progress';
+
+      // Determine the "status" column to write to (either a configured statusFieldId, or the default Status meta column).
+      const statusFieldId = form.followupConfig?.statusFieldId;
+      const statusFieldIdx =
+        statusFieldId && columns.fields[statusFieldId] ? (columns.fields[statusFieldId] as number) : undefined;
+      const metaStatusIdx = columns.status;
+      const statusIdx = statusFieldIdx || metaStatusIdx;
+
+      const readCellText = (colIdx?: number): string => {
+        if (!colIdx || existingRowIdx < 0) return '';
+        try {
+          const raw = sheet.getRange(2 + existingRowIdx, colIdx, 1, 1).getValues()[0][0];
+          return raw === undefined || raw === null ? '' : raw.toString();
+        } catch (_) {
+          return '';
+        }
+      };
+
+      const existingStatusText = (() => {
+        const fromField = statusFieldIdx ? readCellText(statusFieldIdx).trim() : '';
+        const fromMeta = metaStatusIdx ? readCellText(metaStatusIdx).trim() : '';
+        return (fromField || fromMeta || '').toString();
+      })();
+      const isClosed = existingStatusText.trim().toLowerCase() === 'closed';
+      if (existingRowIdx >= 0 && isClosed) {
+        return {
+          success: false,
+          message: 'Record is Closed and read-only.',
+          meta: {
+            id: recordId
+          }
+        };
+      }
+
+      setIf(statusIdx, statusValue);
+    }
+
     const candidateValues: Record<string, any> = {};
     questions.forEach(q => {
       if (q.type === 'TEXT' && q.autoIncrement) {
@@ -185,7 +228,8 @@ export class SubmissionService {
     });
 
     // Dedup check against existing rows (form scope only)
-    if (dedupRules && dedupRules.length) {
+    // Skip for draft autosave (no validation required until submit).
+    if (saveMode !== 'draft' && dedupRules && dedupRules.length) {
       const existingRows = Math.max(0, sheet.getLastRow() - 1);
       if (existingRows > 0) {
         const data = sheet.getRange(2, 1, existingRows, headers.length).getValues();
