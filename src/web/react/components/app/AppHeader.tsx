@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 export const AppHeader: React.FC<{
   title: string;
@@ -8,178 +8,121 @@ export const AppHeader: React.FC<{
   language: string;
   onLanguageChange: (nextLanguage: string) => void;
   onRefresh: () => void;
-  onHome: () => void;
-  onNew: () => void;
-}> = ({ title, buildMarker, isMobile, languages, language, onLanguageChange, onRefresh, onHome, onNew }) => {
-  const [actionsOpen, setActionsOpen] = useState(false);
+}> = ({ title, buildMarker, isMobile, languages, language, onLanguageChange, onRefresh }) => {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const avatarText = useMemo(() => {
+    const trimmed = (title || '').trim();
+    if (!trimmed) return 'CK';
+    const parts = trimmed.split(/\s+/g).filter(Boolean);
+    const first = parts[0]?.[0] || trimmed[0] || 'C';
+    const second = parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1];
+    const joined = `${first || ''}${second || ''}`.toUpperCase();
+    return joined.trim() || first.toUpperCase();
+  }, [title]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    // Prevent background scroll while the drawer is open.
+    const root = document.documentElement;
+    const prevOverflow = root.style.overflow;
+    root.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      root.style.overflow = prevOverflow;
+    };
+  }, [drawerOpen]);
 
   return (
-    <header
-      className="app-shell-header"
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
-        background: '#fff',
-        padding: '18px 20px',
-        marginBottom: 16,
-        borderRadius: 16,
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 10px 30px rgba(15,23,42,0.08)'
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap'
-        }}
-      >
-        <div style={{ fontSize: isMobile ? 52 : 32, fontWeight: 800, minWidth: 0 }}>{title || 'Form'}</div>
-        <div className="muted" style={{ fontSize: isMobile ? 26 : 18, fontWeight: 700, whiteSpace: 'nowrap' }}>
-          Build: {buildMarker}
-        </div>
-      </div>
+    <>
+      <header className="ck-app-header" data-mobile={isMobile ? '1' : '0'}>
+        <button
+          type="button"
+          className="ck-app-avatar-btn"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open menu"
+        >
+          <span className="ck-app-avatar" aria-hidden="true">
+            {avatarText}
+          </span>
+        </button>
+        <div className="ck-app-title">{title || 'Form'}</div>
+      </header>
 
       <div
-        style={{
-          marginTop: 12,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12
-        }}
+        className={`ck-app-drawer-overlay${drawerOpen ? ' open' : ''}`}
+        aria-hidden={!drawerOpen}
+        onClick={() => setDrawerOpen(false)}
       >
-        <div style={{ position: 'relative', flex: '0 0 auto' }}>
-          <button
-            type="button"
-            onClick={() => setActionsOpen(open => !open)}
-            aria-label="Menu"
-            style={{
-              border: '1px solid var(--ck-secondary-border)',
-              background: 'var(--ck-secondary-bg)',
-              color: 'var(--ck-secondary-text)',
-              borderRadius: 14,
-              padding: isMobile ? '18px 22px' : '16px 20px',
-              cursor: 'pointer',
-              fontWeight: 800,
-              fontSize: isMobile ? 30 : 26,
-              minWidth: isMobile ? 86 : 74,
-              minHeight: 'var(--control-height)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            ☰
-          </button>
-          {actionsOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: '100%',
-                marginTop: 8,
-                background: '#fff',
-                border: '1px solid #e5e7eb',
-                borderRadius: 16,
-                boxShadow: '0 14px 36px rgba(15,23,42,0.16)',
-                padding: 14,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-                minWidth: 240,
-                zIndex: 8
+        <div
+          className="ck-app-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="ck-app-drawer-top">
+            <div className="ck-app-drawer-brand">
+              <div className="ck-app-avatar ck-app-avatar--drawer" aria-hidden="true">
+                {avatarText}
+              </div>
+              <div className="ck-app-drawer-brand-text">
+                <div className="ck-app-drawer-brand-title">{title || 'Form'}</div>
+                <div className="ck-app-drawer-brand-subtitle muted">Menu</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="ck-app-drawer-close"
+              onClick={() => setDrawerOpen(false)}
+              aria-label="Close menu"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="ck-app-drawer-section">
+            <button
+              type="button"
+              className="ck-app-drawer-item"
+              onClick={() => {
+                setDrawerOpen(false);
+                onRefresh();
               }}
             >
-              <button
-                type="button"
-                onClick={() => {
-                  setActionsOpen(false);
-                  onRefresh();
-                }}
-                style={{
-                  padding: '14px 16px',
-                  borderRadius: 12,
-                  border: '1px solid var(--ck-secondary-border)',
-                  background: 'var(--ck-secondary-bg)',
-                  color: 'var(--ck-secondary-text)',
-                  fontWeight: 800,
-                  fontSize: 28,
-                  textAlign: 'left',
-                  minHeight: 'var(--control-height)'
-                }}
-              >
-                ⟳ Refresh
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActionsOpen(false);
-                  onHome();
-                }}
-                style={{
-                  padding: '14px 16px',
-                  borderRadius: 12,
-                  border: '1px solid var(--ck-secondary-border)',
-                  background: 'var(--ck-secondary-bg)',
-                  color: 'var(--ck-secondary-text)',
-                  fontWeight: 800,
-                  fontSize: 28,
-                  textAlign: 'left',
-                  minHeight: 'var(--control-height)'
-                }}
-              >
-                Home
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActionsOpen(false);
-                  onNew();
-                }}
-                style={{
-                  padding: '14px 16px',
-                  borderRadius: 12,
-                  border: '1px solid transparent',
-                  background: 'var(--accent)',
-                  color: '#fff',
-                  fontWeight: 900,
-                  fontSize: 28,
-                  textAlign: 'left',
-                  minHeight: 'var(--control-height)'
-                }}
-              >
-                New
-              </button>
-            </div>
-          )}
-        </div>
+              ⟳ Refresh
+            </button>
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
-          <label
-            htmlFor="language-select"
-            style={{
-              fontWeight: 800,
-              fontSize: 'var(--ck-font-label)',
-              color: 'var(--muted)',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            Language:
-          </label>
-          <select id="language-select" value={language} onChange={e => onLanguageChange(e.target.value)}>
-            {(languages.length ? languages : ['EN']).map(lang => (
-              <option key={lang} value={lang}>
-                {lang}
-              </option>
-            ))}
-          </select>
+          <div className="ck-app-drawer-section">
+            <div className="ck-app-drawer-section-title muted">Language</div>
+            <select
+              className="ck-app-drawer-select"
+              value={language}
+              onChange={e => onLanguageChange(e.target.value)}
+              aria-label="Select language"
+            >
+              {(languages.length ? languages : ['EN']).map(lang => (
+                <option key={lang} value={lang}>
+                  {lang}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="ck-app-drawer-section">
+            <div className="ck-app-drawer-section-title muted">Build</div>
+            <div className="ck-app-drawer-build">{buildMarker}</div>
+          </div>
         </div>
       </div>
-    </header>
+    </>
   );
 };
 

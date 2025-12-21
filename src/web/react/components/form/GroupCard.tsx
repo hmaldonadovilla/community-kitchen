@@ -40,24 +40,31 @@ export const GroupCard: React.FC<GroupCardProps> = ({
 
   return (
     <div className={className} data-group-key={groupKey} data-has-error={hasError ? 'true' : undefined}>
-      <div className="ck-group-header">
-        <div className="ck-group-title">{resolvedTitle}</div>
-        {collapsible ? (
-          <button
-            type="button"
+      {collapsible ? (
+        <button
+          type="button"
+          className="ck-group-header ck-group-header--clickable"
+          onClick={onToggleCollapsed}
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} section ${resolvedTitle} (${complete}/${total} required complete)`}
+        >
+          <div className="ck-group-title">{resolvedTitle}</div>
+          <span
             className={`ck-progress-pill ${progressClass}`}
-            onClick={onToggleCollapsed}
-            aria-expanded={!collapsed}
-            aria-label={`${collapsed ? 'Expand' : 'Collapse'} section ${resolvedTitle} (${complete}/${total} required complete)`}
             title={`${complete}/${total} required complete`}
+            aria-hidden="true"
           >
             <span>
               {complete}/{total}
             </span>
             <span className="ck-progress-caret">{collapsed ? '▸' : '▾'}</span>
-          </button>
-        ) : null}
-      </div>
+          </span>
+        </button>
+      ) : (
+        <div className="ck-group-header">
+          <div className="ck-group-title">{resolvedTitle}</div>
+        </div>
+      )}
       {!collapsed && <div className="ck-group-body">{children}</div>}
     </div>
   );

@@ -13,5 +13,5 @@ export interface FormErrors {
   [key: string]: string;
 }
 
-export type View = 'form' | 'list' | 'summary' | 'followup';
+export type View = 'form' | 'list' | 'summary';
 

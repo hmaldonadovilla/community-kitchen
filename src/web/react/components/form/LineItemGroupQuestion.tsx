@@ -205,6 +205,26 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     return ids.map((id: any) => (id ?? '').toString().trim()).filter(Boolean);
   };
 
+  // Auto-add should only reconcile when the controlling dependency values change (or when anchor options arrive),
+  // not when the user removes a row or edits unrelated fields.
+  const autoCfg = q.lineItemConfig;
+  const autoAnchorField =
+    autoCfg?.addMode === 'auto' && autoCfg.anchorFieldId
+      ? (autoCfg.fields || []).find((f: any) => f && f.id === autoCfg.anchorFieldId)
+      : undefined;
+  const autoAnchorIsChoice = !!autoAnchorField && (autoAnchorField as any).type === 'CHOICE';
+  const autoDependencyIds = autoAnchorIsChoice ? resolveDependsOnIds(autoAnchorField) : [];
+  const autoDepSignature = autoDependencyIds
+    .map(depId => {
+      const dep = toDependencyValue((values as any)[depId] as any);
+      if (dep === undefined || dep === null) return '';
+      return dep.toString();
+    })
+    .join('||');
+  const autoAnchorOptionSetKey =
+    autoAnchorIsChoice && autoAnchorField ? optionKey((autoAnchorField as any).id, q.id) : '';
+  const autoAnchorOptionSet = autoAnchorOptionSetKey ? optionState[autoAnchorOptionSetKey] : undefined;
+
   const isValidDependencyValue = (raw: any): boolean => {
     const dep = toDependencyValue(raw as any);
     if (dep === undefined || dep === null) return false;
@@ -383,11 +403,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     });
   }, [
     submitting,
-    q,
-    values,
-    language,
-    optionState,
-    lineItems,
+    q.id,
+    q.lineItemConfig?.addMode,
+    q.lineItemConfig?.anchorFieldId,
+    // Only re-run when controlling dependency values change (or when the anchor options set changes)
+    autoDepSignature,
+    autoAnchorOptionSet,
     ensureLineOptions,
     setLineItems,
     setValues
@@ -771,6 +792,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                 return { canExpand: false, reason: `Complete required fields to expand: ${blocked.join(', ')}` };
               })();
               const canExpand = gateResult.canExpand;
+              const rowLocked = isProgressive && rowCollapsed && !canExpand;
               const rowHasError = errorIndex.rowErrors.has(collapseKey);
               const requiredRowProgress = (() => {
                 let totalRequired = 0;
@@ -808,21 +830,28 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                     ? 'ck-progress-good'
                     : 'ck-progress-bad'
                   : 'ck-progress-neutral';
+
+              const expandLabel = resolveLocalizedString({ en: 'Expand', fr: 'Ouvrir', nl: 'Openen' }, language, 'Expand');
+              const collapseLabel = resolveLocalizedString({ en: 'Collapse', fr: 'Réduire', nl: 'Sluiten' }, language, 'Collapse');
+              const lockedLabel = resolveLocalizedString({ en: 'Locked', fr: 'Verrouillé', nl: 'Vergrendeld' }, language, 'Locked');
+              const pillActionLabel = rowLocked ? lockedLabel : rowCollapsed ? expandLabel : collapseLabel;
               return (
                 <div
                   key={row.id}
-                  className="line-item-row"
+                  className={`line-item-row${rowLocked ? ' ck-row-disabled' : ''}`}
                   data-row-anchor={`${q.id}__${row.id}`}
+                  data-row-disabled={rowLocked ? 'true' : undefined}
                   style={{
                     background:
-                      isProgressive && rowCollapsed && !canExpand
+                      rowLocked
                         ? '#f1f5f9'
                         : rowIdx % 2 === 0
                         ? '#ffffff'
                         : '#f8fafc',
                     padding: 12,
                     borderRadius: 10,
-                    border: '1px solid #e5e7eb',
+                    border: rowLocked ? '2px dashed rgba(100, 116, 139, 0.45)' : '1px solid #e5e7eb',
+                    opacity: rowLocked ? 0.86 : 1,
                     outline: rowHasError ? '3px solid rgba(239, 68, 68, 0.55)' : undefined,
                     outlineOffset: 2,
                     marginBottom: 10
@@ -1055,49 +1084,54 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
                           >
                             {rowHasError ? 'Needs attention · ' : ''}
-                            Fill the collapsed fields to unlock expand.
+                            Locked until complete · Fill the collapsed fields to unlock expand.
                           </div>
                         ) : null}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div
+                      <button
+                        type="button"
+                        className="ck-row-toggle"
+                        aria-label={`${rowCollapsed ? 'Expand' : 'Collapse'} row ${rowIdx + 1} (${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired})`}
+                        aria-expanded={!rowCollapsed}
+                        aria-disabled={rowCollapsed && !canExpand}
+                        title={
+                          rowCollapsed && !canExpand
+                            ? gateResult.reason
+                            : `${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired}`
+                        }
+                        onClick={() => {
+                          if (rowCollapsed && !canExpand) {
+                            onDiagnostic?.('edit.progressive.expand.blocked', {
+                              groupId: q.id,
+                              rowId: row.id,
+                              reason: gateResult.reason
+                            });
+                            return;
+                          }
+                          setCollapsedRows(prev => ({ ...prev, [collapseKey]: !rowCollapsed }));
+                          onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
+                        }}
+                      >
+                        <span
                           className="muted"
                           style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
                         >
                           Row {rowIdx + 1}
                           {rowHasError ? ' · Needs attention' : ''}
-                        </div>
-                        <button
-                          type="button"
+                          {rowLocked ? ' · Locked' : ''}
+                        </span>
+                        <span
                           className={`ck-progress-pill ${requiredRowProgressClass}`}
                           data-has-error={rowHasError ? 'true' : undefined}
-                          aria-label={`${rowCollapsed ? 'Expand' : 'Collapse'} row ${rowIdx + 1} (${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired})`}
-                          aria-expanded={!rowCollapsed}
-                          aria-disabled={rowCollapsed && !canExpand}
-                          title={
-                            rowCollapsed && !canExpand
-                              ? gateResult.reason
-                              : `${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired}`
-                          }
-                          onClick={() => {
-                            if (rowCollapsed && !canExpand) {
-                              onDiagnostic?.('edit.progressive.expand.blocked', {
-                                groupId: q.id,
-                                rowId: row.id,
-                                reason: gateResult.reason
-                              });
-                              return;
-                            }
-                            setCollapsedRows(prev => ({ ...prev, [collapseKey]: !rowCollapsed }));
-                            onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
-                          }}
+                          aria-disabled={rowCollapsed && !canExpand ? 'true' : undefined}
                         >
                           <span>
                             {requiredRowProgress.numerator}/{requiredRowProgress.totalRequired}
                           </span>
+                          <span className="ck-progress-label">{pillActionLabel}</span>
                           <span className="ck-progress-caret">{rowCollapsed ? '▸' : '▾'}</span>
-                        </button>
-                      </div>
+                        </span>
+                      </button>
                     </div>
                   ) : null}
                   {!isProgressive && rowDisclaimerText ? (

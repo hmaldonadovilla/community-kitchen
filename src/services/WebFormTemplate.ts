@@ -149,14 +149,192 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         max-width: 1100px;
         margin: 0 auto;
         padding: 22px;
+        /* Reserve room for the fixed bottom action bar (accounts for iOS safe-area + visualViewport inset). */
+        padding-bottom: calc(22px + 146px + var(--safe-bottom) + var(--vv-bottom));
         display: flex;
         flex-direction: column;
         gap: 16px;
       }
-      /* Only the edit form view has a fixed bottom action bar; add scroll room so the last field
-         never ends up behind it (accounts for iOS safe-area + visualViewport inset). */
-      .page.ck-page-form {
-        padding-bottom: calc(22px + 146px + var(--safe-bottom) + var(--vv-bottom));
+      /* (legacy) ck-page-form is still applied, but bottom-bar room is now reserved for all views. */
+      /* App header (Excel-style: avatar + title) */
+      .ck-app-header {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: calc(14px + var(--safe-top)) 22px 14px;
+        /* Make the header full-bleed within the .page padding */
+        margin: -22px -22px 6px;
+        background: rgba(242, 242, 247, 0.88);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border-bottom: 1px solid var(--border);
+      }
+      .ck-app-avatar-btn {
+        appearance: none;
+        border: none;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        flex: 0 0 auto;
+        border-radius: 999px;
+      }
+      .ck-app-avatar-btn:focus-visible {
+        outline: 4px solid rgba(0, 122, 255, 0.3);
+        outline-offset: 4px;
+      }
+      .ck-app-avatar {
+        --ck-avatar-size: calc(var(--control-height) * 0.62);
+        width: var(--ck-avatar-size);
+        height: var(--ck-avatar-size);
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--ck-secondary-bg);
+        border: 1px solid var(--ck-secondary-border);
+        color: var(--ck-secondary-text);
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        font-size: calc(var(--ck-font-control) * 0.72);
+        line-height: 1;
+        user-select: none;
+      }
+      .ck-app-avatar--drawer {
+        --ck-avatar-size: calc(var(--control-height) * 0.58);
+        font-size: calc(var(--ck-font-control) * 0.66);
+      }
+      .ck-app-title {
+        font-weight: 900;
+        font-size: calc(var(--ck-font-control) + 10px);
+        letter-spacing: -0.6px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* Left slide-in drawer */
+      .ck-app-drawer-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        background: rgba(15, 23, 42, 0);
+        pointer-events: none;
+        transition: background 180ms ease;
+      }
+      .ck-app-drawer-overlay.open {
+        background: rgba(15, 23, 42, 0.28);
+        pointer-events: auto;
+      }
+      .ck-app-drawer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(520px, 88vw);
+        background: var(--card);
+        border-right: 1px solid var(--border);
+        box-shadow: 0 18px 60px rgba(15, 23, 42, 0.24);
+        transform: translateX(-104%);
+        transition: transform 220ms ease;
+        padding: calc(16px + var(--safe-top)) 16px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .ck-app-drawer-overlay.open .ck-app-drawer {
+        transform: translateX(0);
+      }
+      .ck-app-drawer-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .ck-app-drawer-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+      .ck-app-drawer-brand-text {
+        min-width: 0;
+      }
+      .ck-app-drawer-brand-title {
+        font-weight: 900;
+        font-size: calc(var(--ck-font-control) + 6px);
+        letter-spacing: -0.5px;
+        line-height: 1.1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ck-app-drawer-brand-subtitle {
+        font-weight: 700;
+      }
+      .ck-app-drawer-close {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+        width: calc(var(--control-height) * 0.62);
+        height: calc(var(--control-height) * 0.62);
+        border-radius: 999px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-weight: 900;
+        font-size: calc(var(--ck-font-control) + 12px);
+        line-height: 1;
+        flex: 0 0 auto;
+      }
+      .ck-app-drawer-section {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .ck-app-drawer-section-title {
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-size: calc(var(--ck-font-label) * 0.66);
+      }
+      .ck-app-drawer-item {
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--ck-secondary-border);
+        background: var(--ck-secondary-bg);
+        color: var(--ck-secondary-text);
+        border-radius: 16px;
+        font-weight: 900;
+        padding: 16px 18px;
+        min-height: var(--control-height);
+        font-size: var(--ck-font-control);
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .ck-app-drawer-item--primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .ck-app-drawer-select {
+        width: 100%;
+      }
+      .ck-app-drawer-build {
+        font-weight: 800;
+      }
+      .ck-app-drawer-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 6px 0;
       }
       header h1 { margin: 0 0 6px; font-size: 54px; letter-spacing: -0.7px; }
       header p { margin: 0 0 8px; color: var(--muted); }
@@ -310,6 +488,154 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
       .sticky-submit button {
         min-width: 200px;
         box-shadow: none;
+      }
+      /* Bottom action bar (Excel-like) */
+      .ck-bottom-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: var(--vv-bottom);
+        padding: 12px 18px max(12px, var(--safe-bottom));
+        background: rgba(242, 242, 247, 0.92);
+        border-top: 1px solid rgba(60, 60, 67, 0.22);
+        backdrop-filter: saturate(180%) blur(18px);
+        -webkit-backdrop-filter: saturate(180%) blur(18px);
+        z-index: 2000;
+      }
+      .ck-bottom-bar-inner {
+        max-width: 1100px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-inline-size: 0;
+      }
+      .ck-bottom-capsule {
+        flex: 1 1 auto;
+        min-inline-size: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.75);
+        border: 1px solid var(--border);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      }
+      .ck-bottom-item {
+        flex: 1 1 0;
+        min-inline-size: 0;
+        background: transparent;
+        color: var(--text);
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 12px 14px;
+        min-height: calc(var(--control-height) * 0.78);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-weight: 900;
+        font-size: calc(var(--ck-font-pill) * 1.05);
+        white-space: nowrap;
+        box-shadow: none;
+      }
+      .ck-bottom-item--icon {
+        flex: 0 0 auto;
+        padding: 12px 14px;
+        min-inline-size: calc(var(--control-height) * 0.78);
+      }
+      .ck-bottom-item.active {
+        background: var(--ck-secondary-bg);
+        border-color: var(--ck-secondary-border);
+        color: var(--ck-secondary-text);
+      }
+      .ck-bottom-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+      .ck-bottom-submit {
+        flex: 0 0 auto;
+        border-radius: 999px;
+        min-height: calc(var(--control-height) * 0.78);
+        padding: 12px 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-weight: 900;
+        font-size: calc(var(--ck-font-pill) * 1.05);
+        background: var(--accent);
+        border: 1px solid var(--accent);
+        color: #fff;
+        box-shadow: none;
+      }
+      .ck-bottom-submit:disabled {
+        opacity: 0.6;
+      }
+      /* Create (+) menu */
+      .ck-bottom-menu-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 2100;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 0 18px;
+        background: rgba(15, 23, 42, 0);
+        pointer-events: none;
+        transition: background 180ms ease;
+      }
+      .ck-bottom-menu-overlay.open {
+        background: rgba(15, 23, 42, 0.22);
+        pointer-events: auto;
+      }
+      .ck-bottom-menu {
+        position: relative;
+        z-index: 1;
+        width: min(760px, calc(100vw - 36px));
+        margin-bottom: calc(12px + max(12px, var(--safe-bottom)) + var(--vv-bottom) + 110px);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        box-shadow: 0 18px 60px rgba(15, 23, 42, 0.24);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .ck-bottom-menu-backdrop {
+        position: absolute;
+        inset: 0;
+        border: none;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+      }
+      .ck-bottom-menu-item {
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--ck-secondary-border);
+        background: var(--ck-secondary-bg);
+        color: var(--ck-secondary-text);
+        border-radius: 16px;
+        font-weight: 900;
+        padding: 16px 18px;
+        min-height: var(--control-height);
+        font-size: var(--ck-font-control);
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: none;
+      }
+      .ck-bottom-menu-item--primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
       }
     </style>
   </head>

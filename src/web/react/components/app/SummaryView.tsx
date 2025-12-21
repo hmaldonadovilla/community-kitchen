@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { optionKey } from '../../../core';
 import { resolveLocalizedString } from '../../../i18n';
 import { FieldValue, LangCode, LineItemRowState, WebFormDefinition, WebQuestionDefinition, WebFormSubmission } from '../../../types';
@@ -55,8 +55,6 @@ export const SummaryView: React.FC<{
   recordLoadingId: string | null;
   currentRecord: WebFormSubmission | null;
   isMobile: boolean;
-  onEdit: () => void;
-  onFollowup: () => void;
   onDuplicate: () => void;
 }> = ({
   definition,
@@ -70,12 +68,8 @@ export const SummaryView: React.FC<{
   selectedRecordId,
   recordLoadingId,
   currentRecord,
-  isMobile,
-  onEdit,
-  onFollowup,
-  onDuplicate
+  isMobile
 }) => {
-  const [summaryActionsOpen, setSummaryActionsOpen] = useState(false);
 
   const summaryRecordId = lastSubmissionMeta?.id || selectedRecordId || '';
   const summaryTitle = useMemo(() => {
@@ -246,123 +240,6 @@ export const SummaryView: React.FC<{
           <div className="muted" style={{ marginTop: 6 }}>
             Updated {formatDateTime(lastSubmissionMeta?.updatedAt)} · Status {lastSubmissionMeta?.status || '—'}
           </div>
-        </div>
-        <div style={{ position: 'relative' }}>
-          {isMobile ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setSummaryActionsOpen(open => !open)}
-                style={{
-                  border: '1px solid var(--ck-secondary-border)',
-                  background: 'var(--ck-secondary-bg)',
-                  color: 'var(--ck-secondary-text)',
-                  borderRadius: 14,
-                  padding: '18px 22px',
-                  cursor: 'pointer',
-                  fontWeight: 900,
-                  fontSize: 28,
-                  minHeight: 'var(--control-height)'
-                }}
-              >
-                ☰ Actions
-              </button>
-              {summaryActionsOpen && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: '100%',
-                    marginTop: 8,
-                    background: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 16,
-                    boxShadow: '0 14px 36px rgba(15,23,42,0.16)',
-                    padding: 14,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 10,
-                    zIndex: 5,
-                    minWidth: 240
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSummaryActionsOpen(false);
-                      onEdit();
-                    }}
-                    style={{
-                      padding: '14px 16px',
-                      borderRadius: 12,
-                      border: '1px solid var(--ck-secondary-border)',
-                      background: 'var(--ck-secondary-bg)',
-                      color: 'var(--ck-secondary-text)',
-                      fontWeight: 900,
-                      fontSize: 28,
-                      textAlign: 'left',
-                      minHeight: 'var(--control-height)'
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSummaryActionsOpen(false);
-                      onFollowup();
-                    }}
-                    disabled={!summaryRecordId}
-                    style={{
-                      padding: '14px 16px',
-                      borderRadius: 12,
-                      border: '1px solid var(--ck-secondary-border)',
-                      background: 'var(--ck-secondary-bg)',
-                      color: 'var(--ck-secondary-text)',
-                      fontWeight: 900,
-                      fontSize: 28,
-                      textAlign: 'left',
-                      minHeight: 'var(--control-height)'
-                    }}
-                  >
-                    Follow-up
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSummaryActionsOpen(false);
-                      onDuplicate();
-                    }}
-                    style={{
-                      padding: '14px 16px',
-                      borderRadius: 12,
-                      border: '1px solid var(--ck-secondary-border)',
-                      background: 'var(--ck-secondary-bg)',
-                      color: 'var(--ck-secondary-text)',
-                      fontWeight: 900,
-                      fontSize: 28,
-                      textAlign: 'left',
-                      minHeight: 'var(--control-height)'
-                    }}
-                  >
-                    Create copy
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" onClick={onEdit}>
-                Edit
-              </button>
-              <button type="button" onClick={onFollowup} disabled={!summaryRecordId}>
-                Follow-up
-              </button>
-              <button type="button" onClick={onDuplicate}>
-                Create copy
-              </button>
-            </div>
-          )}
         </div>
       </div>
 

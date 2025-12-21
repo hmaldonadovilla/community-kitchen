@@ -473,17 +473,26 @@ export const FORM_VIEW_STYLES = `
         .ck-form-sections {
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 24px; /* clearer separation between sections */
         }
         .ck-group-card {
           padding: 0;
           outline: none;
+          overflow: hidden;
+          /* stronger separation between grouped cards */
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        }
+        .ck-group-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 28px; /* separation between group cards */
         }
         .ck-group-card[data-has-error="true"] {
-          box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.22);
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08), 0 0 0 4px rgba(239, 68, 68, 0.22);
         }
         .ck-group-header {
           width: 100%;
+          appearance: none;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -491,9 +500,22 @@ export const FORM_VIEW_STYLES = `
           padding: 22px 22px;
           border: 0;
           background: transparent;
+          color: inherit;
           text-align: left;
           border-bottom: 1px solid var(--border);
           cursor: default;
+          border-radius: 0;
+        }
+        .ck-group-header--clickable {
+          cursor: pointer;
+        }
+        .ck-group-header--clickable:active {
+          background: rgba(118, 118, 128, 0.10);
+        }
+        .ck-group-header--clickable:focus-visible {
+          outline: 4px solid rgba(0, 122, 255, 0.28);
+          outline-offset: 2px;
+          border-radius: var(--radius-card);
         }
         .ck-group-title {
           font-size: var(--ck-font-group-title);
@@ -518,6 +540,12 @@ export const FORM_VIEW_STYLES = `
           white-space: nowrap;
           min-height: 56px;
           cursor: pointer;
+          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+        }
+        .ck-progress-pill .ck-progress-label {
+          font-size: 0.92em;
+          font-weight: 900;
+          opacity: 0.92;
         }
         .ck-progress-pill:active {
           transform: translateY(1px);
@@ -548,6 +576,31 @@ export const FORM_VIEW_STYLES = `
           background: rgba(118, 118, 128, 0.12);
           border-color: var(--border);
           color: rgba(15, 23, 42, 0.72);
+        }
+        /* Row toggle wrapper (line-item progressive rows): make the whole "Row X + pill" area tappable */
+        .ck-row-toggle {
+          appearance: none;
+          border: none;
+          background: transparent;
+          padding: 0;
+          margin: 0;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          text-align: left;
+        }
+        .ck-row-toggle:active .ck-progress-pill {
+          transform: translateY(1px);
+        }
+        .ck-row-toggle[aria-disabled="true"] {
+          opacity: 0.8;
+          cursor: not-allowed;
+        }
+
+        /* Locked/disabled progressive rows: make it obvious they are not active until completed */
+        .line-item-row.ck-row-disabled {
+          filter: saturate(0.9);
         }
         .ck-group-chevron {
           flex: 0 0 auto;

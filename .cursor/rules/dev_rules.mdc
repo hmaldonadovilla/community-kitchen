@@ -21,3 +21,20 @@ description: Snyk Security At Inception
 - Update the README.md file to reflect the new feature (high level overview).
 - Run unit tests to ensure the new feature works as expected. Fix failures and update the tests to cover the new feature.
 - Run `npm run build` to ensure the application can be compiled successfully.
+
+## Architecture, separation of concerns, and scalability
+
+- Prefer clear boundaries: **UI (React components)**, **state (hooks/store)**, **domain logic (pure TS)**, and **infrastructure (API/IO)** must be separated.
+- Keep React components focused on rendering + wiring. Move business logic to `hooks/` (UI state) and `services/` / `domain/` (business rules).
+- Business/domain logic should be **pure and testable** (no direct DOM, network calls, or global mutable state).
+- Do not call external services directly from components. Use a single abstraction layer (e.g., `src/services/*`) to centralize API clients, retries, error mapping, and telemetry.
+- Use dependency injection via parameters (or lightweight factories) for domain/services to avoid hard-coding environment-specific details.
+- Prefer composition over inheritance. Keep files small; if a module grows beyond ~200–300 lines, consider splitting.
+- Avoid circular dependencies. Imports should flow “down” the layers (UI → hooks/store → domain → services/infrastructure).
+- Keep configuration and constants centralized (e.g., `src/config/`, `src/constants/`). No magic strings scattered across the codebase.
+- Design for extensibility: feature code should live in a `src/features/<feature>/` folder (components, hooks, services, tests) rather than a flat global structure.
+- Reuse logic via shared utilities and hooks, not by duplicating code. If you copy/paste twice, extract.
+- Prefer explicit, typed interfaces at module boundaries (request/response models, DTO mapping). Validate untrusted inputs at the boundary.
+- Keep state local by default. Promote state upward only when multiple siblings need it. Avoid global state for transient UI concerns.
+- Tests: unit test domain logic; integration test service layers; keep UI tests focused on user flows.
+- Every new module should have a clear owner and a doc comment explaining responsibility and boundaries.

@@ -122,7 +122,11 @@ interface FormViewProps {
   lineItems: LineItemState;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
   onSubmit: (ctx: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => Promise<void>;
-  onBack: () => void;
+  /**
+   * Allows the app shell (bottom action bar) to trigger submit while preserving
+   * FormView-specific behavior (e.g., validation navigation).
+   */
+  submitActionRef?: React.MutableRefObject<(() => void) | null>;
   submitting: boolean;
   errors: FormErrors;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
@@ -133,6 +137,12 @@ interface FormViewProps {
   setOptionState: React.Dispatch<React.SetStateAction<OptionState>>;
   ensureOptions: (q: WebQuestionDefinition) => void;
   ensureLineOptions: (groupId: string, field: any) => void;
+  /**
+   * External request to scroll to a newly added row (e.g., selectionEffects-created rows).
+   * Format matches internal anchors: `${groupKey}__${rowId}`.
+   */
+  externalScrollAnchor?: string | null;
+  onExternalScrollConsumed?: () => void;
   onSelectionEffect?: (
     q: WebQuestionDefinition,
     value: FieldValue,
@@ -153,7 +163,7 @@ const FormView: React.FC<FormViewProps> = ({
   lineItems,
   setLineItems,
   onSubmit,
-  onBack,
+  submitActionRef,
   submitting,
   errors,
   setErrors,
@@ -164,6 +174,8 @@ const FormView: React.FC<FormViewProps> = ({
   setOptionState,
   ensureOptions,
   ensureLineOptions,
+  externalScrollAnchor,
+  onExternalScrollConsumed,
   onSelectionEffect,
   onDiagnostic
 }) => {
@@ -187,7 +199,6 @@ const FormView: React.FC<FormViewProps> = ({
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
   const choiceVariantLogRef = useRef<Record<string, string>>({});
-  const vvBottomRef = useRef<number>(-1);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const valuesRef = useRef(values);
   const lineItemsRef = useRef(lineItems);
@@ -196,6 +207,36 @@ const FormView: React.FC<FormViewProps> = ({
     valuesRef.current = values;
     lineItemsRef.current = lineItems;
   }, [values, lineItems]);
+
+  useEffect(() => {
+    if (!externalScrollAnchor) return;
+    setPendingScrollAnchor(externalScrollAnchor);
+    onExternalScrollConsumed?.();
+    onDiagnostic?.('ui.autoscroll.external', { anchor: externalScrollAnchor });
+  }, [externalScrollAnchor, onDiagnostic, onExternalScrollConsumed]);
+
+  // Expose an imperative submit action so the bottom action bar can trigger the same submit
+  // behavior (including the "scroll to first error" flow) without duplicating logic in App.tsx.
+  useEffect(() => {
+    if (!submitActionRef) return;
+    submitActionRef.current = () => {
+      if (submitting) return;
+      // Ensure status/progress messages are visible immediately when submit starts.
+      try {
+        if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } catch (_) {
+        // ignore
+      }
+      errorNavRequestRef.current += 1;
+      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current });
+      void onSubmit({ collapsedRows, collapsedSubgroups });
+    };
+    return () => {
+      submitActionRef.current = null;
+    };
+  }, [collapsedRows, collapsedSubgroups, onDiagnostic, onSubmit, submitActionRef, submitting]);
 
   const hasCopyDerived = useMemo(() => {
     const hasInFields = (fields: any[]): boolean =>
@@ -669,6 +710,34 @@ const FormView: React.FC<FormViewProps> = ({
     if (!pendingScrollAnchor) return;
     if (typeof document === 'undefined') return;
     const anchor = pendingScrollAnchor;
+    const sep = anchor.lastIndexOf('__');
+    const targetGroupKey = sep >= 0 ? anchor.slice(0, sep) : anchor;
+    const targetSubgroupInfo = parseSubgroupKey(targetGroupKey);
+
+    // Ensure the target row is actually rendered before attempting to scroll to it.
+    // This makes selectionEffect-created rows discoverable even when their parent group is collapsed,
+    // or when the target is a subgroup that requires the full-page overlay to be opened.
+    try {
+      if (targetSubgroupInfo) {
+        const groupCardKey = (questionIdToGroupKey as any)[targetSubgroupInfo.parentGroupId] || targetSubgroupInfo.parentGroupId;
+        if (groupCardKey) {
+          setCollapsedGroups(prev => (prev[groupCardKey] === false ? prev : { ...prev, [groupCardKey]: false }));
+        }
+        const rowCollapseKey = `${targetSubgroupInfo.parentGroupId}::${targetSubgroupInfo.parentRowId}`;
+        setCollapsedRows(prev => (prev[rowCollapseKey] === false ? prev : { ...prev, [rowCollapseKey]: false }));
+        // Expand inline subgroup if present; if not present (progressive mode), we'll fall back to opening the overlay
+        // after a few retries below.
+        setCollapsedSubgroups(prev => (prev[targetGroupKey] === false ? prev : { ...prev, [targetGroupKey]: false }));
+      } else {
+        const groupCardKey = (questionIdToGroupKey as any)[targetGroupKey] || targetGroupKey;
+        if (groupCardKey) {
+          setCollapsedGroups(prev => (prev[groupCardKey] === false ? prev : { ...prev, [groupCardKey]: false }));
+        }
+      }
+    } catch (_) {
+      // ignore visibility preparation failures
+    }
+
     let cancelled = false;
     let tries = 0;
     const maxTries = 20;
@@ -711,6 +780,16 @@ const FormView: React.FC<FormViewProps> = ({
     };
     const schedule = () => {
       if (cancelled) return;
+      // If we're trying to scroll to a subgroup row and it's not mounted (common in progressive mode),
+      // open the full-page subgroup overlay after a short delay.
+      if (
+        targetSubgroupInfo &&
+        tries === 4 &&
+        (!subgroupOverlay.open || subgroupOverlay.subKey !== targetGroupKey)
+      ) {
+        openSubgroupOverlay(targetGroupKey);
+        onDiagnostic?.('ui.autoscroll.openSubgroupOverlay', { anchor, subKey: targetGroupKey });
+      }
       if (attempt()) {
         setPendingScrollAnchor(null);
         onDiagnostic?.('ui.autoscroll.success', { anchor, tries });
@@ -731,55 +810,7 @@ const FormView: React.FC<FormViewProps> = ({
     };
   }, [onDiagnostic, pendingScrollAnchor]);
 
-  // iOS Safari / in-app browsers can "clip" fixed bottom bars due to dynamic toolbars.
-  // Use visualViewport to compute a bottom inset and expose it as a CSS variable.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (typeof document === 'undefined') return;
-
-    const root = document.documentElement;
-    const vv = window.visualViewport;
-    if (!root) return;
-
-    if (!vv) {
-      root.style.setProperty('--vv-bottom', '0px');
-      return;
-    }
-
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const bottom = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
-      root.style.setProperty('--vv-bottom', `${bottom}px`);
-      if (vvBottomRef.current !== bottom) {
-        vvBottomRef.current = bottom;
-        onDiagnostic?.('ui.viewport.vvBottom', {
-          bottomPx: bottom,
-          innerHeight: window.innerHeight,
-          vvHeight: vv.height,
-          vvOffsetTop: vv.offsetTop
-        });
-      }
-    };
-    const schedule = () => {
-      if (raf) return;
-      raf = window.requestAnimationFrame(update);
-    };
-
-    schedule();
-    vv.addEventListener('resize', schedule);
-    vv.addEventListener('scroll', schedule);
-    window.addEventListener('resize', schedule);
-    window.addEventListener('orientationchange', schedule);
-
-    return () => {
-      if (raf) window.cancelAnimationFrame(raf);
-      vv.removeEventListener('resize', schedule);
-      vv.removeEventListener('scroll', schedule);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('orientationchange', schedule);
-    };
-  }, [onDiagnostic]);
+  // visualViewport bottom inset is handled globally in App.tsx so the bottom action bar works across views.
 
   useEffect(() => {
     const anyOpen = subgroupOverlay.open || infoOverlay.open || fileOverlay.open;
@@ -814,14 +845,25 @@ const FormView: React.FC<FormViewProps> = ({
     subgroupOverlay.open
   ]);
   useEffect(() => {
-    if (status && statusRef.current) {
-      try {
-        statusRef.current.focus();
-      } catch (_) {
-        // ignore
-      }
-      statusRef.current.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (!status || !statusRef.current) return;
+    if (typeof window === 'undefined') return;
+    if (typeof document === 'undefined') return;
+
+    const el = statusRef.current;
+    const headerEl = document.querySelector<HTMLElement>('.ck-app-header');
+    const headerH = headerEl ? headerEl.getBoundingClientRect().height : 0;
+    const minTop = Math.max(0, headerH + 8);
+    const rect = el.getBoundingClientRect();
+    const alreadyVisible = rect.top >= minTop && rect.bottom >= minTop && rect.top <= window.innerHeight - 12;
+    if (alreadyVisible) return;
+
+    try {
+      el.focus();
+    } catch (_) {
+      // ignore
     }
+    // Respect sticky header by using scroll-margin-top on the element.
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [status]);
 
   const setDragActive = useCallback((questionId: string, active: boolean) => {
@@ -2700,6 +2742,7 @@ const FormView: React.FC<FormViewProps> = ({
             role={statusTone === 'error' ? 'alert' : 'status'}
             tabIndex={-1}
             style={{
+              scrollMarginTop: 'calc(var(--safe-top) + 140px)',
               padding: '14px 16px',
               borderRadius: 14,
               border:
@@ -2723,7 +2766,8 @@ const FormView: React.FC<FormViewProps> = ({
         ) : null}
 
         <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
-          {groupSections.map(section => {
+          <div className="ck-group-stack">
+            {groupSections.map(section => {
             const visible = (section.questions || []).filter(
               q =>
                 !shouldHideField(q.visibility, {
@@ -2827,24 +2871,31 @@ const FormView: React.FC<FormViewProps> = ({
                 data-has-error={sectionHasError ? 'true' : undefined}
               >
                 {section.title ? (
-                  <div className="ck-group-header">
-                    <div className="ck-group-title">{section.title}</div>
-                    {section.collapsible ? (
-        <button
-          type="button"
+                  section.collapsible ? (
+                    <button
+                      type="button"
+                      className="ck-group-header ck-group-header--clickable"
+                      onClick={() => toggleGroupCollapsed(section.key)}
+                      aria-expanded={!isCollapsed}
+                      aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} section ${section.title} (${requiredProgress.numerator}/${requiredProgress.totalRequired})`}
+                    >
+                      <div className="ck-group-title">{section.title}</div>
+                      <span
                         className={`ck-progress-pill ${requiredProgressClass}`}
-                        onClick={() => toggleGroupCollapsed(section.key)}
-                        aria-expanded={!isCollapsed}
-                        aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} section ${section.title} (${requiredProgress.numerator}/${requiredProgress.totalRequired})`}
                         title={`${requiredProgress.numerator}/${requiredProgress.totalRequired}`}
+                        aria-hidden="true"
                       >
                         <span>
                           {requiredProgress.numerator}/{requiredProgress.totalRequired}
                         </span>
                         <span className="ck-progress-caret">{isCollapsed ? '▸' : '▾'}</span>
-        </button>
-                    ) : null}
-      </div>
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="ck-group-header">
+                      <div className="ck-group-title">{section.title}</div>
+                    </div>
+                  )
                 ) : null}
 
                 {!isCollapsed && (
@@ -2870,43 +2921,10 @@ const FormView: React.FC<FormViewProps> = ({
                 )}
               </div>
             );
-          })}
+            })}
+          </div>
         </fieldset>
       </div>
-      <div className="sticky-submit">
-        <div
-          className="sticky-submit-inner"
-          style={{
-            maxWidth: 1100,
-            margin: '0 auto',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 12
-          }}
-        >
-              <button
-                type="button"
-            onClick={onBack}
-            disabled={submitting}
-            style={withDisabled(buttonStyles.secondary, submitting)}
-              >
-          Back
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-              errorNavRequestRef.current += 1;
-              onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current });
-              void onSubmit({ collapsedRows, collapsedSubgroups });
-            }}
-          disabled={submitting}
-          style={withDisabled(buttonStyles.primary, submitting)}
-        >
-          {submitting ? 'Submitting…' : 'Submit'}
-              </button>
-            </div>
-          </div>
       <LineSelectOverlay
         overlay={overlay}
         setOverlay={setOverlay}

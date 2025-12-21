@@ -108,7 +108,7 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
   };
 
   return (
-    <div className="ck-form-sections" style={{ gap: 12 }}>
+    <div className="ck-form-sections">
       {sections.map(section => {
         const instanceKey = `${contextPrefix}:${section.key}`;
         const collapsed = section.collapsible ? !!collapsedGroups[instanceKey] : false;

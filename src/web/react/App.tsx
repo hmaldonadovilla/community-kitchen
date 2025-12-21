@@ -13,8 +13,8 @@ import {
 import { BootstrapContext, submit, triggerFollowup, ListResponse, ListItem, fetchRecordById, fetchRecordByRowNumber } from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
-import FollowupView from './components/FollowupView';
 import { AppHeader } from './components/app/AppHeader';
+import { BottomActionBar } from './components/app/BottomActionBar';
 import { SummaryView } from './components/app/SummaryView';
 import { FormErrors, LineItemState, OptionState, View } from './types';
 import { buildSubmissionPayload, computeUrlOnlyUploadUpdates, resolveExistingRecordId, validateForm } from './app/submission';
@@ -62,11 +62,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [selectedRecordSnapshot, setSelectedRecordSnapshot] = useState<WebFormSubmission | null>(record || null);
   const [recordLoadingId, setRecordLoadingId] = useState<string | null>(null);
   const [recordLoadError, setRecordLoadError] = useState<string | null>(null);
-  const [followupMessage, setFollowupMessage] = useState<string | null>(null);
   const [optionState, setOptionState] = useState<OptionState>({});
   const [tooltipState, setTooltipState] = useState<Record<string, Record<string, string>>>({});
   const preloadPromisesRef = useRef<Record<string, Promise<void> | undefined>>({});
+  const optionStateRef = useRef<OptionState>({});
+  const tooltipStateRef = useRef<Record<string, Record<string, string>>>({});
   const recordFetchSeqRef = useRef(0);
+  const [externalScrollAnchor, setExternalScrollAnchor] = useState<string | null>(null);
   const [lastSubmissionMeta, setLastSubmissionMeta] = useState<SubmissionMeta | null>(() =>
     record
       ? {
@@ -77,7 +79,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
       : null
   );
-  const [followupRunning, setFollowupRunning] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isCompact, setIsCompact] = useState<boolean>(false);
   const [debugEnabled] = useState<boolean>(() => detectDebug());
@@ -92,6 +93,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     },
     [debugEnabled]
   );
+
+  const formSubmitActionRef = useRef<(() => void) | null>(null);
+  const vvBottomRef = useRef<number>(-1);
 
   const [listCache, setListCache] = useState<{ response: ListResponse | null; records: Record<string, WebFormSubmission> }>(() => {
     const globalAny = globalThis as any;
@@ -191,20 +195,42 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     (field: any, groupId?: string) => {
       if (!field?.dataSource) return Promise.resolve();
       const key = optionKey(field.id, groupId);
-      if (optionState[key] && tooltipState[key]) return Promise.resolve();
+      const existing = optionStateRef.current[key];
+      const needsTooltips = !!(existing as any)?.tooltips;
+      const existingTooltips = tooltipStateRef.current[key];
+      if (existing && (!needsTooltips || existingTooltips)) return Promise.resolve();
       if (preloadPromisesRef.current[key]) return preloadPromisesRef.current[key];
-      const promise = loadOptionsFromDataSource(field.dataSource, language).then(res => {
-        if (res) {
-          setOptionState(prev => ({ ...prev, [key]: res }));
-          if (res.tooltips) {
-            setTooltipState(prev => ({ ...prev, [key]: res.tooltips || {} }));
+      const promise = loadOptionsFromDataSource(field.dataSource, language)
+        .then(res => {
+          if (res) {
+            setOptionState(prev => (prev[key] ? prev : { ...prev, [key]: res }));
+            if (res.tooltips) {
+              setTooltipState(prev => (prev[key] ? prev : { ...prev, [key]: res.tooltips || {} }));
+            }
           }
-        }
-      });
+        })
+        .finally(() => {
+          // Allow retries if loading fails; also avoid holding onto resolved promises.
+          delete preloadPromisesRef.current[key];
+        });
       preloadPromisesRef.current[key] = promise;
       return promise;
     },
-    [language, optionState, tooltipState]
+    [language]
+  );
+
+  useEffect(() => {
+    optionStateRef.current = optionState;
+  }, [optionState]);
+  useEffect(() => {
+    tooltipStateRef.current = tooltipState;
+  }, [tooltipState]);
+
+  const ensureLineOptions = useCallback(
+    (groupId: string, field: any) => {
+      void loadOptionsForField(field, groupId);
+    },
+    [loadOptionsForField]
   );
 
   const preloadSummaryTooltips = useCallback(() => {
@@ -254,6 +280,56 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
     return undefined;
   }, []);
+
+  // iOS Safari / in-app browsers can "clip" fixed bottom bars due to dynamic toolbars.
+  // Use visualViewport to compute a bottom inset and expose it as a CSS variable.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (typeof document === 'undefined') return;
+
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    if (!root) return;
+
+    if (!vv) {
+      root.style.setProperty('--vv-bottom', '0px');
+      return;
+    }
+
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const bottom = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+      root.style.setProperty('--vv-bottom', `${bottom}px`);
+      if (vvBottomRef.current !== bottom) {
+        vvBottomRef.current = bottom;
+        logEvent('ui.viewport.vvBottom', {
+          bottomPx: bottom,
+          innerHeight: window.innerHeight,
+          vvHeight: vv.height,
+          vvOffsetTop: vv.offsetTop
+        });
+      }
+    };
+    const schedule = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(update);
+    };
+
+    schedule();
+    vv.addEventListener('resize', schedule);
+    vv.addEventListener('scroll', schedule);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('orientationchange', schedule);
+
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      vv.removeEventListener('resize', schedule);
+      vv.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('orientationchange', schedule);
+    };
+  }, [logEvent]);
 
   useEffect(() => {
     // iOS Safari/WebViews can still auto-zoom/re-scale on focus in some contexts.
@@ -474,9 +550,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setStatusLevel(null);
     setSelectedRecordId('');
     setSelectedRecordSnapshot(null);
-    setFollowupMessage(null);
     setLastSubmissionMeta(null);
-    setFollowupRunning(null);
     setView('form');
     logEvent('form.reset', { reason: 'submitAnother' });
   }, [definition, logEvent]);
@@ -498,7 +572,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setErrors({});
     setStatus(null);
     setStatusLevel(null);
-    setFollowupMessage(null);
     setView('form');
   }, [definition, values, lineItems]);
 
@@ -574,7 +647,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       setValues,
       setLineItems,
       logEvent,
-      opts
+      opts,
+      onRowAppended: ({ anchor, targetKey, rowId, source }) => {
+        setExternalScrollAnchor(anchor);
+        logEvent('ui.selectionEffect.rowAppended', { anchor, targetKey, rowId, source: source || null });
+      }
     });
   }
 
@@ -597,6 +674,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       return;
     }
     setSubmitting(true);
+    setStatus('Submitting…');
+    setStatusLevel('info');
     try {
       const existingRecordId = resolveExistingRecordId({
         selectedRecordId,
@@ -632,22 +711,87 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return;
       }
       logEvent('submit.success', { recordId: res.meta?.id });
-      if (res.meta?.id) {
-        setSelectedRecordId(res.meta.id);
-      }
+
+      const recordId = (res.meta?.id || existingRecordId || selectedRecordId || '').toString();
+      if (recordId) setSelectedRecordId(recordId);
+
       setLastSubmissionMeta(prev => ({
-        id: res.meta?.id || prev?.id || selectedRecordId,
+        id: recordId || prev?.id || selectedRecordId,
         createdAt: res.meta?.createdAt || prev?.createdAt,
         updatedAt: res.meta?.updatedAt || prev?.updatedAt,
-        status: prev?.status || null
+        status: (res.meta as any)?.status || prev?.status || null
       }));
 
-      // Refresh from saved record to surface server-side autoIncrement values immediately
-      if (res.meta?.id) {
+      // Run follow-up actions automatically (and close the record) now that the Follow-up view is removed.
+      const followupCfg = (definition as any)?.followup || null;
+      if (recordId) {
+        const actions: string[] = [];
+        if (followupCfg?.pdfTemplateId) actions.push('CREATE_PDF');
+        if (followupCfg?.emailTemplateId && followupCfg?.emailRecipients) actions.push('SEND_EMAIL');
+        // Always close on submit (per UX requirement).
+        actions.push('CLOSE_RECORD');
+
+        const labelForAction = (action: string): string => {
+          if (action === 'CREATE_PDF') return 'Creating PDF';
+          if (action === 'SEND_EMAIL') return 'Sending email';
+          if (action === 'CLOSE_RECORD') return 'Closing record';
+          return 'Running follow-up';
+        };
+
+        const followupErrors: string[] = [];
+        for (const action of actions) {
+          try {
+            setStatus(`${labelForAction(action)}…`);
+            setStatusLevel('info');
+            logEvent('followup.auto.begin', { action, recordId });
+            const r = await triggerFollowup(formKey, recordId, action);
+            if (!r?.success) {
+              const msg = (r?.message || r?.status || 'Failed').toString();
+              followupErrors.push(`${action}: ${msg}`);
+              logEvent('followup.auto.error', { action, recordId, message: msg });
+              // Continue so we still attempt CLOSE_RECORD even if earlier steps fail.
+              continue;
+            }
+
+            invalidateListCache();
+            logEvent('followup.auto.success', { action, recordId, status: r.status || null });
+            setLastSubmissionMeta(prev => ({
+              ...(prev || { id: recordId }),
+              updatedAt: r.updatedAt || prev?.updatedAt,
+              status: r.status || prev?.status || null
+            }));
+            setSelectedRecordSnapshot(prev =>
+              prev
+                ? {
+                    ...prev,
+                    updatedAt: r.updatedAt || prev.updatedAt,
+                    status: r.status || prev.status,
+                    pdfUrl: r.pdfUrl || prev.pdfUrl
+                  }
+                : prev
+            );
+          } catch (err: any) {
+            const msg = (err?.message || err || 'Failed').toString();
+            followupErrors.push(`${action}: ${msg}`);
+            logEvent('followup.auto.exception', { action, recordId, message: msg });
+          }
+        }
+
+        if (followupErrors.length) {
+          setStatus(`Submitted, but follow-up had issues: ${followupErrors.join(' · ')}`);
+          setStatusLevel('error');
+        } else {
+          setStatus('Submitted and closed.');
+          setStatusLevel('success');
+        }
+      }
+
+      // Refresh from saved record to surface server-side autoIncrement + follow-up changes immediately.
+      if (recordId) {
         try {
-          await loadRecordSnapshot(res.meta.id);
+          await loadRecordSnapshot(recordId);
         } catch (err: any) {
-          logEvent('submit.fetchRecord.error', { message: err?.message || err, recordId: res.meta.id });
+          logEvent('submit.fetchRecord.error', { message: err?.message || err, recordId });
         }
       }
       setView('summary');
@@ -661,49 +805,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
   };
 
-  const handleRunFollowup = async (action: string) => {
-    if (!selectedRecordId) {
-      setFollowupMessage('Select a record first.');
-      return;
-    }
-    setFollowupRunning(action);
-    setFollowupMessage('Running…');
-    logEvent('followup.begin', { action, recordId: selectedRecordId });
-    try {
-      const res = await triggerFollowup(formKey, selectedRecordId, action);
-      setFollowupMessage(res.message || res.status || (res.success ? 'Done' : 'Failed'));
-      if (res.success) {
-        invalidateListCache();
-        logEvent('followup.success', { action, status: res.status });
-        setLastSubmissionMeta(prev => ({
-          ...(prev || { id: selectedRecordId }),
-          updatedAt: res.updatedAt || prev?.updatedAt,
-          status: res.status || prev?.status || null
-        }));
-        setSelectedRecordSnapshot(prev =>
-          prev
-            ? {
-                ...prev,
-                updatedAt: res.updatedAt || prev.updatedAt,
-                status: res.status || prev.status,
-                pdfUrl: res.pdfUrl || prev.pdfUrl
-              }
-            : prev
-        );
-      } else {
-        logEvent('followup.error', { action, message: res.message });
-      }
-    } catch (err: any) {
-      setFollowupMessage(err?.message || 'Failed');
-      logEvent('followup.exception', { action, message: err?.message || err });
-    } finally {
-      setFollowupRunning(null);
-    }
-  };
-
   const handleRecordSelect = (row: ListItem, fullRecord?: WebFormSubmission) => {
     const sourceRecord = fullRecord || listCache.records[row.id] || null;
-    setFollowupMessage(null);
     setStatus(null);
     setStatusLevel(null);
     setRecordLoadError(null);
@@ -748,8 +851,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         onLanguageChange={raw => setLanguage(normalizeLanguage(raw))}
         onRefresh={handleGlobalRefresh}
-        onHome={handleGoHome}
-        onNew={handleSubmitAnother}
       />
 
       {view === 'form' && (
@@ -762,10 +863,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             lineItems={lineItems}
             setLineItems={setLineItems}
             onSubmit={handleSubmit}
-            onBack={() => {
-              const target = selectedRecordId || selectedRecordSnapshot ? 'summary' : 'list';
-              setView(target);
-            }}
+            submitActionRef={formSubmitActionRef}
             submitting={submitting}
             errors={errors}
             setErrors={setErrors}
@@ -775,20 +873,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             optionState={optionState}
             setOptionState={setOptionState}
             ensureOptions={ensureOptions}
-            ensureLineOptions={(groupId, field) => {
-              const key = optionKey(field.id, groupId);
-              if (optionState[key]) return;
-              if (field.dataSource) {
-                loadOptionsFromDataSource(field.dataSource, language).then(res => {
-                  if (res) {
-                    setOptionState(prev => ({ ...prev, [key]: res }));
-                    if (res.tooltips) {
-                      setTooltipState(prev => ({ ...prev, [key]: res.tooltips || {} }));
-                    }
-                  }
-                });
-              }
-            }}
+            ensureLineOptions={ensureLineOptions}
+            externalScrollAnchor={externalScrollAnchor}
+            onExternalScrollConsumed={() => setExternalScrollAnchor(null)}
             onSelectionEffect={runSelectionEffects}
             onDiagnostic={logEvent}
           />
@@ -809,9 +896,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           recordLoadingId={recordLoadingId}
           currentRecord={currentRecord}
           isMobile={isMobile}
-          onEdit={() => setView('form')}
-          onFollowup={() => setView('followup')}
-          onDuplicate={handleDuplicateCurrent}
         />
       )}
       {view === 'list' && (
@@ -833,39 +917,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         />
       )}
 
-      {view === 'followup' && (
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <button
-              type="button"
-              onClick={() => setView('summary')}
-              style={{
-                border: '1px solid #fecdd3',
-                background: '#fff7f7',
-                color: '#b42318',
-                borderRadius: 10,
-                padding: '10px 12px',
-                cursor: 'pointer',
-                fontWeight: 700
-              }}
-            >
-              ← Back to summary
-            </button>
-            <div className="muted" style={{ fontWeight: 600 }}>Follow-up</div>
-          </div>
-        <FollowupView
-          recordId={selectedRecordId}
-          onRun={handleRunFollowup}
-          followupConfig={definition.followup}
-          resultMessage={followupMessage}
-          runningAction={followupRunning}
-          recordStatus={currentRecord?.status || lastSubmissionMeta?.status || null}
-          lastUpdated={currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt || null}
-          pdfUrl={currentRecord?.pdfUrl}
-            isMobile={isMobile}
-        />
-        </div>
-      )}
+      <BottomActionBar
+        view={view}
+        submitting={submitting}
+        canCopy={view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id)}
+        onHome={handleGoHome}
+        onCreateNew={handleSubmitAnother}
+        onCreateCopy={handleDuplicateCurrent}
+        onEdit={() => setView('form')}
+        onSummary={() => setView('summary')}
+        onSubmit={() => formSubmitActionRef.current?.()}
+      />
     </div>
   );
 };

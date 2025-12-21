@@ -403,7 +403,7 @@ This project uses TypeScript. You need to build the script before using it in Go
 
        The same operators (`equals`, `greaterThan`, `lessThan`) and actions (`required`, `min`, `max`, `allowed`, `disallowed`) work inside line items.
     - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
-    - **Post-submit views (summary/follow-up)**: The React app shows a submission summary with the record ID (copy button), timestamps, status, and quick CTAs for “Go to follow-up” / “Submit another”. Follow-up actions stay disabled until a record is selected, display the current status + last updated timestamp, and highlight the configured status transitions so operators always know what each button does. Configure the follow-up behavior in code (PDF/email templates, destination folders, recipients) just like before.
+    - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
     - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; search/sort run client-side on the loaded rows (totalCount is capped at 200).
     - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
     - **Quick recipe for the new features**:
@@ -681,10 +681,13 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 ## UI Navigation & Shell
 
-- The web app now uses a persistent header across List, Summary, Form, and Follow-up views. The language selector stays in the top-right corner.
-- A **Home** button sits under the title; clicking it (or refreshing) always returns you to the List view.
-- The Summary view shows a clean header (status/timestamps only) with quick actions: **Edit**, **Follow-up**, **Create copy**, and **New blank**.
-- Navigation pills in the header let you jump between List, Summary, Form, and Follow-up. Summary/Follow-up are enabled when a record is selected.
+- The web app uses an app-like shell:
+  - Header shows a **logo circle + form title** (Excel-style).
+  - Tap the logo circle to open a **left drawer** with **Refresh**, **Language**, and **Build**.
+  - A fixed **bottom action bar** provides navigation/actions per view:
+    - **List**: Home + Create (Create opens a new record and sends you to the Form).
+    - **Summary**: Home + Create (Create opens a menu: New record / Copy current record).
+    - **Form**: Home + Create (menu: New / Copy) + Summary + Submit.
 
 ## 7. Generate All Forms
 

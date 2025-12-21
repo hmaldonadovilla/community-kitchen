@@ -27,13 +27,31 @@ export const runSelectionEffects = (args: {
   setValues: (next: Record<string, FieldValue> | ((prev: Record<string, FieldValue>) => Record<string, FieldValue>)) => void;
   setLineItems: (next: LineItemState | ((prev: LineItemState) => LineItemState)) => void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
+  onRowAppended?: (args: { anchor: string; targetKey: string; rowId: string; source?: { groupId: string; rowId: string } }) => void;
   opts?: SelectionEffectOpts;
 }) => {
-  const { definition, question, value, language, values, setValues, setLineItems, logEvent, opts } = args;
+  const { definition, question, value, language, values, setValues, setLineItems, logEvent, onRowAppended, opts } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
 
   const resolveTargetGroupKey = (targetGroupId: string, lineItemCtx?: { groupId: string; rowId?: string }): string => {
     if (!lineItemCtx?.groupId || !lineItemCtx?.rowId) return targetGroupId;
+    // If we're already operating inside a subgroup key, resolve subgroup ids relative to that parent row.
+    const parsed = parseSubgroupKey(lineItemCtx.groupId);
+    if (parsed) {
+      // same subgroup id -> current subgroup key
+      if (targetGroupId === parsed.subGroupId) return lineItemCtx.groupId;
+      const parentGroup = definition.questions.find(q => q.id === parsed.parentGroupId);
+      const subMatch = parentGroup?.lineItemConfig?.subGroups?.find(sub => {
+        const key = resolveSubgroupKey(sub as any);
+        return key === targetGroupId;
+      });
+      if (subMatch) {
+        const key = resolveSubgroupKey(subMatch as any) || targetGroupId;
+        return buildSubgroupKey(parsed.parentGroupId, parsed.parentRowId, key);
+      }
+      if (targetGroupId === parsed.parentGroupId) return parsed.parentGroupId;
+      return targetGroupId;
+    }
     const parentGroup = definition.questions.find(q => q.id === lineItemCtx.groupId);
     const subMatch = parentGroup?.lineItemConfig?.subGroups?.find(sub => {
       const key = resolveSubgroupKey(sub as any);
@@ -60,6 +78,9 @@ export const runSelectionEffects = (args: {
         setLineItems(prev => {
           const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
           const rows = prev[targetKey] || [];
+          const sourceGroupId = opts?.lineItem?.groupId;
+          const sourceRowId = opts?.lineItem?.rowId;
+          const wantsInsertUnderTrigger = !!sourceGroupId && !!sourceRowId && targetKey === sourceGroupId;
           // capture section selector value at creation so later selector changes don't rewrite existing rows
           const targetGroup =
             definition.questions.find(q => q.id === targetKey) ||
@@ -86,7 +107,29 @@ export const runSelectionEffects = (args: {
             effectContextId: meta?.effectContextId
           };
           const subgroupInfo = parseSubgroupKey(targetKey);
-          let nextLineItems = { ...prev, [targetKey]: [...rows, newRow] };
+          let nextRows: LineItemRowState[] = [];
+          let appended = true;
+          if (wantsInsertUnderTrigger) {
+            const baseIdx = rows.findIndex(r => r.id === sourceRowId);
+            if (baseIdx >= 0) {
+              // Insert after the triggering row, but preserve order if multiple rows are added under the same trigger:
+              // append to the contiguous "children" block directly beneath the triggering row.
+              let insertIdx = baseIdx + 1;
+              while (
+                insertIdx < rows.length &&
+                (rows[insertIdx] as any)?.parentId === sourceRowId &&
+                (rows[insertIdx] as any)?.parentGroupId === sourceGroupId
+              ) {
+                insertIdx += 1;
+              }
+              nextRows = [...rows.slice(0, insertIdx), newRow, ...rows.slice(insertIdx)];
+              appended = false;
+            }
+          }
+          if (!nextRows.length) {
+            nextRows = [...rows, newRow];
+          }
+          let nextLineItems = { ...prev, [targetKey]: nextRows };
           if (!subgroupInfo) {
             const parentGroup = definition.questions.find(q => q.id === targetKey);
             if (parentGroup) {
@@ -97,6 +140,15 @@ export const runSelectionEffects = (args: {
             mode: 'change'
           });
           setValues(nextValues);
+          if (appended) {
+            const anchor = `${targetKey}__${newRow.id}`;
+            onRowAppended?.({
+              anchor,
+              targetKey,
+              rowId: newRow.id,
+              source: sourceGroupId && sourceRowId ? { groupId: sourceGroupId, rowId: sourceRowId } : undefined
+            });
+          }
           return recomputed;
         });
       },
