@@ -1,5 +1,5 @@
 export type BaseQuestionType = 'DATE' | 'TEXT' | 'PARAGRAPH' | 'NUMBER' | 'CHOICE' | 'CHECKBOX';
-export type QuestionType = BaseQuestionType | 'FILE_UPLOAD' | 'LINE_ITEM_GROUP';
+export type QuestionType = BaseQuestionType | 'FILE_UPLOAD' | 'LINE_ITEM_GROUP' | 'BUTTON';
 // Line item fields cannot themselves be nested LINE_ITEM_GROUPs, but they can support FILE_UPLOAD.
 export type LineItemFieldType = BaseQuestionType | 'FILE_UPLOAD';
 
@@ -25,6 +25,42 @@ export type PresetValue = string | number | boolean | string[];
 export type ChoiceControl = 'auto' | 'select' | 'radio' | 'segmented' | 'switch';
 
 export type LabelLayout = 'auto' | 'stacked';
+
+export type ButtonPlacement = 'form' | 'formSummaryMenu' | 'summaryBar';
+
+export type ButtonOutput = 'pdf';
+
+/**
+ * UI-only button field.
+ *
+ * Primary use case: render a Google Doc template (with placeholders / consolidated directives)
+ * into a PDF preview from the web app.
+ */
+export interface ButtonConfig {
+  /**
+   * Currently only supported action.
+   */
+  action: 'renderDocTemplate';
+  /**
+   * Google Doc template id (or language map).
+   */
+  templateId: TemplateIdMap;
+  /**
+   * Output format. Currently only PDF.
+   */
+  output?: ButtonOutput;
+  /**
+   * Where this button should surface in the web UI.
+   * - form: rendered inline as a normal field in the form view
+   * - formSummaryMenu: appears in the Summary button menu while editing
+   * - summaryBar: appears in the bottom action bar on the Summary view (menu if multiple)
+   */
+  placements?: ButtonPlacement[];
+  /**
+   * Optional Drive folder to write generated PDFs to (defaults to follow-up folder / spreadsheet parent).
+   */
+  folderId?: string;
+}
 
 export interface QuestionUiConfig {
   /**
@@ -529,6 +565,10 @@ export interface QuestionConfig {
    */
   pair?: string;
   listView?: boolean;
+  /**
+   * Optional config for BUTTON fields.
+   */
+  button?: ButtonConfig;
   options: string[];      // English options
   optionsFr: string[];    // French options
   optionsNl: string[];    // Dutch options
@@ -601,6 +641,10 @@ export interface WebQuestionDefinition {
    */
   pair?: string;
   listView?: boolean;
+  /**
+   * Optional config for BUTTON fields.
+   */
+  button?: ButtonConfig;
   options?: {
     en: string[];
     fr: string[];

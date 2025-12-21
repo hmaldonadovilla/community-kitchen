@@ -678,13 +678,41 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 - **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` anywhere inside the table you want duplicated per recipe. The renderer will:
   1. Create a copy of the entire table for every distinct value of the referenced field (`RECIPE` in this example).
   2. Replace the directive placeholder with the group value (so you can show it in the heading).
-  3. Populate the table rows with only the line items that belong to that recipe.  
+  3. Populate the table rows with only the line items that belong to that recipe. If multiple line-item rows share the same recipe, the table’s placeholder rows will repeat for each matching row (e.g., you may see “Portions/Recipe/Core temp” repeated).  
   Combine this with row-level placeholders (e.g., `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`) to print a dedicated ingredient table per dish without manually duplicating sections in the template.
+- **Per-row line item sections (recommended for key/value “section tables”)**: Add a directive placeholder like `{{ROW_TABLE(MP_MEALS_REQUEST.MEAL_TYPE)}}` anywhere inside the table you want duplicated once per line-item row (even if the title field repeats). The renderer will:
+  1. Create a copy of the entire table for each line-item row, preserving row order.
+  2. Replace the directive placeholder with the current row’s field value (so you can show it in the heading).
+  3. Populate the table rows using that single row (so “Portions/Recipe/Core temp” do **not** duplicate inside one section when titles repeat).
 - **Nested subgroup tables (parent → child line items)**: To mirror Summary’s nested layout, add a table that uses `{{PARENT_ID.SUBGROUP_ID.FIELD_ID}}` placeholders inside the row cells (IDs uppercase or slugified labels both work). The renderer will:
   - Insert one copy of the table per parent row that has children.
   - For each child row, duplicate the template row(s) and replace subgroup placeholders. You can also include parent fields in the same row via `{{PARENT_ID.FIELD_ID}}` if needed.
   - Example: if `MP_DISHES` has a subgroup `INGREDIENTS`, a table row like `{{MP_DISHES.INGREDIENTS.ING}} | {{MP_DISHES.INGREDIENTS.QTY}} | {{MP_DISHES.INGREDIENTS.UNIT}}` will render all ingredients under each dish in separate tables.
 - **Consolidated values**: Use `{{CONSOLIDATED(GROUP_ID.FIELD_ID)}}` (or the slugified label) to list the unique values across a line item group. Example: `{{CONSOLIDATED(MP_INGREDIENTS_LI.ALLERGEN)}}` renders `GLUTEN, NUTS, SOY`.
+  - **Row-scoped subgroup consolidation**: Inside a per-row section (recommended: within `ROW_TABLE` output), use `{{CONSOLIDATED_ROW(GROUP.SUBGROUP.FIELD)}}` to aggregate subgroup values for the current parent row.
+  - **Consolidated subgroup tables**: To build a *single* subgroup table across all parent rows (and dedupe rows by the placeholder combination), add `{{CONSOLIDATED_TABLE(GROUP.SUBGROUP)}}` somewhere inside the table. The directive is stripped at render time; the table rows are generated from the unique combinations of the row’s placeholders.
+
+### Report buttons (BUTTON fields)
+
+Use `BUTTON` questions to render a Google Doc template (with the placeholders above) into a PDF preview from the web app.
+
+- **Config (JSON/REF)** example:
+
+  ```json
+  {
+    "button": {
+      "action": "renderDocTemplate",
+      "templateId": { "EN": "DOC_ID_EN", "FR": "DOC_ID_FR", "NL": "DOC_ID_NL" },
+      "placements": ["form", "formSummaryMenu", "summaryBar"],
+      "folderId": "OPTIONAL_DRIVE_FOLDER_ID"
+    }
+  }
+  ```
+
+- **Placements**:
+  - `form`: render inline as a normal field in the edit form.
+  - `formSummaryMenu`: appear inside the Summary button menu while editing.
+  - `summaryBar`: appear in the Summary view bottom action bar (menu if multiple).
 
 ## UI Navigation & Shell
 

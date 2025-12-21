@@ -170,6 +170,12 @@ interface FormViewProps {
     items: Array<string | File>;
     uploadConfig?: any;
   }) => Promise<{ success: boolean; message?: string }>;
+  /**
+   * Optional handler for BUTTON fields (Doc template preview / report rendering).
+   */
+  onReportButton?: (buttonId: string) => void;
+  reportBusy?: boolean;
+  reportBusyId?: string | null;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
@@ -196,6 +202,9 @@ const FormView: React.FC<FormViewProps> = ({
   onExternalScrollConsumed,
   onSelectionEffect,
   onUploadFiles,
+  onReportButton,
+  reportBusy,
+  reportBusyId,
   onDiagnostic
 }) => {
   const ROW_SOURCE_KEY = '__ckRowSource';
@@ -1449,6 +1458,33 @@ const FormView: React.FC<FormViewProps> = ({
     const forceStackedLabel = q.ui?.labelLayout === 'stacked';
 
     switch (q.type) {
+      case 'BUTTON': {
+        const placementsRaw = (q as any)?.button?.placements;
+        const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : ['form'];
+        const showInForm = placements.includes('form');
+        if (!showInForm) return null;
+
+        const label = resolveLabel(q, language);
+        const busyThis = !!reportBusy && reportBusyId === q.id;
+        const disabled = submitting || !onReportButton || !!reportBusy;
+        return (
+          <div
+            key={q.id}
+            className="field inline-field ck-full-width"
+            data-field-path={q.id}
+          >
+            <label style={srOnly}>{label}</label>
+            <button
+              type="button"
+              onClick={() => onReportButton?.(q.id)}
+              disabled={disabled}
+              style={withDisabled(buttonStyles.secondary, disabled)}
+            >
+              {busyThis ? 'Rendering…' : label}
+            </button>
+          </div>
+        );
+      }
       case 'TEXT':
       case 'PARAGRAPH':
       case 'NUMBER':
@@ -2887,6 +2923,7 @@ const FormView: React.FC<FormViewProps> = ({
               if (!q.pair) return false;
               if (q.type === 'LINE_ITEM_GROUP') return false;
               if (q.type === 'PARAGRAPH') return false;
+              if (q.type === 'BUTTON') return false;
               return true;
             };
 

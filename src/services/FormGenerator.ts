@@ -101,7 +101,7 @@ export class FormGenerator {
     const baseHeaders = [
       ...(hasTimestamp ? ['Timestamp'] : []),
       'Language',
-      ...questions.map(q => q.qEn || q.id),
+      ...questions.filter(q => q.type !== 'BUTTON').map(q => q.qEn || q.id),
       'Record ID',
       'Created At',
       'Updated At'

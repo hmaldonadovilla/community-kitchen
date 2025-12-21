@@ -281,6 +281,9 @@ export const SummaryView: React.FC<{
 
       {(!selectedRecordId || currentRecord) &&
         definition.questions.map(q => {
+          if (q.type === 'BUTTON') {
+            return null;
+          }
           if (q.type === 'LINE_ITEM_GROUP') {
             return (
               <div key={q.id} className="field">

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   loadOptionsFromDataSource,
   optionKey,
@@ -15,6 +15,7 @@ import {
   submit,
   triggerFollowup,
   uploadFilesApi,
+  renderDocTemplateApi,
   ListResponse,
   ListItem,
   fetchRecordById,
@@ -24,6 +25,7 @@ import FormView from './components/FormView';
 import ListView from './components/ListView';
 import { AppHeader } from './components/app/AppHeader';
 import { BottomActionBar } from './components/app/BottomActionBar';
+import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
 import { FormErrors, LineItemState, OptionState, View } from './types';
 import {
@@ -44,6 +46,7 @@ import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import packageJson from '../../../package.json';
+import { resolveLabel } from './utils/labels';
 
 type SubmissionMeta = {
   id?: string;
@@ -73,6 +76,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   });
   const [view, setView] = useState<View>('list');
   const [submitting, setSubmitting] = useState(false);
+  const [reportOverlay, setReportOverlay] = useState<ReportOverlayState>({
+    open: false,
+    title: '',
+    phase: 'idle'
+  });
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
@@ -658,6 +666,91 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setStatusLevel(null);
     setView('form');
   }, [definition, values, lineItems]);
+
+  const reportButtons = useMemo(() => {
+    return definition.questions
+      .filter(q => q.type === 'BUTTON' && (q as any)?.button?.action === 'renderDocTemplate' && (q as any)?.button?.templateId)
+      .map(q => {
+        const placementsRaw = (q as any)?.button?.placements;
+        const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : (['form'] as const);
+        return { id: q.id, label: resolveLabel(q, language), placements };
+      });
+  }, [definition.questions, language]);
+
+  const reportButtonsFormMenu = useMemo(
+    () =>
+      reportButtons
+        .filter(b => (b.placements as any[]).includes('formSummaryMenu'))
+        .map(b => ({ id: b.id, label: b.label })),
+    [reportButtons]
+  );
+
+  const reportButtonsSummaryBar = useMemo(
+    () =>
+      reportButtons
+        .filter(b => (b.placements as any[]).includes('summaryBar'))
+        .map(b => ({ id: b.id, label: b.label })),
+    [reportButtons]
+  );
+
+  const openReport = useCallback(
+    async (buttonId: string) => {
+      const btn = definition.questions.find(q => q.type === 'BUTTON' && q.id === (buttonId || '').toString());
+      const title = btn ? resolveLabel(btn, languageRef.current) : (buttonId || 'Report');
+      setReportOverlay({ open: true, buttonId, title, subtitle: definition.title, phase: 'rendering' });
+      logEvent('report.render.start', { buttonId });
+
+      try {
+        const existingRecordId = resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        });
+        const draft = buildDraftPayload({
+          definition,
+          formKey,
+          language: languageRef.current,
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current,
+          existingRecordId
+        });
+        const res = await renderDocTemplateApi(draft, buttonId);
+        if (!res?.success) {
+          const msg = (res?.message || 'Failed to render report.').toString();
+          setReportOverlay({ open: true, buttonId, title, subtitle: definition.title, phase: 'error', message: msg });
+          logEvent('report.render.error', { buttonId, message: msg });
+          return;
+        }
+        setReportOverlay({
+          open: true,
+          buttonId,
+          title,
+          subtitle: definition.title,
+          phase: 'ready',
+          pdfUrl: res.pdfUrl,
+          fileId: res.fileId
+        });
+        logEvent('report.render.ok', { buttonId, fileId: res.fileId || '', pdfUrl: res.pdfUrl || '' });
+      } catch (err: any) {
+        const msg = (err?.message || err?.toString?.() || 'Failed to render report.').toString();
+        setReportOverlay({ open: true, buttonId, title, subtitle: definition.title, phase: 'error', message: msg });
+        logEvent('report.render.exception', { buttonId, message: msg });
+      }
+    },
+    [definition, formKey, logEvent]
+  );
+
+  const closeReportOverlay = useCallback(() => {
+    setReportOverlay(prev => ({
+      ...(prev || { title: '', phase: 'idle' }),
+      open: false,
+      phase: 'idle',
+      pdfUrl: undefined,
+      fileId: undefined,
+      message: undefined,
+      buttonId: undefined
+    }));
+  }, []);
 
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
   const autoSaveDebounceMs = (() => {
@@ -1353,6 +1446,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             onExternalScrollConsumed={() => setExternalScrollAnchor(null)}
             onSelectionEffect={runSelectionEffects}
             onUploadFiles={uploadFieldUrls}
+            onReportButton={openReport}
+            reportBusy={reportOverlay.phase === 'rendering'}
+            reportBusyId={reportOverlay.buttonId || null}
             onDiagnostic={logEvent}
           />
         </>
@@ -1394,17 +1490,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         />
       )}
 
+      <ReportOverlay state={reportOverlay} onClose={closeReportOverlay} />
+
       <BottomActionBar
         view={view}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         canCopy={view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id)}
+        reportButtonsFormMenu={reportButtonsFormMenu}
+        reportButtonsSummaryBar={reportButtonsSummaryBar}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}
         onEdit={() => setView('form')}
         onSummary={() => setView('summary')}
         onSubmit={() => formSubmitActionRef.current?.()}
+        onReport={openReport}
       />
     </div>
   );

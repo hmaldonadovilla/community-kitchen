@@ -51,6 +51,7 @@ export class DefinitionBuilder {
       group: q.group,
       pair: q.pair,
       listView: q.listView,
+      button: q.button,
       dataSource: q.dataSource,
       options: q.options.length || q.optionsFr.length || q.optionsNl.length
         ? {

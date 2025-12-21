@@ -15,7 +15,7 @@ components:
           description: Question identifier (e.g., `Q1`). Generated automatically if omitted.
         type:
           type: string
-          enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD, LINE_ITEM_GROUP]
+          enum: [DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD, LINE_ITEM_GROUP, BUTTON]
           description: The type of the input field.
         qEn:
           type: string
@@ -65,7 +65,7 @@ components:
             Must be a reference string in the format `REF:SheetName` pointing to a separate sheet.
             The referenced sheet must contain three columns: Options (EN), Options (FR), Options (NL).
             Inline comma-separated lists are also supported for quick setup.
-            Ignored for FILE_UPLOAD and LINE_ITEM_GROUP.
+            Ignored for FILE_UPLOAD, LINE_ITEM_GROUP, and BUTTON.
             For CHECKBOX questions: when no options are provided (and no `dataSource` is set), the UI treats the field as a consent boolean and renders a single checkbox.
         optionFilter:
           $ref: '#/components/schemas/OptionFilter'
@@ -103,6 +103,11 @@ components:
         lineItemConfig:
           $ref: '#/components/schemas/LineItemGroupConfig'
           description: Settings for LINE_ITEM_GROUP questions. Provide as JSON or `REF:SheetName` in the `Config (JSON/REF)` column.
+        button:
+          $ref: '#/components/schemas/ButtonConfig'
+          description: |
+            Configuration for BUTTON questions (UI-only actions).
+            BUTTON questions do not persist values to the destination tab and are ignored by validation/progress.
         status:
           type: string
           enum: [Active, Archived]
@@ -131,6 +136,43 @@ components:
               type: string
           description: Auto-generated ID metadata for TEXT fields.
       required: [id, type, qEn, qFr, qNl, required, status]
+
+    ButtonConfig:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [renderDocTemplate]
+          description: |
+            The only supported action today: render a Google Doc template (with placeholders + consolidated directives)
+            into a PDF preview.
+        templateId:
+          oneOf:
+            - type: string
+              description: Google Doc template id.
+            - type: object
+              additionalProperties:
+                type: string
+              description: 'Language map (e.g., `{ "EN": "...", "FR": "...", "NL": "..." }`).'
+          description: Google Doc template id (or language map).
+        output:
+          type: string
+          enum: [pdf]
+          description: Output format. Currently only `pdf`.
+        placements:
+          type: array
+          items:
+            type: string
+            enum: [form, formSummaryMenu, summaryBar]
+          description: |
+            Where the button should surface in the web UI.
+            - `form`: render inline as a normal field in the form view.
+            - `formSummaryMenu`: appear inside the Summary button menu while editing.
+            - `summaryBar`: appear in the bottom action bar on the Summary view (menu if multiple).
+        folderId:
+          type: string
+          description: Optional Drive folder id to write generated PDFs to (defaults to follow-up folder / spreadsheet parent).
+      required: [action, templateId]
 
     FileUploadConfig:
       type: object

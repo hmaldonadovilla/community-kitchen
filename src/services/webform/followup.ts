@@ -316,14 +316,49 @@ export class FollowupService {
     if (!followup.pdfTemplateId) {
       return { success: false, message: 'PDF template ID missing.' };
     }
-    const templateId = this.resolveTemplateId(followup.pdfTemplateId, record.language);
+    return this.renderPdfArtifactFromTemplate({
+      form,
+      questions,
+      record,
+      templateIdMap: followup.pdfTemplateId,
+      folderId: followup.pdfFolderId,
+      namePrefix: form.title || 'Form'
+    });
+  }
+
+  /**
+   * Render a Google Doc template (with placeholders + line-item table directives) into a PDF.
+   * Used by follow-up actions and by the web app's report BUTTON field previews.
+   */
+  public renderPdfFromTemplate(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    record: WebFormSubmission;
+    templateIdMap: TemplateIdMap;
+    folderId?: string;
+    namePrefix?: string;
+  }): { success: boolean; message?: string; url?: string; fileId?: string } {
+    const artifact = this.renderPdfArtifactFromTemplate(args);
+    return { success: artifact.success, message: artifact.message, url: artifact.url, fileId: artifact.fileId };
+  }
+
+  private renderPdfArtifactFromTemplate(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    record: WebFormSubmission;
+    templateIdMap: TemplateIdMap;
+    folderId?: string;
+    namePrefix?: string;
+  }): { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob } {
+    const { form, questions, record, templateIdMap, folderId, namePrefix } = args;
+    const templateId = this.resolveTemplateId(templateIdMap, record.language);
     if (!templateId) {
-      return { success: false, message: 'No PDF template matched the submission language.' };
+      return { success: false, message: 'No template matched the submission language.' };
     }
     try {
       const templateFile = DriveApp.getFileById(templateId);
-      const folder = this.resolveFollowupFolder(followup);
-      const copyName = `${form.title || 'Form'} - ${record.id || this.generateUuid()}`;
+      const folder = this.resolveOutputFolder(folderId, form.followupConfig);
+      const copyName = `${namePrefix || form.title || 'Form'} - ${record.id || this.generateUuid()}`;
       const copy = templateFile.makeCopy(copyName, folder);
       const doc = DocumentApp.openById(copy.getId());
       const lineItemRows = this.collectLineItemRows(record, questions);
@@ -343,6 +378,17 @@ export class FollowupService {
       debugLog('followup.pdf.failed', { error: err ? err.toString() : 'unknown' });
       return { success: false, message: 'Failed to generate PDF.' };
     }
+  }
+
+  private resolveOutputFolder(folderId?: string, followup?: FollowupConfig): GoogleAppsScript.Drive.Folder {
+    if (folderId) {
+      try {
+        return DriveApp.getFolderById(folderId);
+      } catch (_) {
+        // fall through to follow-up/default folder
+      }
+    }
+    return this.resolveFollowupFolder(followup || {});
   }
 
   private resolveFollowupFolder(followup: FollowupConfig): GoogleAppsScript.Drive.Folder {
@@ -379,6 +425,7 @@ export class FollowupService {
     this.addPlaceholderVariants(map, 'PDF_URL', record.pdfUrl || '');
     this.addPlaceholderVariants(map, 'LANGUAGE', record.language || '');
     questions.forEach(q => {
+      if (q.type === 'BUTTON') return;
       const value = record.values ? record.values[q.id] : '';
       const formatted = this.formatTemplateValue(value);
       this.addPlaceholderVariants(map, q.id, formatted);
@@ -550,22 +597,23 @@ export class FollowupService {
         continue;
       }
       const table = element.asTable();
-      const subDirective = this.extractSubGroupDirective(table);
-      if (subDirective) {
-        const inserted = this.renderSubGroupTables(body, childIndex, table, subDirective, groupLookup, lineItemRows);
+      const directive = this.extractTableRepeatDirective(table);
+      if (directive) {
+        const inserted =
+          directive.kind === 'ROW_TABLE'
+            ? this.renderRowLineItemTables(body, childIndex, table, directive, groupLookup, lineItemRows)
+            : this.renderGroupedLineItemTables(body, childIndex, table, directive, groupLookup, lineItemRows);
         childIndex += inserted;
         continue;
       }
-      const directive = this.extractTableGroupDirective(table);
-      if (directive) {
-        const inserted = this.renderGroupedLineItemTables(
-          body,
-          childIndex,
-          table,
-          directive,
-          groupLookup,
-          lineItemRows
-        );
+
+      // By default, tables containing subgroup placeholders are rendered per parent row.
+      // However, if a CONSOLIDATED_TABLE directive is present, we treat it as a single consolidated table
+      // (handled by renderTableRows) rather than inserting a table per parent row.
+      const consolidatedDirective = this.extractConsolidatedTableDirective(table);
+      const subDirective = consolidatedDirective ? null : this.extractSubGroupDirective(table);
+      if (subDirective) {
+        const inserted = this.renderSubGroupTables(body, childIndex, table, subDirective, groupLookup, lineItemRows);
         childIndex += inserted;
         continue;
       }
@@ -578,7 +626,7 @@ export class FollowupService {
     body: GoogleAppsScript.Document.Body,
     childIndex: number,
     templateTable: GoogleAppsScript.Document.Table,
-    directive: { groupId: string; fieldId: string },
+    directive: { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string },
     groupLookup: Record<string, QuestionConfig>,
     lineItemRows: Record<string, any[]>
   ): number {
@@ -596,7 +644,7 @@ export class FollowupService {
     }
     groupedValues.forEach((groupValue, idx) => {
       const newTable = body.insertTable(childIndex + idx, preservedTemplate.copy());
-      this.replaceGroupDirectivePlaceholders(newTable, directive, groupValue);
+      this.replaceTableRepeatDirectivePlaceholders(newTable, directive, groupValue, 'GROUP_TABLE');
       const filteredRows = rows.filter(row => {
         const raw = row?.[directive.fieldId] ?? '';
         return this.normalizeText(raw) === this.normalizeText(groupValue);
@@ -609,6 +657,35 @@ export class FollowupService {
       );
     });
     return groupedValues.length;
+  }
+
+  private renderRowLineItemTables(
+    body: GoogleAppsScript.Document.Body,
+    childIndex: number,
+    templateTable: GoogleAppsScript.Document.Table,
+    directive: { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string },
+    groupLookup: Record<string, QuestionConfig>,
+    lineItemRows: Record<string, any[]>
+  ): number {
+    const group = groupLookup[directive.groupId];
+    if (!group) {
+      body.removeChild(templateTable);
+      return 0;
+    }
+    const rows = lineItemRows[group.id] || [];
+    const preservedTemplate = templateTable.copy();
+    body.removeChild(templateTable);
+    if (!rows.length) {
+      return 0;
+    }
+    rows.forEach((rowData, idx) => {
+      const newTable = body.insertTable(childIndex + idx, preservedTemplate.copy());
+      const title = this.formatTemplateValue(rowData?.[directive.fieldId] ?? '');
+      this.replaceTableRepeatDirectivePlaceholders(newTable, directive, title, 'ROW_TABLE');
+      // Render this table for exactly one parent row (so the key/value rows don't duplicate when titles repeat).
+      this.renderTableRows(newTable, groupLookup, lineItemRows, { groupId: group.id, rows: [rowData] });
+    });
+    return rows.length;
   }
 
   private collectGroupFieldValues(rows: any[], fieldId: string): string[] {
@@ -625,16 +702,18 @@ export class FollowupService {
     return order;
   }
 
-  private replaceGroupDirectivePlaceholders(
+  private replaceTableRepeatDirectivePlaceholders(
     table: GoogleAppsScript.Document.Table,
     directive: { groupId: string; fieldId: string },
-    groupValue: string
+    replacementValue: string,
+    directiveType: 'GROUP_TABLE' | 'ROW_TABLE'
   ): void {
-    const pattern = `(?i){{GROUP_TABLE(${directive.groupId}.${directive.fieldId})}}`;
+    // IMPORTANT: replaceText() uses regex. We must escape literal "(" / ")" / "." in the directive token.
+    const pattern = `(?i){{${directiveType}\\(${directive.groupId}\\.${directive.fieldId}\\)}}`;
     for (let r = 0; r < table.getNumRows(); r++) {
       const tableRow = table.getRow(r);
       for (let c = 0; c < tableRow.getNumCells(); c++) {
-        tableRow.getCell(c).replaceText(pattern, groupValue || '');
+        tableRow.getCell(c).replaceText(pattern, replacementValue || '');
       }
     }
   }
@@ -644,17 +723,45 @@ export class FollowupService {
     return value.toString().trim();
   }
 
-  private extractTableGroupDirective(
+  private extractTableRepeatDirective(
     table: GoogleAppsScript.Document.Table
-  ): { groupId: string; fieldId: string } | null {
+  ): { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string } | null {
     const text = table.getText && table.getText();
     if (!text) return null;
-    const match = text.match(/{{GROUP_TABLE\(([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/i);
+    const match = text.match(/{{(GROUP_TABLE|ROW_TABLE)\(([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/i);
+    if (!match) return null;
+    return {
+      kind: (match[1] || '').toUpperCase() as 'GROUP_TABLE' | 'ROW_TABLE',
+      groupId: match[2].toUpperCase(),
+      fieldId: match[3].toUpperCase()
+    };
+  }
+
+  private extractConsolidatedTableDirective(
+    table: GoogleAppsScript.Document.Table
+  ): { groupId: string; subGroupId: string } | null {
+    const text = table.getText && table.getText();
+    if (!text) return null;
+    const match = text.match(/{{CONSOLIDATED_TABLE\(([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/i);
     if (!match) return null;
     return {
       groupId: match[1].toUpperCase(),
-      fieldId: match[2].toUpperCase()
+      subGroupId: match[2].toUpperCase()
     };
+  }
+
+  private stripConsolidatedTableDirectivePlaceholders(
+    table: GoogleAppsScript.Document.Table,
+    directive: { groupId: string; subGroupId: string }
+  ): void {
+    if (!table) return;
+    const pattern = `(?i){{CONSOLIDATED_TABLE\\(${directive.groupId}\\.${directive.subGroupId}\\)}}`;
+    for (let r = 0; r < table.getNumRows(); r++) {
+      const tableRow = table.getRow(r);
+      for (let c = 0; c < tableRow.getNumCells(); c++) {
+        tableRow.getCell(c).replaceText(pattern, '');
+      }
+    }
   }
 
   private extractSubGroupDirective(
@@ -773,6 +880,11 @@ export class FollowupService {
     lineItemRows: Record<string, any[]>,
     override?: { groupId: string; rows: any[] }
   ): void {
+    const consolidatedDirective = this.extractConsolidatedTableDirective(table);
+    if (consolidatedDirective) {
+      this.stripConsolidatedTableDirectivePlaceholders(table, consolidatedDirective);
+    }
+
     for (let r = 0; r < table.getNumRows(); r++) {
       const row = table.getRow(r);
       const placeholders = this.extractLineItemPlaceholders(row.getText());
@@ -809,6 +921,46 @@ export class FollowupService {
               rows.push({ __parent: parentRow, ...(parentRow || {}), ...(child || {}) });
             });
           });
+        }
+      }
+
+      // Consolidated subgroup tables: dedupe rows by the placeholder combination in the template row.
+      if (consolidatedDirective && targetSubGroupId && groupId === consolidatedDirective.groupId) {
+        const wantsSub = consolidatedDirective.subGroupId;
+        const matchesSub =
+          wantsSub === targetSubGroupId ||
+          (subConfig
+            ? (() => {
+                const key = resolveSubgroupKey(subConfig as any);
+                const normalizedKey = (key || '').toUpperCase();
+                const slugKey = this.slugifyPlaceholder(key || '');
+                return wantsSub === normalizedKey || wantsSub === slugKey;
+              })()
+            : false);
+        if (matchesSub && rows && rows.length) {
+          const normalizedGroupId = group.id.toUpperCase();
+          const keyTemplate = placeholders
+            .map(p => {
+              const token = p.subGroupId
+                ? `${normalizedGroupId}.${(p.subGroupId || '').toUpperCase()}.${(p.fieldId || '').toUpperCase()}`
+                : `${normalizedGroupId}.${(p.fieldId || '').toUpperCase()}`;
+              return `{{${token}}}`;
+            })
+            .join('||');
+          const seen = new Set<string>();
+          const uniqueRows: any[] = [];
+          rows.forEach(dataRow => {
+            const key = this.normalizeText(
+              this.replaceLineItemPlaceholders(keyTemplate, group, dataRow, {
+                subGroup: subConfig,
+                subGroupToken: targetSubGroupId
+              })
+            );
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            uniqueRows.push(dataRow);
+          });
+          rows = uniqueRows;
         }
       }
 
@@ -855,6 +1007,20 @@ export class FollowupService {
         fieldId: (match[3] || match[2] || '').toUpperCase()
       });
     }
+
+    // Row-scoped consolidated placeholders should still cause the row to be processed by the table renderer,
+    // even when they are the only tokens present in the row.
+    // We treat them as "group-only" placeholders so they do NOT trigger subgroup (child-row) rendering.
+    const consolidatedRowPattern = /{{CONSOLIDATED_ROW\(([A-Z0-9_]+)\.([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/gi;
+    let cm: RegExpExecArray | null;
+    while ((cm = consolidatedRowPattern.exec(text)) !== null) {
+      matches.push({
+        groupId: (cm[1] || '').toString().toUpperCase(),
+        subGroupId: undefined,
+        fieldId: (cm[3] || '').toString().toUpperCase()
+      });
+    }
+
     return matches;
   }
 
@@ -900,13 +1066,61 @@ export class FollowupService {
         });
       });
     }
-    return template.replace(/{{([A-Z0-9_]+)(?:\.([A-Z0-9_]+))?\.([A-Z0-9_]+)}}/gi, (_, groupId, maybeSub, fieldKey) => {
+    const replaced = template.replace(/{{([A-Z0-9_]+)(?:\.([A-Z0-9_]+))?\.([A-Z0-9_]+)}}/gi, (_, groupId, maybeSub, fieldKey) => {
       if (groupId.toUpperCase() !== normalizedGroupId) return '';
       const token = maybeSub
         ? `${normalizedGroupId}.${maybeSub.toUpperCase()}.${fieldKey.toUpperCase()}`
         : `${normalizedGroupId}.${fieldKey.toUpperCase()}`;
       return replacements[token] ?? '';
     });
+
+    // Row-scoped consolidated values for nested subgroups (useful inside GROUP_TABLE blocks).
+    // Example: {{CONSOLIDATED_ROW(MP_DISHES.INGREDIENTS.ALLERGEN)}}
+    return replaced.replace(
+      /{{CONSOLIDATED_ROW\(([A-Z0-9_]+)\.([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/gi,
+      (_m, groupIdRaw: string, subGroupIdRaw: string, fieldIdRaw: string) => {
+        const groupId = (groupIdRaw || '').toString().toUpperCase();
+        if (groupId !== normalizedGroupId) return '';
+        const subToken = (subGroupIdRaw || '').toString().toUpperCase();
+        const fieldToken = (fieldIdRaw || '').toString().toUpperCase();
+        if (!subToken || !fieldToken) return '';
+
+        const parentRow = (rowData as any)?.__parent || rowData || {};
+        const subGroups = group.lineItemConfig?.subGroups || [];
+        const subConfig = subGroups.find(sub => {
+          const key = resolveSubgroupKey(sub as SubGroupConfig);
+          const normalizedKey = (key || '').toUpperCase();
+          const slugKey = this.slugifyPlaceholder(key || '');
+          return normalizedKey === subToken || slugKey === subToken;
+        });
+        if (!subConfig) return '';
+        const subKey = resolveSubgroupKey(subConfig as SubGroupConfig);
+        if (!subKey) return '';
+
+        const children = Array.isArray((parentRow as any)[subKey]) ? (parentRow as any)[subKey] : [];
+        if (!children.length) return '';
+
+        const fields = (subConfig as any).fields || [];
+        const fieldCfg = fields.find((f: any) => {
+          const id = (f?.id || '').toString().toUpperCase();
+          const slug = this.slugifyPlaceholder((f?.labelEn || f?.id || '').toString());
+          return id === fieldToken || slug === fieldToken;
+        });
+        if (!fieldCfg) return '';
+
+        const seen = new Set<string>();
+        const ordered: string[] = [];
+        children.forEach((child: any) => {
+          const raw = child?.[fieldCfg.id];
+          if (raw === undefined || raw === null || raw === '') return;
+          const text = this.formatTemplateValue(raw).trim();
+          if (!text || seen.has(text)) return;
+          seen.add(text);
+          ordered.push(text);
+        });
+        return ordered.join(', ');
+      }
+    );
   }
 
   private formatTemplateValue(value: any): string {

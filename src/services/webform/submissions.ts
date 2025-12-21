@@ -164,7 +164,7 @@ export class SubmissionService {
     }
 
     const candidateValues: Record<string, any> = {};
-    questions.forEach(q => {
+    questions.filter(q => q.type !== 'BUTTON').forEach(q => {
       if (q.type === 'TEXT' && q.autoIncrement) {
         const currentVal = (formObject as any)[q.id];
         if (!currentVal) {
@@ -176,7 +176,7 @@ export class SubmissionService {
       }
     });
 
-    questions.forEach(q => {
+    questions.filter(q => q.type !== 'BUTTON').forEach(q => {
       const colIdx = columns.fields[q.id];
       if (!colIdx) return;
       let value: any = '';
@@ -291,7 +291,7 @@ export class SubmissionService {
     const baseHeaders = [
       ...(hasTimestamp ? ['Timestamp'] : []),
       'Language',
-      ...questions.map(q => q.qEn || q.id),
+      ...questions.filter(q => q.type !== 'BUTTON').map(q => q.qEn || q.id),
       ...metaHeaders
     ];
 
@@ -321,7 +321,7 @@ export class SubmissionService {
       fields: {}
     };
 
-    questions.forEach(q => {
+    questions.filter(q => q.type !== 'BUTTON').forEach(q => {
       const idx = this.findHeader(headers, [q.qEn, q.id].filter(Boolean) as string[]);
       if (idx) columns.fields[q.id] = idx;
     });
@@ -339,7 +339,7 @@ export class SubmissionService {
     const recordId = fallbackId || (columns.recordId ? (rowValues[columns.recordId - 1] || '').toString() : '');
     if (!recordId) return null;
     const values: Record<string, any> = {};
-    questions.forEach(q => {
+    questions.filter(q => q.type !== 'BUTTON').forEach(q => {
       const colIdx = columns.fields[q.id];
       if (!colIdx) return;
       let value = rowValues[colIdx - 1];

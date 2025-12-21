@@ -110,6 +110,12 @@ export function uploadFiles(files: any, uploadConfig?: any): any {
   return service.uploadFiles(files, uploadConfig);
 }
 
+export function renderDocTemplate(formObject: WebFormSubmission, buttonId: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderDocTemplate(formObject, buttonId);
+}
+
 export function triggerFollowupAction(formKey: string, recordId: string, action: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

@@ -202,6 +202,72 @@ export class WebFormService {
   }
 
   /**
+   * Render a configured BUTTON field's Doc template into a PDF for preview.
+   * This does not write anything to the destination tab.
+   */
+  public renderDocTemplate(formObject: WebFormSubmission, buttonId: string): { success: boolean; pdfUrl?: string; fileId?: string; message?: string } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    if (!formKey) {
+      return { success: false, message: 'Form key is required.' };
+    }
+    const { form, questions } = this.getFormContext(formKey);
+    const btn = questions.find(q => q && q.type === 'BUTTON' && q.id === (buttonId || '').toString());
+    const cfg: any = (btn as any)?.button;
+    if (!btn || !cfg || cfg.action !== 'renderDocTemplate' || !cfg.templateId) {
+      return { success: false, message: `Unknown or misconfigured button "${buttonId}".` };
+    }
+
+    // Normalize language (supports array input like other endpoints).
+    const langValue = Array.isArray((formObject as any).language)
+      ? ((formObject as any).language[(formObject as any).language.length - 1] || (formObject as any).language[0])
+      : (formObject as any).language;
+    const languageRaw = (langValue || 'EN').toString().toUpperCase();
+    const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
+
+    const values = (formObject as any).values && typeof (formObject as any).values === 'object' ? { ...(formObject as any).values } : {};
+    // Best-effort parse for LINE_ITEM_GROUP values if they were provided as JSON strings.
+    questions
+      .filter(q => q.type === 'LINE_ITEM_GROUP')
+      .forEach(q => {
+        const raw = (values as any)[q.id];
+        if (typeof raw === 'string' && raw.trim()) {
+          try {
+            (values as any)[q.id] = JSON.parse(raw);
+          } catch (_) {
+            // keep raw
+          }
+        }
+      });
+
+    const record: WebFormSubmission = {
+      formKey: formKey,
+      language,
+      values,
+      id: (formObject as any).id ? (formObject as any).id.toString() : undefined,
+      createdAt: (formObject as any).createdAt ? (formObject as any).createdAt.toString() : undefined,
+      updatedAt: (formObject as any).updatedAt ? (formObject as any).updatedAt.toString() : undefined,
+      status: (formObject as any).status ? (formObject as any).status.toString() : undefined,
+      pdfUrl: undefined
+    };
+
+    debugLog('renderDocTemplate.start', { formKey, buttonId: btn.id, language });
+    const result = this.followups.renderPdfFromTemplate({
+      form,
+      questions,
+      record,
+      templateIdMap: cfg.templateId,
+      folderId: cfg.folderId,
+      namePrefix: `${form.title || 'Form'} - ${btn.qEn || btn.id}`
+    });
+    if (!result.success) {
+      debugLog('renderDocTemplate.failed', { formKey, buttonId: btn.id, message: result.message || 'failed' });
+      return { success: false, message: result.message || 'Failed to render template.' };
+    }
+    debugLog('renderDocTemplate.ok', { formKey, buttonId: btn.id, fileId: result.fileId || '', url: result.url || '' });
+    return { success: true, pdfUrl: result.url, fileId: result.fileId };
+  }
+
+  /**
    * Upload files to Drive and return the resulting URL list string (comma-separated).
    * This does not write anything to the destination tab; the caller should save the URLs via saveSubmissionWithId.
    */

@@ -56,6 +56,13 @@ export interface UploadFilesResult {
   message?: string;
 }
 
+export interface RenderDocTemplateResult {
+  success: boolean;
+  pdfUrl?: string;
+  fileId?: string;
+  message?: string;
+}
+
 type Runner = typeof google.script.run;
 
 const getRunner = (): Runner | null => {
@@ -119,6 +126,9 @@ export const triggerFollowup = (
 
 export const uploadFilesApi = (files: any, uploadConfig?: any): Promise<UploadFilesResult> =>
   runAppsScript<UploadFilesResult>('uploadFiles', files, uploadConfig);
+
+export const renderDocTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocTemplateResult> =>
+  runAppsScript<RenderDocTemplateResult>('renderDocTemplate', payload, buttonId);
 
 export interface BootstrapContext {
   definition: WebFormDefinition;

@@ -1,6 +1,7 @@
 import {
   AutoIncrementConfig,
   BaseQuestionType,
+  ButtonConfig,
   ChoiceControl,
   DataSourceConfig,
   DefaultValue,
@@ -62,7 +63,17 @@ export class ConfigSheet {
     // Data validation for Type column
     const typeRange = sheet.getRange(2, 2, 100, 1);
     const typeRule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(['DATE', 'TEXT', 'PARAGRAPH', 'NUMBER', 'CHOICE', 'CHECKBOX', 'FILE_UPLOAD', 'LINE_ITEM_GROUP'])
+      .requireValueInList([
+        'DATE',
+        'TEXT',
+        'PARAGRAPH',
+        'NUMBER',
+        'CHOICE',
+        'CHECKBOX',
+        'FILE_UPLOAD',
+        'LINE_ITEM_GROUP',
+        'BUTTON'
+      ])
       .setAllowInvalid(false)
       .build();
     typeRange.setDataValidation(typeRule);
@@ -159,6 +170,7 @@ export class ConfigSheet {
       const autoIncrement = type === 'TEXT' ? this.parseAutoIncrement(rawConfig) : undefined;
       const derivedValue = this.parseDerivedValue(rawConfig);
       const defaultValue = this.parseDefaultValue(rawConfig);
+      const button = type === 'BUTTON' ? this.parseButtonConfig(rawConfig) : undefined;
 
       return {
         id: row[0] ? row[0].toString() : '',
@@ -166,7 +178,7 @@ export class ConfigSheet {
         qEn: row[idxQEn],
         qFr: row[idxQFr],
         qNl: row[idxQNl],
-        required: !!row[idxRequired],
+        required: type === 'BUTTON' ? false : !!row[idxRequired],
         defaultValue,
         ui,
         header,
@@ -196,7 +208,8 @@ export class ConfigSheet {
         listViewSort,
         autoIncrement,
         valueMap,
-        derivedValue
+        derivedValue,
+        button
       };
     });
   }
@@ -668,6 +681,40 @@ export class ConfigSheet {
         ? (parsed as any).default
         : undefined;
     return this.normalizeDefaultValue(candidate);
+  }
+
+  private static parseButtonConfig(rawConfig?: string): ButtonConfig | undefined {
+    const parsed = this.safeParseObject(rawConfig || '');
+    if (!parsed) return undefined;
+    const cfgRaw: any = (parsed as any).button;
+    if (!cfgRaw || typeof cfgRaw !== 'object') return undefined;
+
+    const action = (cfgRaw.action || 'renderDocTemplate').toString().trim();
+    if (action !== 'renderDocTemplate') return undefined;
+
+    const templateId = cfgRaw.templateId ?? cfgRaw.template ?? cfgRaw.docTemplateId ?? cfgRaw.docId;
+    if (!templateId) return undefined;
+
+    const outputRaw = (cfgRaw.output || 'pdf').toString().trim().toLowerCase();
+    const output = outputRaw === 'pdf' ? 'pdf' : undefined;
+
+    const allowedPlacements = new Set(['form', 'formSummaryMenu', 'summaryBar']);
+    const placementsRaw = Array.isArray(cfgRaw.placements) ? cfgRaw.placements : cfgRaw.placement ? [cfgRaw.placement] : [];
+    const placements = placementsRaw
+      .map((p: any) => (p === undefined || p === null ? '' : p.toString().trim()))
+      .filter((p: string) => allowedPlacements.has(p));
+
+    const folderId =
+      cfgRaw.folderId !== undefined && cfgRaw.folderId !== null ? cfgRaw.folderId.toString().trim() : undefined;
+
+    const config: ButtonConfig = {
+      action: 'renderDocTemplate',
+      templateId: templateId as any,
+      output: (output as any) || 'pdf'
+    };
+    if (placements.length) config.placements = placements as any;
+    if (folderId) config.folderId = folderId;
+    return config;
   }
 
   private static normalizeDefaultValue(raw: any): DefaultValue | undefined {
