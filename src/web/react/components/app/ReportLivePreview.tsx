@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
+import { resolveLocalizedString } from '../../../i18n';
 import { buildSubgroupKey, resolveSubgroupKey } from '../../app/lineItems';
 import { LineItemState } from '../../types';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
+import { GroupCard } from '../form/GroupCard';
+import { resolveGroupSectionKey } from '../form/grouping';
 import { formatFieldValue } from './tooltips';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -362,12 +365,66 @@ export const ReportLivePreview: React.FC<{
   recordMeta?: RecordMeta;
 }> = ({ definition, language, values, lineItems, recordMeta }) => {
   const topQuestions = useMemo(
-    () =>
-      definition.questions.filter(
-        q => q.type !== 'LINE_ITEM_GROUP' && q.type !== 'BUTTON'
-      ),
+    () => definition.questions.filter(q => q.type !== 'LINE_ITEM_GROUP' && q.type !== 'BUTTON'),
     [definition.questions]
   );
+
+  type Section = {
+    key: string;
+    title?: string;
+    collapsible: boolean;
+    defaultCollapsed: boolean;
+    questions: WebQuestionDefinition[];
+    order: number;
+  };
+
+  const topSections = useMemo(() => {
+    const map = new Map<string, Section>();
+    let order = 0;
+    topQuestions.forEach(q => {
+      const groupCfg: any = (q as any)?.group;
+      const key = resolveGroupSectionKey(groupCfg);
+      let title: string | undefined;
+      if (groupCfg?.title) {
+        title = resolveLocalizedString(groupCfg.title, language, '');
+      } else if (groupCfg?.header) {
+        title = 'Header';
+      }
+      const collapsible = groupCfg?.collapsible === undefined ? !!title : !!groupCfg.collapsible;
+      const defaultCollapsed = groupCfg?.defaultCollapsed === undefined ? false : !!groupCfg.defaultCollapsed;
+
+      const existing = map.get(key);
+      if (existing) {
+        existing.questions.push(q);
+        if (existing.title === undefined && title) existing.title = title;
+        existing.collapsible = existing.collapsible || collapsible;
+        existing.defaultCollapsed = existing.defaultCollapsed || defaultCollapsed;
+      } else {
+        map.set(key, { key, title, collapsible, defaultCollapsed, questions: [q], order: order++ });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.order - b.order);
+  }, [language, topQuestions]);
+
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    topSections.forEach(s => {
+      if (s.collapsible && s.defaultCollapsed) init[`summary:${s.key}`] = true;
+    });
+    return init;
+  });
+
+  // Ensure newly added sections respect defaultCollapsed without resetting user toggles.
+  useEffect(() => {
+    setCollapsedSections(prev => {
+      const next = { ...prev };
+      topSections.forEach(s => {
+        const k = `summary:${s.key}`;
+        if (next[k] === undefined && s.collapsible && s.defaultCollapsed) next[k] = true;
+      });
+      return next;
+    });
+  }, [topSections]);
 
   const lineGroups = useMemo(
     () => definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP'),
@@ -376,14 +433,8 @@ export const ReportLivePreview: React.FC<{
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: 12
-        }}
-      >
-        {recordMeta?.pdfUrl ? (
+      {recordMeta?.pdfUrl ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <MetaCard label="PDF">
             <a
               href={recordMeta.pdfUrl}
@@ -395,18 +446,50 @@ export const ReportLivePreview: React.FC<{
               Open PDF
             </a>
           </MetaCard>
-        ) : null}
+        </div>
+      ) : null}
 
-        {topQuestions.map((q: WebQuestionDefinition) => {
-          const label = resolveLabel(q, language);
-          const value = values[q.id];
-          return (
-            <MetaCard key={q.id} label={label}>
-              {renderValueForPreview(value, q.type)}
-            </MetaCard>
-          );
-        })}
-      </div>
+      {topSections.map(section => {
+        const sectionKey = `summary:${section.key}`;
+        const collapsed = section.collapsible ? !!collapsedSections[sectionKey] : false;
+        const body = (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12
+            }}
+          >
+            {section.questions.map((q: WebQuestionDefinition) => {
+              const label = resolveLabel(q, language);
+              const value = values[q.id];
+              return (
+                <MetaCard key={q.id} label={label}>
+                  {renderValueForPreview(value, q.type)}
+                </MetaCard>
+              );
+            })}
+          </div>
+        );
+
+        return (
+          <GroupCard
+            key={sectionKey}
+            groupKey={sectionKey}
+            title={section.title}
+            collapsible={section.collapsible}
+            collapsed={collapsed}
+            onToggleCollapsed={
+              section.collapsible
+                ? () => setCollapsedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))
+                : undefined
+            }
+            progress={null}
+          >
+            {body}
+          </GroupCard>
+        );
+      })}
 
       {lineGroups.map((group: WebQuestionDefinition) => {
         const rows = lineItems[group.id] || [];

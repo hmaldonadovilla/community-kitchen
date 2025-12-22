@@ -167,9 +167,16 @@ export class Dashboard {
     }
     if (!parsed || typeof parsed !== 'object') return undefined;
     const followup = this.buildFollowupConfig(parsed);
-    const listViewMetaColumns = this.normalizeListViewMetaColumns(
-      parsed.listViewMetaColumns || parsed.listViewDefaults || parsed.defaultListFields
-    );
+    const metaRaw =
+      parsed.listViewMetaColumns !== undefined
+        ? parsed.listViewMetaColumns
+        : parsed.listViewDefaults !== undefined
+        ? parsed.listViewDefaults
+        : parsed.defaultListFields !== undefined
+        ? parsed.defaultListFields
+        : undefined;
+    const hasMetaSetting = metaRaw !== undefined;
+    const listViewMetaColumns = this.normalizeListViewMetaColumns(metaRaw);
     const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
     const summaryViewEnabled = (() => {
       if (parsed.summaryViewEnabled !== undefined) return Boolean(parsed.summaryViewEnabled);
@@ -187,7 +194,7 @@ export class Dashboard {
     })();
     if (
       !followup &&
-      (!listViewMetaColumns || !listViewMetaColumns.length) &&
+      !hasMetaSetting &&
       !autoSave &&
       summaryViewEnabled === undefined &&
       copyCurrentRecordEnabled === undefined
@@ -247,7 +254,7 @@ export class Dashboard {
   }
 
   private normalizeListViewMetaColumns(value: any): string[] | undefined {
-    if (!value) return undefined;
+    if (value === undefined || value === null) return undefined;
     const rawEntries: string[] = Array.isArray(value)
       ? value
       : value.toString().split(',').map((entry: string) => entry.trim());
@@ -269,7 +276,8 @@ export class Dashboard {
       .map((key: string) => allowedMap[key!] || '')
       .filter(Boolean);
     const unique = Array.from(new Set(normalized)) as string[];
-    return unique.length ? unique : undefined;
+    // Explicit empty array (or "no valid entries") should be respected as "no meta columns".
+    return unique;
   }
 
   private normalizeTemplateId(value: any): FollowupConfig['pdfTemplateId'] {

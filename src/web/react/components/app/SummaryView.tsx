@@ -45,6 +45,7 @@ export const SummaryView: React.FC<{
 
   return (
     <div
+      className="ck-summary-view"
       style={{
         display: 'flex',
         flexDirection: 'column',

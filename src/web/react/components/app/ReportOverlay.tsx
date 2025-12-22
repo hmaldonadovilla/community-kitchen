@@ -74,31 +74,32 @@ export const ReportOverlay: React.FC<{
       zIndex={10030}
       title={title || 'Report'}
       subtitle={subtitle}
+      leftAction={
+        headerActions.length ? (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{headerActions}</div>
+        ) : undefined
+      }
       rightAction={
         <button type="button" onClick={onClose} style={buttonStyles.secondary}>
           Close
         </button>
       }
     >
-      <div style={{ padding: 16, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{headerActions}</div>
-
-        {pdfPhase === 'rendering' && <div className="status">Generating PDF…</div>}
-        {pdfPhase === 'error' && <div className="error">{pdfMessage || 'Failed to generate PDF.'}</div>}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {pdfPhase === 'rendering' ? (
+          <div style={{ padding: 16 }} className="status">
+            Generating PDF…
+          </div>
+        ) : null}
+        {pdfPhase === 'error' ? (
+          <div style={{ padding: 16 }} className="error">
+            {pdfMessage || 'Failed to generate PDF.'}
+          </div>
+        ) : null}
 
         {pdfPhase === 'ready' && pdfObjectUrl ? (
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <iframe
-              title={title || 'PDF preview'}
-              src={pdfObjectUrl}
-              style={{
-                width: '100%',
-                height: '100%',
-                border: '1px solid rgba(148,163,184,0.45)',
-                borderRadius: 16,
-                background: '#ffffff'
-              }}
-            />
+          <div style={{ padding: 16 }} className="status">
+            PDF ready. Use <strong>Open</strong> (or <strong>Download</strong>) above.
           </div>
         ) : null}
       </div>

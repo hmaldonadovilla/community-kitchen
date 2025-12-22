@@ -280,16 +280,51 @@ const ListView: React.FC<ListViewProps> = ({
   const showPrev = pageIndex > 0;
   const showNext = pageIndex < totalPages - 1;
 
-  const formatDate = (value: any): string | null => {
+  const formatDateOnly = (value: any): string | null => {
     if (value === undefined || value === null || value === '') return null;
     const pad2 = (n: number) => n.toString().padStart(2, '0');
+    const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+    const format = (d: Date): string | null => {
+      if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
+      return `${WEEKDAYS[d.getDay()]}, ${pad2(d.getDate())}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+    };
 
     // Date-only: YYYY-MM-DD -> DD/MM/YYYY
     if (typeof value === 'string') {
       const trimmed = value.trim();
       const ymd = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (ymd) return `${ymd[3]}/${ymd[2]}/${ymd[1]}`;
+      if (ymd) {
+        const y = Number(ymd[1]);
+        const m = Number(ymd[2]);
+        const d = Number(ymd[3]);
+        return format(new Date(y, m - 1, d));
+      }
+      const dmy = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (dmy) {
+        const d = Number(dmy[1]);
+        const m = Number(dmy[2]);
+        const y = Number(dmy[3]);
+        return format(new Date(y, m - 1, d));
+      }
+      const isoPrefix = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[T\s]/);
+      if (isoPrefix) {
+        const y = Number(isoPrefix[1]);
+        const m = Number(isoPrefix[2]);
+        const d = Number(isoPrefix[3]);
+        return format(new Date(y, m - 1, d));
+      }
     }
+    if (value instanceof Date) return format(value);
+    const t = Date.parse(`${value}`);
+    if (!Number.isNaN(t)) return format(new Date(t));
+    return null;
+  };
+
+  const formatDateTime = (value: any): string | null => {
+    if (value === undefined || value === null || value === '') return null;
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
 
     // Date-time: keep user's timezone but force dd/mm/yyyy display
     const candidate = typeof value === 'number' ? value : `${value}`;
@@ -355,7 +390,12 @@ const ListView: React.FC<ListViewProps> = ({
     const isScalar = typeof value === 'string' || typeof value === 'number';
     const fieldType =
       fieldId === 'createdAt' || fieldId === 'updatedAt' ? 'DATETIME' : (questionTypeById[fieldId] || '');
-    const dateText = isScalar && (fieldType === 'DATETIME' || fieldType === 'DATE') ? formatDate(raw) : null;
+    const dateText =
+      isScalar && fieldType === 'DATETIME'
+        ? formatDateTime(raw)
+        : isScalar && fieldType === 'DATE'
+        ? formatDateOnly(raw)
+        : null;
     const text = dateText || (isArray ? summarizeArray(value) : `${value}`);
     const title = dateText ? `${raw}` : text;
     if (typeof value === 'string') {

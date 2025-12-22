@@ -945,12 +945,15 @@ export class FollowupService {
       return 0;
     }
     const rows = lineItemRows[group.id] || [];
+    const orderBy = this.extractOrderByDirective(templateTable);
     const preservedTemplate = templateTable.copy();
     body.removeChild(templateTable);
     if (!rows.length) {
       return 0;
     }
-    rows.forEach((rowData, idx) => {
+    const orderedRows =
+      orderBy && orderBy.keys.length ? this.applyOrderBy(rows, orderBy, group, { subConfig: undefined, subToken: undefined }) : rows;
+    orderedRows.forEach((rowData, idx) => {
       const newTable = body.insertTable(childIndex + idx, preservedTemplate.copy());
       const titleFieldCfg = (group.lineItemConfig?.fields || []).find(
         f => ((f as any)?.id || '').toString().toUpperCase() === (directive.fieldId || '').toString().toUpperCase()
@@ -960,7 +963,7 @@ export class FollowupService {
       // Render this table for exactly one parent row (so the key/value rows don't duplicate when titles repeat).
       this.renderTableRows(newTable, groupLookup, lineItemRows, { groupId: group.id, rows: [rowData] });
     });
-    return rows.length;
+    return orderedRows.length;
   }
 
   private collectGroupFieldValues(rows: any[], fieldId: string): string[] {
@@ -1025,6 +1028,70 @@ export class FollowupService {
     };
   }
 
+  private extractOrderByDirective(
+    table: GoogleAppsScript.Document.Table
+  ): { keys: Array<{ key: string; direction: 'asc' | 'desc' }> } | null {
+    const text = table.getText && table.getText();
+    if (!text) return null;
+    const match = text.match(/{{ORDER_BY\(([^)]*)\)}}/i);
+    if (!match) return null;
+    const raw = (match[1] || '').toString();
+    const keys = this.parseOrderByKeys(raw);
+    return keys.length ? { keys } : null;
+  }
+
+  private parseOrderByKeys(raw: string): Array<{ key: string; direction: 'asc' | 'desc' }> {
+    const clause = (raw || '').toString().trim();
+    if (!clause) return [];
+    const out: Array<{ key: string; direction: 'asc' | 'desc' }> = [];
+    clause
+      .split(',')
+      .map(part => (part || '').toString().trim())
+      .filter(Boolean)
+      .forEach(part => {
+        let token = part.trim();
+        let direction: 'asc' | 'desc' = 'asc';
+
+        // Prefix "-" means DESC
+        if (token.startsWith('-')) {
+          direction = 'desc';
+          token = token.slice(1).trim();
+        }
+
+        // Suffix "ASC"/"DESC"
+        const suffix = token.match(/\s+(ASC|DESC)$/i);
+        if (suffix) {
+          direction = suffix[1].toString().toLowerCase() === 'desc' ? 'desc' : 'asc';
+          token = token.slice(0, token.length - suffix[0].length).trim();
+        }
+
+        // Inline delimiter "FIELD:ASC" / "FIELD:DESC"
+        const colon = token.match(/^(.*):\s*(ASC|DESC)$/i);
+        if (colon) {
+          direction = colon[2].toString().toLowerCase() === 'desc' ? 'desc' : 'asc';
+          token = (colon[1] || '').toString().trim();
+        }
+
+        const normalized = token.toUpperCase().replace(/\s+/g, '');
+        // Allow FIELD, GROUP.FIELD, or GROUP.SUBGROUP.FIELD
+        if (!/^[A-Z0-9_]+(\.[A-Z0-9_]+){0,2}$/.test(normalized)) return;
+        out.push({ key: normalized, direction });
+      });
+    return out;
+  }
+
+  private stripOrderByDirectivePlaceholders(table: GoogleAppsScript.Document.Table): void {
+    if (!table) return;
+    // IMPORTANT: replaceText() uses regex.
+    const pattern = `(?i){{ORDER_BY\\([^)]*\\)}}`;
+    for (let r = 0; r < table.getNumRows(); r++) {
+      const tableRow = table.getRow(r);
+      for (let c = 0; c < tableRow.getNumCells(); c++) {
+        tableRow.getCell(c).replaceText(pattern, '');
+      }
+    }
+  }
+
   private stripConsolidatedTableDirectivePlaceholders(
     table: GoogleAppsScript.Document.Table,
     directive: { groupId: string; subGroupId: string }
@@ -1077,6 +1144,7 @@ export class FollowupService {
     }
     const subKey = resolveSubgroupKey(subConfig);
     const parentRows = lineItemRows[group.id] || [];
+    const orderBy = this.extractOrderByDirective(templateTable);
     const preserved = templateTable.copy();
     body.removeChild(templateTable);
     let inserted = 0;
@@ -1085,6 +1153,9 @@ export class FollowupService {
       const children = Array.isArray((parentRow || {})[subKey]) ? (parentRow as any)[subKey] : [];
       if (!children.length) return;
       const newTable = body.insertTable(childIndex + inserted, preserved.copy());
+      if (orderBy && orderBy.keys.length) {
+        this.stripOrderByDirectivePlaceholders(newTable);
+      }
 
       let r = 0;
       while (r < newTable.getNumRows()) {
@@ -1124,7 +1195,16 @@ export class FollowupService {
         const templateRow = row.copy().asTableRow();
         const insertAt = r;
         newTable.removeRow(r);
-        children.forEach((child: any, childIdx: number) => {
+        const orderedChildren =
+          orderBy && orderBy.keys.length
+            ? this.applyOrderBy(
+                children,
+                orderBy,
+                group,
+                { subConfig, subToken: directive.subGroupId }
+              )
+            : children;
+        orderedChildren.forEach((child: any, childIdx: number) => {
           const dataRow = { __parent: parentRow, ...(parentRow || {}), ...(child || {}) };
           const targetRow = newTable.insertTableRow(insertAt + childIdx, templateRow.copy().asTableRow());
           for (let c = 0; c < targetRow.getNumCells(); c++) {
@@ -1141,7 +1221,7 @@ export class FollowupService {
           }
         });
         // Skip past inserted rows
-        r = insertAt + children.length;
+        r = insertAt + orderedChildren.length;
       }
       inserted += 1;
     });
@@ -1158,6 +1238,10 @@ export class FollowupService {
     const consolidatedDirective = this.extractConsolidatedTableDirective(table);
     if (consolidatedDirective) {
       this.stripConsolidatedTableDirectivePlaceholders(table, consolidatedDirective);
+    }
+    const orderBy = this.extractOrderByDirective(table);
+    if (orderBy && orderBy.keys.length) {
+      this.stripOrderByDirectivePlaceholders(table);
     }
 
     for (let r = 0; r < table.getNumRows(); r++) {
@@ -1213,30 +1297,12 @@ export class FollowupService {
               })()
             : false);
         if (matchesSub && rows && rows.length) {
-          const normalizedGroupId = group.id.toUpperCase();
-          const keyTemplate = placeholders
-            .map(p => {
-              const token = p.subGroupId
-                ? `${normalizedGroupId}.${(p.subGroupId || '').toUpperCase()}.${(p.fieldId || '').toUpperCase()}`
-                : `${normalizedGroupId}.${(p.fieldId || '').toUpperCase()}`;
-              return `{{${token}}}`;
-            })
-            .join('||');
-          const seen = new Set<string>();
-          const uniqueRows: any[] = [];
-          rows.forEach(dataRow => {
-            const key = this.normalizeText(
-              this.replaceLineItemPlaceholders(keyTemplate, group, dataRow, {
-                subGroup: subConfig,
-                subGroupToken: targetSubGroupId
-              })
-            );
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            uniqueRows.push(dataRow);
-          });
-          rows = uniqueRows;
+          rows = this.consolidateConsolidatedTableRows(rows, placeholders, group, subConfig, targetSubGroupId);
         }
+      }
+
+      if (orderBy && orderBy.keys.length && rows && rows.length > 1) {
+        rows = this.applyOrderBy(rows, orderBy, group, { subConfig, subToken: targetSubGroupId });
       }
 
       if (!rows || !rows.length) {
@@ -1268,6 +1334,261 @@ export class FollowupService {
       });
       r += rows.length - 1;
     }
+  }
+
+  private consolidateConsolidatedTableRows(
+    rows: any[],
+    placeholders: Array<{ groupId: string; subGroupId?: string; fieldId: string }>,
+    group: QuestionConfig,
+    subConfig: SubGroupConfig | undefined,
+    targetSubGroupId: string
+  ): any[] {
+    const source = rows || [];
+    if (!source.length) return [];
+    const normalizedGroupId = (group?.id || '').toString().toUpperCase();
+
+    const groupFields = (group?.lineItemConfig?.fields || []) as any[];
+    const subFields = ((subConfig as any)?.fields || []) as any[];
+
+    const resolveFieldCfg = (fieldToken: string, scope: 'group' | 'sub'): any | undefined => {
+      const list = scope === 'sub' ? subFields : groupFields;
+      const tokenUpper = (fieldToken || '').toString().toUpperCase();
+      return (list || []).find((f: any) => {
+        const id = (f?.id || '').toString().toUpperCase();
+        const slug = this.slugifyPlaceholder((f?.labelEn || f?.id || '').toString());
+        return id === tokenUpper || slug === tokenUpper;
+      });
+    };
+
+    const describe = (p: { subGroupId?: string; fieldId: string }) => {
+      const isSub = !!p.subGroupId;
+      const fieldToken = (p.fieldId || '').toString().toUpperCase();
+      const cfg = isSub ? resolveFieldCfg(fieldToken, 'sub') : resolveFieldCfg(fieldToken, 'group');
+      const type = (cfg as any)?.type ? (cfg as any).type.toString().toUpperCase() : '';
+      const id = (cfg as any)?.id ? (cfg as any).id.toString() : fieldToken;
+      return { isSub, fieldToken, cfg, type, id };
+    };
+
+    const resolved = placeholders.map(p => ({ p, meta: describe(p) }));
+    const numeric = resolved.filter(x => x.meta.type === 'NUMBER' && x.meta.id);
+    const nonNumeric = resolved.filter(x => x.meta.type !== 'NUMBER');
+
+    // Default: no numeric fields -> preserve existing behavior (dedupe by full placeholder combination).
+    if (!numeric.length) {
+      const keyTemplate = placeholders
+        .map(p => {
+          const token = p.subGroupId
+            ? `${normalizedGroupId}.${(p.subGroupId || '').toUpperCase()}.${(p.fieldId || '').toUpperCase()}`
+            : `${normalizedGroupId}.${(p.fieldId || '').toUpperCase()}`;
+          return `{{${token}}}`;
+        })
+        .join('||');
+      const seen = new Set<string>();
+      const uniqueRows: any[] = [];
+      source.forEach(dataRow => {
+        const key = this.normalizeText(
+          this.replaceLineItemPlaceholders(keyTemplate, group, dataRow, {
+            subGroup: subConfig,
+            subGroupToken: targetSubGroupId
+          })
+        );
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        uniqueRows.push(dataRow);
+      });
+      return uniqueRows;
+    }
+
+    // With numeric fields present, consolidate by *non-numeric* placeholder values and sum the numeric fields.
+    const keyTemplate = nonNumeric.length
+      ? nonNumeric
+          .map(x => {
+            const p = x.p;
+            const token = p.subGroupId
+              ? `${normalizedGroupId}.${(p.subGroupId || '').toUpperCase()}.${(p.fieldId || '').toUpperCase()}`
+              : `${normalizedGroupId}.${(p.fieldId || '').toUpperCase()}`;
+            return `{{${token}}}`;
+          })
+          .join('||')
+      : '';
+
+    const groups = new Map<string, any>();
+    const sums = new Map<string, Record<string, number>>();
+
+    const toNumber = (raw: any): number | null => {
+      if (raw === undefined || raw === null || raw === '') return null;
+      if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+      const s = raw.toString().trim();
+      if (!s) return null;
+      // Support commas as decimal separators in inputs like "1,25"
+      const normalized = s.replace(',', '.');
+      const n = Number.parseFloat(normalized);
+      return Number.isNaN(n) ? null : n;
+    };
+    const round2 = (n: number): number => {
+      if (!Number.isFinite(n)) return n;
+      // Round to 2 decimals (avoid long floating tails like 0.30000000000000004).
+      return Math.round((n + Math.sign(n) * Number.EPSILON) * 100) / 100;
+    };
+
+    source.forEach(dataRow => {
+      const keyRaw = keyTemplate
+        ? this.normalizeText(
+            this.replaceLineItemPlaceholders(keyTemplate, group, dataRow, {
+              subGroup: subConfig,
+              subGroupToken: targetSubGroupId
+            })
+          )
+        : 'ALL';
+      if (!keyRaw) return;
+
+      if (!groups.has(keyRaw)) {
+        groups.set(keyRaw, { ...(dataRow || {}) });
+        sums.set(keyRaw, {});
+      }
+      const sumRec = sums.get(keyRaw) || {};
+
+      numeric.forEach(x => {
+        const fid = x.meta.id;
+        if (!fid) return;
+        const n = toNumber((dataRow || {})[fid]);
+        if (n === null) return;
+        sumRec[fid] = (sumRec[fid] || 0) + n;
+      });
+      sums.set(keyRaw, sumRec);
+    });
+
+    const aggregated: any[] = [];
+    groups.forEach((baseRow, key) => {
+      const sumRec = sums.get(key) || {};
+      Object.entries(sumRec).forEach(([fid, sum]) => {
+        (baseRow as any)[fid] = round2(sum);
+      });
+      aggregated.push(baseRow);
+    });
+    return aggregated;
+  }
+
+  private applyOrderBy(
+    rows: any[],
+    orderBy: { keys: Array<{ key: string; direction: 'asc' | 'desc' }> },
+    group: QuestionConfig,
+    opts?: { subConfig?: SubGroupConfig; subToken?: string }
+  ): any[] {
+    const keys = orderBy?.keys || [];
+    if (!rows || rows.length <= 1 || !keys.length) return rows || [];
+
+    const enriched = rows.map((row, idx) => ({ row, idx }));
+    const normalizedGroupId = (group?.id || '').toString().toUpperCase();
+    const subToken = (opts?.subToken || '').toString().toUpperCase();
+    const subConfig = opts?.subConfig;
+
+    const resolveFieldCfg = (fieldToken: string, scope: 'group' | 'sub'): any | undefined => {
+      const list = scope === 'sub' ? (subConfig as any)?.fields || [] : (group as any)?.lineItemConfig?.fields || [];
+      const tokenUpper = (fieldToken || '').toString().toUpperCase();
+      return (list || []).find((f: any) => {
+        const id = (f?.id || '').toString().toUpperCase();
+        const slug = this.slugifyPlaceholder((f?.labelEn || f?.id || '').toString());
+        return id === tokenUpper || slug === tokenUpper;
+      });
+    };
+
+    const getComparable = (rowData: any, key: string): { empty: boolean; num?: number; str?: string } => {
+      const rawKey = (key || '').toString().toUpperCase();
+      const segs = rawKey.split('.').filter(Boolean);
+
+      let scope: 'group' | 'sub' = subConfig ? 'sub' : 'group';
+      let fieldToken = '';
+      let fieldCfg: any | undefined;
+
+      if (segs.length === 1) {
+        fieldToken = segs[0];
+        if (subConfig) {
+          fieldCfg = resolveFieldCfg(fieldToken, 'sub') || resolveFieldCfg(fieldToken, 'group');
+          scope = resolveFieldCfg(fieldToken, 'sub') ? 'sub' : 'group';
+        } else {
+          fieldCfg = resolveFieldCfg(fieldToken, 'group');
+          scope = 'group';
+        }
+      } else if (segs.length === 2) {
+        const g = segs[0];
+        const f = segs[1];
+        if (g !== normalizedGroupId) {
+          fieldToken = f;
+          fieldCfg = subConfig ? resolveFieldCfg(fieldToken, 'sub') || resolveFieldCfg(fieldToken, 'group') : resolveFieldCfg(fieldToken, 'group');
+          scope = subConfig && resolveFieldCfg(fieldToken, 'sub') ? 'sub' : 'group';
+        } else {
+          fieldToken = f;
+          fieldCfg = resolveFieldCfg(fieldToken, 'group');
+          scope = 'group';
+        }
+      } else if (segs.length >= 3) {
+        const g = segs[0];
+        const s = segs[1];
+        const f = segs[2];
+        if (g === normalizedGroupId && subConfig && (s === subToken || s === this.slugifyPlaceholder(resolveSubgroupKey(subConfig as any) || ''))) {
+          fieldToken = f;
+          fieldCfg = resolveFieldCfg(fieldToken, 'sub');
+          scope = 'sub';
+        } else if (g === normalizedGroupId) {
+          fieldToken = f;
+          fieldCfg = resolveFieldCfg(fieldToken, 'group');
+          scope = 'group';
+        } else {
+          fieldToken = f;
+          fieldCfg = subConfig ? resolveFieldCfg(fieldToken, 'sub') || resolveFieldCfg(fieldToken, 'group') : resolveFieldCfg(fieldToken, 'group');
+          scope = subConfig && resolveFieldCfg(fieldToken, 'sub') ? 'sub' : 'group';
+        }
+      }
+
+      const rawVal = rowData ? rowData[fieldCfg?.id || fieldToken] : undefined;
+      if (rawVal === undefined || rawVal === null || rawVal === '') return { empty: true };
+      const fieldType = (fieldCfg as any)?.type || undefined;
+
+      // Dates: compare using ISO date when possible.
+      if (fieldType === 'DATE') {
+        const iso = this.normalizeToIsoDate(rawVal);
+        if (!iso) return { empty: true };
+        return { empty: false, str: iso };
+      }
+
+      // Numbers: numeric compare if possible
+      if (fieldType === 'NUMBER') {
+        const n = typeof rawVal === 'number' ? rawVal : Number.parseFloat(rawVal.toString());
+        if (Number.isNaN(n)) return { empty: true };
+        return { empty: false, num: n };
+      }
+
+      // Fallback: string compare
+      const text = Array.isArray(rawVal) ? rawVal.map(v => (v ?? '').toString()).join(', ') : rawVal.toString();
+      const trimmed = (text || '').toString().trim();
+      if (!trimmed) return { empty: true };
+      return { empty: false, str: trimmed.toLowerCase() };
+    };
+
+    const cmp = (a: { row: any; idx: number }, b: { row: any; idx: number }): number => {
+      for (const k of keys) {
+        const dir = k.direction === 'desc' ? -1 : 1;
+        const av = getComparable(a.row, k.key);
+        const bv = getComparable(b.row, k.key);
+        if (av.empty && bv.empty) continue;
+        if (av.empty && !bv.empty) return 1;
+        if (!av.empty && bv.empty) return -1;
+        if (av.num !== undefined && bv.num !== undefined) {
+          if (av.num < bv.num) return -1 * dir;
+          if (av.num > bv.num) return 1 * dir;
+          continue;
+        }
+        const as = (av.str || '').toString();
+        const bs = (bv.str || '').toString();
+        const sCmp = as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
+        if (sCmp !== 0) return sCmp * dir;
+      }
+      return a.idx - b.idx;
+    };
+
+    enriched.sort(cmp);
+    return enriched.map(e => e.row);
   }
 
   private extractLineItemPlaceholders(text: string): Array<{ groupId: string; subGroupId?: string; fieldId: string }> {

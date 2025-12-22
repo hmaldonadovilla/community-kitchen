@@ -482,6 +482,16 @@ export const FORM_VIEW_STYLES = `
           /* stronger separation between grouped cards */
           box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
         }
+        /* Summary view: softer, more report-like group headers (avoid "primary button" look). */
+        .ck-summary-view .ck-group-card {
+          box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+        }
+        .ck-summary-view .ck-group-header {
+          background: rgba(118, 118, 128, 0.06);
+        }
+        .ck-summary-view .ck-progress-pill {
+          background: rgba(118, 118, 128, 0.10);
+        }
         .ck-group-stack {
           display: flex;
           flex-direction: column;

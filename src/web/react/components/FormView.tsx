@@ -42,7 +42,6 @@ import { resolveGroupSectionKey } from './form/grouping';
 import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
-import { FORM_VIEW_STYLES } from './form/styles';
 import { applyValueMapsToForm, resolveValueMapValue } from './form/valueMaps';
 import {
   buildLineContextId,
@@ -2827,7 +2826,6 @@ const FormView: React.FC<FormViewProps> = ({
 
   return (
     <>
-      <style>{FORM_VIEW_STYLES}</style>
       <div className="ck-form-sections">
         {status ? (
           <div

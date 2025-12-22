@@ -154,14 +154,19 @@ export class DefinitionBuilder {
       pdf_url: 'pdfUrl',
       pdf: 'pdfUrl'
     };
-    if (!metaColumns || !metaColumns.length) return ['updatedAt'];
+    // Default meta columns when not configured:
+    // - undefined/null -> default to updatedAt
+    // - [] (explicit) -> show no meta columns
+    if (metaColumns === undefined || metaColumns === null) return ['updatedAt'];
+    if (!metaColumns.length) return [];
     const normalized = metaColumns
       .map(value => value && value.toString().trim().toLowerCase())
       .filter(Boolean)
       .map(key => allowedMap[key!] || '')
       .filter(Boolean);
     const unique = Array.from(new Set(normalized));
-    return unique.length ? unique : ['updatedAt'];
+    // If configured but nothing valid was provided, treat it as "no meta columns".
+    return unique;
   }
 
   private buildMetaColumnLabel(fieldId: string): LocalizedString {

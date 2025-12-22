@@ -27,6 +27,7 @@ import { AppHeader } from './components/app/AppHeader';
 import { BottomActionBar } from './components/app/BottomActionBar';
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
+import { FORM_VIEW_STYLES } from './components/form/styles';
 import { FormErrors, LineItemState, OptionState, View } from './types';
 import {
   buildDraftPayload,
@@ -81,7 +82,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     title: '',
     pdfPhase: 'idle'
   });
-  const reportPdfObjectUrlRef = useRef<string | null>(null);
+  const reportPdfObjectUrlsRef = useRef<string[]>([]);
   const reportPdfSeqRef = useRef<number>(0);
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<string | null>(null);
@@ -765,19 +766,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
       const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Report');
 
-      // Cleanup any prior in-memory preview URL.
-      const prevUrl = reportPdfObjectUrlRef.current;
-      if (prevUrl) {
-        reportPdfObjectUrlRef.current = null;
-        try {
-          URL.revokeObjectURL(prevUrl);
-        } catch (_) {
-          // ignore
-        }
-      }
-
       setReportOverlay(prev => ({
         ...(prev || { title: '' }),
+        // Keep the report generation inside the app (iOS suspends background tabs and can stall callbacks).
         open: true,
         buttonId,
         title,
@@ -822,14 +813,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
         const mimeType = (res.mimeType || 'application/pdf').toString();
         const objectUrl = base64ToPdfObjectUrl(res.pdfBase64, mimeType);
-        reportPdfObjectUrlRef.current = objectUrl;
+        reportPdfObjectUrlsRef.current.push(objectUrl);
+        // Keep a small buffer of recent object URLs so multiple opened PDFs keep working.
+        // Revoke the oldest ones to avoid unbounded memory growth.
+        while (reportPdfObjectUrlsRef.current.length > 4) {
+          const old = reportPdfObjectUrlsRef.current.shift();
+          if (old) {
+            try {
+              URL.revokeObjectURL(old);
+            } catch (_) {
+              // ignore
+            }
+          }
+        }
+
+        const fileName = (res.fileName || 'report.pdf').toString();
+        // Show overlay with Open/Download buttons (no embedded preview).
         setReportOverlay(prev => {
-          if (!prev?.open || prev.buttonId !== buttonId) return prev;
+          if (prev?.buttonId !== buttonId) return prev;
           return {
             ...prev,
+            open: true,
             pdfPhase: 'ready',
             pdfObjectUrl: objectUrl,
-            pdfFileName: (res.fileName || 'report.pdf').toString(),
+            pdfFileName: fileName,
             pdfMessage: undefined
           };
         });
@@ -837,9 +844,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       } catch (err: any) {
         if (seq !== reportPdfSeqRef.current) return;
         const msg = (err?.message || err?.toString?.() || 'Failed to generate PDF preview.').toString();
+        // Always surface errors in-app as well.
         setReportOverlay(prev => {
-          if (!prev?.open || prev.buttonId !== buttonId) return prev;
-          return { ...prev, pdfPhase: 'error', pdfMessage: msg };
+          if (prev?.buttonId !== buttonId) return prev;
+          return { ...prev, open: true, pdfPhase: 'error', pdfMessage: msg };
         });
         logEvent('report.pdfPreview.exception', { buttonId, message: msg });
       }
@@ -848,7 +856,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   );
 
   const openReport = useCallback(
-    async (buttonId: string) => {
+    (buttonId: string) => {
       void generateReportPdfPreview(buttonId);
     },
     [generateReportPdfPreview]
@@ -857,15 +865,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const closeReportOverlay = useCallback(() => {
     // Cancel any in-flight report request so late responses can't re-open/overwrite the overlay.
     reportPdfSeqRef.current += 1;
-    const prevUrl = reportPdfObjectUrlRef.current;
-    if (prevUrl) {
-      reportPdfObjectUrlRef.current = null;
-      try {
-        URL.revokeObjectURL(prevUrl);
-      } catch (_) {
-        // ignore
-      }
-    }
     setReportOverlay(prev => ({
       ...(prev || { title: '' }),
       open: false,
@@ -1540,6 +1539,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           : undefined
       }
     >
+      <style>{FORM_VIEW_STYLES}</style>
       <AppHeader
         title={definition.title || 'Form'}
         buildMarker={BUILD_MARKER}

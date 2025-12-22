@@ -25,10 +25,11 @@ export const GroupCard: React.FC<GroupCardProps> = ({
 }) => {
   const resolvedTitle = (title || '').toString().trim();
   const showHeader = !!resolvedTitle;
-  const complete = progress?.complete ?? 0;
-  const total = progress?.total ?? 0;
+  const showProgress = !!progress && typeof progress.complete === 'number' && typeof progress.total === 'number';
+  const complete = showProgress ? progress.complete : 0;
+  const total = showProgress ? progress.total : 0;
   const progressClass =
-    total > 0 ? (complete >= total ? 'ck-progress-good' : 'ck-progress-bad') : 'ck-progress-neutral';
+    showProgress && total > 0 ? (complete >= total ? 'ck-progress-good' : 'ck-progress-bad') : 'ck-progress-neutral';
 
   if (!showHeader) {
     return (
@@ -46,17 +47,19 @@ export const GroupCard: React.FC<GroupCardProps> = ({
           className="ck-group-header ck-group-header--clickable"
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} section ${resolvedTitle} (${complete}/${total} required complete)`}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} section ${resolvedTitle}${showProgress && total > 0 ? ` (${complete}/${total} required complete)` : ''}`}
         >
           <div className="ck-group-title">{resolvedTitle}</div>
           <span
             className={`ck-progress-pill ${progressClass}`}
-            title={`${complete}/${total} required complete`}
+            title={showProgress && total > 0 ? `${complete}/${total} required complete` : `${collapsed ? 'Expand' : 'Collapse'} ${resolvedTitle}`}
             aria-hidden="true"
           >
-            <span>
-              {complete}/{total}
-            </span>
+            {showProgress && total > 0 ? (
+              <span>
+                {complete}/{total}
+              </span>
+            ) : null}
             <span className="ck-progress-caret">{collapsed ? '▸' : '▾'}</span>
           </span>
         </button>

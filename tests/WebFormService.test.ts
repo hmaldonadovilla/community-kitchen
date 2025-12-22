@@ -122,6 +122,26 @@ describe('WebFormService', () => {
     expect(metaCols).toEqual(['createdAt', 'status']);
   });
 
+  test('listViewMetaColumns: [] disables meta columns (no Updated column)', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
+    if (!dashboardSheet) throw new Error('Dashboard not created');
+
+    const followupJson = JSON.stringify({
+      listViewMetaColumns: []
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson]
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const def = service.buildDefinition('Config: Delivery');
+    const metaCols = def.listView?.columns.filter(col => col.kind === 'meta').map(col => col.fieldId) || [];
+    expect(metaCols).toEqual([]);
+  });
+
   test('triggerFollowupAction sends emails using data source recipients', () => {
     const followups = (service as any).followups || (service as any);
     jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
