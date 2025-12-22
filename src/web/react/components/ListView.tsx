@@ -371,6 +371,7 @@ const ListView: React.FC<ListViewProps> = ({
                 rel="noopener noreferrer"
                 className="truncate-link"
                 title={u}
+                onClick={e => e.stopPropagation()}
               >
                 {u.split('/').pop() || u}
               </a>
@@ -382,7 +383,14 @@ const ListView: React.FC<ListViewProps> = ({
       if (urls.length === 1) {
         const href = urls[0];
         return (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="truncate-link" title={title}>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="truncate-link"
+            title={title}
+            onClick={e => e.stopPropagation()}
+          >
             {text}
           </a>
         );
@@ -391,7 +399,14 @@ const ListView: React.FC<ListViewProps> = ({
     const isLink = typeof value === 'string' && /^https?:\/\//i.test(value);
     if (isLink) {
       return (
-        <a href={value as string} target="_blank" rel="noopener noreferrer" className="truncate-link" title={title}>
+        <a
+          href={value as string}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="truncate-link"
+          title={title}
+          onClick={e => e.stopPropagation()}
+        >
           {text}
         </a>
       );

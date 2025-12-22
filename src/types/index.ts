@@ -30,6 +30,8 @@ export type ButtonPlacement = 'form' | 'formSummaryMenu' | 'summaryBar';
 
 export type ButtonOutput = 'pdf';
 
+export type ButtonPreviewMode = 'pdf' | 'live';
+
 /**
  * UI-only button field.
  *
@@ -49,6 +51,13 @@ export interface ButtonConfig {
    * Output format. Currently only PDF.
    */
   output?: ButtonOutput;
+  /**
+   * Preview mode for the web app overlay.
+   * - pdf: clicking the button immediately renders a PDF (current behavior)
+   * - live: clicking the button opens a fast in-app preview (no Drive files),
+   *   and the user can optionally generate a PDF on demand.
+   */
+  previewMode?: ButtonPreviewMode;
   /**
    * Where this button should surface in the web UI.
    * - form: rendered inline as a normal field in the form view
@@ -602,6 +611,18 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   autoSave?: AutoSaveConfig;
+  /**
+   * Enable/disable the Summary view in the React web app.
+   * When false, list-row clicks always open the Form view (closed records will be read-only).
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  summaryViewEnabled?: boolean;
+  /**
+   * Enable/disable the "Copy current record" action in the React web app.
+   * When false, the Create button always creates a new record (no copy option).
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  copyCurrentRecordEnabled?: boolean;
 }
 
 export interface FormResult {
@@ -679,6 +700,16 @@ export interface WebFormDefinition {
    * Optional draft autosave behavior for the web edit view.
    */
   autoSave?: AutoSaveConfig;
+  /**
+   * Enable/disable the Summary view in the React web app.
+   * When false, list-row clicks always open the Form view (closed records will be read-only).
+   */
+  summaryViewEnabled?: boolean;
+  /**
+   * Enable/disable the "Copy current record" action in the React web app.
+   * When false, the Create button always creates a new record (no copy option).
+   */
+  copyCurrentRecordEnabled?: boolean;
 }
 
 export interface WebFormSubmission {

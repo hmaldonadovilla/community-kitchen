@@ -694,7 +694,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 ### Report buttons (BUTTON fields)
 
-Use `BUTTON` questions to render a Google Doc template (with the placeholders above) into a PDF preview from the web app.
+Use `BUTTON` questions to render a Google Doc template (with the placeholders above) into an in-app **PDF preview** from the web app.
+The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written).
 
 - **Config (JSON/REF)** example:
 
@@ -708,6 +709,10 @@ Use `BUTTON` questions to render a Google Doc template (with the placeholders ab
     }
   }
   ```
+
+- **Preview mode**:
+  - `previewMode` is **deprecated/ignored** and kept only for backward compatibility.
+  - The current UI always opens an **in-app PDF preview** (generated in-memory; no Drive PDF file).
 
 - **Placements**:
   - `form`: render inline as a normal field in the edit form.
@@ -723,6 +728,17 @@ Use `BUTTON` questions to render a Google Doc template (with the placeholders ab
     - **List**: Home + Create (Create opens a new record and sends you to the Form).
     - **Summary**: Home + Create (Create opens a menu: New record / Copy current record).
     - **Form**: Home + Create (menu: New / Copy) + Summary + Submit.
+
+- **Optional: disable Summary view**:
+  - In the dashboard “Follow-up Config (JSON)” column, set `"summaryViewEnabled": false`.
+  - Behavior when disabled:
+    - Clicking a record in the list always opens the **Form** view (Closed records are read-only).
+    - The Summary action in the bottom bar is hidden; if report buttons are configured for the form summary menu, a **Reports** menu is shown instead.
+
+- **Optional: disable “Copy current record”**:
+  - In the dashboard “Follow-up Config (JSON)” column, set `"copyCurrentRecordEnabled": false`.
+  - Behavior when disabled:
+    - The Create button always starts a **New record** (no copy option).
 
 ## 7. Generate All Forms
 

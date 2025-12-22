@@ -107,6 +107,8 @@ export class Dashboard {
       const followupConfig = dashboardConfig?.followup;
       const listViewMetaColumns = dashboardConfig?.listViewMetaColumns;
       const autoSave = dashboardConfig?.autoSave;
+      const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
+      const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
       if (title && configSheetName) {
         forms.push({
           title,
@@ -118,7 +120,9 @@ export class Dashboard {
           rowIndex: dataStartRow + index,
           followupConfig,
           listViewMetaColumns,
-          autoSave
+          autoSave,
+          summaryViewEnabled,
+          copyCurrentRecordEnabled
         });
       }
     });
@@ -145,7 +149,13 @@ export class Dashboard {
 
   private parseDashboardConfig(
     raw: any
-  ): { followup?: FollowupConfig; listViewMetaColumns?: string[]; autoSave?: AutoSaveConfig } | undefined {
+  ): {
+    followup?: FollowupConfig;
+    listViewMetaColumns?: string[];
+    autoSave?: AutoSaveConfig;
+    summaryViewEnabled?: boolean;
+    copyCurrentRecordEnabled?: boolean;
+  } | undefined {
     if (!raw || (typeof raw === 'string' && raw.trim() === '')) return undefined;
     const value = raw.toString().trim();
     let parsed: any;
@@ -161,8 +171,30 @@ export class Dashboard {
       parsed.listViewMetaColumns || parsed.listViewDefaults || parsed.defaultListFields
     );
     const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
-    if (!followup && (!listViewMetaColumns || !listViewMetaColumns.length) && !autoSave) return undefined;
-    return { followup, listViewMetaColumns, autoSave };
+    const summaryViewEnabled = (() => {
+      if (parsed.summaryViewEnabled !== undefined) return Boolean(parsed.summaryViewEnabled);
+      if (parsed.summaryView !== undefined) return Boolean(parsed.summaryView);
+      if (parsed.summary !== undefined) return Boolean(parsed.summary);
+      if (parsed.disableSummaryView !== undefined) return !Boolean(parsed.disableSummaryView);
+      return undefined;
+    })();
+    const copyCurrentRecordEnabled = (() => {
+      if (parsed.copyCurrentRecordEnabled !== undefined) return Boolean(parsed.copyCurrentRecordEnabled);
+      if (parsed.copyEnabled !== undefined) return Boolean(parsed.copyEnabled);
+      if (parsed.disableCopyCurrentRecord !== undefined) return !Boolean(parsed.disableCopyCurrentRecord);
+      if (parsed.disableCopy !== undefined) return !Boolean(parsed.disableCopy);
+      return undefined;
+    })();
+    if (
+      !followup &&
+      (!listViewMetaColumns || !listViewMetaColumns.length) &&
+      !autoSave &&
+      summaryViewEnabled === undefined &&
+      copyCurrentRecordEnabled === undefined
+    ) {
+      return undefined;
+    }
+    return { followup, listViewMetaColumns, autoSave, summaryViewEnabled, copyCurrentRecordEnabled };
   }
 
   private normalizeAutoSave(value: any): AutoSaveConfig | undefined {

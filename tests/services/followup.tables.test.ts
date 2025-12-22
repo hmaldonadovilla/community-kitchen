@@ -46,6 +46,13 @@ describe('FollowupService table directives', () => {
       'Dinner'
     );
   });
+
+  it('formats DATE fields as EEE, dd-MMM-yyyy', () => {
+    const service = makeService() as any;
+    expect(service.formatTemplateValue('2025-12-21', 'DATE')).toBe('Sun, 21-Dec-2025');
+    // Non-DATE fields should keep the raw ISO date string.
+    expect(service.formatTemplateValue('2025-12-21')).toBe('2025-12-21');
+  });
 });
 
 

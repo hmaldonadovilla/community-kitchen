@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { buttonStyles } from '../form/ui';
 import { FullPageOverlay } from '../form/overlays/FullPageOverlay';
 
@@ -7,20 +7,66 @@ export type ReportOverlayState = {
   buttonId?: string;
   title: string;
   subtitle?: string;
-  phase: 'idle' | 'rendering' | 'ready' | 'error';
-  pdfUrl?: string;
-  fileId?: string;
-  message?: string;
+  pdfPhase?: 'idle' | 'rendering' | 'ready' | 'error';
+  pdfObjectUrl?: string;
+  pdfFileName?: string;
+  pdfMessage?: string;
 };
 
 export const ReportOverlay: React.FC<{
   state: ReportOverlayState;
   onClose: () => void;
 }> = ({ state, onClose }) => {
-  const { open, title, subtitle, phase, pdfUrl, fileId, message } = state;
+  const {
+    open,
+    title,
+    subtitle,
+    pdfPhase,
+    pdfMessage,
+    pdfObjectUrl,
+    pdfFileName
+  } = state;
   if (!open) return null;
 
-  const previewUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : '';
+  const headerActions = useMemo(() => {
+    const actions: React.ReactNode[] = [];
+    if (pdfObjectUrl) {
+      actions.push(
+        <a
+          key="open"
+          href={pdfObjectUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            ...buttonStyles.secondary,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textDecoration: 'none'
+          }}
+        >
+          Open
+        </a>
+      );
+      actions.push(
+        <a
+          key="download"
+          href={pdfObjectUrl}
+          download={pdfFileName || 'report.pdf'}
+          style={{
+            ...buttonStyles.secondary,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textDecoration: 'none'
+          }}
+        >
+          Download
+        </a>
+      );
+    }
+    return actions;
+  }, [pdfFileName, pdfObjectUrl]);
 
   return (
     <FullPageOverlay
@@ -35,51 +81,16 @@ export const ReportOverlay: React.FC<{
       }
     >
       <div style={{ padding: 16, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {phase === 'rendering' && <div className="status">Rendering…</div>}
-        {phase === 'error' && <div className="error">{message || 'Failed to render report.'}</div>}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{headerActions}</div>
 
-        {phase === 'ready' && (pdfUrl || fileId) && (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {pdfUrl ? (
-              <a
-                href={pdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  ...buttonStyles.secondary,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textDecoration: 'none'
-                }}
-              >
-                Open PDF
-              </a>
-            ) : null}
-            {fileId ? (
-              <a
-                href={previewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  ...buttonStyles.secondary,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textDecoration: 'none'
-                }}
-              >
-                Open preview
-              </a>
-            ) : null}
-          </div>
-        )}
+        {pdfPhase === 'rendering' && <div className="status">Generating PDF…</div>}
+        {pdfPhase === 'error' && <div className="error">{pdfMessage || 'Failed to generate PDF.'}</div>}
 
-        {phase === 'ready' && fileId ? (
+        {pdfPhase === 'ready' && pdfObjectUrl ? (
           <div style={{ flex: 1, minHeight: 0 }}>
             <iframe
-              title={title || 'Report preview'}
-              src={previewUrl}
+              title={title || 'PDF preview'}
+              src={pdfObjectUrl}
               style={{
                 width: '100%',
                 height: '100%',
@@ -89,10 +100,6 @@ export const ReportOverlay: React.FC<{
               }}
             />
           </div>
-        ) : null}
-
-        {phase === 'ready' && !fileId && pdfUrl ? (
-          <div className="muted">Preview not available. Use “Open PDF”.</div>
         ) : null}
       </div>
     </FullPageOverlay>

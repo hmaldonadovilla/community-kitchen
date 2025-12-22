@@ -342,6 +342,131 @@ export class FollowupService {
     return { success: artifact.success, message: artifact.message, url: artifact.url, fileId: artifact.fileId };
   }
 
+  /**
+   * Render a Google Doc template (with placeholders + line-item table directives) into an in-memory PDF (base64).
+   * This avoids embedding Drive/Docs preview pages (which can be blocked by CSP) and does not persist a PDF file.
+   *
+   * NOTE: This still creates a temporary Doc copy to safely apply placeholders/directives, then trashes it.
+   */
+  public renderPdfBytesFromTemplate(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    record: WebFormSubmission;
+    templateIdMap: TemplateIdMap;
+    namePrefix?: string;
+  }): { success: boolean; message?: string; pdfBase64?: string; mimeType?: string; fileName?: string } {
+    const { form, questions, record, templateIdMap, namePrefix } = args;
+    try {
+      const rendered = this.renderDocCopyFromTemplate({
+        form,
+        questions,
+        record,
+        templateIdMap,
+        namePrefix: `${namePrefix || form.title || 'Form'} - Preview`,
+        copyFolder: DriveApp.getRootFolder()
+      });
+      if (!rendered.success || !rendered.copy || !rendered.copyName) {
+        return { success: false, message: rendered.message || 'Failed to render template.' };
+      }
+      const pdfBlob = rendered.copy.getAs('application/pdf');
+      const bytes = pdfBlob.getBytes();
+      const pdfBase64 = Utilities.base64Encode(bytes);
+      const fileName = `${rendered.copyName}.pdf`;
+      rendered.copy.setTrashed(true);
+      return { success: true, pdfBase64, mimeType: 'application/pdf', fileName };
+    } catch (err) {
+      debugLog('followup.pdfBytes.failed', { error: err ? err.toString() : 'unknown' });
+      return { success: false, message: 'Failed to generate PDF preview.' };
+    }
+  }
+
+  /**
+   * Render a Google Doc template (with placeholders + line-item table directives) into a temporary Doc copy
+   * and return a preview URL for embedding in the web app.
+   *
+   * Why this exists:
+   * - Drive export does NOT support converting Google Docs to HTML/ZIP via API.
+   * - Using the Google Docs/Drive preview iframe gives perfect fidelity with the template formatting.
+   *
+   * IMPORTANT: This method does create a temporary Doc file. Callers should clean it up when done.
+   */
+  public renderDocPreviewFromTemplate(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    record: WebFormSubmission;
+    templateIdMap: TemplateIdMap;
+    folderId?: string;
+    namePrefix?: string;
+  }): { success: boolean; message?: string; fileId?: string; previewUrl?: string } {
+    const { form, questions, record, templateIdMap, folderId, namePrefix } = args;
+    try {
+      const folder = this.resolveOutputFolder(folderId, form.followupConfig);
+      const rendered = this.renderDocCopyFromTemplate({
+        form,
+        questions,
+        record,
+        templateIdMap,
+        namePrefix: `${namePrefix || form.title || 'Form'} - Preview`,
+        copyFolder: folder
+      });
+      if (!rendered.success || !rendered.copy) {
+        return { success: false, message: rendered.message || 'Failed to render template.' };
+      }
+      const fileId = rendered.copy.getId();
+      // Use Google Docs' preview URL for iframe embedding.
+      // Drive preview pages may set CSP frame-ancestors restrictions that block embedding from Apps Script web apps.
+      const previewUrl = `https://docs.google.com/document/d/${fileId}/preview`;
+      return { success: true, fileId, previewUrl };
+    } catch (err) {
+      const errText = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to render preview.';
+      debugLog('followup.docPreview.failed', { error: errText });
+      return { success: false, message: errText };
+    }
+  }
+
+  /**
+   * Render a Google Doc template (with placeholders + line-item table directives) into a self-contained HTML string.
+   *
+   * Notes:
+   * - This does NOT create any Drive artifacts (no PDF files).
+   * - Internally it still makes a temporary Doc copy in Drive (required to safely mutate the template),
+   *   exports it to HTML, inlines any zipped assets (e.g., images), and then trashes the temporary copy.
+   */
+  public renderHtmlFromTemplate(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    record: WebFormSubmission;
+    templateIdMap: TemplateIdMap;
+    namePrefix?: string;
+  }): { success: boolean; message?: string; html?: string } {
+    const rendered = this.renderDocCopyFromTemplate({
+      form: args.form,
+      questions: args.questions,
+      record: args.record,
+      templateIdMap: args.templateIdMap,
+      namePrefix: args.namePrefix,
+      copyFolder: DriveApp.getRootFolder()
+    });
+    if (!rendered.success || !rendered.copy) {
+      return { success: false, message: rendered.message || 'Failed to render template.' };
+    }
+
+    try {
+      const html = this.exportDocFileToHtml(rendered.copy);
+      rendered.copy.setTrashed(true);
+      return { success: true, html };
+    } catch (err) {
+      try {
+        rendered.copy.setTrashed(true);
+      } catch (_) {
+        // ignore
+      }
+      const errText = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to export HTML.';
+      debugLog('followup.html.failed', { error: errText });
+      return { success: false, message: errText };
+    }
+  }
+
   private renderPdfArtifactFromTemplate(args: {
     form: FormConfig;
     questions: QuestionConfig[];
@@ -351,33 +476,182 @@ export class FollowupService {
     namePrefix?: string;
   }): { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob } {
     const { form, questions, record, templateIdMap, folderId, namePrefix } = args;
+    try {
+      const folder = this.resolveOutputFolder(folderId, form.followupConfig);
+      const rendered = this.renderDocCopyFromTemplate({
+        form,
+        questions,
+        record,
+        templateIdMap,
+        namePrefix,
+        copyFolder: folder
+      });
+      if (!rendered.success || !rendered.copy || !rendered.copyName) {
+        return { success: false, message: rendered.message || 'Failed to render template.' };
+      }
+      const pdfBlob = rendered.copy.getAs('application/pdf');
+      const copyName = rendered.copyName;
+      const pdfFile = folder.createFile(pdfBlob).setName(`${copyName}.pdf`);
+      rendered.copy.setTrashed(true);
+      return { success: true, url: pdfFile.getUrl(), fileId: pdfFile.getId(), blob: pdfBlob };
+    } catch (err) {
+      debugLog('followup.pdf.failed', { error: err ? err.toString() : 'unknown' });
+      return { success: false, message: 'Failed to generate PDF.' };
+    }
+  }
+
+  private renderDocCopyFromTemplate(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    record: WebFormSubmission;
+    templateIdMap: TemplateIdMap;
+    namePrefix?: string;
+    copyFolder: GoogleAppsScript.Drive.Folder;
+  }): { success: boolean; message?: string; copy?: GoogleAppsScript.Drive.File; copyName?: string } {
+    const { form, questions, record, templateIdMap, namePrefix, copyFolder } = args;
     const templateId = this.resolveTemplateId(templateIdMap, record.language);
     if (!templateId) {
       return { success: false, message: 'No template matched the submission language.' };
     }
     try {
       const templateFile = DriveApp.getFileById(templateId);
-      const folder = this.resolveOutputFolder(folderId, form.followupConfig);
       const copyName = `${namePrefix || form.title || 'Form'} - ${record.id || this.generateUuid()}`;
-      const copy = templateFile.makeCopy(copyName, folder);
+      const copy = templateFile.makeCopy(copyName, copyFolder);
       const doc = DocumentApp.openById(copy.getId());
       const lineItemRows = this.collectLineItemRows(record, questions);
       const placeholders = this.buildPlaceholderMap(record, questions, lineItemRows);
       this.addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
       this.renderLineItemTables(doc, questions, lineItemRows);
       const body = doc.getBody();
+      const header = doc.getHeader();
+      const footer = doc.getFooter();
+      const targets: any[] = [body];
+      if (header) targets.push(header as any);
+      if (footer) targets.push(footer as any);
+
+      // Replace placeholders across the full document, including header/footer (common for distributor/address blocks).
       Object.entries(placeholders).forEach(([token, value]) => {
-        body.replaceText(this.escapeRegExp(token), value ?? '');
+        const pattern = this.escapeRegExp(token);
+        targets.forEach(t => {
+          try {
+            if (t && typeof t.replaceText === 'function') {
+              t.replaceText(pattern, value ?? '');
+            } else if (t && typeof t.editAsText === 'function') {
+              t.editAsText().replaceText(pattern, value ?? '');
+            }
+          } catch (_) {
+            // ignore best-effort replacement errors in non-text containers
+          }
+        });
       });
       doc.saveAndClose();
-      const pdfBlob = copy.getAs('application/pdf');
-      const pdfFile = folder.createFile(pdfBlob).setName(`${copyName}.pdf`);
-      copy.setTrashed(true);
-      return { success: true, url: pdfFile.getUrl(), fileId: pdfFile.getId(), blob: pdfBlob };
+      return { success: true, copy, copyName };
     } catch (err) {
-      debugLog('followup.pdf.failed', { error: err ? err.toString() : 'unknown' });
-      return { success: false, message: 'Failed to generate PDF.' };
+      debugLog('followup.renderDocCopy.failed', { error: err ? err.toString() : 'unknown' });
+      return { success: false, message: 'Failed to render template.' };
     }
+  }
+
+  private exportDocFileToHtml(file: GoogleAppsScript.Drive.File): string {
+    // Prefer Drive export API (DriveApp.getAs('text/html') is not reliably supported for Google Docs).
+    const fileId = file.getId();
+    try {
+      // Google Docs "web page" export is delivered as a ZIP containing index.html + assets.
+      // Drive does NOT support converting Docs directly to text/html.
+      const res = this.fetchDriveExport(fileId, 'application/zip');
+      const blob = res.getBlob();
+      const contentType = (blob.getContentType() || '').toString().toLowerCase();
+      if (contentType.includes('zip')) {
+        return this.exportHtmlZipToSelfContainedHtml(blob);
+      }
+      const html = (res.getContentText ? res.getContentText() : '') || blob.getDataAsString();
+      return this.stripUnsafeHtml(html);
+    } catch (err) {
+      // Fallback attempt (may still work for some deployments/templates).
+      try {
+        const blob = file.getAs('application/zip');
+        const contentType = (blob.getContentType() || '').toString().toLowerCase();
+        if (contentType.includes('zip')) {
+          return this.exportHtmlZipToSelfContainedHtml(blob);
+        }
+        return this.stripUnsafeHtml(blob.getDataAsString());
+      } catch (err2) {
+        const errText =
+          (err2 as any)?.message?.toString?.() ||
+          (err2 as any)?.toString?.() ||
+          (err as any)?.message?.toString?.() ||
+          (err as any)?.toString?.() ||
+          'Failed to export HTML.';
+        throw new Error(errText);
+      }
+    }
+  }
+
+  private fetchDriveExport(fileId: string, mimeType: string): GoogleAppsScript.URL_Fetch.HTTPResponse {
+    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(
+      mimeType
+    )}`;
+    const res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      muteHttpExceptions: true,
+      headers: {
+        Authorization: `Bearer ${ScriptApp.getOAuthToken()}`
+      }
+    });
+    const code = res.getResponseCode();
+    if (code < 200 || code >= 300) {
+      const body = (res.getContentText ? res.getContentText() : '').toString();
+      const snippet = body.length > 600 ? body.slice(0, 600) + '…' : body;
+      throw new Error(`Drive export failed (${code}). ${snippet || ''}`.trim());
+    }
+    return res;
+  }
+
+  private exportHtmlZipToSelfContainedHtml(zipBlob: GoogleAppsScript.Base.Blob): string {
+    const parts = Utilities.unzip(zipBlob);
+    const htmlBlob =
+      parts.find(p => (p.getName() || '').toString().toLowerCase().endsWith('.html')) ||
+      parts.find(p => (p.getContentType() || '').toString().toLowerCase().includes('html')) ||
+      parts[0];
+    if (!htmlBlob) return '';
+    let html = htmlBlob.getDataAsString();
+    const assetBlobs = parts.filter(p => p !== htmlBlob);
+    if (assetBlobs.length) {
+      html = this.inlineZipAssetsAsDataUris(html, assetBlobs);
+    }
+    return this.stripUnsafeHtml(html);
+  }
+
+  private inlineZipAssetsAsDataUris(html: string, assets: GoogleAppsScript.Base.Blob[]): string {
+    let out = html || '';
+    const mapping: Record<string, string> = {};
+    assets.forEach(b => {
+      const nameRaw = (b.getName() || '').toString();
+      const name = nameRaw.trim();
+      if (!name) return;
+      const mime = (b.getContentType() || 'application/octet-stream').toString();
+      const b64 = Utilities.base64Encode(b.getBytes());
+      const dataUri = `data:${mime};base64,${b64}`;
+      mapping[name] = dataUri;
+      const base = name.split('/').pop() || name.split('\\').pop() || name;
+      mapping[base] = dataUri;
+    });
+
+    Object.entries(mapping).forEach(([assetName, dataUri]) => {
+      if (!assetName) return;
+      const token = this.escapeRegExp(assetName);
+      // Replace common relative path references (src/href) with data URIs.
+      out = out.replace(new RegExp(`(["'])\\.?\\/?${token}\\1`, 'g'), `$1${dataUri}$1`);
+      out = out.replace(new RegExp(`(["'])images\\/${token}\\1`, 'g'), `$1${dataUri}$1`);
+    });
+    return out;
+  }
+
+  private stripUnsafeHtml(html: string): string {
+    const raw = (html || '').toString();
+    if (!raw) return '';
+    // Defensive: Docs export should already be safe, but never allow script tags in the embedded preview.
+    return raw.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
   }
 
   private resolveOutputFolder(folderId?: string, followup?: FollowupConfig): GoogleAppsScript.Drive.Folder {
@@ -427,17 +701,16 @@ export class FollowupService {
     questions.forEach(q => {
       if (q.type === 'BUTTON') return;
       const value = record.values ? record.values[q.id] : '';
-      const formatted = this.formatTemplateValue(value);
-      this.addPlaceholderVariants(map, q.id, formatted);
+      this.addPlaceholderVariants(map, q.id, value, q.type);
       const labelToken = this.slugifyPlaceholder(q.qEn || q.id);
-      this.addPlaceholderVariants(map, labelToken, formatted);
+      this.addPlaceholderVariants(map, labelToken, value, q.type);
       if (q.type === 'LINE_ITEM_GROUP') {
         const rows = lineItemRows[q.id] || [];
         (q.lineItemConfig?.fields || []).forEach(field => {
           const values = rows
             .map(row => row[field.id])
             .filter(val => val !== undefined && val !== null && val !== '')
-            .map(val => this.formatTemplateValue(val));
+            .map(val => this.formatTemplateValue(val, (field as any).type));
           if (!values.length) return;
           const joined = values.join('\n');
           this.addPlaceholderVariants(map, `${q.id}.${field.id}`, joined);
@@ -457,10 +730,9 @@ export class FollowupService {
               (sub.fields || []).forEach(field => {
                 const raw = subRow?.[field.id];
                 if (raw === undefined || raw === null || raw === '') return;
-                const text = this.formatTemplateValue(raw);
-                this.addPlaceholderVariants(map, `${q.id}.${subKey}.${field.id}`, text);
+                this.addPlaceholderVariants(map, `${q.id}.${subKey}.${field.id}`, raw, (field as any).type);
                 const slug = this.slugifyPlaceholder(field.labelEn || field.id);
-                this.addPlaceholderVariants(map, `${q.id}.${subKey}.${slug}`, text);
+                this.addPlaceholderVariants(map, `${q.id}.${subKey}.${slug}`, raw, (field as any).type);
               });
             });
           });
@@ -535,7 +807,7 @@ export class FollowupService {
             rows
               .map(row => row[field.id])
               .filter(val => val !== undefined && val !== null && val !== '')
-              .map(val => this.formatTemplateValue(val))
+                .map(val => this.formatTemplateValue(val, (field as any).type))
           )
         );
         if (!unique.length) return;
@@ -556,7 +828,7 @@ export class FollowupService {
             (sub.fields || []).forEach(field => {
               const raw = subRow?.[field.id];
               if (raw === undefined || raw === null || raw === '') return;
-              const text = this.formatTemplateValue(raw);
+              const text = this.formatTemplateValue(raw, (field as any).type);
               if (!collected[field.id]) collected[field.id] = new Set<string>();
               collected[field.id].add(text);
               const slug = this.slugifyPlaceholder(field.labelEn || field.id);
@@ -680,7 +952,10 @@ export class FollowupService {
     }
     rows.forEach((rowData, idx) => {
       const newTable = body.insertTable(childIndex + idx, preservedTemplate.copy());
-      const title = this.formatTemplateValue(rowData?.[directive.fieldId] ?? '');
+      const titleFieldCfg = (group.lineItemConfig?.fields || []).find(
+        f => ((f as any)?.id || '').toString().toUpperCase() === (directive.fieldId || '').toString().toUpperCase()
+      ) as any;
+      const title = this.formatTemplateValue(rowData?.[directive.fieldId] ?? '', titleFieldCfg?.type);
       this.replaceTableRepeatDirectivePlaceholders(newTable, directive, title, 'ROW_TABLE');
       // Render this table for exactly one parent row (so the key/value rows don't duplicate when titles repeat).
       this.renderTableRows(newTable, groupLookup, lineItemRows, { groupId: group.id, rows: [rowData] });
@@ -1042,7 +1317,7 @@ export class FollowupService {
     const normalizedGroupId = group.id.toUpperCase();
     const replacements: Record<string, string> = {};
     (group.lineItemConfig?.fields || []).forEach(field => {
-      const text = this.formatTemplateValue(rowData ? rowData[field.id] : '');
+      const text = this.formatTemplateValue(rowData ? rowData[field.id] : '', (field as any).type);
       const tokens = [
         `${normalizedGroupId}.${field.id.toUpperCase()}`,
         `${normalizedGroupId}.${this.slugifyPlaceholder(field.labelEn || field.id)}`
@@ -1056,7 +1331,7 @@ export class FollowupService {
       const subToken = opts.subGroupToken || this.slugifyPlaceholder(subKeyRaw);
       const normalizedSubKey = subToken.toUpperCase();
       (opts.subGroup.fields || []).forEach((field: any) => {
-        const text = this.formatTemplateValue(rowData ? rowData[field.id] : '');
+        const text = this.formatTemplateValue(rowData ? rowData[field.id] : '', (field as any).type);
         const tokens = [
           `${normalizedGroupId}.${normalizedSubKey}.${field.id.toUpperCase()}`,
           `${normalizedGroupId}.${normalizedSubKey}.${this.slugifyPlaceholder(field.labelEn || field.id)}`
@@ -1113,7 +1388,7 @@ export class FollowupService {
         children.forEach((child: any) => {
           const raw = child?.[fieldCfg.id];
           if (raw === undefined || raw === null || raw === '') return;
-          const text = this.formatTemplateValue(raw).trim();
+          const text = this.formatTemplateValue(raw, (fieldCfg as any).type).trim();
           if (!text || seen.has(text)) return;
           seen.add(text);
           ordered.push(text);
@@ -1123,8 +1398,13 @@ export class FollowupService {
     );
   }
 
-  private formatTemplateValue(value: any): string {
+  private formatTemplateValue(value: any, fieldType?: string): string {
     if (value === undefined || value === null) return '';
+    if (fieldType === 'DATE') {
+      const iso = this.normalizeToIsoDate(value);
+      if (!iso) return '';
+      return this.formatIsoDateLabel(iso);
+    }
     if (Array.isArray(value)) {
       if (value.length && typeof value[0] === 'object') {
         return value
@@ -1142,6 +1422,13 @@ export class FollowupService {
         .map(([key, val]) => `${key}: ${val ?? ''}`)
         .join(', ');
     }
+    const asIsoDate = this.normalizeToIsoDate(value);
+    if (asIsoDate) return asIsoDate;
+    return value.toString();
+  }
+
+  private normalizeToIsoDate(value: any): string | undefined {
+    if (value === undefined || value === null) return undefined;
     // Google Sheets numeric serial dates (roughly 1900 epoch)
     if (typeof value === 'number') {
       const days = Number(value);
@@ -1149,7 +1436,7 @@ export class FollowupService {
         const millis = (days - 25569) * 86400 * 1000; // Excel/Sheets serial to epoch
         return new Date(millis).toISOString().slice(0, 10);
       }
-      return value.toString();
+      return undefined;
     }
     if (value instanceof Date) {
       return value.toISOString().slice(0, 10);
@@ -1187,13 +1474,28 @@ export class FollowupService {
         return new Date(millis).toISOString().slice(0, 10);
       }
     }
-    return value.toString();
+    return undefined;
   }
 
-  private addPlaceholderVariants(map: Record<string, string>, key: string, value: any): void {
+  private formatIsoDateLabel(iso: string): string {
+    const trimmed = (iso || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed || '';
+    const [y, m, d] = trimmed.split('-').map(n => Number(n));
+    if (!y || !m || !d) return trimmed;
+    const date = new Date(Date.UTC(y, m - 1, d));
+    if (Number.isNaN(date.getTime())) return trimmed;
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
+    const dow = days[date.getUTCDay()] || '';
+    const mon = months[m - 1] || '';
+    return `${dow}, ${pad2(d)}-${mon}-${y}`;
+  }
+
+  private addPlaceholderVariants(map: Record<string, string>, key: string, value: any, fieldType?: string): void {
     if (!key) return;
     const keys = this.buildPlaceholderKeys(key);
-    const text = this.formatTemplateValue(value);
+    const text = this.formatTemplateValue(value, fieldType);
     keys.forEach(token => {
       map[`{{${token}}}`] = text;
     });

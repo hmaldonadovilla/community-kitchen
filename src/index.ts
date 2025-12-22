@@ -116,6 +116,30 @@ export function renderDocTemplate(formObject: WebFormSubmission, buttonId: strin
   return service.renderDocTemplate(formObject, buttonId);
 }
 
+export function renderDocTemplatePdfPreview(formObject: WebFormSubmission, buttonId: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderDocTemplatePdfPreview(formObject, buttonId);
+}
+
+export function renderDocTemplateHtml(formObject: WebFormSubmission, buttonId: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderDocTemplateHtml(formObject, buttonId);
+}
+
+export function renderSubmissionReportHtml(formObject: WebFormSubmission): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderSubmissionReportHtml(formObject);
+}
+
+export function trashPreviewArtifact(cleanupToken: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.trashPreviewArtifact(cleanupToken);
+}
+
 export function triggerFollowupAction(formKey: string, recordId: string, action: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

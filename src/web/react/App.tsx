@@ -15,7 +15,7 @@ import {
   submit,
   triggerFollowup,
   uploadFilesApi,
-  renderDocTemplateApi,
+  renderDocTemplatePdfPreviewApi,
   ListResponse,
   ListItem,
   fetchRecordById,
@@ -79,8 +79,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [reportOverlay, setReportOverlay] = useState<ReportOverlayState>({
     open: false,
     title: '',
-    phase: 'idle'
+    pdfPhase: 'idle'
   });
+  const reportPdfObjectUrlRef = useRef<string | null>(null);
+  const reportPdfSeqRef = useRef<number>(0);
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
@@ -667,13 +669,58 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setView('form');
   }, [definition, values, lineItems]);
 
+  const CK_BUTTON_IDX_TOKEN = '__ckQIdx=';
+  const parseButtonRef = useCallback((ref: string): { id: string; qIdx?: number } => {
+    const raw = (ref || '').toString();
+    const pos = raw.lastIndexOf(CK_BUTTON_IDX_TOKEN);
+    if (pos < 0) return { id: raw };
+    const id = raw.slice(0, pos);
+    const idxRaw = raw.slice(pos + CK_BUTTON_IDX_TOKEN.length);
+    const qIdx = Number.parseInt(idxRaw, 10);
+    if (!Number.isFinite(qIdx)) return { id: raw };
+    return { id, qIdx };
+  }, []);
+
+  const encodeButtonRef = useCallback(
+    (id: string, qIdx?: number) => {
+      const base = (id || '').toString();
+      if (qIdx === undefined || qIdx === null || !Number.isFinite(qIdx)) return base;
+      return `${base}${CK_BUTTON_IDX_TOKEN}${qIdx}`;
+    },
+    []
+  );
+
+  const resolveTemplateIdForClient = useCallback((template: any, language: string): string | undefined => {
+    if (!template) return undefined;
+    const pick = (v: any) => (v !== undefined && v !== null ? v.toString().trim() : '');
+    if (typeof template === 'string') {
+      const trimmed = template.trim();
+      return trimmed || undefined;
+    }
+    const langKey = (language || 'EN').toUpperCase();
+    const direct = pick((template as any)[langKey]);
+    if (direct) return direct;
+    const lower = (language || 'en').toLowerCase();
+    const lowerPick = pick((template as any)[lower]);
+    if (lowerPick) return lowerPick;
+    const enPick = pick((template as any).EN);
+    if (enPick) return enPick;
+    const firstKey = Object.keys(template || {})[0];
+    const firstPick = firstKey ? pick((template as any)[firstKey]) : '';
+    return firstPick || undefined;
+  }, []);
+
   const reportButtons = useMemo(() => {
     return definition.questions
-      .filter(q => q.type === 'BUTTON' && (q as any)?.button?.action === 'renderDocTemplate' && (q as any)?.button?.templateId)
-      .map(q => {
+      .map((q, idx) => ({ q, idx }))
+      .filter(({ q }) => q.type === 'BUTTON' && (q as any)?.button?.action === 'renderDocTemplate' && (q as any)?.button?.templateId)
+      .map(({ q, idx }) => {
         const placementsRaw = (q as any)?.button?.placements;
         const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : (['form'] as const);
-        return { id: q.id, label: resolveLabel(q, language), placements };
+        // Use a stable "button reference" that includes the question index.
+        // This avoids ambiguity if multiple BUTTON fields accidentally share the same id.
+        const id = encodeButtonRef(q.id, idx);
+        return { id, label: resolveLabel(q, language), placements };
       });
   }, [definition.questions, language]);
 
@@ -693,12 +740,59 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     [reportButtons]
   );
 
-  const openReport = useCallback(
+  const base64ToPdfObjectUrl = useCallback((pdfBase64: string, mimeType: string) => {
+    const raw = (pdfBase64 || '').toString();
+    const binary = globalThis.atob ? globalThis.atob(raw) : atob(raw);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: mimeType || 'application/pdf' });
+    return URL.createObjectURL(blob);
+  }, []);
+
+  const generateReportPdfPreview = useCallback(
     async (buttonId: string) => {
-      const btn = definition.questions.find(q => q.type === 'BUTTON' && q.id === (buttonId || '').toString());
-      const title = btn ? resolveLabel(btn, languageRef.current) : (buttonId || 'Report');
-      setReportOverlay({ open: true, buttonId, title, subtitle: definition.title, phase: 'rendering' });
-      logEvent('report.render.start', { buttonId });
+      const seq = ++reportPdfSeqRef.current;
+      const parsedRef = parseButtonRef(buttonId || '');
+      const baseId = parsedRef.id;
+      const qIdx = parsedRef.qIdx;
+      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
+      const btn =
+        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
+          ? indexed
+          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Report');
+
+      // Cleanup any prior in-memory preview URL.
+      const prevUrl = reportPdfObjectUrlRef.current;
+      if (prevUrl) {
+        reportPdfObjectUrlRef.current = null;
+        try {
+          URL.revokeObjectURL(prevUrl);
+        } catch (_) {
+          // ignore
+        }
+      }
+
+      setReportOverlay(prev => ({
+        ...(prev || { title: '' }),
+        open: true,
+        buttonId,
+        title,
+        subtitle: definition.title,
+        pdfPhase: 'rendering',
+        pdfObjectUrl: undefined,
+        pdfFileName: undefined,
+        pdfMessage: undefined
+      }));
+      const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
+      const templateIdShort =
+        templateIdResolved && templateIdResolved.length > 12
+          ? `${templateIdResolved.slice(0, 5)}…${templateIdResolved.slice(-5)}`
+          : templateIdResolved;
+      logEvent('report.pdfPreview.start', { buttonId: baseId, qIdx: qIdx ?? null, templateId: templateIdShort || null });
 
       try {
         const existingRecordId = resolveExistingRecordId({
@@ -714,45 +808,78 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           lineItems: lineItemsRef.current,
           existingRecordId
         });
-        const res = await renderDocTemplateApi(draft, buttonId);
-        if (!res?.success) {
-          const msg = (res?.message || 'Failed to render report.').toString();
-          setReportOverlay({ open: true, buttonId, title, subtitle: definition.title, phase: 'error', message: msg });
-          logEvent('report.render.error', { buttonId, message: msg });
+        const res = await renderDocTemplatePdfPreviewApi(draft, buttonId);
+        // Ignore stale responses (e.g., user clicked another report or closed the overlay).
+        if (seq !== reportPdfSeqRef.current) return;
+        if (!res?.success || !res?.pdfBase64) {
+          const msg = (res?.message || 'Failed to generate PDF preview.').toString();
+          setReportOverlay(prev => {
+            if (!prev?.open || prev.buttonId !== buttonId) return prev;
+            return { ...prev, pdfPhase: 'error', pdfMessage: msg };
+          });
+          logEvent('report.pdfPreview.error', { buttonId, message: msg });
           return;
         }
-        setReportOverlay({
-          open: true,
-          buttonId,
-          title,
-          subtitle: definition.title,
-          phase: 'ready',
-          pdfUrl: res.pdfUrl,
-          fileId: res.fileId
+        const mimeType = (res.mimeType || 'application/pdf').toString();
+        const objectUrl = base64ToPdfObjectUrl(res.pdfBase64, mimeType);
+        reportPdfObjectUrlRef.current = objectUrl;
+        setReportOverlay(prev => {
+          if (!prev?.open || prev.buttonId !== buttonId) return prev;
+          return {
+            ...prev,
+            pdfPhase: 'ready',
+            pdfObjectUrl: objectUrl,
+            pdfFileName: (res.fileName || 'report.pdf').toString(),
+            pdfMessage: undefined
+          };
         });
-        logEvent('report.render.ok', { buttonId, fileId: res.fileId || '', pdfUrl: res.pdfUrl || '' });
+        logEvent('report.pdfPreview.ok', { buttonId, fileName: (res.fileName || '').toString() });
       } catch (err: any) {
-        const msg = (err?.message || err?.toString?.() || 'Failed to render report.').toString();
-        setReportOverlay({ open: true, buttonId, title, subtitle: definition.title, phase: 'error', message: msg });
-        logEvent('report.render.exception', { buttonId, message: msg });
+        if (seq !== reportPdfSeqRef.current) return;
+        const msg = (err?.message || err?.toString?.() || 'Failed to generate PDF preview.').toString();
+        setReportOverlay(prev => {
+          if (!prev?.open || prev.buttonId !== buttonId) return prev;
+          return { ...prev, pdfPhase: 'error', pdfMessage: msg };
+        });
+        logEvent('report.pdfPreview.exception', { buttonId, message: msg });
       }
     },
-    [definition, formKey, logEvent]
+    [base64ToPdfObjectUrl, definition, formKey, logEvent]
+  );
+
+  const openReport = useCallback(
+    async (buttonId: string) => {
+      void generateReportPdfPreview(buttonId);
+    },
+    [generateReportPdfPreview]
   );
 
   const closeReportOverlay = useCallback(() => {
+    // Cancel any in-flight report request so late responses can't re-open/overwrite the overlay.
+    reportPdfSeqRef.current += 1;
+    const prevUrl = reportPdfObjectUrlRef.current;
+    if (prevUrl) {
+      reportPdfObjectUrlRef.current = null;
+      try {
+        URL.revokeObjectURL(prevUrl);
+      } catch (_) {
+        // ignore
+      }
+    }
     setReportOverlay(prev => ({
-      ...(prev || { title: '', phase: 'idle' }),
+      ...(prev || { title: '' }),
       open: false,
-      phase: 'idle',
-      pdfUrl: undefined,
-      fileId: undefined,
-      message: undefined,
+      pdfPhase: 'idle',
+      pdfObjectUrl: undefined,
+      pdfFileName: undefined,
+      pdfMessage: undefined,
       buttonId: undefined
     }));
   }, []);
 
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
+  const summaryViewEnabled = definition.summaryViewEnabled !== false;
+  const copyCurrentRecordEnabled = definition.copyCurrentRecordEnabled !== false;
   const autoSaveDebounceMs = (() => {
     const raw = definition.autoSave?.debounceMs;
     const n = raw === undefined || raw === null ? NaN : Number(raw);
@@ -1314,7 +1441,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           logEvent('submit.fetchRecord.error', { message: err?.message || err, recordId });
         }
       }
-      setView('summary');
+      setView(summaryViewEnabled ? 'summary' : 'form');
       invalidateListCache();
     } catch (err: any) {
       setStatus(err?.message || 'Submit failed');
@@ -1346,7 +1473,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       loadRecordSnapshot(row.id, Number.isFinite(rowNumberHint) ? rowNumberHint : undefined);
     }
 
-    setView('summary');
+    const statusRaw = ((sourceRecord?.status || row.status || '') as any)?.toString?.() || '';
+    const isClosed = statusRaw.trim().toLowerCase() === 'closed';
+    // When Summary view is disabled, always open the Form view (closed records are read-only).
+    setView(summaryViewEnabled ? (isClosed ? 'summary' : 'form') : 'form');
   };
 
   const currentRecord = selectedRecordSnapshot || (selectedRecordId ? listCache.records[selectedRecordId] : null);
@@ -1432,7 +1562,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             setLineItems={setLineItems}
             onSubmit={handleSubmit}
             submitActionRef={formSubmitActionRef}
-            submitting={submitting || isClosedRecord}
+            submitting={submitting || isClosedRecord || Boolean(recordLoadingId)}
             errors={errors}
             setErrors={setErrors}
             status={status}
@@ -1447,7 +1577,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             onSelectionEffect={runSelectionEffects}
             onUploadFiles={uploadFieldUrls}
             onReportButton={openReport}
-            reportBusy={reportOverlay.phase === 'rendering'}
+            reportBusy={reportOverlay.pdfPhase === 'rendering'}
             reportBusyId={reportOverlay.buttonId || null}
             onDiagnostic={logEvent}
           />
@@ -1460,15 +1590,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           language={language}
           values={values}
           lineItems={lineItems}
-          optionState={optionState}
-          tooltipState={tooltipState}
           lastSubmissionMeta={lastSubmissionMeta}
           recordLoadError={recordLoadError}
           selectedRecordId={selectedRecordId}
           recordLoadingId={recordLoadingId}
           currentRecord={currentRecord}
-          isMobile={isMobile}
-          onDuplicate={handleDuplicateCurrent}
         />
       )}
       {view === 'list' && (
@@ -1490,20 +1616,37 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         />
       )}
 
-      <ReportOverlay state={reportOverlay} onClose={closeReportOverlay} />
+      <ReportOverlay
+        state={reportOverlay}
+        onClose={closeReportOverlay}
+      />
 
       <BottomActionBar
         view={view}
-        submitting={submitting}
+        submitting={submitting || Boolean(recordLoadingId)}
         readOnly={view === 'form' && isClosedRecord}
-        canCopy={view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id)}
+        canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
+        summaryEnabled={summaryViewEnabled}
+        copyEnabled={copyCurrentRecordEnabled}
         reportButtonsFormMenu={reportButtonsFormMenu}
         reportButtonsSummaryBar={reportButtonsSummaryBar}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}
         onEdit={() => setView('form')}
-        onSummary={() => setView('summary')}
+        onSummary={() => {
+          if (!summaryViewEnabled) return;
+          try {
+            globalThis.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+          } catch (_) {
+            try {
+              globalThis.scrollTo?.(0, 0);
+            } catch (_) {
+              // ignore
+            }
+          }
+          setView('summary');
+        }}
         onSubmit={() => formSubmitActionRef.current?.()}
         onReport={openReport}
       />

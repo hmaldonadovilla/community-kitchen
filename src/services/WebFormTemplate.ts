@@ -59,6 +59,8 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
 <html>
   <head>
     <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://docs.google.com" />
+    <link rel="preconnect" href="https://drive.google.com" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
@@ -144,11 +146,14 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
       }
       @supports (min-height: 100dvh) {
         body { min-height: 100dvh; }
+        .page { min-height: 100dvh; }
       }
       .page {
         max-width: 1100px;
         margin: 0 auto;
         padding: 22px;
+        /* Make the page a "definite height" flex container so children can use flex:1 and iframe height:100%. */
+        min-height: 100vh;
         /* Reserve room for the fixed bottom action bar (accounts for iOS safe-area + visualViewport inset). */
         padding-bottom: calc(22px + 146px + var(--safe-bottom) + var(--vv-bottom));
         display: flex;

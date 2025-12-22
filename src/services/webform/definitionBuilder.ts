@@ -86,7 +86,9 @@ export class DefinitionBuilder {
       dedupRules: loadDedupRules(this.ss, form.configSheet),
       startRoute: listView ? 'list' : 'form',
       followup: form.followupConfig,
-      autoSave: form.autoSave
+      autoSave: form.autoSave,
+      summaryViewEnabled: form.summaryViewEnabled,
+      copyCurrentRecordEnabled: form.copyCurrentRecordEnabled
     };
   }
 

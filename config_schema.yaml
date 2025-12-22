@@ -159,6 +159,14 @@ components:
           type: string
           enum: [pdf]
           description: Output format. Currently only `pdf`.
+        previewMode:
+          type: string
+          enum: [pdf, live]
+          description: |
+            Preview mode for the web app overlay.
+
+            NOTE: The current UI always shows an **in-app PDF preview** (generated in-memory; no PDF file is written to Drive).
+            `live` is deprecated/ignored and kept only for backward compatibility with older configs.
         placements:
           type: array
           items:
@@ -738,6 +746,20 @@ components:
             status:
               type: string
               description: Status value written during autosave. Default "In progress".
+        summaryViewEnabled:
+          type: boolean
+          description: |
+            Enable the React Summary view for this form.
+
+            - When `true` (default), clicking a **Closed** record in the list opens the Summary view.
+            - When `false`, list-row clicks always open the **Edit** view (Closed records will be read-only).
+        copyCurrentRecordEnabled:
+          type: boolean
+          description: |
+            Enable the "Copy current record" action in the Create menu.
+
+            - When `true` (default), Create opens a menu: New record / Copy current record.
+            - When `false`, Create always starts a New record (no copy option).
       additionalProperties: true
 
     TemplateIdMap:

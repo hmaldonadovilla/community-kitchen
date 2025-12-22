@@ -63,6 +63,27 @@ export interface RenderDocTemplateResult {
   message?: string;
 }
 
+export interface RenderDocTemplatePdfPreviewResult {
+  success: boolean;
+  pdfBase64?: string;
+  mimeType?: string;
+  fileName?: string;
+  message?: string;
+}
+
+export interface RenderDocPreviewResult {
+  success: boolean;
+  previewFileId?: string;
+  previewUrl?: string;
+  cleanupToken?: string;
+  message?: string;
+}
+
+export interface TrashPreviewResult {
+  success: boolean;
+  message?: string;
+}
+
 type Runner = typeof google.script.run;
 
 const getRunner = (): Runner | null => {
@@ -129,6 +150,21 @@ export const uploadFilesApi = (files: any, uploadConfig?: any): Promise<UploadFi
 
 export const renderDocTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocTemplateResult> =>
   runAppsScript<RenderDocTemplateResult>('renderDocTemplate', payload, buttonId);
+
+export const renderDocTemplatePdfPreviewApi = (
+  payload: SubmissionPayload,
+  buttonId: string
+): Promise<RenderDocTemplatePdfPreviewResult> =>
+  runAppsScript<RenderDocTemplatePdfPreviewResult>('renderDocTemplatePdfPreview', payload, buttonId);
+
+export const renderDocTemplateHtmlApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocPreviewResult> =>
+  runAppsScript<RenderDocPreviewResult>('renderDocTemplateHtml', payload, buttonId);
+
+export const renderSubmissionReportHtmlApi = (payload: SubmissionPayload): Promise<RenderDocPreviewResult> =>
+  runAppsScript<RenderDocPreviewResult>('renderSubmissionReportHtml', payload);
+
+export const trashPreviewArtifactApi = (cleanupToken: string): Promise<TrashPreviewResult> =>
+  runAppsScript<TrashPreviewResult>('trashPreviewArtifact', cleanupToken);
 
 export interface BootstrapContext {
   definition: WebFormDefinition;

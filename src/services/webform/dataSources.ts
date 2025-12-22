@@ -93,14 +93,20 @@ export class DataSourceService {
     const ds = question.dataSource;
     const normalized = selectedValue.toString().trim().toLowerCase();
     if (!normalized) return null;
+    // IMPORTANT: For placeholder expansion we need the *full row* (so we can expose ADDRESS/POSTAL_CODE/etc).
+    // Many option data sources set projection=["value"], which would otherwise return scalar items and prevent
+    // lookupDataSourceDetails() from ever matching/returning details.
     const cacheKey = JSON.stringify({
       id: ds.id,
       tabName: ds.tabName,
       sheetId: ds.sheetId,
-      projection: ds.projection
+      details: true
     });
     if (!this.dataSourceCache[cacheKey]) {
-      this.dataSourceCache[cacheKey] = this.fetchDataSource(ds, language, ds.projection, ds.limit);
+      // Force a "details" fetch that is not constrained by ds.projection.
+      // (fetchDataSource() will fall back to reading the sheet headers when projection is omitted.)
+      const detailsConfig = { ...(ds as any), projection: undefined };
+      this.dataSourceCache[cacheKey] = this.fetchDataSource(detailsConfig, language, undefined, ds.limit);
     }
     const response = this.dataSourceCache[cacheKey];
     const items = Array.isArray(response.items) ? response.items : [];

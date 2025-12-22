@@ -66,6 +66,8 @@ export const BottomActionBar: React.FC<{
   submitting: boolean;
   readOnly?: boolean;
   canCopy: boolean;
+  summaryEnabled?: boolean;
+  copyEnabled?: boolean;
   reportButtonsFormMenu?: Array<{ id: string; label: string }>;
   reportButtonsSummaryBar?: Array<{ id: string; label: string }>;
   onHome: () => void;
@@ -80,6 +82,8 @@ export const BottomActionBar: React.FC<{
   submitting,
   readOnly,
   canCopy,
+  summaryEnabled = true,
+  copyEnabled = true,
   reportButtonsFormMenu,
   reportButtonsSummaryBar,
   onHome,
@@ -95,9 +99,9 @@ export const BottomActionBar: React.FC<{
   const summaryOpen = menu === 'summary';
   const reportsOpen = menu === 'reports';
 
-  const showCreateMenu = useMemo(() => view === 'summary' || view === 'form', [view]);
-  const showEdit = useMemo(() => view === 'summary', [view]);
-  const showSummary = useMemo(() => view === 'form', [view]);
+  const showCreateMenu = useMemo(() => (view === 'summary' || view === 'form') && copyEnabled, [copyEnabled, view]);
+  const showEdit = useMemo(() => view === 'summary' && summaryEnabled, [summaryEnabled, view]);
+  const showSummary = useMemo(() => view === 'form' && summaryEnabled, [summaryEnabled, view]);
   const showSubmit = useMemo(() => view === 'form' && !readOnly, [readOnly, view]);
   const hasSummaryMenu = useMemo(() => (reportButtonsFormMenu || []).length > 0, [reportButtonsFormMenu]);
   const hasSummaryBarReports = useMemo(() => (reportButtonsSummaryBar || []).length > 0, [reportButtonsSummaryBar]);
@@ -164,20 +168,22 @@ export const BottomActionBar: React.FC<{
               </IconWrap>
               New record
             </button>
-            <button
-              type="button"
-              className="ck-bottom-menu-item"
-              disabled={submitting || !canCopy}
-              onClick={() => {
-                setMenu(null);
-                onCreateCopy();
-              }}
-            >
-              <IconWrap>
-                <SummaryIcon />
-              </IconWrap>
-              Copy current record
-            </button>
+            {copyEnabled && (
+              <button
+                type="button"
+                className="ck-bottom-menu-item"
+                disabled={submitting || !canCopy}
+                onClick={() => {
+                  setMenu(null);
+                  onCreateCopy();
+                }}
+              >
+                <IconWrap>
+                  <SummaryIcon />
+                </IconWrap>
+                Copy current record
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -191,20 +197,22 @@ export const BottomActionBar: React.FC<{
             onClick={() => setMenu(null)}
           />
           <div className="ck-bottom-menu" aria-label="Summary menu">
-            <button
-              type="button"
-              className="ck-bottom-menu-item ck-bottom-menu-item--primary"
-              disabled={submitting}
-              onClick={() => {
-                setMenu(null);
-                onSummary();
-              }}
-            >
-              <IconWrap>
-                <SummaryIcon />
-              </IconWrap>
-              View summary
-            </button>
+            {summaryEnabled && (
+              <button
+                type="button"
+                className="ck-bottom-menu-item ck-bottom-menu-item--primary"
+                disabled={submitting}
+                onClick={() => {
+                  setMenu(null);
+                  onSummary();
+                }}
+              >
+                <IconWrap>
+                  <SummaryIcon />
+                </IconWrap>
+                View summary
+              </button>
+            )}
             {(reportButtonsFormMenu || []).map(btn => (
               <button
                 key={btn.id}
@@ -305,6 +313,22 @@ export const BottomActionBar: React.FC<{
                   <SummaryIcon />
                 </IconWrap>
                 Summary
+              </button>
+            )}
+
+            {!summaryEnabled && view === 'form' && hasSummaryMenu && (
+              <button
+                type="button"
+                className={`ck-bottom-item${summaryOpen ? ' active' : ''}`}
+                onClick={handleSummaryPress}
+                disabled={submitting}
+                aria-haspopup="dialog"
+                aria-expanded={summaryOpen}
+              >
+                <IconWrap>
+                  <SummaryIcon />
+                </IconWrap>
+                Reports
               </button>
             )}
 

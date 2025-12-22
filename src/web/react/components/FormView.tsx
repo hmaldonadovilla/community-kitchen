@@ -1538,7 +1538,7 @@ const FormView: React.FC<FormViewProps> = ({
               />
             ) : (
               <input
-                type={q.type === 'NUMBER' ? 'number' : q.type === 'DATE' ? 'date' : 'text'}
+                type={q.type === 'DATE' ? 'date' : 'text'}
                 value={inputValue}
                 onChange={e => handleFieldChange(q, e.target.value)}
                 readOnly={!!q.valueMap}

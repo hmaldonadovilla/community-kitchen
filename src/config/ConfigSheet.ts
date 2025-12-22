@@ -698,6 +698,9 @@ export class ConfigSheet {
     const outputRaw = (cfgRaw.output || 'pdf').toString().trim().toLowerCase();
     const output = outputRaw === 'pdf' ? 'pdf' : undefined;
 
+    const previewModeRaw = (cfgRaw.previewMode || cfgRaw.preview || 'pdf').toString().trim().toLowerCase();
+    const previewMode = previewModeRaw === 'live' ? 'live' : 'pdf';
+
     const allowedPlacements = new Set(['form', 'formSummaryMenu', 'summaryBar']);
     const placementsRaw = Array.isArray(cfgRaw.placements) ? cfgRaw.placements : cfgRaw.placement ? [cfgRaw.placement] : [];
     const placements = placementsRaw
@@ -710,7 +713,8 @@ export class ConfigSheet {
     const config: ButtonConfig = {
       action: 'renderDocTemplate',
       templateId: templateId as any,
-      output: (output as any) || 'pdf'
+      output: (output as any) || 'pdf',
+      previewMode: previewMode as any
     };
     if (placements.length) config.placements = placements as any;
     if (folderId) config.folderId = folderId;
