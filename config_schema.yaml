@@ -472,6 +472,37 @@ components:
               $ref: '#/components/schemas/LocalizedString'
               description: Fallback disclaimer when no cases match and no template is set.
 
+    OptionMapRefConfig:
+      type: object
+      properties:
+        ref:
+          type: string
+          description: |
+            Sheet/tab reference that contains the mapping table.
+            Use `REF:TabName` (recommended) or a plain `TabName`.
+        keyColumn:
+          oneOf:
+            - type: integer
+              description: 1-based column index (e.g., 1 for column A).
+            - type: string
+              description: Column letter (e.g., "A") or header label (e.g., "Supplier").
+          description: Column holding the lookup key (dependency value or composite key).
+        lookupColumn:
+          oneOf:
+            - type: integer
+              description: 1-based column index (e.g., 2 for column B).
+            - type: string
+              description: Column letter (e.g., "B") or header label (e.g., "Allowed options").
+          description: Column holding the lookup value(s) (allowed options / derived values).
+        delimiter:
+          type: string
+          description: Optional delimiter to split multiple values stored in one cell (defaults to comma/semicolon/newline splitting).
+      required: [ref, keyColumn, lookupColumn]
+      example:
+        ref: "REF:Supplier_Map"
+        keyColumn: Supplier
+        lookupColumn: Allowed options
+
     OptionFilter:
       type: object
       properties:
@@ -491,6 +522,15 @@ components:
               type: string
           description: |
             Mapping of parent value(s) -> allowed options for this field. For multiple dependencies, join values with `||` in the order listed in `dependsOn` (e.g., `"Carrots||Local"`). Use `"*"` as a fallback key.
+        optionMapRef:
+          $ref: '#/components/schemas/OptionMapRefConfig'
+          description: |
+            Alternative to `optionMap`: load the mapping from a sheet tab with key/value columns.
+            Each row contributes a `key -> value` entry; repeated keys are merged.
+      required: [dependsOn]
+      oneOf:
+        - required: [optionMap]
+        - required: [optionMapRef]
       example:
         dependsOn: [Product, Supplier]
         optionMap:
@@ -502,8 +542,12 @@ components:
       type: object
       properties:
         dependsOn:
-          type: string
-          description: Field ID whose value is used to look up the mapped output.
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: Field ID(s) whose value(s) are used to look up the mapped output (arrays form composite keys joined with `||`).
         optionMap:
           type: object
           additionalProperties:
@@ -511,7 +555,15 @@ components:
             items:
               type: string
           description: Map of dependency value -> array of strings; arrays are joined with ", " for the readonly TEXT value. Supports `*` fallback.
-      required: [dependsOn, optionMap]
+        optionMapRef:
+          $ref: '#/components/schemas/OptionMapRefConfig'
+          description: |
+            Alternative to `optionMap`: load the mapping from a sheet tab with key/value columns.
+            Each row contributes a `key -> value` entry; repeated keys are merged.
+      required: [dependsOn]
+      oneOf:
+        - required: [optionMap]
+        - required: [optionMapRef]
       example:
         dependsOn: ING
         optionMap:

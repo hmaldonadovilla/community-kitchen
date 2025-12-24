@@ -15,6 +15,7 @@ import {
   LineItemSelectorConfig,
   LineItemTotalConfig,
   ListViewSortConfig,
+  OptionMapRefConfig,
   OptionFilter,
   QuestionGroupConfig,
   QuestionUiConfig,
@@ -152,10 +153,10 @@ export class ConfigSheet {
       const validationRaw = row[idxValidation] ? row[idxValidation].toString().trim() : rawConfig;
       const lineItemConfig = type === 'LINE_ITEM_GROUP' ? this.parseLineItemConfig(ss, rawConfig || row[idxOptionsEn], row[idxOptionsEn]) : undefined;
       const uploadConfig = type === 'FILE_UPLOAD' ? this.parseUploadConfig(rawConfig || row[6]) : undefined;
-      const optionFilter = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseOptionFilter(optionFilterRaw) : undefined;
+      const optionFilter = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseOptionFilter(ss, optionFilterRaw) : undefined;
       const dataSource = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseDataSource(rawConfig) : undefined;
       const validationRules = this.parseValidationRules(validationRaw);
-      const valueMap = type === 'TEXT' ? this.parseValueMap(rawConfig) : undefined;
+      const valueMap = type === 'TEXT' ? this.parseValueMap(ss, rawConfig) : undefined;
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
       const header = this.parseHeaderFlag([rawConfig, optionFilterRaw, validationRaw]);
@@ -540,13 +541,227 @@ export class ConfigSheet {
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
-  private static parseOptionFilter(rawConfig: string): OptionFilter | undefined {
+  private static normalizeOptionMapRef(raw: any): OptionMapRefConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const refRaw = (raw as any).ref ?? (raw as any).tab ?? (raw as any).tabName ?? (raw as any).sheet ?? (raw as any).sheetName;
+    const keyRaw = (raw as any).keyColumn ?? (raw as any).keyCol ?? (raw as any).key ?? (raw as any).keyHeader;
+    const lookupRaw =
+      (raw as any).lookupColumn ??
+      (raw as any).lookupCol ??
+      (raw as any).valueColumn ??
+      (raw as any).valueCol ??
+      (raw as any).value ??
+      (raw as any).lookup ??
+      (raw as any).lookupHeader;
+
+    if (refRaw === undefined || refRaw === null) return undefined;
+    if (keyRaw === undefined || keyRaw === null) return undefined;
+    if (lookupRaw === undefined || lookupRaw === null) return undefined;
+
+    const ref = refRaw.toString().trim();
+    if (!ref) return undefined;
+
+    const normalizeCol = (val: any): string | number | undefined => {
+      if (val === undefined || val === null) return undefined;
+      if (typeof val === 'number' && Number.isFinite(val)) return val;
+      const s = val.toString().trim();
+      if (!s) return undefined;
+      if (/^\d+$/.test(s)) return Number(s);
+      return s;
+    };
+
+    const keyColumn = normalizeCol(keyRaw);
+    const lookupColumn = normalizeCol(lookupRaw);
+    if (keyColumn === undefined || lookupColumn === undefined) return undefined;
+
+    const delimiterRaw = (raw as any).delimiter ?? (raw as any).separator ?? (raw as any).sep ?? (raw as any).split;
+    const delimiter =
+      delimiterRaw !== undefined && delimiterRaw !== null ? delimiterRaw.toString() : undefined;
+
+    return {
+      ref,
+      keyColumn,
+      lookupColumn,
+      delimiter: delimiter ? delimiter.toString() : undefined
+    };
+  }
+
+  private static resolveRefSheetName(ref: string): string {
+    const raw = (ref || '').toString().trim();
+    if (!raw) return '';
+    return raw.startsWith('REF:') ? raw.substring(4).trim() : raw;
+  }
+
+  private static columnLettersToIndex(letters: string): number {
+    const s = (letters || '').toString().trim().toUpperCase();
+    if (!s || !/^[A-Z]+$/.test(s)) return 0;
+    let n = 0;
+    for (let i = 0; i < s.length; i++) {
+      n = n * 26 + (s.charCodeAt(i) - 64); // 'A' -> 1
+    }
+    return n;
+  }
+
+  private static resolveSheetColumnIndex(col: string | number, headers: any[]): number | null {
+    if (typeof col === 'number' && Number.isFinite(col)) {
+      const idx = Math.floor(col);
+      if (idx < 1) return null;
+      const max = Array.isArray(headers) ? headers.length : 0;
+      if (max && idx > max) return null;
+      return idx;
+    }
+    const raw = col !== undefined && col !== null ? col.toString().trim() : '';
+    if (!raw) return null;
+    if (/^\d+$/.test(raw)) {
+      const idx = Number(raw);
+      if (idx < 1) return null;
+      const max = Array.isArray(headers) ? headers.length : 0;
+      if (max && idx > max) return null;
+      return idx;
+    }
+    const target = raw.toLowerCase().trim();
+    const headerIdx = Array.isArray(headers)
+      ? headers.findIndex(h => (h || '').toString().trim().toLowerCase() === target)
+      : -1;
+    if (headerIdx >= 0) return headerIdx + 1;
+
+    // If there is no matching header, fall back to column letters (A, B, AA, ...).
+    const upper = raw.toUpperCase();
+    if (/^[A-Z]+$/.test(upper) && upper.length <= 3) {
+      const idx = this.columnLettersToIndex(upper);
+      const max = Array.isArray(headers) ? headers.length : 0;
+      if (idx < 1) return null;
+      if (max && idx > max) return null;
+      return idx;
+    }
+
+    return null;
+  }
+
+  private static splitOptionMapCell(raw: any, delimiter?: string): string[] {
+    if (raw === undefined || raw === null) return [];
+    const str = String(raw).trim();
+    if (!str) return [];
+    const delim = delimiter !== undefined && delimiter !== null ? delimiter.toString() : '';
+    if (delim && delim.toLowerCase() !== 'none') {
+      return str
+        .split(delim)
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+    }
+    return str
+      .split(/[,;\n]+/)
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+  }
+
+  private static normalizeOptionMapRecord(raw: any): Record<string, string[]> | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const out: Record<string, string[]> = {};
+    Object.keys(raw).forEach(key => {
+      const valuesRaw: any = (raw as any)[key];
+      if (valuesRaw === undefined || valuesRaw === null) return;
+      if (Array.isArray(valuesRaw)) {
+        out[key] = valuesRaw.map((v: any) => (v === undefined || v === null ? '' : v.toString().trim())).filter(Boolean);
+        return;
+      }
+      if (typeof valuesRaw === 'string' || typeof valuesRaw === 'number' || typeof valuesRaw === 'boolean') {
+        out[key] = this.splitOptionMapCell(valuesRaw);
+        return;
+      }
+    });
+    return out;
+  }
+
+  private static buildOptionMapFromRef(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    refCfg: OptionMapRefConfig
+  ): Record<string, string[]> | undefined {
+    const tabName = this.resolveRefSheetName(refCfg.ref);
+    if (!tabName) return undefined;
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) return undefined;
+
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastCol < 1) return undefined;
+    if (lastRow <= 1) return {};
+
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
+    const keyColIdx = this.resolveSheetColumnIndex(refCfg.keyColumn, headers);
+    const lookupColIdx = this.resolveSheetColumnIndex(refCfg.lookupColumn, headers);
+    if (!keyColIdx || !lookupColIdx) return undefined;
+
+    const numRows = lastRow - 1;
+    const keys = sheet.getRange(2, keyColIdx, numRows, 1).getValues();
+    const lookups = sheet.getRange(2, lookupColIdx, numRows, 1).getValues();
+    const map: Record<string, string[]> = {};
+
+    for (let i = 0; i < numRows; i++) {
+      const keyRaw = keys[i]?.[0];
+      const key = keyRaw !== undefined && keyRaw !== null ? keyRaw.toString().trim() : '';
+      if (!key) continue;
+      const lookupRaw = lookups[i]?.[0];
+      const values = this.splitOptionMapCell(lookupRaw, refCfg.delimiter);
+      if (!values.length) continue;
+      if (!map[key]) map[key] = [];
+      map[key].push(...values);
+    }
+
+    Object.keys(map).forEach(k => {
+      const seen = new Set<string>();
+      const uniq: string[] = [];
+      map[k].forEach(v => {
+        const t = (v ?? '').toString().trim();
+        if (!t || seen.has(t)) return;
+        seen.add(t);
+        uniq.push(t);
+      });
+      map[k] = uniq;
+    });
+
+    return map;
+  }
+
+  private static normalizeOptionMapLike(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    raw: any
+  ): OptionFilter | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+
+    const dependsOnRaw = (raw as any).dependsOn;
+    if (dependsOnRaw === undefined || dependsOnRaw === null) return undefined;
+    const dependsOn = Array.isArray(dependsOnRaw)
+      ? dependsOnRaw.map(v => (v === undefined || v === null ? '' : v.toString().trim())).filter(Boolean)
+      : dependsOnRaw.toString().trim();
+    if (Array.isArray(dependsOn) && !dependsOn.length) return undefined;
+    if (!Array.isArray(dependsOn) && !dependsOn) return undefined;
+
+    const optionMap = this.normalizeOptionMapRecord((raw as any).optionMap);
+    if (optionMap) {
+      return { ...(raw as any), dependsOn, optionMap } as OptionFilter;
+    }
+
+    const refCfg = this.normalizeOptionMapRef((raw as any).optionMapRef);
+    if (refCfg) {
+      const resolved = this.buildOptionMapFromRef(ss, refCfg);
+      if (!resolved) return undefined;
+      return { ...(raw as any), dependsOn, optionMap: resolved, optionMapRef: refCfg } as OptionFilter;
+    }
+
+    return undefined;
+  }
+
+  private static parseOptionFilter(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    rawConfig: string
+  ): OptionFilter | undefined {
     if (!rawConfig) return undefined;
     try {
       const parsed = JSON.parse(this.sanitizeJson(rawConfig));
-      if (parsed && parsed.optionFilter && parsed.optionFilter.dependsOn && parsed.optionFilter.optionMap) {
-        return parsed.optionFilter as OptionFilter;
-      }
+      const candidate = parsed?.optionFilter;
+      const normalized = this.normalizeOptionMapLike(ss, candidate);
+      if (normalized) return normalized;
     } catch (_) {
       // ignore
     }
@@ -562,6 +777,7 @@ export class ConfigSheet {
   }
 
   private static buildDataSourceConfig(candidate: any): DataSourceConfig | undefined {
+    if (!candidate || typeof candidate !== 'object') return undefined;
     const idValue = candidate.id || candidate.sourceId || candidate.sheet;
     if (!idValue) return undefined;
 
@@ -644,14 +860,16 @@ export class ConfigSheet {
     return this.normalizeSelectionEffects(parsed.selectionEffects);
   }
 
-  private static parseValueMap(rawConfig?: string): OptionFilter | undefined {
+  private static parseValueMap(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    rawConfig?: string
+  ): OptionFilter | undefined {
     if (!rawConfig) return undefined;
     try {
       const parsed = JSON.parse(this.sanitizeJson(rawConfig || ''));
       const vm = parsed?.valueMap;
-      if (vm && vm.dependsOn && vm.optionMap) {
-        return vm as OptionFilter;
-      }
+      const normalized = this.normalizeOptionMapLike(ss, vm);
+      if (normalized) return normalized;
     } catch (_) {
       // ignore parse errors
     }
@@ -1209,7 +1427,7 @@ export class ConfigSheet {
       parsed = JSON.parse(rawConfig);
       if (parsed && typeof parsed === 'object') {
         const jsonFields: LineItemFieldConfig[] = Array.isArray(parsed.fields)
-          ? parsed.fields.map((f: any, idx: number) => this.normalizeLineItemField(f, idx))
+          ? parsed.fields.map((f: any, idx: number) => this.normalizeLineItemField(ss, f, idx))
           : [];
         const refFields = jsonFields.length === 0 ? loadRefFields(optionsRef) : [];
         const mergedFields = jsonFields.length ? jsonFields : refFields;
@@ -1309,7 +1527,7 @@ export class ConfigSheet {
       const fields: LineItemFieldConfig[] = rows.map((row, idx) => {
         const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
         const rawConfig = row[9] ? row[9].toString().trim() : '';
-        const optionFilter = this.parseOptionFilter(rawConfig);
+        const optionFilter = this.parseOptionFilter(ss, rawConfig);
         const validationRules = this.parseValidationRules(rawConfig);
         const visibility = this.parseVisibility(rawConfig);
         const fieldType = (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as LineItemFieldType;
@@ -1317,7 +1535,7 @@ export class ConfigSheet {
           ? this.parseDataSource(rawConfig)
           : undefined;
         const selectionEffects = this.parseSelectionEffects(rawConfig);
-        const valueMap = this.parseValueMap(rawConfig);
+        const valueMap = this.parseValueMap(ss, rawConfig);
         const derivedValue = this.parseDerivedValue(rawConfig);
         const defaultValue = this.parseDefaultValue(rawConfig);
       const ui = this.parseQuestionUi([rawConfig]);
@@ -1355,7 +1573,11 @@ export class ConfigSheet {
     return { fields };
   }
 
-  private static normalizeLineItemField(field: any, idx: number): LineItemFieldConfig {
+  private static normalizeLineItemField(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    field: any,
+    idx: number
+  ): LineItemFieldConfig {
     const baseType = (field?.type ? field.type.toString().toUpperCase() : 'TEXT') as LineItemFieldType;
     const dataSource = (baseType === 'CHOICE' || baseType === 'CHECKBOX')
       ? this.buildDataSourceConfig(this.extractDataSourceCandidate(field))
@@ -1363,7 +1585,8 @@ export class ConfigSheet {
     const uploadConfig =
       baseType === 'FILE_UPLOAD' ? this.normalizeUploadConfig(field?.uploadConfig || field?.upload) : undefined;
     const selectionEffects = this.normalizeSelectionEffects(field?.selectionEffects);
-    const valueMap = this.normalizeValueMap(field?.valueMap);
+    const optionFilter = this.normalizeOptionMapLike(ss, field?.optionFilter);
+    const valueMap = this.normalizeOptionMapLike(ss, field?.valueMap);
     const derivedValue = this.normalizeDerivedValue(field?.derivedValue);
     const ui = this.normalizeQuestionUi(field?.ui || field?.view || field?.layout);
     const group = this.normalizeQuestionGroup(field?.group || field?.section || field?.card);
@@ -1391,7 +1614,7 @@ export class ConfigSheet {
       options: Array.isArray(field?.options) ? field.options : [],
       optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],
       optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : [],
-      optionFilter: field?.optionFilter,
+      optionFilter,
       validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined,
       visibility: this.normalizeVisibility(field?.visibility),
       dataSource,
@@ -1430,7 +1653,7 @@ export class ConfigSheet {
     }
 
     const fields: LineItemFieldConfig[] = Array.isArray(entry.fields)
-      ? entry.fields.map((f: any, idx: number) => this.normalizeLineItemField(f, idx))
+      ? entry.fields.map((f: any, idx: number) => this.normalizeLineItemField(ss, f, idx))
       : [];
     const sectionSelector = this.normalizeLineItemSelector(ss, entry.sectionSelector);
     const totals = this.normalizeLineItemTotals(entry.totals);
@@ -1451,10 +1674,11 @@ export class ConfigSheet {
     };
   }
 
-  private static normalizeValueMap(raw: any): OptionFilter | undefined {
-    if (!raw) return undefined;
-    if (raw.dependsOn && raw.optionMap) return raw as OptionFilter;
-    return undefined;
+  private static normalizeValueMap(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    raw: any
+  ): OptionFilter | undefined {
+    return this.normalizeOptionMapLike(ss, raw);
   }
 
   private static normalizeDerivedValue(raw: any): DerivedValueConfig | undefined {

@@ -37,46 +37,47 @@ This project uses TypeScript. You need to build the script before using it in Go
 ## 6. Configure Your Forms
 
 1. **Dashboard**: Add new rows to the "Forms Dashboard" sheet for each form.
-   - **Form Title**: The title users will see.
-   - **Configuration Sheet Name**: e.g., "Config: Fridge".
-   - **Destination Tab Name**: Name for the sheet where responses will go (e.g., "Fridge Logs").
-   - **Description**: Form description.
-   - **Form ID / URLs**: Leave these blank. The script will fill them in.
+    - **Form Title**: The title users will see.
+    - **Configuration Sheet Name**: e.g., "Config: Fridge".
+    - **Destination Tab Name**: Name for the sheet where responses will go (e.g., "Fridge Logs").
+    - **Description**: Form description.
+    - **Form ID / URLs**: Leave these blank. The script will fill them in.
+
 2. **Config Sheets**: Create new sheets (tabs) for each form.
-   - Copy the header row from an example sheet (includes `Config (JSON/REF)` for line items or file upload settings).
-   - **Group cards (collapsible sections)**: In a question’s `Config (JSON/REF)` cell, you can set a `group` to render fields together inside a card section in the **form body** (collapsible if you want). Example (a “Header” section rendered as a collapsible card):
+    - Copy the header row from an example sheet (includes `Config (JSON/REF)` for line items or file upload settings).
+    - **Group cards (collapsible sections)**: In a question’s `Config (JSON/REF)` cell, you can set a `group` to render fields together inside a card section in the **form body** (collapsible if you want). Example (a “Header” section rendered as a collapsible card):
 
-     ```json
-     {
-       "group": { "header": true, "title": "Header", "collapsible": true, "defaultCollapsed": false }
-     }
-     ```
+      ```json
+      {
+        "group": { "header": true, "title": "Header", "collapsible": true, "defaultCollapsed": false }
+      }
+      ```
 
-     Notes:
-     - The app header only contains **form title**, **build number**, **language selector**, and **burger menu**.
-     - Legacy `"header": true` is deprecated but still supported; it is mapped to `group: { header: true, title: "Header", collapsible: true }`.
-     - When `group.collapsible` is enabled, the section header shows a **progress pill** `completed/required` (required fields only). Clicking the pill expands/collapses the section.
+      > **Notes:**
+      >- The app header only contains **form title**, **build number**, **language selector**, and **burger menu**.
+      >- Legacy `"header": true` is deprecated but still supported; it is mapped to `group: { header: true, title: "Header", collapsible: true }`.
+      >- When `group.collapsible` is enabled, the section header shows a **progress pill** `completed/required` (required fields only). Clicking the pill expands/collapses the section.
 
-   - **Field pairing (2‑up layout)**: Use `pair` to control which fields appear next to each other on the same row. If `pair` is not set (or no matching pair is found), the field takes the full row.
+    - **Field pairing (2‑up layout)**: Use `pair` to control which fields appear next to each other on the same row. If `pair` is not set (or no matching pair is found), the field takes the full row.
 
-     ```json
-     { "pair": "qty_temp" }
-     ```
+        ```json
+        { "pair": "qty_temp" }
+        ```
 
-   - **Label/control layout override**: Default behavior is label+control inline on full-width rows, and stacked label+control inside 2-up grids. To force stacked label+control even when a field takes the full row:
+    - **Label/control layout override**: Default behavior is label+control inline on full-width rows, and stacked label+control inside 2-up grids. To force stacked label+control even when a field takes the full row:
 
-     ```json
-     { "ui": { "labelLayout": "stacked" } }
-     ```
+        ```json
+        { "ui": { "labelLayout": "stacked" } }
+        ```
 
-   - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON. Lower priorities win; when nothing is specified we fall back to `updatedAt desc`.
-   - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
-   - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved.
-   - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
-   - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
-     - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.
-     - Progressive disclosure (collapsed-by-default rows): in the LINE_ITEM_GROUP JSON, add a `ui` block. The collapsed view renders only `collapsedFields` (editable). The expand toggle is gated by `expandGate`:
-        - The expand/collapse control is also a **progress pill** `completed/required` for required fields within that row.
+    - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON. Lower priorities win; when nothing is specified we fall back to `updatedAt desc`.
+    - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
+    - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved.
+    - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
+    - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
+        - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.
+        - Progressive disclosure (collapsed-by-default rows): in the LINE_ITEM_GROUP JSON, add a `ui` block. The collapsed view renders only `collapsedFields` (editable). The expand toggle is gated by `expandGate`:
+            - The expand/collapse control is also a **progress pill** `completed/required` for required fields within that row.
 
        ```json
        {
@@ -109,7 +110,7 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        Put the rule JSON on that line-item field (either inline in `fields[]` or in the line-item ref sheet’s Config column).
-     - Row disclaimers (per-row hints): in the LINE_ITEM_GROUP (or subgroup) JSON, you can optionally add `ui.rowDisclaimer` to show a localized disclaimer at the top of each row. It supports simple placeholders using row field ids and `__ckRowSource`:
+    - Row disclaimers (per-row hints): in the LINE_ITEM_GROUP (or subgroup) JSON, you can optionally add `ui.rowDisclaimer` to show a localized disclaimer at the top of each row. It supports simple placeholders using row field ids and `__ckRowSource`:
 
        ```json
        {
@@ -125,7 +126,7 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        - Placeholders: `{{FIELD_ID}}`, `{{__ckRowSource}}` (auto/manual), `{{__ckRowSourceLabel}}` (localized).
-     - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
+    - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
 
        ```json
        {
@@ -140,14 +141,14 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
-     - Auto add flow (no overlay): use `addMode: "auto"` with `anchorFieldId` pointing to a CHOICE line-item field that has an `optionFilter.dependsOn` (one or more controlling fields). When all `dependsOn` fields are filled, the form will automatically create one row per allowed anchor option (same filtering logic as overlay). If the controlling fields change later, auto-generated rows are recomputed and overwritten; manual rows are preserved.
-       - Progressive + expand gate: if you also set `"ui": { "mode": "progressive", "expandGate": "collapsedFieldsValid", "collapsedFields": [...] }` then:
-         - Auto-generated rows treat the anchor field as the row title and it is not editable (it’s system-selected).
-         - Auto-generated rows created by `addLineItemsFromDataSource` selection effects also lock the anchor field and render it as the row title when `anchorFieldId` is set (works for subgroups too).
-         - Rows that are still “disabled” (collapsed fields not yet valid) are ignored for validation, so you can submit with unfinished rows.
-         - If the LINE_ITEM_GROUP question is marked `required: true`, at least one enabled+valid row is still required (disabled rows don’t satisfy required).
-     - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). Submitted payloads contain an array of parents, each with a child array keyed by the subgroup id/label. Default mode renders inline subgroup sections with Show/Hide. Progressive mode (`ui.mode: "progressive"`) edits subgroups via a full-page overlay opened from “Open …” buttons next to triggering fields (selection effects) plus fallback “Open …” buttons for remaining subgroups.
-       Example config:
+    - Auto add flow (no overlay): use `addMode: "auto"` with `anchorFieldId` pointing to a CHOICE line-item field that has an `optionFilter.dependsOn` (one or more controlling fields). When all `dependsOn` fields are filled, the form will automatically create one row per allowed anchor option (same filtering logic as overlay). If the controlling fields change later, auto-generated rows are recomputed and overwritten; manual rows are preserved.
+      - Progressive + expand gate: if you also set `"ui": { "mode": "progressive", "expandGate": "collapsedFieldsValid", "collapsedFields": [...] }` then:
+        - Auto-generated rows treat the anchor field as the row title and it is not editable (it’s system-selected).
+        - Auto-generated rows created by `addLineItemsFromDataSource` selection effects also lock the anchor field and render it as the row title when `anchorFieldId` is set (works for subgroups too).
+        - Rows that are still “disabled” (collapsed fields not yet valid) are ignored for validation, so you can submit with unfinished rows.
+        - If the LINE_ITEM_GROUP question is marked `required: true`, at least one enabled+valid row is still required (disabled rows don’t satisfy required).
+    - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). Submitted payloads contain an array of parents, each with a child array keyed by the subgroup id/label. Default mode renders inline subgroup sections with Show/Hide. Progressive mode (`ui.mode: "progressive"`) edits subgroups via a full-page overlay opened from “Open …” buttons next to triggering fields (selection effects) plus fallback “Open …” buttons for remaining subgroups.
+      Example config:
 
       ```json
       {
@@ -189,65 +190,65 @@ This project uses TypeScript. You need to build the script before using it in Go
       ]
       ```
 
-   - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`. The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
-     - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).
-     - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
-   - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, locale, projection, limit, pageToken)` Apps Script function is included in `dist/Code.js` and used by the web UI. Use this when options need to stay in sync with another form or sheet.
-   - **Choice UI controls (iOS-style)**: For `CHOICE` questions (and line-item `CHOICE` fields), you can optionally set `ui.control` in the Config JSON to influence which control is rendered:
-     - `auto` (default): `<= 3` options → segmented, `<= 6` → radio list, else → native dropdown. Boolean-like non-required choices (e.g., YES/NO) may render as an iOS switch.
-     - `select`, `radio`, `segmented`, `switch`: force a specific variant.
+    - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`. The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
+      - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).
+      - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
+    - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, locale, projection, limit, pageToken)` Apps Script function is included in `dist/Code.js` and used by the web UI. Use this when options need to stay in sync with another form or sheet.
+    - **Choice UI controls (iOS-style)**: For `CHOICE` questions (and line-item `CHOICE` fields), you can optionally set `ui.control` in the Config JSON to influence which control is rendered:
+      - `auto` (default): `<= 3` options → segmented, `<= 6` → radio list, else → native dropdown. Boolean-like non-required choices (e.g., YES/NO) may render as an iOS switch.
+      - `select`, `radio`, `segmented`, `switch`: force a specific variant.
 
-     Example:
+      Example:
 
-     ```json
-     { "ui": { "control": "segmented" } }
-     ```
+      ```json
+      { "ui": { "control": "segmented" } }
+      ```
 
-   - **Label/control layout override**: For any field (top-level, line-item, subgroup), you can force the label to be stacked above the control:
+    - **Label/control layout override**: For any field (top-level, line-item, subgroup), you can force the label to be stacked above the control:
 
-     ```json
-     { "ui": { "labelLayout": "stacked" } }
-     ```
+      ```json
+      { "ui": { "labelLayout": "stacked" } }
+      ```
 
-   - **Consent checkbox**: A `CHECKBOX` field with **no options** (and no `dataSource`) is treated as a consent boolean and rendered as a **single checkbox**. The stored value is a boolean; when `required: true`, the checkbox must be checked to submit.
-   - **Auto-increment IDs**: For `TEXT` questions that should generate IDs (e.g., “Meal Preparation #”), add:
-
-     ```json
-     {
-       "autoIncrement": {
-         "prefix": "MP-AA",
-         "padLength": 6
-       }
-     }
-     ```
-
-     Leave the field empty in the UI and the backend will emit `MP-AA000001`, `MP-AA000002`, etc. Counters are stored in script properties, so numbering persists across deployments. Use `"propertyKey": "MEAL_RUN"` when you need isolated counters within the same form.
-   - **Default values (`defaultValue`)**: To prefill a field on **new records / new rows**, add `defaultValue` in the field JSON.
-     - This is only applied when the field is **missing from the payload**, so it **does not override user edits** once the field exists.
-     - Works for **top-level fields** and **line-item / subgroup fields**.
-
-    ```json
-    { "defaultValue": "no" }
-    ```
-
-    - Notes:
-      - For `CHOICE`, use the stored option value (usually the EN option string).
-      - For consent `CHECKBOX` (no options + no `dataSource`), use `true/false`.
-      - For multi-select `CHECKBOX`, use an array: `{ "defaultValue": ["A", "B"] }`.
-   - **Selection effects (auto line items)**: Add `selectionEffects` to a CHOICE/CHECKBOX config to spawn line items automatically when certain values are picked. Example:
+    - **Consent checkbox**: A `CHECKBOX` field with **no options** (and no `dataSource`) is treated as a consent boolean and rendered as a **single checkbox**. The stored value is a boolean; when `required: true`, the checkbox must be checked to submit.
+    - **Auto-increment IDs**: For `TEXT` questions that should generate IDs (e.g., “Meal Preparation #”), add:
 
       ```json
       {
-        "selectionEffects": [
-          {
-            "type": "addLineItems",
-            "groupId": "DELIVERY_LINES",
-            "triggerValues": ["Add lines"],
-            "preset": { "ITEM_UNIT": "Crate" }
-          }
-        ]
+        "autoIncrement": {
+          "prefix": "MP-AA",
+          "padLength": 6
+        }
       }
       ```
+
+      Leave the field empty in the UI and the backend will emit `MP-AA000001`, `MP-AA000002`, etc. Counters are stored in script properties, so numbering persists across deployments. Use `"propertyKey": "MEAL_RUN"` when you need isolated counters within the same form.
+    - **Default values (`defaultValue`)**: To prefill a field on **new records / new rows**, add `defaultValue` in the field JSON.
+      - This is only applied when the field is **missing from the payload**, so it **does not override user edits** once the field exists.
+      - Works for **top-level fields** and **line-item / subgroup fields**.
+
+      ```json
+      { "defaultValue": "no" }
+      ```
+
+      > **Notes:**
+      >- For `CHOICE`, use the stored option value (usually the EN option string).
+      >- For consent `CHECKBOX` (no options + no `dataSource`), use `true/false`.
+      >- For multi-select `CHECKBOX`, use an array: `{ "defaultValue": ["A", "B"] }`.
+    - **Selection effects (auto line items)**: Add `selectionEffects` to a CHOICE/CHECKBOX config to spawn line items automatically when certain values are picked. Example:
+
+       ```json
+       {
+         "selectionEffects": [
+           {
+             "type": "addLineItems",
+             "groupId": "DELIVERY_LINES",
+             "triggerValues": ["Add lines"],
+             "preset": { "ITEM_UNIT": "Crate" }
+           }
+         ]
+       }
+       ```
 
       This will add a row to the `DELIVERY_LINES` line-item group when the value "Add lines" is selected, pre-filling the `ITEM_UNIT` field with "Crate".
       - You can also **copy values** into the new row using reference strings in `preset`:
@@ -270,11 +271,26 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
-   - **Filters & rules**: For CHOICE/CHECKBOX fields, add `optionFilter` in the JSON to filter options based on another field, and `validationRules` to enforce dependencies (works in main form and line items).
+    - **Filters & rules**: For CHOICE/CHECKBOX fields, add `optionFilter` in the JSON to filter options based on another field, and `validationRules` to enforce dependencies (works in main form and line items).
       - Example (main form filter):
 
         ```json
         { "optionFilter": { "dependsOn": "Supplier", "optionMap": { "VDS": ["Fresh vegetables", "Dairy"], "*": ["Other"] } } }
+        ```
+
+      - Sheet-driven option maps (recommended for non-developers): use `optionMapRef` to load the mapping from a separate tab.
+        - Create a tab (e.g. `Supplier_Map`) with a **header row** and at least two columns:
+          - `Supplier` (key)
+          - `Allowed options` (lookup value)
+        - Add one row per mapping entry. Repeated keys are merged. Add a `*` key for fallback.
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": "Supplier",
+            "optionMapRef": { "ref": "REF:Supplier_Map", "keyColumn": "Supplier", "lookupColumn": "Allowed options" }
+          }
+        }
         ```
 
       - Composite filters and cross-scope dependencies:
@@ -403,65 +419,75 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```
 
        The same operators (`equals`, `greaterThan`, `lessThan`) and actions (`required`, `min`, `max`, `allowed`, `disallowed`) work inside line items.
-   - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
-    - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
-    - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; search/sort run client-side on the loaded rows (totalCount is capped at 200).
-   - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
-   - **Quick recipe for the new features**:
-     - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
+    - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
+      - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
+      - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; search/sort run client-side on the loaded rows (totalCount is capped at 200).
+    - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
+    - **Quick recipe for the new features**:
+      - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
 
-       ```json
-       {
-         "sectionSelector": {
-           "id": "ITEM_FILTER",
-           "labelEn": "Category",
-           "optionsRef": "REF:SelectorOptions" // or inline: "options": ["Veg", "Dairy"], "optionsFr": [...]
-         },
-         "fields": [ ...your existing line-item fields... ]
-       }
-       ```
+        ```json
+        {
+          "sectionSelector": {
+            "id": "ITEM_FILTER",
+            "labelEn": "Category",
+            "optionsRef": "REF:SelectorOptions" // or inline: "options": ["Veg", "Dairy"], "optionsFr": [...]
+          },
+          "fields": [ ...your existing line-item fields... ]
+        }
+        ```
 
        Use `ITEM_FILTER` in line-item `optionFilter.dependsOn` or validation `when.fieldId` so options/rules react to the selector.
-     - *Totals under line items*: In the same LINE_ITEM_GROUP JSON, append:
+      - *Totals under line items*: In the same LINE_ITEM_GROUP JSON, append:
 
-       ```json
-       "totals": [
-         { "type": "count", "label": { "en": "Items" } },
-         { "type": "sum", "fieldId": "QTY", "label": { "en": "Total qty" }, "decimalPlaces": 1 }
-       ]
-       ```
+        ```json
+        "totals": [
+          { "type": "count", "label": { "en": "Items" } },
+          { "type": "sum", "fieldId": "QTY", "label": { "en": "Total qty" }, "decimalPlaces": 1 }
+        ]
+        ```
 
-       `count` tallies visible rows; `sum` adds a numeric line-item field (`fieldId` required).
-     - *Show/hide logic*: Add `visibility` wherever you configure the field (Config JSON for main questions; line-item field Config column or inline field JSON):
+        `count` tallies visible rows; `sum` adds a numeric line-item field (`fieldId` required).
+      - *Show/hide logic*: Add `visibility` wherever you configure the field (Config JSON for main questions; line-item field Config column or inline field JSON):
 
-       ```json
-       { "visibility": { "showWhen": { "fieldId": "Supplier", "equals": "Local" } } }
-       ```
+        ```json
+        { "visibility": { "showWhen": { "fieldId": "Supplier", "equals": "Local" } } }
+        ```
 
-       Supports `showWhen`/`hideWhen` with `equals`, `greaterThan`, `lessThan`. Line-item fields can reference top-level or sibling fields (including `sectionSelector`).
-     - *Clear-on-change reset*: On a controlling question add `clearOnChange: true` in Config JSON. When that field changes, all other fields and line items clear, then filters/visibility reapply. Handy for “mode” or “category” selectors.
-     - *List view (start on list)*: Add a `List View?` column to the config sheet and mark `TRUE` on the fields you want to display in the list. If at least one is `TRUE`, the form definition includes `listView` and `startRoute: "list"` so the app opens in list mode showing those fields plus `createdAt`/`updatedAt` with pagination.
-     - *Data sources (options/prefill from sheets/tabs)*: For CHOICE/CHECKBOX questions (or line-item fields via field JSON), set `dataSource`:
+        Supports `showWhen`/`hideWhen` with `equals`, `greaterThan`, `lessThan`. Line-item fields can reference top-level or sibling fields (including `sectionSelector`).
+      - *Clear-on-change reset*: On a controlling question add `clearOnChange: true` in Config JSON. When that field changes, all other fields and line items clear, then filters/visibility reapply. Handy for “mode” or “category” selectors.
+      - *List view (start on list)*: Add a `List View?` column to the config sheet and mark `TRUE` on the fields you want to display in the list. If at least one is `TRUE`, the form definition includes `listView` and `startRoute: "list"` so the app opens in list mode showing those fields plus `createdAt`/`updatedAt` with pagination.
+      - *Data sources (options/prefill from sheets/tabs)*: For CHOICE/CHECKBOX questions (or line-item fields via field JSON), set `dataSource`:
 
-       ```json
-       {
-         "dataSource": {
-           "id": "1abcDEFsheetId::Products",    // or "Products" for same spreadsheet tab
-           "projection": ["name_en"],
-           "localeKey": "locale",               // optional column used to filter by locale
-           "mapping": { "name_en": "value" },   // optional source->target remap
-           "limit": 100,
-           "mode": "options"
-         }
-       }
-       ```
+        ```json
+        {
+          "dataSource": {
+            "id": "1abcDEFsheetId::Products",    // or "Products" for same spreadsheet tab
+            "projection": ["name_en"],
+            "localeKey": "locale",               // optional column used to filter by locale
+            "mapping": { "name_en": "value" },   // optional source->target remap
+            "limit": 100,
+            "mode": "options"
+          }
+        }
+        ```
 
-   - *Tooltips from data sources*: Add `"tooltipField": "column_name"` inside `dataSource` to show tooltip overlays for each option (works for line-item fields too). Inline option metadata is supported as a fallback. You can customize the overlay title/trigger text per field with `"tooltipLabel": { "en": "Recipe instructions", "fr": "Instructions", "nl": "Instructies" }`; the label is localized automatically in form and summary.
-   - *Readonly TEXT value maps*: Add `valueMap` with `dependsOn` and `optionMap` to auto-fill a readonly TEXT field (arrays join with `","`). Example: `{"valueMap":{"dependsOn":"ING","optionMap":{"Pesto":["Milk","Peanuts"],"*":["None"]}}}`.
-   - *Consolidated aggregation (summary + PDF)*: Unique values are shown automatically in the summary view and can be referenced in PDF/email templates with placeholders. Use `{{CONSOLIDATED(GROUP.FIELD)}}` for parent groups, and `{{CONSOLIDATED(GROUP.SUBGROUP.FIELD)}}` for nested subgroups (IDs are uppercase; dotted paths match the JSON shape above). Example: `{{CONSOLIDATED(MP_DISHES.INGREDIENTS.ALLERGEN)}}` renders the unique allergens across all ingredient rows.
-   - *ITEM_FILTER visibility*: The section selector (`ITEM_FILTER`) remains available for filters/visibility but is hidden in the summary view (including inside subgroups).
+    - *Tooltips from data sources*: Add `"tooltipField": "column_name"` inside `dataSource` to show tooltip overlays for each option (works for line-item fields too). Inline option metadata is supported as a fallback. You can customize the overlay title/trigger text per field with `"tooltipLabel": { "en": "Recipe instructions", "fr": "Instructions", "nl": "Instructies" }`; the label is localized automatically in form and summary.
+    - *Readonly TEXT value maps*: Add `valueMap` with `dependsOn` and `optionMap` to auto-fill a readonly TEXT field (arrays join with `","`). Example: `{"valueMap":{"dependsOn":"ING","optionMap":{"Pesto":["Milk","Peanuts"],"*":["None"]}}}`.
+      - You can also load `valueMap.optionMap` from a sheet tab using `optionMapRef` (same shape as `optionFilter`):
+        - Create a tab (e.g. `Allergen_Map`) with headers like `ING` and `Allergens` (key + lookup).
+        - Repeated keys are merged; `*` is a fallback.
+        - Each lookup cell can contain a single value or a comma-separated list.
+        - Example:
 
-       The backend `fetchDataSource` reads that tab (or external sheet id + tab) with projection, locale filtering, and mapping. For prefilling line items, include the `mapping` that matches source columns to target field ids.
+        ```json
+        { "valueMap": { "dependsOn": "ING", "optionMapRef": { "ref": "REF:Allergen_Map", "keyColumn": "ING", "lookupColumn": "Allergens" } } }
+        ```
+
+    - *Consolidated aggregation (summary + PDF)*: Unique values are shown automatically in the summary view and can be referenced in PDF/email templates with placeholders. Use `{{CONSOLIDATED(GROUP.FIELD)}}` for parent groups, and `{{CONSOLIDATED(GROUP.SUBGROUP.FIELD)}}` for nested subgroups (IDs are uppercase; dotted paths match the JSON shape above). Example: `{{CONSOLIDATED(MP_DISHES.INGREDIENTS.ALLERGEN)}}` renders the unique allergens across all ingredient rows.
+    - *ITEM_FILTER visibility*: The section selector (`ITEM_FILTER`) remains available for filters/visibility but is hidden in the summary view (including inside subgroups).
+
+        The backend `fetchDataSource` reads that tab (or external sheet id + tab) with projection, locale filtering, and mapping. For prefilling line items, include the `mapping` that matches source columns to target field ids.
 
 ### Data-driven selection effects (line items)
 

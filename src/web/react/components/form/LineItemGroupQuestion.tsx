@@ -7,7 +7,8 @@ import {
   computeTotals,
   loadOptionsFromDataSource,
   optionKey,
-  toDependencyValue
+  toDependencyValue,
+  toOptionSet
 } from '../../../core';
 import { resolveLocalizedString } from '../../../i18n';
 import {
@@ -807,7 +808,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                     ? resolveValueMapValue(field.valueMap, (fid: string) => {
                         if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
                         return values[fid];
-                      })
+                      }, { language, targetOptions: toOptionSet(field) })
                     : undefined;
                   const raw = field.valueMap ? mapped : (row.values || {})[field.id];
                   const filled = !isEmptyValue(raw as any);
@@ -1040,7 +1041,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 ? resolveValueMapValue(titleField.valueMap, fid => {
                                     if (row.values.hasOwnProperty(fid)) return row.values[fid];
                                     return values[fid];
-                                  })
+                                  }, { language, targetOptions: toOptionSet(titleField) })
                                 : undefined;
                               const fieldValueRaw = titleField.valueMap ? mapped : ((row.values[titleField.id] as any) ?? '');
                               const fieldValue = titleField.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
@@ -1466,7 +1467,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           ? resolveValueMapValue(field.valueMap, fid => {
                               if (row.values.hasOwnProperty(fid)) return row.values[fid];
                               return values[fid];
-                            })
+                            }, { language, targetOptions: toOptionSet(field) })
                           : undefined;
                           const fieldValueRaw = field.valueMap ? mapped : ((row.values[field.id] as any) ?? '');
                           const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
@@ -1552,7 +1553,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             ? resolveValueMapValue(field.valueMap, (fid: string) => {
                                 if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
                                 return values[fid];
-                              })
+                              }, { language, targetOptions: toOptionSet(field) })
                             : undefined;
                           const raw = field.valueMap ? mapped : (row.values || {})[field.id];
                           return !isEmptyValue(raw as any);
@@ -2102,7 +2103,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
                                           if (row.values.hasOwnProperty(fid)) return row.values[fid];
                                           return values[fid];
-                                        })
+                                        }, { language, targetOptions: toOptionSet(field) })
                                       : undefined;
                                       const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
                                       const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
@@ -2168,7 +2169,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             if ((subRow.values || {}).hasOwnProperty(fid)) return (subRow.values || {})[fid];
                                             if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
                                             return values[fid];
-                                          })
+                                          }, { language, targetOptions: toOptionSet(field) })
                                         : undefined;
                                       const raw = field.valueMap ? mapped : (subRow.values || {})[field.id];
                                       return !isEmptyValue(raw as any);

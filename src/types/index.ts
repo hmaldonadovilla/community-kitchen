@@ -96,9 +96,50 @@ export interface FileUploadConfig {
   allowedExtensions?: string[];
 }
 
+export type SheetColumnRef = string | number;
+
+/**
+ * Sheet-driven option/value maps.
+ *
+ * Allows non-developers to maintain mappings directly in a spreadsheet tab instead of writing JSON objects.
+ *
+ * The referenced tab should have a header row (row 1). Data is read from row 2 onward.
+ * Each row contributes one (key -> lookup) entry; repeated keys are merged.
+ */
+export interface OptionMapRefConfig {
+  /**
+   * Sheet/tab reference.
+   * - `REF:TabName` (recommended, consistent with other ref patterns)
+   * - `TabName` (also accepted)
+   */
+  ref: string;
+  /**
+   * Column holding the lookup key (dependency value or composite key).
+   * Accepts:
+   * - 1-based index (e.g. 1)
+   * - Column letter (e.g. "A")
+   * - Header label (e.g. "Supplier")
+   */
+  keyColumn: SheetColumnRef;
+  /**
+   * Column holding the lookup value(s) (allowed options / derived values).
+   * Accepts:
+   * - 1-based index (e.g. 2)
+   * - Column letter (e.g. "B")
+   * - Header label (e.g. "Allowed Options")
+   */
+  lookupColumn: SheetColumnRef;
+  /**
+   * Optional delimiter to split multiple values stored in a single cell.
+   * Defaults to splitting on common separators like comma/semicolon/newline.
+   */
+  delimiter?: string;
+}
+
 export interface OptionFilter {
   dependsOn: string | string[]; // question/field ID(s) to watch (supports array for composite filters)
   optionMap: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
+  optionMapRef?: OptionMapRefConfig; // optional source reference (resolved into optionMap at load time)
 }
 
 // Maps a controlling field's value to a derived readonly value for TEXT fields.
@@ -106,6 +147,7 @@ export interface OptionFilter {
 export interface ValueMapConfig {
   dependsOn: string | string[];
   optionMap: Record<string, string[]>;
+  optionMapRef?: OptionMapRefConfig; // optional source reference (resolved into optionMap at load time)
 }
 
 export interface VisibilityCondition {

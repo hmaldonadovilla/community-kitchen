@@ -1488,7 +1488,9 @@ const FormView: React.FC<FormViewProps> = ({
       case 'PARAGRAPH':
       case 'NUMBER':
       case 'DATE':
-        const mappedValue = q.valueMap ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId]) : undefined;
+        const mappedValue = q.valueMap
+          ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId], { language, targetOptions: toOptionSet(q) })
+          : undefined;
         const inputValueRaw = q.valueMap ? (mappedValue || '') : ((values[q.id] as any) ?? '');
         const inputValue = q.type === 'DATE' ? toDateInputValue(inputValueRaw) : inputValueRaw;
         if (q.type === 'NUMBER') {
@@ -2652,11 +2654,15 @@ const FormView: React.FC<FormViewProps> = ({
                         }
                         default: {
                           const mapped = field.valueMap
-                            ? resolveValueMapValue(field.valueMap, fid => {
-                                if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
-                                if (parentRowValues.hasOwnProperty(fid)) return parentRowValues[fid];
-                                return values[fid];
-                              })
+                            ? resolveValueMapValue(
+                                field.valueMap,
+                                fid => {
+                                  if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
+                                  if (parentRowValues.hasOwnProperty(fid)) return parentRowValues[fid];
+                                  return values[fid];
+                                },
+                                { language, targetOptions: toOptionSet(field) }
+                              )
                             : undefined;
                           const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
                           const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
@@ -2706,11 +2712,15 @@ const FormView: React.FC<FormViewProps> = ({
                         hasError={(field: any) => !!errors[`${subKey}__${field.id}__${subRow.id}`]}
                         isComplete={(field: any) => {
                           const mapped = field.valueMap
-                            ? resolveValueMapValue(field.valueMap, (fid: string) => {
-                                if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fid)) return subRow.values[fid];
-                                if (Object.prototype.hasOwnProperty.call(parentRowValues || {}, fid)) return parentRowValues[fid];
-                                return values[fid];
-                              })
+                            ? resolveValueMapValue(
+                                field.valueMap,
+                                (fid: string) => {
+                                  if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fid)) return subRow.values[fid];
+                                  if (Object.prototype.hasOwnProperty.call(parentRowValues || {}, fid)) return parentRowValues[fid];
+                                  return values[fid];
+                                },
+                                { language, targetOptions: toOptionSet(field) }
+                              )
                             : undefined;
                           const raw = field.valueMap ? mapped : (subRow.values || {})[field.id];
                           return !isEmptyValue(raw as any);
@@ -2876,7 +2886,10 @@ const FormView: React.FC<FormViewProps> = ({
                   return rows.length > 0;
                 }
                 const mappedValue = (q as any).valueMap
-                  ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId])
+                  ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId], {
+                      language,
+                      targetOptions: toOptionSet(q as any)
+                    })
                   : undefined;
                 const raw = (q as any).valueMap ? mappedValue : (values[q.id] as any);
                 return !isEmptyValue(raw as any);

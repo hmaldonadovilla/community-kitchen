@@ -1,92 +1,92 @@
-optionEn,optionFr,optionNl
-Onions,Oignons,Oignons
-Potatoes,Pommes de terre,Pommes de terre
-Broccoli,Brocoli,Brocoli
-Aubergines,Aubergines,Aubergines
-Carrots,Carottes,Carottes
-Tomatoes,Tomates,Tomates
-Peppers,Poivrons,Poivrons
-Cauliflower,Chou-fleur,Chou-fleur
-Squash,Courge,Courge
-Sweet potatoes,Patates douces,Patates douces
-Parsley,Persil,Persil
-Basil,Basilic,Basilic
-Dill,Aneth,Aneth
-Butternut,Butternut,Butternut
-Pumpkin,Potiron,Potiron
-Pleurotte mushrooms,Pleurotes,Pleurotes
-Spaghetti squash,Courge spaghetti,Courge spaghetti
-Courgettes,Courgettes,Courgettes
-Leeks,Poireaux,Poireaux
-Fresh mushrooms,Champignons frais,Champignons frais
-Rice,Riz,Riz
-Couscous (wheat),Couscous (blé),Couscous (blé)
-Bulgur (wheat),Boulgour (blé),Boulgour (blé)
-Orzo (wheat),Orzo (blé),Orzo (blé)
-Pasta (wheat),Pâtes (blé),Pâtes (blé)
-Chickpeas (dry),Pois chiches secs,Pois chiches secs
-Red lentils,Lentilles corail,Lentilles corail
-Green lentils,Lentilles vertes,Lentilles vertes
-Tomato pulp,Pulpe de tomate,Pulpe de tomate
-Tomato paste,Concentré de tomate,Concentré de tomate
-Diced tomatoes,Tomates concassées,Tomates concassées
-Garlic paste,Pâte d'ail,Pâte d'ail
-Ginger paste,Pâte de gingembre,Pâte de gingembre
-Cream,Crème,Crème
-Yellow curry paste,Pâte de curry jaune,Pâte de curry jaune
-Coconut milk,Lait de coco,Lait de coco
-Oat milk,Lait d'avoine,Havermelk
-Peanut butter,Beurre de cacahuète,Beurre de cacahuète
-Green beans (tinned),Haricots verts en conserve,Haricots verts en conserve
-Carrots (tinned),Carottes en conserve,Carottes en conserve
-Chickpeas (tinned),Pois chiches en conserve,Pois chiches en conserve
-Red beans (tinned),Haricots rouges en conserve,Haricots rouges en conserve
-White beans (tinned),Haricots blancs en conserve,Haricots blancs en conserve
-Pesto,Pesto,Pesto
-Greek yogurt,Yaourt grec,Yaourt grec
-Mozzarella grated cheese,Mozzarella râpée,Mozzarella râpée
-Chicken stripes (breaded),Lanières de poulet panées,Lanières de poulet panées
-Chicken cubes,Dés de poulet,Dés de poulet
-Chicken wings,Ailes de poulet,Ailes de poulet
-Chicken tenders (breaded),Nuggets de poulet panés,Nuggets de poulet panés
-Cordon bleu,Cordon bleu,Cordon bleu
-Fishsticks (breaded),Bâtonnets de poisson panés,Bâtonnets de poisson panés
-Frozen green beans,Haricots verts surgelés,Haricots verts surgelés
-Frozen Chinese mix,Mélange chinois surgelé,Mélange chinois surgelé
-Frozen corn,Maïs surgelé,Maïs surgelé
-Frozen leeks,Poireaux surgelés,Poireaux surgelés
-Frozen mushrooms,Champignons surgelés,Champignons surgelés
-Frozen carrots,Carottes surgelées,Carottes surgelées
-Frozen couscous mix,Mélange couscous surgelé,Mélange couscous surgelé
-Frozen courgettes,Courgettes surgelées,Courgettes surgelées
-Frozen pumpkin,Potiron surgelé,Potiron surgelé
-Frozen peppers,Poivrons surgelés,Poivrons surgelés
-Frozen spinach,Épinards surgelés,Épinards surgelés
-Frozen red beans,Haricots rouges surgelés,Haricots rouges surgelés
-Frozen onions,Oignons surgelés,Oignons surgelés
-Frozen green peas,Petits pois surgelés,Petits pois surgelés
-Frozen cauliflower,Chou-fleur surgelé,Chou-fleur surgelé
-Bouillon powder (soy),Bouillon en poudre (soja),Bouillon en poudre (soja)
-Salt,Sel,Sel
-Sugar,Sucre,Sucre
-Curry madras,Curry madras,Curry madras
-Coriander,Coriandre,Coriandre
-Cayenne pepper,Piment de Cayenne,Piment de Cayenne
-Turmeric,Curcuma,Curcuma
-Black pepper,Poivre noir,Poivre noir
-Paprika,Paprika,Paprika
-Cumin,Cumin,Cumin
-Cinnamon,Cannelle,Cannelle
-Mint,Menthe,Menthe
-Oregano,Origan,Origan
-Dried parsley,Persil séché,Persil séché
-Dried dill,Aneth séché,Aneth séché
-Dried mint,Menthe séchée,Menthe séchée
-Dried oregano,Origan séché,Origan séché
-Bay leaves,Feuilles de laurier,Feuilles de laurier
-Nutmeg,Muscade,Muscade
-Dried basil,Basilic séché,Basilic séché
-Soy sauce (soy),Sauce soja (soja),Sauce soja (soja)
-Miso paste (soy),Pâte miso (soja),Pâte miso (soja)
-Sunflower oil,Huile de tournesol,Huile de tournesol
-Olive oil,Huile d'olive,Huile d'olive
+optionEn,optionFr,optionNl,Category,Allergens
+Onions,Oignons,Oignons,Fresh vegetables,
+Potatoes,Pommes de terre,Pommes de terre,Fresh vegetables,
+Broccoli,Brocoli,Brocoli,Fresh vegetables,
+Aubergines,Aubergines,Aubergines,Fresh vegetables,
+Carrots,Carottes,Carottes,Fresh vegetables,
+Tomatoes,Tomates,Tomates,Fresh vegetables,
+Peppers,Poivrons,Poivrons,Fresh vegetables,
+Cauliflower,Chou-fleur,Chou-fleur,Fresh vegetables,
+Squash,Courge,Courge,Fresh vegetables,
+Sweet potatoes,Patates douces,Patates douces,Fresh vegetables,
+Parsley,Persil,Persil,Fresh vegetables,
+Basil,Basilic,Basilic,Fresh vegetables,
+Dill,Aneth,Aneth,Fresh vegetables,
+Butternut,Butternut,Butternut,Fresh vegetables,
+Pumpkin,Potiron,Potiron,Fresh vegetables,
+Pleurotte mushrooms,Pleurotes,Pleurotes,Fresh vegetables,
+Spaghetti squash,Courge spaghetti,Courge spaghetti,Fresh vegetables,
+Courgettes,Courgettes,Courgettes,Fresh vegetables,
+Leeks,Poireaux,Poireaux,Fresh vegetables,
+Fresh mushrooms,Champignons frais,Champignons frais,Fresh vegetables,
+Rice,Riz,Riz,Dry carbohydrates,
+Couscous (wheat),Couscous (blé),Couscous (blé),Dry carbohydrates,Gluten
+Bulgur (wheat),Boulgour (blé),Boulgour (blé),Dry carbohydrates,Gluten
+Orzo (wheat),Orzo (blé),Orzo (blé),Dry carbohydrates,Gluten
+Pasta (wheat),Pâtes (blé),Pâtes (blé),Dry carbohydrates,Gluten
+Chickpeas (dry),Pois chiches secs,Pois chiches secs,Vegan protein,
+Red lentils,Lentilles corail,Lentilles corail,Vegan protein,
+Green lentils,Lentilles vertes,Lentilles vertes,Vegan protein,
+Tomato pulp,Pulpe de tomate,Pulpe de tomate,Tins/Pots,
+Tomato paste,Concentré de tomate,Concentré de tomate,Tins/Pots,
+Diced tomatoes,Tomates concassées,Tomates concassées,Tins/Pots,
+Garlic paste,Pâte d'ail,Pâte d'ail,Tins/Pots,
+Ginger paste,Pâte de gingembre,Pâte de gingembre,Tins/Pots,
+Cream,Crème,Crème,Tins/Pots,Milk
+Yellow curry paste,Pâte de curry jaune,Pâte de curry jaune,Tins/Pots,
+Coconut milk,Lait de coco,Lait de coco,Tins/Pots,
+Oat milk,Lait d'avoine,Havermelk,Dairy,Gluten
+Peanut butter,Beurre de cacahuète,Beurre de cacahuète,Tins/Pots,Peanuts
+Green beans (tinned),Haricots verts en conserve,Haricots verts en conserve,Tins/Pots,
+Carrots (tinned),Carottes en conserve,Carottes en conserve,Tins/Pots,
+Chickpeas (tinned),Pois chiches en conserve,Pois chiches en conserve,Tins/Pots,
+Red beans (tinned),Haricots rouges en conserve,Haricots rouges en conserve,Tins/Pots,
+White beans (tinned),Haricots blancs en conserve,Haricots blancs en conserve,Tins/Pots,
+Pesto,Pesto,Pesto,Tins/Pots,Milk; Peanuts
+Greek yogurt,Yaourt grec,Yaourt grec,Dairy,Milk
+Mozzarella grated cheese,Mozzarella râpée,Mozzarella râpée,Dairy,Milk
+Chicken stripes (breaded),Lanières de poulet panées,Lanières de poulet panées,Animal protein Halal,Gluten
+Chicken cubes,Dés de poulet,Dés de poulet,Animal protein Halal,
+Chicken wings,Ailes de poulet,Ailes de poulet,Animal protein Halal,
+Chicken tenders (breaded),Nuggets de poulet panés,Nuggets de poulet panés,Animal protein Halal,Gluten
+Cordon bleu,Cordon bleu,Cordon bleu,Animal protein Halal,Gluten
+Fishsticks (breaded),Bâtonnets de poisson panés,Bâtonnets de poisson panés,Animal protein Halal,Gluten
+Frozen green beans,Haricots verts surgelés,Haricots verts surgelés,Frozen vegetables,
+Frozen Chinese mix,Mélange chinois surgelé,Mélange chinois surgelé,Frozen vegetables,
+Frozen corn,Maïs surgelé,Maïs surgelé,Frozen vegetables,
+Frozen leeks,Poireaux surgelés,Poireaux surgelés,Frozen vegetables,
+Frozen mushrooms,Champignons surgelés,Champignons surgelés,Frozen vegetables,
+Frozen carrots,Carottes surgelées,Carottes surgelées,Frozen vegetables,
+Frozen couscous mix,Mélange couscous surgelé,Mélange couscous surgelé,Frozen vegetables,Gluten
+Frozen courgettes,Courgettes surgelées,Courgettes surgelées,Frozen vegetables,
+Frozen pumpkin,Potiron surgelé,Potiron surgelé,Frozen vegetables,
+Frozen peppers,Poivrons surgelés,Poivrons surgelés,Frozen vegetables,
+Frozen spinach,Épinards surgelés,Épinards surgelés,Frozen vegetables,
+Frozen red beans,Haricots rouges surgelés,Haricots rouges surgelés,Frozen vegetables,
+Frozen onions,Oignons surgelés,Oignons surgelés,Frozen vegetables,
+Frozen green peas,Petits pois surgelés,Petits pois surgelés,Frozen vegetables,
+Frozen cauliflower,Chou-fleur surgelé,Chou-fleur surgelé,Frozen vegetables,
+Bouillon powder (soy),Bouillon en poudre (soja),Bouillon en poudre (soja),Spices,Soy
+Salt,Sel,Sel,Spices,
+Sugar,Sucre,Sucre,Spices,
+Curry madras,Curry madras,Curry madras,Spices,
+Coriander,Coriandre,Coriandre,Spices,
+Cayenne pepper,Piment de Cayenne,Piment de Cayenne,Spices,
+Turmeric,Curcuma,Curcuma,Spices,
+Black pepper,Poivre noir,Poivre noir,Spices,
+Paprika,Paprika,Paprika,Spices,
+Cumin,Cumin,Cumin,Spices,
+Cinnamon,Cannelle,Cannelle,Spices,
+Mint,Menthe,Menthe,Spices,
+Oregano,Origan,Origan,Spices,
+Dried parsley,Persil séché,Persil séché,Spices,
+Dried dill,Aneth séché,Aneth séché,Spices,
+Dried mint,Menthe séchée,Menthe séchée,Spices,
+Dried oregano,Origan séché,Origan séché,Spices,
+Bay leaves,Feuilles de laurier,Feuilles de laurier,Spices,
+Nutmeg,Muscade,Muscade,Spices,
+Dried basil,Basilic séché,Basilic séché,Spices,
+Soy sauce (soy),Sauce soja (soja),Sauce soja (soja),Spices,Soy
+Miso paste (soy),Pâte miso (soja),Pâte miso (soja),Spices,Soy
+Sunflower oil,Huile de tournesol,Huile de tournesol,Oils,
+Olive oil,Huile d'olive,Huile d'olive,Oils,

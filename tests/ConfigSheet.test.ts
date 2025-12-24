@@ -239,4 +239,151 @@ describe('ConfigSheet', () => {
     expect(questions[0].dataSource!.limit).toBe(100);
     expect(questions[0].dataSource!.mode).toBe('options');
   });
+
+  test('getQuestions resolves optionFilter.optionMapRef from a ref tab', () => {
+    const configSheet = mockSS.insertSheet('Config: OptionMapRef');
+    const rows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q1',
+        'CHOICE',
+        'Category',
+        'Catégorie',
+        'Categorie',
+        true,
+        'A,B,C',
+        'A,B,C',
+        'A,B,C',
+        'Active',
+        '',
+        `{
+          "optionFilter": {
+            "dependsOn": "Supplier",
+            "optionMapRef": { "ref": "REF:Supplier_Map", "keyColumn": "Supplier", "lookupColumn": "Allowed options" }
+          }
+        }`,
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(rows);
+
+    const mapSheet = mockSS.insertSheet('Supplier_Map');
+    (mapSheet as any).setMockData([
+      ['Supplier', 'Allowed options'],
+      ['VDS', 'Fresh vegetables'],
+      ['VDS', 'Dairy'],
+      ['*', 'Other']
+    ]);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: OptionMapRef');
+    expect(questions.length).toBe(1);
+    expect(questions[0].optionFilter).toBeDefined();
+    expect(questions[0].optionFilter!.optionMap).toEqual({
+      VDS: ['Fresh vegetables', 'Dairy'],
+      '*': ['Other']
+    });
+    expect((questions[0].optionFilter as any).optionMapRef?.ref).toBe('REF:Supplier_Map');
+  });
+
+  test('getQuestions resolves valueMap.optionMapRef from a ref tab', () => {
+    const configSheet = mockSS.insertSheet('Config: ValueMapRef');
+    const rows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q2',
+        'TEXT',
+        'Allergens',
+        'Allergènes',
+        'Allergenen',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "valueMap": {
+            "dependsOn": "ING",
+            "optionMapRef": { "ref": "REF:Allergen_Map", "keyColumn": "ING", "lookupColumn": "Allergens" }
+          }
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(rows);
+
+    const mapSheet = mockSS.insertSheet('Allergen_Map');
+    (mapSheet as any).setMockData([
+      ['ING', 'Allergens'],
+      ['Pesto', 'Milk'],
+      ['Pesto', 'Peanuts'],
+      ['*', 'None']
+    ]);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: ValueMapRef');
+    expect(questions.length).toBe(1);
+    expect(questions[0].valueMap).toBeDefined();
+    expect(questions[0].valueMap!.optionMap).toEqual({
+      Pesto: ['Milk', 'Peanuts'],
+      '*': ['None']
+    });
+    expect((questions[0].valueMap as any).optionMapRef?.ref).toBe('REF:Allergen_Map');
+  });
+
+  test('getQuestions resolves optionMapRef inside inline LINE_ITEM_GROUP JSON', () => {
+    const configSheet = mockSS.insertSheet('Config: LineItemOptionMapRef');
+    const rows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q3',
+        'LINE_ITEM_GROUP',
+        'Items',
+        'Articles',
+        'Artikelen',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "fields": [
+            {
+              "id": "LI1",
+              "type": "CHOICE",
+              "labelEn": "Unit",
+              "options": ["Dry","Chilled"],
+              "optionFilter": {
+                "dependsOn": "Supplier",
+                "optionMapRef": { "ref": "REF:Supplier_Unit_Map", "keyColumn": "Supplier", "lookupColumn": "Allowed" }
+              }
+            }
+          ]
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(rows);
+
+    const mapSheet = mockSS.insertSheet('Supplier_Unit_Map');
+    (mapSheet as any).setMockData([
+      ['Supplier', 'Allowed'],
+      ['VDS', 'Dry'],
+      ['VDS', 'Chilled'],
+      ['*', 'Dry']
+    ]);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: LineItemOptionMapRef');
+    expect(questions.length).toBe(1);
+    expect(questions[0].lineItemConfig).toBeDefined();
+    expect(questions[0].lineItemConfig!.fields.length).toBe(1);
+    expect(questions[0].lineItemConfig!.fields[0].optionFilter).toBeDefined();
+    expect(questions[0].lineItemConfig!.fields[0].optionFilter!.optionMap).toEqual({
+      VDS: ['Dry', 'Chilled'],
+      '*': ['Dry']
+    });
+  });
 });
