@@ -4,6 +4,7 @@ import { SubmissionPayload } from '../api';
 import { FormErrors, LineItemState } from '../types';
 import { resolveFieldLabel } from '../utils/labels';
 import { isEmptyValue } from '../utils/values';
+import { tSystem } from '../../systemStrings';
 import { buildMaybeFilePayload } from './filePayload';
 import { buildSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { applyValueMapsToForm } from './valueMaps';
@@ -156,7 +157,13 @@ export const validateForm = (args: {
             if (hideField) return;
             const val = row.values[field.id];
             if (isEmptyValue(val as any)) {
-              allErrors[`${q.id}__${field.id}__${row.id}`] = resolveFieldLabel(field, language, 'Required') + ' is required';
+              const fieldLabel = resolveFieldLabel(field, language, field.id);
+              allErrors[`${q.id}__${field.id}__${row.id}`] = tSystem(
+                'validation.fieldRequired',
+                language,
+                '{field} is required.',
+                { field: fieldLabel }
+              );
               rowValid = false;
             }
           }
@@ -221,8 +228,13 @@ export const validateForm = (args: {
                   if (hide) return;
                   const val = subRow.values[field.id];
                   if (isEmptyValue(val as any)) {
-                    allErrors[`${subKey}__${field.id}__${subRow.id}`] =
-                      resolveFieldLabel(field, language, 'Required') + ' is required';
+                    const fieldLabel = resolveFieldLabel(field, language, field.id);
+                    allErrors[`${subKey}__${field.id}__${subRow.id}`] = tSystem(
+                      'validation.fieldRequired',
+                      language,
+                      '{field} is required.',
+                      { field: fieldLabel }
+                    );
                     rowValid = false;
                   }
                 }
@@ -239,12 +251,16 @@ export const validateForm = (args: {
         allErrors[q.id] =
           isProgressive && expandGate === 'collapsedFieldsValid'
             ? !hasAnyRow || !hasAnyNonDisabledRow
-              ? 'Complete at least one row (fill the collapsed fields).'
-              : 'Complete at least one valid row.'
-            : 'At least one line item is required.';
+              ? tSystem(
+                  'validation.completeAtLeastOneRowFillCollapsed',
+                  language,
+                  'Complete at least one row (fill the collapsed fields).'
+                )
+              : tSystem('validation.completeAtLeastOneValidRow', language, 'Complete at least one valid row.')
+            : tSystem('validation.atLeastOneLineItemRequired', language, 'At least one line item is required.');
       }
     } else if ((q as any).required && !questionHidden && isEmptyValue(values[q.id])) {
-      allErrors[q.id] = 'This field is required.';
+      allErrors[q.id] = tSystem('validation.thisFieldRequired', language, 'This field is required.');
     }
   });
 

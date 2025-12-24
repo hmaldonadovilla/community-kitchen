@@ -1,15 +1,18 @@
 import React from 'react';
 import { buttonStyles } from '../ui';
 import { FullPageOverlay } from './FullPageOverlay';
+import type { LangCode } from '../../../../types';
+import { tSystem } from '../../../../systemStrings';
 
 export type InfoOverlayProps = {
   open: boolean;
+  language: LangCode;
   title: string;
   text: string;
   onClose: () => void;
 };
 
-export const InfoOverlay: React.FC<InfoOverlayProps> = ({ open, title, text, onClose }) => {
+export const InfoOverlay: React.FC<InfoOverlayProps> = ({ open, language, title, text, onClose }) => {
   if (!open) return null;
   if (!text) return null;
 
@@ -17,10 +20,10 @@ export const InfoOverlay: React.FC<InfoOverlayProps> = ({ open, title, text, onC
     <FullPageOverlay
       open={open}
       zIndex={10020}
-      title={title || 'Info'}
+      title={title || tSystem('common.info', language, 'Info')}
       rightAction={
         <button type="button" onClick={onClose} style={buttonStyles.secondary}>
-          Close
+          {tSystem('common.close', language, 'Close')}
         </button>
       }
     >

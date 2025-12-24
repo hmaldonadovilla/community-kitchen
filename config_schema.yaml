@@ -751,6 +751,33 @@ components:
       type: object
       description: JSON stored in the dashboard’s “Follow-up Config (JSON)” column.
       properties:
+        languages:
+          type: array
+          description: |
+            Enabled UI languages for the web app (max 3). Supported: `EN`, `FR`, `NL`.
+
+            - When omitted, languages are auto-detected from which label columns have values.
+            - You can also provide a comma-separated string (e.g. `"EN,FR"`).
+          items:
+            type: string
+            enum: [EN, FR, NL]
+        disabledLanguages:
+          type: array
+          description: Optional list of languages to disable (removed from `languages`).
+          items:
+            type: string
+            enum: [EN, FR, NL]
+        defaultLanguage:
+          type: string
+          description: Default language for the web app (and the forced language when language selection is disabled).
+          enum: [EN, FR, NL]
+        languageSelectorEnabled:
+          type: boolean
+          description: |
+            Enable/disable language selection in the web app.
+
+            - When `false`, the language selector is hidden and the app always uses `defaultLanguage`.
+            - When `true` (default), users can switch language (if 2+ languages are enabled).
         pdfTemplateId:
           $ref: '#/components/schemas/TemplateIdMap'
         pdfFolderId:

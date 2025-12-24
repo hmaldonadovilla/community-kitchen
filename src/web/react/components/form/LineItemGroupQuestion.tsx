@@ -11,6 +11,7 @@ import {
   toOptionSet
 } from '../../../core';
 import { resolveLocalizedString } from '../../../i18n';
+import { tSystem } from '../../../systemStrings';
 import {
   FieldValue,
   LangCode,
@@ -570,7 +571,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                 }}
               >
                 <PlusIcon />
-                {resolveLocalizedString(q.lineItemConfig?.addButtonLabel, language, 'Add lines')}
+                {resolveLocalizedString(
+                  q.lineItemConfig?.addButtonLabel,
+                  language,
+                  tSystem('lineItems.addLines', language, 'Add lines')
+                )}
               </button>
             );
           }
@@ -582,7 +587,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               style={withDisabled(buttonStyles.secondary, submitting)}
             >
               <PlusIcon />
-              {resolveLocalizedString(q.lineItemConfig?.addButtonLabel, language, 'Add line')}
+              {resolveLocalizedString(
+                q.lineItemConfig?.addButtonLabel,
+                language,
+                tSystem('lineItems.addLine', language, 'Add line')
+              )}
             </button>
           );
         };
@@ -611,7 +620,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                   });
                 }}
               >
-                <option value="">Select…</option>
+                <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
                 {selectorOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
@@ -630,7 +639,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <h3 style={{ margin: 0 }}>{resolveLabel(q, language)}</h3>
               <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
-                {parentCount} item{parentCount === 1 ? '' : 's'}
+                {tSystem(
+                  parentCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
+                  language,
+                  parentCount === 1 ? '{count} item' : '{count} items',
+                  { count: parentCount }
+                )}
               </span>
             </div>
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
@@ -790,7 +804,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
 
                 const blocked = Array.from(new Set([...missing, ...invalid]));
                 if (!blocked.length) return { canExpand: true, reason: '' };
-                return { canExpand: false, reason: `Complete required fields to expand: ${blocked.join(', ')}` };
+                return {
+                  canExpand: false,
+                  reason: tSystem('lineItems.completeRequiredToExpand', language, 'Complete required fields to expand: {fields}', {
+                    fields: blocked.join(', ')
+                  })
+                };
               })();
               const canExpand = gateResult.canExpand;
               const rowLocked = isProgressive && rowCollapsed && !canExpand;
@@ -832,9 +851,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                     : 'ck-progress-bad'
                   : 'ck-progress-neutral';
 
-              const expandLabel = resolveLocalizedString({ en: 'Expand', fr: 'Ouvrir', nl: 'Openen' }, language, 'Expand');
-              const collapseLabel = resolveLocalizedString({ en: 'Collapse', fr: 'Réduire', nl: 'Sluiten' }, language, 'Collapse');
-              const lockedLabel = resolveLocalizedString({ en: 'Locked', fr: 'Verrouillé', nl: 'Vergrendeld' }, language, 'Locked');
+              const expandLabel = tSystem('lineItems.expand', language, 'Expand');
+              const collapseLabel = tSystem('lineItems.collapse', language, 'Collapse');
+              const lockedLabel = tSystem('lineItems.locked', language, 'Locked');
               const pillActionLabel = rowLocked ? lockedLabel : rowCollapsed ? expandLabel : collapseLabel;
               return (
                 <div
@@ -947,7 +966,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           value={choiceVal || ''}
                                           onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
                                         >
-                                          <option value="">Select…</option>
+                                          <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
                                           {optsField.map(opt => (
                                             <option key={opt.value} value={opt.value}>
                                               {opt.label}
@@ -1084,15 +1103,19 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             className="muted"
                             style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
                           >
-                            {rowHasError ? 'Needs attention · ' : ''}
-                            Locked until complete · Fill the collapsed fields to unlock expand.
+                            {rowHasError ? `${tSystem('lineItems.needsAttention', language, 'Needs attention')} · ` : ''}
+                            {tSystem(
+                              'lineItems.lockedUntilComplete',
+                              language,
+                              'Locked until complete · Fill the collapsed fields to unlock expand.'
+                            )}
                           </div>
                         ) : null}
                       </div>
                       <button
                         type="button"
                         className="ck-row-toggle"
-                        aria-label={`${rowCollapsed ? 'Expand' : 'Collapse'} row ${rowIdx + 1} (${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired})`}
+                        aria-label={`${rowCollapsed ? expandLabel : collapseLabel} ${tSystem('lineItems.row', language, 'Row')} ${rowIdx + 1} (${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired})`}
                         aria-expanded={!rowCollapsed}
                         aria-disabled={rowCollapsed && !canExpand}
                         title={
@@ -1117,9 +1140,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           className="muted"
                           style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
                         >
-                          Row {rowIdx + 1}
-                          {rowHasError ? ' · Needs attention' : ''}
-                          {rowLocked ? ' · Locked' : ''}
+                          {tSystem('lineItems.row', language, 'Row')} {rowIdx + 1}
+                          {rowHasError ? ` · ${tSystem('lineItems.needsAttention', language, 'Needs attention')}` : ''}
+                          {rowLocked ? ` · ${tSystem('lineItems.locked', language, 'Locked')}` : ''}
                         </span>
                         <span
                           className={`ck-progress-pill ${requiredRowProgressClass}`}
@@ -1436,7 +1459,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   style={withDisabled(buttonStyles.secondary, submitting)}
                                   title={helperParts.length ? helperParts.join(' | ') : undefined}
                                 >
-                                  Files{items.length ? ` (${items.length})` : ''}
+                                  {tSystem('files.title', language, 'Files')}
+                                  {items.length ? ` (${items.length})` : ''}
                                 </button>
                                 {subgroupTriggerNodes.length ? (
                                   <div className="ck-field-actions">{subgroupTriggerNodes}</div>
@@ -1592,7 +1616,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                     }
                   >
                     <button type="button" onClick={() => removeLineRow(q.id, row.id)} style={buttonStyles.negative}>
-                      Remove
+                      {tSystem('lineItems.remove', language, 'Remove')}
                     </button>
                   </div>
                   {!isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
@@ -1675,7 +1699,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             }}
                           >
                             <PlusIcon />
-                            {resolveLocalizedString(sub.addButtonLabel, language, 'Add lines')}
+                            {resolveLocalizedString(
+                              sub.addButtonLabel,
+                              language,
+                              tSystem('lineItems.addLines', language, 'Add lines')
+                            )}
                           </button>
                         );
                       }
@@ -1705,7 +1733,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           <div style={{ textAlign: 'center', fontWeight: 700 }}>
                             {subLabelResolved || subId}
                             <span className="pill" style={{ marginLeft: 8, background: '#e2e8f0', color: '#334155' }}>
-                              {subCount} item{subCount === 1 ? '' : 's'}
+                              {tSystem(
+                                subCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
+                                language,
+                                subCount === 1 ? '{count} item' : '{count} items',
+                                { count: subCount }
+                              )}
                             </span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
@@ -1730,7 +1763,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       });
                                     }}
                                   >
-                                    <option value="">Select…</option>
+                                    <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
                                     {subSelectorOptions.map(opt => (
                                       <option key={opt.value} value={opt.value}>
                                         {opt.label}
@@ -2069,7 +2102,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                               disabled={submitting}
                                               style={withDisabled(buttonStyles.secondary, submitting)}
                                             >
-                                              Files{items.length ? ` (${items.length})` : ''}
+                                              {tSystem('files.title', language, 'Files')}
+                                              {items.length ? ` (${items.length})` : ''}
                                             </button>
                                           </div>
                                           <div style={srOnly} aria-live="polite">
@@ -2183,7 +2217,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   onClick={() => removeLineRow(subKey, subRow.id)}
                                   style={buttonStyles.negative}
                                 >
-                                  Remove
+                                  {tSystem('lineItems.remove', language, 'Remove')}
                                 </button>
                               </div>
                             </div>
@@ -2225,7 +2259,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                         });
                                       }}
                                     >
-                                      <option value="">Select…</option>
+                                      <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
                                       {subSelectorOptions.map(opt => (
                                         <option key={opt.value} value={opt.value}>
                                           {opt.label}
@@ -2297,7 +2331,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         });
                       }}
                     >
-                      <option value="">Select…</option>
+                      <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
                       {selectorOptions.map(opt => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}

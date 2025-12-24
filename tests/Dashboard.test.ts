@@ -102,4 +102,41 @@ describe('Dashboard', () => {
     expect(forms[0].autoSave?.debounceMs).toBe(1500);
     expect(forms[0].autoSave?.status).toBe('In progress');
   });
+
+  test('getForms parses language config from dashboard config', () => {
+    const configJson = JSON.stringify({
+      languages: ['EN', 'FR', 'NL'],
+      defaultLanguage: 'FR',
+      languageSelectorEnabled: false
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].languages).toEqual(['EN', 'FR', 'NL']);
+    expect(forms[0].defaultLanguage).toBe('FR');
+    expect(forms[0].languageSelectorEnabled).toBe(false);
+  });
+
+  test('getForms removes disabled languages from dashboard config', () => {
+    const configJson = JSON.stringify({
+      languages: 'EN,FR,NL',
+      disabledLanguages: ['FR']
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].languages).toEqual(['EN', 'NL']);
+  });
 });

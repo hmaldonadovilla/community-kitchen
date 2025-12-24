@@ -109,6 +109,9 @@ export class Dashboard {
       const autoSave = dashboardConfig?.autoSave;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
+      const languages = dashboardConfig?.languages;
+      const defaultLanguage = dashboardConfig?.defaultLanguage;
+      const languageSelectorEnabled = dashboardConfig?.languageSelectorEnabled;
       if (title && configSheetName) {
         forms.push({
           title,
@@ -122,7 +125,10 @@ export class Dashboard {
           listViewMetaColumns,
           autoSave,
           summaryViewEnabled,
-          copyCurrentRecordEnabled
+          copyCurrentRecordEnabled,
+          languages,
+          defaultLanguage,
+          languageSelectorEnabled
         });
       }
     });
@@ -155,6 +161,9 @@ export class Dashboard {
     autoSave?: AutoSaveConfig;
     summaryViewEnabled?: boolean;
     copyCurrentRecordEnabled?: boolean;
+    languages?: Array<'EN' | 'FR' | 'NL'>;
+    defaultLanguage?: 'EN' | 'FR' | 'NL';
+    languageSelectorEnabled?: boolean;
   } | undefined {
     if (!raw || (typeof raw === 'string' && raw.trim() === '')) return undefined;
     const value = raw.toString().trim();
@@ -166,6 +175,64 @@ export class Dashboard {
       return undefined;
     }
     if (!parsed || typeof parsed !== 'object') return undefined;
+    const languagesRaw =
+      parsed.languages !== undefined
+        ? parsed.languages
+        : parsed.supportedLanguages !== undefined
+        ? parsed.supportedLanguages
+        : parsed.enabledLanguages !== undefined
+        ? parsed.enabledLanguages
+        : parsed.languageList !== undefined
+        ? parsed.languageList
+        : parsed.langs !== undefined
+        ? parsed.langs
+        : undefined;
+    let languages = this.normalizeLanguageList(languagesRaw);
+
+    const disabledLanguagesRaw =
+      parsed.disabledLanguages !== undefined
+        ? parsed.disabledLanguages
+        : parsed.disabledLangs !== undefined
+        ? parsed.disabledLangs
+        : parsed.disableLanguagesList !== undefined
+        ? parsed.disableLanguagesList
+        : undefined;
+    const disabledLanguages = this.normalizeLanguageList(disabledLanguagesRaw);
+    if (languages && disabledLanguages && disabledLanguages.length) {
+      languages = languages.filter(lang => !disabledLanguages.includes(lang));
+    }
+
+    const defaultLanguage = this.normalizeLanguageCode(
+      parsed.defaultLanguage !== undefined
+        ? parsed.defaultLanguage
+        : parsed.defaultLang !== undefined
+        ? parsed.defaultLang
+        : parsed.languageDefault !== undefined
+        ? parsed.languageDefault
+        : undefined
+    );
+
+    const languageSelectorEnabled = (() => {
+      if (parsed.languageSelectorEnabled !== undefined) return Boolean(parsed.languageSelectorEnabled);
+      if (parsed.languageSelectionEnabled !== undefined) return Boolean(parsed.languageSelectionEnabled);
+      if (parsed.enableLanguageSelector !== undefined) return Boolean(parsed.enableLanguageSelector);
+      if (parsed.disableLanguageSelector !== undefined) return !Boolean(parsed.disableLanguageSelector);
+      if (parsed.singleLanguageMode !== undefined) return !Boolean(parsed.singleLanguageMode);
+      if (parsed.disableLanguages !== undefined && typeof parsed.disableLanguages === 'boolean') {
+        return !Boolean(parsed.disableLanguages);
+      }
+      return undefined;
+    })();
+
+    // Enforce max 3 languages (app supports EN/FR/NL only).
+    if (languages && languages.length > 3) {
+      languages = languages.slice(0, 3);
+    }
+    // Ensure defaultLanguage is included if both are provided.
+    if (languages && languages.length && defaultLanguage && !languages.includes(defaultLanguage)) {
+      languages = [defaultLanguage, ...languages].slice(0, 3);
+    }
+
     const followup = this.buildFollowupConfig(parsed);
     const metaRaw =
       parsed.listViewMetaColumns !== undefined
@@ -197,11 +264,47 @@ export class Dashboard {
       !hasMetaSetting &&
       !autoSave &&
       summaryViewEnabled === undefined &&
-      copyCurrentRecordEnabled === undefined
+      copyCurrentRecordEnabled === undefined &&
+      !languages &&
+      defaultLanguage === undefined &&
+      languageSelectorEnabled === undefined
     ) {
       return undefined;
     }
-    return { followup, listViewMetaColumns, autoSave, summaryViewEnabled, copyCurrentRecordEnabled };
+    return {
+      followup,
+      listViewMetaColumns,
+      autoSave,
+      summaryViewEnabled,
+      copyCurrentRecordEnabled,
+      languages,
+      defaultLanguage,
+      languageSelectorEnabled
+    };
+  }
+
+  private normalizeLanguageCode(value: any): 'EN' | 'FR' | 'NL' | undefined {
+    if (value === undefined || value === null) return undefined;
+    const normalized = value.toString().trim().toUpperCase();
+    if (normalized === 'EN' || normalized === 'FR' || normalized === 'NL') {
+      return normalized;
+    }
+    return undefined;
+  }
+
+  private normalizeLanguageList(value: any): Array<'EN' | 'FR' | 'NL'> | undefined {
+    if (value === undefined || value === null) return undefined;
+    const raw: any[] = Array.isArray(value)
+      ? value
+      : value
+          .toString()
+          .split(',')
+          .map((entry: string) => entry.trim());
+    const normalized = raw
+      .map(v => this.normalizeLanguageCode(v))
+      .filter((v): v is 'EN' | 'FR' | 'NL' => Boolean(v));
+    const unique = Array.from(new Set(normalized));
+    return unique.length ? unique : undefined;
   }
 
   private normalizeAutoSave(value: any): AutoSaveConfig | undefined {

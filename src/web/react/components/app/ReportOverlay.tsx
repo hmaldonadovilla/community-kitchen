@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { buttonStyles } from '../form/ui';
 import { FullPageOverlay } from '../form/overlays/FullPageOverlay';
+import type { LangCode } from '../../../types';
+import { tSystem } from '../../../systemStrings';
 
 export type ReportOverlayState = {
   open: boolean;
@@ -14,9 +16,10 @@ export type ReportOverlayState = {
 };
 
 export const ReportOverlay: React.FC<{
+  language: LangCode;
   state: ReportOverlayState;
   onClose: () => void;
-}> = ({ state, onClose }) => {
+}> = ({ state, language, onClose }) => {
   const {
     open,
     title,
@@ -45,7 +48,7 @@ export const ReportOverlay: React.FC<{
             textDecoration: 'none'
           }}
         >
-          Open
+          {tSystem('common.open', language, 'Open')}
         </a>
       );
       actions.push(
@@ -61,18 +64,18 @@ export const ReportOverlay: React.FC<{
             textDecoration: 'none'
           }}
         >
-          Download
+          {tSystem('common.download', language, 'Download')}
         </a>
       );
     }
     return actions;
-  }, [pdfFileName, pdfObjectUrl]);
+  }, [language, pdfFileName, pdfObjectUrl]);
 
   return (
     <FullPageOverlay
       open={open}
       zIndex={10030}
-      title={title || 'Report'}
+      title={title || tSystem('report.title', language, 'Report')}
       subtitle={subtitle}
       leftAction={
         headerActions.length ? (
@@ -81,25 +84,25 @@ export const ReportOverlay: React.FC<{
       }
       rightAction={
         <button type="button" onClick={onClose} style={buttonStyles.secondary}>
-          Close
+          {tSystem('common.close', language, 'Close')}
         </button>
       }
     >
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {pdfPhase === 'rendering' ? (
           <div style={{ padding: 16 }} className="status">
-            Generating PDF…
+            {tSystem('report.generatingPdf', language, 'Generating PDF…')}
           </div>
         ) : null}
         {pdfPhase === 'error' ? (
           <div style={{ padding: 16 }} className="error">
-            {pdfMessage || 'Failed to generate PDF.'}
+            {pdfMessage || tSystem('report.failedPdf', language, 'Failed to generate PDF.')}
           </div>
         ) : null}
 
         {pdfPhase === 'ready' && pdfObjectUrl ? (
           <div style={{ padding: 16 }} className="status">
-            PDF ready. Use <strong>Open</strong> (or <strong>Download</strong>) above.
+            {tSystem('report.pdfReady', language, 'PDF ready. Use Open (or Download) above.')}
           </div>
         ) : null}
       </div>

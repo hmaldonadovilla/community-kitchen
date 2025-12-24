@@ -48,6 +48,7 @@ import { applyValueMapsToForm } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import packageJson from '../../../package.json';
 import { resolveLabel } from './utils/labels';
+import { tSystem } from '../systemStrings';
 
 type SubmissionMeta = {
   id?: string;
@@ -62,7 +63,13 @@ type DraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused'
 const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
 
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
-  const [language, setLanguage] = useState<LangCode>(normalizeLanguage(definition.languages?.[0] || record?.language));
+  const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
+    'EN' | 'FR' | 'NL'
+  >;
+  const defaultLanguage = normalizeLanguage(definition.defaultLanguage || availableLanguages[0] || record?.language);
+  const allowLanguageSelection = definition.languageSelectorEnabled !== false && availableLanguages.length > 1;
+  const initialLanguage = allowLanguageSelection ? normalizeLanguage(record?.language || defaultLanguage) : defaultLanguage;
+  const [language, setLanguage] = useState<LangCode>(initialLanguage);
   const [values, setValues] = useState<Record<string, FieldValue>>(() => {
     const normalized = normalizeRecordValues(definition, record?.values);
     const initialLineItems = buildInitialLineItems(definition, record?.values);
@@ -122,6 +129,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     },
     [debugEnabled]
   );
+
+  useEffect(() => {
+    // Enforce language config changes from the definition.
+    if (!allowLanguageSelection) {
+      if (language !== defaultLanguage) {
+        setLanguage(defaultLanguage);
+        logEvent('i18n.language.forcedDefault', { defaultLanguage, reason: 'languageSelectorDisabled' });
+      }
+      return;
+    }
+    const normalized = normalizeLanguage(language as any);
+    if (!availableLanguages.includes(normalized as any)) {
+      setLanguage(defaultLanguage);
+      logEvent('i18n.language.reset', { prev: language, defaultLanguage, availableLanguages });
+    }
+  }, [allowLanguageSelection, availableLanguages, defaultLanguage, language, logEvent]);
 
   const formSubmitActionRef = useRef<(() => void) | null>(null);
   const vvBottomRef = useRef<number>(-1);
@@ -1297,7 +1320,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   const handleSubmit = async (submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => {
     if (isClosedRecord) {
-      setStatus('Record is Closed and read-only.');
+      setStatus(tSystem('app.closedReadOnly', language, 'Closed (read-only)'));
       setStatusLevel('info');
       logEvent('submit.blocked.closed');
       return;
@@ -1314,13 +1337,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
-      setStatus('Please fix validation errors.');
+      setStatus(tSystem('validation.fixErrors', language, 'Please fix validation errors.'));
       setStatusLevel('error');
       logEvent('submit.validationFailed');
       return;
     }
     setSubmitting(true);
-    setStatus('Submitting…');
+    setStatus(tSystem('actions.submitting', language, 'Submitting…'));
     setStatusLevel('info');
     try {
       const existingRecordId = resolveExistingRecordId({
@@ -1492,7 +1515,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           }}
           aria-live="polite"
         >
-          Closed (read-only)
+          {tSystem('app.closedReadOnly', language, 'Closed (read-only)')}
         </output>
       );
     }
@@ -1501,11 +1524,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     if (draftSave.phase === 'idle') return null;
 
     let text: string | null = null;
-    if (draftSave.phase === 'saving') text = 'Saving draft…';
-    else if (draftSave.phase === 'saved') text = 'Draft saved.';
-    else if (draftSave.phase === 'dirty') text = 'Draft has unsaved changes.';
-    else if (draftSave.phase === 'paused') text = draftSave.message || 'Draft autosave paused.';
-    else if (draftSave.phase === 'error') text = `Draft save failed: ${draftSave.message || 'Unknown error'}`;
+    if (draftSave.phase === 'saving') text = tSystem('draft.saving', language, 'Saving draft…');
+    else if (draftSave.phase === 'saved') text = tSystem('draft.saved', language, 'Draft saved.');
+    else if (draftSave.phase === 'dirty') text = tSystem('draft.dirty', language, 'Draft has unsaved changes.');
+    else if (draftSave.phase === 'paused') text = draftSave.message || tSystem('draft.paused', language, 'Draft autosave paused.');
+    else if (draftSave.phase === 'error') {
+      const message = draftSave.message || tSystem('draft.unknownError', language, 'Unknown error');
+      text = tSystem('draft.saveFailed', language, 'Draft save failed: {message}', { message });
+    }
 
     if (!text) return null;
     const isError = draftSave.phase === 'error';
@@ -1544,9 +1570,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         title={definition.title || 'Form'}
         buildMarker={BUILD_MARKER}
         isMobile={isMobile}
-        languages={definition.languages || ['EN']}
+        languages={availableLanguages}
         language={language}
-        onLanguageChange={raw => setLanguage(normalizeLanguage(raw))}
+        onLanguageChange={raw => {
+          const next = normalizeLanguage(raw);
+          if (!allowLanguageSelection) {
+            logEvent('i18n.language.changeIgnored', { raw, next, reason: 'languageSelectorDisabled' });
+            setLanguage(defaultLanguage);
+            return;
+          }
+          if (!availableLanguages.includes(next as any)) {
+            logEvent('i18n.language.changeRejected', { raw, next, availableLanguages });
+            setLanguage(defaultLanguage);
+            return;
+          }
+          setLanguage(next);
+        }}
         onRefresh={handleGlobalRefresh}
       />
 
@@ -1617,11 +1656,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       )}
 
       <ReportOverlay
+        language={language}
         state={reportOverlay}
         onClose={closeReportOverlay}
       />
 
       <BottomActionBar
+        language={language}
         view={view}
         submitting={submitting || Boolean(recordLoadingId)}
         readOnly={view === 'form' && isClosedRecord}

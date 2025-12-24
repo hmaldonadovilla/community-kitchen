@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { FieldValue, LangCode, WebFormDefinition, WebFormSubmission } from '../../../types';
+import { tSystem } from '../../../systemStrings';
 import { LineItemState } from '../../types';
 import { ReportLivePreview } from './ReportLivePreview';
 
@@ -57,7 +58,7 @@ export const SummaryView: React.FC<{
       {(recordLoadError || recordLoadingId) && (
         <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {recordLoadError && <div className="error">{recordLoadError}</div>}
-          {recordLoadingId && <div className="status">Loading record…</div>}
+          {recordLoadingId && <div className="status">{tSystem('summary.loadingRecord', language, 'Loading record…')}</div>}
         </div>
       )}
 

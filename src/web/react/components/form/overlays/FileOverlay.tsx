@@ -2,6 +2,8 @@ import React, { useEffect, useMemo } from 'react';
 import { buttonStyles, withDisabled } from '../ui';
 import { fileNameFromUrl, formatFileSize, isFileInstance, isHttpUrl } from '../utils';
 import { FullPageOverlay } from './FullPageOverlay';
+import type { LangCode } from '../../../../types';
+import { tSystem } from '../../../../systemStrings';
 
 export type UploadConfigLike = {
   maxFiles?: number;
@@ -11,6 +13,7 @@ export type UploadConfigLike = {
 
 export type FileOverlayProps = {
   open: boolean;
+  language: LangCode;
   title: string;
   zIndex?: number;
   submitting: boolean;
@@ -24,6 +27,7 @@ export type FileOverlayProps = {
 
 export const FileOverlay: React.FC<FileOverlayProps> = ({
   open,
+  language,
   title,
   zIndex = 10030,
   submitting,
@@ -80,26 +84,46 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
     ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
   );
   const helperParts: string[] = [];
-  if (uploadConfig?.maxFiles) helperParts.push(`${uploadConfig.maxFiles} file${uploadConfig.maxFiles > 1 ? 's' : ''} max`);
-  if (uploadConfig?.maxFileSizeMb) helperParts.push(`<= ${uploadConfig.maxFileSizeMb} MB each`);
-  if (allowedDisplay.length) helperParts.push(`Allowed: ${allowedDisplay.join(', ')}`);
+  if (uploadConfig?.maxFiles) {
+    helperParts.push(
+      tSystem(
+        uploadConfig.maxFiles === 1 ? 'files.maxFilesOne' : 'files.maxFilesMany',
+        language,
+        uploadConfig.maxFiles === 1 ? '1 file max' : '{count} files max',
+        { count: uploadConfig.maxFiles }
+      )
+    );
+  }
+  if (uploadConfig?.maxFileSizeMb) {
+    helperParts.push(
+      tSystem('files.maxSizeEach', language, '≤ {mb} MB each', { mb: uploadConfig.maxFileSizeMb })
+    );
+  }
+  if (allowedDisplay.length) {
+    helperParts.push(
+      tSystem('files.allowed', language, 'Allowed: {exts}', { exts: allowedDisplay.join(', ') })
+    );
+  }
 
-  let selectionLabel = 'No files selected.';
+  let selectionLabel = tSystem('files.noneSelected', language, 'No files selected.');
   if (items.length) {
-    const plural = items.length > 1 ? 's' : '';
-    const bytesLabel = totalBytes ? ` • ${formatFileSize(totalBytes)} new` : '';
-    selectionLabel = `${items.length} file${plural} selected${bytesLabel}`;
+    const base =
+      items.length === 1
+        ? tSystem('files.selectedOne', language, '1 file selected')
+        : tSystem('files.selectedMany', language, '{count} files selected', { count: items.length });
+    const bytesLabel = totalBytes ? ` • ${formatFileSize(totalBytes)}` : '';
+    selectionLabel = `${base}${bytesLabel}`;
   }
 
   return (
     <FullPageOverlay
       open={open}
       zIndex={zIndex}
-      title={title || 'Files'}
+      title={title || tSystem('files.title', language, 'Files')}
       subtitle={selectionLabel}
       rightAction={
         <button type="button" onClick={onClose} style={buttonStyles.secondary}>
-          Close
+          {tSystem('common.close', language, 'Close')}
         </button>
       }
     >
@@ -124,7 +148,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
               disabled={submitting || maxed}
               style={withDisabled(buttonStyles.primary, submitting || maxed)}
             >
-              Add files
+              {tSystem('files.add', language, 'Add files')}
             </button>
             {items.length ? (
               <button
@@ -133,11 +157,11 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                 disabled={submitting}
                 style={withDisabled(buttonStyles.negative, submitting)}
               >
-                Clear all
+                {tSystem('files.clearAll', language, 'Clear all')}
               </button>
             ) : null}
             {helperParts.length ? <span className="muted">{helperParts.join(' | ')}</span> : null}
-            {maxed ? <span className="muted">Maximum files selected.</span> : null}
+            {maxed ? <span className="muted">{tSystem('files.maxSelected', language, 'Maximum files selected.')}</span> : null}
           </div>
 
           {items.length ? (
@@ -150,7 +174,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                 if (isExisting) {
                   href = isHttpUrl(item) ? item : undefined;
                   name = fileNameFromUrl(item);
-                  meta = 'Uploaded';
+                  meta = tSystem('files.uploaded', language, 'Uploaded');
                 } else {
                   href = undefined;
                   name = item.name;
@@ -255,14 +279,14 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                       </div>
                     </div>
                     <button type="button" onClick={() => onRemoveAt(idx)} style={buttonStyles.negative}>
-                      Remove
+                      {tSystem('lineItems.remove', language, 'Remove')}
                     </button>
                   </li>
                 );
               })}
             </ul>
           ) : (
-            <div className="muted">No files selected yet. Use “Add files” (or tap the upload icon in the form) to attach.</div>
+            <div className="muted">{tSystem('files.emptyHint', language, 'No files selected yet.')}</div>
           )}
         </div>
       </fieldset>

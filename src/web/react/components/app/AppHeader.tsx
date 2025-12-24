@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import type { LangCode } from '../../../types';
+import { tSystem } from '../../../systemStrings';
 
 export const AppHeader: React.FC<{
   title: string;
   buildMarker: string;
   isMobile: boolean;
   languages: string[];
-  language: string;
+  language: LangCode;
   onLanguageChange: (nextLanguage: string) => void;
   onRefresh: () => void;
 }> = ({ title, buildMarker, isMobile, languages, language, onLanguageChange, onRefresh }) => {
@@ -46,7 +48,7 @@ export const AppHeader: React.FC<{
           type="button"
           className="ck-app-avatar-btn"
           onClick={() => setDrawerOpen(true)}
-          aria-label="Open menu"
+          aria-label={tSystem('app.openMenu', language, 'Open menu')}
         >
           <span className="ck-app-avatar" aria-hidden="true">
             {avatarText}
@@ -74,14 +76,14 @@ export const AppHeader: React.FC<{
               </div>
               <div className="ck-app-drawer-brand-text">
                 <div className="ck-app-drawer-brand-title">{title || 'Form'}</div>
-                <div className="ck-app-drawer-brand-subtitle muted">Menu</div>
+            <div className="ck-app-drawer-brand-subtitle muted">{tSystem('app.menu', language, 'Menu')}</div>
               </div>
             </div>
             <button
               type="button"
               className="ck-app-drawer-close"
               onClick={() => setDrawerOpen(false)}
-              aria-label="Close menu"
+          aria-label={tSystem('app.closeMenu', language, 'Close menu')}
             >
               ×
             </button>
@@ -96,28 +98,30 @@ export const AppHeader: React.FC<{
                 onRefresh();
               }}
             >
-              ⟳ Refresh
+          ⟳ {tSystem('app.refresh', language, 'Refresh')}
             </button>
           </div>
 
-          <div className="ck-app-drawer-section">
-            <div className="ck-app-drawer-section-title muted">Language</div>
-            <select
-              className="ck-app-drawer-select"
-              value={language}
-              onChange={e => onLanguageChange(e.target.value)}
-              aria-label="Select language"
-            >
-              {(languages.length ? languages : ['EN']).map(lang => (
-                <option key={lang} value={lang}>
-                  {lang}
-                </option>
-              ))}
-            </select>
-          </div>
+      {languages.length > 1 ? (
+        <div className="ck-app-drawer-section">
+          <div className="ck-app-drawer-section-title muted">{tSystem('app.language', language, 'Language')}</div>
+          <select
+            className="ck-app-drawer-select"
+            value={language}
+            onChange={e => onLanguageChange(e.target.value)}
+            aria-label={tSystem('app.selectLanguage', language, 'Select language')}
+          >
+            {(languages.length ? languages : ['EN']).map(lang => (
+              <option key={lang} value={lang}>
+                {lang}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
           <div className="ck-app-drawer-section">
-            <div className="ck-app-drawer-section-title muted">Build</div>
+        <div className="ck-app-drawer-section-title muted">{tSystem('app.build', language, 'Build')}</div>
             <div className="ck-app-drawer-build">{buildMarker}</div>
           </div>
         </div>

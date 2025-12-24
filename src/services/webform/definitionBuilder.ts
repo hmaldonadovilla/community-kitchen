@@ -34,7 +34,8 @@ export class DefinitionBuilder {
   buildDefinition(formKey?: string): WebFormDefinition {
     const form = this.findForm(formKey);
     const questions = ConfigSheet.getQuestions(this.ss, form.configSheet).filter(q => q.status === 'Active');
-    const languages: Array<'EN' | 'FR' | 'NL'> = this.computeLanguages(questions);
+    const languageSettings = this.resolveLanguageSettings(form, questions);
+    const languages: Array<'EN' | 'FR' | 'NL'> = languageSettings.languages;
 
     const webQuestions: WebQuestionDefinition[] = questions.map(q => ({
       id: q.id,
@@ -80,6 +81,8 @@ export class DefinitionBuilder {
       description: form.description,
       destinationTab: form.destinationTab || `${form.title} Responses`,
       languages,
+      defaultLanguage: languageSettings.defaultLanguage,
+      languageSelectorEnabled: languageSettings.languageSelectorEnabled,
       questions: webQuestions,
       dataSources: [],
       listView,
@@ -90,6 +93,42 @@ export class DefinitionBuilder {
       summaryViewEnabled: form.summaryViewEnabled,
       copyCurrentRecordEnabled: form.copyCurrentRecordEnabled
     };
+  }
+
+  private resolveLanguageSettings(
+    form: FormConfig,
+    questions: QuestionConfig[]
+  ): {
+    languages: Array<'EN' | 'FR' | 'NL'>;
+    defaultLanguage: 'EN' | 'FR' | 'NL';
+    languageSelectorEnabled: boolean;
+  } {
+    const normalizeLang = (value: any): 'EN' | 'FR' | 'NL' => {
+      const normalized = (value || 'EN').toString().trim().toUpperCase();
+      return (normalized === 'FR' || normalized === 'NL' || normalized === 'EN' ? normalized : 'EN') as 'EN' | 'FR' | 'NL';
+    };
+
+    const detected = this.computeLanguages(questions);
+    const base = (form.languages && form.languages.length ? form.languages : detected) || ['EN'];
+    let langs = Array.from(
+      new Set(
+        base
+          .map(v => (v || '').toString().trim().toUpperCase())
+          .filter(v => v === 'EN' || v === 'FR' || v === 'NL') as Array<'EN' | 'FR' | 'NL'>
+      )
+    );
+    if (!langs.length) langs = ['EN'];
+    if (langs.length > 3) langs = langs.slice(0, 3);
+
+    const defaultLanguage = normalizeLang(form.defaultLanguage || langs[0] || detected[0] || 'EN');
+    if (!langs.includes(defaultLanguage)) {
+      langs = [defaultLanguage, ...langs].slice(0, 3);
+    }
+
+    const languageSelectorEnabled = form.languageSelectorEnabled !== undefined ? Boolean(form.languageSelectorEnabled) : true;
+    const effectiveLangs = languageSelectorEnabled ? langs : [defaultLanguage];
+
+    return { languages: effectiveLangs, defaultLanguage, languageSelectorEnabled };
   }
 
   private computeLanguages(questions: QuestionConfig[]): Array<'EN' | 'FR' | 'NL'> {

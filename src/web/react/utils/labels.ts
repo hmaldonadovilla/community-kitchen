@@ -6,7 +6,17 @@ export const resolveLabel = (q: WebQuestionDefinition, language: LangCode) => {
 };
 
 export const resolveFieldLabel = (field: any, language: LangCode, fallback: string) => {
-  const key = (language || 'en').toString().toLowerCase();
-  return field?.[`label${key.toUpperCase()}`] || field?.labelEn || fallback;
+  const keyLower = (language || 'EN').toString().trim().toLowerCase();
+  const label = field?.label;
+  if (label) {
+    if (typeof label === 'string') return label;
+    const fromLabelObject = (label as any)[keyLower] || (label as any).en;
+    if (fromLabelObject) return fromLabelObject;
+  }
+
+  const key = (language || 'EN').toString().trim().toUpperCase();
+  if (key === 'FR') return field?.labelFr || field?.labelEn || fallback;
+  if (key === 'NL') return field?.labelNl || field?.labelEn || fallback;
+  return field?.labelEn || fallback;
 };
 

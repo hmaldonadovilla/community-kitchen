@@ -1,0 +1,159 @@
+{
+  "app": {
+    "menu": { "en": "Menu", "fr": "Menu", "nl": "Menu" },
+    "refresh": { "en": "Refresh", "fr": "Actualiser", "nl": "Vernieuwen" },
+    "language": { "en": "Language", "fr": "Langue", "nl": "Taal" },
+    "build": { "en": "Build", "fr": "Version", "nl": "Versie" },
+    "bottomActions": { "en": "Bottom actions", "fr": "Actions", "nl": "Acties" },
+    "navigation": { "en": "Navigation", "fr": "Navigation", "nl": "Navigatie" },
+    "openMenu": { "en": "Open menu", "fr": "Ouvrir le menu", "nl": "Menu openen" },
+    "closeMenu": { "en": "Close menu", "fr": "Fermer le menu", "nl": "Menu sluiten" },
+    "selectLanguage": { "en": "Select language", "fr": "Choisir la langue", "nl": "Taal kiezen" },
+    "closedReadOnly": { "en": "Closed (read-only)", "fr": "Fermé (lecture seule)", "nl": "Gesloten (alleen lezen)" }
+  },
+  "draft": {
+    "saving": { "en": "Saving draft…", "fr": "Enregistrement du brouillon…", "nl": "Concept opslaan…" },
+    "saved": { "en": "Draft saved.", "fr": "Brouillon enregistré.", "nl": "Concept opgeslagen." },
+    "dirty": {
+      "en": "Draft has unsaved changes.",
+      "fr": "Le brouillon contient des modifications non enregistrées.",
+      "nl": "Concept bevat niet-opgeslagen wijzigingen."
+    },
+    "paused": { "en": "Draft autosave paused.", "fr": "Sauvegarde automatique en pause.", "nl": "Automatisch opslaan gepauzeerd." },
+    "saveFailed": {
+      "en": "Draft save failed: {message}",
+      "fr": "Échec de l'enregistrement du brouillon : {message}",
+      "nl": "Concept opslaan mislukt: {message}"
+    },
+    "unknownError": { "en": "Unknown error", "fr": "Erreur inconnue", "nl": "Onbekende fout" }
+  },
+  "actions": {
+    "home": { "en": "Home", "fr": "Accueil", "nl": "Start" },
+    "create": { "en": "Create", "fr": "Créer", "nl": "Aanmaken" },
+    "edit": { "en": "Edit", "fr": "Modifier", "nl": "Bewerken" },
+    "summary": { "en": "Summary", "fr": "Résumé", "nl": "Samenvatting" },
+    "reports": { "en": "Reports", "fr": "Rapports", "nl": "Rapporten" },
+    "submit": { "en": "Submit", "fr": "Envoyer", "nl": "Verzenden" },
+    "submitting": { "en": "Submitting…", "fr": "Envoi…", "nl": "Verzenden…" },
+    "newRecord": { "en": "New record", "fr": "Nouvel enregistrement", "nl": "Nieuw record" },
+    "copyCurrentRecord": { "en": "Copy current record", "fr": "Copier l'enregistrement actuel", "nl": "Huidig record kopiëren" },
+    "viewSummary": { "en": "View summary", "fr": "Voir le résumé", "nl": "Samenvatting bekijken" },
+    "closeCreateMenu": { "en": "Close create menu", "fr": "Fermer le menu de création", "nl": "Maakmenu sluiten" },
+    "createMenu": { "en": "Create menu", "fr": "Menu de création", "nl": "Maakmenu" },
+    "closeSummaryMenu": { "en": "Close summary menu", "fr": "Fermer le menu du résumé", "nl": "Samenvattingsmenu sluiten" },
+    "summaryMenu": { "en": "Summary menu", "fr": "Menu du résumé", "nl": "Samenvattingsmenu" },
+    "closeReportsMenu": { "en": "Close reports menu", "fr": "Fermer le menu des rapports", "nl": "Rapportenmenu sluiten" },
+    "reportsMenu": { "en": "Reports menu", "fr": "Menu des rapports", "nl": "Rapportenmenu" }
+  },
+  "lineItems": {
+    "expand": { "en": "Expand", "fr": "Ouvrir", "nl": "Openen" },
+    "collapse": { "en": "Collapse", "fr": "Réduire", "nl": "Sluiten" },
+    "locked": { "en": "Locked", "fr": "Verrouillé", "nl": "Vergrendeld" },
+    "row": { "en": "Row", "fr": "Ligne", "nl": "Rij" },
+    "needsAttention": { "en": "Needs attention", "fr": "À vérifier", "nl": "Aandacht nodig" },
+    "lockedUntilComplete": {
+      "en": "Locked until complete · Fill the collapsed fields to unlock expand.",
+      "fr": "Verrouillé jusqu'à complétion · Remplissez les champs repliés pour déverrouiller l'ouverture.",
+      "nl": "Vergrendeld tot voltooid · Vul de ingeklapte velden in om openen te ontgrendelen."
+    },
+    "completeRequiredToExpand": {
+      "en": "Complete required fields to expand: {fields}",
+      "fr": "Remplissez les champs obligatoires pour ouvrir : {fields}",
+      "nl": "Vul verplichte velden in om te openen: {fields}"
+    },
+    "remove": { "en": "Remove", "fr": "Supprimer", "nl": "Verwijderen" },
+    "addLine": { "en": "Add line", "fr": "Ajouter une ligne", "nl": "Regel toevoegen" },
+    "addLines": { "en": "Add lines", "fr": "Ajouter des lignes", "nl": "Regels toevoegen" },
+    "selectLinesTitle": { "en": "Select lines", "fr": "Sélectionner des lignes", "nl": "Regels selecteren" },
+    "noOptionsAvailable": { "en": "No options available.", "fr": "Aucune option disponible.", "nl": "Geen opties beschikbaar." }
+  },
+  "common": {
+    "info": { "en": "Info", "fr": "Info", "nl": "Info" },
+    "selectPlaceholder": { "en": "Select…", "fr": "Sélectionner…", "nl": "Selecteer…" },
+    "close": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" },
+    "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
+    "download": { "en": "Download", "fr": "Télécharger", "nl": "Downloaden" },
+    "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
+    "add": { "en": "Add", "fr": "Ajouter", "nl": "Toevoegen" },
+    "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
+    "more": { "en": "+{count} more", "fr": "+{count} de plus", "nl": "+{count} meer" }
+  },
+  "values": {
+    "yes": { "en": "Yes", "fr": "Oui", "nl": "Ja" },
+    "no": { "en": "No", "fr": "Non", "nl": "Nee" }
+  },
+  "summary": {
+    "loadingRecord": { "en": "Loading record…", "fr": "Chargement de l'enregistrement…", "nl": "Record laden…" },
+    "headerSection": { "en": "Header", "fr": "En-tête", "nl": "Kop" },
+    "pdf": { "en": "PDF", "fr": "PDF", "nl": "PDF" },
+    "openPdf": { "en": "Open PDF", "fr": "Ouvrir le PDF", "nl": "PDF openen" },
+    "show": { "en": "Show", "fr": "Afficher", "nl": "Tonen" },
+    "hide": { "en": "Hide", "fr": "Masquer", "nl": "Verbergen" }
+  },
+  "list": {
+    "title": { "en": "Records", "fr": "Enregistrements", "nl": "Records" },
+    "searchPlaceholder": { "en": "Search records", "fr": "Rechercher", "nl": "Zoeken" },
+    "sortBy": { "en": "Sort by", "fr": "Trier par", "nl": "Sorteer op" },
+    "asc": { "en": "Asc", "fr": "Croissant", "nl": "Oplopend" },
+    "desc": { "en": "Desc", "fr": "Décroissant", "nl": "Aflopend" },
+    "noRecords": { "en": "No records found.", "fr": "Aucun enregistrement trouvé.", "nl": "Geen records gevonden." },
+    "previous": { "en": "Previous", "fr": "Précédent", "nl": "Vorige" },
+    "next": { "en": "Next", "fr": "Suivant", "nl": "Volgende" },
+    "pageOf": { "en": "Page {page} of {total}", "fr": "Page {page} sur {total}", "nl": "Pagina {page} van {total}" },
+    "recordsCountOne": { "en": "{count} record", "fr": "{count} enregistrement", "nl": "{count} record" },
+    "recordsCountMany": { "en": "{count} records", "fr": "{count} enregistrements", "nl": "{count} records" }
+  },
+  "overlay": {
+    "row": { "en": "Row", "fr": "Ligne", "nl": "Rij" },
+    "itemsOne": { "en": "{count} item", "fr": "{count} élément", "nl": "{count} item" },
+    "itemsMany": { "en": "{count} items", "fr": "{count} éléments", "nl": "{count} items" }
+  },
+  "files": {
+    "title": { "en": "Files", "fr": "Fichiers", "nl": "Bestanden" },
+    "fileN": { "en": "File {n}", "fr": "Fichier {n}", "nl": "Bestand {n}" },
+    "add": { "en": "Add files", "fr": "Ajouter des fichiers", "nl": "Bestanden toevoegen" },
+    "clearAll": { "en": "Clear all", "fr": "Tout effacer", "nl": "Alles wissen" },
+    "noneSelected": { "en": "No files selected.", "fr": "Aucun fichier sélectionné.", "nl": "Geen bestanden geselecteerd." },
+    "selectedOne": { "en": "1 file selected", "fr": "1 fichier sélectionné", "nl": "1 bestand geselecteerd" },
+    "selectedMany": { "en": "{count} files selected", "fr": "{count} fichiers sélectionnés", "nl": "{count} bestanden geselecteerd" },
+    "maxSelected": { "en": "Maximum files selected.", "fr": "Nombre maximal de fichiers atteint.", "nl": "Maximum aantal bestanden geselecteerd." },
+    "uploaded": { "en": "Uploaded", "fr": "Téléversé", "nl": "Geüpload" },
+    "maxFilesOne": { "en": "1 file max", "fr": "1 fichier max", "nl": "1 bestand max" },
+    "maxFilesMany": { "en": "{count} files max", "fr": "{count} fichiers max", "nl": "{count} bestanden max" },
+    "maxSizeEach": { "en": "≤ {mb} MB each", "fr": "≤ {mb} MB chacun", "nl": "≤ {mb} MB elk" },
+    "allowed": { "en": "Allowed: {exts}", "fr": "Autorisés : {exts}", "nl": "Toegestaan: {exts}" },
+    "emptyHint": {
+      "en": "No files selected yet. Use “Add files” (or tap the upload icon in the form) to attach.",
+      "fr": "Aucun fichier sélectionné. Utilisez « Ajouter des fichiers » (ou touchez l'icône d'envoi dans le formulaire) pour joindre.",
+      "nl": "Nog geen bestanden geselecteerd. Gebruik “Bestanden toevoegen” (of tik op het upload-icoon in het formulier) om toe te voegen."
+    }
+  },
+  "report": {
+    "title": { "en": "Report", "fr": "Rapport", "nl": "Rapport" },
+    "generatingPdf": { "en": "Generating PDF…", "fr": "Génération du PDF…", "nl": "PDF genereren…" },
+    "failedPdf": { "en": "Failed to generate PDF.", "fr": "Échec de génération du PDF.", "nl": "PDF genereren mislukt." },
+    "pdfReady": { "en": "PDF ready. Use Open (or Download) above.", "fr": "PDF prêt. Utilisez Ouvrir (ou Télécharger) ci-dessus.", "nl": "PDF klaar. Gebruik Openen (of Downloaden) hierboven." }
+  },
+  "validation": {
+    "thisFieldRequired": { "en": "This field is required.", "fr": "Ce champ est requis.", "nl": "Dit veld is verplicht." },
+    "fixErrors": { "en": "Please fix validation errors.", "fr": "Veuillez corriger les erreurs de validation.", "nl": "Corrigeer de validatiefouten." },
+    "fieldRequired": { "en": "{field} is required.", "fr": "{field} est requis.", "nl": "{field} is verplicht." },
+    "completeAtLeastOneRowFillCollapsed": {
+      "en": "Complete at least one row (fill the collapsed fields).",
+      "fr": "Complétez au moins une ligne (remplissez les champs repliés).",
+      "nl": "Vul minstens één rij in (vul de ingeklapte velden in)."
+    },
+    "completeAtLeastOneValidRow": {
+      "en": "Complete at least one valid row.",
+      "fr": "Complétez au moins une ligne valide.",
+      "nl": "Vul minstens één geldige rij in."
+    },
+    "atLeastOneLineItemRequired": {
+      "en": "At least one line item is required.",
+      "fr": "Au moins une ligne est requise.",
+      "nl": "Minstens één regel is verplicht."
+    }
+  }
+}
+
+

@@ -11,6 +11,7 @@ import {
   toOptionSet
 } from '../../core';
 import { resolveLocalizedString } from '../../i18n';
+import { tSystem } from '../../systemStrings';
 import {
   FieldValue,
   LangCode,
@@ -638,7 +639,7 @@ const FormView: React.FC<FormViewProps> = ({
             // fallback
             return (
               <select value={value || ''} onChange={e => onChange(e.target.value)}>
-                <option value="">Select…</option>
+                <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
                 {options.map(opt => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
@@ -665,7 +666,7 @@ const FormView: React.FC<FormViewProps> = ({
         default:
           return (
             <select value={value || ''} onChange={e => onChange(e.target.value)}>
-              <option value="">Select…</option>
+              <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
               {options.map(opt => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
@@ -1743,7 +1744,8 @@ const FormView: React.FC<FormViewProps> = ({
                 style={withDisabled(buttonStyles.secondary, submitting)}
                 title={helperParts.length ? helperParts.join(' | ') : undefined}
               >
-                Files{items.length ? ` (${items.length})` : ''}
+                {tSystem('files.title', language, 'Files')}
+                {items.length ? ` (${items.length})` : ''}
               </button>
               </div>
             {remainingSlots ? <div className="muted">{remainingSlots}</div> : null}
@@ -2221,13 +2223,22 @@ const FormView: React.FC<FormViewProps> = ({
               <div style={{ fontWeight: 900, fontSize: 40, color: '#0f172a', letterSpacing: -0.4 }}>{subLabel}</div>
               <div className="muted" style={{ fontWeight: 700, marginTop: 8, fontSize: 24 }}>
                 {parentLabel}
-                {parentRowIdx >= 0 ? ` · Row ${parentRowIdx + 1}` : parsed?.parentRowId ? ` · ${parsed.parentRowId}` : ''}
-                {` · ${orderedRows.length} item${orderedRows.length === 1 ? '' : 's'}`}
+                {parentRowIdx >= 0
+                  ? ` · ${tSystem('overlay.row', language, 'Row')} ${parentRowIdx + 1}`
+                  : parsed?.parentRowId
+                  ? ` · ${parsed.parentRowId}`
+                  : ''}
+                {` · ${tSystem(
+                  orderedRows.length === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
+                  language,
+                  orderedRows.length === 1 ? '{count} item' : '{count} items',
+                  { count: orderedRows.length }
+                )}`}
                           </div>
             </div>
             <div style={{ justifySelf: 'end' }}>
               <button type="button" onClick={closeSubgroupOverlay} style={buttonStyles.secondary}>
-                Close
+                {tSystem('common.close', language, 'Close')}
               </button>
             </div>
           </div>
@@ -2260,7 +2271,7 @@ const FormView: React.FC<FormViewProps> = ({
                                       });
                                     }}
                                   >
-                                    <option value="">Select…</option>
+                                    <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
                                     {subSelectorOptions.map(opt => (
                                       <option key={opt.value} value={opt.value}>
                                         {opt.label}
@@ -2624,7 +2635,8 @@ const FormView: React.FC<FormViewProps> = ({
                                   disabled={submitting}
                                   style={withDisabled(buttonStyles.secondary, submitting)}
                                 >
-                                  Files{items.length ? ` (${items.length})` : ''}
+                                  {tSystem('files.title', language, 'Files')}
+                                  {items.length ? ` (${items.length})` : ''}
                                 </button>
                               </div>
                               <div style={srOnly} aria-live="polite">
@@ -2730,7 +2742,7 @@ const FormView: React.FC<FormViewProps> = ({
                   })()}
                   <div className="line-actions">
                     <button type="button" onClick={() => removeLineRow(subKey, subRow.id)} style={buttonStyles.negative}>
-                      Remove
+                      {tSystem('lineItems.remove', language, 'Remove')}
                     </button>
                   </div>
                 </div>
@@ -2750,7 +2762,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (!fileOverlay.open) return null;
     if (typeof document === 'undefined') return null;
 
-    const title = fileOverlay.title || 'Files';
+    const title = fileOverlay.title || tSystem('files.title', language, 'Files');
     const isTop = fileOverlay.scope === 'top' && !!fileOverlay.question;
     const isLine =
       fileOverlay.scope === 'line' &&
@@ -2813,6 +2825,7 @@ const FormView: React.FC<FormViewProps> = ({
     return (
       <FileOverlay
         open={fileOverlay.open}
+        language={language}
         title={title}
         submitting={submitting}
         items={items}
@@ -2828,7 +2841,8 @@ const FormView: React.FC<FormViewProps> = ({
   const infoOverlayPortal = (
     <InfoOverlay
       open={infoOverlay.open}
-      title={infoOverlay.title || 'Info'}
+      language={language}
+      title={infoOverlay.title || ''}
       text={infoOverlay.text || ''}
       onClose={closeInfoOverlay}
     />
@@ -3033,6 +3047,7 @@ const FormView: React.FC<FormViewProps> = ({
       <LineSelectOverlay
         overlay={overlay}
         setOverlay={setOverlay}
+        language={language}
         submitting={submitting}
         addLineItemRowManual={addLineItemRowManual}
       />

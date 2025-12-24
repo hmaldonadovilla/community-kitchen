@@ -14,7 +14,10 @@ describe('DefinitionBuilder', () => {
       pdfTemplateId: { EN: 'pdf-en' },
       emailTemplateId: { EN: 'email-en' },
       statusTransitions: { onEmail: 'Sent' },
-      listViewMetaColumns: ['createdAt', 'status']
+      listViewMetaColumns: ['createdAt', 'status'],
+      languages: ['EN', 'FR', 'NL'],
+      defaultLanguage: 'FR',
+      languageSelectorEnabled: false
     });
     dashboardSheet?.setMockData([
       [],
@@ -45,5 +48,13 @@ describe('DefinitionBuilder', () => {
     expect(def.listView?.columns.map(col => col.fieldId)).toContain('Q1');
     const metaColumns = def.listView?.columns.filter(col => col.kind === 'meta').map(col => col.fieldId);
     expect(metaColumns).toEqual(['createdAt', 'status']);
+  });
+
+  test('buildDefinition respects language config from the dashboard', () => {
+    const def = builder.buildDefinition('Config: Pantry');
+    expect(def.defaultLanguage).toBe('FR');
+    expect(def.languageSelectorEnabled).toBe(false);
+    // When language selector is disabled, the web app should only expose the default language.
+    expect(def.languages).toEqual(['FR']);
   });
 });

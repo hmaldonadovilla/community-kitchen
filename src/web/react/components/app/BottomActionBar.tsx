@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { View } from '../../types';
+import type { LangCode } from '../../../types';
+import { tSystem } from '../../../systemStrings';
 
 const IconWrap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="ck-bottom-icon" aria-hidden="true">
@@ -62,6 +64,7 @@ const CheckIcon: React.FC = () => (
 );
 
 export const BottomActionBar: React.FC<{
+  language: LangCode;
   view: View;
   submitting: boolean;
   readOnly?: boolean;
@@ -78,6 +81,7 @@ export const BottomActionBar: React.FC<{
   onSubmit: () => void;
   onReport?: (buttonId: string) => void;
 }> = ({
+  language,
   view,
   submitting,
   readOnly,
@@ -147,12 +151,12 @@ export const BottomActionBar: React.FC<{
           <button
             type="button"
             className="ck-bottom-menu-backdrop"
-            aria-label="Close create menu"
+            aria-label={tSystem('actions.closeCreateMenu', language, 'Close create menu')}
             onClick={() => setMenu(null)}
           />
           <div
             className="ck-bottom-menu"
-            aria-label="Create menu"
+            aria-label={tSystem('actions.createMenu', language, 'Create menu')}
           >
             <button
               type="button"
@@ -166,7 +170,7 @@ export const BottomActionBar: React.FC<{
               <IconWrap>
                 <PlusIcon />
               </IconWrap>
-              New record
+              {tSystem('actions.newRecord', language, 'New record')}
             </button>
             {copyEnabled && (
               <button
@@ -181,7 +185,7 @@ export const BottomActionBar: React.FC<{
                 <IconWrap>
                   <SummaryIcon />
                 </IconWrap>
-                Copy current record
+                {tSystem('actions.copyCurrentRecord', language, 'Copy current record')}
               </button>
             )}
           </div>
@@ -193,10 +197,10 @@ export const BottomActionBar: React.FC<{
           <button
             type="button"
             className="ck-bottom-menu-backdrop"
-            aria-label="Close summary menu"
+            aria-label={tSystem('actions.closeSummaryMenu', language, 'Close summary menu')}
             onClick={() => setMenu(null)}
           />
-          <div className="ck-bottom-menu" aria-label="Summary menu">
+          <div className="ck-bottom-menu" aria-label={tSystem('actions.summaryMenu', language, 'Summary menu')}>
             {summaryEnabled && (
               <button
                 type="button"
@@ -210,7 +214,7 @@ export const BottomActionBar: React.FC<{
                 <IconWrap>
                   <SummaryIcon />
                 </IconWrap>
-                View summary
+                {tSystem('actions.viewSummary', language, 'View summary')}
               </button>
             )}
             {(reportButtonsFormMenu || []).map(btn => (
@@ -239,10 +243,10 @@ export const BottomActionBar: React.FC<{
           <button
             type="button"
             className="ck-bottom-menu-backdrop"
-            aria-label="Close reports menu"
+            aria-label={tSystem('actions.closeReportsMenu', language, 'Close reports menu')}
             onClick={() => setMenu(null)}
           />
-          <div className="ck-bottom-menu" aria-label="Reports menu">
+          <div className="ck-bottom-menu" aria-label={tSystem('actions.reportsMenu', language, 'Reports menu')}>
             {(reportButtonsSummaryBar || []).map(btn => (
               <button
                 key={btn.id}
@@ -264,16 +268,16 @@ export const BottomActionBar: React.FC<{
         </div>
       )}
 
-      <nav className="ck-bottom-bar" aria-label="Bottom actions">
+      <nav className="ck-bottom-bar" aria-label={tSystem('app.bottomActions', language, 'Bottom actions')}>
         <div className="ck-bottom-bar-inner">
-          <div className="ck-bottom-capsule" aria-label="Navigation">
+          <div className="ck-bottom-capsule" aria-label={tSystem('app.navigation', language, 'Navigation')}>
             <button
               type="button"
               className={`ck-bottom-item ck-bottom-item--icon${homeActive ? ' active' : ''}`}
               onClick={onHome}
               disabled={submitting}
-              aria-label="Home"
-              title="Home"
+              aria-label={tSystem('actions.home', language, 'Home')}
+              title={tSystem('actions.home', language, 'Home')}
             >
               <IconWrap>
                 <HomeIcon />
@@ -290,14 +294,14 @@ export const BottomActionBar: React.FC<{
               <IconWrap>
                 <PlusIcon />
               </IconWrap>
-              Create
+              {tSystem('actions.create', language, 'Create')}
             </button>
             {showEdit && (
               <button type="button" className="ck-bottom-item" onClick={onEdit} disabled={submitting}>
                 <IconWrap>
                   <EditIcon />
                 </IconWrap>
-                Edit
+                {tSystem('actions.edit', language, 'Edit')}
               </button>
             )}
             {showSummary && (
@@ -312,7 +316,7 @@ export const BottomActionBar: React.FC<{
                 <IconWrap>
                   <SummaryIcon />
                 </IconWrap>
-                Summary
+                {tSystem('actions.summary', language, 'Summary')}
               </button>
             )}
 
@@ -328,7 +332,7 @@ export const BottomActionBar: React.FC<{
                 <IconWrap>
                   <SummaryIcon />
                 </IconWrap>
-                Reports
+                {tSystem('actions.reports', language, 'Reports')}
               </button>
             )}
 
@@ -358,7 +362,7 @@ export const BottomActionBar: React.FC<{
                 <IconWrap>
                   <SummaryIcon />
                 </IconWrap>
-                Reports
+                {tSystem('actions.reports', language, 'Reports')}
               </button>
             )}
           </div>
@@ -367,7 +371,7 @@ export const BottomActionBar: React.FC<{
               <IconWrap>
                 <CheckIcon />
               </IconWrap>
-              {submitting ? 'Submitting…' : 'Submit'}
+              {submitting ? tSystem('actions.submitting', language, 'Submitting…') : tSystem('actions.submit', language, 'Submit')}
             </button>
           )}
         </div>

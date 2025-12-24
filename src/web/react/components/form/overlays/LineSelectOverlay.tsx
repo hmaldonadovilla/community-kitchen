@@ -1,6 +1,8 @@
 import React from 'react';
 
 import { buttonStyles, withDisabled } from '../ui';
+import type { LangCode } from '../../../../types';
+import { tSystem } from '../../../../systemStrings';
 
 export interface LineOverlayState {
   open: boolean;
@@ -13,9 +15,10 @@ export interface LineOverlayState {
 export const LineSelectOverlay: React.FC<{
   overlay: LineOverlayState;
   setOverlay: React.Dispatch<React.SetStateAction<LineOverlayState>>;
+  language: LangCode;
   submitting: boolean;
   addLineItemRowManual: (groupId: string, preset?: Record<string, any>) => void;
-}> = ({ overlay, setOverlay, submitting, addLineItemRowManual }) => {
+}> = ({ overlay, setOverlay, language, submitting, addLineItemRowManual }) => {
   if (!overlay.open) return null;
 
   return (
@@ -42,7 +45,7 @@ export const LineSelectOverlay: React.FC<{
         }}
       >
         <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 'var(--ck-font-group-title)', letterSpacing: -0.3 }}>
-          Select lines
+          {tSystem('lineItems.selectLinesTitle', language, 'Select lines')}
         </h3>
         <div style={{ maxHeight: '50vh', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {overlay.options.map(opt => (
@@ -80,7 +83,9 @@ export const LineSelectOverlay: React.FC<{
               <span style={{ fontSize: 'var(--ck-font-control)' }}>{opt.label}</span>
             </label>
           ))}
-          {!overlay.options.length && <div className="muted">No options available.</div>}
+          {!overlay.options.length && (
+            <div className="muted">{tSystem('lineItems.noOptionsAvailable', language, 'No options available.')}</div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 12 }}>
           <button
@@ -88,7 +93,7 @@ export const LineSelectOverlay: React.FC<{
             onClick={() => setOverlay({ open: false, options: [], selected: [] })}
             style={buttonStyles.secondary}
           >
-            Cancel
+            {tSystem('common.cancel', language, 'Cancel')}
           </button>
           <button
             type="button"
@@ -104,7 +109,7 @@ export const LineSelectOverlay: React.FC<{
             disabled={submitting}
             style={withDisabled(buttonStyles.primary, submitting)}
           >
-            Add
+            {tSystem('common.add', language, 'Add')}
           </button>
         </div>
       </div>

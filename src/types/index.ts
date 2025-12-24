@@ -649,6 +649,25 @@ export interface FormConfig {
   followupConfig?: FollowupConfig;
   listViewMetaColumns?: string[];
   /**
+   * Enabled languages for the web app UI (max 3).
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   * When omitted, the app auto-detects languages based on which label columns have values.
+   */
+  languages?: Array<'EN' | 'FR' | 'NL'>;
+  /**
+   * Default language used when opening the app (and when language selection is disabled).
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  defaultLanguage?: 'EN' | 'FR' | 'NL';
+  /**
+   * When false, hides language selection in the web app and forces `defaultLanguage`.
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  languageSelectorEnabled?: boolean;
+  /**
    * Optional draft autosave behavior for the web edit view.
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
@@ -732,6 +751,14 @@ export interface WebFormDefinition {
   description?: string;
   destinationTab: string;
   languages: Array<'EN' | 'FR' | 'NL'>;
+  /**
+   * Default language used when opening the app (and when language selection is disabled).
+   */
+  defaultLanguage?: 'EN' | 'FR' | 'NL';
+  /**
+   * When false, hides language selection in the web app and forces `defaultLanguage`.
+   */
+  languageSelectorEnabled?: boolean;
   questions: WebQuestionDefinition[];
   dataSources?: DataSourceConfig[];
   listView?: ListViewConfig;

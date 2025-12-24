@@ -759,11 +759,19 @@ The PDF is generated **in-memory** and discarded when you close the overlay (no 
 
 - The web app uses an app-like shell:
   - Header shows a **logo circle + form title** (Excel-style).
-  - Tap the logo circle to open a **left drawer** with **Refresh**, **Language**, and **Build**.
+  - Tap the logo circle to open a **left drawer** with **Refresh**, **Language** (only when enabled / 2+ languages), and **Build**.
   - A fixed **bottom action bar** provides navigation/actions per view:
     - **List**: Home + Create (Create opens a new record and sends you to the Form).
     - **Summary**: Home + Create (Create opens a menu: New record / Copy current record).
     - **Form**: Home + Create (menu: New / Copy) + Summary + Submit.
+
+- **Optional: configure languages (max 3)**:
+  - In the dashboard “Follow-up Config (JSON)” column, set:
+    - `"languages": ["EN","FR","NL"]` (or `"EN,FR,NL"`)
+    - `"defaultLanguage": "EN"`
+  - To **disable language selection** (force a single language), set `"languageSelectorEnabled": false`.
+    - When disabled (or when only 1 language is enabled), the Language selector is hidden and the app always uses `defaultLanguage`.
+  - System UI copy (menus, autosave banners, expand/collapse, etc.) lives in `src/web/systemStrings.json` and ships with defaults for **EN/FR/NL (Belgian Dutch)**.
 
 - **Optional: disable Summary view**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"summaryViewEnabled": false`.

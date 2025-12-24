@@ -4,7 +4,7 @@ A Google Apps Script project to digitize AFSCA compliance documentation for a co
 
 ## Features
 
-- **Multi-language Support**: Generates forms with branching logic for English, French, and Dutch.
+- **Multi-language Support (max 3)**: Supports English/French/Dutch (Belgian Dutch) with per-form language config (enabled languages + default language). You can also disable language selection and force a single default language.
 - **Dashboard Management**: Manage multiple forms from a single "Forms Dashboard" sheet.
 - **Smart Updates**: Updates existing forms without breaking links or losing data.
 - **Archiving**: Soft-delete questions by marking them as "Archived" in the config sheet.
@@ -18,8 +18,9 @@ A Google Apps Script project to digitize AFSCA compliance documentation for a co
 - **Nested Line Items**: Line-item groups support child subgroups (e.g., Dish headers with Ingredients sub-rows) with option filters, selection effects, and totals.
 - **Consolidated Outputs**: PDF templates support consolidated aggregations, including subgroup paths (e.g., `{{CONSOLIDATED(MP_DISHES.INGREDIENTS.ALLERGEN)}}`) and row-scoped subgroup consolidation inside per-row table sections via `{{CONSOLIDATED_ROW(GROUP.SUBGROUP.FIELD)}}`.
 - **Report Buttons (Doc template previews)**: Add `BUTTON` questions that render Google Doc templates (with placeholders + consolidated directives) into an in-app **PDF preview**. The preview is generated **in-memory** (no Drive PDF file) and discarded when the overlay is closed.
-- **Unified Shell & Navigation**: Excel-style header (logo circle + form title) with a left drawer (Refresh/Language/Build) and a fixed bottom action bar that adapts per view (List/Summary/Form).
-- **Feature flags (per form)**: You can disable some UI features via the dashboard config JSON, e.g. `"summaryViewEnabled": false` or `"copyCurrentRecordEnabled": false`.
+- **Unified Shell & Navigation**: Excel-style header (logo circle + form title) with a left drawer (Refresh / Language (optional) / Build) and a fixed bottom action bar that adapts per view (List/Summary/Form).
+- **Feature flags (per form)**: You can disable some UI features via the dashboard config JSON, e.g. `"summaryViewEnabled": false`, `"copyCurrentRecordEnabled": false`, or `"languageSelectorEnabled": false`.
+- **System UI strings (i18n)**: App/system copy (menus, autosave banners, expand/collapse, etc.) is stored in `src/web/systemStrings.json` with defaults for EN/FR/NL.
 - **Progressive Edit View**: Mark questions with `"header": true` to pin them in the sticky header while editing, and set `LINE_ITEM_GROUP` configs to `"ui": { "mode": "progressive" }` to render line-item rows collapsed by default with an expand toggle that unlocks once configured collapsed fields are valid. Subgroups can be edited via a full-page overlay from buttons next to triggering fields (selection effects) or from subgroup fallback buttons. Line-item rows can also display config-driven per-row disclaimers (localized, template-based) that can reference `__ckRowSource`.
 - **App-like iOS Edit UI**: The edit view uses an iOS “grouped” visual style, a fixed bottom action bar (Home/Create/Summary/Submit) with safe-area padding, and supports 2-up field grids where space allows. `CHOICE` fields can render as segmented/radio/select/switch (auto-defaults with per-field overrides), and `CHECKBOX` fields with no options render as a single consent checkbox.
 - **React Summary View**: The Summary view is a fast React report: top-level fields render as cards, line-item groups render as mobile-friendly tables, and subgroups render as collapsible tables (collapsed by default). If a PDF was generated on submission, its `pdfUrl` is shown as a link. You can disable Summary per-form via the dashboard config: `"summaryViewEnabled": false`.

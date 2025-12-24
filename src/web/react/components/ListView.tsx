@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { resolveLocalizedString } from '../../i18n';
 import { LangCode, WebFormDefinition, WebFormSubmission } from '../../types';
+import { toOptionSet } from '../../core';
+import { tSystem } from '../../systemStrings';
 import { fetchBatch, fetchList, ListItem, ListResponse } from '../api';
+import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 
 interface ListViewProps {
   formKey: string;
@@ -63,6 +66,16 @@ const ListView: React.FC<ListViewProps> = ({
       const id = (q?.id || '').toString();
       if (!id) return;
       map[id] = q.type;
+    });
+    return map;
+  }, [definition.questions]);
+
+  const optionSetById = useMemo(() => {
+    const map: Record<string, any> = {};
+    (definition.questions || []).forEach(q => {
+      const id = (q?.id || '').toString();
+      if (!id) return;
+      map[id] = toOptionSet(q as any);
     });
     return map;
   }, [definition.questions]);
@@ -219,9 +232,9 @@ const ListView: React.FC<ListViewProps> = ({
     columns.forEach(col => {
       push(col.fieldId, resolveLocalizedString(col.label, language, col.fieldId));
     });
-    push('updatedAt', 'Updated');
-    push('createdAt', 'Created');
-    push('status', 'Status');
+    push('updatedAt', resolveLocalizedString({ en: 'Updated', fr: 'Mis à jour', nl: 'Bijgewerkt' }, language, 'Updated'));
+    push('createdAt', resolveLocalizedString({ en: 'Created', fr: 'Créé', nl: 'Aangemaakt' }, language, 'Created'));
+    push('status', resolveLocalizedString({ en: 'Status', fr: 'Statut', nl: 'Status' }, language, 'Status'));
     return options;
   }, [columns, language]);
 
@@ -282,44 +295,8 @@ const ListView: React.FC<ListViewProps> = ({
 
   const formatDateOnly = (value: any): string | null => {
     if (value === undefined || value === null || value === '') return null;
-    const pad2 = (n: number) => n.toString().padStart(2, '0');
-    const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
-
-    const format = (d: Date): string | null => {
-      if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
-      return `${WEEKDAYS[d.getDay()]}, ${pad2(d.getDate())}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
-    };
-
-    // Date-only: YYYY-MM-DD -> DD/MM/YYYY
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      const ymd = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (ymd) {
-        const y = Number(ymd[1]);
-        const m = Number(ymd[2]);
-        const d = Number(ymd[3]);
-        return format(new Date(y, m - 1, d));
-      }
-      const dmy = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (dmy) {
-        const d = Number(dmy[1]);
-        const m = Number(dmy[2]);
-        const y = Number(dmy[3]);
-        return format(new Date(y, m - 1, d));
-      }
-      const isoPrefix = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[T\s]/);
-      if (isoPrefix) {
-        const y = Number(isoPrefix[1]);
-        const m = Number(isoPrefix[2]);
-        const d = Number(isoPrefix[3]);
-        return format(new Date(y, m - 1, d));
-      }
-    }
-    if (value instanceof Date) return format(value);
-    const t = Date.parse(`${value}`);
-    if (!Number.isNaN(t)) return format(new Date(t));
-    return null;
+    const out = formatDateEeeDdMmmYyyy(value, language);
+    return out === EMPTY_DISPLAY ? null : out;
   };
 
   const formatDateTime = (value: any): string | null => {
@@ -349,7 +326,7 @@ const ListView: React.FC<ListViewProps> = ({
   };
 
   const summarizeArray = (raw: any[]): string => {
-    if (!raw.length) return '—';
+    if (!raw.length) return EMPTY_DISPLAY;
     const scalarOnly = raw.every(v => typeof v === 'string' || typeof v === 'number');
     if (scalarOnly) return raw.join(', ');
     const firstObject = raw.find(v => v && typeof v === 'object');
@@ -368,7 +345,10 @@ const ListView: React.FC<ListViewProps> = ({
       .filter(Boolean)
       .join(' · ');
     const suffix = raw.length > 3 ? ` … +${raw.length - 3}` : '';
-    return preview ? `${preview}${suffix}` : `${raw.length} item${raw.length > 1 ? 's' : ''}`;
+    if (preview) return `${preview}${suffix}`;
+    const key = raw.length === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany';
+    const fallback = raw.length === 1 ? `${raw.length} item` : `${raw.length} items`;
+    return tSystem(key, language, fallback, { count: raw.length });
   };
 
   const tryParseJson = (raw: string): unknown | null => {
@@ -383,20 +363,37 @@ const ListView: React.FC<ListViewProps> = ({
 
   const renderCellValue = (row: ListItem, fieldId: string) => {
     const raw = (row as any)[fieldId];
-    if (raw === undefined || raw === null || raw === '') return '—';
+    if (raw === undefined || raw === null || raw === '') return EMPTY_DISPLAY;
     const parsed = typeof raw === 'string' ? tryParseJson(raw) : null;
     const value = parsed !== null ? parsed : raw;
     const isArray = Array.isArray(value);
     const isScalar = typeof value === 'string' || typeof value === 'number';
     const fieldType =
       fieldId === 'createdAt' || fieldId === 'updatedAt' ? 'DATETIME' : (questionTypeById[fieldId] || '');
+    const optionSet = optionSetById[fieldId];
     const dateText =
       isScalar && fieldType === 'DATETIME'
         ? formatDateTime(raw)
         : isScalar && fieldType === 'DATE'
         ? formatDateOnly(raw)
         : null;
-    const text = dateText || (isArray ? summarizeArray(value) : `${value}`);
+    const text = (() => {
+      if (dateText) return dateText;
+      if (isArray) {
+        // Localize scalar arrays (checkbox / multi-select).
+        if (Array.isArray(value) && value.every(v => typeof v === 'string')) {
+          return formatDisplayText(value, { language, optionSet, fieldType });
+        }
+        return summarizeArray(value);
+      }
+      if (typeof value === 'boolean') {
+        return formatDisplayText(value, { language, optionSet, fieldType });
+      }
+      if (typeof value === 'string') {
+        return formatDisplayText(value, { language, optionSet, fieldType });
+      }
+      return `${value}`;
+    })();
     const title = dateText ? `${raw}` : text;
     if (typeof value === 'string') {
       const urls = splitUrlList(value).filter(u => /^https?:\/\//i.test(u));
@@ -416,7 +413,11 @@ const ListView: React.FC<ListViewProps> = ({
                 {u.split('/').pop() || u}
               </a>
             ))}
-            {urls.length > 3 && <span className="muted">+{urls.length - 3} more</span>}
+            {urls.length > 3 && (
+              <span className="muted">
+                {tSystem('common.more', language, '+{count} more', { count: urls.length - 3 })}
+              </span>
+            )}
           </div>
         );
       }
@@ -460,16 +461,16 @@ const ListView: React.FC<ListViewProps> = ({
 
   return (
     <div className="card">
-      <h3>{resolveLocalizedString(definition.listView?.title, language, 'Records')}</h3>
+      <h3>{resolveLocalizedString(definition.listView?.title, language, tSystem('list.title', language, 'Records'))}</h3>
       <div className="list-toolbar">
         <input
           type="search"
-          placeholder="Search records"
+          placeholder={tSystem('list.searchPlaceholder', language, 'Search records')}
           value={searchValue}
           onChange={e => setSearchValue(e.target.value)}
         />
         <label className="sort-control">
-          Sort by
+          {tSystem('list.sortBy', language, 'Sort by')}
           <select value={sortField} onChange={e => setSortField(e.target.value)}>
             {sortOptions.map(option => (
               <option key={option.id} value={option.id}>
@@ -483,10 +484,12 @@ const ListView: React.FC<ListViewProps> = ({
           className="secondary"
           onClick={() => setSortDirection(dir => (dir === 'asc' ? 'desc' : 'asc'))}
         >
-          {sortDirection === 'asc' ? 'Asc' : 'Desc'}
+          {sortDirection === 'asc'
+            ? tSystem('list.asc', language, 'Asc')
+            : tSystem('list.desc', language, 'Desc')}
         </button>
       </div>
-      {loading && <div className="status">Loading…</div>}
+      {loading && <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>}
       {error && <div className="error">{error}</div>}
       <div className="list-table-wrapper">
         <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -530,7 +533,7 @@ const ListView: React.FC<ListViewProps> = ({
             ) : (
               <tr>
                 <td colSpan={columns.length} className="muted">
-                  No records found.
+                  {tSystem('list.noRecords', language, 'No records found.')}
                 </td>
               </tr>
             )}
@@ -544,13 +547,20 @@ const ListView: React.FC<ListViewProps> = ({
           onClick={() => setPageIndex(prev => Math.max(0, prev - 1))}
           disabled={!showPrev}
         >
-          Previous
+          {tSystem('list.previous', language, 'Previous')}
         </button>
         <div className="muted" style={{ alignSelf: 'center' }}>
-          Page {totalPages ? pageIndex + 1 : 0} of {totalPages} • {visibleItems.length || totalCount} records
+          {tSystem('list.pageOf', language, 'Page {page} of {total}', { page: totalPages ? pageIndex + 1 : 0, total: totalPages })}{' '}
+          •{' '}
+          {tSystem(
+            (visibleItems.length || totalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
+            language,
+            (visibleItems.length || totalCount) === 1 ? '{count} record' : '{count} records',
+            { count: visibleItems.length || totalCount }
+          )}
         </div>
         <button type="button" onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))} disabled={!showNext}>
-          Next
+          {tSystem('list.next', language, 'Next')}
         </button>
       </div>
     </div>

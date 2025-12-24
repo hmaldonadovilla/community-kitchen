@@ -1,53 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
 import { resolveLocalizedString } from '../../../i18n';
+import { toOptionSet } from '../../../core';
+import { tSystem } from '../../../systemStrings';
 import { buildSubgroupKey, resolveSubgroupKey } from '../../app/lineItems';
 import { LineItemState } from '../../types';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
+import { EMPTY_DISPLAY, formatDisplayText } from '../../utils/valueDisplay';
 import { GroupCard } from '../form/GroupCard';
 import { resolveGroupSectionKey } from '../form/grouping';
-import { formatFieldValue } from './tooltips';
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
-const pad2 = (n: number) => n.toString().padStart(2, '0');
-
-const formatDateEeeDdMmmYyyy = (raw: any): string => {
-  if (raw === undefined || raw === null || raw === '') return '—';
-
-  const format = (d: Date) => {
-    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '—';
-    return `${WEEKDAYS[d.getDay()]}, ${pad2(d.getDate())}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
-  };
-
-  if (raw instanceof Date) return format(raw);
-  const s = raw?.toString?.().trim?.() || '';
-  if (!s) return '—';
-
-  // Canonical DATE storage: "YYYY-MM-DD" (treat as local date to avoid timezone shifts).
-  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (ymd) {
-    const y = Number(ymd[1]);
-    const m = Number(ymd[2]);
-    const d = Number(ymd[3]);
-    return format(new Date(y, m - 1, d));
-  }
-
-  // Common display/storage fallback: "DD/MM/YYYY"
-  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (dmy) {
-    const d = Number(dmy[1]);
-    const m = Number(dmy[2]);
-    const y = Number(dmy[3]);
-    return format(new Date(y, m - 1, d));
-  }
-
-  // ISO-like strings (e.g., "2025-12-20T23:00:00.0Z")
-  const t = Date.parse(s);
-  if (!Number.isNaN(t)) return format(new Date(t));
-
-  return s;
-};
 
 type UploadLink = { url: string; label?: string };
 
@@ -99,26 +60,15 @@ const extractUploadLinks = (value: any): UploadLink[] => {
   return ordered;
 };
 
-const formatValueTextForPreview = (value: any, fieldType?: string): string => {
-  if (fieldType === 'DATE') return formatDateEeeDdMmmYyyy(value);
-  if (value === undefined || value === null) return '—';
-  if (Array.isArray(value)) {
-    if (!value.length) return '—';
-    return formatFieldValue(value);
-  }
-  if (typeof value === 'object') {
-    if (typeof value?.url === 'string') {
-      const u = (value.url as string).trim();
-      return u || '—';
-    }
-  }
-  return formatFieldValue(value);
-};
-
-const renderValueForPreview = (value: any, fieldType?: string): React.ReactNode => {
+const renderValueForPreview = (
+  value: any,
+  fieldType: string | undefined,
+  language: LangCode,
+  optionSet?: any
+): React.ReactNode => {
   if (fieldType === 'FILE_UPLOAD') {
     const links = extractUploadLinks(value);
-    if (!links.length) return '—';
+    if (!links.length) return EMPTY_DISPLAY;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {links.map((l, idx) => (
@@ -130,26 +80,13 @@ const renderValueForPreview = (value: any, fieldType?: string): React.ReactNode 
             style={{ color: '#1d4ed8', textDecoration: 'underline', fontWeight: 800 }}
             onClick={e => e.stopPropagation()}
           >
-            {l.label || `File ${idx + 1}`}
+            {l.label || tSystem('files.fileN', language, 'File {n}', { n: idx + 1 })}
           </a>
         ))}
       </div>
     );
   }
-  return formatValueTextForPreview(value, fieldType);
-};
-
-const uniqueJoin = (values: any[]): string => {
-  const seen = new Set<string>();
-  const ordered: string[] = [];
-  values.forEach(v => {
-    const text = formatValueTextForPreview(v).trim();
-    if (!text || text === '—') return;
-    if (seen.has(text)) return;
-    seen.add(text);
-    ordered.push(text);
-  });
-  return ordered.length ? ordered.join(', ') : '—';
+  return formatDisplayText(value, { language, optionSet, fieldType });
 };
 
 type RecordMeta = {
@@ -189,7 +126,12 @@ const LineItemRowCard: React.FC<{
   const subGroups = group.lineItemConfig?.subGroups || [];
 
   const anchorValue = anchorId ? row.values[anchorId] : undefined;
-  const title = anchorId && anchorValue ? formatValueTextForPreview(anchorValue) : `${resolveLabel(group, language)} #${idx + 1}`;
+  const anchorField = anchorId ? (fields.find(f => f.id === anchorId) as any) : undefined;
+  const anchorOptionSet = anchorField ? toOptionSet(anchorField) : undefined;
+  const title =
+    anchorId && anchorValue
+      ? formatDisplayText(anchorValue, { language, optionSet: anchorOptionSet, fieldType: (anchorField as any)?.type })
+      : `${resolveLabel(group, language)} #${idx + 1}`;
 
   const toggleSub = (subKey: string) => {
     setOpenSubs(prev => ({ ...prev, [subKey]: !prev[subKey] }));
@@ -221,6 +163,7 @@ const LineItemRowCard: React.FC<{
             {fields.map(field => {
               const label = resolveFieldLabel(field as any, language, field.id);
               const v = row.values[field.id];
+              const optionSet = toOptionSet(field as any);
               // Avoid duplicating the anchor field if it's already used as the title.
               if (anchorId && field.id === anchorId) return null;
               return (
@@ -245,7 +188,7 @@ const LineItemRowCard: React.FC<{
                       wordBreak: 'break-word'
                     }}
                   >
-                    {renderValueForPreview(v, (field as any)?.type)}
+                    {renderValueForPreview(v, (field as any)?.type, language, optionSet)}
                   </td>
                 </tr>
               );
@@ -294,7 +237,8 @@ const LineItemRowCard: React.FC<{
                             boxShadow: '0 1px 0 rgba(15,23,42,0.06)'
                           }}
                         >
-                          {open ? 'Hide ▾' : 'Show ▸'} ({childRows.length})
+                          {open ? tSystem('summary.hide', language, 'Hide') : tSystem('summary.show', language, 'Show')}{' '}
+                          {open ? '▾' : '▸'} ({childRows.length})
                         </button>
                       </div>
                     </td>
@@ -336,7 +280,7 @@ const LineItemRowCard: React.FC<{
                                         wordBreak: 'break-word'
                                       }}
                                     >
-                                      {renderValueForPreview(cr?.values?.[sf.id], sf?.type)}
+                                      {renderValueForPreview(cr?.values?.[sf.id], sf?.type, language, toOptionSet(sf))}
                                     </td>
                                   ))}
                                 </tr>
@@ -388,7 +332,7 @@ export const ReportLivePreview: React.FC<{
       if (groupCfg?.title) {
         title = resolveLocalizedString(groupCfg.title, language, '');
       } else if (groupCfg?.header) {
-        title = 'Header';
+        title = tSystem('summary.headerSection', language, 'Header');
       }
       const collapsible = groupCfg?.collapsible === undefined ? !!title : !!groupCfg.collapsible;
       const defaultCollapsed = groupCfg?.defaultCollapsed === undefined ? false : !!groupCfg.defaultCollapsed;
@@ -435,7 +379,7 @@ export const ReportLivePreview: React.FC<{
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {recordMeta?.pdfUrl ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          <MetaCard label="PDF">
+          <MetaCard label={tSystem('summary.pdf', language, 'PDF')}>
             <a
               href={recordMeta.pdfUrl}
               target="_blank"
@@ -443,7 +387,7 @@ export const ReportLivePreview: React.FC<{
               style={{ color: '#0f172a', textDecoration: 'underline' }}
               onClick={e => e.stopPropagation()}
             >
-              Open PDF
+              {tSystem('summary.openPdf', language, 'Open PDF')}
             </a>
           </MetaCard>
         </div>
@@ -465,7 +409,7 @@ export const ReportLivePreview: React.FC<{
               const value = values[q.id];
               return (
                 <MetaCard key={q.id} label={label}>
-                  {renderValueForPreview(value, q.type)}
+                  {renderValueForPreview(value, q.type, language, toOptionSet(q as any))}
                 </MetaCard>
               );
             })}
