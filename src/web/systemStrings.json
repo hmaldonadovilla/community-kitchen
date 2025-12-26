@@ -9,7 +9,8 @@
     "openMenu": { "en": "Open menu", "fr": "Ouvrir le menu", "nl": "Menu openen" },
     "closeMenu": { "en": "Close menu", "fr": "Fermer le menu", "nl": "Menu sluiten" },
     "selectLanguage": { "en": "Select language", "fr": "Choisir la langue", "nl": "Taal kiezen" },
-    "closedReadOnly": { "en": "Closed (read-only)", "fr": "Fermé (lecture seule)", "nl": "Gesloten (alleen lezen)" }
+    "closedReadOnly": { "en": "Closed (read-only)", "fr": "Fermé (lecture seule)", "nl": "Gesloten (alleen lezen)" },
+    "topActions": { "en": "Actions", "fr": "Actions", "nl": "Acties" }
   },
   "draft": {
     "saving": { "en": "Saving draft…", "fr": "Enregistrement du brouillon…", "nl": "Concept opslaan…" },
@@ -44,6 +45,10 @@
     "summaryMenu": { "en": "Summary menu", "fr": "Menu du résumé", "nl": "Samenvattingsmenu" },
     "closeReportsMenu": { "en": "Close reports menu", "fr": "Fermer le menu des rapports", "nl": "Rapportenmenu sluiten" },
     "reportsMenu": { "en": "Reports menu", "fr": "Menu des rapports", "nl": "Rapportenmenu" }
+    ,
+    "actions": { "en": "Actions", "fr": "Actions", "nl": "Acties" },
+    "actionsMenu": { "en": "Actions menu", "fr": "Menu des actions", "nl": "Actiemenu" },
+    "closeActionsMenu": { "en": "Close actions menu", "fr": "Fermer le menu des actions", "nl": "Actiemenu sluiten" }
   },
   "lineItems": {
     "expand": { "en": "Expand", "fr": "Ouvrir", "nl": "Openen" },

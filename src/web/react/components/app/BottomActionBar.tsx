@@ -71,15 +71,16 @@ export const BottomActionBar: React.FC<{
   canCopy: boolean;
   summaryEnabled?: boolean;
   copyEnabled?: boolean;
-  reportButtonsFormMenu?: Array<{ id: string; label: string }>;
-  reportButtonsSummaryBar?: Array<{ id: string; label: string }>;
+  customButtonsFormMenu?: Array<{ id: string; label: string; action?: string }>;
+  customButtonsSummaryBar?: Array<{ id: string; label: string; action?: string }>;
+  customButtonsListBar?: Array<{ id: string; label: string; action?: string }>;
   onHome: () => void;
   onCreateNew: () => void;
   onCreateCopy: () => void;
   onEdit: () => void;
   onSummary: () => void;
   onSubmit: () => void;
-  onReport?: (buttonId: string) => void;
+  onButton?: (buttonId: string) => void;
 }> = ({
   language,
   view,
@@ -88,27 +89,29 @@ export const BottomActionBar: React.FC<{
   canCopy,
   summaryEnabled = true,
   copyEnabled = true,
-  reportButtonsFormMenu,
-  reportButtonsSummaryBar,
+  customButtonsFormMenu,
+  customButtonsSummaryBar,
+  customButtonsListBar,
   onHome,
   onCreateNew,
   onCreateCopy,
   onEdit,
   onSummary,
   onSubmit,
-  onReport
+  onButton
 }) => {
-  const [menu, setMenu] = useState<'create' | 'summary' | 'reports' | null>(null);
+  const [menu, setMenu] = useState<'create' | 'summary' | 'actions' | null>(null);
   const createOpen = menu === 'create';
   const summaryOpen = menu === 'summary';
-  const reportsOpen = menu === 'reports';
+  const actionsOpen = menu === 'actions';
 
   const showCreateMenu = useMemo(() => (view === 'summary' || view === 'form') && copyEnabled, [copyEnabled, view]);
   const showEdit = useMemo(() => view === 'summary' && summaryEnabled, [summaryEnabled, view]);
   const showSummary = useMemo(() => view === 'form' && summaryEnabled, [summaryEnabled, view]);
   const showSubmit = useMemo(() => view === 'form' && !readOnly, [readOnly, view]);
-  const hasSummaryMenu = useMemo(() => (reportButtonsFormMenu || []).length > 0, [reportButtonsFormMenu]);
-  const hasSummaryBarReports = useMemo(() => (reportButtonsSummaryBar || []).length > 0, [reportButtonsSummaryBar]);
+  const hasSummaryMenu = useMemo(() => (customButtonsFormMenu || []).length > 0, [customButtonsFormMenu]);
+  const hasSummaryBarButtons = useMemo(() => (customButtonsSummaryBar || []).length > 0, [customButtonsSummaryBar]);
+  const hasListBarButtons = useMemo(() => (customButtonsListBar || []).length > 0, [customButtonsListBar]);
 
   useEffect(() => {
     // Close transient UI when navigating between views.
@@ -217,19 +220,19 @@ export const BottomActionBar: React.FC<{
                 {tSystem('actions.viewSummary', language, 'View summary')}
               </button>
             )}
-            {(reportButtonsFormMenu || []).map(btn => (
+            {(customButtonsFormMenu || []).map(btn => (
               <button
                 key={btn.id}
                 type="button"
                 className="ck-bottom-menu-item"
-                disabled={submitting || !onReport}
+                disabled={submitting || !onButton}
                 onClick={() => {
                   setMenu(null);
-                  onReport?.(btn.id);
+                  onButton?.(btn.id);
                 }}
               >
                 <IconWrap>
-                  <SummaryIcon />
+                  {btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}
                 </IconWrap>
                 {btn.label}
               </button>
@@ -238,28 +241,28 @@ export const BottomActionBar: React.FC<{
         </div>
       )}
 
-      {reportsOpen && view === 'summary' && (reportButtonsSummaryBar || []).length > 1 && (
+      {actionsOpen && (view === 'summary' || view === 'list') && (
         <div className="ck-bottom-menu-overlay open" aria-hidden={false}>
           <button
             type="button"
             className="ck-bottom-menu-backdrop"
-            aria-label={tSystem('actions.closeReportsMenu', language, 'Close reports menu')}
+            aria-label={tSystem('actions.closeActionsMenu', language, 'Close actions menu')}
             onClick={() => setMenu(null)}
           />
-          <div className="ck-bottom-menu" aria-label={tSystem('actions.reportsMenu', language, 'Reports menu')}>
-            {(reportButtonsSummaryBar || []).map(btn => (
+          <div className="ck-bottom-menu" aria-label={tSystem('actions.actionsMenu', language, 'Actions menu')}>
+            {((view === 'summary' ? customButtonsSummaryBar : customButtonsListBar) || []).map(btn => (
               <button
                 key={btn.id}
                 type="button"
                 className="ck-bottom-menu-item ck-bottom-menu-item--primary"
-                disabled={submitting || !onReport}
+                disabled={submitting || !onButton}
                 onClick={() => {
                   setMenu(null);
-                  onReport?.(btn.id);
+                  onButton?.(btn.id);
                 }}
               >
                 <IconWrap>
-                  <SummaryIcon />
+                  {btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}
                 </IconWrap>
                 {btn.label}
               </button>
@@ -332,37 +335,67 @@ export const BottomActionBar: React.FC<{
                 <IconWrap>
                   <SummaryIcon />
                 </IconWrap>
-                {tSystem('actions.reports', language, 'Reports')}
+                {tSystem('actions.actions', language, 'Actions')}
               </button>
             )}
 
-            {view === 'summary' && hasSummaryBarReports && (reportButtonsSummaryBar || []).length === 1 && (
+            {view === 'summary' && hasSummaryBarButtons && (customButtonsSummaryBar || []).length === 1 && (
               <button
                 type="button"
                 className="ck-bottom-item"
-                onClick={() => onReport?.((reportButtonsSummaryBar || [])[0].id)}
-                disabled={submitting || !onReport}
+                onClick={() => onButton?.((customButtonsSummaryBar || [])[0].id)}
+                disabled={submitting || !onButton}
               >
                 <IconWrap>
-                  <SummaryIcon />
+                  {(customButtonsSummaryBar || [])[0].action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}
                 </IconWrap>
-                {(reportButtonsSummaryBar || [])[0].label}
+                {(customButtonsSummaryBar || [])[0].label}
               </button>
             )}
 
-            {view === 'summary' && (reportButtonsSummaryBar || []).length > 1 && (
+            {view === 'summary' && (customButtonsSummaryBar || []).length > 1 && (
               <button
                 type="button"
-                className={`ck-bottom-item${reportsOpen ? ' active' : ''}`}
-                onClick={() => setMenu(current => (current === 'reports' ? null : 'reports'))}
-                disabled={submitting || !onReport}
+                className={`ck-bottom-item${actionsOpen ? ' active' : ''}`}
+                onClick={() => setMenu(current => (current === 'actions' ? null : 'actions'))}
+                disabled={submitting || !onButton}
                 aria-haspopup="dialog"
-                aria-expanded={reportsOpen}
+                aria-expanded={actionsOpen}
               >
                 <IconWrap>
                   <SummaryIcon />
                 </IconWrap>
-                {tSystem('actions.reports', language, 'Reports')}
+                {tSystem('actions.actions', language, 'Actions')}
+              </button>
+            )}
+
+            {view === 'list' && hasListBarButtons && (customButtonsListBar || []).length === 1 && (
+              <button
+                type="button"
+                className="ck-bottom-item"
+                onClick={() => onButton?.((customButtonsListBar || [])[0].id)}
+                disabled={submitting || !onButton}
+              >
+                <IconWrap>
+                  {(customButtonsListBar || [])[0].action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}
+                </IconWrap>
+                {(customButtonsListBar || [])[0].label}
+              </button>
+            )}
+
+            {view === 'list' && (customButtonsListBar || []).length > 1 && (
+              <button
+                type="button"
+                className={`ck-bottom-item${actionsOpen ? ' active' : ''}`}
+                onClick={() => setMenu(current => (current === 'actions' ? null : 'actions'))}
+                disabled={submitting || !onButton}
+                aria-haspopup="dialog"
+                aria-expanded={actionsOpen}
+              >
+                <IconWrap>
+                  <SummaryIcon />
+                </IconWrap>
+                {tSystem('actions.actions', language, 'Actions')}
               </button>
             )}
           </div>

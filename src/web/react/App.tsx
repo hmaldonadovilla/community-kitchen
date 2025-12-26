@@ -25,6 +25,7 @@ import FormView from './components/FormView';
 import ListView from './components/ListView';
 import { AppHeader } from './components/app/AppHeader';
 import { BottomActionBar } from './components/app/BottomActionBar';
+import { TopActionBar } from './components/app/TopActionBar';
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -44,7 +45,7 @@ import {
   resolveSubgroupKey
 } from './app/lineItems';
 import { normalizeRecordValues } from './app/records';
-import { applyValueMapsToForm } from './app/valueMaps';
+import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import packageJson from '../../../package.json';
 import { resolveLabel } from './utils/labels';
@@ -734,34 +735,65 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     return firstPick || undefined;
   }, []);
 
-  const reportButtons = useMemo(() => {
+  const customButtons = useMemo(() => {
     return definition.questions
       .map((q, idx) => ({ q, idx }))
-      .filter(({ q }) => q.type === 'BUTTON' && (q as any)?.button?.action === 'renderDocTemplate' && (q as any)?.button?.templateId)
+      .filter(({ q }) => q.type === 'BUTTON')
       .map(({ q, idx }) => {
-        const placementsRaw = (q as any)?.button?.placements;
+        const cfg: any = (q as any)?.button;
+        if (!cfg || typeof cfg !== 'object') return null;
+        const action = (cfg.action || '').toString().trim();
+        if (action === 'renderDocTemplate') {
+          if (!cfg.templateId) return null;
+        } else if (action === 'createRecordPreset') {
+          if (!cfg.presetValues || typeof cfg.presetValues !== 'object') return null;
+        } else {
+          return null;
+        }
+
+        const placementsRaw = cfg.placements;
         const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : (['form'] as const);
         // Use a stable "button reference" that includes the question index.
         // This avoids ambiguity if multiple BUTTON fields accidentally share the same id.
         const id = encodeButtonRef(q.id, idx);
-        return { id, label: resolveLabel(q, language), placements };
-      });
-  }, [definition.questions, language]);
+        return { id, label: resolveLabel(q, language), placements, action };
+      })
+      .filter((b): b is { id: string; label: string; placements: string[]; action: string } => !!b);
+  }, [definition.questions, encodeButtonRef, language]);
 
-  const reportButtonsFormMenu = useMemo(
+  const customButtonsFormMenu = useMemo(
     () =>
-      reportButtons
+      customButtons
         .filter(b => (b.placements as any[]).includes('formSummaryMenu'))
-        .map(b => ({ id: b.id, label: b.label })),
-    [reportButtons]
+        .map(b => ({ id: b.id, label: b.label, action: b.action })),
+    [customButtons]
   );
 
-  const reportButtonsSummaryBar = useMemo(
+  const customButtonsSummaryBar = useMemo(
     () =>
-      reportButtons
+      customButtons
         .filter(b => (b.placements as any[]).includes('summaryBar'))
-        .map(b => ({ id: b.id, label: b.label })),
-    [reportButtons]
+        .map(b => ({ id: b.id, label: b.label, action: b.action })),
+    [customButtons]
+  );
+
+  const customButtonsListBar = useMemo(
+    () =>
+      customButtons
+        .filter(b => (b.placements as any[]).includes('listBar'))
+        .map(b => ({ id: b.id, label: b.label, action: b.action })),
+    [customButtons]
+  );
+
+  const customButtonsTopBar = useMemo(
+    () => {
+      const viewPlacement =
+        view === 'list' ? 'topBarList' : view === 'summary' ? 'topBarSummary' : 'topBarForm';
+      return customButtons
+        .filter(b => (b.placements as any[]).includes('topBar') || (b.placements as any[]).includes(viewPlacement))
+        .map(b => ({ id: b.id, label: b.label, action: b.action }));
+    },
+    [customButtons, view]
   );
 
   const base64ToPdfObjectUrl = useCallback((pdfBase64: string, mimeType: string) => {
@@ -883,6 +915,101 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       void generateReportPdfPreview(buttonId);
     },
     [generateReportPdfPreview]
+  );
+
+  const createRecordFromPreset = useCallback(
+    (args: { buttonId: string; presetValues: Record<string, any> }) => {
+      const { buttonId, presetValues } = args;
+
+      // Creating a preset record is a "new record" flow: clear draft autosave and record context.
+      autoSaveDirtyRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+
+      const parsedRef = parseButtonRef(buttonId || '');
+      const baseId = parsedRef.id;
+      const qIdx = parsedRef.qIdx;
+
+      const baseValues = normalizeRecordValues(definition);
+      const valuesWithPreset: Record<string, FieldValue> = { ...(baseValues as any) };
+      const unknownFields: string[] = [];
+      const appliedFields: string[] = [];
+
+      Object.keys(presetValues || {}).forEach(fieldIdRaw => {
+        const fieldId = (fieldIdRaw || '').toString().trim();
+        if (!fieldId) return;
+        const q = definition.questions.find(qq => qq.id === fieldId);
+        if (!q || q.type === 'LINE_ITEM_GROUP' || q.type === 'BUTTON' || q.type === 'FILE_UPLOAD') {
+          unknownFields.push(fieldId);
+          return;
+        }
+        const opts = (q as any).options;
+        const hasAnyOption = !!(opts?.en?.length || opts?.fr?.length || opts?.nl?.length);
+        const coerced = coerceDefaultValue({
+          type: (q as any).type || '',
+          raw: (presetValues as any)[fieldIdRaw],
+          hasAnyOption,
+          hasDataSource: !!(q as any).dataSource
+        });
+        if (coerced !== undefined) {
+          valuesWithPreset[fieldId] = coerced;
+          appliedFields.push(fieldId);
+        }
+      });
+
+      const initialLineItems = buildInitialLineItems(definition);
+      const mapped = applyValueMapsToForm(definition, valuesWithPreset, initialLineItems, { mode: 'init' });
+      lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
+      setValues(mapped.values);
+      setLineItems(mapped.lineItems);
+      setErrors({});
+      setStatus(null);
+      setStatusLevel(null);
+      setSelectedRecordId('');
+      setSelectedRecordSnapshot(null);
+      setLastSubmissionMeta(null);
+      setView('form');
+
+      logEvent('button.createRecordPreset.apply', {
+        buttonId: baseId,
+        qIdx: qIdx ?? null,
+        appliedFieldCount: appliedFields.length,
+        unknownFieldCount: unknownFields.length,
+        unknownFields: unknownFields.length ? unknownFields.slice(0, 20) : []
+      });
+    },
+    [definition, logEvent, parseButtonRef]
+  );
+
+  const handleCustomButton = useCallback(
+    (buttonId: string) => {
+      const parsedRef = parseButtonRef(buttonId || '');
+      const baseId = parsedRef.id;
+      const qIdx = parsedRef.qIdx;
+      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
+      const btn =
+        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
+          ? indexed
+          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const cfg: any = btn ? (btn as any).button : null;
+      const action = (cfg?.action || '').toString().trim();
+      logEvent('ui.customButton.click', { buttonId: baseId, qIdx: qIdx ?? null, action: action || null });
+
+      if (action === 'renderDocTemplate') {
+        openReport(buttonId);
+        return;
+      }
+      if (action === 'createRecordPreset') {
+        createRecordFromPreset({ buttonId, presetValues: (cfg?.presetValues || {}) as any });
+        return;
+      }
+
+      logEvent('ui.customButton.unsupported', { buttonId: baseId, qIdx: qIdx ?? null, action: action || null });
+    },
+    [createRecordFromPreset, definition.questions, logEvent, openReport, parseButtonRef]
   );
 
   const closeReportOverlay = useCallback(() => {
@@ -1589,6 +1716,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onRefresh={handleGlobalRefresh}
       />
 
+      <TopActionBar
+        language={language}
+        buttons={customButtonsTopBar}
+        disabled={submitting || Boolean(recordLoadingId)}
+        onButton={handleCustomButton}
+      />
+
       {view === 'form' && (
         <>
           {draftBanner}
@@ -1669,8 +1803,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
-        reportButtonsFormMenu={reportButtonsFormMenu}
-        reportButtonsSummaryBar={reportButtonsSummaryBar}
+        customButtonsFormMenu={customButtonsFormMenu}
+        customButtonsSummaryBar={customButtonsSummaryBar}
+        customButtonsListBar={customButtonsListBar}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}
@@ -1689,7 +1824,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           setView('summary');
         }}
         onSubmit={() => formSubmitActionRef.current?.()}
-        onReport={openReport}
+        onButton={handleCustomButton}
       />
     </div>
   );

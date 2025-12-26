@@ -14,6 +14,20 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
         }
 
+        /* Top action bar (below header): match the BottomActionBar styling exactly (capsule + pill items). */
+        .ck-top-action-bar {
+          width: 100%;
+          box-sizing: border-box;
+          /* Full-bleed like the sticky header */
+          margin: -6px -22px 6px;
+          padding: 12px 18px 12px;
+          background: rgba(242, 242, 247, 0.92);
+          border-bottom: 1px solid rgba(60, 60, 67, 0.22);
+          backdrop-filter: saturate(180%) blur(18px);
+          -webkit-backdrop-filter: saturate(180%) blur(18px);
+          z-index: 25;
+        }
+
         .form-card input,
         .form-card select,
         .form-card textarea {
@@ -43,11 +57,28 @@ export const FORM_VIEW_STYLES = `
           gap: 8px 12px;
           align-items: center;
         }
+        /* DATE controls can have a large intrinsic min width on iOS (due to localized display),
+           which causes them to wrap onto their own line even with 50/50 flex-basis.
+           Use a small 2-column grid to keep label + date control on the same row. */
+        .form-card .field.inline-field.ck-date-inline:not(.ck-label-stacked),
+        .webform-overlay .field.inline-field.ck-date-inline:not(.ck-label-stacked) {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 8px 12px;
+          align-items: center;
+        }
+        .form-card .field.inline-field.ck-date-inline:not(.ck-label-stacked) > .error,
+        .webform-overlay .field.inline-field.ck-date-inline:not(.ck-label-stacked) > .error {
+          grid-column: 1 / -1;
+        }
         .form-card .field.inline-field > label,
         .webform-overlay .field.inline-field > label {
-          flex: 1 1 160px;
-          min-width: 120px;
-          max-width: 220px;
+          /* Single-row fields: give labels ~half the width by default (better balance vs controls). */
+          /* Account for the horizontal gap (12px) so 50/50 doesn't wrap on narrow screens. */
+          flex: 1 1 calc(50% - 6px);
+          /* Allow the label to shrink on narrow screens (important for iOS DATE inputs). */
+          min-width: 0;
+          max-width: calc(50% - 6px);
           margin: 0;
           font-weight: 800;
           font-size: var(--ck-font-label);
@@ -67,7 +98,8 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay .field.inline-field > .inline-options,
         .webform-overlay .field.inline-field > .ck-choice-control,
         .webform-overlay .field.inline-field > .ck-number-stepper {
-          flex: 2 1 260px;
+          /* Account for the horizontal gap (12px) so 50/50 doesn't wrap on narrow screens. */
+          flex: 1 1 calc(50% - 6px);
           min-width: 0;
           width: 100%;
         }
@@ -277,8 +309,17 @@ export const FORM_VIEW_STYLES = `
           word-break: break-word;
         }
         .ck-segmented button.active {
-          background: var(--card);
-          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+          /* Make the selected segment visually obvious. */
+          background: var(--accent);
+          color: #ffffff;
+          box-shadow: 0 6px 14px rgba(0, 0, 0, 0.14);
+        }
+        .ck-segmented button:not(.active) {
+          color: rgba(15, 23, 42, 0.78);
+        }
+        .ck-segmented button:focus-visible {
+          outline: 3px solid rgba(59, 130, 246, 0.5);
+          outline-offset: 2px;
         }
 
         .ck-radio-list {
@@ -434,6 +475,30 @@ export const FORM_VIEW_STYLES = `
           height: 40px;
           accent-color: var(--accent);
           margin: 0;
+        }
+        /* Consent checkbox: render checkbox on the left of the label (full-width row). */
+        .form-card .field.inline-field.ck-consent-field > label,
+        .webform-overlay .field.inline-field.ck-consent-field > label {
+          flex: 1 1 100%;
+          max-width: none;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+        }
+        .form-card .field.inline-field.ck-consent-field > label > input[type="checkbox"],
+        .webform-overlay .field.inline-field.ck-consent-field > label > input[type="checkbox"] {
+          width: 40px;
+          height: 40px;
+          accent-color: var(--accent);
+          margin: 0;
+          flex: 0 0 auto;
+          /* visually align the checkbox with the first line of text */
+          margin-top: 2px;
+        }
+        .form-card .field.inline-field.ck-consent-field > label > .ck-consent-text,
+        .webform-overlay .field.inline-field.ck-consent-field > label > .ck-consent-text {
+          flex: 1 1 auto;
+          min-width: 0;
         }
 
         /* Native selects can render shorter on iOS; force them to match the global control height. */
@@ -645,12 +710,6 @@ export const FORM_VIEW_STYLES = `
           /* iOS date inputs are very wide; if a paired row contains a DATE field, stack it on mobile to prevent overflow. */
           .ck-pair-grid.ck-pair-has-date {
             grid-template-columns: 1fr;
-          }
-
-          .form-card .field.inline-field > label,
-          .webform-overlay .field.inline-field > label {
-            flex-basis: 100%;
-            max-width: none;
           }
           .form-card .collapsed-fields-grid {
             grid-template-columns: 1fr !important;

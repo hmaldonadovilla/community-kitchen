@@ -1287,6 +1287,32 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           return acc;
                         }, [...allowedField]);
                         const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language);
+                        if (isConsentCheckbox) {
+                          return (
+                            <div
+                              key={field.id}
+                              className={`field inline-field ck-consent-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            >
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={!!row.values[field.id]}
+                                  onChange={e => handleLineFieldChange(q, row.id, field, e.target.checked)}
+                                />
+                                <span className="ck-consent-text" style={labelStyle}>
+                                  {resolveFieldLabel(field, language, field.id)}
+                                  {field.required && <RequiredStar />}
+                                </span>
+                              </label>
+                              {subgroupTriggerNodes.length ? (
+                                <div className="ck-field-actions">{subgroupTriggerNodes}</div>
+                              ) : null}
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                            </div>
+                          );
+                        }
                         return (
                             <div
                               key={field.id}
@@ -1298,17 +1324,6 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               {resolveFieldLabel(field, language, field.id)}
                               {field.required && <RequiredStar />}
                             </label>
-                              {isConsentCheckbox ? (
-                                <div className="ck-choice-control ck-consent-control">
-                                  <label className="ck-consent">
-                                    <input
-                                      type="checkbox"
-                                      checked={!!row.values[field.id]}
-                                      onChange={e => handleLineFieldChange(q, row.id, field, e.target.checked)}
-                                    />
-                                  </label>
-                                </div>
-                              ) : (
                             <div className="inline-options">
                               {optsField.map(opt => (
                                 <label key={opt.value} className="inline">
@@ -1326,7 +1341,6 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 </label>
                               ))}
                             </div>
-                              )}
                               {subgroupTriggerNodes.length ? (
                                 <div className="ck-field-actions">{subgroupTriggerNodes}</div>
                               ) : null}

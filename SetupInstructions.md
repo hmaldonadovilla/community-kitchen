@@ -728,38 +728,64 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
     - Sort ingredients table by category then ingredient: `{{ORDER_BY(CAT ASC, ING ASC)}}`
     - Sort by quantity descending: `{{ORDER_BY(QTY DESC)}}` (also accepts `QTY:DESC` or `-QTY`)
 
-### Report buttons (BUTTON fields)
+### BUTTON fields (custom actions)
 
-Use `BUTTON` questions to render a Google Doc template (with the placeholders above) into an in-app **PDF preview** from the web app.
-The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written).
+`BUTTON` questions render as **custom actions** in the web UI. Two actions are supported:
 
-- **Config (JSON/REF)** example:
+- **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into an in-app **PDF preview**. The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written).
+- **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
 
-  ```json
-  {
-    "button": {
-      "action": "renderDocTemplate",
-      "templateId": { "EN": "DOC_ID_EN", "FR": "DOC_ID_FR", "NL": "DOC_ID_NL" },
-      "placements": ["form", "formSummaryMenu", "summaryBar"],
-      "folderId": "OPTIONAL_DRIVE_FOLDER_ID"
-    }
+#### Example: PDF preview button
+
+```json
+{
+  "button": {
+    "action": "renderDocTemplate",
+    "templateId": { "EN": "DOC_ID_EN", "FR": "DOC_ID_FR", "NL": "DOC_ID_NL" },
+    "placements": ["form", "formSummaryMenu", "summaryBar", "topBarSummary"],
+    "folderId": "OPTIONAL_DRIVE_FOLDER_ID"
   }
-  ```
+}
+```
+
+#### Example: create record with preset values
+
+```json
+{
+  "button": {
+    "action": "createRecordPreset",
+    "presetValues": {
+      "SHIFT": "AM",
+      "CONSENT": true,
+      "STATUS": "In progress"
+    },
+    "placements": ["listBar", "topBarList"]
+  }
+}
+```
+
+#### Notes
 
 - **Preview mode**:
   - `previewMode` is **deprecated/ignored** and kept only for backward compatibility.
   - The current UI always opens an **in-app PDF preview** (generated in-memory; no Drive PDF file).
 
 - **Placements**:
-  - `form`: render inline as a normal field in the edit form.
+  - `form`: render inline as a normal field in the edit form (**PDF preview only** today).
   - `formSummaryMenu`: appear inside the Summary button menu while editing.
   - `summaryBar`: appear in the Summary view bottom action bar (menu if multiple).
+  - `topBar`: appear in the global action bar directly under the header (**all views**).
+  - `topBarList`: appear in the top action bar on the List view.
+  - `topBarForm`: appear in the top action bar on the Form (edit) view.
+  - `topBarSummary`: appear in the top action bar on the Summary view.
+  - `listBar`: appear in the List view bottom action bar (menu if multiple).
 
 ## UI Navigation & Shell
 
 - The web app uses an app-like shell:
   - Header shows a **logo circle + form title** (Excel-style).
   - Tap the logo circle to open a **left drawer** with **Refresh**, **Language** (only when enabled / 2+ languages), and **Build**.
+  - Optional: a **top action bar** under the header can show custom `BUTTON` actions (`placements: ["topBar"]`).
   - A fixed **bottom action bar** provides navigation/actions per view:
     - **List**: Home + Create (Create opens a new record and sends you to the Form).
     - **Summary**: Home + Create (Create opens a menu: New record / Copy current record).
@@ -777,7 +803,7 @@ The PDF is generated **in-memory** and discarded when you close the overlay (no 
   - In the dashboard “Follow-up Config (JSON)” column, set `"summaryViewEnabled": false`.
   - Behavior when disabled:
     - Clicking a record in the list always opens the **Form** view (Closed records are read-only).
-    - The Summary action in the bottom bar is hidden; if report buttons are configured for the form summary menu, a **Reports** menu is shown instead.
+    - The Summary action in the bottom bar is hidden; if `BUTTON` actions are configured for the form summary menu, an **Actions** menu is shown instead.
 
 - **Optional: disable “Copy current record”**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"copyCurrentRecordEnabled": false`.

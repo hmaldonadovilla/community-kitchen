@@ -908,35 +908,66 @@ export class ConfigSheet {
     if (!cfgRaw || typeof cfgRaw !== 'object') return undefined;
 
     const action = (cfgRaw.action || 'renderDocTemplate').toString().trim();
-    if (action !== 'renderDocTemplate') return undefined;
-
-    const templateId = cfgRaw.templateId ?? cfgRaw.template ?? cfgRaw.docTemplateId ?? cfgRaw.docId;
-    if (!templateId) return undefined;
-
-    const outputRaw = (cfgRaw.output || 'pdf').toString().trim().toLowerCase();
-    const output = outputRaw === 'pdf' ? 'pdf' : undefined;
-
-    const previewModeRaw = (cfgRaw.previewMode || cfgRaw.preview || 'pdf').toString().trim().toLowerCase();
-    const previewMode = previewModeRaw === 'live' ? 'live' : 'pdf';
-
-    const allowedPlacements = new Set(['form', 'formSummaryMenu', 'summaryBar']);
+    const allowedPlacements = new Set([
+      'form',
+      'formSummaryMenu',
+      'summaryBar',
+      'topBar',
+      'topBarList',
+      'topBarForm',
+      'topBarSummary',
+      'listBar'
+    ]);
     const placementsRaw = Array.isArray(cfgRaw.placements) ? cfgRaw.placements : cfgRaw.placement ? [cfgRaw.placement] : [];
     const placements = placementsRaw
       .map((p: any) => (p === undefined || p === null ? '' : p.toString().trim()))
       .filter((p: string) => allowedPlacements.has(p));
 
-    const folderId =
-      cfgRaw.folderId !== undefined && cfgRaw.folderId !== null ? cfgRaw.folderId.toString().trim() : undefined;
+    if (action === 'renderDocTemplate') {
+      const templateId = cfgRaw.templateId ?? cfgRaw.template ?? cfgRaw.docTemplateId ?? cfgRaw.docId;
+      if (!templateId) return undefined;
 
-    const config: ButtonConfig = {
-      action: 'renderDocTemplate',
-      templateId: templateId as any,
-      output: (output as any) || 'pdf',
-      previewMode: previewMode as any
-    };
-    if (placements.length) config.placements = placements as any;
-    if (folderId) config.folderId = folderId;
-    return config;
+      const outputRaw = (cfgRaw.output || 'pdf').toString().trim().toLowerCase();
+      const output = outputRaw === 'pdf' ? 'pdf' : undefined;
+
+      const previewModeRaw = (cfgRaw.previewMode || cfgRaw.preview || 'pdf').toString().trim().toLowerCase();
+      const previewMode = previewModeRaw === 'live' ? 'live' : 'pdf';
+
+      const folderId =
+        cfgRaw.folderId !== undefined && cfgRaw.folderId !== null ? cfgRaw.folderId.toString().trim() : undefined;
+
+      const config: ButtonConfig = {
+        action: 'renderDocTemplate',
+        templateId: templateId as any,
+        output: (output as any) || 'pdf',
+        previewMode: previewMode as any
+      } as any;
+      if (placements.length) (config as any).placements = placements as any;
+      if (folderId) (config as any).folderId = folderId;
+      return config;
+    }
+
+    if (action === 'createRecordPreset') {
+      const presetRaw = cfgRaw.presetValues ?? cfgRaw.preset ?? cfgRaw.values ?? cfgRaw.defaults;
+      if (!presetRaw || typeof presetRaw !== 'object') return undefined;
+      const presetValues: Record<string, any> = {};
+      Object.keys(presetRaw).forEach(key => {
+        const id = (key || '').toString().trim();
+        if (!id) return;
+        const val = (presetRaw as any)[key];
+        if (val === undefined || val === null) return;
+        const normalized = this.normalizeDefaultValue(val);
+        if (normalized === undefined) return;
+        presetValues[id] = normalized;
+      });
+      if (!Object.keys(presetValues).length) return undefined;
+
+      const config: ButtonConfig = { action: 'createRecordPreset', presetValues } as any;
+      if (placements.length) (config as any).placements = placements as any;
+      return config;
+    }
+
+    return undefined;
   }
 
   private static normalizeDefaultValue(raw: any): DefaultValue | undefined {

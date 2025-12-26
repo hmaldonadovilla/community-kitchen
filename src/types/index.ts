@@ -26,7 +26,15 @@ export type ChoiceControl = 'auto' | 'select' | 'radio' | 'segmented' | 'switch'
 
 export type LabelLayout = 'auto' | 'stacked';
 
-export type ButtonPlacement = 'form' | 'formSummaryMenu' | 'summaryBar';
+export type ButtonPlacement =
+  | 'form'
+  | 'formSummaryMenu'
+  | 'summaryBar'
+  | 'topBar'
+  | 'topBarList'
+  | 'topBarForm'
+  | 'topBarSummary'
+  | 'listBar';
 
 export type ButtonOutput = 'pdf';
 
@@ -38,10 +46,9 @@ export type ButtonPreviewMode = 'pdf' | 'live';
  * Primary use case: render a Google Doc template (with placeholders / consolidated directives)
  * into a PDF preview from the web app.
  */
-export interface ButtonConfig {
-  /**
-   * Currently only supported action.
-   */
+export type ButtonAction = 'renderDocTemplate' | 'createRecordPreset';
+
+export interface RenderDocTemplateButtonConfig {
   action: 'renderDocTemplate';
   /**
    * Google Doc template id (or language map).
@@ -63,6 +70,9 @@ export interface ButtonConfig {
    * - form: rendered inline as a normal field in the form view
    * - formSummaryMenu: appears in the Summary button menu while editing
    * - summaryBar: appears in the bottom action bar on the Summary view (menu if multiple)
+   * - topBar: appears in the action bar directly under the header (all views)
+   * - topBarList/topBarForm/topBarSummary: show in the top action bar only on the matching view
+   * - listBar: appears in the bottom action bar on the list view (menu if multiple)
    */
   placements?: ButtonPlacement[];
   /**
@@ -70,6 +80,20 @@ export interface ButtonConfig {
    */
   folderId?: string;
 }
+
+export interface CreateRecordPresetButtonConfig {
+  action: 'createRecordPreset';
+  /**
+   * Field values to prefill when creating a new record.
+   *
+   * Important: these are stored values (not localized labels).
+   * For CHOICE, use the underlying option value (typically the EN option key).
+   */
+  presetValues: Record<string, DefaultValue>;
+  placements?: ButtonPlacement[];
+}
+
+export type ButtonConfig = RenderDocTemplateButtonConfig | CreateRecordPresetButtonConfig;
 
 export interface QuestionUiConfig {
   /**

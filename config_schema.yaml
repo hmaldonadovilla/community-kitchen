@@ -138,49 +138,83 @@ components:
       required: [id, type, qEn, qFr, qNl, required, status]
 
     ButtonConfig:
-      type: object
-      properties:
-        action:
-          type: string
-          enum: [renderDocTemplate]
-          description: |
-            The only supported action today: render a Google Doc template (with placeholders + consolidated directives)
-            into a PDF preview.
-        templateId:
-          oneOf:
-            - type: string
-              description: Google Doc template id.
-            - type: object
-              additionalProperties:
-                type: string
-              description: 'Language map (e.g., `{ "EN": "...", "FR": "...", "NL": "..." }`).'
-          description: Google Doc template id (or language map).
-        output:
-          type: string
-          enum: [pdf]
-          description: Output format. Currently only `pdf`.
-        previewMode:
-          type: string
-          enum: [pdf, live]
-          description: |
-            Preview mode for the web app overlay.
+      description: UI-only button field configuration.
+      oneOf:
+        - type: object
+          properties:
+            action:
+              type: string
+              enum: [renderDocTemplate]
+              description: Render a Google Doc template (with placeholders + consolidated directives) into a PDF preview.
+            templateId:
+              oneOf:
+                - type: string
+                  description: Google Doc template id.
+                - type: object
+                  additionalProperties:
+                    type: string
+                  description: 'Language map (e.g., `{ "EN": "...", "FR": "...", "NL": "..." }`).'
+              description: Google Doc template id (or language map).
+            output:
+              type: string
+              enum: [pdf]
+              description: Output format. Currently only `pdf`.
+            previewMode:
+              type: string
+              enum: [pdf, live]
+              description: |
+                Preview mode for the web app overlay.
 
-            NOTE: The current UI always shows an **in-app PDF preview** (generated in-memory; no PDF file is written to Drive).
-            `live` is deprecated/ignored and kept only for backward compatibility with older configs.
-        placements:
-          type: array
-          items:
-            type: string
-            enum: [form, formSummaryMenu, summaryBar]
-          description: |
-            Where the button should surface in the web UI.
-            - `form`: render inline as a normal field in the form view.
-            - `formSummaryMenu`: appear inside the Summary button menu while editing.
-            - `summaryBar`: appear in the bottom action bar on the Summary view (menu if multiple).
-        folderId:
-          type: string
-          description: Optional Drive folder id to write generated PDFs to (defaults to follow-up folder / spreadsheet parent).
-      required: [action, templateId]
+                NOTE: The current UI always shows an **in-app PDF preview** (generated in-memory; no PDF file is written to Drive).
+                `live` is deprecated/ignored and kept only for backward compatibility with older configs.
+            placements:
+              type: array
+              items:
+                type: string
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+              description: |
+                Where the button should surface in the web UI.
+                - `form`: render inline as a normal field in the form view.
+                - `formSummaryMenu`: appear inside the Summary button menu while editing.
+                - `summaryBar`: appear in the bottom action bar on the Summary view (menu if multiple).
+                - `topBar`: appear in the action bar directly under the header (all views).
+                - `topBarList`: appear in the top action bar on the List view.
+                - `topBarForm`: appear in the top action bar on the Form (edit) view.
+                - `topBarSummary`: appear in the top action bar on the Summary view.
+                - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+            folderId:
+              type: string
+              description: Optional Drive folder id to write generated PDFs to (defaults to follow-up folder / spreadsheet parent).
+          required: [action, templateId]
+        - type: object
+          properties:
+            action:
+              type: string
+              enum: [createRecordPreset]
+              description: Create a new record and prefill field values.
+            presetValues:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/DefaultValue'
+              description: |
+                Prefill values by field id (stored values, not localized labels).
+                For CHOICE, use the underlying option value (typically the EN option key).
+            placements:
+              type: array
+              items:
+                type: string
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+              description: |
+                Where the button should surface in the web UI.
+                - `form`: render inline as a normal field in the form view.
+                - `formSummaryMenu`: appear inside the Summary button menu while editing.
+                - `summaryBar`: appear in the bottom action bar on the Summary view (menu if multiple).
+                - `topBar`: appear in the action bar directly under the header (all views).
+                - `topBarList`: appear in the top action bar on the List view.
+                - `topBarForm`: appear in the top action bar on the Form (edit) view.
+                - `topBarSummary`: appear in the top action bar on the Summary view.
+                - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+          required: [action, presetValues]
 
     FileUploadConfig:
       type: object

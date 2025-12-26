@@ -202,6 +202,45 @@ describe('ConfigSheet', () => {
     expect(questions[0].uploadConfig!.destinationFolderId).toBe('abc');
   });
 
+  test('getQuestions parses BUTTON createRecordPreset config JSON', () => {
+    const configSheet = mockSS.insertSheet('Config: Buttons');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'BTN1',
+        'BUTTON',
+        'Create preset record',
+        'Créer un enregistrement',
+        'Nieuw record aanmaken',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "button": {
+            "action": "createRecordPreset",
+            "presetValues": { "TYPE": "AM", "CONSENT": true, "TAGS": ["A", "B"] },
+            "placements": ["topBarList", "listBar", "unknownPlacement"]
+          }
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: Buttons');
+    expect(questions.length).toBe(1);
+    expect(questions[0].type).toBe('BUTTON');
+    expect((questions[0] as any).button).toEqual({
+      action: 'createRecordPreset',
+      presetValues: { TYPE: 'AM', CONSENT: true, TAGS: ['A', 'B'] },
+      placements: ['topBarList', 'listBar']
+    });
+  });
+
   test('getQuestions parses dataSource config JSON for choice fields', () => {
     const configSheet = mockSS.insertSheet('Config: DataSource');
     const exampleRows = [

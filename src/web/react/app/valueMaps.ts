@@ -125,7 +125,7 @@ const coerceConsentBoolean = (raw: any): boolean => {
   return true;
 };
 
-const coerceDefaultValue = (args: {
+export const coerceDefaultValue = (args: {
   type: string;
   raw: any;
   hasAnyOption?: boolean;

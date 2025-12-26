@@ -1459,10 +1459,12 @@ const FormView: React.FC<FormViewProps> = ({
 
     switch (q.type) {
       case 'BUTTON': {
+        const action = ((q as any)?.button?.action || '').toString().trim();
         const placementsRaw = (q as any)?.button?.placements;
         const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : ['form'];
         const showInForm = placements.includes('form');
-        if (!showInForm) return null;
+        // Inline BUTTON fields are currently only used for report rendering.
+        if (!showInForm || action !== 'renderDocTemplate') return null;
 
         const label = resolveLabel(q, language);
         const busyThis = !!reportBusy && reportBusyId === q.id;
@@ -1524,7 +1526,7 @@ const FormView: React.FC<FormViewProps> = ({
             key={q.id}
             className={`${q.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
               forceStackedLabel ? ' ck-label-stacked' : ''
-            }`}
+            }${q.type === 'DATE' && !forceStackedLabel ? ' ck-date-inline' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
           >
@@ -1585,6 +1587,29 @@ const FormView: React.FC<FormViewProps> = ({
         const hasAnyOption = !!((optionSet.en && optionSet.en.length) || (optionSet.fr && optionSet.fr.length) || (optionSet.nl && optionSet.nl.length));
         const isConsentCheckbox = !q.dataSource && !hasAnyOption;
         const selected = Array.isArray(values[q.id]) ? (values[q.id] as string[]) : [];
+        if (isConsentCheckbox) {
+          return (
+            <div
+              key={q.id}
+              className={`field inline-field ck-consent-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+              data-field-path={q.id}
+              data-has-error={errors[q.id] ? 'true' : undefined}
+            >
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!!values[q.id]}
+                  onChange={e => handleFieldChange(q, e.target.checked)}
+                />
+                <span className="ck-consent-text">
+                  {resolveLabel(q, language)}
+                  {q.required && <RequiredStar />}
+                </span>
+              </label>
+              {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+            </div>
+          );
+        }
         return (
           <div
             key={q.id}
@@ -1596,17 +1621,6 @@ const FormView: React.FC<FormViewProps> = ({
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
-            {isConsentCheckbox ? (
-              <div className="ck-choice-control ck-consent-control">
-                <label className="ck-consent">
-                  <input
-                    type="checkbox"
-                    checked={!!values[q.id]}
-                    onChange={e => handleFieldChange(q, e.target.checked)}
-                  />
-                </label>
-              </div>
-            ) : (
             <div className="inline-options">
               {opts.map(opt => (
                 <label key={opt.value} className="inline">
@@ -1622,7 +1636,6 @@ const FormView: React.FC<FormViewProps> = ({
                 </label>
               ))}
             </div>
-            )}
             {(() => {
               const withTooltips = opts.filter(opt => opt.tooltip && selected.includes(opt.value));
               if (!withTooltips.length) return null;
@@ -2482,28 +2495,40 @@ const FormView: React.FC<FormViewProps> = ({
                               ((optionSetField as any).nl && (optionSetField as any).nl.length));
                           const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
                                     const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
+                                    if (isConsentCheckbox) {
+                                      return (
+                                        <div
+                                          key={field.id}
+                                          className={`field inline-field ck-consent-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
+                                          data-field-path={fieldPath}
+                                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        >
+                                          <label>
+                                            <input
+                                              type="checkbox"
+                                              checked={!!subRow.values[field.id]}
+                                              onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.checked)}
+                                            />
+                                            <span className="ck-consent-text">
+                                              {resolveFieldLabel(field, language, field.id)}
+                                              {field.required && <RequiredStar />}
+                                            </span>
+                                          </label>
+                                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                        </div>
+                                      );
+                                    }
                                     return (
-                            <div
-                              key={field.id}
-                              className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
-                              data-field-path={fieldPath}
-                              data-has-error={errors[fieldPath] ? 'true' : undefined}
-                            >
+                                      <div
+                                        key={field.id}
+                                        className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
+                                        data-field-path={fieldPath}
+                                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                      >
                                         <label>
                                           {resolveFieldLabel(field, language, field.id)}
                                           {field.required && <RequiredStar />}
                                         </label>
-                              {isConsentCheckbox ? (
-                                <div className="ck-choice-control ck-consent-control">
-                                  <label className="ck-consent">
-                                    <input
-                                      type="checkbox"
-                                      checked={!!subRow.values[field.id]}
-                                      onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.checked)}
-                                    />
-                                  </label>
-                                </div>
-                              ) : (
                                         <div className="inline-options">
                                           {optsField.map(opt => (
                                             <label key={opt.value} className="inline">
@@ -2511,32 +2536,36 @@ const FormView: React.FC<FormViewProps> = ({
                                                 type="checkbox"
                                                 checked={selected.includes(opt.value)}
                                                 onChange={e => {
-                                          const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
-                                          handleLineFieldChange(subGroupDef, subRow.id, field, next);
+                                                  const next = e.target.checked
+                                                    ? [...selected, opt.value]
+                                                    : selected.filter(v => v !== opt.value);
+                                                  handleLineFieldChange(subGroupDef, subRow.id, field, next);
                                                 }}
                                               />
                                               <span>{opt.label}</span>
                                             </label>
                                           ))}
                                         </div>
-                              )}
                                         {(() => {
                                           const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
                                           if (!withTooltips.length) return null;
                                           const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                                const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
+                                          const tooltipLabel = resolveLocalizedString(field.dataSource?.tooltipLabel, language, fallbackLabel);
                                           return (
                                             <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                               {withTooltips.map(opt => (
-                                      <span key={opt.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                        {opt.label}{' '}
-                                        <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
+                                                <span
+                                                  key={opt.value}
+                                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                                >
+                                                  {opt.label}{' '}
+                                                  <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
                                                 </span>
                                               ))}
                                             </div>
                                           );
                                         })()}
-                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                                       </div>
                                     );
                                   }
@@ -2683,7 +2712,7 @@ const FormView: React.FC<FormViewProps> = ({
                               key={field.id}
                               className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
                                 forceStackedSubFieldLabel ? ' ck-label-stacked' : ''
-                              }`}
+                              }${field.type === 'DATE' && !forceStackedSubFieldLabel ? ' ck-date-inline' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                             >
