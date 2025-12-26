@@ -171,6 +171,54 @@ describe('WebFormService', () => {
     expect(optionsArg.bcc).toBe('audit@example.com');
   });
 
+  test('emailTemplateId supports conditional cases based on record field values', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
+    if (!dashboardSheet) throw new Error('Dashboard not created');
+
+    const followupJson = JSON.stringify({
+      pdfTemplateId: { EN: 'pdf-template-en' },
+      emailTemplateId: {
+        cases: [
+          { when: { fieldId: 'Q4', equals: 'ACME' }, templateId: 'email-template-acme' },
+          { when: { fieldId: 'Q4', equals: 'Beta' }, templateId: 'email-template-beta' }
+        ],
+        default: 'email-template-default'
+      },
+      emailRecipients: ['ops@example.com']
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson]
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const followups = (service as any).followups || (service as any);
+    jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
+      success: true,
+      url: 'http://pdf',
+      fileId: 'file-1',
+      blob: null
+    });
+
+    (global as any).DocumentApp.openById.mockClear();
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+
+    const result = service.triggerFollowupAction('Config: Delivery', 'REC-1', 'SEND_EMAIL');
+    expect(result.success).toBe(true);
+    expect((global as any).DocumentApp.openById).toHaveBeenCalledWith('email-template-acme');
+  });
+
   test('auto increment text fields populate sequential values', () => {
     service.submitWebForm({
       formKey: 'Config: Delivery',

@@ -20,4 +20,11 @@ describe('shouldHideField', () => {
     const hide = shouldHideField({ showWhen: { fieldId: 'dep', equals: 'yes' } }, ctx);
     expect(hide).toBe(false);
   });
+
+  it('supports notEmpty in showWhen', () => {
+    const ctxEmpty = { getValue: (_id: string) => '' };
+    const ctxNonEmpty = { getValue: (_id: string) => 'hello' };
+    expect(shouldHideField({ showWhen: { fieldId: 'dep', notEmpty: true } } as any, ctxEmpty as any)).toBe(true);
+    expect(shouldHideField({ showWhen: { fieldId: 'dep', notEmpty: true } } as any, ctxNonEmpty as any)).toBe(false);
+  });
 });

@@ -546,6 +546,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         white-space: nowrap;
         box-shadow: none;
       }
+      .ck-bottom-label {
+        /* Prevent long labels from overflowing and overlapping neighboring pills. */
+        min-inline-size: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .ck-bottom-item--icon {
         flex: 0 0 auto;
         padding: 12px 14px;

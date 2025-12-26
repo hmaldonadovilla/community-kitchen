@@ -58,4 +58,35 @@ describe('validation rules', () => {
     expect(errors.length).toBe(1);
     expect(errors[0].fieldId).toBe('B');
   });
+
+  it('supports when.notEmpty for conditional required (text fields)', () => {
+    const rules = [
+      {
+        when: { fieldId: 'A', notEmpty: true },
+        then: { fieldId: 'B', required: true }
+      }
+    ];
+
+    const emptyA = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? '' : ''),
+      isHidden: () => false
+    } as any);
+    expect(emptyA.length).toBe(0);
+
+    const blankA = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? '   ' : ''),
+      isHidden: () => false
+    } as any);
+    expect(blankA.length).toBe(0);
+
+    const nonEmptyA = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'hello' : ''),
+      isHidden: () => false
+    } as any);
+    expect(nonEmptyA.length).toBe(1);
+    expect(nonEmptyA[0].fieldId).toBe('B');
+  });
 });

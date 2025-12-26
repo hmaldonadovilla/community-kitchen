@@ -1,5 +1,11 @@
 import {
   AutoSaveConfig,
+  ActionBarsConfig,
+  ActionBarItemConfig,
+  ActionBarViewConfig,
+  ActionBarSystemButton,
+  ButtonPlacement,
+  ButtonAction,
   FollowupConfig,
   FollowupStatusConfig,
   EmailRecipientEntry,
@@ -109,6 +115,8 @@ export class Dashboard {
       const autoSave = dashboardConfig?.autoSave;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
+      const createRecordPresetButtonsEnabled = dashboardConfig?.createRecordPresetButtonsEnabled;
+      const actionBars = dashboardConfig?.actionBars;
       const languages = dashboardConfig?.languages;
       const defaultLanguage = dashboardConfig?.defaultLanguage;
       const languageSelectorEnabled = dashboardConfig?.languageSelectorEnabled;
@@ -126,6 +134,8 @@ export class Dashboard {
           autoSave,
           summaryViewEnabled,
           copyCurrentRecordEnabled,
+          createRecordPresetButtonsEnabled,
+          actionBars,
           languages,
           defaultLanguage,
           languageSelectorEnabled
@@ -161,6 +171,8 @@ export class Dashboard {
     autoSave?: AutoSaveConfig;
     summaryViewEnabled?: boolean;
     copyCurrentRecordEnabled?: boolean;
+    createRecordPresetButtonsEnabled?: boolean;
+    actionBars?: ActionBarsConfig;
     languages?: Array<'EN' | 'FR' | 'NL'>;
     defaultLanguage?: 'EN' | 'FR' | 'NL';
     languageSelectorEnabled?: boolean;
@@ -259,12 +271,37 @@ export class Dashboard {
       if (parsed.disableCopy !== undefined) return !Boolean(parsed.disableCopy);
       return undefined;
     })();
+
+    const createRecordPresetButtonsEnabled = (() => {
+      if (parsed.createRecordPresetButtonsEnabled !== undefined) return Boolean(parsed.createRecordPresetButtonsEnabled);
+      if (parsed.createRecordPresetEnabled !== undefined) return Boolean(parsed.createRecordPresetEnabled);
+      if (parsed.enableCreateRecordPresetButtons !== undefined) return Boolean(parsed.enableCreateRecordPresetButtons);
+      if (parsed.disableCreateRecordPresetButtons !== undefined) return !Boolean(parsed.disableCreateRecordPresetButtons);
+      if (parsed.disableCreatePresets !== undefined) return !Boolean(parsed.disableCreatePresets);
+      return undefined;
+    })();
+
+    const actionBars = this.normalizeActionBars(
+      parsed.actionBars !== undefined
+        ? parsed.actionBars
+        : parsed.actionBar !== undefined
+        ? parsed.actionBar
+        : parsed.actionBarConfig !== undefined
+        ? parsed.actionBarConfig
+        : parsed.actionButtons !== undefined
+        ? parsed.actionButtons
+        : parsed.buttonsUi !== undefined
+        ? parsed.buttonsUi
+        : undefined
+    );
     if (
       !followup &&
       !hasMetaSetting &&
       !autoSave &&
       summaryViewEnabled === undefined &&
       copyCurrentRecordEnabled === undefined &&
+      createRecordPresetButtonsEnabled === undefined &&
+      !actionBars &&
       !languages &&
       defaultLanguage === undefined &&
       languageSelectorEnabled === undefined
@@ -277,10 +314,155 @@ export class Dashboard {
       autoSave,
       summaryViewEnabled,
       copyCurrentRecordEnabled,
+      createRecordPresetButtonsEnabled,
+      actionBars,
       languages,
       defaultLanguage,
       languageSelectorEnabled
     };
+  }
+
+  private normalizeActionBars(value: any): ActionBarsConfig | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const cfg: ActionBarsConfig = {};
+
+    const allowedSystem: Set<ActionBarSystemButton> = new Set([
+      'home',
+      'create',
+      'edit',
+      'summary',
+      'actions',
+      'submit'
+    ]);
+    const allowedPlacements = new Set<ButtonPlacement>([
+      'form',
+      'formSummaryMenu',
+      'summaryBar',
+      'topBar',
+      'topBarList',
+      'topBarForm',
+      'topBarSummary',
+      'listBar'
+    ]);
+    const allowedActions = new Set<ButtonAction>(['renderDocTemplate', 'createRecordPreset']);
+
+    const normalizePlacements = (raw: any): ButtonPlacement[] => {
+      if (raw === undefined || raw === null) return [];
+      const entries: any[] = Array.isArray(raw)
+        ? raw
+        : raw
+            .toString()
+            .split(',')
+            .map((p: string) => p.trim());
+      const normalized = entries
+        .map(p => (p === undefined || p === null ? '' : p.toString().trim()))
+        .filter(Boolean)
+        .filter((p: string) => allowedPlacements.has(p as ButtonPlacement)) as ButtonPlacement[];
+      return Array.from(new Set(normalized));
+    };
+
+    const normalizeActions = (raw: any): ButtonAction[] | undefined => {
+      if (raw === undefined || raw === null) return undefined;
+      const entries: any[] = Array.isArray(raw)
+        ? raw
+        : raw
+            .toString()
+            .split(',')
+            .map((p: string) => p.trim());
+      const normalized = entries
+        .map(p => (p === undefined || p === null ? '' : p.toString().trim()))
+        .filter(Boolean)
+        .filter((a: string) => allowedActions.has(a as ButtonAction)) as ButtonAction[];
+      const unique = Array.from(new Set(normalized));
+      return unique.length ? unique : undefined;
+    };
+
+    const normalizeItems = (raw: any): ActionBarItemConfig[] | undefined => {
+      if (raw === undefined || raw === null) return undefined;
+      const itemsRaw: any[] = Array.isArray(raw) ? raw : [raw];
+      const items: ActionBarItemConfig[] = [];
+      itemsRaw.forEach(entry => {
+        if (typeof entry === 'string') {
+          const id = entry.toString().trim().toLowerCase();
+          if (allowedSystem.has(id as ActionBarSystemButton)) {
+            items.push(id as ActionBarSystemButton);
+          }
+          return;
+        }
+        if (!entry || typeof entry !== 'object') return;
+        const type = (entry.type || '').toString().trim();
+        if (type === 'system') {
+          const idRaw = (entry.id || '').toString().trim().toLowerCase();
+          if (!allowedSystem.has(idRaw as ActionBarSystemButton)) return;
+          const out: any = { type: 'system', id: idRaw };
+          if (entry.hideWhenActive !== undefined) out.hideWhenActive = Boolean(entry.hideWhenActive);
+          if (entry.menuBehavior !== undefined) out.menuBehavior = entry.menuBehavior;
+          if (entry.summaryBehavior !== undefined) out.summaryBehavior = entry.summaryBehavior;
+          if (entry.showCopyCurrentRecord !== undefined) out.showCopyCurrentRecord = Boolean(entry.showCopyCurrentRecord);
+          const placements = normalizePlacements(entry.placements ?? entry.placement);
+          if (placements.length) out.placements = placements;
+          const actions = normalizeActions(entry.actions);
+          if (actions && actions.length) out.actions = actions;
+          items.push(out as any);
+          return;
+        }
+        if (type === 'custom') {
+          const placements = normalizePlacements(entry.placements ?? entry.placement);
+          if (!placements.length) return;
+          const out: any = { type: 'custom', placements };
+          const displayRaw = (entry.display || entry.mode || '').toString().trim().toLowerCase();
+          if (displayRaw === 'menu' || displayRaw === 'inline') out.display = displayRaw;
+          if (entry.label !== undefined) out.label = entry.label;
+          const actions = normalizeActions(entry.actions);
+          if (actions && actions.length) out.actions = actions;
+          items.push(out as any);
+          return;
+        }
+      });
+      return items.length ? items : undefined;
+    };
+
+    const normalizeViewConfig = (raw: any): ActionBarViewConfig | undefined => {
+      if (raw === undefined || raw === null) return undefined;
+      const viewObj = Array.isArray(raw) ? { items: raw } : raw;
+      if (!viewObj || typeof viewObj !== 'object') return undefined;
+      const items = normalizeItems((viewObj as any).items ?? (viewObj as any).buttons ?? (viewObj as any).capsule);
+      const primary = normalizeItems((viewObj as any).primary ?? (viewObj as any).right);
+      if (!items?.length && !primary?.length) return undefined;
+      const out: ActionBarViewConfig = {};
+      if (items?.length) out.items = items;
+      if (primary?.length) out.primary = primary;
+      return out;
+    };
+
+    const normalizeBar = (raw: any, allowSticky: boolean): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const out: any = {};
+      if (allowSticky && raw.sticky !== undefined) out.sticky = Boolean(raw.sticky);
+      (['list', 'form', 'summary'] as const).forEach(viewKey => {
+        const cfg = normalizeViewConfig((raw as any)[viewKey]);
+        if (cfg) out[viewKey] = cfg;
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
+
+    const topRaw = (value as any).top ?? (value as any).topBar;
+    const bottomRaw = (value as any).bottom ?? (value as any).bottomBar;
+    const top = normalizeBar(topRaw, true);
+    const bottom = normalizeBar(bottomRaw, false);
+    if (top) cfg.top = top;
+    if (bottom) cfg.bottom = bottom;
+
+    const systemRaw = (value as any).system ?? (value as any).systemButtons;
+    if (systemRaw && typeof systemRaw === 'object') {
+      const homeRaw = (systemRaw as any).home;
+      if (homeRaw && typeof homeRaw === 'object' && (homeRaw as any).hideWhenActive !== undefined) {
+        cfg.system = cfg.system || {};
+        cfg.system.home = { hideWhenActive: Boolean((homeRaw as any).hideWhenActive) };
+      }
+    }
+
+    return Object.keys(cfg).length ? cfg : undefined;
   }
 
   private normalizeLanguageCode(value: any): 'EN' | 'FR' | 'NL' | undefined {
@@ -385,21 +567,54 @@ export class Dashboard {
 
   private normalizeTemplateId(value: any): FollowupConfig['pdfTemplateId'] {
     if (!value) return undefined;
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      return trimmed ? trimmed : undefined;
-    }
-    if (typeof value === 'object') {
-      const map: Record<string, string> = {};
-      Object.entries(value).forEach(([lang, id]) => {
-        if (typeof id !== 'string') return;
-        const trimmed = id.trim();
-        if (!trimmed) return;
-        map[lang.toUpperCase()] = trimmed;
+
+    const normalizeBase = (raw: any): any => {
+      if (!raw) return undefined;
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof raw === 'object') {
+        const map: Record<string, string> = {};
+        Object.entries(raw).forEach(([lang, id]) => {
+          if (typeof id !== 'string') return;
+          const trimmed = id.trim();
+          if (!trimmed) return;
+          map[lang.toUpperCase()] = trimmed;
+        });
+        return Object.keys(map).length ? map : undefined;
+      }
+      return undefined;
+    };
+
+    // Conditional selector: { cases: [{ when: { fieldId, ... }, templateId: "..." | {EN: "..."} }], default?: ... }
+    if (typeof value === 'object' && Array.isArray((value as any).cases)) {
+      const casesRaw = (value as any).cases as any[];
+      const cases: any[] = [];
+      casesRaw.forEach(entry => {
+        if (!entry || typeof entry !== 'object') return;
+        const whenRaw = (entry as any).when || (entry as any).condition;
+        if (!whenRaw || typeof whenRaw !== 'object') return;
+        const fieldIdRaw = (whenRaw as any).fieldId || (whenRaw as any).field || (whenRaw as any).id;
+        const fieldId = fieldIdRaw ? fieldIdRaw.toString().trim() : '';
+        if (!fieldId) return;
+        const when = { ...(whenRaw as any), fieldId };
+
+        const templateIdRaw =
+          (entry as any).templateId ?? (entry as any).template ?? (entry as any).docTemplateId ?? (entry as any).docId ?? (entry as any).id;
+        const templateId = normalizeBase(templateIdRaw);
+        if (!templateId) return;
+        cases.push({ when, templateId });
       });
-      return Object.keys(map).length ? map : undefined;
+      const def = normalizeBase((value as any).default);
+      if (!cases.length && !def) return undefined;
+      const out: any = { cases };
+      if (def) out.default = def;
+      return out;
     }
-    return undefined;
+
+    // Base template id: string or language map
+    return normalizeBase(value);
   }
 
   private normalizeRecipientEntries(value: any): EmailRecipientEntry[] | undefined {

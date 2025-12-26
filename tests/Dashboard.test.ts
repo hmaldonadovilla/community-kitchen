@@ -139,4 +139,40 @@ describe('Dashboard', () => {
     const forms = dashboard.getForms();
     expect(forms[0].languages).toEqual(['EN', 'NL']);
   });
+
+  test('getForms parses actionBars and createRecordPresetButtonsEnabled from dashboard config', () => {
+    const configJson = JSON.stringify({
+      createRecordPresetButtonsEnabled: false,
+      actionBars: {
+        system: { home: { hideWhenActive: true } },
+        top: {
+          sticky: true,
+          list: {
+            items: [
+              'create',
+              { type: 'custom', placements: ['topBarList'], display: 'inline', actions: ['createRecordPreset'] }
+            ]
+          }
+        },
+        bottom: {
+          list: {
+            items: ['home', { type: 'system', id: 'actions', placements: ['listBar'], menuBehavior: 'menu' }]
+          }
+        }
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].createRecordPresetButtonsEnabled).toBe(false);
+    expect(forms[0].actionBars?.system?.home?.hideWhenActive).toBe(true);
+    expect((forms[0].actionBars as any)?.top?.sticky).toBe(true);
+    expect((forms[0].actionBars as any)?.top?.list?.items?.length).toBeGreaterThan(0);
+  });
 });

@@ -24,8 +24,7 @@ import {
 import FormView from './components/FormView';
 import ListView from './components/ListView';
 import { AppHeader } from './components/app/AppHeader';
-import { BottomActionBar } from './components/app/BottomActionBar';
-import { TopActionBar } from './components/app/TopActionBar';
+import { ActionBar } from './components/app/ActionBar';
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -386,6 +385,35 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     return undefined;
   }, []);
 
+  // Measure sticky header height so the Top action bar can stick just below it.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (typeof window === 'undefined') return;
+    const root = document.documentElement;
+    if (!root) return;
+
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const header = document.querySelector<HTMLElement>('.ck-app-header');
+      if (!header) return;
+      const h = header.offsetHeight || 0;
+      root.style.setProperty('--ck-header-height', `${h}px`);
+    };
+    const schedule = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(update);
+    };
+    schedule();
+    window.addEventListener('resize', schedule);
+    window.addEventListener('orientationchange', schedule);
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('orientationchange', schedule);
+    };
+  }, [language, isCompact, isMobile]);
+
   // iOS Safari / in-app browsers can "clip" fixed bottom bars due to dynamic toolbars.
   // Use visualViewport to compute a bottom inset and expose it as a CSS variable.
   useEffect(() => {
@@ -736,6 +764,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, []);
 
   const customButtons = useMemo(() => {
+    const createPresetEnabled = definition.createRecordPresetButtonsEnabled !== false;
     return definition.questions
       .map((q, idx) => ({ q, idx }))
       .filter(({ q }) => q.type === 'BUTTON')
@@ -746,6 +775,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         if (action === 'renderDocTemplate') {
           if (!cfg.templateId) return null;
         } else if (action === 'createRecordPreset') {
+          if (!createPresetEnabled) return null;
           if (!cfg.presetValues || typeof cfg.presetValues !== 'object') return null;
         } else {
           return null;
@@ -756,45 +786,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         // Use a stable "button reference" that includes the question index.
         // This avoids ambiguity if multiple BUTTON fields accidentally share the same id.
         const id = encodeButtonRef(q.id, idx);
-        return { id, label: resolveLabel(q, language), placements, action };
+        return { id, label: resolveLabel(q, language), placements: placements as any, action: action as any };
       })
-      .filter((b): b is { id: string; label: string; placements: string[]; action: string } => !!b);
+      .filter((b): b is { id: string; label: string; placements: any[]; action: any } => !!b);
   }, [definition.questions, encodeButtonRef, language]);
-
-  const customButtonsFormMenu = useMemo(
-    () =>
-      customButtons
-        .filter(b => (b.placements as any[]).includes('formSummaryMenu'))
-        .map(b => ({ id: b.id, label: b.label, action: b.action })),
-    [customButtons]
-  );
-
-  const customButtonsSummaryBar = useMemo(
-    () =>
-      customButtons
-        .filter(b => (b.placements as any[]).includes('summaryBar'))
-        .map(b => ({ id: b.id, label: b.label, action: b.action })),
-    [customButtons]
-  );
-
-  const customButtonsListBar = useMemo(
-    () =>
-      customButtons
-        .filter(b => (b.placements as any[]).includes('listBar'))
-        .map(b => ({ id: b.id, label: b.label, action: b.action })),
-    [customButtons]
-  );
-
-  const customButtonsTopBar = useMemo(
-    () => {
-      const viewPlacement =
-        view === 'list' ? 'topBarList' : view === 'summary' ? 'topBarSummary' : 'topBarForm';
-      return customButtons
-        .filter(b => (b.placements as any[]).includes('topBar') || (b.placements as any[]).includes(viewPlacement))
-        .map(b => ({ id: b.id, label: b.label, action: b.action }));
-    },
-    [customButtons, view]
-  );
 
   const base64ToPdfObjectUrl = useCallback((pdfBase64: string, mimeType: string) => {
     const raw = (pdfBase64 || '').toString();
@@ -1716,11 +1711,38 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onRefresh={handleGlobalRefresh}
       />
 
-      <TopActionBar
+      <ActionBar
+        position="top"
         language={language}
-        buttons={customButtonsTopBar}
+        view={view}
         disabled={submitting || Boolean(recordLoadingId)}
-        onButton={handleCustomButton}
+        submitting={submitting}
+        readOnly={view === 'form' && isClosedRecord}
+        summaryEnabled={summaryViewEnabled}
+        copyEnabled={copyCurrentRecordEnabled}
+        canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
+        customButtons={customButtons as any}
+        actionBars={definition.actionBars}
+        onHome={handleGoHome}
+        onCreateNew={handleSubmitAnother}
+        onCreateCopy={handleDuplicateCurrent}
+        onEdit={() => setView('form')}
+        onSummary={() => {
+          if (!summaryViewEnabled) return;
+          try {
+            globalThis.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+          } catch (_) {
+            try {
+              globalThis.scrollTo?.(0, 0);
+            } catch (_) {
+              // ignore
+            }
+          }
+          setView('summary');
+        }}
+        onSubmit={() => formSubmitActionRef.current?.()}
+        onCustomButton={handleCustomButton}
+        onDiagnostic={logEvent}
       />
 
       {view === 'form' && (
@@ -1795,17 +1817,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onClose={closeReportOverlay}
       />
 
-      <BottomActionBar
+      <ActionBar
+        position="bottom"
         language={language}
         view={view}
-        submitting={submitting || Boolean(recordLoadingId)}
+        disabled={submitting || Boolean(recordLoadingId)}
+        submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
-        canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
-        customButtonsFormMenu={customButtonsFormMenu}
-        customButtonsSummaryBar={customButtonsSummaryBar}
-        customButtonsListBar={customButtonsListBar}
+        canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
+        customButtons={customButtons as any}
+        actionBars={definition.actionBars}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}
@@ -1824,7 +1847,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           setView('summary');
         }}
         onSubmit={() => formSubmitActionRef.current?.()}
-        onButton={handleCustomButton}
+        onCustomButton={handleCustomButton}
+        onDiagnostic={logEvent}
       />
     </div>
   );

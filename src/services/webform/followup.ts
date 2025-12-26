@@ -15,6 +15,7 @@ import { debugLog } from './debug';
 import { SubmissionService } from './submissions';
 import { RecordContext } from './types';
 import { validateRules } from '../../web/rules/validation';
+import { matchesWhen } from '../../web/rules/visibility';
 
 type SubGroupConfig = LineItemGroupConfig;
 
@@ -149,9 +150,9 @@ export class FollowupService {
     }
     const ccRecipients = this.resolveRecipients(followup.emailCc, placeholders, ctx.record);
     const bccRecipients = this.resolveRecipients(followup.emailBcc, placeholders, ctx.record);
-    const templateId = this.resolveTemplateId(followup.emailTemplateId, ctx.record.language);
+    const templateId = this.resolveTemplateId(followup.emailTemplateId, ctx.record);
     if (!templateId) {
-      return { success: false, message: 'No email template matched the submission language.' };
+      return { success: false, message: 'No email template matched the record values/language.' };
     }
     try {
       const templateDoc = DocumentApp.openById(templateId);
@@ -509,9 +510,9 @@ export class FollowupService {
     copyFolder: GoogleAppsScript.Drive.Folder;
   }): { success: boolean; message?: string; copy?: GoogleAppsScript.Drive.File; copyName?: string } {
     const { form, questions, record, templateIdMap, namePrefix, copyFolder } = args;
-    const templateId = this.resolveTemplateId(templateIdMap, record.language);
+    const templateId = this.resolveTemplateId(templateIdMap, record);
     if (!templateId) {
-      return { success: false, message: 'No template matched the submission language.' };
+      return { success: false, message: 'No template matched the record values/language.' };
     }
     try {
       const templateFile = DriveApp.getFileById(templateId);
@@ -544,6 +545,12 @@ export class FollowupService {
           }
         });
       });
+
+      // FILE_UPLOAD fields are stored as Drive URLs (comma-separated). In the rendered PDF we want:
+      // - correct links (each file URL is clickable)
+      // - readable labels instead of the full URL (same UX as Summary view)
+      this.linkifyUploadedFileUrls(doc, questions, record);
+
       doc.saveAndClose();
       return { success: true, copy, copyName };
     } catch (err) {
@@ -1748,6 +1755,153 @@ export class FollowupService {
     return value.toString();
   }
 
+  private extractUploadUrls(value: any): string[] {
+    const looksLikeUrl = (s: string) => /^https?:\/\/\S+$/i.test((s || '').trim());
+    const urls: string[] = [];
+    const push = (raw: any) => {
+      const u = String(raw ?? '').trim();
+      if (!u) return;
+      // Stored format is typically "url1, url2" but allow commas/newlines.
+      u.split(/[,\n]+/g)
+        .map(p => p.trim())
+        .filter(Boolean)
+        .forEach(part => {
+          if (!looksLikeUrl(part)) return;
+          urls.push(part);
+        });
+    };
+
+    if (Array.isArray(value)) {
+      value.forEach(v => {
+        if (!v) return;
+        if (typeof v === 'string') return push(v);
+        if (typeof v === 'object' && typeof (v as any).url === 'string') return push((v as any).url);
+      });
+    } else if (typeof value === 'string') {
+      push(value);
+    } else if (typeof value === 'object' && value && typeof (value as any).url === 'string') {
+      push((value as any).url);
+    }
+
+    // de-dupe while preserving order
+    const seen = new Set<string>();
+    return urls.filter(u => {
+      if (!u) return false;
+      if (seen.has(u)) return false;
+      seen.add(u);
+      return true;
+    });
+  }
+
+  private formatFileLinkLabel(n: number, language?: string): string {
+    const lang = (language || 'EN').toString().trim().toUpperCase();
+    const base = lang.startsWith('FR') ? 'Fichier' : lang.startsWith('NL') ? 'Bestand' : 'File';
+    return `${base} ${n}`;
+  }
+
+  private linkifyUploadedFileUrls(
+    doc: GoogleAppsScript.Document.Document,
+    questions: QuestionConfig[],
+    record: WebFormSubmission
+  ): void {
+    try {
+      const body = doc.getBody();
+      const header = doc.getHeader();
+      const footer = doc.getFooter();
+      const targets: any[] = [];
+      if (body) targets.push(body);
+      if (header) targets.push(header as any);
+      if (footer) targets.push(footer as any);
+      if (!targets.length) return;
+
+      const urlToLabel: Record<string, string> = {};
+      const addValue = (raw: any) => {
+        const urls = this.extractUploadUrls(raw);
+        urls.forEach((u, idx) => {
+          const url = (u || '').toString().trim();
+          if (!url) return;
+          if (urlToLabel[url]) return;
+          urlToLabel[url] = this.formatFileLinkLabel(idx + 1, record.language);
+        });
+      };
+
+      // Top-level FILE_UPLOAD questions
+      questions.forEach(q => {
+        if (q.type !== 'FILE_UPLOAD') return;
+        addValue((record.values as any)?.[q.id]);
+      });
+
+      // Line item groups + subgroups
+      questions
+        .filter(q => q.type === 'LINE_ITEM_GROUP')
+        .forEach(groupQ => {
+          const rows = Array.isArray((record.values as any)?.[groupQ.id]) ? ((record.values as any)[groupQ.id] as any[]) : [];
+          if (!rows.length) return;
+
+          const groupFields = (groupQ.lineItemConfig?.fields || []) as any[];
+          groupFields.forEach(f => {
+            if (((f as any)?.type || '').toString().toUpperCase() !== 'FILE_UPLOAD') return;
+            rows.forEach(row => addValue((row || {})[f.id]));
+          });
+
+          const subs = (groupQ.lineItemConfig?.subGroups || []) as any[];
+          subs.forEach(sub => {
+            const subKey = resolveSubgroupKey(sub as any);
+            if (!subKey) return;
+            const subFields = (sub.fields || []) as any[];
+            subFields.forEach(f => {
+              if (((f as any)?.type || '').toString().toUpperCase() !== 'FILE_UPLOAD') return;
+              rows.forEach(row => {
+                const children = Array.isArray((row || {})[subKey]) ? ((row as any)[subKey] as any[]) : [];
+                children.forEach(child => addValue((child || {})[f.id]));
+              });
+            });
+          });
+        });
+
+      const entries = Object.entries(urlToLabel);
+      if (!entries.length) return;
+
+      entries.forEach(([url, label]) => {
+        if (!url || !label) return;
+        const pattern = this.escapeRegExp(url);
+        targets.forEach(t => {
+          let guard = 0;
+          let found = t.findText ? t.findText(pattern) : null;
+          while (found && guard < 500) {
+            guard++;
+            try {
+              const el = found.getElement && found.getElement();
+              if (!el || !el.getType || el.getType() !== DocumentApp.ElementType.TEXT) {
+                found = t.findText(pattern);
+                continue;
+              }
+              const text = el.asText();
+              const start = found.getStartOffset();
+              const end = found.getEndOffsetInclusive();
+              if (typeof start !== 'number' || typeof end !== 'number' || end < start) {
+                found = t.findText(pattern);
+                continue;
+              }
+              text.deleteText(start, end);
+              text.insertText(start, label);
+              try {
+                text.setLinkUrl(start, start + label.length - 1, url);
+              } catch (_) {
+                // best effort
+              }
+            } catch (_) {
+              // ignore
+            }
+            found = t.findText(pattern);
+          }
+        });
+      });
+    } catch (_) {
+      // best-effort; never fail report generation because of link formatting
+    }
+  }
+
   private normalizeToIsoDate(value: any): string | undefined {
     if (value === undefined || value === null) return undefined;
     // Google Sheets numeric serial dates (roughly 1900 epoch)
@@ -1839,19 +1993,59 @@ export class FollowupService {
     return Array.from(new Set([upper, lower, title]));
   }
 
-  private resolveTemplateId(template: TemplateIdMap | undefined, language: string): string | undefined {
+  private resolveTemplateId(template: TemplateIdMap | undefined, record: WebFormSubmission): string | undefined {
     if (!template) return undefined;
-    if (typeof template === 'string') {
-      const trimmed = template.trim();
-      return trimmed || undefined;
-    }
+
+    const resolveBase = (t: any): any => {
+      if (!t) return undefined;
+      if (typeof t === 'string') {
+        const trimmed = t.trim();
+        return trimmed || undefined;
+      }
+      if (typeof t !== 'object') return undefined;
+
+      // Selector config: choose a template based on record field values.
+      if (Array.isArray((t as any).cases)) {
+        const cases = (t as any).cases as any[];
+        for (const c of cases) {
+          const when = c?.when;
+          const candidate = c?.templateId;
+          const fieldId = when?.fieldId ? when.fieldId.toString() : '';
+          if (!fieldId) continue;
+          const value = (record.values as any)?.[fieldId];
+          try {
+            if (matchesWhen(value, when)) {
+              debugLog('followup.template.caseMatched', {
+                fieldId,
+                value: value === undefined || value === null ? '' : value.toString?.() || value,
+                language: record.language || ''
+              });
+              return resolveBase(candidate);
+            }
+          } catch (err) {
+            debugLog('followup.template.caseError', { error: err ? err.toString() : 'unknown', fieldId });
+          }
+        }
+        if ((t as any).default !== undefined) return resolveBase((t as any).default);
+        return undefined;
+      }
+
+      // Language map object: { EN: "...", FR: "..." } or { en: "...", fr: "..." }.
+      return t;
+    };
+
+    const base = resolveBase(template);
+    if (!base) return undefined;
+    if (typeof base === 'string') return base.trim() || undefined;
+
+    const language = (record.language || 'EN').toString();
     const langKey = (language || 'EN').toUpperCase();
-    if ((template as any)[langKey]) return (template as any)[langKey];
+    if ((base as any)[langKey]) return (base as any)[langKey];
     const lower = (language || 'en').toLowerCase();
-    if ((template as any)[lower]) return (template as any)[lower];
-    if ((template as any).EN) return (template as any).EN;
-    const firstKey = Object.keys(template)[0];
-    return firstKey ? (template as any)[firstKey] : undefined;
+    if ((base as any)[lower]) return (base as any)[lower];
+    if ((base as any).EN) return (base as any).EN;
+    const firstKey = Object.keys(base)[0];
+    return firstKey ? (base as any)[firstKey] : undefined;
   }
 
   private lookupRecipientFromDataSource(

@@ -26,6 +26,110 @@ export type ChoiceControl = 'auto' | 'select' | 'radio' | 'segmented' | 'switch'
 
 export type LabelLayout = 'auto' | 'stacked';
 
+/**
+ * Summary view visibility behavior for a field.
+ * - inherit: follow normal `visibility` rules (default)
+ * - always: show even if hidden by `visibility`
+ * - never: never show in summary (even if visible in form)
+ */
+export type SummaryVisibility = 'inherit' | 'always' | 'never';
+
+export type ActionBarView = 'list' | 'form' | 'summary';
+export type ActionBarPosition = 'top' | 'bottom';
+
+/**
+ * System buttons that can appear in the top/bottom action bars.
+ */
+export type ActionBarSystemButton = 'home' | 'create' | 'edit' | 'summary' | 'actions' | 'submit';
+
+export type ActionBarMenuBehavior = 'auto' | 'menu' | 'inline';
+export type SummaryButtonBehavior = 'auto' | 'navigate' | 'menu';
+
+export interface ActionBarSystemItemConfig {
+  type: 'system';
+  id: ActionBarSystemButton;
+  /**
+   * When true, hide this button when it is "active" for the current view.
+   * Example: hide Home while on the Home (list) view.
+   */
+  hideWhenActive?: boolean;
+  /**
+   * Menu behavior for `actions`:
+   * - auto: 1 button -> render inline; 2+ -> actions menu (default)
+   * - menu: always render a menu trigger (even if only 1)
+   * - inline: always render all matched custom buttons inline
+   */
+  menuBehavior?: ActionBarMenuBehavior;
+  /**
+   * Which custom BUTTON placements should populate the Actions menu (or inline list).
+   * When omitted, the UI uses view-specific defaults (listBar/summaryBar/formSummaryMenu).
+   */
+  placements?: ButtonPlacement[];
+  /**
+   * Optional filter for which custom button actions to include when this system item sources custom buttons.
+   * Useful for:
+   * - Create menu: include only `createRecordPreset`
+   * - Actions menu: include only `renderDocTemplate`
+   */
+  actions?: ButtonAction[];
+  /**
+   * Control how the Summary button behaves on the form (edit) view.
+   * - auto: open a menu when `formSummaryMenu` custom buttons exist; otherwise navigate
+   * - navigate: always navigate to Summary (if enabled)
+   * - menu: always open the menu (if enabled)
+   */
+  summaryBehavior?: SummaryButtonBehavior;
+  /**
+   * Override whether the Create menu should include "Copy current record".
+   * When omitted, falls back to `copyCurrentRecordEnabled`.
+   */
+  showCopyCurrentRecord?: boolean;
+}
+
+export interface ActionBarCustomItemConfig {
+  type: 'custom';
+  /**
+   * Which BUTTON placements should be included.
+   * Example: ["topBar", "topBarList"] or ["listBar"].
+   */
+  placements: ButtonPlacement[];
+  /**
+   * How to render these buttons.
+   * - inline: render each custom button as a standalone pill
+   * - menu: render a single menu trigger listing these buttons
+   */
+  display?: 'inline' | 'menu';
+  /**
+   * Optional label for the menu trigger when display=menu.
+   */
+  label?: LocalizedString | string;
+  /**
+   * Optional filter by action type (e.g. only show createRecordPreset buttons).
+   */
+  actions?: ButtonAction[];
+}
+
+export type ActionBarItemConfig = ActionBarSystemButton | ActionBarSystemItemConfig | ActionBarCustomItemConfig;
+
+export interface ActionBarViewConfig {
+  /**
+   * Buttons rendered inside the capsule (left side).
+   */
+  items?: ActionBarItemConfig[];
+  /**
+   * Primary buttons rendered outside the capsule (right side), e.g. Submit.
+   */
+  primary?: ActionBarItemConfig[];
+}
+
+export interface ActionBarsConfig {
+  top?: Partial<Record<ActionBarView, ActionBarViewConfig>> & { sticky?: boolean };
+  bottom?: Partial<Record<ActionBarView, ActionBarViewConfig>>;
+  system?: {
+    home?: { hideWhenActive?: boolean };
+  };
+}
+
 export type ButtonPlacement =
   | 'form'
   | 'formSummaryMenu'
@@ -111,6 +215,11 @@ export interface QuestionUiConfig {
    * - stacked: force label above control even for full-width rows
    */
   labelLayout?: LabelLayout;
+  /**
+   * Whether this field should appear in the Summary view.
+   * Default is `inherit` (only show when the field is visible in the Form view).
+   */
+  summaryVisibility?: SummaryVisibility;
 }
 
 export interface FileUploadConfig {
@@ -179,6 +288,12 @@ export interface VisibilityCondition {
   equals?: string | string[];
   greaterThan?: number | string;
   lessThan?: number | string;
+  /**
+   * Match based on emptiness rather than a specific value.
+   * - true: matches when the field has any non-empty value (not null/undefined/blank)
+   * - false: matches when the field is empty
+   */
+  notEmpty?: boolean;
 }
 
 export interface VisibilityConfig {
@@ -199,6 +314,12 @@ export interface ValidationRule {
     equals?: string | string[];
     greaterThan?: number | string;
     lessThan?: number | string;
+    /**
+     * Match based on emptiness rather than a specific value.
+     * - true: matches when the field has any non-empty value (not null/undefined/blank)
+     * - false: matches when the field is empty
+     */
+    notEmpty?: boolean;
   };
   then: {
     fieldId: string;
@@ -529,7 +650,35 @@ export interface FollowupStatusConfig {
   onClose?: string;
 }
 
-export type TemplateIdMap = string | Record<string, string>;
+export type TemplateIdBase = string | Record<string, string>;
+
+export interface TemplateIdCase {
+  /**
+   * Condition evaluated against the record values. First match wins.
+   *
+   * Notes:
+   * - `fieldId` is required; comparisons use the stored record value (arrays use first element).
+   * - Use raw stored values (not localized labels) for CHOICE/CHECKBOX fields.
+   */
+  when: VisibilityCondition;
+  /**
+   * Template id (or language map) to use when the case matches.
+   */
+  templateId: TemplateIdBase;
+}
+
+/**
+ * Template id config:
+ * - string: single template id
+ * - object map: language -> template id (e.g. { EN: "...", FR: "..." })
+ * - cases: choose a template based on a field value, with optional language maps per case
+ */
+export type TemplateIdMap =
+  | TemplateIdBase
+  | {
+      cases: TemplateIdCase[];
+      default?: TemplateIdBase;
+    };
 
 export interface EmailRecipientDataSourceConfig {
   type: 'dataSource';
@@ -708,6 +857,17 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   copyCurrentRecordEnabled?: boolean;
+  /**
+   * Enable/disable `createRecordPreset` BUTTON actions in the React web app.
+   * When false, these custom buttons are ignored (not shown in any action bars).
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  createRecordPresetButtonsEnabled?: boolean;
+  /**
+   * Optional per-view action bar configuration (system + custom buttons).
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  actionBars?: ActionBarsConfig;
 }
 
 export interface FormResult {
@@ -803,6 +963,15 @@ export interface WebFormDefinition {
    * When false, the Create button always creates a new record (no copy option).
    */
   copyCurrentRecordEnabled?: boolean;
+  /**
+   * Enable/disable `createRecordPreset` BUTTON actions in the React web app.
+   * When false, these custom buttons are ignored (not shown in any action bars).
+   */
+  createRecordPresetButtonsEnabled?: boolean;
+  /**
+   * Optional per-view action bar configuration (system + custom buttons).
+   */
+  actionBars?: ActionBarsConfig;
 }
 
 export interface WebFormSubmission {

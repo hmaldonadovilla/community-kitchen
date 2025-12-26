@@ -70,6 +70,17 @@ This project uses TypeScript. You need to build the script before using it in Go
         { "ui": { "labelLayout": "stacked" } }
         ```
 
+    - **Summary view field visibility**: By default, the Summary view only shows fields that are currently visible in the Form view (i.e., not hidden by `visibility`). You can override this per field (and per line-item field/subgroup field) via `ui.summaryVisibility`:
+
+        ```json
+        { "ui": { "summaryVisibility": "always" } }
+        ```
+
+        Supported values:
+        - `inherit` (default): follow normal `visibility` rules
+        - `always`: show even if hidden by `visibility`
+        - `never`: never show in summary
+
     - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON. Lower priorities win; when nothing is specified we fall back to `updatedAt desc`.
     - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved.
@@ -320,7 +331,13 @@ This project uses TypeScript. You need to build the script before using it in Go
         ] }
         ```
 
-        Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`. Actions: `required` true/false, `min`, `max`, `minFieldId`, `maxFieldId`, `allowed`, `disallowed`.
+      - Conditional required when another field is filled (useful for TEXT / PARAGRAPH):
+
+        ```json
+        { "validationRules": [ { "when": { "fieldId": "Other details", "notEmpty": true }, "then": { "fieldId": "Reason", "required": true } } ] }
+        ```
+
+        Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`, `notEmpty`. Actions: `required` true/false, `min`, `max`, `minFieldId`, `maxFieldId`, `allowed`, `disallowed`.
       - Scope rules to follow-up only: add `"phase": "followup"` to a rule when it should only block follow-up actions (e.g., require `FINAL_QTY` during follow-up but keep it optional on submit).
 
     - Computed fields (`derivedValue`):
@@ -652,9 +669,24 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    }
    ```
 
-   - `pdfTemplateId`: Google Doc template used to build the PDF. Provide either a single Doc ID or an object keyed by `EN`/`FR`/`NL` (the form language determines which template runs). Use `{{FIELD_ID}}` tokens (or slugified labels) in the Doc; the runtime replaces them with the submitted values (line items render as bullet summaries).  
+   - `pdfTemplateId`: Google Doc template used to build the PDF. Provide either:
+     - a single Doc ID (`"1PdfTemplate..."`)
+     - a language map (`{ "EN": "...", "FR": "..." }`)
+     - or a conditional selector (`cases`) that picks a template based on a record field value:
+
+       ```json
+       {
+         "cases": [
+           { "when": { "fieldId": "CHECK_FREQUENCY", "equals": "Weekly" }, "templateId": { "EN": "DOC_WEEKLY_EN", "FR": "DOC_WEEKLY_FR" } },
+           { "when": { "fieldId": "CHECK_FREQUENCY", "equals": "Monthly" }, "templateId": "DOC_MONTHLY" }
+         ],
+         "default": "DOC_FALLBACK"
+       }
+       ```
+
+     Use `{{FIELD_ID}}` tokens (or slugified labels) in the Doc; the runtime replaces them with the submitted values (line items render as bullet summaries).  
    - `pdfFolderId` (optional): target Drive folder for generated PDFs; falls back to the spreadsheet’s parent folder.  
-   - `emailTemplateId`: Google Doc containing the email body. Can be a string or language map (same rules as the PDF template). Tokens work the same as in the PDF template.  
+   - `emailTemplateId`: Google Doc containing the email body. Same structure as `pdfTemplateId` (string, language map, or `cases` selector). Tokens work the same as in the PDF template.  
    - `emailRecipients`: list of addresses. Entries can be plain strings (placeholders allowed) or objects describing a data source lookup:
      - `recordFieldId`: the form/line-item field whose submitted value should be used as the lookup key.
      - `dataSource`: standard data source config (sheet/tab reference, projection, limit, etc.).
@@ -748,6 +780,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 }
 ```
 
+`templateId` supports the same structure as `pdfTemplateId` / `emailTemplateId` (string, language map, or `cases` selector).
+
 #### Example: create record with preset values
 
 ```json
@@ -785,11 +819,57 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 - The web app uses an app-like shell:
   - Header shows a **logo circle + form title** (Excel-style).
   - Tap the logo circle to open a **left drawer** with **Refresh**, **Language** (only when enabled / 2+ languages), and **Build**.
-  - Optional: a **top action bar** under the header can show custom `BUTTON` actions (`placements: ["topBar"]`).
-  - A fixed **bottom action bar** provides navigation/actions per view:
-    - **List**: Home + Create (Create opens a new record and sends you to the Form).
-    - **Summary**: Home + Create (Create opens a menu: New record / Copy current record).
-    - **Form**: Home + Create (menu: New / Copy) + Summary + Submit.
+  - Optional: a **top action bar** under the header can show system + custom actions (default behavior uses `BUTTON` placements like `topBarList` / `topBarForm` / `topBarSummary`).
+  - A fixed **bottom action bar** provides navigation/actions per view (defaults below can be overridden via `"actionBars"`):
+    - **List**: Home + Create + (custom list actions, if configured).
+    - **Summary**: Home + Create + Edit + (custom summary actions, if configured).
+    - **Form**: Home + Create + Summary/Actions + Submit.
+
+- **Optional: configure action bars (system + custom buttons)**:
+  - In the dashboard “Follow-up Config (JSON)” column, you can provide `"actionBars"` to control:
+    - which **system** buttons appear (`home`, `create`, `edit`, `summary`, `actions`, `submit`)
+    - which **custom** button groups appear (by `BUTTON` `placements`)
+    - ordering and visibility per view (`list`, `form`, `summary`) and per bar (`top`, `bottom`)
+    - whether **createRecordPreset** buttons appear inside the **Create** menu (via the `create` system item `actions: ["createRecordPreset"]`)
+
+  Example (hide Home on the list view, show listBar custom buttons inline in the top bar, keep Submit on the bottom bar):
+
+```json
+{
+  "actionBars": {
+    "system": { "home": { "hideWhenActive": true } },
+    "top": {
+      "list": { "items": ["create", { "type": "custom", "placements": ["listBar"], "display": "inline" }] }
+    },
+    "bottom": {
+      "list": { "items": ["create", { "type": "system", "id": "actions", "placements": ["listBar"], "menuBehavior": "menu" }] },
+      "form": { "items": ["home", "create", { "type": "system", "id": "summary" }], "primary": ["submit"] }
+    }
+  }
+}
+```
+
+Example (show `createRecordPreset` buttons inside the **Create** menu on the bottom bar for Form + Summary views):
+
+```json
+{
+  "actionBars": {
+    "bottom": {
+      "form": {
+        "items": [
+          "home",
+          { "type": "system", "id": "create", "actions": ["createRecordPreset"] },
+          { "type": "system", "id": "summary" }
+        ],
+        "primary": ["submit"]
+      },
+      "summary": {
+        "items": ["home", { "type": "system", "id": "create", "actions": ["createRecordPreset"] }, "edit"]
+      }
+    }
+  }
+}
+```
 
 - **Optional: configure languages (max 3)**:
   - In the dashboard “Follow-up Config (JSON)” column, set:
@@ -809,6 +889,11 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - In the dashboard “Follow-up Config (JSON)” column, set `"copyCurrentRecordEnabled": false`.
   - Behavior when disabled:
     - The Create button always starts a **New record** (no copy option).
+
+- **Optional: disable create preset buttons**:
+  - In the dashboard “Follow-up Config (JSON)” column, set `"createRecordPresetButtonsEnabled": false`.
+  - Behavior when disabled:
+    - Any `BUTTON` with `action: "createRecordPreset"` is ignored and **will not show** in any action bars/menus.
 
 ## 7. Generate All Forms
 

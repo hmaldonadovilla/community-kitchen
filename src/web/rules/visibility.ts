@@ -15,6 +15,32 @@ export function matchesWhen(value: unknown, when?: WhenConfig | VisibilityCondit
   // If we have any non-empty values, ignore empty placeholders when evaluating equals
   const candidates = normalized.some(v => v !== '') ? normalized.filter(v => v !== '') : normalized;
 
+  const isNonEmpty = (v: unknown): boolean => {
+    if (v === undefined || v === null) return false;
+    if (typeof v === 'string') return v.trim() !== '';
+    if (typeof v === 'boolean') return v === true;
+    if (typeof v === 'number') return Number.isFinite(v);
+    if (v instanceof Date) return !Number.isNaN(v.getTime());
+    if (Array.isArray(v)) return v.some(isNonEmpty);
+    if (typeof v === 'object') {
+      const url = (v as any)?.url;
+      if (typeof url === 'string') return url.trim() !== '';
+      try {
+        return Object.keys(v as any).length > 0;
+      } catch (_) {
+        return true;
+      }
+    }
+    return true;
+  };
+
+  const wantsNotEmpty = (when as any).notEmpty;
+  if (typeof wantsNotEmpty === 'boolean') {
+    const hasAny = normalized.some(isNonEmpty);
+    if (wantsNotEmpty && !hasAny) return false;
+    if (!wantsNotEmpty && hasAny) return false;
+  }
+
   if (when.equals !== undefined) {
     const expectedRaw = Array.isArray(when.equals) ? when.equals : [when.equals];
     const expected = expectedRaw.map(normalizeVal);

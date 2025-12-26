@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
+import { FieldValue, LangCode, SummaryVisibility, WebFormDefinition, WebQuestionDefinition } from '../../../types';
 import { resolveLocalizedString } from '../../../i18n';
 import { toOptionSet } from '../../../core';
 import { tSystem } from '../../../systemStrings';
@@ -9,6 +9,7 @@ import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from '../../utils/valueDisplay';
 import { GroupCard } from '../form/GroupCard';
 import { resolveGroupSectionKey } from '../form/grouping';
+import { shouldHideField } from '../../../rules/visibility';
 
 type UploadLink = { url: string; label?: string };
 
@@ -58,6 +59,26 @@ const extractUploadLinks = (value: any): UploadLink[] => {
     ordered.push(l);
   });
   return ordered;
+};
+
+const normalizeSummaryVisibility = (raw: any): SummaryVisibility => {
+  const v = (raw || '').toString().trim().toLowerCase();
+  if (v === 'always') return 'always';
+  if (v === 'never') return 'never';
+  return 'inherit';
+};
+
+const isVisibleInSummary = (args: {
+  item: any;
+  ctx: { getValue: (fieldId: string) => any; getLineValue?: (rowId: string, fieldId: string) => any };
+  rowId?: string;
+  linePrefix?: string;
+}): boolean => {
+  const mode = normalizeSummaryVisibility(args.item?.ui?.summaryVisibility);
+  if (mode === 'never') return false;
+  const hidden = shouldHideField(args.item?.visibility, args.ctx as any, { rowId: args.rowId, linePrefix: args.linePrefix });
+  if (hidden && mode !== 'always') return false;
+  return true;
 };
 
 const renderValueForPreview = (
@@ -119,17 +140,46 @@ const LineItemRowCard: React.FC<{
   idx: number;
   language: LangCode;
   lineItems: LineItemState;
-}> = ({ group, row, idx, language, lineItems }) => {
+  values: Record<string, FieldValue>;
+}> = ({ group, row, idx, language, lineItems, values }) => {
   const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
   const anchorId = group.lineItemConfig?.anchorFieldId;
   const fields = (group.lineItemConfig?.fields || []).filter(f => f.id !== 'ITEM_FILTER');
   const subGroups = group.lineItemConfig?.subGroups || [];
 
+  const groupCtx = useMemo(
+    () => ({
+      getValue: (fid: string) => values[fid],
+      getLineValue: (_rowId: string, fid: string) => row.values[fid]
+    }),
+    [row.values, values]
+  );
+
+  const visibleFields = useMemo(
+    () =>
+      fields.filter(field =>
+        isVisibleInSummary({
+          item: field,
+          ctx: groupCtx,
+          rowId: row.id,
+          linePrefix: group.id
+        })
+      ),
+    [fields, group.id, groupCtx, row.id]
+  );
+
   const anchorValue = anchorId ? row.values[anchorId] : undefined;
   const anchorField = anchorId ? (fields.find(f => f.id === anchorId) as any) : undefined;
   const anchorOptionSet = anchorField ? toOptionSet(anchorField) : undefined;
+  const canUseAnchorAsTitle =
+    !!anchorId &&
+    !!anchorField &&
+    isVisibleInSummary({ item: anchorField, ctx: groupCtx, rowId: row.id, linePrefix: group.id }) &&
+    anchorValue !== undefined &&
+    anchorValue !== null &&
+    anchorValue !== '';
   const title =
-    anchorId && anchorValue
+    canUseAnchorAsTitle
       ? formatDisplayText(anchorValue, { language, optionSet: anchorOptionSet, fieldType: (anchorField as any)?.type })
       : `${resolveLabel(group, language)} #${idx + 1}`;
 
@@ -160,7 +210,7 @@ const LineItemRowCard: React.FC<{
       <div style={{ padding: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <tbody>
-            {fields.map(field => {
+            {visibleFields.map(field => {
               const label = resolveFieldLabel(field as any, language, field.id);
               const v = row.values[field.id];
               const optionSet = toOptionSet(field as any);
@@ -202,7 +252,18 @@ const LineItemRowCard: React.FC<{
               if (!childRows.length) return null;
 
               const subLabel = (sub as any)?.label ? resolveLabel(sub as any, language) : subKey;
-              const subFields = (((sub as any)?.fields ?? []) as any[]).filter((f: any) => f?.id && f.id !== 'ITEM_FILTER');
+              const subFieldsAll = (((sub as any)?.fields ?? []) as any[]).filter((f: any) => f?.id && f.id !== 'ITEM_FILTER');
+              const subFields = subFieldsAll.filter((sf: any) =>
+                // Subgroup visibility is evaluated per subgroup row. We include a field if it is visible for at least one row.
+                childRows.some(cr => {
+                  const subCtx = {
+                    ...groupCtx,
+                    getLineValue: (_rowId: string, fid: string) => (cr as any)?.values?.[fid]
+                  };
+                  return isVisibleInSummary({ item: sf, ctx: subCtx, rowId: (cr as any)?.id, linePrefix: subKey });
+                })
+              );
+              if (!subFields.length) return null;
               const open = !!openSubs[subKey];
 
               return (
@@ -269,20 +330,43 @@ const LineItemRowCard: React.FC<{
                             <tbody>
                               {childRows.map(cr => (
                                 <tr key={cr.id}>
-                                  {subFields.map((sf: any) => (
-                                    <td
-                                      key={`${cr.id}.${sf.id}`}
-                                      style={{
-                                        padding: '8px 8px',
-                                        borderBottom: '1px solid rgba(148,163,184,0.18)',
-                                        fontWeight: 700,
-                                        verticalAlign: 'top',
-                                        wordBreak: 'break-word'
-                                      }}
-                                    >
-                                      {renderValueForPreview(cr?.values?.[sf.id], sf?.type, language, toOptionSet(sf))}
-                                    </td>
-                                  ))}
+                                  {subFields.map((sf: any) => {
+                                    const subCtx = {
+                                      ...groupCtx,
+                                      getLineValue: (_rowId: string, fid: string) => (cr as any)?.values?.[fid]
+                                    };
+                                    const visible = isVisibleInSummary({
+                                      item: sf,
+                                      ctx: subCtx,
+                                      rowId: (cr as any)?.id,
+                                      linePrefix: subKey
+                                    });
+                                    if (!visible) {
+                                      return (
+                                        <td
+                                          key={`${cr.id}.${sf.id}`}
+                                          style={{
+                                            padding: '8px 8px',
+                                            borderBottom: '1px solid rgba(148,163,184,0.18)'
+                                          }}
+                                        />
+                                      );
+                                    }
+                                    return (
+                                      <td
+                                        key={`${cr.id}.${sf.id}`}
+                                        style={{
+                                          padding: '8px 8px',
+                                          borderBottom: '1px solid rgba(148,163,184,0.18)',
+                                          fontWeight: 700,
+                                          verticalAlign: 'top',
+                                          wordBreak: 'break-word'
+                                        }}
+                                      >
+                                        {renderValueForPreview(cr?.values?.[sf.id], sf?.type, language, toOptionSet(sf))}
+                                      </td>
+                                    );
+                                  })}
                                 </tr>
                               ))}
                             </tbody>
@@ -308,10 +392,32 @@ export const ReportLivePreview: React.FC<{
   lineItems: LineItemState;
   recordMeta?: RecordMeta;
 }> = ({ definition, language, values, lineItems, recordMeta }) => {
-  const topQuestions = useMemo(
-    () => definition.questions.filter(q => q.type !== 'LINE_ITEM_GROUP' && q.type !== 'BUTTON'),
-    [definition.questions]
+  const resolveVisibilityValue = (fieldId: string): FieldValue | undefined => {
+    const direct = values[fieldId];
+    if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+    // Mirror FormView behavior: allow visibility rules to "see" the first non-empty line-item occurrence.
+    for (const rows of Object.values(lineItems || {})) {
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const v = (row as any)?.values?.[fieldId];
+        if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+      }
+    }
+    return undefined;
+  };
+
+  const summaryCtx = useMemo(
+    () => ({
+      getValue: (fid: string) => resolveVisibilityValue(fid)
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [values, lineItems]
   );
+
+  const topQuestions = useMemo(() => {
+    const raw = definition.questions.filter(q => q.type !== 'LINE_ITEM_GROUP' && q.type !== 'BUTTON');
+    return raw.filter(q => isVisibleInSummary({ item: q, ctx: summaryCtx }));
+  }, [definition.questions, summaryCtx]);
 
   type Section = {
     key: string;
@@ -370,10 +476,10 @@ export const ReportLivePreview: React.FC<{
     });
   }, [topSections]);
 
-  const lineGroups = useMemo(
-    () => definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP'),
-    [definition.questions]
-  );
+  const lineGroups = useMemo(() => {
+    const raw = definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP');
+    return raw.filter(q => isVisibleInSummary({ item: q, ctx: summaryCtx }));
+  }, [definition.questions, summaryCtx]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -446,7 +552,15 @@ export const ReportLivePreview: React.FC<{
             </div>
 
             {rows.map((row, idx) => (
-              <LineItemRowCard key={row.id} group={group} row={row} idx={idx} language={language} lineItems={lineItems} />
+              <LineItemRowCard
+                key={row.id}
+                group={group}
+                row={row}
+                idx={idx}
+                language={language}
+                lineItems={lineItems}
+                values={values}
+              />
             ))}
           </div>
         );

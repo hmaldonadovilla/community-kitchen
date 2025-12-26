@@ -17,7 +17,9 @@ describe('DefinitionBuilder', () => {
       listViewMetaColumns: ['createdAt', 'status'],
       languages: ['EN', 'FR', 'NL'],
       defaultLanguage: 'FR',
-      languageSelectorEnabled: false
+      languageSelectorEnabled: false,
+      createRecordPresetButtonsEnabled: false,
+      actionBars: { system: { home: { hideWhenActive: true } } }
     });
     dashboardSheet?.setMockData([
       [],
@@ -56,5 +58,11 @@ describe('DefinitionBuilder', () => {
     expect(def.languageSelectorEnabled).toBe(false);
     // When language selector is disabled, the web app should only expose the default language.
     expect(def.languages).toEqual(['FR']);
+  });
+
+  test('buildDefinition includes action bar config and button feature flags from the dashboard', () => {
+    const def = builder.buildDefinition('Config: Pantry');
+    expect(def.createRecordPresetButtonsEnabled).toBe(false);
+    expect(def.actionBars?.system?.home?.hideWhenActive).toBe(true);
   });
 });

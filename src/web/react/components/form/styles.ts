@@ -18,6 +18,7 @@ export const FORM_VIEW_STYLES = `
         .ck-top-action-bar {
           width: 100%;
           box-sizing: border-box;
+          position: relative;
           /* Full-bleed like the sticky header */
           margin: -6px -22px 6px;
           padding: 12px 18px 12px;
@@ -25,7 +26,12 @@ export const FORM_VIEW_STYLES = `
           border-bottom: 1px solid rgba(60, 60, 67, 0.22);
           backdrop-filter: saturate(180%) blur(18px);
           -webkit-backdrop-filter: saturate(180%) blur(18px);
-          z-index: 25;
+          /* Keep under the header (z=30) but above scrolling content. */
+          z-index: 29;
+        }
+        .ck-top-action-bar[data-sticky="1"] {
+          position: sticky;
+          top: var(--ck-header-height, 0px);
         }
 
         .form-card input,

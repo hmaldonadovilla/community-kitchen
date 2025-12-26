@@ -147,14 +147,8 @@ components:
               enum: [renderDocTemplate]
               description: Render a Google Doc template (with placeholders + consolidated directives) into a PDF preview.
             templateId:
-              oneOf:
-                - type: string
-                  description: Google Doc template id.
-                - type: object
-                  additionalProperties:
-                    type: string
-                  description: 'Language map (e.g., `{ "EN": "...", "FR": "...", "NL": "..." }`).'
-              description: Google Doc template id (or language map).
+              $ref: '#/components/schemas/TemplateIdMap'
+              description: Google Doc template id config (string, language map, or `cases` selector).
             output:
               type: string
               enum: [pdf]
@@ -420,6 +414,14 @@ components:
             Label/control layout hint.
             - auto: default behavior (inline on full-width rows; stacked in 2-up grids)
             - stacked: force label above control even for full-width rows
+        summaryVisibility:
+          type: string
+          enum: [inherit, always, never]
+          description: |
+            Whether this field should appear in the Summary view.
+            - inherit: follow normal `visibility` rules (default; only show when visible in the Form view)
+            - always: show even if hidden by `visibility`
+            - never: never show in summary (even if visible in form)
 
     QuestionGroupConfig:
       type: object
@@ -873,14 +875,215 @@ components:
 
             - When `true` (default), Create opens a menu: New record / Copy current record.
             - When `false`, Create always starts a New record (no copy option).
+        createRecordPresetButtonsEnabled:
+          type: boolean
+          description: |
+            Enable/disable `createRecordPreset` custom BUTTON actions in the web app.
+
+            - When `true` (default), preset buttons work normally.
+            - When `false`, preset buttons are ignored and **will not show** in any action bars/menus.
+        actionBars:
+          $ref: '#/components/schemas/ActionBarsConfig'
+          description: |
+            Optional per-view configuration for the top and bottom action bars (system + custom buttons).
+            When omitted, the app uses the default layout.
       additionalProperties: true
 
-    TemplateIdMap:
+    ActionBarsConfig:
+      type: object
+      description: |
+        Per-view configuration for the top and bottom action bars (system + custom buttons).
+
+        Notes:
+        - Omitted sections fall back to defaults.
+        - Provide an empty config (e.g. `{ "items": [] }`) to intentionally hide a bar for a view.
+      properties:
+        top:
+          $ref: '#/components/schemas/ActionBarTopConfig'
+        bottom:
+          $ref: '#/components/schemas/ActionBarBottomConfig'
+        system:
+          type: object
+          description: Optional global system button tweaks.
+          properties:
+            home:
+              type: object
+              properties:
+                hideWhenActive:
+                  type: boolean
+                  description: When true, hide the Home button while on the List (home) view.
+      additionalProperties: true
+
+    ActionBarTopConfig:
+      type: object
+      properties:
+        sticky:
+          type: boolean
+          description: When true (default), keep the top action bar visible (sticky) below the header.
+        list:
+          $ref: '#/components/schemas/ActionBarViewConfig'
+        form:
+          $ref: '#/components/schemas/ActionBarViewConfig'
+        summary:
+          $ref: '#/components/schemas/ActionBarViewConfig'
+      additionalProperties: true
+
+    ActionBarBottomConfig:
+      type: object
+      properties:
+        list:
+          $ref: '#/components/schemas/ActionBarViewConfig'
+        form:
+          $ref: '#/components/schemas/ActionBarViewConfig'
+        summary:
+          $ref: '#/components/schemas/ActionBarViewConfig'
+      additionalProperties: true
+
+    ActionBarViewConfig:
+      type: object
+      description: Layout for one view’s action bar.
+      properties:
+        items:
+          type: array
+          description: Buttons rendered inside the capsule (left side).
+          items:
+            $ref: '#/components/schemas/ActionBarItemConfig'
+        primary:
+          type: array
+          description: Primary buttons rendered outside the capsule (right side), e.g. Submit.
+          items:
+            $ref: '#/components/schemas/ActionBarItemConfig'
+      additionalProperties: true
+
+    ActionBarItemConfig:
+      description: Action bar item (system button shorthand, system config object, or custom group).
+      oneOf:
+        - type: string
+          enum: [home, create, edit, summary, actions, submit]
+          description: Shorthand system button id.
+        - $ref: '#/components/schemas/ActionBarSystemItemConfig'
+        - $ref: '#/components/schemas/ActionBarCustomItemConfig'
+
+    ActionBarSystemItemConfig:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [system]
+        id:
+          type: string
+          enum: [home, create, edit, summary, actions, submit]
+        hideWhenActive:
+          type: boolean
+          description: When true, hide this button when it is active for the current view.
+        menuBehavior:
+          type: string
+          enum: [auto, menu, inline]
+          description: |
+            Menu behavior for `actions`:
+            - auto: 1 button -> render inline; 2+ -> actions menu
+            - menu: always render a menu trigger
+            - inline: always render all matched custom buttons inline
+        placements:
+          type: array
+          description: |
+            Which custom BUTTON placements should populate a system menu/inline list.
+
+            - For `id: "actions"`: controls which custom buttons appear in the Actions menu (or inline list).
+              If omitted, view-specific defaults are used (listBar/summaryBar/formSummaryMenu).
+            - For `id: "create"` (when `actions` includes `createRecordPreset`): controls which preset buttons are listed inside the Create menu.
+          items:
+            type: string
+            enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+        actions:
+          type: array
+          description: |
+            Optional filter for which custom button actions to include when this system item sources custom buttons.
+
+            Examples:
+            - Create menu presets: `"id": "create", "actions": ["createRecordPreset"]`
+            - Actions menu PDFs only: `"id": "actions", "actions": ["renderDocTemplate"]`
+          items:
+            type: string
+            enum: [renderDocTemplate, createRecordPreset]
+        summaryBehavior:
+          type: string
+          enum: [auto, navigate, menu]
+          description: |
+            Control how the Summary button behaves on the Form (edit) view.
+            - auto: open a menu when formSummaryMenu buttons exist; otherwise navigate
+            - navigate: always navigate to Summary
+            - menu: always open the menu
+        showCopyCurrentRecord:
+          type: boolean
+          description: Override whether the Create menu should include "Copy current record".
+      additionalProperties: true
+
+    ActionBarCustomItemConfig:
+      type: object
+      required: [type, placements]
+      properties:
+        type:
+          type: string
+          enum: [custom]
+        placements:
+          type: array
+          description: Which custom BUTTON placements should be included.
+          items:
+            type: string
+            enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+        display:
+          type: string
+          enum: [inline, menu]
+          description: |
+            How to render these buttons.
+            - inline: render each custom button as a standalone pill
+            - menu: render a single menu trigger listing these buttons
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional label for the menu trigger when display=menu.
+        actions:
+          type: array
+          description: Optional filter by action type (e.g. only show createRecordPreset buttons).
+          items:
+            type: string
+            enum: [renderDocTemplate, createRecordPreset]
+      additionalProperties: true
+
+    TemplateIdBase:
       oneOf:
         - type: string
         - type: object
           additionalProperties:
             type: string
+
+    TemplateIdCase:
+      type: object
+      required: [when, templateId]
+      properties:
+        when:
+          $ref: '#/components/schemas/VisibilityCondition'
+        templateId:
+          $ref: '#/components/schemas/TemplateIdBase'
+
+    TemplateIdSelector:
+      type: object
+      required: [cases]
+      properties:
+        cases:
+          type: array
+          description: Ordered list of conditional templates; first match wins.
+          items:
+            $ref: '#/components/schemas/TemplateIdCase'
+        default:
+          $ref: '#/components/schemas/TemplateIdBase'
+          description: Optional fallback template when no cases match.
+
+    TemplateIdMap:
+      oneOf:
+        - $ref: '#/components/schemas/TemplateIdBase'
+        - $ref: '#/components/schemas/TemplateIdSelector'
 
     LocalizedString:
       oneOf:
@@ -1170,6 +1373,9 @@ components:
           oneOf:
             - type: number
             - type: string
+        notEmpty:
+          type: boolean
+          description: If true, condition matches when the field has any value other than empty/blank/null. If false, condition matches when the field is empty.
 
     VisibilityConfig:
       type: object
@@ -1254,6 +1460,9 @@ components:
               oneOf:
                 - type: number
                 - type: string
+            notEmpty:
+              type: boolean
+              description: If true, condition matches when the field has any value other than empty/blank/null. If false, condition matches when the field is empty.
         then:
           type: object
           properties:

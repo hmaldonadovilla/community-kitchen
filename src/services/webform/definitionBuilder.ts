@@ -91,7 +91,9 @@ export class DefinitionBuilder {
       followup: form.followupConfig,
       autoSave: form.autoSave,
       summaryViewEnabled: form.summaryViewEnabled,
-      copyCurrentRecordEnabled: form.copyCurrentRecordEnabled
+      copyCurrentRecordEnabled: form.copyCurrentRecordEnabled,
+      createRecordPresetButtonsEnabled: form.createRecordPresetButtonsEnabled,
+      actionBars: form.actionBars
     };
   }
 
