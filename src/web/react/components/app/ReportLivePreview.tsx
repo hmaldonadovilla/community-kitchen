@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FieldValue, LangCode, SummaryVisibility, WebFormDefinition, WebQuestionDefinition } from '../../../types';
+import type { SummaryVisibility } from '../../../../types';
+import { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
 import { resolveLocalizedString } from '../../../i18n';
 import { toOptionSet } from '../../../core';
 import { tSystem } from '../../../systemStrings';
@@ -119,19 +120,46 @@ type RecordMeta = {
   pdfUrl?: string;
 };
 
-const MetaCard: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+const MetaCard: React.FC<{ label: string; children: React.ReactNode; fieldPath?: string }> = ({ label, children, fieldPath }) => (
   <div
+    data-field-path={fieldPath}
     style={{
       border: '1px solid rgba(148,163,184,0.25)',
       background: 'rgba(248,250,252,0.7)',
       borderRadius: 14,
-      padding: 12
+      padding: 12,
+      height: '100%',
+      minWidth: 0,
+      display: 'flex',
+      flexDirection: 'column'
     }}
   >
-    <div className="muted" style={{ fontWeight: 700, marginBottom: 6 }}>
+    <div
+      className="muted"
+      style={{
+        fontWeight: 800,
+        marginBottom: 6,
+        minWidth: 0,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}
+    >
       {label}
     </div>
-    <div style={{ fontWeight: 700, wordBreak: 'break-word' }}>{children}</div>
+    <div
+      style={{
+        fontWeight: 800,
+        wordBreak: 'break-word',
+        minWidth: 0,
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-end'
+      }}
+    >
+      {children}
+    </div>
   </div>
 );
 
@@ -627,21 +655,20 @@ export const ReportLivePreview: React.FC<{
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 12
+              gap: 12,
+              alignItems: 'stretch'
             }}
           >
             {section.questions.map((q: WebQuestionDefinition) => {
               const label = resolveLabel(q, language);
               const value = values[q.id];
               return (
-                <div key={q.id} data-field-path={q.id}>
-                  <MetaCard label={label}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div>{renderValueForPreview(value, q.type, language, toOptionSet(q as any))}</div>
-                      {renderWarnings(q.id)}
-                    </div>
-                  </MetaCard>
-                </div>
+                <MetaCard key={q.id} label={label} fieldPath={q.id}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div>{renderValueForPreview(value, q.type, language, toOptionSet(q as any))}</div>
+                    {renderWarnings(q.id)}
+                  </div>
+                </MetaCard>
               );
             })}
           </div>

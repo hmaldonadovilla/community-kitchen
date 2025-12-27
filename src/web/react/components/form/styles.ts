@@ -251,9 +251,12 @@ export const FORM_VIEW_STYLES = `
         }
         /* In 2-up grids, keep the "aligned label rows" behavior even if a field forces stacked layout. */
         .ck-line-grid > .field.inline-field.ck-label-stacked > label,
-        .ck-pair-grid > .field.inline-field.ck-label-stacked > label,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field.ck-label-stacked > label {
-          min-height: 2.4em;
+          min-height: 0;
+        }
+        .ck-pair-grid > .field.inline-field.ck-label-stacked > label {
+          /* Paired rows: keep control rows aligned by matching the tallest label in the pair (computed per row). */
+          min-height: var(--ck-pair-label-min-height, 0px);
         }
         .form-card .field[data-has-warning="true"]:not([data-has-error="true"]),
         .webform-overlay .field[data-has-warning="true"]:not([data-has-error="true"]) {
@@ -386,11 +389,15 @@ export const FORM_VIEW_STYLES = `
         .ck-line-grid > .field.inline-field > label,
         .ck-pair-grid > .field.inline-field > label,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > label {
-          /* Reserve some space for 2-line labels, but avoid large gaps for short labels */
+          /* Labels should shrink to their actual height (avoid reserving extra lines) */
           line-height: 1.2;
-          min-height: 2.4em;
+          min-height: 0;
           max-width: none;
           margin: 0;
+        }
+        .ck-pair-grid > .field.inline-field > label {
+          /* Paired rows: keep control rows aligned by matching the tallest label in the pair (computed per row). */
+          min-height: var(--ck-pair-label-min-height, 0px);
         }
         .ck-line-grid > .field.inline-field > input,
         .ck-line-grid > .field.inline-field > select,

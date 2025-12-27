@@ -1330,15 +1330,39 @@ export class ConfigSheet {
     }
   }
 
+  private static normalizeSummaryVisibility(raw: any): QuestionUiConfig['summaryVisibility'] | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (raw === true) return 'always';
+    if (raw === false) return undefined;
+    const candidate = raw.toString().trim().toLowerCase();
+    switch (candidate) {
+      case 'always':
+      case 'show':
+      case 'visible':
+        return 'always';
+      case 'never':
+      case 'hide':
+      case 'hidden':
+        return 'never';
+      case 'inherit':
+      case 'auto':
+        return undefined;
+      default:
+        return undefined;
+    }
+  }
+
   private static normalizeQuestionUi(rawUi: any): QuestionUiConfig | undefined {
     if (!rawUi || typeof rawUi !== 'object') return undefined;
     const control = this.normalizeChoiceControl(rawUi.control || rawUi.choiceControl || rawUi.choice);
     const labelLayout = this.normalizeLabelLayout(
       rawUi.labelLayout ?? rawUi.label_layout ?? rawUi.stackedLabel ?? rawUi.stackLabel ?? rawUi.stacked
     );
+    const summaryVisibility = this.normalizeSummaryVisibility(rawUi.summaryVisibility ?? rawUi.summary_visibility);
     const cfg: QuestionUiConfig = {};
     if (control) cfg.control = control;
     if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
+    if (summaryVisibility) cfg.summaryVisibility = summaryVisibility;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
