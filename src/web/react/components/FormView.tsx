@@ -39,6 +39,7 @@ import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectO
 import { InfoTooltip } from './form/InfoTooltip';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
+import { PairedRowGrid } from './form/PairedRowGrid';
 import { resolveGroupSectionKey } from './form/grouping';
 import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSelectors';
@@ -3229,13 +3230,13 @@ const FormView: React.FC<FormViewProps> = ({
                         if (row.length === 2) {
                           const hasDate = row[0].type === 'DATE' || row[1].type === 'DATE';
                           return (
-                            <div
+                            <PairedRowGrid
                               key={`${row[0].id}__${row[1].id}`}
                               className={`ck-pair-grid${hasDate ? ' ck-pair-has-date' : ''}`}
                             >
                               {renderQuestion(row[0])}
                               {renderQuestion(row[1])}
-                            </div>
+                            </PairedRowGrid>
                           );
                         }
                         return renderQuestion(row[0]);

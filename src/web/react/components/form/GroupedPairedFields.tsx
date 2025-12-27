@@ -1,63 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { resolveLocalizedString } from '../../../i18n';
 import { LangCode, QuestionGroupConfig } from '../../../types';
 import { GroupCard } from './GroupCard';
+import { PairedRowGrid } from './PairedRowGrid';
 import { resolveGroupSectionKey } from './grouping';
-
-const PairedRowGrid: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = 'ck-pair-grid' }) => {
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (typeof ResizeObserver === 'undefined') return;
-
-    const getLabels = () =>
-      Array.from(el.querySelectorAll<HTMLElement>(':scope > .field.inline-field > label')).filter(Boolean);
-
-    const compute = () => {
-      const labels = getLabels();
-      if (labels.length < 2) return;
-      const heights = labels.map(l => l.getBoundingClientRect().height).filter(h => Number.isFinite(h) && h > 0);
-      const max = heights.length ? Math.max(...heights) : 0;
-      const next = max ? `${Math.ceil(max)}px` : '0px';
-      if (el.style.getPropertyValue('--ck-pair-label-min-height') !== next) {
-        el.style.setProperty('--ck-pair-label-min-height', next);
-      }
-    };
-
-    let raf: number | null = null;
-    const schedule = () => {
-      if (typeof requestAnimationFrame === 'undefined') {
-        compute();
-        return;
-      }
-      if (raf !== null) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        raf = null;
-        compute();
-      });
-    };
-
-    schedule();
-    const labels = getLabels();
-    const ro = new ResizeObserver(schedule);
-    labels.forEach(l => ro.observe(l));
-    globalThis.addEventListener?.('resize', schedule as any);
-    return () => {
-      globalThis.removeEventListener?.('resize', schedule as any);
-      ro.disconnect();
-      if (raf !== null) cancelAnimationFrame(raf);
-    };
-    // Intentionally run after each render; paired rows can change based on visibility rules, language, etc.
-  });
-
-  return (
-    <div ref={ref} className={className} style={{ ['--ck-pair-label-min-height' as any]: '0px' }}>
-      {children}
-    </div>
-  );
-};
 
 export type GroupedPairedFieldsProps = {
   contextPrefix: string;
