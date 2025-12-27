@@ -10,6 +10,7 @@ import { EMPTY_DISPLAY, formatDisplayText } from '../../utils/valueDisplay';
 import { GroupCard } from '../form/GroupCard';
 import { resolveGroupSectionKey } from '../form/grouping';
 import { shouldHideField } from '../../../rules/visibility';
+import { collectValidationWarnings } from '../../app/submission';
 
 type UploadLink = { url: string; label?: string };
 
@@ -141,11 +142,31 @@ const LineItemRowCard: React.FC<{
   language: LangCode;
   lineItems: LineItemState;
   values: Record<string, FieldValue>;
-}> = ({ group, row, idx, language, lineItems, values }) => {
+  warningByField?: Record<string, string[]>;
+}> = ({ group, row, idx, language, lineItems, values, warningByField }) => {
   const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
   const anchorId = group.lineItemConfig?.anchorFieldId;
   const fields = (group.lineItemConfig?.fields || []).filter(f => f.id !== 'ITEM_FILTER');
   const subGroups = group.lineItemConfig?.subGroups || [];
+
+  const warningsFor = (fieldPath: string): string[] => {
+    const key = (fieldPath || '').toString();
+    const list = key && warningByField ? (warningByField as any)[key] : undefined;
+    return Array.isArray(list) ? list.filter(Boolean).map((m: any) => (m || '').toString()) : [];
+  };
+  const renderWarnings = (fieldPath: string): React.ReactNode => {
+    const msgs = warningsFor(fieldPath);
+    if (!msgs.length) return null;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+        {msgs.map((m, idx) => (
+          <div key={`${fieldPath}-warning-${idx}`} className="warning">
+            {m}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const groupCtx = useMemo(
     () => ({
@@ -216,6 +237,7 @@ const LineItemRowCard: React.FC<{
               const optionSet = toOptionSet(field as any);
               // Avoid duplicating the anchor field if it's already used as the title.
               if (anchorId && field.id === anchorId) return null;
+              const fieldPath = `${group.id}__${field.id}__${row.id}`;
               return (
                 <tr key={field.id}>
                   <td
@@ -238,7 +260,10 @@ const LineItemRowCard: React.FC<{
                       wordBreak: 'break-word'
                     }}
                   >
-                    {renderValueForPreview(v, (field as any)?.type, language, optionSet)}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-field-path={fieldPath}>
+                      <div>{renderValueForPreview(v, (field as any)?.type, language, optionSet)}</div>
+                      {renderWarnings(fieldPath)}
+                    </div>
                   </td>
                 </tr>
               );
@@ -352,6 +377,7 @@ const LineItemRowCard: React.FC<{
                                         />
                                       );
                                     }
+                                    const fieldPath = `${childKey}__${sf.id}__${cr.id}`;
                                     return (
                                       <td
                                         key={`${cr.id}.${sf.id}`}
@@ -363,7 +389,10 @@ const LineItemRowCard: React.FC<{
                                           wordBreak: 'break-word'
                                         }}
                                       >
-                                        {renderValueForPreview(cr?.values?.[sf.id], sf?.type, language, toOptionSet(sf))}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-field-path={fieldPath}>
+                                          <div>{renderValueForPreview(cr?.values?.[sf.id], sf?.type, language, toOptionSet(sf))}</div>
+                                          {renderWarnings(fieldPath)}
+                                        </div>
                                       </td>
                                     );
                                   })}
@@ -481,8 +510,99 @@ export const ReportLivePreview: React.FC<{
     return raw.filter(q => isVisibleInSummary({ item: q, ctx: summaryCtx }));
   }, [definition.questions, summaryCtx]);
 
+  const warningInfo = useMemo(
+    () =>
+      collectValidationWarnings({
+        definition,
+        language,
+        values,
+        lineItems,
+        phase: 'submit'
+      }),
+    [definition, language, lineItems, values]
+  );
+
+  const warningsFor = (fieldPath: string): string[] => {
+    const key = (fieldPath || '').toString();
+    const list = (warningInfo as any)?.byField?.[key];
+    return Array.isArray(list) ? list.filter(Boolean).map((m: any) => (m || '').toString()) : [];
+  };
+
+  const renderWarnings = (fieldPath: string): React.ReactNode => {
+    const msgs = warningsFor(fieldPath);
+    if (!msgs.length) return null;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+        {msgs.map((m, idx) => (
+          <div key={`${fieldPath}-warning-${idx}`} className="warning">
+            {m}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {warningInfo.top.length ? (
+        <div
+          role="status"
+          style={{
+            padding: '14px 16px',
+            borderRadius: 14,
+            border: '1px solid #fdba74',
+            background: '#ffedd5',
+            color: '#0f172a',
+            fontWeight: 800,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8
+          }}
+        >
+          <div>{tSystem('validation.warningsTitle', language, 'Warnings')}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 700 }}>
+            {warningInfo.top.map((w: { message: string; fieldPath: string }, idx: number) => (
+              <button
+                key={`${idx}-${w.fieldPath}-${w.message}`}
+                type="button"
+                onClick={() => {
+                  const key = (w.fieldPath || '').toString();
+                  if (!key || typeof document === 'undefined') return;
+
+                  // Expand the containing section if needed (top-level questions).
+                  const parts = key.split('__');
+                  const isTopLevel = parts.length !== 3 && !key.includes('::');
+                  if (isTopLevel) {
+                    const section = topSections.find(s => (s.questions || []).some(q => q && q.id === key));
+                    if (section) {
+                      const sectionKey = `summary:${section.key}`;
+                      setCollapsedSections(prev => (prev[sectionKey] ? { ...prev, [sectionKey]: false } : prev));
+                    }
+                  }
+
+                  requestAnimationFrame(() => {
+                    const el = document.querySelector<HTMLElement>(`[data-field-path="${key}"]`);
+                    if (!el) return;
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  });
+                }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  padding: 0,
+                  textAlign: 'left',
+                  font: 'inherit',
+                  color: 'inherit',
+                  cursor: 'pointer'
+                }}
+              >
+                {w.message}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {recordMeta?.pdfUrl ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <MetaCard label={tSystem('summary.pdf', language, 'PDF')}>
@@ -514,9 +634,14 @@ export const ReportLivePreview: React.FC<{
               const label = resolveLabel(q, language);
               const value = values[q.id];
               return (
-                <MetaCard key={q.id} label={label}>
-                  {renderValueForPreview(value, q.type, language, toOptionSet(q as any))}
-                </MetaCard>
+                <div key={q.id} data-field-path={q.id}>
+                  <MetaCard label={label}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div>{renderValueForPreview(value, q.type, language, toOptionSet(q as any))}</div>
+                      {renderWarnings(q.id)}
+                    </div>
+                  </MetaCard>
+                </div>
               );
             })}
           </div>
@@ -550,6 +675,7 @@ export const ReportLivePreview: React.FC<{
             <div className="muted" style={{ fontWeight: 800 }}>
               {resolveLabel(group, language)}
             </div>
+            {renderWarnings(group.id)}
 
             {rows.map((row, idx) => (
               <LineItemRowCard
@@ -560,6 +686,7 @@ export const ReportLivePreview: React.FC<{
                 language={language}
                 lineItems={lineItems}
                 values={values}
+                warningByField={(warningInfo as any)?.byField || {}}
               />
             ))}
           </div>

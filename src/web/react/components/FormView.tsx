@@ -132,6 +132,8 @@ interface FormViewProps {
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
   status?: string | null;
   statusTone?: StatusTone | null;
+  warningTop?: Array<{ message: string; fieldPath: string }>;
+  warningByField?: Record<string, string[]>;
   onStatusClear?: () => void;
   optionState: OptionState;
   setOptionState: React.Dispatch<React.SetStateAction<OptionState>>;
@@ -193,6 +195,8 @@ const FormView: React.FC<FormViewProps> = ({
   setErrors,
   status,
   statusTone,
+  warningTop,
+  warningByField,
   onStatusClear,
   optionState,
   setOptionState,
@@ -208,6 +212,21 @@ const FormView: React.FC<FormViewProps> = ({
   onDiagnostic
 }) => {
   const ROW_SOURCE_KEY = '__ckRowSource';
+  const warningsFor = (fieldPath: string): string[] => {
+    const key = (fieldPath || '').toString();
+    const list = key && warningByField ? (warningByField as any)[key] : undefined;
+    return Array.isArray(list) ? list.filter(Boolean).map(m => (m || '').toString()) : [];
+  };
+  const hasWarning = (fieldPath: string): boolean => warningsFor(fieldPath).length > 0;
+  const renderWarnings = (fieldPath: string): React.ReactNode => {
+    const msgs = warningsFor(fieldPath);
+    if (!msgs.length) return null;
+    return msgs.map((m, idx) => (
+      <div key={`${fieldPath}-warning-${idx}`} className="warning">
+        {m}
+      </div>
+    ));
+  };
   const [overlay, setOverlay] = useState<LineOverlayState>({ open: false, options: [], selected: [] });
   const [subgroupOverlay, setSubgroupOverlay] = useState<SubgroupOverlayState>({ open: false });
   const [infoOverlay, setInfoOverlay] = useState<InfoOverlayState>({ open: false });
@@ -259,7 +278,9 @@ const FormView: React.FC<FormViewProps> = ({
       }
       errorNavRequestRef.current += 1;
       onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current });
-      void onSubmit({ collapsedRows, collapsedSubgroups });
+      void onSubmit({ collapsedRows, collapsedSubgroups }).catch((err: any) => {
+        onDiagnostic?.('submit.exception', { message: err?.message || err || 'unknown' });
+      });
     };
     return () => {
       submitActionRef.current = null;
@@ -695,6 +716,91 @@ const FormView: React.FC<FormViewProps> = ({
       onDiagnostic?.('subgroup.overlay.open', { subKey });
     },
     [onDiagnostic, overlay.open]
+  );
+
+  // NOTE: Must be declared AFTER `questionIdToGroupKey`, `nestedGroupMeta`, and `openSubgroupOverlay` are initialized.
+  // Otherwise production bundles can hit a TDZ "Cannot access X before initialization" when evaluating hook deps.
+  const navigateToFieldKey = useCallback(
+    (fieldKey: string) => {
+      const key = (fieldKey || '').toString();
+      if (!key) return;
+      if (typeof document === 'undefined') return;
+
+      const expandGroupForQuestionId = (questionId: string): boolean => {
+        const groupKey = questionIdToGroupKey[questionId];
+        if (!groupKey) return false;
+        setCollapsedGroups(prev => (prev[groupKey] === false ? prev : { ...prev, [groupKey]: false }));
+        return true;
+      };
+
+      const ensureMountedForKey = (): boolean => {
+        const parts = key.split('__');
+        if (parts.length !== 3) {
+          // Top-level question key: ensure its group card is expanded.
+          return expandGroupForQuestionId(key);
+        }
+        const prefix = parts[0];
+        const fieldId = parts[1];
+        const rowId = parts[2];
+        const subgroupInfo = parseSubgroupKey(prefix);
+        if (subgroupInfo) {
+          expandGroupForQuestionId(subgroupInfo.parentGroupId);
+          const collapseKey = `${subgroupInfo.parentGroupId}::${subgroupInfo.parentRowId}`;
+          setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
+          const nestedKey =
+            nestedGroupMeta.subgroupFieldToGroupKey[`${subgroupInfo.parentGroupId}::${subgroupInfo.subGroupId}__${fieldId}`];
+          if (nestedKey) {
+            setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
+          }
+          if (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix) {
+            openSubgroupOverlay(prefix);
+            onDiagnostic?.('validation.navigate.openSubgroup', { key, subKey: prefix, source: 'click' });
+          }
+          return true;
+        }
+
+        expandGroupForQuestionId(prefix);
+        const collapseKey = `${prefix}::${rowId}`;
+        setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
+        const nestedKey = nestedGroupMeta.lineFieldToGroupKey[`${prefix}__${fieldId}`];
+        if (nestedKey) {
+          setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
+        }
+        return true;
+      };
+
+      const scrollToKey = (): boolean => {
+        const target = document.querySelector<HTMLElement>(`[data-field-path="${key}"]`);
+        if (!target) return false;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const focusable = target.querySelector<HTMLElement>('input, select, textarea, button');
+        try {
+          focusable?.focus({ preventScroll: true } as any);
+        } catch (_) {
+          // ignore
+        }
+        return true;
+      };
+
+      const requestedMount = ensureMountedForKey();
+      requestAnimationFrame(() => {
+        const found = scrollToKey();
+        if (!found && requestedMount) {
+          // wait for state-driven DOM mount (expanded row / subgroup overlay)
+          requestAnimationFrame(() => scrollToKey());
+          setTimeout(() => scrollToKey(), 80);
+        }
+      });
+    },
+    [
+      nestedGroupMeta.lineFieldToGroupKey,
+      nestedGroupMeta.subgroupFieldToGroupKey,
+      onDiagnostic,
+      openSubgroupOverlay,
+      questionIdToGroupKey,
+      subgroupOverlay.open,
+      subgroupOverlay.subKey
+    ]
   );
 
   const closeInfoOverlay = useCallback(() => {
@@ -1505,6 +1611,7 @@ const FormView: React.FC<FormViewProps> = ({
               className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
               data-field-path={q.id}
               data-has-error={errors[q.id] ? 'true' : undefined}
+              data-has-warning={hasWarning(q.id) ? 'true' : undefined}
             >
               <label>
                 {resolveFieldLabel(q, language, q.id)}
@@ -1518,6 +1625,7 @@ const FormView: React.FC<FormViewProps> = ({
                 onChange={next => handleFieldChange(q, next)}
               />
               {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+              {renderWarnings(q.id)}
             </div>
           );
         }
@@ -1529,6 +1637,7 @@ const FormView: React.FC<FormViewProps> = ({
             }${q.type === 'DATE' && !forceStackedLabel ? ' ck-date-inline' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
+            data-has-warning={hasWarning(q.id) ? 'true' : undefined}
           >
             <label>
               {resolveLabel(q, language)}
@@ -1549,6 +1658,7 @@ const FormView: React.FC<FormViewProps> = ({
               />
             )}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+            {renderWarnings(q.id)}
           </div>
         );
       case 'CHOICE': {
@@ -1560,6 +1670,7 @@ const FormView: React.FC<FormViewProps> = ({
             className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
+            data-has-warning={hasWarning(q.id) ? 'true' : undefined}
           >
             <label>
               {resolveLabel(q, language)}
@@ -1580,6 +1691,7 @@ const FormView: React.FC<FormViewProps> = ({
               return <InfoTooltip text={selected?.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
             })()}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+            {renderWarnings(q.id)}
           </div>
         );
       }
@@ -1594,6 +1706,7 @@ const FormView: React.FC<FormViewProps> = ({
               className={`field inline-field ck-consent-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
               data-field-path={q.id}
               data-has-error={errors[q.id] ? 'true' : undefined}
+              data-has-warning={hasWarning(q.id) ? 'true' : undefined}
             >
               <label>
                 <input
@@ -1607,6 +1720,7 @@ const FormView: React.FC<FormViewProps> = ({
                 </span>
               </label>
               {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+              {renderWarnings(q.id)}
             </div>
           );
         }
@@ -1616,6 +1730,7 @@ const FormView: React.FC<FormViewProps> = ({
             className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
+            data-has-warning={hasWarning(q.id) ? 'true' : undefined}
           >
             <label>
               {resolveLabel(q, language)}
@@ -1652,6 +1767,7 @@ const FormView: React.FC<FormViewProps> = ({
               );
             })()}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+            {renderWarnings(q.id)}
           </div>
         );
       }
@@ -1684,6 +1800,7 @@ const FormView: React.FC<FormViewProps> = ({
             className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
+            data-has-warning={hasWarning(q.id) ? 'true' : undefined}
           >
             <label>
               {resolveLabel(q, language)}
@@ -1776,6 +1893,7 @@ const FormView: React.FC<FormViewProps> = ({
               onChange={e => handleFileInputChange(q, e.target.files)}
             />
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+            {renderWarnings(q.id)}
           </div>
         );
       }
@@ -1794,6 +1912,7 @@ const FormView: React.FC<FormViewProps> = ({
               submitting,
               errors,
               setErrors,
+              warningByField,
               optionState,
               setOptionState,
               ensureLineOptions,
@@ -2464,6 +2583,7 @@ const FormView: React.FC<FormViewProps> = ({
                               className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
                                         <label>
                                           {resolveFieldLabel(field, language, field.id)}
@@ -2485,6 +2605,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 return <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />;
                                         })()}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
                                       </div>
                                     );
                                   }
@@ -2502,6 +2623,7 @@ const FormView: React.FC<FormViewProps> = ({
                                           className={`field inline-field ck-consent-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
                                           data-field-path={fieldPath}
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
                                           <label>
                                             <input
@@ -2515,6 +2637,7 @@ const FormView: React.FC<FormViewProps> = ({
                                             </span>
                                           </label>
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                          {renderWarnings(fieldPath)}
                                         </div>
                                       );
                                     }
@@ -2524,6 +2647,7 @@ const FormView: React.FC<FormViewProps> = ({
                                         className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
                                         data-field-path={fieldPath}
                                         data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                       >
                                         <label>
                                           {resolveFieldLabel(field, language, field.id)}
@@ -2566,6 +2690,7 @@ const FormView: React.FC<FormViewProps> = ({
                                           );
                                         })()}
                                         {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                        {renderWarnings(fieldPath)}
                                       </div>
                                     );
                                   }
@@ -2584,6 +2709,7 @@ const FormView: React.FC<FormViewProps> = ({
                               className={`field inline-field${forceStackedSubFieldLabel ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
                                         <label>
                                           {resolveFieldLabel(field, language, field.id)}
@@ -2690,6 +2816,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 }
                               />
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
                       </div>
                     );
                         }
@@ -2715,6 +2842,7 @@ const FormView: React.FC<FormViewProps> = ({
                               }${field.type === 'DATE' && !forceStackedSubFieldLabel ? ' ck-date-inline' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
                               <label>
                                 {resolveFieldLabel(field, language, field.id)}
@@ -2727,6 +2855,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 readOnly={!!field.valueMap}
                               />
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
           </div>
         );
       }
@@ -2880,11 +3009,57 @@ const FormView: React.FC<FormViewProps> = ({
   return (
     <>
       <div className="ck-form-sections">
+        {warningTop && warningTop.length ? (
+          <div
+            role="status"
+            style={{
+              scrollMarginTop: 'calc(var(--safe-top) + 140px)',
+              padding: '14px 16px',
+              borderRadius: 14,
+              border: '1px solid #fdba74',
+              background: '#ffedd5',
+              color: '#0f172a',
+              fontWeight: 800,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8
+            }}
+          >
+            <div>{tSystem('validation.warningsTitle', language, 'Warnings')}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 700 }}>
+              {warningTop.map((w, idx) => (
+                <button
+                  key={`${idx}-${w.fieldPath}-${w.message}`}
+                  type="button"
+                  onClick={() => navigateToFieldKey(w.fieldPath)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    padding: 0,
+                    textAlign: 'left',
+                    font: 'inherit',
+                    color: 'inherit',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {w.message}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {status ? (
           <div
             ref={statusRef}
             role={statusTone === 'error' ? 'alert' : 'status'}
             tabIndex={-1}
+            onClick={() => {
+              if (statusTone !== 'error') return;
+              const keys = Object.keys(errors || {});
+              if (!keys.length) return;
+              navigateToFieldKey(keys[0]);
+            }}
             style={{
               scrollMarginTop: 'calc(var(--safe-top) + 140px)',
               padding: '14px 16px',
@@ -2902,7 +3077,8 @@ const FormView: React.FC<FormViewProps> = ({
                   ? '#dcfce7'
                   : '#e0f2fe',
               color: '#0f172a',
-              fontWeight: 800
+              fontWeight: 800,
+              cursor: statusTone === 'error' && Object.keys(errors || {}).length ? 'pointer' : undefined
             }}
           >
             {status}

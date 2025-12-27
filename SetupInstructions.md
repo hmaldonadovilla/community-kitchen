@@ -201,6 +201,19 @@ This project uses TypeScript. You need to build the script before using it in Go
       ]
       ```
 
+    - **PDF templates: forcing visibility for disabled progressive rows**: When a line-item group uses progressive mode with `"expandGate": "collapsedFieldsValid"`, rows that are still disabled (collapsed fields missing/invalid) are rendered in PDFs as **ROW_TABLE title only** by default. To force a specific field row to remain visible in the PDF for disabled rows, wrap the placeholder with:
+
+      - `{{ALWAYS_SHOW(GROUP.FIELD)}}`
+      - `{{ALWAYS_SHOW(GROUP.SUBGROUP.FIELD)}}`
+      - `{{ALWAYS_SHOW(CONSOLIDATED_ROW(GROUP.SUBGROUP.FIELD))}}`
+
+      Example:
+
+      ```text
+      Portions
+      {{ALWAYS_SHOW(MP_MEALS_REQUEST.FINAL_QTY)}}
+      ```
+
     - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`. The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
       - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).
       - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
@@ -338,6 +351,10 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```
 
         Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`, `notEmpty`. Actions: `required` true/false, `min`, `max`, `minFieldId`, `maxFieldId`, `allowed`, `disallowed`.
+      - Warning rules (non-blocking): set `"level": "warning"` to surface a message without blocking submit.
+        - You can use normal rules (`when` + `then`) or **message-only** rules (`when` + `message`, omit `then`) to show a warning when the condition matches.
+        - Optional: `"warningDisplay": "top" | "field" | "both"` to control where warnings render in the UI (edit + summary). Defaults to `"top"`.
+        - Warnings are shown in the UI and Summary view. In PDFs, warnings are only rendered when the template includes `{{VALIDATION_WARNINGS}}`.
       - Scope rules to follow-up only: add `"phase": "followup"` to a rule when it should only block follow-up actions (e.g., require `FINAL_QTY` during follow-up but keep it optional on submit).
 
     - Computed fields (`derivedValue`):
@@ -731,6 +748,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 ### Template placeholders (PDF/email)
 
 - **Basic fields**: Use `{{FIELD_ID}}` or the slugified label (`{{MEAL_NUMBER}}`) inside your Doc template. Standard metadata is available out of the box: `{{RECORD_ID}}`, `{{FORM_KEY}}`, `{{CREATED_AT}}`, `{{UPDATED_AT}}`, `{{STATUS}}`, etc. Placeholder matching is case-insensitive, so `{{Updated_At}}` works.
+- **Validation warnings**: Use `{{VALIDATION_WARNINGS}}` to place non-blocking validation warnings (rules with `"level": "warning"`) in the template. Warnings are only rendered in the PDF when this placeholder is present.
 - **Data source columns**: When a CHOICE/CHECKBOX question comes from a data source, you can access the columns returned in its `projection` via `{{QUESTION_ID.Column_Name}}` (spaces become underscores). Example: `{{MP_DISTRIBUTOR.Address_Line_1}}`, `{{MP_DISTRIBUTOR.CITY}}`, `{{MP_DISTRIBUTOR.EMAIL}}`.
 - **Line item tables**: Build a table row whose cells contain placeholders such as `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`. The service duplicates that row for every line item entry and replaces the placeholders per row. Empty groups simply clear the template row.
 - **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` anywhere inside the table you want duplicated per recipe. The renderer will:
@@ -746,10 +764,18 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - Insert one copy of the table per parent row that has children.
   - For each child row, duplicate the template row(s) and replace subgroup placeholders. You can also include parent fields in the same row via `{{PARENT_ID.FIELD_ID}}` if needed.
   - Example: if `MP_DISHES` has a subgroup `INGREDIENTS`, a table row like `{{MP_DISHES.INGREDIENTS.ING}} | {{MP_DISHES.INGREDIENTS.QTY}} | {{MP_DISHES.INGREDIENTS.UNIT}}` will render all ingredients under each dish in separate tables.
-- **Consolidated values**: Use `{{CONSOLIDATED(GROUP_ID.FIELD_ID)}}` (or the slugified label) to list the unique values across a line item group. Example: `{{CONSOLIDATED(MP_INGREDIENTS_LI.ALLERGEN)}}` renders `GLUTEN, NUTS, SOY`.
-  - **Row-scoped subgroup consolidation**: Inside a per-row section (recommended: within `ROW_TABLE` output), use `{{CONSOLIDATED_ROW(GROUP.SUBGROUP.FIELD)}}` to aggregate subgroup values for the current parent row.
+- **Consolidated values**: Use `{{CONSOLIDATED(GROUP_ID.FIELD_ID)}}` (or the slugified label) to list the unique values across a line item group. Example: `{{CONSOLIDATED(MP_INGREDIENTS_LI.ALLERGEN)}}` renders `GLUTEN, NUTS, SOY`. When empty, consolidated placeholders render `None`.
+  - **Row-scoped subgroup consolidation**: Inside a per-row section (recommended: within `ROW_TABLE` output), use `{{CONSOLIDATED_ROW(GROUP.SUBGROUP.FIELD)}}` to aggregate subgroup values for the current parent row (renders `None` when empty).
+  - **Consolidated calculations**:
+    - `{{COUNT(GROUP_ID)}}` counts group rows.
+    - `{{COUNT(GROUP_ID.SUBGROUP_ID)}}` counts subgroup rows across all parents.
+    - `{{SUM(GROUP_ID.FIELD_ID)}}` sums a `NUMBER` field across group rows (subgroup path supported: `{{SUM(GROUP_ID.SUBGROUP_ID.FIELD_ID)}}`).
   - **Consolidated subgroup tables**: To build a *single* subgroup table across all parent rows (and dedupe rows by the placeholder combination), add `{{CONSOLIDATED_TABLE(GROUP.SUBGROUP)}}` somewhere inside the table. The directive is stripped at render time; the table rows are generated from the unique combinations of the row’s placeholders.
 - **Numeric aggregation in consolidated subgroup tables**: If the table row includes `NUMBER` placeholders (e.g., `{{GROUP.SUBGROUP.QTY}}`), then `CONSOLIDATED_TABLE` will **sum those numeric fields** when all **non-numeric** columns match (so duplicates collapse and quantities aggregate).
+  - **Item count in consolidated subgroup tables**: Use `{{GROUP.SUBGROUP.__COUNT}}` to show how many source rows were consolidated into the generated row.
+  - **Exclude rows**: Add `{{EXCLUDE_WHEN(KEY=VALUE[, KEY2=VALUE2 ...])}}` anywhere inside the table to exclude matching rows *before* consolidation/sorting.
+    - Keys: `FIELD_ID`, `GROUP.FIELD_ID`, or `GROUP.SUBGROUP.FIELD_ID`
+    - Values: use `|` to match multiple values (example: `{{EXCLUDE_WHEN(STATUS=Removed|Deleted)}}`)
 - **Sorting generated rows (tables/lists)**: Add `{{ORDER_BY(...)}}` anywhere inside a table to control the order of generated rows (works with `CONSOLIDATED_TABLE`, normal line-item tables, and subgroup tables).
   - **Syntax**: `{{ORDER_BY(KEY1 [ASC|DESC], KEY2 [ASC|DESC], ...)}}`
   - **Keys**:

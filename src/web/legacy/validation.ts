@@ -92,6 +92,7 @@ export function validateFormWithBundle(definition: WebFormDefinition, language: 
         (field.validationRules || []).forEach(rule => {
           rows.forEach(row => {
             const whenName = group.id + '__' + rule.when.fieldId;
+            if (!rule?.then?.fieldId) return;
             const thenName = group.id + '__' + rule.then.fieldId;
             let whenVal = getRowValue(row, whenName);
             if (whenVal === '' || (Array.isArray(whenVal) && whenVal.length === 0)) {

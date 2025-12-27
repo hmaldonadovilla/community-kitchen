@@ -321,7 +321,7 @@ export interface ValidationRule {
      */
     notEmpty?: boolean;
   };
-  then: {
+  then?: {
     fieldId: string;
     required?: boolean;
     min?: number | string;
@@ -351,12 +351,26 @@ export interface ValidationRule {
   };
   message?: LocalizedString;
   /**
+   * Warning-only display preference for UI surfaces (edit + summary).
+   * Defaults to "top".
+   * - top: show in the warnings banner only
+   * - field: show only under the target field
+   * - both: show in both places
+   */
+  warningDisplay?: 'top' | 'field' | 'both';
+  /**
    * Optional phase scoping. Defaults to "both".
    * - submit: apply only on form submission
    * - followup: apply only on follow-up actions
    * - both: apply everywhere
    */
   phase?: 'submit' | 'followup' | 'both';
+  /**
+   * Optional rule severity. Defaults to "error".
+   * - error: blocks submission (normal validation behavior)
+   * - warning: does not block submission, but is surfaced in submission/summary/PDF messages
+   */
+  level?: 'error' | 'warning';
 }
 
 export type DerivedValueWhen = 'always' | 'empty';

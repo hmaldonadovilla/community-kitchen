@@ -1,0 +1,185 @@
+import { LineItemGroupConfig, LocalizedString } from '../../../types';
+
+/**
+ * Shared helpers for Follow-up template rendering (PDF/email/html) and table directives.
+ *
+ * Responsibility:
+ * - Pure-ish value formatting and placeholder key helpers
+ * - Small, reusable utilities (no Drive/Docs side effects)
+ */
+
+export const resolveLocalizedValue = (value?: LocalizedString, fallback: string = ''): string => {
+  if (!value) return fallback;
+  if (typeof value === 'string') return value;
+  return value.en || value.fr || value.nl || fallback;
+};
+
+export const resolveSubgroupKey = (sub?: LineItemGroupConfig): string => {
+  if (!sub) return '';
+  if (sub.id) return sub.id;
+  return resolveLocalizedValue(sub.label, '');
+};
+
+export const normalizeText = (value: any): string => {
+  if (value === undefined || value === null) return '';
+  return value.toString().trim();
+};
+
+export const toFiniteNumber = (value: any): number | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const s = value.toString().trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+};
+
+export const slugifyPlaceholder = (label: string): string => {
+  return (label || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+};
+
+export const escapeRegExp = (value: string): string => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+export const normalizeToIsoDate = (value: any): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  // Google Sheets numeric serial dates (roughly 1900 epoch)
+  if (typeof value === 'number') {
+    const days = Number(value);
+    if (days > 30000 && days < 90000) {
+      const millis = (days - 25569) * 86400 * 1000; // Excel/Sheets serial to epoch
+      return new Date(millis).toISOString().slice(0, 10);
+    }
+    return undefined;
+  }
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  // Handle date-like strings from Sheets without coercing plain numbers
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    // ISO date only: keep as-is to avoid TZ shifts
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+    // ISO with time
+    const isoWithTime = /^\d{4}-\d{2}-\d{2}[T\s].*/.test(trimmed);
+    // Common d/m/y or m/d/y with separators
+    const dmMatch = /^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/.test(trimmed);
+    // Pure numeric serial stored as string
+    const numericSerial = /^\d{4,}$/.test(trimmed) ? Number(trimmed) : Number.NaN;
+    if (isoWithTime) {
+      const parsed = Date.parse(trimmed);
+      if (!Number.isNaN(parsed)) return new Date(parsed).toISOString().slice(0, 10);
+    }
+    if (dmMatch) {
+      const [a, b, c] = trimmed.split(/[\/-]/);
+      const dayFirst = a.length <= 2 && b.length <= 2;
+      const day = dayFirst ? Number(a) : Number(b);
+      const month = dayFirst ? Number(b) : Number(a);
+      const year = c.length === 2 ? Number(`20${c}`) : Number(c);
+      if (!Number.isNaN(day) && !Number.isNaN(month) && !Number.isNaN(year)) {
+        const utc = Date.UTC(year, month - 1, day);
+        return new Date(utc).toISOString().slice(0, 10);
+      }
+    }
+    if (!Number.isNaN(numericSerial) && numericSerial > 30000 && numericSerial < 90000) {
+      const millis = (numericSerial - 25569) * 86400 * 1000;
+      return new Date(millis).toISOString().slice(0, 10);
+    }
+  }
+  return undefined;
+};
+
+export const formatIsoDateLabel = (iso: string): string => {
+  const trimmed = (iso || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed || '';
+  const [y, m, d] = trimmed.split('-').map(Number);
+  if (!y || !m || !d) return trimmed;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(date.getTime())) return trimmed;
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const pad2 = (n: number) => n.toString().padStart(2, '0');
+  const dow = days[date.getUTCDay()] || '';
+  const mon = months[m - 1] || '';
+  return `${dow}, ${pad2(d)}-${mon}-${y}`;
+};
+
+export const formatTemplateValue = (value: any, fieldType?: string): string => {
+  if (value === undefined || value === null) return '';
+  if (fieldType === 'DATE') {
+    const iso = normalizeToIsoDate(value);
+    if (!iso) return '';
+    return formatIsoDateLabel(iso);
+  }
+  if (Array.isArray(value)) {
+    if (value.length && typeof value[0] === 'object') {
+      return value
+        .map(entry =>
+          Object.entries(entry)
+            .map(([key, val]) => `${key}: ${val ?? ''}`)
+            .join(', ')
+        )
+        .join('\n');
+    }
+    return value.map(v => (v ?? '').toString()).join(', ');
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .map(([key, val]) => `${key}: ${val ?? ''}`)
+      .join(', ');
+  }
+  const asIsoDate = normalizeToIsoDate(value);
+  if (asIsoDate) return asIsoDate;
+  return value.toString();
+};
+
+export const buildPlaceholderKeys = (raw: string): string[] => {
+  const sanitized = raw || '';
+  const segments = sanitized.split('.').map(seg => seg.trim());
+  const upper = segments.map(seg => seg.toUpperCase()).join('.');
+  const lower = segments.map(seg => seg.toLowerCase()).join('.');
+  const title = segments
+    .map(seg =>
+      seg
+        .toLowerCase()
+        .split('_')
+        .map(word => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ''))
+        .join('_')
+    )
+    .join('.');
+  return Array.from(new Set([upper, lower, title]));
+};
+
+export const addPlaceholderVariants = (
+  map: Record<string, string>,
+  key: string,
+  value: any,
+  fieldType?: string
+): void => {
+  if (!key) return;
+  const keys = buildPlaceholderKeys(key);
+  const text = formatTemplateValue(value, fieldType);
+  keys.forEach(token => {
+    map[`{{${token}}}`] = text;
+  });
+};
+
+export const applyPlaceholders = (template: string, placeholders: Record<string, string>): string => {
+  if (!template) return '';
+  let output = template;
+  Object.entries(placeholders).forEach(([token, value]) => {
+    output = output.replace(new RegExp(escapeRegExp(token), 'g'), value ?? '');
+    // Relaxed matcher to tolerate incidental spaces around tokens in the Doc
+    if (token.startsWith('{{') && token.endsWith('}}')) {
+      const inner = token.slice(2, -2);
+      const relaxed = new RegExp(`{{\\s*${escapeRegExp(inner)}\\s*}}`, 'g');
+      output = output.replace(relaxed, value ?? '');
+    }
+  });
+  return output;
+};
+
+

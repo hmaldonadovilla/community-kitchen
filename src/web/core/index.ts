@@ -1,5 +1,5 @@
 // Shared form engine exports for both legacy and React UIs.
-export { validateRules, checkRule } from '../rules/validation';
+export { validateRules, evaluateRules, checkRule } from '../rules/validation';
 export { shouldHideField, matchesWhen } from '../rules/visibility';
 export { computeAllowedOptions, buildLocalizedOptions } from '../rules/filter';
 export { computeTotals, isEmptyRow } from '../lineItems';

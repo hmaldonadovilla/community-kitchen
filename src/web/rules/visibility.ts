@@ -54,7 +54,16 @@ export function matchesWhen(value: unknown, when?: WhenConfig | VisibilityCondit
   }
 
   const numericVals = candidates
-    .map(v => Number(v))
+    .map(v => {
+      const vv = normalizeVal(v);
+      // Treat empty/blank as "not numeric" (do not coerce '' -> 0), so numeric comparisons
+      // don't accidentally match on empty fields.
+      if (vv === '') return NaN;
+      if (typeof vv === 'boolean') return NaN;
+      if (vv instanceof Date) return NaN;
+      const n = Number(vv);
+      return Number.isFinite(n) ? n : NaN;
+    })
     .filter(v => !isNaN(v));
 
   if (when.greaterThan !== undefined) {

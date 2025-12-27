@@ -1,4 +1,4 @@
-import { shouldHideField, validateRules } from '../../core';
+import { evaluateRules, shouldHideField, validateRules } from '../../core';
 import { FieldValue, LangCode, VisibilityContext, WebFormDefinition, WebFormSubmission } from '../../types';
 import { SubmissionPayload } from '../api';
 import { FormErrors, LineItemState } from '../types';
@@ -265,6 +265,177 @@ export const validateForm = (args: {
   });
 
   return allErrors;
+};
+
+export type WarningCollection = {
+  top: Array<{ message: string; fieldPath: string }>;
+  byField: Record<string, string[]>;
+};
+
+const normalizeWarningDisplay = (raw: any): 'top' | 'field' | 'both' => {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (s === 'field') return 'field';
+  if (s === 'both') return 'both';
+  return 'top';
+};
+
+export const collectValidationWarnings = (args: {
+  definition: WebFormDefinition;
+  language: LangCode;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  phase?: 'submit' | 'followup';
+}): WarningCollection => {
+  const { definition, language, values, lineItems, phase = 'submit' } = args;
+  const ctx = buildValidationContext(values, lineItems);
+  const top: Array<{ message: string; fieldPath: string }> = [];
+  const topSeen = new Set<string>();
+  const byField: Record<string, string[]> = {};
+  const fieldSeen: Record<string, Set<string>> = {};
+
+  const pushTop = (fieldPath: string, msg: string) => {
+    const fp = (fieldPath || '').toString();
+    const m = (msg || '').toString().trim();
+    if (!fp || !m) return;
+    const k = `${fp}||${m}`;
+    if (topSeen.has(k)) return;
+    topSeen.add(k);
+    top.push({ fieldPath: fp, message: m });
+  };
+
+  const pushField = (fieldPath: string, msg: string) => {
+    const key = (fieldPath || '').toString();
+    const m = (msg || '').toString().trim();
+    if (!key || !m) return;
+    if (!fieldSeen[key]) fieldSeen[key] = new Set<string>();
+    if (fieldSeen[key].has(m)) return;
+    fieldSeen[key].add(m);
+    if (!byField[key]) byField[key] = [];
+    byField[key].push(m);
+  };
+
+  const pushIssue = (fieldPath: string, msg: string, displayRaw: any) => {
+    const display = normalizeWarningDisplay(displayRaw);
+    if (display === 'top' || display === 'both') pushTop(fieldPath, msg);
+    if (display === 'field' || display === 'both') pushField(fieldPath, msg);
+  };
+
+  const warningRulesOnly = (rules: any[] | undefined | null): any[] =>
+    (Array.isArray(rules) ? rules : []).filter(r => {
+      const raw = r?.level;
+      const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+      return s === 'warning' || s === 'warn';
+    });
+
+  definition.questions.forEach(q => {
+    const questionHidden = shouldHideField(q.visibility, ctx);
+
+    const qWarnRules = warningRulesOnly(q.validationRules);
+    if (qWarnRules.length) {
+      const issues = evaluateRules(qWarnRules as any, {
+        ...ctx,
+        language,
+        phase,
+        isHidden: (fieldId: string) => {
+          const target = (definition.questions || []).find(qq => qq && qq.id === fieldId) as any;
+          if (!target) return questionHidden;
+          return shouldHideField(target.visibility, ctx);
+        }
+      } as any);
+      issues
+        .filter(i => (i as any)?.level === 'warning')
+        .forEach(i => pushIssue(i.fieldId, i.message, (i as any)?.warningDisplay));
+    }
+
+    if (q.type !== 'LINE_ITEM_GROUP' || !q.lineItemConfig?.fields) return;
+
+    const rows = lineItems[q.id] || [];
+    rows.forEach((row, idx) => {
+      void idx;
+      const groupCtx: VisibilityContext = {
+        getValue: fid => values[fid],
+        getLineValue: (_rowId, fid) => row.values[fid]
+      };
+      const getRowValue = (fieldId: string): FieldValue => {
+        if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
+        return values[fieldId];
+      };
+
+      q.lineItemConfig?.fields.forEach(field => {
+        const rules = warningRulesOnly(field.validationRules);
+        if (!rules.length) return;
+        const hideTarget = (fieldId: string): boolean => {
+          const target = (q.lineItemConfig?.fields || []).find(f => f?.id === fieldId) as any;
+          if (!target) return false;
+          return shouldHideField(target.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+        };
+        const issues = evaluateRules(rules as any, {
+          ...groupCtx,
+          getValue: getRowValue,
+          language,
+          phase,
+          isHidden: (fieldId: string) => hideTarget(fieldId)
+        } as any);
+        if (!issues.length) return;
+        const fieldIds = new Set<string>((q.lineItemConfig?.fields || []).map(f => (f?.id || '').toString()));
+        issues
+          .filter(i => (i as any)?.level === 'warning')
+          .forEach(i => {
+            const targetId = (i.fieldId || '').toString();
+            const fieldPath = fieldIds.has(targetId) ? `${q.id}__${targetId}__${row.id}` : targetId;
+            pushIssue(fieldPath, i.message, (i as any)?.warningDisplay);
+          });
+      });
+
+      if (q.lineItemConfig?.subGroups?.length) {
+        q.lineItemConfig.subGroups.forEach(sub => {
+          const subId = resolveSubgroupKey(sub as any);
+          if (!subId) return;
+          const subKey = buildSubgroupKey(q.id, row.id, subId);
+          const subRows = lineItems[subKey] || [];
+          subRows.forEach((subRow, sIdx) => {
+            void sIdx;
+            const subCtx: VisibilityContext = {
+              getValue: fid => values[fid],
+              getLineValue: (_rowId, fid) => subRow.values[fid]
+            };
+            const getSubValue = (fieldId: string): FieldValue => {
+              if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fieldId)) return (subRow.values || {})[fieldId];
+              if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
+              return values[fieldId];
+            };
+            (sub as any).fields?.forEach((field: any) => {
+              const rules = warningRulesOnly(field.validationRules);
+              if (!rules.length) return;
+              const hideTarget = (fieldId: string): boolean => {
+                const target = ((sub as any).fields || []).find((f: any) => f?.id === fieldId) as any;
+                if (!target) return false;
+                return shouldHideField(target.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+              };
+              const issues = evaluateRules(rules as any, {
+                ...subCtx,
+                getValue: getSubValue,
+                language,
+                phase,
+                isHidden: (fieldId: string) => hideTarget(fieldId)
+              } as any);
+              if (!issues.length) return;
+              const fieldIds = new Set<string>(((sub as any).fields || []).map((f: any) => (f?.id || '').toString()));
+              issues
+                .filter((i: any) => i?.level === 'warning')
+                .forEach((i: any) => {
+                  const targetId = (i.fieldId || '').toString();
+                  const fieldPath = fieldIds.has(targetId) ? `${subKey}__${targetId}__${subRow.id}` : targetId;
+                  pushIssue(fieldPath, i.message, i?.warningDisplay);
+                });
+            });
+          });
+        });
+      }
+    });
+  });
+
+  return { top, byField };
 };
 
 export const buildSubmissionPayload = async (args: {

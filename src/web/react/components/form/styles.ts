@@ -255,6 +255,14 @@ export const FORM_VIEW_STYLES = `
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field.ck-label-stacked > label {
           min-height: 2.4em;
         }
+        .form-card .field[data-has-warning="true"]:not([data-has-error="true"]),
+        .webform-overlay .field[data-has-warning="true"]:not([data-has-error="true"]) {
+          outline: 2px solid rgba(245, 158, 11, 0.6);
+          outline-offset: 2px;
+          border-radius: 12px;
+          padding: 8px;
+          background: rgba(245, 158, 11, 0.08);
+        }
         .form-card .field[data-has-error="true"],
         .webform-overlay .field[data-has-error="true"] {
           outline: 2px solid rgba(255, 59, 48, 0.65);

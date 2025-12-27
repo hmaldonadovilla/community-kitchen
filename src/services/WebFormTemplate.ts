@@ -468,6 +468,12 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         font-weight: 800;
         line-height: 1.15;
       }
+      .warning {
+        color: #b45309;
+        font-size: calc(var(--ck-font-label) * 0.85);
+        font-weight: 800;
+        line-height: 1.15;
+      }
       .line-summary-table { overflow-x: auto; margin-top: 8px; }
       .line-summary-table table { width: 100%; border-collapse: collapse; min-width: 480px; }
       .line-summary-table th, .line-summary-table td {

@@ -1,4 +1,4 @@
-import { checkRule, validateRules } from '../../src/web/rules/validation';
+import { checkRule, evaluateRules, validateRules } from '../../src/web/rules/validation';
 
 describe('validation rules', () => {
   it('validates required', () => {
@@ -88,5 +88,106 @@ describe('validation rules', () => {
     } as any);
     expect(nonEmptyA.length).toBe(1);
     expect(nonEmptyA[0].fieldId).toBe('B');
+  });
+
+  it('supports warning-level rules without blocking submission validation', () => {
+    const rules = [
+      {
+        level: 'warning',
+        when: { fieldId: 'A', notEmpty: true },
+        then: { fieldId: 'B', required: true },
+        message: { en: 'B should be filled when A is set.' }
+      }
+    ];
+
+    const issues = evaluateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'hello' : ''),
+      isHidden: () => false
+    } as any);
+    expect(issues.length).toBe(1);
+    expect((issues[0] as any).level).toBe('warning');
+
+    const errorsOnly = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'hello' : ''),
+      isHidden: () => false
+    } as any);
+    expect(errorsOnly.length).toBe(0);
+  });
+
+  it('treats level=WARNING (case-insensitive) as non-blocking', () => {
+    const rules = [
+      {
+        level: 'WARNING',
+        when: { fieldId: 'A', notEmpty: true },
+        then: { fieldId: 'B', required: true },
+        message: { en: 'B should be filled when A is set.' }
+      }
+    ];
+
+    const errorsOnly = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'hello' : ''),
+      isHidden: () => false
+    } as any);
+    expect(errorsOnly.length).toBe(0);
+  });
+
+  it('supports message-only warning rules (no then)', () => {
+    const rules = [
+      {
+        level: 'warning',
+        when: { fieldId: 'MP_COOK_TEMP', lessThan: 63 },
+        message: {
+          en: 'Core temperature must be greater than 63°C'
+        }
+      }
+    ];
+
+    const issues = evaluateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'MP_COOK_TEMP' ? 60 : ''),
+      isHidden: () => false
+    } as any);
+    expect(issues.length).toBe(1);
+    expect(issues[0].fieldId).toBe('MP_COOK_TEMP');
+    expect((issues[0] as any).level).toBe('warning');
+
+    const errorsOnly = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'MP_COOK_TEMP' ? 60 : ''),
+      isHidden: () => false
+    } as any);
+    expect(errorsOnly.length).toBe(0);
+  });
+
+  it('supports warningDisplay (top/field/both) on warning rules', () => {
+    const base = {
+      level: 'warning',
+      when: { fieldId: 'A', notEmpty: true },
+      message: { en: 'Warn A' }
+    };
+
+    const top = evaluateRules([{ ...base, warningDisplay: 'top' }] as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'x' : ''),
+      isHidden: () => false
+    } as any);
+    expect((top[0] as any).warningDisplay).toBe('top');
+
+    const field = evaluateRules([{ ...base, warningDisplay: 'field' }] as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'x' : ''),
+      isHidden: () => false
+    } as any);
+    expect((field[0] as any).warningDisplay).toBe('field');
+
+    const both = evaluateRules([{ ...base, warningDisplay: 'both' }] as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'x' : ''),
+      isHidden: () => false
+    } as any);
+    expect((both[0] as any).warningDisplay).toBe('both');
   });
 });

@@ -32,6 +32,7 @@ import { FormErrors, LineItemState, OptionState, View } from './types';
 import {
   buildDraftPayload,
   buildSubmissionPayload,
+  collectValidationWarnings,
   computeUrlOnlyUploadUpdates,
   resolveExistingRecordId,
   validateForm
@@ -92,6 +93,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const reportPdfObjectUrlsRef = useRef<string[]>([]);
   const reportPdfSeqRef = useRef<number>(0);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [validationWarnings, setValidationWarnings] = useState<{
+    top: Array<{ message: string; fieldPath: string }>;
+    byField: Record<string, string[]>;
+  }>({
+    top: [],
+    byField: {}
+  });
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string>(record?.id || '');
@@ -360,6 +368,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setStatusLevel(null);
     logEvent('status.cleared');
   }, [logEvent]);
+
+  // Warnings are surfaced as transient "submission messages" in Form view.
+  // Summary/PDF compute warnings from record values, so clear when leaving the Form view.
+  useEffect(() => {
+    if (view !== 'form') setValidationWarnings([]);
+  }, [view]);
 
   useEffect(() => {
     const updateMobile = () => {
@@ -1449,6 +1463,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
     clearStatus();
     logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length });
+    try {
+      setValidationWarnings(
+        collectValidationWarnings({
+          definition,
+          language,
+          values,
+          lineItems,
+          phase: 'submit'
+        })
+      );
+    } catch (err: any) {
+      // Never block submission because of warning computation bugs.
+      setValidationWarnings({ top: [], byField: {} });
+      logEvent('submit.warnings.failed', { message: err?.message || err || 'unknown' });
+    }
     const nextErrors = validateForm({
       definition,
       language,
@@ -1762,6 +1791,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             setErrors={setErrors}
             status={status}
             statusTone={statusLevel}
+            warningTop={validationWarnings.top}
+            warningByField={validationWarnings.byField}
             onStatusClear={clearStatus}
             optionState={optionState}
             setOptionState={setOptionState}

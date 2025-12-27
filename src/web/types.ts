@@ -61,6 +61,19 @@ export interface ValidationError {
   message: string;
   scope?: 'main' | 'line';
   rowId?: string;
+  /**
+   * Optional severity marker for rule-driven messages.
+   * - error: blocks submission (default)
+   * - warning: informational; does not block submission
+   */
+  level?: 'error' | 'warning';
+  /**
+   * Optional warning display hint (UI only).
+   * - top: show in warnings banner
+   * - field: show under the field
+   * - both: show in both places
+   */
+  warningDisplay?: 'top' | 'field' | 'both';
 }
 
 export interface VisibilityContext {

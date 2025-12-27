@@ -1,4 +1,4 @@
-import { shouldHideField } from '../../src/web/rules/visibility';
+import { matchesWhen, shouldHideField } from '../../src/web/rules/visibility';
 
 describe('shouldHideField', () => {
   const ctx = {
@@ -26,5 +26,11 @@ describe('shouldHideField', () => {
     const ctxNonEmpty = { getValue: (_id: string) => 'hello' };
     expect(shouldHideField({ showWhen: { fieldId: 'dep', notEmpty: true } } as any, ctxEmpty as any)).toBe(true);
     expect(shouldHideField({ showWhen: { fieldId: 'dep', notEmpty: true } } as any, ctxNonEmpty as any)).toBe(false);
+  });
+
+  it('does not treat empty values as 0 for numeric comparisons', () => {
+    expect(matchesWhen('', { fieldId: 'dep', lessThan: 63 } as any)).toBe(false);
+    expect(matchesWhen('   ', { fieldId: 'dep', lessThan: 63 } as any)).toBe(false);
+    expect(matchesWhen(0, { fieldId: 'dep', lessThan: 63 } as any)).toBe(true);
   });
 });

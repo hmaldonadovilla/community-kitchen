@@ -67,6 +67,8 @@ export interface ValidationContext extends VisibilityContext {
   isHidden?: (fieldId: string, rowId?: string) => boolean;
 }
 
+export type ValidationLevel = 'error' | 'warning';
+
 export function checkRule(
   value: FieldValue,
   thenCfg: ThenConfig,
@@ -157,25 +159,65 @@ export function checkRule(
 }
 
 export function validateRules(rules: ValidationRule[], ctx: ValidationContext): ValidationError[] {
-  const errors: ValidationError[] = [];
+  return evaluateRules(rules, ctx).filter(i => (i.level || 'error') === 'error');
+}
+
+export function evaluateRules(rules: ValidationRule[], ctx: ValidationContext): ValidationError[] {
+  const issues: ValidationError[] = [];
   const phase = ctx.phase || 'submit';
 
   rules.forEach(rule => {
-    const rulePhase = rule.phase || 'both';
-    if (rulePhase !== 'both' && rulePhase !== phase) return;
-    const whenValue = ctx.getValue(rule.when.fieldId);
-    if (!matchesWhen(whenValue, rule.when)) return;
-    if (ctx.isHidden && ctx.isHidden(rule.then.fieldId)) return;
-    const targetVal = ctx.getValue(rule.then.fieldId);
-    const msg = checkRule(targetVal, rule.then, ctx.language, rule.message, ctx.getValue);
-    if (msg) {
-      errors.push({
-        fieldId: rule.then.fieldId,
+    try {
+      const rulePhase = rule.phase || 'both';
+      if (rulePhase !== 'both' && rulePhase !== phase) return;
+
+      const levelRaw = (rule as any)?.level;
+      const levelStr = typeof levelRaw === 'string' ? levelRaw.trim().toLowerCase() : '';
+      const level: ValidationLevel = levelStr === 'warning' || levelStr === 'warn' ? 'warning' : 'error';
+
+      const warningDisplayRaw = (rule as any)?.warningDisplay;
+      const warningDisplayStr = typeof warningDisplayRaw === 'string' ? warningDisplayRaw.trim().toLowerCase() : '';
+      const warningDisplay: 'top' | 'field' | 'both' =
+        warningDisplayStr === 'field' || warningDisplayStr === 'both' ? (warningDisplayStr as any) : 'top';
+
+      const whenFieldId = (rule as any)?.when?.fieldId;
+      if (!whenFieldId) return;
+      const whenValue = ctx.getValue(whenFieldId);
+      if (!matchesWhen(whenValue, (rule as any).when)) return;
+
+      // "Message-only" rules: allow rules that don't specify `then` and simply emit a message when `when` matches.
+      // This is especially useful for non-blocking warnings.
+      const thenFieldId = (rule as any)?.then?.fieldId;
+      if (!thenFieldId) {
+        if (ctx.isHidden && ctx.isHidden(whenFieldId)) return;
+        const msg = resolveLocalizedString((rule as any)?.message, ctx.language, '');
+        if (!msg) return;
+        issues.push({
+          fieldId: whenFieldId,
+          message: msg,
+          scope: 'main',
+          level,
+          warningDisplay: level === 'warning' ? warningDisplay : undefined
+        });
+        return;
+      }
+
+      if (ctx.isHidden && ctx.isHidden(thenFieldId)) return;
+      const targetVal = ctx.getValue(thenFieldId);
+      const msg = checkRule(targetVal, (rule as any).then, ctx.language, (rule as any).message, ctx.getValue);
+      if (!msg) return;
+      issues.push({
+        fieldId: thenFieldId,
         message: msg,
-        scope: 'main'
+        scope: 'main',
+        level,
+        warningDisplay: level === 'warning' ? warningDisplay : undefined
       });
+    } catch (err) {
+      validationLog('rule.eval.failed', { error: err ? err.toString() : 'unknown' });
+      return;
     }
   });
 
-  return errors;
+  return issues;
 }

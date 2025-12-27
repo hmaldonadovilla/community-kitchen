@@ -582,7 +582,7 @@ components:
             - type: string
             - type: array
               items:
-                type: string
+          type: string
           description: Field ID(s) whose value(s) are used to look up the mapped output (arrays form composite keys joined with `||`).
         optionMap:
           type: object
@@ -1441,6 +1441,18 @@ components:
     ValidationRule:
       type: object
       properties:
+        level:
+          type: string
+          enum: [error, warning]
+          description: Optional severity; defaults to `error`. Use `warning` to surface a message without blocking submission.
+        warningDisplay:
+          type: string
+          enum: [top, field, both]
+          description: |
+            Warning-only display preference for UI surfaces (edit + summary). Defaults to `top`.
+            - top: show in the warnings banner only
+            - field: show only under the target field
+            - both: show in both places
         when:
           type: object
           properties:
@@ -1514,8 +1526,13 @@ components:
           description: Optional scope; defaults to "both". Use "followup" to enforce a rule only during follow-up actions (e.g., require FINAL_QTY then).
       required:
         - when
-        - then
-      description: Cross-field validation rule to enforce allowed/disallowed combinations.
+      anyOf:
+        - required: [then]
+        - required: [message]
+      description: |
+        Conditional validation rule.
+        - Use `when` + `then` to enforce requirements/constraints on a target field.
+        - Use `when` + `message` (omitting `then`) to emit a message when the condition matches (useful for warning-only rules).
       example:
         when:
           fieldId: Product

@@ -1,18 +1,21 @@
 import '../mocks/GoogleAppsScript';
-import { FollowupService } from '../../src/services/webform/followup';
 import { QuestionConfig } from '../../src/types';
-
-const makeService = () =>
-  new FollowupService({} as any, {} as any, {
-    lookupDataSourceDetails: jest.fn(),
-    fetchDataSource: jest.fn()
-  } as any);
+import {
+  extractExcludeWhenDirective,
+  extractOrderByDirective,
+  extractTableRepeatDirective,
+  replaceTableRepeatDirectivePlaceholders
+} from '../../src/services/webform/followup/tableDirectives';
+import { formatTemplateValue } from '../../src/services/webform/followup/utils';
+import { replaceLineItemPlaceholders } from '../../src/services/webform/followup/lineItemPlaceholders';
+import { shouldRenderCollapsedOnlyForProgressiveRow } from '../../src/services/webform/followup/progressiveRows';
+import { applyOrderBy, consolidateConsolidatedTableRows } from '../../src/services/webform/followup/tableConsolidation';
+import { extractLineItemPlaceholders } from '../../src/services/webform/followup/tableDirectives';
 
 describe('FollowupService table directives', () => {
   it('extracts GROUP_TABLE directives from table text', () => {
-    const service = makeService() as any;
     const table = { getText: () => '{{GROUP_TABLE(MP_MEALS_REQUEST.MEAL_TYPE)}}' };
-    expect(service.extractTableRepeatDirective(table)).toEqual({
+    expect(extractTableRepeatDirective(table as any)).toEqual({
       kind: 'GROUP_TABLE',
       groupId: 'MP_MEALS_REQUEST',
       fieldId: 'MEAL_TYPE'
@@ -20,9 +23,8 @@ describe('FollowupService table directives', () => {
   });
 
   it('extracts ROW_TABLE directives from table text', () => {
-    const service = makeService() as any;
     const table = { getText: () => '{{ROW_TABLE(MP_MEALS_REQUEST.MEAL_TYPE)}}' };
-    expect(service.extractTableRepeatDirective(table)).toEqual({
+    expect(extractTableRepeatDirective(table as any)).toEqual({
       kind: 'ROW_TABLE',
       groupId: 'MP_MEALS_REQUEST',
       fieldId: 'MEAL_TYPE'
@@ -30,13 +32,12 @@ describe('FollowupService table directives', () => {
   });
 
   it('replaces GROUP_TABLE directive using an escaped regex (so the token does not leak into output)', () => {
-    const service = makeService() as any;
     const cell = { replaceText: jest.fn() };
     const row = { getNumCells: () => 1, getCell: () => cell };
     const table = { getNumRows: () => 1, getRow: () => row };
 
-    service.replaceTableRepeatDirectivePlaceholders(
-      table,
+    replaceTableRepeatDirectivePlaceholders(
+      table as any,
       { groupId: 'MP_MEALS_REQUEST', fieldId: 'MEAL_TYPE' },
       'Dinner',
       'GROUP_TABLE'
@@ -49,16 +50,14 @@ describe('FollowupService table directives', () => {
   });
 
   it('formats DATE fields as EEE, dd-MMM-yyyy', () => {
-    const service = makeService() as any;
-    expect(service.formatTemplateValue('2025-12-21', 'DATE')).toBe('Sun, 21-Dec-2025');
+    expect(formatTemplateValue('2025-12-21', 'DATE')).toBe('Sun, 21-Dec-2025');
     // Non-DATE fields should keep the raw ISO date string.
-    expect(service.formatTemplateValue('2025-12-21')).toBe('2025-12-21');
+    expect(formatTemplateValue('2025-12-21')).toBe('2025-12-21');
   });
 
   it('extracts ORDER_BY directives from table text', () => {
-    const service = makeService() as any;
     const table = { getText: () => '{{ORDER_BY(CAT ASC, ING:DESC, -QTY)}}' };
-    expect(service.extractOrderByDirective(table)).toEqual({
+    expect(extractOrderByDirective(table as any)).toEqual({
       keys: [
         { key: 'CAT', direction: 'asc' },
         { key: 'ING', direction: 'desc' },
@@ -67,8 +66,175 @@ describe('FollowupService table directives', () => {
     });
   });
 
+  it('extracts EXCLUDE_WHEN directives from table text', () => {
+    const table = { getText: () => '{{EXCLUDE_WHEN(STATUS=Removed|Deleted, CAT=Other)}}' };
+    expect(extractExcludeWhenDirective(table as any)).toEqual({
+      clauses: [
+        { key: 'STATUS', values: ['Removed', 'Deleted'] },
+        { key: 'CAT', values: ['Other'] }
+      ]
+    });
+  });
+
+  it('in progressive mode, PDF table placeholders populate all fields by default', () => {
+    const group: QuestionConfig = {
+      id: 'MP_GROUP',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Group',
+      qFr: 'Groupe',
+      qNl: 'Groep',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        ui: { mode: 'progressive', collapsedFields: [{ fieldId: 'A' }] } as any,
+        fields: [
+          { id: 'A', type: 'TEXT', labelEn: 'A', labelFr: 'A', labelNl: 'A', required: false },
+          { id: 'B', type: 'TEXT', labelEn: 'B', labelFr: 'B', labelNl: 'B', required: false }
+        ],
+        subGroups: []
+      }
+    } as any;
+
+    const out = replaceLineItemPlaceholders('{{MP_GROUP.A}}|{{MP_GROUP.B}}', group, { A: 'aaa', B: 'bbb' }, {});
+    expect(out).toBe('aaa|bbb');
+  });
+
+  it('in progressive mode, PDF can render collapsed-only rows when requested', () => {
+    const group: QuestionConfig = {
+      id: 'MP_GROUP',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Group',
+      qFr: 'Groupe',
+      qNl: 'Groep',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        ui: { mode: 'progressive', collapsedFields: [{ fieldId: 'A' }] } as any,
+        fields: [
+          { id: 'A', type: 'TEXT', labelEn: 'A', labelFr: 'A', labelNl: 'A', required: false },
+          { id: 'B', type: 'TEXT', labelEn: 'B', labelFr: 'B', labelNl: 'B', required: false }
+        ],
+        subGroups: []
+      }
+    } as any;
+
+    const out = replaceLineItemPlaceholders(
+      '{{MP_GROUP.A}}|{{MP_GROUP.B}}',
+      group,
+      { A: 'aaa', B: 'bbb' },
+      { collapsedOnly: true }
+    );
+    expect(out).toBe('aaa|');
+  });
+
+  it('supports ALWAYS_SHOW wrapper placeholders in PDF templates', () => {
+    // Extraction: ALWAYS_SHOW should be treated as a placeholder so table rendering can process the row.
+    expect(extractLineItemPlaceholders('x {{ALWAYS_SHOW(MP_GROUP.B)}} y')).toEqual([
+      { groupId: 'MP_GROUP', subGroupId: undefined, fieldId: 'B' }
+    ]);
+
+    const group: QuestionConfig = {
+      id: 'MP_GROUP',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Group',
+      qFr: 'Groupe',
+      qNl: 'Groep',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [
+          { id: 'A', type: 'TEXT', labelEn: 'A', labelFr: 'A', labelNl: 'A', required: false },
+          { id: 'B', type: 'NUMBER', labelEn: 'B', labelFr: 'B', labelNl: 'B', required: false }
+        ],
+        subGroups: []
+      }
+    } as any;
+
+    // Replacement: ALWAYS_SHOW should output the underlying field value (same as a normal placeholder).
+    expect(replaceLineItemPlaceholders('{{ALWAYS_SHOW(MP_GROUP.B)}}', group, { A: 'aaa', B: 0 }, {})).toBe('0');
+    expect(replaceLineItemPlaceholders('{{ALWAYS_SHOW(MP_GROUP.B)}}', group, { A: 'aaa', B: 12 }, {})).toBe('12');
+  });
+
+  it('treats empty subgroup child rows as non-meaningful for progressive collapsed-only detection', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      qFr: 'Repas',
+      qNl: 'Maaltijden',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        ui: {
+          mode: 'progressive',
+          collapsedFields: [
+            { fieldId: 'MEAL_TYPE', showLabel: false },
+            { fieldId: 'QTY', showLabel: true },
+            { fieldId: 'FINAL_QTY', showLabel: true }
+          ]
+        } as any,
+        fields: [
+          { id: 'MEAL_TYPE', type: 'TEXT', labelEn: 'Meal type', labelFr: 'Type', labelNl: 'Type', required: false },
+          { id: 'QTY', type: 'NUMBER', labelEn: 'Requested', labelFr: 'Demandé', labelNl: 'Gevraagd', required: false },
+          { id: 'FINAL_QTY', type: 'NUMBER', labelEn: 'Final', labelFr: 'Final', labelNl: 'Final', required: false },
+          { id: 'RECIPE', type: 'TEXT', labelEn: 'Recipe', labelFr: 'Recette', labelNl: 'Recept', required: false }
+        ],
+        subGroups: [
+          {
+            id: 'MP_INGREDIENTS_LI',
+            fields: [
+              { id: 'ING', type: 'TEXT', labelEn: 'Ingredient', labelFr: 'Ing', labelNl: 'Ing', required: false },
+              { id: 'QTY', type: 'NUMBER', labelEn: 'Qty', labelFr: 'Qté', labelNl: 'Qty', required: false }
+            ]
+          } as any
+        ]
+      }
+    } as any;
+
+    // Has child rows, but they are empty -> should still be considered "collapsed-only" (inactive).
+    const shouldCollapseEmptyChild = shouldRenderCollapsedOnlyForProgressiveRow({
+      group,
+      ui: (group as any).lineItemConfig.ui,
+      fields: (group as any).lineItemConfig.fields,
+      row: {
+        MEAL_TYPE: 'Vegan',
+        QTY: 0,
+        FINAL_QTY: 0,
+        RECIPE: '',
+        MP_INGREDIENTS_LI: [{ ING: '', QTY: 0 }]
+      }
+    });
+    expect(shouldCollapseEmptyChild).toBe(true);
+
+    // If a child row has meaningful values, we should render full rows.
+    const shouldNotCollapseMeaningfulChild = shouldRenderCollapsedOnlyForProgressiveRow({
+      group,
+      ui: (group as any).lineItemConfig.ui,
+      fields: (group as any).lineItemConfig.fields,
+      row: {
+        MEAL_TYPE: 'Vegan',
+        QTY: 0,
+        FINAL_QTY: 0,
+        RECIPE: '',
+        MP_INGREDIENTS_LI: [{ ING: 'Onions', QTY: 1 }]
+      }
+    });
+    expect(shouldNotCollapseMeaningfulChild).toBe(false);
+  });
+
   it('applies ORDER_BY sorting for consolidated subgroup tables (multi-key priority)', () => {
-    const service = makeService() as any;
     const group: QuestionConfig = {
       id: 'MP_MEALS_REQUEST',
       type: 'LINE_ITEM_GROUP',
@@ -105,13 +271,18 @@ describe('FollowupService table directives', () => {
       { CAT: 'A', ING: 'B', QTY: 3 }
     ];
 
-    const orderBy = { keys: [{ key: 'CAT', direction: 'asc' }, { key: 'ING', direction: 'asc' }, { key: 'QTY', direction: 'desc' }] };
-    const sorted = service.applyOrderBy(rows, orderBy, group, { subConfig, subToken: 'MP_INGREDIENTS_LI' });
+    const orderBy = {
+      keys: [
+        { key: 'CAT', direction: 'asc' as const },
+        { key: 'ING', direction: 'asc' as const },
+        { key: 'QTY', direction: 'desc' as const }
+      ]
+    };
+    const sorted = applyOrderBy({ rows, orderBy, group, opts: { subConfig, subToken: 'MP_INGREDIENTS_LI' } });
     expect(sorted.map((r: any) => `${r.CAT}-${r.ING}-${r.QTY}`)).toEqual(['A-A-1', 'A-B-10', 'A-B-3', 'B-Z-2']);
   });
 
   it('aggregates NUMBER fields when CONSOLIDATED_TABLE rows share the same non-numeric values', () => {
-    const service = makeService() as any;
     const group: QuestionConfig = {
       id: 'MP_MEALS_REQUEST',
       type: 'LINE_ITEM_GROUP',
@@ -152,11 +323,70 @@ describe('FollowupService table directives', () => {
       { CAT: 'Fresh', ING: 'Onions', QTY: '0.444' }
     ];
 
-    const aggregated = service.consolidateConsolidatedTableRows(rows, placeholders, group, subConfig, 'MP_INGREDIENTS_LI');
+    const aggregated = consolidateConsolidatedTableRows({
+      rows,
+      placeholders,
+      group,
+      subConfig,
+      targetSubGroupId: 'MP_INGREDIENTS_LI'
+    });
     expect(aggregated).toHaveLength(2);
     const byIng = new Map<string, any>(aggregated.map((r: any) => [r.ING, r]));
     expect((byIng.get('Onions') as any)?.QTY).toBe(3.78);
     expect((byIng.get('Pumpkin') as any)?.QTY).toBe(3);
+    expect((byIng.get('Onions') as any)?.__COUNT).toBe(3);
+    expect((byIng.get('Pumpkin') as any)?.__COUNT).toBe(1);
+  });
+
+  it('adds __COUNT when CONSOLIDATED_TABLE de-dupes without numeric fields', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      qFr: 'Repas',
+      qNl: 'Maaltijden',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [],
+        subGroups: [
+          {
+            id: 'MP_INGREDIENTS_LI',
+            fields: [
+              { id: 'CAT', type: 'TEXT', labelEn: 'Category', labelFr: 'Cat', labelNl: 'Cat', required: false },
+              { id: 'ING', type: 'TEXT', labelEn: 'Ingredient', labelFr: 'Ing', labelNl: 'Ing', required: false }
+            ]
+          }
+        ]
+      }
+    } as any;
+    const subConfig = (group as any).lineItemConfig.subGroups[0];
+
+    const placeholders = [
+      { groupId: 'MP_MEALS_REQUEST', subGroupId: 'MP_INGREDIENTS_LI', fieldId: 'CAT' },
+      { groupId: 'MP_MEALS_REQUEST', subGroupId: 'MP_INGREDIENTS_LI', fieldId: 'ING' }
+    ];
+
+    const rows = [
+      { CAT: 'Fresh', ING: 'Onions' },
+      { CAT: 'Fresh', ING: 'Onions' },
+      { CAT: 'Fresh', ING: 'Pumpkin' }
+    ];
+
+    const aggregated = consolidateConsolidatedTableRows({
+      rows,
+      placeholders,
+      group,
+      subConfig,
+      targetSubGroupId: 'MP_INGREDIENTS_LI'
+    });
+    expect(aggregated).toHaveLength(2);
+    const byIng = new Map<string, any>(aggregated.map((r: any) => [r.ING, r]));
+    expect((byIng.get('Onions') as any)?.__COUNT).toBe(2);
+    expect((byIng.get('Pumpkin') as any)?.__COUNT).toBe(1);
   });
 });
 

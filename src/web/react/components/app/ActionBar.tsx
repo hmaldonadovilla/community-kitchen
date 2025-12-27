@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import type { LangCode } from '../../../types';
 import type {
   ActionBarCustomItemConfig,
   ActionBarItemConfig,
@@ -10,9 +11,8 @@ import type {
   ActionBarsConfig,
   ButtonAction,
   ButtonPlacement,
-  LangCode,
   LocalizedString
-} from '../../../types';
+} from '../../../../types';
 import type { View } from '../../types';
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
@@ -58,6 +58,25 @@ const SummaryIcon: React.FC = () => (
     />
     <path d="M8.5 11h7M8.5 15h7M8.5 19h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     <path d="M14 3v3a1 1 0 0 0 1 1h3" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+  </svg>
+);
+
+// System "Summary" button should use a checklist/summary icon (distinct from renderDocTemplate buttons).
+const SummarySystemIcon: React.FC = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    style={{ width: '1.25em', height: '1.25em' }}
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="5" y="3" width="14" height="18" rx="2" />
+    <path d="M9 3V2.75A1.75 1.75 0 0 1 10.75 1h2.5A1.75 1.75 0 0 1 15 2.75V3" />
+    <path d="M8.5 8h7" />
+    <path d="M8.5 12h7" />
+    <path d="M14.5 15.5l.5-1 .5 1 1 .5-1 .5-.5 1-.5-1-1-.5z" fill="currentColor"/>
   </svg>
 );
 
@@ -214,7 +233,7 @@ export const ActionBar: React.FC<{
   const resolved = useMemo(() => {
     const capsule: Array<
       | { kind: 'home'; hideWhenActive: boolean }
-      | { kind: 'create'; showMenu: boolean; showCopy: boolean }
+      | { kind: 'create'; showMenu: boolean; showCopy: boolean; presetButtons: CustomButton[] }
       | { kind: 'edit' }
       | { kind: 'summary'; showMenu: boolean; showViewSummary: boolean; menuButtons: CustomButton[]; label: string }
       | { kind: 'actionsMenu'; menuId: string; label: string; buttons: CustomButton[] }
@@ -525,7 +544,7 @@ export const ActionBar: React.FC<{
                 }}
               >
                 <IconWrap>
-                  <SummaryIcon />
+                  <SummarySystemIcon />
                 </IconWrap>
                 {tSystem('actions.viewSummary', language, 'View summary')}
               </button>
@@ -627,7 +646,7 @@ export const ActionBar: React.FC<{
                     aria-expanded={it.showMenu ? summaryOpen : undefined}
                   >
                     <IconWrap>
-                      <SummaryIcon />
+                      <SummarySystemIcon />
                     </IconWrap>
                     <span className="ck-bottom-label">{it.label}</span>
                   </button>

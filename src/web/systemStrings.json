@@ -142,6 +142,7 @@
   "validation": {
     "thisFieldRequired": { "en": "This field is required.", "fr": "Ce champ est requis.", "nl": "Dit veld is verplicht." },
     "fixErrors": { "en": "Please fix validation errors.", "fr": "Veuillez corriger les erreurs de validation.", "nl": "Corrigeer de validatiefouten." },
+    "warningsTitle": { "en": "Warnings", "fr": "Avertissements", "nl": "Waarschuwingen" },
     "fieldRequired": { "en": "{field} is required.", "fr": "{field} est requis.", "nl": "{field} is verplicht." },
     "completeAtLeastOneRowFillCollapsed": {
       "en": "Complete at least one row (fill the collapsed fields).",

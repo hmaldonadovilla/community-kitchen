@@ -77,6 +77,7 @@ export interface LineItemGroupQuestionCtx {
 
   errors: FormErrors;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
+  warningByField?: Record<string, string[]>;
 
   optionState: OptionState;
   setOptionState: React.Dispatch<React.SetStateAction<OptionState>>;
@@ -148,6 +149,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     setLineItems,
     submitting,
     errors,
+    warningByField,
     optionState,
     setOptionState,
     ensureLineOptions,
@@ -180,6 +182,22 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
   } = ctx;
 
   const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
+
+  const warningsFor = (fieldPath: string): string[] => {
+    const key = (fieldPath || '').toString();
+    const list = key && warningByField ? (warningByField as any)[key] : undefined;
+    return Array.isArray(list) ? list.filter(Boolean).map(m => (m || '').toString()) : [];
+  };
+  const hasWarning = (fieldPath: string): boolean => warningsFor(fieldPath).length > 0;
+  const renderWarnings = (fieldPath: string): React.ReactNode => {
+    const msgs = warningsFor(fieldPath);
+    if (!msgs.length) return null;
+    return msgs.map((m, idx) => (
+      <div key={`${fieldPath}-warning-${idx}`} className="warning">
+        {m}
+      </div>
+    ));
+  };
 
   const normalizeAnchorKey = (raw: any): string => {
     if (raw === undefined || raw === null) return '';
@@ -635,6 +653,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               className="card ck-full-width"
               data-field-path={q.id}
               data-has-error={errors[q.id] ? 'true' : undefined}
+              data-has-warning={hasWarning(q.id) ? 'true' : undefined}
             >
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <h3 style={{ margin: 0 }}>{resolveLabel(q, language)}</h3>
@@ -648,6 +667,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               </span>
             </div>
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
+              {renderWarnings(q.id)}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
                 {selectorControl}
@@ -953,6 +973,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
                                     data-field-path={errorKey}
                                     data-has-error={errors[errorKey] ? 'true' : undefined}
+                                    data-has-warning={hasWarning(errorKey) ? 'true' : undefined}
                                   >
                                     <label style={labelStyle}>
                                       {resolveFieldLabel(titleField, language, titleField.id)}
@@ -992,6 +1013,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       })()}
                                     </div>
                                     {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
+                                    {renderWarnings(errorKey)}
                                   </div>
                                 );
                               }
@@ -1025,6 +1047,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
                                     data-field-path={errorKey}
                                     data-has-error={errors[errorKey] ? 'true' : undefined}
+                                    data-has-warning={hasWarning(errorKey) ? 'true' : undefined}
                                   >
                                     <label style={labelStyle}>
                                       {resolveFieldLabel(titleField, language, titleField.id)}
@@ -1052,6 +1075,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       <div className="ck-field-actions">{subgroupTriggerNodes}</div>
                                     ) : null}
                                     {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
+                                    {renderWarnings(errorKey)}
                                   </div>
                                 );
                               }
@@ -1070,6 +1094,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
                                   data-field-path={errorKey}
                                   data-has-error={errors[errorKey] ? 'true' : undefined}
+                                  data-has-warning={hasWarning(errorKey) ? 'true' : undefined}
                                 >
                                   <label style={labelStyle}>
                                     {resolveFieldLabel(titleField, language, titleField.id)}
@@ -1092,6 +1117,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     <div className="ck-field-actions">{subgroupTriggerNodes}</div>
                                   ) : null}
                                   {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
+                                  {renderWarnings(errorKey)}
                                 </div>
                               );
                             })()}
@@ -1239,6 +1265,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
                               <label style={labelStyle}>
                               {resolveFieldLabel(field, language, field.id)}
@@ -1272,6 +1299,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 })()}
                               </div>
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
                           </div>
                         );
                       }
@@ -1294,6 +1322,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               className={`field inline-field ck-consent-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
                               <label>
                                 <input
@@ -1310,6 +1339,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 <div className="ck-field-actions">{subgroupTriggerNodes}</div>
                               ) : null}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
                             </div>
                           );
                         }
@@ -1319,6 +1349,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
                               <label style={labelStyle}>
                               {resolveFieldLabel(field, language, field.id)}
@@ -1360,6 +1391,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               );
                             })()}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
                             </div>
                           );
                         }
@@ -1392,6 +1424,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
                               <label style={labelStyle}>
                                 {resolveFieldLabel(field, language, field.id)}
@@ -1497,6 +1530,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 }
                               />
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
                           </div>
                         );
                       }
@@ -1523,6 +1557,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               }`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
                               <label style={labelStyle}>
                               {resolveFieldLabel(field, language, field.id)}
@@ -1548,6 +1583,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 <div className="ck-field-actions">{subgroupTriggerNodes}</div>
                               ) : null}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
                           </div>
                         );
                       }
@@ -1903,6 +1939,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
                                           data-field-path={fieldPath}
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
                                         <label>
                                           {resolveFieldLabel(field, language, field.id)}
@@ -1930,6 +1967,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             );
                                         })()}
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                          {renderWarnings(fieldPath)}
                                       </div>
                                     );
                                   }
@@ -1948,6 +1986,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
                                           data-field-path={fieldPath}
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
                                         <label>
                                           {resolveFieldLabel(field, language, field.id)}
@@ -2008,6 +2047,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           );
                                         })()}
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                          {renderWarnings(fieldPath)}
                                         </div>
                                       );
                                     }
@@ -2026,6 +2066,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
                                           data-field-path={fieldPath}
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
                                           <label>
                                             {resolveFieldLabel(field, language, field.id)}
@@ -2142,6 +2183,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             }
                                           />
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                          {renderWarnings(fieldPath)}
                                       </div>
                                     );
                                   }
@@ -2169,6 +2211,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           }`}
                                           data-field-path={fieldPath}
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
                                         <label>
                                           {resolveFieldLabel(field, language, field.id)}
@@ -2191,6 +2234,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           />
                                         )}
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                          {renderWarnings(fieldPath)}
                                       </div>
                                     );
                                   }
