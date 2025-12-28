@@ -109,6 +109,11 @@ const renderValueForPreview = (
       </div>
     );
   }
+  if (fieldType === 'PARAGRAPH') {
+    const raw = value === undefined || value === null ? '' : String(value);
+    if (!raw.trim()) return EMPTY_DISPLAY;
+    return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{raw}</div>;
+  }
   return formatDisplayText(value, { language, optionSet, fieldType });
 };
 
@@ -259,7 +264,8 @@ const LineItemRowCard: React.FC<{
       <div style={{ padding: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <tbody>
-            {visibleFields.map(field => {
+            {visibleFields.map((field, fieldIdx) => {
+              const stripe = fieldIdx % 2 === 1;
               const label = resolveFieldLabel(field as any, language, field.id);
               const v = row.values[field.id];
               const optionSet = toOptionSet(field as any);
@@ -273,6 +279,7 @@ const LineItemRowCard: React.FC<{
                       width: '42%',
                       padding: '10px 10px',
                       borderBottom: '1px solid rgba(148,163,184,0.25)',
+                      background: stripe ? 'rgba(241,245,249,0.55)' : 'transparent',
                       color: '#475569',
                       fontWeight: 700,
                       wordBreak: 'break-word'
@@ -284,6 +291,7 @@ const LineItemRowCard: React.FC<{
                     style={{
                       padding: '10px 10px',
                       borderBottom: '1px solid rgba(148,163,184,0.25)',
+                      background: stripe ? 'rgba(241,245,249,0.55)' : 'transparent',
                       fontWeight: 700,
                       wordBreak: 'break-word'
                     }}
@@ -381,8 +389,8 @@ const LineItemRowCard: React.FC<{
                               </tr>
                             </thead>
                             <tbody>
-                              {childRows.map(cr => (
-                                <tr key={cr.id}>
+                              {childRows.map((cr, crIdx) => (
+                                <tr key={cr.id} style={{ background: crIdx % 2 === 1 ? 'rgba(241,245,249,0.55)' : 'transparent' }}>
                                   {subFields.map((sf: any) => {
                                     const subCtx = {
                                       ...groupCtx,

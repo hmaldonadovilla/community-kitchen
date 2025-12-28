@@ -756,6 +756,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   2. Replace the directive placeholder with the group value (so you can show it in the heading).
   3. Populate the table rows with only the line items that belong to that recipe. If multiple line-item rows share the same recipe, the table’s placeholder rows will repeat for each matching row (e.g., you may see “Portions/Recipe/Core temp” repeated).  
   Combine this with row-level placeholders (e.g., `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`) to print a dedicated ingredient table per dish without manually duplicating sections in the template.
+- **Zebra striping (readability)**: Generated rows inside `GROUP_TABLE` and `CONSOLIDATED_TABLE` outputs use **alternating row background colors** automatically (no configuration needed).
 - **Per-row line item sections (recommended for key/value “section tables”)**: Add a directive placeholder like `{{ROW_TABLE(MP_MEALS_REQUEST.MEAL_TYPE)}}` anywhere inside the table you want duplicated once per line-item row (even if the title field repeats). The renderer will:
   1. Create a copy of the entire table for each line-item row, preserving row order.
   2. Replace the directive placeholder with the current row’s field value (so you can show it in the heading).
@@ -792,6 +793,11 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 - **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into an in-app **PDF preview**. The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written).
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
+
+### UI tips (React edit + Summary)
+
+- **PARAGRAPH fields (textarea height)**: You can increase the visible height of a paragraph field in the edit view by setting:
+  - `ui.paragraphRows` (integer, 2–20; default 4)
 
 #### Example: PDF preview button
 

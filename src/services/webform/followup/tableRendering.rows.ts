@@ -13,6 +13,7 @@ import {
 import { applyOrderBy, consolidateConsolidatedTableRows } from './tableConsolidation';
 import { replaceLineItemPlaceholders } from './lineItemPlaceholders';
 import { shouldRenderCollapsedOnlyForProgressiveRow } from './progressiveRows';
+import { applyZebraStripeToRow } from './tableZebra';
 
 type SubGroupConfig = LineItemGroupConfig;
 
@@ -20,9 +21,11 @@ export const renderTableRows = (
   table: GoogleAppsScript.Document.Table,
   groupLookup: Record<string, QuestionConfig>,
   lineItemRows: Record<string, any[]>,
-  override?: { groupId: string; rows: any[] }
+  override?: { groupId: string; rows: any[] },
+  opts?: { zebra?: boolean }
 ): void => {
   const consolidatedDirective = extractConsolidatedTableDirective(table);
+  const zebraEnabled = !!(opts && opts.zebra) || !!consolidatedDirective;
   if (consolidatedDirective) {
     stripConsolidatedTableDirectivePlaceholders(table, consolidatedDirective);
   }
@@ -153,6 +156,11 @@ export const renderTableRows = (
         while (targetRow.getNumCells() < templateCells.length) {
           targetRow.appendTableCell('');
         }
+      }
+      // Zebra striping: only shade alternating rows within repeated data sections.
+      // We keep idx=0 unshaded to preserve template header/row styling.
+      if (zebraEnabled && rows.length > 1) {
+        applyZebraStripeToRow(targetRow, { stripe: idx % 2 === 1 });
       }
       for (let c = 0; c < templateCells.length; c++) {
         const template = templateCells[c];

@@ -1571,6 +1571,13 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
                                 onChange={next => handleLineFieldChange(q, row.id, field, next)}
                               />
+                            ) : field.type === 'PARAGRAPH' ? (
+                              <textarea
+                                value={fieldValue}
+                                onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
+                                readOnly={!!field.valueMap}
+                                rows={(field as any)?.ui?.paragraphRows || 4}
+                              />
                             ) : (
                               <input
                                 type={field.type === 'DATE' ? 'date' : 'text'}
@@ -2224,6 +2231,13 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             readOnly={!!field.valueMap}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
+                                          />
+                                        ) : field.type === 'PARAGRAPH' ? (
+                                          <textarea
+                                            value={fieldValue}
+                                            onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
+                                            readOnly={!!field.valueMap}
+                                            rows={(field as any)?.ui?.paragraphRows || 4}
                                           />
                                         ) : (
                                           <input

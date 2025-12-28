@@ -1352,6 +1352,15 @@ export class ConfigSheet {
     }
   }
 
+  private static normalizeParagraphRows(raw: any): number | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n)) return undefined;
+    // Clamp to a reasonable range for mobile layouts.
+    const clamped = Math.max(2, Math.min(20, Math.round(n)));
+    return clamped;
+  }
+
   private static normalizeQuestionUi(rawUi: any): QuestionUiConfig | undefined {
     if (!rawUi || typeof rawUi !== 'object') return undefined;
     const control = this.normalizeChoiceControl(rawUi.control || rawUi.choiceControl || rawUi.choice);
@@ -1359,10 +1368,12 @@ export class ConfigSheet {
       rawUi.labelLayout ?? rawUi.label_layout ?? rawUi.stackedLabel ?? rawUi.stackLabel ?? rawUi.stacked
     );
     const summaryVisibility = this.normalizeSummaryVisibility(rawUi.summaryVisibility ?? rawUi.summary_visibility);
+    const paragraphRows = this.normalizeParagraphRows(rawUi.paragraphRows ?? rawUi.paragraph_rows ?? rawUi.textareaRows ?? rawUi.textarea_rows);
     const cfg: QuestionUiConfig = {};
     if (control) cfg.control = control;
     if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
     if (summaryVisibility) cfg.summaryVisibility = summaryVisibility;
+    if (paragraphRows) (cfg as any).paragraphRows = paragraphRows;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 

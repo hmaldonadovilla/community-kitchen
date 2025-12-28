@@ -145,7 +145,11 @@ components:
             action:
               type: string
               enum: [renderDocTemplate]
-              description: Render a Google Doc template (with placeholders + consolidated directives) into a PDF preview.
+              description: |
+                Render a Google Doc template (with placeholders + consolidated directives) into a PDF preview.
+
+                Notes:
+                - Generated rows inside `GROUP_TABLE` and `CONSOLIDATED_TABLE` outputs use alternating row background colors (zebra striping) automatically.
             templateId:
               $ref: '#/components/schemas/TemplateIdMap'
               description: Google Doc template id config (string, language map, or `cases` selector).
@@ -422,6 +426,13 @@ components:
             - inherit: follow normal `visibility` rules (default; only show when visible in the Form view)
             - always: show even if hidden by `visibility`
             - never: never show in summary (even if visible in form)
+        paragraphRows:
+          type: integer
+          minimum: 2
+          maximum: 20
+          description: |
+            For `PARAGRAPH` fields, controls the textarea height (visible rows).
+            Default when omitted: 4.
 
     QuestionGroupConfig:
       type: object
@@ -816,6 +827,11 @@ components:
             - When `true` (default), users can switch language (if 2+ languages are enabled).
         pdfTemplateId:
           $ref: '#/components/schemas/TemplateIdMap'
+          description: |
+            Google Doc template id(s) used to render follow-up PDFs (Create PDF / Send Email w/ PDF attachment).
+
+            Notes:
+            - Generated rows inside `GROUP_TABLE` and `CONSOLIDATED_TABLE` outputs use alternating row background colors (zebra striping) automatically.
         pdfFolderId:
           type: string
         emailTemplateId:

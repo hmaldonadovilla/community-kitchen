@@ -220,6 +220,11 @@ export interface QuestionUiConfig {
    * Default is `inherit` (only show when the field is visible in the Form view).
    */
   summaryVisibility?: SummaryVisibility;
+  /**
+   * For PARAGRAPH fields, controls the textarea height (visible rows).
+   * Default when omitted: 4.
+   */
+  paragraphRows?: number;
 }
 
 export interface FileUploadConfig {

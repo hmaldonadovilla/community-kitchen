@@ -1649,6 +1649,7 @@ const FormView: React.FC<FormViewProps> = ({
                 value={inputValue}
                 onChange={e => handleFieldChange(q, e.target.value)}
                 readOnly={!!q.valueMap}
+                rows={((q as any)?.ui as any)?.paragraphRows || 4}
               />
             ) : (
               <input

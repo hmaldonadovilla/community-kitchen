@@ -110,50 +110,14 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
         }
 
-        /* Number stepper: + / − buttons inside the same control width (no layout expansion). */
+        /* Number input wrapper (legacy name: ck-number-stepper). */
         .ck-number-stepper {
-          position: relative;
           width: 100%;
           min-width: 0;
         }
         .ck-number-stepper input[type="number"] {
           width: 100%;
-          padding-left: 68px;
-          padding-right: 68px;
-          text-align: right;
-          font-variant-numeric: tabular-nums;
-        }
-        .ck-number-stepper-btn {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 54px;
-          height: calc(var(--control-height) - 18px);
-          min-height: 0;
-          border-radius: 12px;
-          border: 1px solid rgba(60, 60, 67, 0.18);
-          background: rgba(120, 120, 128, 0.10);
-          color: var(--text);
-          font-size: 34px;
-          line-height: 1;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          padding: 0;
-          user-select: none;
-          -webkit-user-select: none;
-          touch-action: manipulation;
-        }
-        .ck-number-stepper-btn:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-        .ck-number-stepper-btn.minus {
-          left: 8px;
-        }
-        .ck-number-stepper-btn.plus {
-          right: 8px;
+          min-width: 0;
         }
 
         /* Control row: keep the main control + its action buttons (subgroup/info) on the same line when possible. */

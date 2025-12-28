@@ -31,7 +31,8 @@ export const renderGroupedLineItemTables = (
       const raw = row?.[directive.fieldId] ?? '';
       return normalizeText(raw) === normalizeText(groupValue);
     });
-    renderTableRows(newTable, groupLookup, lineItemRows, { groupId: group.id, rows: filteredRows });
+    // Zebra striping improves readability for grouped line-item tables.
+    renderTableRows(newTable, groupLookup, lineItemRows, { groupId: group.id, rows: filteredRows }, { zebra: true });
   });
   return groupedValues.length;
 };

@@ -1496,6 +1496,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setSubmitting(true);
     setStatus(tSystem('actions.submitting', language, 'Submitting…'));
     setStatusLevel('info');
+    // Ensure submission messages are immediately visible, even if the user is scrolled deep in the form.
+    try {
+      if (typeof globalThis.scrollTo === 'function') {
+        globalThis.scrollTo(0, 0);
+        logEvent('submit.scrollTopOnStart');
+      }
+    } catch (_) {
+      // ignore
+    }
     try {
       const existingRecordId = resolveExistingRecordId({
         selectedRecordId,
