@@ -17,7 +17,8 @@ export const resolveLocalizedValue = (value?: LocalizedString, fallback: string 
 export const resolveSubgroupKey = (sub?: LineItemGroupConfig): string => {
   if (!sub) return '';
   if (sub.id) return sub.id;
-  return resolveLocalizedValue(sub.label, '');
+  // Phase 3 (Option A): subgroup IDs are required; label fallback is intentionally removed.
+  return '';
 };
 
 export const normalizeText = (value: any): string => {

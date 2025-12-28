@@ -8,8 +8,11 @@ export class ConfigValidator {
   static validate(questions: QuestionConfig[], sheetName: string): string[] {
     const errors: string[] = [];
 
-    // Check for duplicate question names across questions
-    errors.push(...this.validateUniqueNamesAcrossQuestions(questions));
+    // Check for duplicate question IDs (stable keys)
+    errors.push(...this.validateUniqueIdsAcrossQuestions(questions));
+
+    // Check required nested IDs (LINE_ITEM_GROUP subGroups)
+    errors.push(...this.validateLineItemSubGroupIds(questions));
     
     // Check for matching option counts
     errors.push(...this.validateOptionCounts(questions));
@@ -18,30 +21,61 @@ export class ConfigValidator {
     return errors;
   }
   
-  private static validateUniqueNamesAcrossQuestions(questions: QuestionConfig[]): string[] {
+  private static validateUniqueIdsAcrossQuestions(questions: QuestionConfig[]): string[] {
     const errors: string[] = [];
     
-    // Check English names
-    const enNames = questions.map((q, idx) => ({ name: q.qEn.trim(), index: idx + 1 }));
-    const enDuplicates = this.findDuplicates(enNames);
-    if (enDuplicates.size > 0) {
-      errors.push(this.formatDuplicateError('English', enDuplicates));
+    const ids = questions.map((q, idx) => ({ name: (q.id || '').toString().trim(), index: idx + 1 }));
+    const duplicates = this.findDuplicates(ids);
+    if (duplicates.size > 0) {
+      let error = '━━━ DUPLICATE QUESTION IDs ━━━\n\n';
+      duplicates.forEach((indices, id) => {
+        error += `❌ "${id}" appears ${indices.length} times in rows: ${indices.join(', ')}\n`;
+      });
+      error += '\n✓ Solution: IDs must be unique (Column A). Rename one of the duplicated IDs.\n';
+      error += '   Labels (EN/FR/NL) may be duplicated; IDs may not.\n';
+      errors.push(error);
     }
-    
-    // Check French names
-    const frNames = questions.map((q, idx) => ({ name: q.qFr.trim(), index: idx + 1 }));
-    const frDuplicates = this.findDuplicates(frNames);
-    if (frDuplicates.size > 0) {
-      errors.push(this.formatDuplicateError('French', frDuplicates));
-    }
-    
-    // Check Dutch names
-    const nlNames = questions.map((q, idx) => ({ name: q.qNl.trim(), index: idx + 1 }));
-    const nlDuplicates = this.findDuplicates(nlNames);
-    if (nlDuplicates.size > 0) {
-      errors.push(this.formatDuplicateError('Dutch', nlDuplicates));
-    }
-    
+
+    return errors;
+  }
+
+  private static validateLineItemSubGroupIds(questions: QuestionConfig[]): string[] {
+    const errors: string[] = [];
+    questions.forEach((q, idx) => {
+      if (q.type !== 'LINE_ITEM_GROUP') return;
+      const subs: any[] = Array.isArray((q as any).lineItemConfig?.subGroups) ? ((q as any).lineItemConfig.subGroups as any[]) : [];
+      if (!subs.length) return;
+
+      const missing = subs
+        .map((sub, sIdx) => ({ sub, sIdx }))
+        .filter(({ sub }) => !sub || !sub.id || !sub.id.toString().trim());
+      if (missing.length) {
+        let error = `━━━ MISSING SUBGROUP IDs (Row ${idx + 2}) ━━━\n\n`;
+        error += `❌ Question: "${q.qEn || q.id}" (${q.id})\n\n`;
+        missing.forEach(({ sub, sIdx }) => {
+          const label = (sub?.label?.en || sub?.label?.fr || sub?.label?.nl || sub?.label || '').toString();
+          const labelText = label ? ` label="${label}"` : '';
+          error += `   - SubGroup #${sIdx + 1}${labelText} is missing an id\n`;
+        });
+        error += '\n✓ Solution: Add a stable `id` for every entry in lineItemConfig.subGroups.\n';
+        error += '   (We no longer allow label-based subgroup keys.)';
+        errors.push(error);
+      }
+
+      const idEntries = subs
+        .map((sub, sIdx) => ({ name: (sub?.id || '').toString().trim(), index: sIdx + 1 }))
+        .filter(e => !!e.name);
+      const dupes = this.findDuplicates(idEntries);
+      if (dupes.size) {
+        let error = `━━━ DUPLICATE SUBGROUP IDs (Row ${idx + 2}) ━━━\n\n`;
+        error += `❌ Question: "${q.qEn || q.id}" (${q.id})\n\n`;
+        dupes.forEach((indices, id) => {
+          error += `   - "${id}" appears ${indices.length} times in subGroups: ${indices.join(', ')}\n`;
+        });
+        error += '\n✓ Solution: SubGroup IDs must be unique within a LINE_ITEM_GROUP.\n';
+        errors.push(error);
+      }
+    });
     return errors;
   }
   
@@ -68,18 +102,8 @@ export class ConfigValidator {
     return duplicates;
   }
   
-  private static formatDuplicateError(language: string, duplicates: Map<string, number[]>): string {
-    let error = `━━━ DUPLICATE NAMES ACROSS QUESTIONS (${language}) ━━━\n\n`;
-    
-    duplicates.forEach((indices, name) => {
-      error += `❌ "${name}" appears ${indices.length} times in rows: ${indices.join(', ')}\n`;
-    });
-    
-    error += `\n✓ Solution: Make each ${language} question name unique.\n`;
-    error += `   Example: "Date" → "Date", "Start Date"`;
-    
-    return error;
-  }
+  // NOTE: We intentionally do NOT validate for duplicate labels (EN/FR/NL) anymore.
+  // Labels are presentation-only; stable IDs are the canonical keys (see record schema rules).
   
   private static validateOptionCounts(questions: QuestionConfig[]): string[] {
     const errors: string[] = [];

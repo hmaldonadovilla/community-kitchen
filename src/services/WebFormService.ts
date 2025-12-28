@@ -19,6 +19,7 @@ import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
 import { buildReactTemplate } from './webform/template';
 import { loadDedupRules } from './dedup';
+import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -199,6 +200,57 @@ export class WebFormService {
   ): FollowupActionResult {
     const { form, questions } = this.getFormContext(formKey);
     return this.followups.triggerFollowupAction(form, questions, recordId, action);
+  }
+
+  /**
+   * One-time maintenance: migrate legacy label-based Doc placeholders to ID-based placeholders.
+   *
+   * This updates the Google Doc template(s) in-place (body/header/footer).
+   *
+   * It scans:
+   * - followup pdfTemplateId + emailTemplateId
+   * - BUTTON fields with action=renderDocTemplate
+   */
+  public migrateFormTemplatesToIdPlaceholders(
+    formKey: string
+  ): { success: boolean; message: string; results?: Array<{ templateId: string; success: boolean; message?: string; warnings?: string[] }> } {
+    const key = (formKey || '').toString().trim();
+    if (!key) return { success: false, message: 'formKey is required.' };
+    const { form, questions } = this.getFormContext(key);
+
+    const templateMaps: Array<{ source: string; map: any }> = [];
+    if (form.followupConfig?.pdfTemplateId) {
+      templateMaps.push({ source: 'followup.pdfTemplateId', map: form.followupConfig.pdfTemplateId });
+    }
+    if (form.followupConfig?.emailTemplateId) {
+      templateMaps.push({ source: 'followup.emailTemplateId', map: form.followupConfig.emailTemplateId });
+    }
+    questions
+      .filter(q => q && q.type === 'BUTTON')
+      .forEach(q => {
+        const cfg: any = (q as any).button;
+        if (cfg && cfg.action === 'renderDocTemplate' && cfg.templateId) {
+          templateMaps.push({ source: `button:${q.id}`, map: cfg.templateId });
+        }
+      });
+
+    const templateIds = Array.from(
+      new Set(templateMaps.flatMap(entry => collectTemplateIdsFromMap(entry.map)).map(id => (id || '').toString().trim()).filter(Boolean))
+    );
+    if (!templateIds.length) {
+      return { success: true, message: 'No templates configured for this form.' };
+    }
+
+    debugLog('templateMigration.start', { formKey: key, templates: templateIds.length });
+    const results = templateIds.map(id => migrateDocTemplatePlaceholdersToIds({ templateId: id, questions }));
+    const failures = results.filter(r => !r.success);
+    debugLog('templateMigration.done', { formKey: key, ok: results.length - failures.length, failed: failures.length });
+
+    if (failures.length) {
+      const msg = `Template migration finished with errors: ${failures.length}/${results.length} failed.`;
+      return { success: false, message: msg, results };
+    }
+    return { success: true, message: `Template migration complete: ${results.length} template(s) updated.`, results };
   }
 
   /**

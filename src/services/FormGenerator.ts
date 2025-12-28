@@ -3,6 +3,7 @@ import { ConfigSheet } from '../config/ConfigSheet';
 import { ConfigValidator } from '../config/ConfigValidator';
 import { FormConfig, FormResult, QuestionConfig } from '../types';
 import { WebFormService } from './WebFormService';
+import { buildResponsesRecordSchema, normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } from './webform/recordSchema';
 
 export class FormGenerator {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -94,28 +95,92 @@ export class FormGenerator {
       sheet = this.ss.insertSheet(destinationTab);
     }
 
+    const metaHeaders = ['Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'];
     const lastColumn = Math.max(sheet.getLastColumn(), 1);
-    const existingRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
-    const existingHeaders = existingRow.map(h => (h || '').toString().trim()).filter(Boolean);
-    const hasTimestamp = existingHeaders.some(h => h.toLowerCase() === 'timestamp');
-    const baseHeaders = [
-      ...(hasTimestamp ? ['Timestamp'] : []),
-      'Language',
-      ...questions.filter(q => q.type !== 'BUTTON').map(q => q.qEn || q.id),
-      'Record ID',
-      'Created At',
-      'Updated At'
-    ];
+    const existingRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0] || [];
+    const rawExistingHeaders = existingRow.map(h => (h || '').toString().trim());
+    const existingHeaders = rawExistingHeaders.map(h => sanitizeHeaderCellText(h));
+    const normalizedExisting = existingHeaders.map(h => normalizeHeaderToken(h));
+    const hasTimestamp = normalizedExisting.some(h => h === 'timestamp');
+    const hasMeaningfulHeaders = normalizedExisting.some(h => !!h);
 
-    const headers = existingHeaders.length ? [...existingHeaders] : [];
-    baseHeaders.forEach(label => {
-      if (!headers.some(h => h.toLowerCase() === label.toLowerCase())) {
-        headers.push(label);
+    const schema = buildResponsesRecordSchema(questions);
+
+    const labelCounts = (() => {
+      const counts: Record<string, number> = {};
+      questions
+        .filter(q => q && q.type !== 'BUTTON')
+        .forEach(q => {
+          const key = normalizeHeaderToken((q.qEn || '').toString());
+          if (!key) return;
+          counts[key] = (counts[key] || 0) + 1;
+        });
+      return counts;
+    })();
+
+    const headers: string[] = hasMeaningfulHeaders ? [...existingHeaders] : [];
+
+    const headerInfo = () =>
+      headers.map(h => {
+        const parsed = parseHeaderKey(h);
+        return {
+          rawNorm: normalizeHeaderToken(parsed.raw),
+          keyNorm: parsed.key ? normalizeHeaderToken(parsed.key) : undefined
+        };
+      });
+
+    const ensureHeader = (label: string) => {
+      const target = normalizeHeaderToken(label);
+      const infos = headerInfo();
+      if (infos.some(h => h.rawNorm === target)) return;
+      headers.push(label);
+    };
+
+    if (hasTimestamp) ensureHeader('Timestamp');
+    if (!headers.length) headers.push('Language');
+    else ensureHeader('Language');
+
+    const fieldColumns: Record<string, number> = {};
+    schema.forEach(field => {
+      const idNorm = normalizeHeaderToken(field.id);
+      const infos = headerInfo();
+
+      const byKey = infos.findIndex(h => h.keyNorm === idNorm);
+      if (byKey >= 0) {
+        fieldColumns[field.id] = byKey + 1;
+        return;
       }
+      const byId = infos.findIndex(h => h.rawNorm === idNorm);
+      if (byId >= 0) {
+        headers[byId] = field.header;
+        fieldColumns[field.id] = byId + 1;
+        return;
+      }
+      const labelKey = normalizeHeaderToken(field.label);
+      if (labelKey && labelCounts[labelKey] === 1) {
+        const matches = infos
+          .map((h, idx) => ({ h, idx }))
+          .filter(entry => entry.h.rawNorm === labelKey)
+          .map(entry => entry.idx);
+        if (matches.length === 1) {
+          const idx = matches[0];
+          headers[idx] = field.header;
+          fieldColumns[field.id] = idx + 1;
+          return;
+        }
+      }
+      headers.push(field.header);
+      fieldColumns[field.id] = headers.length;
     });
 
-    const finalHeaders = headers.length ? headers : baseHeaders;
-    sheet.getRange(1, 1, 1, finalHeaders.length).setValues([finalHeaders]).setFontWeight('bold');
+    metaHeaders.forEach(ensureHeader);
+
+    const headersChanged =
+      headers.length !== rawExistingHeaders.length ||
+      headers.some((h, idx) => (h || '') !== (rawExistingHeaders[idx] || ''));
+    if (headersChanged) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    }
 
     return sheet;
   }

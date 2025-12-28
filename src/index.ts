@@ -146,6 +146,12 @@ export function triggerFollowupAction(formKey: string, recordId: string, action:
   return service.triggerFollowupAction(formKey, recordId, action);
 }
 
+export function migrateFormTemplatesToIdPlaceholders(formKey: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.migrateFormTemplatesToIdPlaceholders(formKey);
+}
+
 export function installTriggers(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   // Check if trigger already exists to avoid duplicates

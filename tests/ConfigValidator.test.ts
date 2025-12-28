@@ -35,7 +35,7 @@ describe('ConfigValidator', () => {
     expect(errors).toEqual([]);
   });
 
-  test('detects duplicate English names across questions', () => {
+  test('allows duplicate labels across questions (labels are presentation-only)', () => {
     const questions: QuestionConfig[] = [
       {
         id: 'Q1',
@@ -64,12 +64,10 @@ describe('ConfigValidator', () => {
     ];
 
     const errors = ConfigValidator.validate(questions, 'Config: Test');
-    expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0]).toContain('DUPLICATE NAMES ACROSS QUESTIONS (English)');
-    expect(errors[0]).toContain('"Date"');
+    expect(errors).toEqual([]);
   });
 
-  test('detects duplicate French names across questions', () => {
+  test('detects duplicate question IDs', () => {
     const questions: QuestionConfig[] = [
       {
         id: 'Q1',
@@ -84,10 +82,10 @@ describe('ConfigValidator', () => {
         status: 'Active'
       },
       {
-        id: 'Q2',
+        id: 'Q1', // Duplicate ID
         type: 'TEXT',
         qEn: 'End Date',
-        qFr: 'Date', // Duplicate across questions
+        qFr: 'Date',
         qNl: 'Begindatum',
         required: false,
         options: [],
@@ -99,7 +97,8 @@ describe('ConfigValidator', () => {
 
     const errors = ConfigValidator.validate(questions, 'Config: Test');
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0]).toContain('DUPLICATE NAMES ACROSS QUESTIONS (French)');
+    expect(errors[0]).toContain('DUPLICATE QUESTION IDs');
+    expect(errors[0]).toContain('"Q1"');
   });
 
   test('detects mismatched option counts', () => {
@@ -163,7 +162,7 @@ describe('ConfigValidator', () => {
       {
         id: 'Q2',
         type: 'TEXT',
-        qEn: 'Date', // Duplicate EN across questions
+        qEn: 'Date', // Duplicate labels are allowed
         qFr: 'Date de début',
         qNl: 'Begindatum',
         required: false,
@@ -187,9 +186,39 @@ describe('ConfigValidator', () => {
     ];
 
     const errors = ConfigValidator.validate(questions, 'Config: Test');
-    expect(errors.length).toBe(2); // Both duplicate names AND mismatched options
-    expect(errors.some((e: string) => e.includes('DUPLICATE'))).toBe(true);
-    expect(errors.some((e: string) => e.includes('MISMATCHED'))).toBe(true);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain('MISMATCHED');
+  });
+
+  test('detects missing subGroup.id in line item groups', () => {
+    const questions: QuestionConfig[] = [
+      {
+        id: 'ITEMS',
+        type: 'LINE_ITEM_GROUP',
+        qEn: 'Items',
+        qFr: 'Articles',
+        qNl: 'Artikelen',
+        required: true,
+        options: [],
+        optionsFr: [],
+        optionsNl: [],
+        status: 'Active',
+        lineItemConfig: {
+          fields: [],
+          subGroups: [
+            {
+              // id intentionally missing
+              label: { en: 'Meals' },
+              fields: [
+                { id: 'QTY', type: 'NUMBER', labelEn: 'Qty', labelFr: 'Qté', labelNl: 'Aantal', required: true }
+              ]
+            } as any
+          ]
+        } as any
+      } as any
+    ];
+    const errors = ConfigValidator.validate(questions, 'Config: Test');
+    expect(errors.some((e: string) => e.includes('MISSING SUBGROUP IDs'))).toBe(true);
   });
 
   test('detects mismatched option counts inside line item groups', () => {

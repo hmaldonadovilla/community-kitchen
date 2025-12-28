@@ -1,5 +1,6 @@
 import { DataSourceConfig, PaginatedResult, QuestionConfig } from '../../types';
 import { decodePageToken, encodePageToken } from './pagination';
+import { normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } from './recordSchema';
 
 export class DataSourceService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -35,7 +36,7 @@ export class DataSourceService {
     if (!sheet) return { items: [], nextPageToken: undefined, totalCount: 0 };
 
     const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const headers = headerRow.map(h => (h || '').toString().trim());
+    const headers = headerRow.map(h => sanitizeHeaderCellText((h || '').toString()));
     if (!headers.length) return { items: [], nextPageToken: undefined, totalCount: 0 };
 
     const columns = this.buildHeaderIndex(headers);
@@ -144,8 +145,14 @@ export class DataSourceService {
   private buildHeaderIndex(headers: string[]): Record<string, number> {
     const index: Record<string, number> = {};
     headers.forEach((h, idx) => {
-      const key = (h || '').toString().trim().toLowerCase();
-      if (key && index[key] === undefined) index[key] = idx;
+      const cleaned = sanitizeHeaderCellText(h);
+      const rawKey = normalizeHeaderToken(cleaned);
+      if (rawKey && index[rawKey] === undefined) index[rawKey] = idx;
+      const parsed = parseHeaderKey(cleaned);
+      if (parsed.key) {
+        const bracketKey = normalizeHeaderToken(parsed.key);
+        if (bracketKey && index[bracketKey] === undefined) index[bracketKey] = idx;
+      }
     });
     return index;
   }

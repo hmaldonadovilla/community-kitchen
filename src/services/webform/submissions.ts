@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { evaluateDedupConflict, ExistingRecord } from '../dedup';
 import { CacheEtagManager } from './cache';
+import { buildResponsesRecordSchema, normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } from './recordSchema';
 import { HeaderColumns, RecordContext } from './types';
 import { UploadService } from './uploads';
 
@@ -16,8 +17,8 @@ const AUTO_INCREMENT_PROPERTY_PREFIX = 'CK_AUTO_';
 const resolveSubgroupKey = (sub?: any): string => {
   if (!sub) return '';
   if (sub.id) return sub.id;
-  if (typeof sub.label === 'string') return sub.label;
-  return sub.label?.en || sub.label?.fr || sub.label?.nl || '';
+  // Phase 3 (Option A): subgroup IDs are required; label fallback is intentionally removed.
+  return '';
 };
 
 export class SubmissionService {
@@ -285,27 +286,110 @@ export class SubmissionService {
     }
 
     const metaHeaders = ['Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'];
-    const rawHeaderRow = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
-    const existingHeaders = rawHeaderRow.map(h => (h ? h.toString().trim() : '')).filter(Boolean);
-    const hasTimestamp = existingHeaders.some(h => h.toLowerCase() === 'timestamp');
-    const baseHeaders = [
-      ...(hasTimestamp ? ['Timestamp'] : []),
-      'Language',
-      ...questions.filter(q => q.type !== 'BUTTON').map(q => q.qEn || q.id),
-      ...metaHeaders
-    ];
+    const lastColumn = Math.max(sheet.getLastColumn(), 1);
+    const rawHeaderRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0] || [];
+    const rawExistingHeaders = rawHeaderRow.map(h => (h ? h.toString().trim() : ''));
+    const existingHeaders = rawExistingHeaders.map(h => sanitizeHeaderCellText(h));
 
-    const headers: string[] = existingHeaders.length ? [...existingHeaders] : [];
-    baseHeaders.forEach(label => {
-      if (!headers.some(h => h.toLowerCase() === label.toLowerCase())) {
-        headers.push(label);
+    const normalizedExisting = existingHeaders.map(h => normalizeHeaderToken(h));
+    const hasTimestamp = normalizedExisting.some(h => h === 'timestamp');
+    const hasMeaningfulHeaders = normalizedExisting.some(h => !!h);
+
+    // Canonical record schema for question fields: Label [ID]
+    const schema = buildResponsesRecordSchema(questions);
+
+    // Track question label collisions so we can migrate legacy label headers only when unambiguous.
+    const labelCounts = (() => {
+      const counts: Record<string, number> = {};
+      questions
+        .filter(q => q && q.type !== 'BUTTON')
+        .forEach(q => {
+          const key = normalizeHeaderToken((q.qEn || '').toString());
+          if (!key) return;
+          counts[key] = (counts[key] || 0) + 1;
+        });
+      return counts;
+    })();
+
+    // Work on a mutable header row.
+    // - If the sheet is new/blank, start clean so we can create `Language`, fields, then meta in a predictable order.
+    // - If the sheet already has content, preserve the existing order and migrate in-place when safe.
+    const headers: string[] = hasMeaningfulHeaders ? [...existingHeaders] : [];
+
+    const headerInfo = () =>
+      headers.map(h => {
+        const parsed = parseHeaderKey(h);
+        const rawNorm = normalizeHeaderToken(parsed.raw);
+        const keyNorm = parsed.key ? normalizeHeaderToken(parsed.key) : undefined;
+        return { raw: parsed.raw, rawNorm, key: parsed.key, keyNorm };
+      });
+
+    const ensureHeader = (label: string) => {
+      const target = normalizeHeaderToken(label);
+      const infos = headerInfo();
+      const idx = infos.findIndex(h => h.rawNorm === target);
+      if (idx >= 0) return;
+      headers.push(label);
+    };
+
+    // Ensure core non-question columns.
+    if (hasTimestamp) ensureHeader('Timestamp');
+    // Ensure Language exists before we start appending question fields (new sheets get a sensible order).
+    if (!headers.length) {
+      headers.push('Language');
+    } else {
+      ensureHeader('Language');
+    }
+
+    // Ensure each question has a stable column key and migrate legacy headers when safe.
+    const fieldColumns: Record<string, number> = {};
+    schema.forEach(field => {
+      const desiredHeader = field.header;
+      const idNorm = normalizeHeaderToken(field.id);
+      const infos = headerInfo();
+
+      // 1) Preferred: bracket key match (Label [ID]).
+      const byKey = infos.findIndex(h => h.keyNorm === idNorm);
+      if (byKey >= 0) {
+        fieldColumns[field.id] = byKey + 1;
+        return;
       }
+
+      // 2) Legacy: header is the ID (ID-only).
+      const byId = infos.findIndex(h => h.rawNorm === idNorm);
+      if (byId >= 0) {
+        // Migrate in-place to `Label [ID]` for readability + stability.
+        headers[byId] = desiredHeader;
+        fieldColumns[field.id] = byId + 1;
+        return;
+      }
+
+      // 3) Legacy: header is the English label (label-only) – only safe when label is unique in config and sheet.
+      const labelKey = normalizeHeaderToken(field.label);
+      if (labelKey && labelCounts[labelKey] === 1) {
+        const matches = infos
+          .map((h, idx) => ({ h, idx }))
+          .filter(entry => entry.h.rawNorm === labelKey)
+          .map(entry => entry.idx);
+        if (matches.length === 1) {
+          const idx = matches[0];
+          headers[idx] = desiredHeader;
+          fieldColumns[field.id] = idx + 1;
+          return;
+        }
+      }
+
+      // 4) New: append a new column with the canonical header.
+      headers.push(desiredHeader);
+      fieldColumns[field.id] = headers.length;
     });
 
+    // Ensure meta headers after the question field columns.
+    metaHeaders.forEach(ensureHeader);
+
     const headersChanged =
-      !existingHeaders.length ||
-      headers.length !== existingHeaders.length ||
-      headers.some((h, idx) => h !== existingHeaders[idx]);
+      headers.length !== rawExistingHeaders.length ||
+      headers.some((h, idx) => (h || '') !== (rawExistingHeaders[idx] || ''));
     if (headersChanged) {
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
     }
@@ -321,9 +405,8 @@ export class SubmissionService {
       fields: {}
     };
 
-    questions.filter(q => q.type !== 'BUTTON').forEach(q => {
-      const idx = this.findHeader(headers, [q.qEn, q.id].filter(Boolean) as string[]);
-      if (idx) columns.fields[q.id] = idx;
+    Object.entries(fieldColumns).forEach(([fid, idx]) => {
+      if (idx) columns.fields[fid] = idx;
     });
 
     return { sheet, headers, columns };
@@ -441,10 +524,11 @@ export class SubmissionService {
 
   private findHeader(headers: string[], labels: string[]): number | undefined {
     if (!labels.length) return undefined;
-    const lowered = headers.map(h => h.toLowerCase());
+    const lowered = headers.map(h => normalizeHeaderToken(h));
     for (const label of labels) {
       if (!label) continue;
-      const idx = lowered.findIndex(h => h === label.toLowerCase() || h.startsWith(label.toLowerCase()));
+      const target = normalizeHeaderToken(label);
+      const idx = lowered.findIndex(h => h === target || (target && h.startsWith(target + ' [')));
       if (idx >= 0) return idx + 1; // 1-based
     }
     return undefined;

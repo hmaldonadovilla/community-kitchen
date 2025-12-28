@@ -240,7 +240,8 @@ describe('WebFormService', () => {
     const sheet = ss.getSheetByName('Deliveries');
     const values = sheet!.getRange(1, 1, sheet!.getLastRow(), sheet!.getLastColumn()).getValues();
     const header = values[0];
-    const mealCol = header.findIndex((c: string) => c === 'Meal Number');
+    // Option 1b: destination headers are stored as `Label [ID]`
+    const mealCol = header.findIndex((c: string) => /\[Q5\]\s*$/.test((c || '').toString().trim()));
     expect(mealCol).toBeGreaterThanOrEqual(0);
     expect(values[1][mealCol]).toBe('MP-AA000001');
     expect(values[2][mealCol]).toBe('MP-AA000002');

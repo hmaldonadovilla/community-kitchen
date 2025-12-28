@@ -332,6 +332,13 @@ components:
     LineItemGroupConfig:
       type: object
       properties:
+        id:
+          type: string
+          description: |
+            Stable subgroup identifier.
+
+            - Required for entries inside `lineItemConfig.subGroups` (subgroup keys are ID-based).
+            - Typically omitted for the top-level `lineItemConfig` because the parent question’s `id` is used as the group key.
         label:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional localized label rendered as the subgroup title; falls back to `id` when omitted.
@@ -381,6 +388,8 @@ components:
             Each child supports the same structure as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals)
             and may also specify `ref: "REF:TabName"` to load its fields from a ref sheet (same column format as parent line-item refs);
             inline values override the ref.
+            **Important:** Each subgroup entry must define a stable `id` (label-based subgroup keys are not supported).
+
             The web UI renders each subgroup with a localized title (from `label`, falling back to `id`) and a per-row Show/Hide toggle to collapse or expand its contents without affecting stored data.
             In progressive edit mode (`ui.mode: "progressive"`), subgroup rows are edited in a full-page overlay opened from buttons next to triggering fields (selection effects) or fallback subgroup buttons.
           items:
@@ -767,12 +776,19 @@ components:
           type: array
           items:
             type: string
-          description: Limit columns returned from the data source.
+          description: |
+            Limit columns returned from the data source.
+
+            Recommended convention for source tabs: `Label [KEY]` headers (e.g., `Supplier [SUPPLIER]`, `Email [EMAIL]`).
+            `projection` entries can reference either the raw header text or the bracket key.
         mapping:
           type: object
           additionalProperties:
             type: string
-          description: Optional map from source column -> target field id (used for prefill/line-item injection).
+          description: |
+            Optional map from source column -> target field id (used for prefill/line-item injection).
+
+            Source column keys can reference either the raw header text or a bracket key when the source header uses `Label [KEY]`.
         tooltipField:
           type: string
           description: Optional column name to surface as tooltip text for each option (shown in form + summary).
