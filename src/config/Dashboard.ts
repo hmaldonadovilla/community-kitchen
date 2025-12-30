@@ -10,7 +10,10 @@ import {
   FollowupStatusConfig,
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
-  FormConfig
+  FormConfig,
+  ListViewColumnConfig,
+  ListViewLegendItem,
+  LocalizedString
 } from '../types';
 
 export const DASHBOARD_SHEET_NAME = 'Forms Dashboard';
@@ -111,7 +114,12 @@ export class Dashboard {
       const formId = colFormId >= 0 ? row[colFormId] : undefined;
       const dashboardConfig = colFollowup >= 0 ? this.parseDashboardConfig(row[colFollowup]) : undefined;
       const followupConfig = dashboardConfig?.followup;
+      const listViewTitle = dashboardConfig?.listViewTitle;
+      const listViewDefaultSort = dashboardConfig?.listViewDefaultSort;
+      const listViewPageSize = dashboardConfig?.listViewPageSize;
       const listViewMetaColumns = dashboardConfig?.listViewMetaColumns;
+      const listViewColumns = dashboardConfig?.listViewColumns;
+      const listViewLegend = dashboardConfig?.listViewLegend;
       const autoSave = dashboardConfig?.autoSave;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
@@ -130,7 +138,12 @@ export class Dashboard {
           formId,
           rowIndex: dataStartRow + index,
           followupConfig,
+          listViewTitle,
+          listViewDefaultSort,
+          listViewPageSize,
           listViewMetaColumns,
+          listViewColumns,
+          listViewLegend,
           autoSave,
           summaryViewEnabled,
           copyCurrentRecordEnabled,
@@ -167,7 +180,12 @@ export class Dashboard {
     raw: any
   ): {
     followup?: FollowupConfig;
+    listViewTitle?: LocalizedString;
+    listViewDefaultSort?: { fieldId: string; direction?: 'asc' | 'desc' };
+    listViewPageSize?: number;
     listViewMetaColumns?: string[];
+    listViewColumns?: ListViewColumnConfig[];
+    listViewLegend?: ListViewLegendItem[];
     autoSave?: AutoSaveConfig;
     summaryViewEnabled?: boolean;
     copyCurrentRecordEnabled?: boolean;
@@ -246,6 +264,71 @@ export class Dashboard {
     }
 
     const followup = this.buildFollowupConfig(parsed);
+    const normalizeLocalized = (input: any): any => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'string') {
+        const trimmed = input.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof input !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        const trimmed = v.trim();
+        if (!trimmed) return;
+        out[k.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
+
+    const listViewObj =
+      parsed.listView !== undefined && parsed.listView !== null && typeof parsed.listView === 'object' ? parsed.listView : undefined;
+    const listViewTitleRaw =
+      parsed.listViewTitle !== undefined
+        ? parsed.listViewTitle
+        : parsed.listTitle !== undefined
+        ? parsed.listTitle
+        : listViewObj && listViewObj.title !== undefined
+        ? listViewObj.title
+        : listViewObj && listViewObj.heading !== undefined
+        ? listViewObj.heading
+        : undefined;
+    const listViewTitle = normalizeLocalized(listViewTitleRaw);
+
+    const listViewPageSizeRaw =
+      parsed.listViewPageSize !== undefined
+        ? parsed.listViewPageSize
+        : parsed.pageSize !== undefined
+        ? parsed.pageSize
+        : listViewObj && listViewObj.pageSize !== undefined
+        ? listViewObj.pageSize
+        : undefined;
+    const listViewPageSize = (() => {
+      if (listViewPageSizeRaw === undefined || listViewPageSizeRaw === null || listViewPageSizeRaw === '') return undefined;
+      const n = Number(listViewPageSizeRaw);
+      if (!Number.isFinite(n)) return undefined;
+      return Math.max(1, Math.min(50, Math.round(n)));
+    })();
+
+    const listViewDefaultSortRaw =
+      parsed.listViewDefaultSort !== undefined
+        ? parsed.listViewDefaultSort
+        : parsed.defaultSort !== undefined
+        ? parsed.defaultSort
+        : listViewObj && listViewObj.defaultSort !== undefined
+        ? listViewObj.defaultSort
+        : listViewObj && listViewObj.sort !== undefined
+        ? listViewObj.sort
+        : undefined;
+    const listViewDefaultSort = (() => {
+      if (!listViewDefaultSortRaw || typeof listViewDefaultSortRaw !== 'object') return undefined;
+      const fieldId = (listViewDefaultSortRaw as any).fieldId !== undefined ? `${(listViewDefaultSortRaw as any).fieldId}`.trim() : '';
+      if (!fieldId) return undefined;
+      const dirRaw =
+        (listViewDefaultSortRaw as any).direction !== undefined ? `${(listViewDefaultSortRaw as any).direction}`.trim().toLowerCase() : '';
+      const direction = dirRaw === 'asc' || dirRaw === 'desc' ? (dirRaw as 'asc' | 'desc') : undefined;
+      return { fieldId, direction };
+    })();
     const metaRaw =
       parsed.listViewMetaColumns !== undefined
         ? parsed.listViewMetaColumns
@@ -253,9 +336,33 @@ export class Dashboard {
         ? parsed.listViewDefaults
         : parsed.defaultListFields !== undefined
         ? parsed.defaultListFields
+        : listViewObj && listViewObj.metaColumns !== undefined
+        ? listViewObj.metaColumns
+        : listViewObj && listViewObj.meta !== undefined
+        ? listViewObj.meta
         : undefined;
     const hasMetaSetting = metaRaw !== undefined;
     const listViewMetaColumns = this.normalizeListViewMetaColumns(metaRaw);
+    const listViewColumnsRaw =
+      parsed.listViewColumns !== undefined
+        ? parsed.listViewColumns
+        : parsed.listViewColumnConfigs !== undefined
+        ? parsed.listViewColumnConfigs
+        : parsed.listViewRuleColumns !== undefined
+        ? parsed.listViewRuleColumns
+        : parsed.listView !== undefined && parsed.listView !== null && typeof parsed.listView === 'object'
+        ? (parsed.listView.columns ?? parsed.listView.extraColumns ?? parsed.listView.customColumns)
+        : undefined;
+    const listViewColumns = this.normalizeListViewColumns(listViewColumnsRaw);
+    const legendRaw =
+      parsed.listViewLegend !== undefined
+        ? parsed.listViewLegend
+        : parsed.listLegend !== undefined
+        ? parsed.listLegend
+        : parsed.listView !== undefined && parsed.listView !== null && typeof parsed.listView === 'object'
+        ? (parsed.listView.legend ?? parsed.listView.listViewLegend)
+        : undefined;
+    const listViewLegend = this.normalizeListViewLegend(legendRaw);
     const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
     const summaryViewEnabled = (() => {
       if (parsed.summaryViewEnabled !== undefined) return Boolean(parsed.summaryViewEnabled);
@@ -296,7 +403,12 @@ export class Dashboard {
     );
     if (
       !followup &&
+      !listViewTitle &&
+      !listViewDefaultSort &&
+      listViewPageSize === undefined &&
       !hasMetaSetting &&
+      !listViewColumns?.length &&
+      !listViewLegend?.length &&
       !autoSave &&
       summaryViewEnabled === undefined &&
       copyCurrentRecordEnabled === undefined &&
@@ -310,7 +422,12 @@ export class Dashboard {
     }
     return {
       followup,
+      listViewTitle,
+      listViewDefaultSort,
+      listViewPageSize,
       listViewMetaColumns,
+      listViewColumns,
+      listViewLegend,
       autoSave,
       summaryViewEnabled,
       copyCurrentRecordEnabled,
@@ -563,6 +680,193 @@ export class Dashboard {
     const unique = Array.from(new Set(normalized)) as string[];
     // Explicit empty array (or "no valid entries") should be respected as "no meta columns".
     return unique;
+  }
+
+  private normalizeListViewColumns(value: any): ListViewColumnConfig[] | undefined {
+    if (value === undefined || value === null) return undefined;
+    const raw: any[] = Array.isArray(value) ? value : [value];
+    const columns: ListViewColumnConfig[] = [];
+
+    const metaSet = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
+    const allowedRuleStyles = new Set(['link', 'warning', 'muted', 'default']);
+    const allowedIcons = new Set(['warning', 'check', 'error', 'info', 'external', 'lock', 'edit', 'view']);
+    const allowedOpenViews = new Set(['auto', 'form', 'summary']);
+
+    const normalizeLocalized = (input: any): any => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'string') return input;
+      if (typeof input !== 'object') return undefined;
+      // Allow any language keys; keep as-is.
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        const trimmed = v.trim();
+        if (trimmed) out[k] = trimmed;
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
+
+    const normalizeWhen = (when: any): any => {
+      if (when === undefined || when === null) return undefined;
+      if (Array.isArray(when)) {
+        const list = when.map(normalizeWhen).filter(Boolean);
+        return list.length ? ({ all: list } as any) : undefined;
+      }
+      if (typeof when !== 'object') return undefined;
+      if (Array.isArray((when as any).all)) {
+        const list = ((when as any).all as any[]).map(normalizeWhen).filter(Boolean);
+        return list.length ? ({ all: list } as any) : undefined;
+      }
+      if (Array.isArray((when as any).any)) {
+        const list = ((when as any).any as any[]).map(normalizeWhen).filter(Boolean);
+        return list.length ? ({ any: list } as any) : undefined;
+      }
+      const fieldIdRaw = (when as any).fieldId ?? (when as any).field ?? (when as any).id;
+      const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
+      if (!fieldId) return undefined;
+      const out: any = { fieldId };
+      if ((when as any).equals !== undefined) out.equals = (when as any).equals;
+      if ((when as any).notEquals !== undefined) out.notEquals = (when as any).notEquals;
+      if ((when as any).notEmpty !== undefined) out.notEmpty = Boolean((when as any).notEmpty);
+      if ((when as any).isToday !== undefined) out.isToday = Boolean((when as any).isToday);
+      if ((when as any).isNotToday !== undefined) out.isNotToday = Boolean((when as any).isNotToday);
+      return out;
+    };
+
+    const normalizeRuleCase = (entry: any): any | null => {
+      if (!entry || typeof entry !== 'object') return null;
+      const text = normalizeLocalized((entry as any).text ?? (entry as any).value ?? (entry as any).label);
+      if (!text) return null;
+      const out: any = { text };
+      const when = normalizeWhen((entry as any).when ?? (entry as any).if ?? (entry as any).condition);
+      if (when) out.when = when;
+      const styleRaw = ((entry as any).style ?? (entry as any).variant ?? (entry as any).tone ?? '').toString().trim().toLowerCase();
+      if (styleRaw && allowedRuleStyles.has(styleRaw)) out.style = styleRaw;
+      const iconRaw = ((entry as any).icon ?? '').toString().trim().toLowerCase();
+      if (iconRaw && allowedIcons.has(iconRaw)) out.icon = iconRaw;
+      const hrefRaw =
+        (entry as any).hrefFieldId !== undefined
+          ? (entry as any).hrefFieldId
+          : (entry as any).urlFieldId !== undefined
+          ? (entry as any).urlFieldId
+          : (entry as any).linkFieldId !== undefined
+          ? (entry as any).linkFieldId
+          : (entry as any).hrefField !== undefined
+          ? (entry as any).hrefField
+          : (entry as any).urlField !== undefined
+          ? (entry as any).urlField
+          : undefined;
+      const hrefFieldId = hrefRaw !== undefined && hrefRaw !== null ? hrefRaw.toString().trim() : '';
+      if (hrefFieldId) out.hrefFieldId = hrefFieldId;
+      return out;
+    };
+
+    raw.forEach(entry => {
+      if (typeof entry === 'string') {
+        const fieldId = entry.trim();
+        if (!fieldId) return;
+        columns.push({ fieldId, kind: metaSet.has(fieldId) ? 'meta' : 'question' });
+        return;
+      }
+      if (!entry || typeof entry !== 'object') return;
+
+      const typeRaw = ((entry as any).type ?? (entry as any).columnType ?? (entry as any).kind ?? '').toString().trim().toLowerCase();
+      const type = typeRaw === 'rule' || typeRaw === 'computed' ? 'rule' : 'field';
+
+      const fieldIdRaw = (entry as any).fieldId ?? (entry as any).id ?? (entry as any).key;
+      const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
+      if (!fieldId) return;
+
+      if (type === 'rule') {
+        const label = normalizeLocalized((entry as any).label ?? (entry as any).header ?? (entry as any).title) || fieldId;
+        const casesRaw = Array.isArray((entry as any).cases)
+          ? ((entry as any).cases as any[])
+          : Array.isArray((entry as any).rules)
+          ? ((entry as any).rules as any[])
+          : [];
+        const cases = casesRaw.map(normalizeRuleCase).filter(Boolean);
+        if (!cases.length) return;
+        const out: any = { type: 'rule', fieldId, label, cases };
+        const def = normalizeRuleCase((entry as any).default);
+        if (def) out.default = { text: def.text, style: def.style, icon: def.icon, hrefFieldId: def.hrefFieldId };
+        const colHrefRaw =
+          (entry as any).hrefFieldId !== undefined
+            ? (entry as any).hrefFieldId
+            : (entry as any).urlFieldId !== undefined
+            ? (entry as any).urlFieldId
+            : (entry as any).linkFieldId !== undefined
+            ? (entry as any).linkFieldId
+            : undefined;
+        const colHrefFieldId = colHrefRaw !== undefined && colHrefRaw !== null ? colHrefRaw.toString().trim() : '';
+        if (colHrefFieldId) out.hrefFieldId = colHrefFieldId;
+        const openViewRaw = ((entry as any).openView ?? (entry as any).open ?? (entry as any).view ?? '').toString().trim().toLowerCase();
+        if (openViewRaw && allowedOpenViews.has(openViewRaw)) out.openView = openViewRaw;
+        if ((entry as any).sortable !== undefined) out.sortable = Boolean((entry as any).sortable);
+        columns.push(out as ListViewColumnConfig);
+        return;
+      }
+
+      const label = normalizeLocalized((entry as any).label ?? (entry as any).header ?? (entry as any).title);
+      const kindRaw = ((entry as any).kind ?? '').toString().trim().toLowerCase();
+      const kind = kindRaw === 'meta' || metaSet.has(fieldId) ? 'meta' : 'question';
+      const out: any = { fieldId, kind };
+      if (label) out.label = label;
+      columns.push(out as ListViewColumnConfig);
+    });
+
+    return columns.length ? columns : undefined;
+  }
+
+  private normalizeListViewLegend(value: any): ListViewLegendItem[] | undefined {
+    if (value === undefined || value === null) return undefined;
+    const allowedIcons = new Set(['warning', 'check', 'error', 'info', 'external', 'lock', 'edit', 'view']);
+
+    const normalizeLocalized = (input: any): any => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'string') return input;
+      if (typeof input !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        const trimmed = v.trim();
+        if (trimmed) out[k] = trimmed;
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
+
+    const items: ListViewLegendItem[] = [];
+    const seenIcons = new Set<string>();
+    const push = (iconRaw: any, textRaw: any) => {
+      const text = normalizeLocalized(textRaw);
+      if (!text) return;
+
+      const icon = (iconRaw || '').toString().trim().toLowerCase();
+      if (!icon) {
+        items.push({ text } as any);
+        return;
+      }
+      if (!allowedIcons.has(icon) || seenIcons.has(icon)) return;
+      seenIcons.add(icon);
+      items.push({ icon: icon as any, text });
+    };
+
+    // Accept object map form: { warning: "Missing date", error: {en: "..."} }
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      const v = value as any;
+      const looksLikeSingle =
+        v.icon !== undefined || v.text !== undefined || v.label !== undefined || v.description !== undefined;
+      if (!looksLikeSingle) {
+        Object.entries(v).forEach(([k, v2]) => push(k, v2));
+        return items.length ? items : undefined;
+      }
+    }
+
+    const raw: any[] = Array.isArray(value) ? value : [value];
+    raw.forEach(entry => {
+      if (!entry || typeof entry !== 'object') return;
+      push((entry as any).icon, (entry as any).text ?? (entry as any).label ?? (entry as any).description);
+    });
+    return items.length ? items : undefined;
   }
 
   private normalizeTemplateId(value: any): FollowupConfig['pdfTemplateId'] {

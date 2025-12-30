@@ -74,7 +74,15 @@ export class DefinitionBuilder {
       autoIncrement: q.autoIncrement
     }));
 
-    const listView = this.buildListViewConfig(webQuestions, form.listViewMetaColumns);
+    const listView = this.buildListViewConfig(
+      webQuestions,
+      form.listViewMetaColumns,
+      form.listViewColumns,
+      form.listViewLegend,
+      form.listViewTitle,
+      form.listViewDefaultSort,
+      form.listViewPageSize
+    );
 
     return {
       title: form.title,
@@ -143,10 +151,16 @@ export class DefinitionBuilder {
 
   private buildListViewConfig(
     questions: WebQuestionDefinition[],
-    metaColumns?: string[]
+    metaColumns?: string[],
+    dashboardColumns?: ListViewConfig['columns'],
+    legend?: ListViewConfig['legend'],
+    title?: ListViewConfig['title'],
+    defaultSortOverride?: ListViewConfig['defaultSort'],
+    pageSizeOverride?: ListViewConfig['pageSize']
   ): ListViewConfig | undefined {
     const listQuestions = questions.filter(q => q.listView);
-    if (!listQuestions.length) return undefined;
+    const customColumns = Array.isArray(dashboardColumns) ? dashboardColumns : [];
+    if (!listQuestions.length && !customColumns.length) return undefined;
     const questionColumns = listQuestions.map(q => ({ fieldId: q.id, label: q.label, kind: 'question' as const }));
     const resolvedMetaColumns = this.normalizeMetaColumnList(metaColumns);
     const metaColumnDefs = resolvedMetaColumns.map(fieldId => ({
@@ -154,7 +168,8 @@ export class DefinitionBuilder {
       label: this.buildMetaColumnLabel(fieldId),
       kind: 'meta' as const
     }));
-    const columns = [...questionColumns, ...metaColumnDefs];
+    // Dashboard-defined columns (e.g. rule/computed columns) come first so action columns are leftmost.
+    const columns = [...customColumns, ...questionColumns, ...metaColumnDefs];
     const sortCandidate = listQuestions
       .filter(q => !!q.listViewSort)
       .sort((a, b) => {
@@ -170,7 +185,7 @@ export class DefinitionBuilder {
       }
       return undefined;
     };
-    const defaultSort = sortCandidate
+    const computedDefaultSort = sortCandidate
       ? {
           fieldId: sortCandidate.id,
           direction: normalizeDirection(sortCandidate.listViewSort?.direction) || 'asc'
@@ -179,7 +194,12 @@ export class DefinitionBuilder {
           fieldId: resolvedMetaColumns[0] || (questionColumns[0]?.fieldId ?? 'updatedAt'),
           direction: 'desc' as const
         };
-    return { columns, metaColumns: resolvedMetaColumns, defaultSort };
+    const defaultSort = defaultSortOverride?.fieldId ? defaultSortOverride : computedDefaultSort;
+    const out: ListViewConfig = { columns, metaColumns: resolvedMetaColumns, defaultSort };
+    if (title) out.title = title;
+    if (legend && Array.isArray(legend) && legend.length) out.legend = legend;
+    if (pageSizeOverride && Number.isFinite(pageSizeOverride)) out.pageSize = pageSizeOverride;
+    return out;
   }
 
   private normalizeMetaColumnList(metaColumns?: string[]): string[] {

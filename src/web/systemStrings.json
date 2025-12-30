@@ -106,7 +106,18 @@
     "next": { "en": "Next", "fr": "Suivant", "nl": "Volgende" },
     "pageOf": { "en": "Page {page} of {total}", "fr": "Page {page} sur {total}", "nl": "Pagina {page} van {total}" },
     "recordsCountOne": { "en": "{count} record", "fr": "{count} enregistrement", "nl": "{count} record" },
-    "recordsCountMany": { "en": "{count} records", "fr": "{count} enregistrements", "nl": "{count} records" }
+    "recordsCountMany": { "en": "{count} records", "fr": "{count} enregistrements", "nl": "{count} records" },
+    "legend": {
+      "title": { "en": "Legend", "fr": "Légende", "nl": "Legenda" },
+      "warning": { "en": "Warning", "fr": "Avertissement", "nl": "Waarschuwing" },
+      "check": { "en": "OK", "fr": "OK", "nl": "OK" },
+      "error": { "en": "Error", "fr": "Erreur", "nl": "Fout" },
+      "info": { "en": "Info", "fr": "Info", "nl": "Info" },
+      "external": { "en": "External link", "fr": "Lien externe", "nl": "Externe link" },
+      "lock": { "en": "Locked", "fr": "Verrouillé", "nl": "Vergrendeld" },
+      "edit": { "en": "Edit", "fr": "Modifier", "nl": "Bewerken" },
+      "view": { "en": "View", "fr": "Voir", "nl": "Bekijken" }
+    }
   },
   "overlay": {
     "row": { "en": "Row", "fr": "Ligne", "nl": "Rij" },

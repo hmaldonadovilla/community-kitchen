@@ -83,6 +83,79 @@ This project uses TypeScript. You need to build the script before using it in Go
 
     - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON. Lower priorities win; when nothing is specified we fall back to `updatedAt desc`.
     - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
+      - Recommended (consolidated): use `listView.metaColumns` instead:
+
+      ```json
+      { "listView": { "metaColumns": ["updatedAt", "status", "pdfUrl"] } }
+      ```
+
+    - Want to change the **list view title**? Set `listView.title`:
+
+      ```json
+      { "listView": { "title": { "en": "My Records" } } }
+      ```
+    - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
+      - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.
+
+      Example: show `Missing` (⚠️) when the record DATE is not today and the status is not Closed; otherwise show `Edit` or `View`. Clicking the cell opens the record in the Form (edit) view (Closed records are read-only):
+
+      ```json
+      {
+        "listView": {
+          "columns": [
+            {
+              "type": "rule",
+              "fieldId": "action",
+              "label": { "en": "Action" },
+              "openView": "form",
+              "cases": [
+                { "when": { "all": [ { "fieldId": "status", "notEquals": "Closed" }, { "fieldId": "DATE", "isNotToday": true } ] }, "text": "Missing", "style": "warning", "icon": "warning" },
+                { "when": { "fieldId": "status", "notEquals": "Closed" }, "text": "Edit", "style": "link" },
+                { "when": { "fieldId": "status", "equals": "Closed" }, "text": "View", "style": "link" }
+              ]
+            }
+          ]
+        }
+      }
+      ```
+
+      Tip: to make a `style: "link"` case open a URL stored in another field (e.g. `pdfUrl`), set `hrefFieldId` on the column or the case:
+
+      ```json
+      {
+        "listView": {
+          "columns": [
+            {
+              "type": "rule",
+              "fieldId": "pdf",
+              "label": { "en": "PDF" },
+              "hrefFieldId": "pdfUrl",
+              "cases": [
+                { "when": { "fieldId": "pdfUrl", "notEmpty": true }, "text": "Open PDF", "style": "link" },
+                { "text": "—", "style": "muted" }
+              ]
+            }
+          ]
+        }
+      }
+      ```
+
+      Optional: show a **legend below the table** to explain icons / table elements. The legend is **only shown when you define it** (recommended when you use `icon` in rule columns):
+
+      ```json
+      {
+        "listView": {
+          "legend": [
+            { "icon": "warning", "text": { "en": "Needs attention (e.g. Missing DATE)" } },
+            { "icon": "check", "text": { "en": "OK / complete" } },
+            { "text": { "en": "Click Action to open the record." } }
+          ]
+        }
+      }
+      ```
+
+      Supported icons: `warning`, `check`, `error`, `info`, `external`, `lock`, `edit`, `view`.
+
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved.
     - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
     - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.

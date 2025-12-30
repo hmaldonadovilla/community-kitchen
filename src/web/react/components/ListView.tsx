@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { resolveLocalizedString } from '../../i18n';
-import { LangCode, WebFormDefinition, WebFormSubmission } from '../../types';
+import { LangCode, ListViewColumnConfig, ListViewRuleColumnConfig, WebFormDefinition, WebFormSubmission } from '../../types';
 import { toOptionSet } from '../../core';
 import { tSystem } from '../../systemStrings';
 import { fetchBatch, fetchList, ListItem, ListResponse } from '../api';
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
+import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
+import { buildListViewLegendItems } from '../app/listViewLegend';
+import { ListViewIcon } from './ListViewIcon';
 
 interface ListViewProps {
   formKey: string;
   definition: WebFormDefinition;
   language: LangCode;
-  onSelect: (row: ListItem, record?: WebFormSubmission) => void;
+  onSelect: (row: ListItem, record?: WebFormSubmission, opts?: { openView?: 'auto' | 'form' | 'summary' }) => void;
   cachedResponse?: ListResponse | null;
   cachedRecords?: Record<string, WebFormSubmission>;
   refreshToken?: number;
@@ -55,10 +58,13 @@ const ListView: React.FC<ListViewProps> = ({
     }
   }, [cachedRecords]);
 
-  const columns = useMemo(
-    () => definition.listView?.columns || definition.questions.map(q => ({ fieldId: q.id, label: q.label })),
+  const columns = useMemo<ListViewColumnConfig[]>(
+    () => (definition.listView?.columns as ListViewColumnConfig[]) || definition.questions.map(q => ({ fieldId: q.id, label: q.label })),
     [definition]
   );
+
+  const isRuleColumn = (col: ListViewColumnConfig): col is ListViewRuleColumnConfig => (col as any)?.type === 'rule';
+  const isSortableColumn = (col: ListViewColumnConfig): boolean => (!isRuleColumn(col) ? true : Boolean((col as any).sortable));
 
   const questionTypeById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -83,10 +89,19 @@ const ListView: React.FC<ListViewProps> = ({
   const projection = useMemo(() => {
     const meta = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
     const ids = new Set<string>();
+    const add = (fid: string) => {
+      const id = (fid || '').toString().trim();
+      if (!id || meta.has(id)) return;
+      ids.add(id);
+    };
     columns.forEach(col => {
-      const fid = (col.fieldId || '').toString();
-      if (!fid || meta.has(fid)) return;
-      ids.add(fid);
+      const fid = (col as any)?.fieldId;
+      if (!fid) return;
+      if (isRuleColumn(col)) {
+        collectListViewRuleColumnDependencies(col).forEach(add);
+        return;
+      }
+      add(fid);
     });
     return Array.from(ids);
   }, [columns]);
@@ -230,7 +245,10 @@ const ListView: React.FC<ListViewProps> = ({
       options.push({ id, label });
     };
     columns.forEach(col => {
-      push(col.fieldId, resolveLocalizedString(col.label, language, col.fieldId));
+      if (!isSortableColumn(col)) return;
+      const fid = (col as any).fieldId;
+      const label = isRuleColumn(col) ? (col as any).label : (col as any).label;
+      push(fid, resolveLocalizedString(label, language, fid));
     });
     push('updatedAt', resolveLocalizedString({ en: 'Updated', fr: 'Mis à jour', nl: 'Bijgewerkt' }, language, 'Updated'));
     push('createdAt', resolveLocalizedString({ en: 'Created', fr: 'Créé', nl: 'Aangemaakt' }, language, 'Created'));
@@ -244,6 +262,33 @@ const ListView: React.FC<ListViewProps> = ({
     ['status', 'pdfUrl', 'updatedAt', 'createdAt', 'id'].forEach(id => ids.add(id));
     return Array.from(ids);
   }, [columns]);
+
+  const ruleColumns = useMemo(() => columns.filter(isRuleColumn) as ListViewRuleColumnConfig[], [columns]);
+
+  const legendItems = useMemo(
+    () => buildListViewLegendItems(columns, definition.listView?.legend, language),
+    [columns, definition.listView?.legend, language]
+  );
+
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    if (!ruleColumns.length) return;
+    const deps = ruleColumns.map(c => ({
+      columnId: c.fieldId,
+      openView: (c as any).openView || 'auto',
+      dependencies: collectListViewRuleColumnDependencies(c)
+    }));
+    onDiagnostic('list.ruleColumns.enabled', { columns: deps });
+  }, [onDiagnostic, ruleColumns]);
+
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    if (!legendItems.length) return;
+    onDiagnostic('list.legend.enabled', {
+      count: legendItems.length,
+      icons: legendItems.map(i => i.icon).filter(Boolean)
+    });
+  }, [legendItems, onDiagnostic]);
 
   const compareValues = (a: any, b: any): number => {
     if (a === b) return 0;
@@ -263,7 +308,20 @@ const ListView: React.FC<ListViewProps> = ({
   };
 
   const visibleItems = useMemo(() => {
-    const items = allItems || [];
+    const baseItems = allItems || [];
+    const items: ListItem[] =
+      ruleColumns.length
+        ? baseItems.map(row => {
+            let next: any = null;
+            ruleColumns.forEach(col => {
+              const cell = evaluateListViewRuleColumnCell(col, row);
+              const text = cell ? resolveLocalizedString(cell.text, language, '') : '';
+              if (next === null) next = { ...row };
+              next[col.fieldId] = text;
+            });
+            return (next || row) as ListItem;
+          })
+        : baseItems;
     const keyword = searchValue.trim().toLowerCase();
     const filtered = keyword
       ? items.filter(row =>
@@ -281,7 +339,7 @@ const ListView: React.FC<ListViewProps> = ({
       return sortDirection === 'asc' ? result : -result;
     });
     return sorted;
-  }, [allItems, searchValue, searchableFieldIds, sortField, sortDirection]);
+  }, [allItems, language, ruleColumns, searchValue, searchableFieldIds, sortField, sortDirection]);
 
   const pagedItems = useMemo(() => {
     const start = pageIndex * pageSize;
@@ -359,6 +417,73 @@ const ListView: React.FC<ListViewProps> = ({
     } catch {
       return null;
     }
+  };
+
+  const renderRuleCell = (row: ListItem, col: ListViewRuleColumnConfig) => {
+    const cell = evaluateListViewRuleColumnCell(col, row);
+    if (!cell) return EMPTY_DISPLAY;
+    const text = resolveLocalizedString(cell.text, language, EMPTY_DISPLAY);
+    const style = (cell?.style || 'link').toString();
+    const icon = cell?.icon ? <ListViewIcon name={cell.icon} /> : null;
+    const openView = (col.openView || 'auto') as 'auto' | 'form' | 'summary';
+    const className =
+      style === 'warning'
+        ? 'ck-list-nav ck-list-nav--warning'
+        : style === 'muted'
+        ? 'ck-list-nav ck-list-nav--muted'
+        : 'ck-list-nav';
+
+    const hrefFieldId = (cell.hrefFieldId || '').toString().trim();
+    const hrefRaw = hrefFieldId ? (row as any)[hrefFieldId] : null;
+    const href = (() => {
+      if (!hrefRaw) return '';
+      const str = Array.isArray(hrefRaw) ? hrefRaw.join(' ') : hrefRaw.toString();
+      const urls = splitUrlList(str).filter(u => /^https?:\/\//i.test(u));
+      return urls[0] || '';
+    })();
+
+    if (style === 'link' && hrefFieldId) {
+      // URL-driven link: open the URL stored in the target field (e.g. pdfUrl).
+      if (!href) {
+        onDiagnostic?.('list.ruleColumn.link.missingUrl', { columnId: col.fieldId, hrefFieldId });
+        return (
+          <span className="ck-list-nav ck-list-nav--muted">
+            {icon}
+            <span>{text}</span>
+          </span>
+        );
+      }
+      return (
+        <a
+          className={className}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => {
+            e.stopPropagation();
+            onDiagnostic?.('list.ruleColumn.link.open', { columnId: col.fieldId, hrefFieldId, href });
+          }}
+        >
+          {icon}
+          <span>{text}</span>
+        </a>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={e => {
+          e.stopPropagation();
+          onDiagnostic?.('list.ruleColumn.click', { columnId: col.fieldId, openView, text });
+          onSelect(row, row?.id ? records[row.id] : undefined, { openView });
+        }}
+      >
+        {icon}
+        <span>{text}</span>
+      </button>
+    );
   };
 
   const renderCellValue = (row: ListItem, fieldId: string) => {
@@ -498,14 +623,21 @@ const ListView: React.FC<ListViewProps> = ({
               {columns.map(col => (
                 <th
                   key={col.fieldId}
-                  onClick={() => {
-                    const nextField = col.fieldId;
-                    setSortField(nextField);
-                    setSortDirection(prev =>
-                      sortField === nextField ? (prev === 'asc' ? 'desc' : 'asc') : 'desc'
-                    );
+                  onClick={
+                    isSortableColumn(col)
+                      ? () => {
+                          const nextField = col.fieldId;
+                          setSortField(nextField);
+                          setSortDirection(prev => (sortField === nextField ? (prev === 'asc' ? 'desc' : 'asc') : 'desc'));
+                        }
+                      : undefined
+                  }
+                  style={{
+                    maxWidth: 180,
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    cursor: isSortableColumn(col) ? 'pointer' : 'default'
                   }}
-                  style={{ maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}
                 >
                   {resolveLocalizedString(col.label, language, col.fieldId)}
                 </th>
@@ -525,7 +657,7 @@ const ListView: React.FC<ListViewProps> = ({
                       key={col.fieldId}
                       style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
                     >
-                      {renderCellValue(row, col.fieldId)}
+                      {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
                     </td>
                   ))}
                 </tr>
@@ -540,6 +672,17 @@ const ListView: React.FC<ListViewProps> = ({
           </tbody>
         </table>
       </div>
+      {legendItems.length ? (
+        <div className="ck-list-legend" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
+          <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
+          {legendItems.map((item, idx) => (
+            <span key={`legend-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
+              {item.icon ? <ListViewIcon name={item.icon} /> : null}
+              <span>{item.text}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="actions" style={{ justifyContent: 'space-between' }}>
         <button
           type="button"

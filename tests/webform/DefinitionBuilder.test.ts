@@ -14,7 +14,9 @@ describe('DefinitionBuilder', () => {
       pdfTemplateId: { EN: 'pdf-en' },
       emailTemplateId: { EN: 'email-en' },
       statusTransitions: { onEmail: 'Sent' },
+      listView: { title: { en: 'Pantry Records' } },
       listViewMetaColumns: ['createdAt', 'status'],
+      listViewLegend: [{ icon: 'warning', text: { en: 'Needs attention' } }],
       languages: ['EN', 'FR', 'NL'],
       defaultLanguage: 'FR',
       languageSelectorEnabled: false,
@@ -48,7 +50,11 @@ describe('DefinitionBuilder', () => {
     const def = builder.buildDefinition('Config: Pantry');
     expect(def.dedupRules?.[0]?.id).toBe('rule-1');
     expect(def.listView?.columns.map(col => col.fieldId)).toContain('Q1');
-    const metaColumns = def.listView?.columns.filter(col => col.kind === 'meta').map(col => col.fieldId);
+    expect(def.listView?.legend).toEqual([{ icon: 'warning', text: { en: 'Needs attention' } }]);
+    expect(def.listView?.title).toEqual({ en: 'Pantry Records' });
+    const metaColumns = (def.listView?.columns || [])
+      .filter((col): col is { fieldId: string; kind: 'meta' } => (col as any).kind === 'meta')
+      .map(col => col.fieldId);
     expect(metaColumns).toEqual(['createdAt', 'status']);
   });
 

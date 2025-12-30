@@ -814,6 +814,23 @@ components:
       type: object
       description: JSON stored in the dashboard’s “Follow-up Config (JSON)” column.
       properties:
+        listView:
+          $ref: '#/components/schemas/ListViewConfig'
+          description: |
+            Standard list view configuration for this form (**recommended**).
+
+            Use this to control the List screen:
+            - `title`: heading shown above the table (defaults to "Records")
+            - `columns`: optional dashboard-defined columns (prepended before any questions with `listView: true`)
+              - Supports computed/action columns via `type: "rule"`
+            - `metaColumns`: optional system columns appended after question columns (`createdAt`, `updatedAt`, `status`, `pdfUrl`)
+            - `legend`: optional legend shown below the table to explain icons / table elements (only shown when defined)
+            - `defaultSort`: initial sort field/direction
+            - `pageSize`: rows per page (default 10, max 50)
+
+            Notes:
+            - The List screen appears when at least one question is marked `listView: true` or when you provide `columns`.
+            - Legacy top-level aliases (`listViewMetaColumns`, `listViewColumns`, `listViewLegend`) are still accepted but deprecated.
         languages:
           type: array
           description: |
@@ -871,10 +888,24 @@ components:
         statusTransitions:
           $ref: '#/components/schemas/FollowupStatusConfig'
         listViewMetaColumns:
+          deprecated: true
           type: array
+          description: Deprecated. Use `listView.metaColumns`.
           items:
             type: string
             enum: [createdAt, updatedAt, status, pdfUrl]
+        listViewColumns:
+          deprecated: true
+          type: array
+          description: Deprecated. Use `listView.columns`.
+          items:
+            $ref: '#/components/schemas/ListViewColumnConfig'
+        listViewLegend:
+          deprecated: true
+          type: array
+          description: Deprecated. Use `listView.legend`.
+          items:
+            $ref: '#/components/schemas/ListViewLegendItem'
         autoSave:
           type: object
           description: |
@@ -1158,8 +1189,18 @@ components:
           type: string
 
     ListViewColumnConfig:
+      oneOf:
+        - $ref: '#/components/schemas/ListViewFieldColumnConfig'
+        - $ref: '#/components/schemas/ListViewRuleColumnConfig'
+      description: List view column config (either a direct field/meta column or a rule-based computed column).
+
+    ListViewFieldColumnConfig:
       type: object
       properties:
+        type:
+          type: string
+          enum: [field]
+          description: Optional discriminator (omit for backward compatibility).
         fieldId:
           type: string
         label:
@@ -1175,6 +1216,169 @@ components:
       required:
         - fieldId
 
+    ListViewRuleColumnConfig:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [rule]
+        fieldId:
+          type: string
+          description: Stable column id for this computed column (does not need to match a question id).
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Column header label.
+        hrefFieldId:
+          type: string
+          description: |
+            Optional default URL field for the column. When set (and the matched case uses `style: "link"`),
+            the cell opens the URL stored in this field (e.g. `pdfUrl` or any question id containing a URL).
+
+            Cases can override via `cases[].hrefFieldId`.
+        openView:
+          type: string
+          enum: [auto, form, summary]
+          description: |
+            Which view opens when clicking the computed cell:
+            - `auto`: preserve default list click behavior
+            - `form`: force edit view (Closed records are read-only)
+            - `summary`: force Summary view (falls back to form if Summary is disabled)
+        sortable:
+          type: boolean
+          description: When true, allow sorting by the computed text value (default false).
+        cases:
+          type: array
+          description: First match wins.
+          items:
+            $ref: '#/components/schemas/ListViewRuleCase'
+        default:
+          $ref: '#/components/schemas/ListViewRuleCaseDefault'
+          description: Fallback when no cases match.
+      required:
+        - type
+        - fieldId
+        - label
+        - cases
+
+    ListViewRuleCaseDefault:
+      type: object
+      properties:
+        text:
+          $ref: '#/components/schemas/LocalizedString'
+        style:
+          type: string
+          enum: [link, warning, muted, default]
+        icon:
+          type: string
+          enum: [warning, check, error, info, external, lock, edit, view]
+        hrefFieldId:
+          type: string
+          description: 'Optional URL field to open when `style: "link"`.'
+      required:
+        - text
+
+    ListViewRuleCase:
+      type: object
+      properties:
+        when:
+          $ref: '#/components/schemas/ListViewRuleWhen'
+          description: Condition for the case; omitted means "always".
+        text:
+          $ref: '#/components/schemas/LocalizedString'
+        style:
+          type: string
+          enum: [link, warning, muted, default]
+        icon:
+          type: string
+          enum: [warning, check, error, info, external, lock, edit, view]
+        hrefFieldId:
+          type: string
+          description: |
+            Optional URL field to open when `style: "link"`.
+
+            Example: `pdfUrl` or a question id that stores `https://...`.
+      required:
+        - text
+
+    ListViewRuleWhen:
+      description: |
+        Rule condition used by list view computed columns.
+
+        Notes:
+        - Use `{ "all": [...] }` for AND conditions.
+        - Use `{ "any": [...] }` for OR conditions.
+        - `isToday` / `isNotToday` treat `YYYY-MM-DD` as a **local date** (not UTC).
+      oneOf:
+        - $ref: '#/components/schemas/ListViewRulePredicate'
+        - type: object
+          properties:
+            all:
+              type: array
+              items:
+                $ref: '#/components/schemas/ListViewRuleWhen'
+          required: [all]
+        - type: object
+          properties:
+            any:
+              type: array
+              items:
+                $ref: '#/components/schemas/ListViewRuleWhen'
+          required: [any]
+
+    ListViewRulePredicate:
+      type: object
+      properties:
+        fieldId:
+          type: string
+          description: |
+            Field id to evaluate.
+
+            You can reference question IDs or system meta fields: `id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`.
+        equals:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: array
+              items:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+        notEquals:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: array
+              items:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+        notEmpty:
+          type: boolean
+        isToday:
+          type: boolean
+        isNotToday:
+          type: boolean
+      required:
+        - fieldId
+
+    ListViewLegendItem:
+      type: object
+      description: Legend entry displayed below the list view table (icon + explanatory text).
+      properties:
+        icon:
+          type: string
+          enum: [warning, check, error, info, external, lock, edit, view]
+          description: Optional icon name shown next to the text.
+        text:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Explanatory text shown next to the icon.
+      required:
+        - text
+
     ListViewConfig:
       type: object
       properties:
@@ -1187,14 +1391,35 @@ components:
           description: Optional localized heading displayed above the list view.
         columns:
           type: array
+          description: |
+            Optional dashboard-defined columns for the list view.
+
+            These columns are **prepended** before any questions marked `listView: true`, and before `metaColumns`.
+            Use this to add computed/action columns based on record fields (for example: an Action column that shows
+            Edit/View/Missing depending on status + DATE).
           items:
             $ref: '#/components/schemas/ListViewColumnConfig'
         metaColumns:
           type: array
-          description: System columns appended after question columns.
+          description: |
+            Optional system columns appended after question columns.
+
+            Notes:
+            - When omitted, the app defaults to `["updatedAt"]`.
+            - Use an explicit empty list `[]` to show no meta columns.
           items:
             type: string
             enum: [createdAt, updatedAt, status, pdfUrl]
+        legend:
+          type: array
+          description: |
+            Optional legend displayed below the list view table to explain icons/visual indicators.
+
+            Notes:
+            - The legend is **only shown when you define it**.
+            - Each legend entry can include an `icon`, or omit it for text-only legend lines.
+          items:
+            $ref: '#/components/schemas/ListViewLegendItem'
         defaultSort:
           type: object
           properties:
@@ -1206,8 +1431,6 @@ components:
         pageSize:
           type: integer
           description: Max rows per page (default 10, capped at 50).
-      required:
-        - columns
       description: Configuration for list views showing saved submissions.
       example:
         columns:

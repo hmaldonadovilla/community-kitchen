@@ -839,7 +839,35 @@ export interface FormConfig {
   appUrl?: string;
   rowIndex: number;
   followupConfig?: FollowupConfig;
+  /**
+   * Optional override for the list view heading/title.
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column (recommended: `listView.title`).
+   */
+  listViewTitle?: LocalizedString;
+  /**
+   * Optional override for the list view default sort (recommended: `listView.defaultSort`).
+   */
+  listViewDefaultSort?: ListViewConfig['defaultSort'];
+  /**
+   * Optional override for list view page size (recommended: `listView.pageSize`).
+   */
+  listViewPageSize?: number;
   listViewMetaColumns?: string[];
+  /**
+   * Optional list view columns defined at the dashboard level (in the “Follow-up Config (JSON)” column).
+   *
+   * Notes:
+   * - These columns are prepended before question + meta columns in the generated definition list view.
+   * - Supports both normal field/meta columns and rule-based computed columns (`type: "rule"`).
+   */
+  listViewColumns?: ListViewColumnConfig[];
+  /**
+   * Optional legend shown below the list view table (dashboard-level config).
+   *
+   * Use this to explain the meaning of icons used in rule-based columns (e.g., warning/check/error).
+   */
+  listViewLegend?: ListViewLegendItem[];
   /**
    * Enabled languages for the web app UI (max 3).
    *
@@ -1005,16 +1033,131 @@ export interface WebFormSubmission {
   pdfUrl?: string;
 }
 
-export interface ListViewColumnConfig {
+export interface ListViewFieldColumnConfig {
+  /**
+   * Column type discriminator.
+   * - Omitted defaults to `"field"` for backward compatibility.
+   */
+  type?: 'field';
   fieldId: string;
   label?: LocalizedString;
   kind?: 'question' | 'meta';
+}
+
+export type ListViewRuleCellStyle = 'link' | 'warning' | 'muted' | 'default';
+
+export type ListViewRuleIcon =
+  | 'warning'
+  | 'check'
+  | 'error'
+  | 'info'
+  | 'external'
+  | 'lock'
+  | 'edit'
+  | 'view';
+
+export interface ListViewRulePredicate {
+  /**
+   * Field id to evaluate.
+   *
+   * Notes:
+   * - You can reference both question IDs and system meta fields: `id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`.
+   */
+  fieldId: string;
+  equals?: string | number | boolean | Array<string | number | boolean>;
+  notEquals?: string | number | boolean | Array<string | number | boolean>;
+  /**
+   * Match based on emptiness rather than a specific value.
+   * - true: matches when the field has any non-empty value (not null/undefined/blank)
+   * - false: matches when the field is empty
+   */
+  notEmpty?: boolean;
+  /**
+   * Date-only match against the user's local "today".
+   */
+  isToday?: boolean;
+  /**
+   * Date-only mismatch against the user's local "today" (empty/invalid dates are treated as "not today").
+   */
+  isNotToday?: boolean;
+}
+
+export type ListViewRuleWhen =
+  | ListViewRulePredicate
+  | {
+      all: ListViewRuleWhen[];
+    }
+  | {
+      any: ListViewRuleWhen[];
+    };
+
+export interface ListViewRuleCase {
+  when?: ListViewRuleWhen;
+  text: LocalizedString;
+  style?: ListViewRuleCellStyle;
+  icon?: ListViewRuleIcon;
+  /**
+   * Optional field id containing a URL to open when the user clicks this cell.
+   *
+   * Example: "pdfUrl" or a question id whose value is a URL.
+   * When set, the list view renders the cell as a link and opens the URL in a new tab.
+   */
+  hrefFieldId?: string;
+}
+
+export interface ListViewRuleColumnConfig {
+  type: 'rule';
+  fieldId: string;
+  label: LocalizedString;
+  /**
+   * First match wins.
+   */
+  cases: ListViewRuleCase[];
+  /**
+   * Fallback when no cases match.
+   */
+  default?: Omit<ListViewRuleCase, 'when'>;
+  /**
+   * Optional default URL field for the column. Cases can override via `hrefFieldId`.
+   */
+  hrefFieldId?: string;
+  /**
+   * Controls which view opens when clicking the cell.
+   * - auto: preserve the app's default "list row click" behavior
+   * - form: force the edit view (Closed records will be read-only)
+   * - summary: force Summary view (if enabled; otherwise falls back to form)
+   */
+  openView?: 'auto' | 'form' | 'summary';
+  /**
+   * When true, allow sorting by the computed text value.
+   * Defaults to false (rule columns are usually "actions" rather than sortable data).
+   */
+  sortable?: boolean;
+}
+
+export type ListViewColumnConfig = ListViewFieldColumnConfig | ListViewRuleColumnConfig;
+
+export interface ListViewLegendItem {
+  /**
+   * Optional icon displayed in the legend (must match a supported list view icon name).
+   *
+   * When omitted, the legend entry is rendered as plain text.
+   */
+  icon?: ListViewRuleIcon;
+  /**
+   * Text explaining what the icon means for this form.
+   */
+  text: LocalizedString;
 }
 
 export interface ListViewConfig {
   title?: LocalizedString;
   columns: ListViewColumnConfig[];
   metaColumns?: string[];
+  /**
+   * Optional legend shown below the list view table to explain icons/visual indicators.
+   */
+  legend?: ListViewLegendItem[];
   defaultSort?: {
     fieldId: string;
     direction?: 'asc' | 'desc';

@@ -118,7 +118,9 @@ describe('WebFormService', () => {
     expect(def.listView).toBeDefined();
     expect(def.listView?.columns.map(col => col.fieldId)).toContain('Q4');
     expect(def.listView?.defaultSort).toEqual({ fieldId: 'Q4', direction: 'desc' });
-    const metaCols = def.listView?.columns.filter(col => col.kind === 'meta').map(col => col.fieldId);
+    const metaCols = (def.listView?.columns || [])
+      .filter((col): col is { fieldId: string; kind: 'meta' } => (col as any).kind === 'meta')
+      .map(col => col.fieldId);
     expect(metaCols).toEqual(['createdAt', 'status']);
   });
 
@@ -138,7 +140,9 @@ describe('WebFormService', () => {
     (dashboardSheet as any).setMockData(dashboardData);
 
     const def = service.buildDefinition('Config: Delivery');
-    const metaCols = def.listView?.columns.filter(col => col.kind === 'meta').map(col => col.fieldId) || [];
+    const metaCols = (def.listView?.columns || [])
+      .filter((col): col is { fieldId: string; kind: 'meta' } => (col as any).kind === 'meta')
+      .map(col => col.fieldId);
     expect(metaCols).toEqual([]);
   });
 

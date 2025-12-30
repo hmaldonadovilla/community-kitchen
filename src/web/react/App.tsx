@@ -156,6 +156,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   const formSubmitActionRef = useRef<(() => void) | null>(null);
   const vvBottomRef = useRef<number>(-1);
+  const bottomBarHeightRef = useRef<number>(-1);
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
     phase: 'idle'
   }));
@@ -372,7 +373,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   // Warnings are surfaced as transient "submission messages" in Form view.
   // Summary/PDF compute warnings from record values, so clear when leaving the Form view.
   useEffect(() => {
-    if (view !== 'form') setValidationWarnings([]);
+    if (view !== 'form') setValidationWarnings({ top: [], byField: {} });
   }, [view]);
 
   useEffect(() => {
@@ -475,6 +476,65 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       vv.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
       window.removeEventListener('orientationchange', schedule);
+    };
+  }, [logEvent]);
+
+  // Measure bottom action bar height so content isn't covered when buttons wrap onto multiple rows.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    if (!root) return;
+
+    const cssVar = '--ck-bottom-bar-height';
+    let raf = 0;
+    let ro: ResizeObserver | null = null;
+    let observed: HTMLElement | null = null;
+
+    const update = () => {
+      raf = 0;
+      const bar = document.querySelector<HTMLElement>('.ck-bottom-bar');
+
+      if (bar !== observed) {
+        ro?.disconnect();
+        observed = bar;
+        if (ro && bar) ro.observe(bar);
+      }
+
+      if (!bar) {
+        root.style.removeProperty(cssVar);
+        if (bottomBarHeightRef.current !== -1) {
+          bottomBarHeightRef.current = -1;
+          logEvent('ui.actionBars.bottomBarHeight', { heightPx: null });
+        }
+        return;
+      }
+
+      const h = Math.max(0, Math.round(bar.getBoundingClientRect().height));
+      root.style.setProperty(cssVar, `${h}px`);
+      if (bottomBarHeightRef.current !== h) {
+        bottomBarHeightRef.current = h;
+        logEvent('ui.actionBars.bottomBarHeight', { heightPx: h });
+      }
+    };
+
+    const schedule = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(update);
+    };
+
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => schedule());
+    }
+
+    schedule();
+    window.addEventListener('resize', schedule);
+    window.addEventListener('orientationchange', schedule);
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('orientationchange', schedule);
+      ro?.disconnect();
     };
   }, [logEvent]);
 
@@ -1634,7 +1694,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
   };
 
-  const handleRecordSelect = (row: ListItem, fullRecord?: WebFormSubmission) => {
+  const handleRecordSelect = (
+    row: ListItem,
+    fullRecord?: WebFormSubmission,
+    opts?: { openView?: 'auto' | 'form' | 'summary' }
+  ) => {
     const sourceRecord = fullRecord || listCache.records[row.id] || null;
     setStatus(null);
     setStatusLevel(null);
@@ -1658,7 +1722,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     const statusRaw = ((sourceRecord?.status || row.status || '') as any)?.toString?.() || '';
     const isClosed = statusRaw.trim().toLowerCase() === 'closed';
     // When Summary view is disabled, always open the Form view (closed records are read-only).
-    setView(summaryViewEnabled ? (isClosed ? 'summary' : 'form') : 'form');
+    const requested = (opts?.openView || 'auto') as 'auto' | 'form' | 'summary';
+    if (requested === 'form') {
+      setView('form');
+    } else if (requested === 'summary') {
+      setView(summaryViewEnabled ? 'summary' : 'form');
+    } else {
+      setView(summaryViewEnabled ? (isClosed ? 'summary' : 'form') : 'form');
+    }
   };
 
   const currentRecord = selectedRecordSnapshot || (selectedRecordId ? listCache.records[selectedRecordId] : null);

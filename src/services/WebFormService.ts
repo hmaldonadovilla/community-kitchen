@@ -78,10 +78,50 @@ export class WebFormService {
       if (!def?.listView?.columns?.length) return null;
       const { form, questions } = this.getFormContextLite(formKey);
 
-      const projection = (def.listView.columns || [])
-        .filter(col => col && col.kind !== 'meta')
-        .map(col => (col.fieldId || '').toString())
-        .filter(Boolean);
+      const metaFields = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
+      const projectionIds = new Set<string>();
+      const addProjection = (fieldId: string) => {
+        const fid = (fieldId || '').toString().trim();
+        if (!fid || metaFields.has(fid)) return;
+        projectionIds.add(fid);
+      };
+      const collectWhenFieldIds = (when: any) => {
+        if (!when) return;
+        if (Array.isArray(when)) {
+          when.forEach(collectWhenFieldIds);
+          return;
+        }
+        if (typeof when !== 'object') return;
+        if (Array.isArray((when as any).all)) {
+          ((when as any).all as any[]).forEach(collectWhenFieldIds);
+          return;
+        }
+        if (Array.isArray((when as any).any)) {
+          ((when as any).any as any[]).forEach(collectWhenFieldIds);
+          return;
+        }
+        const fidRaw = (when as any).fieldId ?? (when as any).field ?? (when as any).id;
+        const fid = fidRaw !== undefined && fidRaw !== null ? fidRaw.toString().trim() : '';
+        if (fid) addProjection(fid);
+      };
+      (def.listView.columns || []).forEach(col => {
+        if (!col) return;
+        const type = (col as any).type;
+        if (type === 'rule') {
+          const colHref = (col as any).hrefFieldId;
+          if (colHref !== undefined && colHref !== null) addProjection(colHref);
+          const cases = Array.isArray((col as any).cases) ? ((col as any).cases as any[]) : [];
+          cases.forEach(entry => {
+            collectWhenFieldIds(entry?.when);
+            addProjection(entry?.hrefFieldId);
+          });
+          addProjection((col as any)?.default?.hrefFieldId);
+          return;
+        }
+        if ((col as any).kind === 'meta') return;
+        addProjection((col as any).fieldId);
+      });
+      const projection = Array.from(projectionIds);
 
       const fetchPageSize = 50;
       const recordBootstrapLimit = 25;

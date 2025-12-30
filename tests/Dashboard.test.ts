@@ -77,6 +77,44 @@ describe('Dashboard', () => {
     expect(forms[0].listViewMetaColumns).toEqual(['createdAt', 'status', 'pdfUrl']);
   });
 
+  test('getForms parses list view legend from dashboard config', () => {
+    const configJson = JSON.stringify({
+      listViewLegend: [
+        { icon: 'warning', text: { en: 'Missing DATE' } },
+        { text: 'Click Action to open the record.' }
+      ]
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].listViewLegend).toEqual([
+      { icon: 'warning', text: { en: 'Missing DATE' } },
+      { text: 'Click Action to open the record.' }
+    ]);
+  });
+
+  test('getForms parses list view title from dashboard config (listView.title)', () => {
+    const configJson = JSON.stringify({
+      listView: { title: { EN: 'My Records' } }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].listViewTitle).toEqual({ en: 'My Records' });
+  });
+
   test('getForms parses autosave config from dashboard config', () => {
     const configJson = JSON.stringify({
       autoSave: { enabled: true, debounceMs: 1500, status: 'In progress' }

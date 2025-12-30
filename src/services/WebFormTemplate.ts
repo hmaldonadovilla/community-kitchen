@@ -155,7 +155,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         /* Make the page a "definite height" flex container so children can use flex:1 and iframe height:100%. */
         min-height: 100vh;
         /* Reserve room for the fixed bottom action bar (accounts for iOS safe-area + visualViewport inset). */
-        padding-bottom: calc(22px + 146px + var(--safe-bottom) + var(--vv-bottom));
+        padding-bottom: calc(22px + var(--ck-bottom-bar-height, calc(146px + var(--safe-bottom))) + var(--vv-bottom));
         display: flex;
         flex-direction: column;
         gap: 16px;
@@ -436,6 +436,62 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         text-decoration: none;
       }
       .inline-link:hover { text-decoration: underline; }
+      .ck-list-nav {
+        appearance: none;
+        border: none;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        color: var(--accent);
+        font: inherit;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      .ck-list-nav:hover { text-decoration: underline; }
+      .ck-list-nav:focus-visible {
+        outline: 4px solid rgba(0, 122, 255, 0.28);
+        outline-offset: 3px;
+        border-radius: 10px;
+      }
+      .ck-list-nav--warning { color: #b45309; }
+      .ck-list-nav--muted { color: var(--muted); font-weight: 700; }
+      .ck-list-icon {
+        width: 1.05em;
+        height: 1.05em;
+        flex: 0 0 auto;
+        color: currentColor;
+      }
+      .ck-list-icon--warning { color: #b45309; }
+      .ck-list-icon--check { color: #16a34a; }
+      .ck-list-icon--error { color: #b91c1c; }
+      .ck-list-icon--info { color: #2563eb; }
+      .ck-list-icon--external { color: var(--accent); }
+      .ck-list-icon--lock { color: var(--muted); }
+      .ck-list-icon--edit { color: var(--accent); }
+      .ck-list-icon--view { color: var(--accent); }
+      .ck-list-legend {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.85em;
+      }
+      .ck-list-legend-title {
+        font-weight: 800;
+        color: var(--text);
+      }
+      .ck-list-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 700;
+      }
       .required-star {
         color: #dc2626;
         font-size: 0.9em;
@@ -526,6 +582,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         flex: 1 1 auto;
         min-inline-size: 0;
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 8px;
         padding: 8px;
@@ -535,8 +592,8 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
       }
       .ck-bottom-item {
-        flex: 1 1 0;
-        min-inline-size: 0;
+        /* Size to label (no ellipsis). If space is tight, the capsule wraps buttons onto a new row. */
+        flex: 1 0 auto;
         background: transparent;
         color: var(--text);
         border: 1px solid transparent;
@@ -553,10 +610,8 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         box-shadow: none;
       }
       .ck-bottom-label {
-        /* Prevent long labels from overflowing and overlapping neighboring pills. */
+        /* Show labels in full; wrapping happens at the button level (via the capsule). */
         min-inline-size: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
       }
       .ck-bottom-item--icon {
@@ -615,7 +670,8 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         position: relative;
         z-index: 1;
         width: min(760px, calc(100vw - 36px));
-        margin-bottom: calc(12px + max(12px, var(--safe-bottom)) + var(--vv-bottom) + 110px);
+        /* Keep menus above the fixed bottom action bar (which can become 2 rows on small screens). */
+        margin-bottom: calc(var(--vv-bottom) + var(--ck-bottom-bar-height, calc(146px + var(--safe-bottom))) + 16px);
         background: var(--card);
         border: 1px solid var(--border);
         border-radius: 22px;
