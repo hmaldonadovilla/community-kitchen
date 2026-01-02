@@ -216,6 +216,13 @@ export interface QuestionUiConfig {
    */
   labelLayout?: LabelLayout;
   /**
+   * When true, visually hide the field label in the edit view (kept for accessibility).
+   *
+   * Use this sparingly: labels help users understand fields. This is mainly useful when a field is already
+   * clearly explained by surrounding UI, or when you render your own label elsewhere.
+   */
+  hideLabel?: boolean;
+  /**
    * Whether this field should appear in the Summary view.
    * Default is `inherit` (only show when the field is visible in the Form view).
    */
@@ -534,6 +541,18 @@ export interface LineItemGroupUiConfig {
    * Includes `{{__ckRowSource}}` (auto/manual) and `{{__ckRowSourceLabel}}` (localized).
    */
   rowDisclaimer?: RowDisclaimerConfig;
+
+  /**
+   * Controls whether the "N items" pill is displayed in the group header.
+   * Defaults to true.
+   */
+  showItemPill?: boolean;
+
+  /**
+   * Controls where the "Add" button is shown for this group (and for subgroups when configured there).
+   * Defaults to 'both' (top header + bottom toolbar).
+   */
+  addButtonPlacement?: 'top' | 'bottom' | 'both' | 'hidden';
 }
 
 export interface RowDisclaimerRule {
@@ -915,6 +934,38 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   actionBars?: ActionBarsConfig;
+  /**
+   * Optional app header configuration (dashboard-level).
+   */
+  appHeader?: AppHeaderConfig;
+  /**
+   * Optional behavior settings for collapsible group sections in the edit view (dashboard-level).
+   */
+  groupBehavior?: GroupBehaviorConfig;
+}
+
+export interface AppHeaderConfig {
+  /**
+   * Optional logo image shown in the app header.
+   *
+   * Recommend using a Google Drive image (shared with users) via a direct URL.
+   */
+  logoUrl?: string;
+}
+
+export interface GroupBehaviorConfig {
+  /**
+   * When true, automatically collapse a group section when it becomes complete (based on required progress).
+   */
+  autoCollapseOnComplete?: boolean;
+  /**
+   * When true (and autoCollapseOnComplete is enabled), automatically open the next incomplete section.
+   */
+  autoOpenNextIncomplete?: boolean;
+  /**
+   * When true, scroll the expanded section to the top (below the sticky header).
+   */
+  autoScrollOnExpand?: boolean;
 }
 
 export interface FormResult {
@@ -1019,6 +1070,14 @@ export interface WebFormDefinition {
    * Optional per-view action bar configuration (system + custom buttons).
    */
   actionBars?: ActionBarsConfig;
+  /**
+   * Optional app header configuration.
+   */
+  appHeader?: AppHeaderConfig;
+  /**
+   * Optional behavior settings for collapsible group sections in the edit view.
+   */
+  groupBehavior?: GroupBehaviorConfig;
 }
 
 export interface WebFormSubmission {

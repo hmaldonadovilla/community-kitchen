@@ -208,6 +208,12 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         line-height: 1;
         user-select: none;
       }
+      /* When using an image logo, keep the same circular sizing + border, but render as an image. */
+      .ck-app-avatar--img {
+        display: block;
+        object-fit: cover;
+        background: transparent;
+      }
       .ck-app-avatar--drawer {
         --ck-avatar-size: calc(var(--control-height) * 0.58);
         font-size: calc(var(--ck-font-control) * 0.66);

@@ -101,7 +101,9 @@ export class DefinitionBuilder {
       summaryViewEnabled: form.summaryViewEnabled,
       copyCurrentRecordEnabled: form.copyCurrentRecordEnabled,
       createRecordPresetButtonsEnabled: form.createRecordPresetButtonsEnabled,
-      actionBars: form.actionBars
+      actionBars: form.actionBars,
+      appHeader: form.appHeader,
+      groupBehavior: form.groupBehavior
     };
   }
 

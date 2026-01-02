@@ -1,5 +1,6 @@
 import {
   AutoSaveConfig,
+  AppHeaderConfig,
   ActionBarsConfig,
   ActionBarItemConfig,
   ActionBarViewConfig,
@@ -11,6 +12,7 @@ import {
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
   FormConfig,
+  GroupBehaviorConfig,
   ListViewColumnConfig,
   ListViewLegendItem,
   LocalizedString
@@ -125,6 +127,8 @@ export class Dashboard {
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
       const createRecordPresetButtonsEnabled = dashboardConfig?.createRecordPresetButtonsEnabled;
       const actionBars = dashboardConfig?.actionBars;
+      const appHeader = dashboardConfig?.appHeader;
+      const groupBehavior = dashboardConfig?.groupBehavior;
       const languages = dashboardConfig?.languages;
       const defaultLanguage = dashboardConfig?.defaultLanguage;
       const languageSelectorEnabled = dashboardConfig?.languageSelectorEnabled;
@@ -149,6 +153,8 @@ export class Dashboard {
           copyCurrentRecordEnabled,
           createRecordPresetButtonsEnabled,
           actionBars,
+          appHeader,
+          groupBehavior,
           languages,
           defaultLanguage,
           languageSelectorEnabled
@@ -191,6 +197,8 @@ export class Dashboard {
     copyCurrentRecordEnabled?: boolean;
     createRecordPresetButtonsEnabled?: boolean;
     actionBars?: ActionBarsConfig;
+    appHeader?: AppHeaderConfig;
+    groupBehavior?: GroupBehaviorConfig;
     languages?: Array<'EN' | 'FR' | 'NL'>;
     defaultLanguage?: 'EN' | 'FR' | 'NL';
     languageSelectorEnabled?: boolean;
@@ -401,6 +409,94 @@ export class Dashboard {
         ? parsed.buttonsUi
         : undefined
     );
+
+    const normalizeString = (input: any): string | undefined => {
+      if (input === undefined || input === null) return undefined;
+      const s = input.toString().trim();
+      return s ? s : undefined;
+    };
+
+    const normalizeDriveImageUrl = (input: any): string | undefined => {
+      const raw = normalizeString(input);
+      if (!raw) return undefined;
+
+      const extractDriveId = (value: string): string | undefined => {
+        // Common share formats:
+        // - https://drive.google.com/file/d/<ID>/view?...
+        // - https://drive.google.com/open?id=<ID>
+        // - https://drive.google.com/uc?id=<ID>
+        // - https://drive.google.com/uc?export=view&id=<ID>
+        const byPath = value.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/);
+        if (byPath && byPath[1]) return byPath[1];
+        const byQuery = value.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+        if (byQuery && byQuery[1]) return byQuery[1];
+        return undefined;
+      };
+
+      // Full URL: if it's a Drive share link, convert it to a direct-view URL.
+      if (/^https?:\/\//i.test(raw)) {
+        const id = extractDriveId(raw);
+        if (id) return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`;
+        return raw;
+      }
+
+      // Bare Drive file id: treat it as a Drive image.
+      if (/^[a-zA-Z0-9_-]{10,}$/.test(raw)) {
+        return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(raw)}`;
+      }
+
+      return undefined;
+    };
+
+    const appHeaderObj = parsed.appHeader !== undefined && parsed.appHeader !== null && typeof parsed.appHeader === 'object' ? parsed.appHeader : undefined;
+    const appHeaderLogoRaw =
+      appHeaderObj && (appHeaderObj.logo !== undefined || appHeaderObj.logoUrl !== undefined)
+        ? (appHeaderObj.logo ?? appHeaderObj.logoUrl)
+        : parsed.appHeaderLogo !== undefined
+        ? parsed.appHeaderLogo
+        : parsed.appLogo !== undefined
+        ? parsed.appLogo
+        : parsed.logo !== undefined
+        ? parsed.logo
+        : parsed.logoUrl !== undefined
+        ? parsed.logoUrl
+        : undefined;
+    const appHeaderLogoUrl = normalizeDriveImageUrl(appHeaderLogoRaw);
+    const appHeader: AppHeaderConfig | undefined = appHeaderLogoUrl ? { logoUrl: appHeaderLogoUrl } : undefined;
+
+    const groupBehaviorObj =
+      parsed.groupBehavior !== undefined && parsed.groupBehavior !== null && typeof parsed.groupBehavior === 'object'
+        ? parsed.groupBehavior
+        : parsed.formGroups !== undefined && parsed.formGroups !== null && typeof parsed.formGroups === 'object'
+        ? parsed.formGroups
+        : undefined;
+    const autoCollapseOnComplete =
+      groupBehaviorObj && (groupBehaviorObj.autoCollapseOnComplete !== undefined || groupBehaviorObj.collapseOnComplete !== undefined)
+        ? Boolean(groupBehaviorObj.autoCollapseOnComplete ?? groupBehaviorObj.collapseOnComplete)
+        : parsed.autoCollapseOnComplete !== undefined
+        ? Boolean(parsed.autoCollapseOnComplete)
+        : undefined;
+    const autoOpenNextIncomplete =
+      groupBehaviorObj && (groupBehaviorObj.autoOpenNextIncomplete !== undefined || groupBehaviorObj.openNextIncomplete !== undefined)
+        ? Boolean(groupBehaviorObj.autoOpenNextIncomplete ?? groupBehaviorObj.openNextIncomplete)
+        : parsed.autoOpenNextIncomplete !== undefined
+        ? Boolean(parsed.autoOpenNextIncomplete)
+        : undefined;
+    const autoScrollOnExpand =
+      groupBehaviorObj && (groupBehaviorObj.autoScrollOnExpand !== undefined || groupBehaviorObj.scrollOnExpand !== undefined)
+        ? Boolean(groupBehaviorObj.autoScrollOnExpand ?? groupBehaviorObj.scrollOnExpand)
+        : parsed.autoScrollOnExpand !== undefined
+        ? Boolean(parsed.autoScrollOnExpand)
+        : undefined;
+    const groupBehavior: GroupBehaviorConfig | undefined =
+      autoCollapseOnComplete === undefined && autoOpenNextIncomplete === undefined && autoScrollOnExpand === undefined
+        ? undefined
+        : {
+            autoCollapseOnComplete,
+            autoOpenNextIncomplete,
+            autoScrollOnExpand
+          };
+
     if (
       !followup &&
       !listViewTitle &&
@@ -414,6 +510,8 @@ export class Dashboard {
       copyCurrentRecordEnabled === undefined &&
       createRecordPresetButtonsEnabled === undefined &&
       !actionBars &&
+      !appHeader &&
+      !groupBehavior &&
       !languages &&
       defaultLanguage === undefined &&
       languageSelectorEnabled === undefined
@@ -433,6 +531,8 @@ export class Dashboard {
       copyCurrentRecordEnabled,
       createRecordPresetButtonsEnabled,
       actionBars,
+      appHeader,
+      groupBehavior,
       languages,
       defaultLanguage,
       languageSelectorEnabled

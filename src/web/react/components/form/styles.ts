@@ -20,7 +20,6 @@ export const FORM_VIEW_STYLES = `
           box-sizing: border-box;
           position: relative;
           /* Full-bleed like the sticky header */
-          margin: -6px -22px 6px;
           padding: 12px 18px 12px;
           background: rgba(242, 242, 247, 0.92);
           border-bottom: 1px solid rgba(60, 60, 67, 0.22);
@@ -28,6 +27,14 @@ export const FORM_VIEW_STYLES = `
           -webkit-backdrop-filter: saturate(180%) blur(18px);
           /* Keep under the header (z=30) but above scrolling content. */
           z-index: 29;
+        }
+        /* Ensure the top action bar uses the full available width (no shrink-to-content). */
+        .ck-top-action-bar .ck-bottom-bar-inner {
+          width: 100%;
+          max-width: none;
+        }
+        .ck-top-action-bar .ck-bottom-capsule {
+          width: 100%;
         }
         .ck-top-action-bar[data-sticky="1"] {
           position: sticky;
@@ -568,6 +575,11 @@ export const FORM_VIEW_STYLES = `
         }
         .ck-group-header--clickable {
           cursor: pointer;
+          background: rgba(118, 118, 128, 0.06);
+          transition: background 160ms ease;
+        }
+        .ck-group-header--clickable:hover {
+          background: rgba(118, 118, 128, 0.08);
         }
         .ck-group-header--clickable:active {
           background: rgba(118, 118, 128, 0.10);
@@ -649,6 +661,20 @@ export const FORM_VIEW_STYLES = `
           gap: 8px;
           cursor: pointer;
           text-align: left;
+        }
+        /* Progressive line-item rows: make the top area look/feel like a group header. */
+        .line-item-row .ck-row-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 10px;
+          /* Stretch to the row edges (row has padding: 12px inline). */
+          margin: -12px -12px 12px;
+          padding: 18px 18px 14px;
+          border-bottom: 1px solid var(--border);
+          background: rgba(118, 118, 128, 0.06);
+          border-top-left-radius: 10px;
+          border-top-right-radius: 10px;
         }
         .ck-row-toggle:active .ck-progress-pill {
           transform: translateY(1px);

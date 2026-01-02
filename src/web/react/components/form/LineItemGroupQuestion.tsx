@@ -647,6 +647,25 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               </select>
             </div>
           ) : null;
+        const liUi = q.lineItemConfig?.ui;
+        const showItemPill = liUi?.showItemPill !== undefined ? !!liUi.showItemPill : true;
+        const addButtonPlacement = (liUi?.addButtonPlacement || 'both').toString().toLowerCase();
+        const showAddTop =
+          addButtonPlacement !== 'hidden' && (addButtonPlacement === 'both' || addButtonPlacement === 'top');
+        const showAddBottom =
+          addButtonPlacement !== 'hidden' && (addButtonPlacement === 'both' || addButtonPlacement === 'bottom');
+        const hideGroupLabel = q.ui?.hideLabel === true;
+
+        React.useEffect(() => {
+          if (!onDiagnostic) return;
+          if (liUi?.showItemPill === false) onDiagnostic('ui.lineItems.itemPill.disabled', { groupId: q.id });
+          if (liUi?.addButtonPlacement && liUi.addButtonPlacement !== 'both') {
+            onDiagnostic('ui.lineItems.addButtonPlacement', { groupId: q.id, value: liUi.addButtonPlacement });
+          }
+        }, [onDiagnostic, liUi?.addButtonPlacement, liUi?.showItemPill, q.id]);
+
+        const shouldRenderTopToolbar = !!selectorControl || showAddTop;
+        const shouldRenderBottomToolbar = (parentRows.length > 0 || showAddBottom) && (showAddBottom || !!selectorCfg || groupTotals.length > 0);
         return (
             <div
               key={q.id}
@@ -656,24 +675,28 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               data-has-warning={hasWarning(q.id) ? 'true' : undefined}
             >
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <h3 style={{ margin: 0 }}>{resolveLabel(q, language)}</h3>
-              <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
-                {tSystem(
-                  parentCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
-                  language,
-                  parentCount === 1 ? '{count} item' : '{count} items',
-                  { count: parentCount }
-                )}
-              </span>
+              <h3 style={hideGroupLabel ? { ...srOnly, margin: 0 } : { margin: 0 }}>{resolveLabel(q, language)}</h3>
+              {showItemPill ? (
+                <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
+                  {tSystem(
+                    parentCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
+                    language,
+                    parentCount === 1 ? '{count} item' : '{count} items',
+                    { count: parentCount }
+                  )}
+                </span>
+              ) : null}
             </div>
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
               {renderWarnings(q.id)}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
-                {selectorControl}
-                {renderAddButton()}
+            {shouldRenderTopToolbar ? (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
+                  {selectorControl}
+                  {showAddTop ? renderAddButton() : null}
+                </div>
               </div>
-            </div>
+            ) : null}
             {parentRows.map((row, rowIdx) => {
               const groupCtx: VisibilityContext = {
                 getValue: fid => values[fid],
@@ -898,7 +921,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                   }}
                 >
                   {isProgressive ? (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                    <div className="ck-row-header">
                       <div style={{ minWidth: 0 }}>
                         {showTitleControl && titleField ? (
                           <div style={{ maxWidth: 420 }}>
@@ -1218,7 +1241,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                     if (hideField) return null;
 
                       const fieldPath = `${q.id}__${field.id}__${row.id}`;
-                      const hideLabel = isProgressive && rowCollapsed && collapsedLabelMap[field.id] === false;
+                      const hideLabel =
+                        Boolean((field as any)?.ui?.hideLabel) ||
+                        (isProgressive && rowCollapsed && collapsedLabelMap[field.id] === false);
                       const labelStyle = hideLabel ? srOnly : undefined;
 
                       const triggeredSubgroupIds = (() => {
@@ -1789,14 +1814,21 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         >
                           <div style={{ textAlign: 'center', fontWeight: 700 }}>
                             {subLabelResolved || subId}
-                            <span className="pill" style={{ marginLeft: 8, background: '#e2e8f0', color: '#334155' }}>
-                              {tSystem(
-                                subCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
-                                language,
-                                subCount === 1 ? '{count} item' : '{count} items',
-                                { count: subCount }
-                              )}
-                            </span>
+                            {(() => {
+                              const subUi = (sub as any).ui as any;
+                              const subShowItemPill = subUi?.showItemPill !== undefined ? !!subUi.showItemPill : true;
+                              if (!subShowItemPill) return null;
+                              return (
+                                <span className="pill" style={{ marginLeft: 8, background: '#e2e8f0', color: '#334155' }}>
+                                  {tSystem(
+                                    subCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
+                                    language,
+                                    subCount === 1 ? '{count} item' : '{count} items',
+                                    { count: subCount }
+                                  )}
+                                </span>
+                              );
+                            })()}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
@@ -1829,7 +1861,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   </select>
                                 </div>
                               )}
-                              {renderSubAddButton()}
+                              {(() => {
+                                const subUi = (sub as any).ui as any;
+                                const placement = (subUi?.addButtonPlacement || 'both').toString().toLowerCase();
+                                const showTop = placement !== 'hidden' && (placement === 'both' || placement === 'top');
+                                return showTop ? renderSubAddButton() : null;
+                              })()}
                             </div>
                             <div style={{ marginLeft: 'auto' }}>
                               <button
@@ -1932,6 +1969,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 });
                                 if (hideField) return null;
                                   const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
+                                  const hideLabel = Boolean((field as any)?.ui?.hideLabel);
+                                  const labelStyle = hideLabel ? srOnly : undefined;
 
                                 switch (field.type) {
                                   case 'CHOICE': {
@@ -1948,7 +1987,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
                                           data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
-                                        <label>
+                                        <label style={labelStyle}>
                                           {resolveFieldLabel(field, language, field.id)}
                                           {field.required && <RequiredStar />}
                                         </label>
@@ -1995,7 +2034,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
                                           data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
-                                        <label>
+                                        <label style={labelStyle}>
                                           {resolveFieldLabel(field, language, field.id)}
                                           {field.required && <RequiredStar />}
                                         </label>
@@ -2075,7 +2114,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
                                           data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
-                                          <label>
+                                          <label style={labelStyle}>
                                             {resolveFieldLabel(field, language, field.id)}
                                             {field.required && <RequiredStar />}
                                           </label>
@@ -2220,7 +2259,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           data-has-error={errors[fieldPath] ? 'true' : undefined}
                                           data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                         >
-                                        <label>
+                                        <label style={labelStyle}>
                                           {resolveFieldLabel(field, language, field.id)}
                                           {field.required && <RequiredStar />}
                                         </label>
@@ -2295,7 +2334,13 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             </div>
                           );
                         })}
-                        {orderedSubRows.length > 0 && (
+                        {(() => {
+                          const subUi = (sub as any).ui as any;
+                          const placement = (subUi?.addButtonPlacement || 'both').toString().toLowerCase();
+                          const showBottom = placement !== 'hidden' && (placement === 'both' || placement === 'bottom');
+                          const shouldRender = orderedSubRows.length > 0 || showBottom;
+                          if (!shouldRender) return null;
+                          return (
                         <div
                             ref={el => {
                               subgroupBottomRefs.current[subKey] = el;
@@ -2340,7 +2385,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     </select>
                                   </div>
                                 )}
-                                {renderSubAddButton()}
+                                {showBottom ? renderSubAddButton() : null}
                                 {subTotals.length ? (
                                   <div className="line-item-totals">
                                     {subTotals.map(t => (
@@ -2371,7 +2416,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               </div>
                             </div>
                         </div>
-                        )}
+                          );
+                        })()}
                         </div>
                         </div>
                         )}
@@ -2381,7 +2427,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                 </div>
               );
             })}
-            {parentRows.length > 0 && (
+            {shouldRenderBottomToolbar ? (
               <div className="line-item-toolbar">
                 {selectorCfg && (
                   <div
@@ -2413,7 +2459,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                   </div>
                 )}
                 <div className="line-item-toolbar-actions">
-                  {renderAddButton()}
+                  {showAddBottom ? renderAddButton() : null}
                   {groupTotals.length ? (
                     <div className="line-item-totals">
                       {groupTotals.map(t => (
@@ -2425,7 +2471,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                   ) : null}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         );
 };

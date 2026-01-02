@@ -1799,6 +1799,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       <style>{FORM_VIEW_STYLES}</style>
       <AppHeader
         title={definition.title || 'Form'}
+        logoUrl={definition.appHeader?.logoUrl}
         buildMarker={BUILD_MARKER}
         isMobile={isMobile}
         languages={availableLanguages}
@@ -1818,6 +1819,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           setLanguage(next);
         }}
         onRefresh={handleGlobalRefresh}
+        onDiagnostic={logEvent}
       />
 
       <ActionBar

@@ -41,6 +41,54 @@ describe('ConfigSheet', () => {
     expect(questions[0].ui).toEqual({ summaryVisibility: 'always' });
   });
 
+  test('getQuestions preserves ui.hideLabel', () => {
+    const sheet = mockSS.insertSheet('Config: HideLabel');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      ['Q1', 'TEXT', 'ID', 'ID', 'ID', false, '', '', '', 'Active', '{"ui":{"hideLabel":true}}', '', '', '']
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: HideLabel');
+    expect(questions.length).toBe(1);
+    expect(questions[0].ui).toEqual({ hideLabel: true });
+  });
+
+  test('getQuestions parses line item ui controls (showItemPill, addButtonPlacement)', () => {
+    const sheet = mockSS.insertSheet('Config: LineItemUiControls');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q_LI',
+        'LINE_ITEM_GROUP',
+        'Meals',
+        'Repas',
+        'Maaltijden',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"fields":[{"id":"QTY","type":"NUMBER","labelEn":"Qty"}],"ui":{"mode":"progressive","showItemPill":false,"addButtonPlacement":"bottom"}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: LineItemUiControls');
+    expect(questions.length).toBe(1);
+    expect(questions[0].lineItemConfig).toBeDefined();
+    expect(questions[0].lineItemConfig!.ui).toEqual(
+      expect.objectContaining({
+        mode: 'progressive',
+        showItemPill: false,
+        addButtonPlacement: 'bottom'
+      })
+    );
+  });
+
   test('getQuestions parses REF: syntax', () => {
     const configSheet = mockSS.insertSheet('Config: Ref');
     const exampleRows = [

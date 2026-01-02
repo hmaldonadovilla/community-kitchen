@@ -70,6 +70,14 @@ This project uses TypeScript. You need to build the script before using it in Go
         { "ui": { "labelLayout": "stacked" } }
         ```
 
+    - **Hide/remove a field label**: To visually hide a field label (kept for accessibility), set `ui.hideLabel: true`:
+
+        ```json
+        { "ui": { "hideLabel": true } }
+        ```
+
+        Works for both top-level questions and line-item fields.
+
     - **Summary view field visibility**: By default, the Summary view only shows fields that are currently visible in the Form view (i.e., not hidden by `visibility`). You can override this per field (and per line-item field/subgroup field) via `ui.summaryVisibility`:
 
         ```json
@@ -156,10 +164,31 @@ This project uses TypeScript. You need to build the script before using it in Go
 
       Supported icons: `warning`, `check`, `error`, `info`, `external`, `lock`, `edit`, `view`.
 
+    - Want a **logo** in the app header? Set `appHeader.logo` in the dashboard “Follow-up Config (JSON)” column. You can provide a Google Drive file id, a Drive share URL, or a direct `https://...` image URL:
+
+      ```json
+      { "appHeader": { "logo": "https://drive.google.com/file/d/<ID>/view?usp=sharing" } }
+      ```
+
+    - Want group sections to **auto-collapse on completion** (and optionally open the next incomplete section + auto-scroll on expand)? Set `groupBehavior`:
+
+      ```json
+      {
+        "groupBehavior": {
+          "autoCollapseOnComplete": true,
+          "autoOpenNextIncomplete": true,
+          "autoScrollOnExpand": true
+        }
+      }
+      ```
+
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved.
     - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
     - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
         - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.
+        - Header controls:
+          - `ui.showItemPill`: show/hide the “N items” pill in the line-item header (default: true)
+          - `ui.addButtonPlacement`: where the Add button appears (`top`, `bottom`, `both`, `hidden`; default: `both`)
         - Progressive disclosure (collapsed-by-default rows): in the LINE_ITEM_GROUP JSON, add a `ui` block. The collapsed view renders only `collapsedFields` (editable). The expand toggle is gated by `expandGate`:
             - The expand/collapse control is also a **progress pill** `completed/required` for required fields within that row.
 

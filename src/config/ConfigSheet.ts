@@ -1368,10 +1368,21 @@ export class ConfigSheet {
       rawUi.labelLayout ?? rawUi.label_layout ?? rawUi.stackedLabel ?? rawUi.stackLabel ?? rawUi.stacked
     );
     const summaryVisibility = this.normalizeSummaryVisibility(rawUi.summaryVisibility ?? rawUi.summary_visibility);
+    const normalizeBool = (v: any): boolean | undefined => {
+      if (v === undefined || v === null) return undefined;
+      if (typeof v === 'boolean') return v;
+      if (typeof v === 'number') return v !== 0;
+      const s = v.toString().trim().toLowerCase();
+      if (s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'on') return true;
+      if (s === 'false' || s === 'no' || s === 'n' || s === '0' || s === 'off' || s === '') return false;
+      return undefined;
+    };
+    const hideLabel = normalizeBool(rawUi.hideLabel ?? rawUi.hide_label ?? rawUi.noLabel ?? rawUi.no_label ?? rawUi.removeLabel);
     const paragraphRows = this.normalizeParagraphRows(rawUi.paragraphRows ?? rawUi.paragraph_rows ?? rawUi.textareaRows ?? rawUi.textarea_rows);
     const cfg: QuestionUiConfig = {};
     if (control) cfg.control = control;
     if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
+    if (hideLabel === true) cfg.hideLabel = true;
     if (summaryVisibility) cfg.summaryVisibility = summaryVisibility;
     if (paragraphRows) (cfg as any).paragraphRows = paragraphRows;
     return Object.keys(cfg).length ? cfg : undefined;
@@ -1390,6 +1401,16 @@ export class ConfigSheet {
 
   private static normalizeLineItemUi(rawUi: any): LineItemGroupUiConfig | undefined {
     if (!rawUi || typeof rawUi !== 'object') return undefined;
+
+    const normalizeBool = (v: any): boolean | undefined => {
+      if (v === undefined || v === null) return undefined;
+      if (typeof v === 'boolean') return v;
+      if (typeof v === 'number') return v !== 0;
+      const s = v.toString().trim().toLowerCase();
+      if (s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'on') return true;
+      if (s === 'false' || s === 'no' || s === 'n' || s === '0' || s === 'off' || s === '') return false;
+      return undefined;
+    };
 
     const modeRaw = rawUi.mode !== undefined ? rawUi.mode : rawUi.type;
     const modeCandidate = modeRaw !== undefined && modeRaw !== null ? modeRaw.toString().toLowerCase() : '';
@@ -1420,12 +1441,44 @@ export class ConfigSheet {
 
     const rowDisclaimer = this.normalizeRowDisclaimer(rawUi.rowDisclaimer ?? rawUi.row_disclaimer ?? rawUi.disclaimer);
 
+    const showItemPill = normalizeBool(
+      rawUi.showItemPill ??
+        rawUi.showItemCountPill ??
+        rawUi.itemPill ??
+        rawUi.itemsPill ??
+        rawUi.showItemsPill ??
+        rawUi.show_items_pill
+    );
+
+    const placementRaw =
+      rawUi.addButtonPlacement ??
+      rawUi.addButtonPosition ??
+      rawUi.addButtonLocation ??
+      rawUi.addButton ??
+      rawUi.add_button_placement ??
+      rawUi.add_button_position ??
+      rawUi.add_button_location ??
+      rawUi.add_button;
+    const placementCandidate = placementRaw !== undefined && placementRaw !== null ? placementRaw.toString().trim().toLowerCase() : '';
+    const addButtonPlacement: LineItemGroupUiConfig['addButtonPlacement'] | undefined =
+      placementCandidate === 'top' || placementCandidate === 'header'
+        ? 'top'
+        : placementCandidate === 'bottom' || placementCandidate === 'footer'
+          ? 'bottom'
+          : placementCandidate === 'both' || placementCandidate === 'all'
+            ? 'both'
+            : placementCandidate === 'hidden' || placementCandidate === 'none' || placementCandidate === 'hide'
+              ? 'hidden'
+              : undefined;
+
     const cfg: LineItemGroupUiConfig = {};
     if (mode) cfg.mode = mode;
     if (collapsedFields && collapsedFields.length) cfg.collapsedFields = collapsedFields;
     if (expandGate) cfg.expandGate = expandGate;
     if (defaultCollapsed !== undefined) cfg.defaultCollapsed = defaultCollapsed;
     if (rowDisclaimer) (cfg as any).rowDisclaimer = rowDisclaimer;
+    if (showItemPill !== undefined) (cfg as any).showItemPill = showItemPill;
+    if (addButtonPlacement) (cfg as any).addButtonPlacement = addButtonPlacement;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 

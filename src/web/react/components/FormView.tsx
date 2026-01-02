@@ -247,6 +247,8 @@ const FormView: React.FC<FormViewProps> = ({
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
   const choiceVariantLogRef = useRef<Record<string, string>>({});
+  const hideLabelLoggedRef = useRef<Set<string>>(new Set());
+  const groupScrollAnimRafRef = useRef(0);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const valuesRef = useRef(values);
   const lineItemsRef = useRef(lineItems);
@@ -299,6 +301,21 @@ const FormView: React.FC<FormViewProps> = ({
       return subs.some(sub => hasInFields(((sub as any).fields || []) as any[]));
     });
   }, [definition.questions]);
+
+  const hideLabelQuestionIds = useMemo(() => {
+    return (definition.questions || []).filter(q => q.ui?.hideLabel === true).map(q => q.id);
+  }, [definition.questions]);
+
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    (hideLabelQuestionIds || []).forEach(id => {
+      const fieldId = (id || '').toString().trim();
+      if (!fieldId) return;
+      if (hideLabelLoggedRef.current.has(fieldId)) return;
+      hideLabelLoggedRef.current.add(fieldId);
+      onDiagnostic('ui.field.hideLabel', { fieldId });
+    });
+  }, [hideLabelQuestionIds, onDiagnostic]);
 
   const blurRecomputeTimerRef = useRef<number | null>(null);
 
@@ -569,15 +586,350 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [nestedGroupMeta.collapsibleDefaults]);
 
+  const autoCollapseGroups = Boolean(definition.groupBehavior?.autoCollapseOnComplete);
+  const autoOpenNextIncomplete = Boolean(definition.groupBehavior?.autoOpenNextIncomplete);
+  const autoScrollOnExpand =
+    definition.groupBehavior?.autoScrollOnExpand !== undefined
+      ? Boolean(definition.groupBehavior.autoScrollOnExpand)
+      : autoCollapseGroups;
+
+  const topLevelGroupKeySet = useMemo(() => {
+    // Only top-level groups (exclude header group).
+    return new Set(groupSections.filter(s => !s.isHeader).map(s => s.key));
+  }, [groupSections]);
+
+  const scrollGroupToTop = useCallback(
+    (groupKey: string, args?: { behavior?: ScrollBehavior; reason?: string }) => {
+      if (typeof window === 'undefined' || typeof document === 'undefined') return;
+      const reason = (args?.reason || 'expand').toString();
+      const escaped = (groupKey || '').toString().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const el = document.querySelector<HTMLElement>(`[data-group-key="${escaped}"]`);
+      if (!el) {
+        onDiagnostic?.('ui.group.scrollIntoView.miss', { groupKey, reason });
+        return;
+      }
+
+      const header = document.querySelector<HTMLElement>('.ck-app-header');
+      const topBar = document.querySelector<HTMLElement>('.ck-top-action-bar');
+      const headerRect = header?.getBoundingClientRect();
+      const topBarRect = topBar?.getBoundingClientRect();
+      // Use the bottom edge of the sticky stack (header + top action bar) for a reliable offset.
+      const stickyBottom = Math.max(0, headerRect?.bottom || 0, topBarRect?.bottom || 0);
+      const offset = Math.round(stickyBottom + 16);
+      const rect = el.getBoundingClientRect();
+      const vv = window.visualViewport || null;
+      const scrollEl = document.scrollingElement as HTMLElement | null;
+      const docEl = document.documentElement as HTMLElement | null;
+      const bodyEl = document.body as HTMLElement | null;
+      const vvPageTop = vv && typeof vv.pageTop === 'number' ? vv.pageTop : null;
+
+      const snapshotScroll = () => {
+        const win = typeof window.scrollY === 'number' ? window.scrollY : 0;
+        const se = scrollEl && typeof scrollEl.scrollTop === 'number' ? scrollEl.scrollTop : null;
+        const doc = docEl && typeof docEl.scrollTop === 'number' ? docEl.scrollTop : null;
+        const body = bodyEl && typeof bodyEl.scrollTop === 'number' ? bodyEl.scrollTop : null;
+        return { win, se, doc, body };
+      };
+
+      const before = snapshotScroll();
+      const baseScrollTop = Math.max(
+        0,
+        before.win || 0,
+        before.se || 0,
+        before.doc || 0,
+        before.body || 0,
+        vvPageTop || 0
+      );
+      const targetTop = Math.max(0, baseScrollTop + rect.top - offset);
+      const behavior: ScrollBehavior =
+        args?.behavior || (reason.toLowerCase().startsWith('auto') ? 'auto' : 'smooth');
+
+      const isIOS =
+        typeof navigator !== 'undefined' &&
+        (/iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+          // iPadOS 13+ reports as MacIntel but has touch points.
+          (navigator.platform === 'MacIntel' && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1));
+      const prefersReducedMotion =
+        typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const computeStickyOffset = () => {
+        const headerNow = document.querySelector<HTMLElement>('.ck-app-header');
+        const topBarNow = document.querySelector<HTMLElement>('.ck-top-action-bar');
+        const headerRectNow = headerNow?.getBoundingClientRect();
+        const topBarRectNow = topBarNow?.getBoundingClientRect();
+        const stickyBottomNow = Math.max(0, headerRectNow?.bottom || 0, topBarRectNow?.bottom || 0);
+        const offsetNow = Math.round(stickyBottomNow + 16);
+        return { offsetNow, stickyBottomNow, headerRectNow, topBarRectNow };
+      };
+
+      const setScrollTop = (top: number) => {
+        const next = Math.max(0, top);
+        try {
+          window.scrollTo(0, next);
+        } catch (_) {
+          // ignore
+        }
+        try {
+          if (scrollEl) scrollEl.scrollTop = next;
+          if (docEl) docEl.scrollTop = next;
+          if (bodyEl) bodyEl.scrollTop = next;
+        } catch (_) {
+          // ignore
+        }
+      };
+
+      // iOS smooth scrolling can drift while the browser chrome animates, which makes any single
+      // precomputed target land slightly under the sticky header. For manual expand/collapse we
+      // run a single custom smooth animation that re-applies the intended target each frame, so
+      // there's no visible "correction jump" at the end.
+      if (isIOS && behavior === 'smooth' && !prefersReducedMotion && typeof window.requestAnimationFrame === 'function') {
+        // Cancel any in-flight scroll animation.
+        if (groupScrollAnimRafRef.current) {
+          try {
+            window.cancelAnimationFrame(groupScrollAnimRafRef.current);
+          } catch (_) {
+            // ignore
+          }
+          groupScrollAnimRafRef.current = 0;
+        }
+
+        const absoluteTop = baseScrollTop + rect.top;
+        const initialTargetTop = Math.max(0, absoluteTop - offset);
+        const distance = Math.abs(initialTargetTop - baseScrollTop);
+        const durationMs = Math.min(420, Math.max(200, Math.round(distance * 0.15 + 180)));
+        const startTime = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+
+        const easeInOutCubic = (t: number) => {
+          const p = Math.max(0, Math.min(1, t));
+          return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+        };
+
+        const step = (ts: number) => {
+          const now = ts || (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now());
+          const p = Math.min(1, Math.max(0, (now - startTime) / durationMs));
+          const eased = easeInOutCubic(p);
+
+          const { offsetNow } = computeStickyOffset();
+          const targetNow = Math.max(0, absoluteTop - offsetNow);
+          const nextTop = baseScrollTop + (targetNow - baseScrollTop) * eased;
+          setScrollTop(nextTop);
+
+          if (p < 1) {
+            groupScrollAnimRafRef.current = window.requestAnimationFrame(step);
+            return;
+          }
+          groupScrollAnimRafRef.current = 0;
+          setScrollTop(targetNow);
+
+          const after = snapshotScroll();
+          const rectAfter = el.getBoundingClientRect();
+          onDiagnostic?.('ui.group.scrollIntoView', {
+            groupKey,
+            reason,
+            mode: 'customSmooth',
+            durationMs,
+            offsetPx: offset,
+            stickyBottomPx: Math.round(stickyBottom),
+            headerBottomPx: headerRect?.bottom ? Math.round(headerRect.bottom) : null,
+            topBarBottomPx: topBarRect?.bottom ? Math.round(topBarRect.bottom) : null,
+            rectTopPx: Math.round(rectAfter.top),
+            baseScrollTopPx: Math.round(baseScrollTop),
+            targetTopPx: Math.round(targetNow),
+            scrollYPx: Math.round(window.scrollY),
+            scrollElTopPx: after.se !== null ? Math.round(after.se) : null,
+            docScrollTopPx: after.doc !== null ? Math.round(after.doc) : null,
+            bodyScrollTopPx: after.body !== null ? Math.round(after.body) : null,
+            vvPageTopPx: vv && typeof vv.pageTop === 'number' ? Math.round(vv.pageTop) : null,
+            vvOffsetTopPx: vv && typeof vv.offsetTop === 'number' ? Math.round(vv.offsetTop) : null
+          });
+        };
+
+        groupScrollAnimRafRef.current = window.requestAnimationFrame(step);
+        return;
+      }
+
+      const finalizeAlignment = () => {
+        try {
+          const { offsetNow } = computeStickyOffset();
+          const vvNow = window.visualViewport || null;
+          const vvNowPageTop = vvNow && typeof vvNow.pageTop === 'number' ? vvNow.pageTop : null;
+          const rectNow = el.getBoundingClientRect();
+          const now = snapshotScroll();
+          const baseNow = Math.max(
+            0,
+            now.win || 0,
+            now.se || 0,
+            now.doc || 0,
+            now.body || 0,
+            vvNowPageTop || 0
+          );
+          const targetNow = Math.max(0, baseNow + rectNow.top - offsetNow);
+          const misaligned = Math.abs(rectNow.top - offsetNow) > 2;
+          if (!misaligned) return;
+          if (Math.abs(targetNow - baseNow) < 2) return;
+
+          // Use non-smooth scrolling for the correction pass (smooth can drift on iOS during viewport changes).
+          try {
+            window.scrollTo({ top: targetNow, behavior: 'auto' });
+          } catch (_) {
+            window.scrollTo(0, targetNow);
+          }
+          try {
+            scrollEl?.scrollTo?.({ top: targetNow, behavior: 'auto' });
+          } catch (_) {
+            // ignore
+          }
+          try {
+            if (scrollEl) scrollEl.scrollTop = targetNow;
+            if (docEl) docEl.scrollTop = targetNow;
+            if (bodyEl) bodyEl.scrollTop = targetNow;
+          } catch (_) {
+            // ignore
+          }
+
+          onDiagnostic?.('ui.group.scrollIntoView.adjust', {
+            groupKey,
+            reason,
+            rectTopPx: Math.round(rectNow.top),
+            offsetPx: Math.round(offsetNow),
+            baseScrollTopPx: Math.round(baseNow),
+            targetTopPx: Math.round(targetNow),
+            vvPageTopPx: vvNow && typeof vvNow.pageTop === 'number' ? Math.round(vvNow.pageTop) : null,
+            scrollYPx: Math.round(window.scrollY)
+          });
+        } catch (_) {
+          // ignore
+        }
+      };
+
+      try {
+        // Try the browser's preferred scrolling mechanism first.
+        window.scrollTo({ top: targetTop, behavior });
+        // Some iOS webviews ignore window.scrollTo but respect scrollingElement.
+        try {
+          scrollEl?.scrollTo?.({ top: targetTop, behavior });
+        } catch (_) {
+          // ignore
+        }
+
+        // For non-smooth scroll, also assign common scrollTop targets directly.
+        if (behavior !== 'smooth') {
+          try {
+            if (scrollEl) scrollEl.scrollTop = targetTop;
+            if (docEl) docEl.scrollTop = targetTop;
+            if (bodyEl) bodyEl.scrollTop = targetTop;
+          } catch (_) {
+            // ignore
+          }
+        }
+
+        const after = snapshotScroll();
+        onDiagnostic?.('ui.group.scrollIntoView', {
+          groupKey,
+          reason,
+          offsetPx: offset,
+          stickyBottomPx: Math.round(stickyBottom),
+          headerBottomPx: headerRect?.bottom ? Math.round(headerRect.bottom) : null,
+          topBarBottomPx: topBarRect?.bottom ? Math.round(topBarRect.bottom) : null,
+          rectTopPx: Math.round(rect.top),
+          baseScrollTopPx: Math.round(baseScrollTop),
+          targetTopPx: Math.round(targetTop),
+          scrollYPx: Math.round(window.scrollY),
+          scrollElTopPx: after.se !== null ? Math.round(after.se) : null,
+          docScrollTopPx: after.doc !== null ? Math.round(after.doc) : null,
+          bodyScrollTopPx: after.body !== null ? Math.round(after.body) : null,
+          vvPageTopPx: vv && typeof vv.pageTop === 'number' ? Math.round(vv.pageTop) : null,
+          vvOffsetTopPx: vv && typeof vv.offsetTop === 'number' ? Math.round(vv.offsetTop) : null
+        });
+
+        // Verify and force-scroll if nothing moved (common iOS/webview failure mode).
+        if (Math.abs(targetTop - baseScrollTop) > 2) {
+          window.setTimeout(() => {
+            const check = snapshotScroll();
+            const moved =
+              Math.abs((check.win || 0) - (before.win || 0)) > 2 ||
+              Math.abs((check.se || 0) - (before.se || 0)) > 2 ||
+              Math.abs((check.doc || 0) - (before.doc || 0)) > 2 ||
+              Math.abs((check.body || 0) - (before.body || 0)) > 2;
+            if (moved) return;
+
+            try {
+              if (scrollEl) scrollEl.scrollTop = targetTop;
+              if (docEl) docEl.scrollTop = targetTop;
+              if (bodyEl) bodyEl.scrollTop = targetTop;
+              window.scrollTo(0, targetTop);
+            } catch (_) {
+              // ignore
+            }
+            const forced = snapshotScroll();
+            onDiagnostic?.('ui.group.scrollIntoView.force', {
+              groupKey,
+              reason,
+              targetTopPx: Math.round(targetTop),
+              scrollYPx: Math.round(window.scrollY),
+              scrollElTopPx: forced.se !== null ? Math.round(forced.se) : null,
+              docScrollTopPx: forced.doc !== null ? Math.round(forced.doc) : null,
+              bodyScrollTopPx: forced.body !== null ? Math.round(forced.body) : null
+            });
+          }, behavior === 'smooth' ? 260 : 80);
+        }
+
+        // Post-scroll alignment pass: iOS can drift during smooth scroll (viewport chrome/safe area changes).
+        window.setTimeout(() => finalizeAlignment(), behavior === 'smooth' ? 420 : 120);
+      } catch (_) {
+        try {
+          window.scrollTo(0, targetTop);
+          onDiagnostic?.('ui.group.scrollIntoView', {
+            groupKey,
+            reason,
+            offsetPx: offset,
+            stickyBottomPx: Math.round(stickyBottom),
+            headerBottomPx: headerRect?.bottom ? Math.round(headerRect.bottom) : null,
+            topBarBottomPx: topBarRect?.bottom ? Math.round(topBarRect.bottom) : null,
+            rectTopPx: Math.round(rect.top),
+            baseScrollTopPx: Math.round(baseScrollTop),
+            targetTopPx: Math.round(targetTop),
+            scrollYPx: Math.round(window.scrollY),
+            scrollElTopPx: scrollEl && typeof scrollEl.scrollTop === 'number' ? Math.round(scrollEl.scrollTop) : null,
+            docScrollTopPx: docEl && typeof docEl.scrollTop === 'number' ? Math.round(docEl.scrollTop) : null,
+            bodyScrollTopPx: bodyEl && typeof bodyEl.scrollTop === 'number' ? Math.round(bodyEl.scrollTop) : null,
+            vvPageTopPx: vv && typeof vv.pageTop === 'number' ? Math.round(vv.pageTop) : null,
+            vvOffsetTopPx: vv && typeof vv.offsetTop === 'number' ? Math.round(vv.offsetTop) : null
+          });
+          window.setTimeout(() => finalizeAlignment(), 120);
+        } catch (_) {
+          // ignore
+        }
+      }
+    },
+    [onDiagnostic]
+  );
+
+  const scheduleScrollGroupToTop = useCallback(
+    (groupKey: string, args?: { behavior?: ScrollBehavior; reason?: string }) => {
+      if (!autoScrollOnExpand) return;
+      if (!topLevelGroupKeySet.has(groupKey)) return;
+      if (typeof window === 'undefined') return;
+      // Double rAF to allow the DOM to reflow after expanding/collapsing.
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => scrollGroupToTop(groupKey, args));
+      });
+    },
+    [autoScrollOnExpand, scrollGroupToTop, topLevelGroupKeySet]
+  );
+
   const toggleGroupCollapsed = useCallback(
     (groupKey: string) => {
       setCollapsedGroups(prev => {
         const nextCollapsed = !prev[groupKey];
         onDiagnostic?.('ui.group.toggle', { groupKey, collapsed: nextCollapsed });
+        if (!nextCollapsed) {
+          scheduleScrollGroupToTop(groupKey, { reason: 'toggle' });
+        }
         return { ...prev, [groupKey]: nextCollapsed };
       });
     },
-    [onDiagnostic]
+    [onDiagnostic, scheduleScrollGroupToTop]
   );
 
   const renderChoiceControl = useCallback(
@@ -1525,19 +1877,128 @@ const FormView: React.FC<FormViewProps> = ({
     return optionState[optionKey(q.id)] || toOptionSet(q);
   };
 
-  const resolveVisibilityValue = (fieldId: string): FieldValue | undefined => {
-    const direct = values[fieldId];
-    if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-    // scan all line item groups for the first non-empty occurrence
-    for (const rows of Object.values(lineItems)) {
-      if (!Array.isArray(rows)) continue;
-      for (const row of rows) {
-        const v = (row as LineItemRowState).values[fieldId];
-        if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+  const resolveVisibilityValue = useCallback(
+    (fieldId: string): FieldValue | undefined => {
+      const direct = values[fieldId];
+      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+      // scan all line item groups for the first non-empty occurrence
+      for (const rows of Object.values(lineItems)) {
+        if (!Array.isArray(rows)) continue;
+        for (const row of rows) {
+          const v = (row as LineItemRowState).values[fieldId];
+          if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+        }
       }
+      return undefined;
+    },
+    [lineItems, values]
+  );
+
+  const topLevelGroupProgress = useMemo(() => {
+    // Mirror the progress logic used in the group header UI.
+    const isQuestionComplete = (q: WebQuestionDefinition): boolean => {
+      if (q.type === 'LINE_ITEM_GROUP') {
+        const rows = (lineItems[q.id] || []) as any[];
+        return rows.length > 0;
+      }
+      const mappedValue = (q as any).valueMap
+        ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId], {
+            language,
+            targetOptions: toOptionSet(q as any)
+          })
+        : undefined;
+      const raw = (q as any).valueMap ? mappedValue : (values[q.id] as any);
+      return !isEmptyValue(raw as any);
+    };
+
+    const groups = (groupSections || []).filter(s => s && !s.isHeader && s.collapsible);
+    return groups
+      .map(section => {
+        const visible = (section.questions || []).filter(
+          q =>
+            !shouldHideField(q.visibility, {
+              getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
+            })
+        );
+        if (!visible.length) return null;
+
+        const requiredQs = visible.filter(q => !!q.required);
+        const totalRequired = requiredQs.length;
+        const requiredComplete = requiredQs.reduce((acc, q) => (isQuestionComplete(q) ? acc + 1 : acc), 0);
+        const complete = totalRequired > 0 && requiredComplete >= totalRequired;
+        return { key: section.key, complete, totalRequired, requiredComplete };
+      })
+      .filter(Boolean) as Array<{ key: string; complete: boolean; totalRequired: number; requiredComplete: number }>;
+  }, [groupSections, language, lineItems, resolveVisibilityValue, values]);
+
+  const prevGroupCompleteRef = useRef<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!autoCollapseGroups) return;
+    if (!topLevelGroupProgress.length) return;
+
+    const prevComplete = prevGroupCompleteRef.current || {};
+    const nextComplete: Record<string, boolean> = {};
+    topLevelGroupProgress.forEach(g => {
+      nextComplete[g.key] = g.complete;
+    });
+    prevGroupCompleteRef.current = nextComplete;
+
+    const completedNow = topLevelGroupProgress
+      .filter(g => g.complete && !prevComplete[g.key])
+      .map(g => g.key);
+    if (!completedNow.length) return;
+
+    // Choose the last group (in visual order) that just completed as the anchor for "open next".
+    const anchorKey = completedNow[completedNow.length - 1];
+    const anchorIdx = topLevelGroupProgress.findIndex(g => g.key === anchorKey);
+
+    const findNextIncomplete = (): string | undefined => {
+      if (!autoOpenNextIncomplete) return undefined;
+      if (anchorIdx < 0) return undefined;
+
+      const n = topLevelGroupProgress.length;
+      for (let step = 1; step <= n; step += 1) {
+        const idx = (anchorIdx + step) % n;
+        const cand = topLevelGroupProgress[idx];
+        if (!cand) continue;
+        if (cand.totalRequired <= 0) continue;
+        if (!cand.complete) return cand.key;
+      }
+      return undefined;
+    };
+
+    const nextOpenKey = findNextIncomplete();
+
+    setCollapsedGroups(prev => {
+      let changed = false;
+      const next = { ...prev };
+      completedNow.forEach(key => {
+        if (next[key] !== true) {
+          next[key] = true;
+          changed = true;
+        }
+      });
+      if (nextOpenKey) {
+        if (next[nextOpenKey] !== false) {
+          next[nextOpenKey] = false;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        onDiagnostic?.('ui.group.autoCollapse', {
+          completed: completedNow,
+          opened: nextOpenKey || null
+        });
+      }
+      return changed ? next : prev;
+    });
+
+    if (nextOpenKey) {
+      scheduleScrollGroupToTop(nextOpenKey, { reason: 'autoOpenNext' });
     }
-    return undefined;
-  };
+  }, [autoCollapseGroups, autoOpenNextIncomplete, onDiagnostic, scheduleScrollGroupToTop, topLevelGroupProgress]);
 
   const renderQuestion = (q: WebQuestionDefinition) => {
     const optionSet = renderOptions(q);
@@ -1563,6 +2024,8 @@ const FormView: React.FC<FormViewProps> = ({
         });
     if (hidden) return null;
     const forceStackedLabel = q.ui?.labelLayout === 'stacked';
+    const hideFieldLabel = q.ui?.hideLabel === true;
+    const labelStyle = hideFieldLabel ? srOnly : undefined;
 
     switch (q.type) {
       case 'BUTTON': {
@@ -1614,7 +2077,7 @@ const FormView: React.FC<FormViewProps> = ({
               data-has-error={errors[q.id] ? 'true' : undefined}
               data-has-warning={hasWarning(q.id) ? 'true' : undefined}
             >
-              <label>
+              <label style={labelStyle}>
                 {resolveFieldLabel(q, language, q.id)}
                 {(q as any).required && <RequiredStar />}
               </label>
@@ -1640,7 +2103,7 @@ const FormView: React.FC<FormViewProps> = ({
             data-has-error={errors[q.id] ? 'true' : undefined}
             data-has-warning={hasWarning(q.id) ? 'true' : undefined}
           >
-            <label>
+            <label style={labelStyle}>
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
@@ -1674,7 +2137,7 @@ const FormView: React.FC<FormViewProps> = ({
             data-has-error={errors[q.id] ? 'true' : undefined}
             data-has-warning={hasWarning(q.id) ? 'true' : undefined}
           >
-            <label>
+            <label style={labelStyle}>
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
@@ -1702,6 +2165,7 @@ const FormView: React.FC<FormViewProps> = ({
         const isConsentCheckbox = !q.dataSource && !hasAnyOption;
         const selected = Array.isArray(values[q.id]) ? (values[q.id] as string[]) : [];
         if (isConsentCheckbox) {
+          const consentLabel = resolveLabel(q, language);
           return (
             <div
               key={q.id}
@@ -1714,12 +2178,15 @@ const FormView: React.FC<FormViewProps> = ({
                 <input
                   type="checkbox"
                   checked={!!values[q.id]}
+                  aria-label={hideFieldLabel ? consentLabel : undefined}
                   onChange={e => handleFieldChange(q, e.target.checked)}
                 />
-                <span className="ck-consent-text">
-                  {resolveLabel(q, language)}
-                  {q.required && <RequiredStar />}
-                </span>
+                {!hideFieldLabel ? (
+                  <span className="ck-consent-text">
+                    {consentLabel}
+                    {q.required && <RequiredStar />}
+                  </span>
+                ) : null}
               </label>
               {errors[q.id] && <div className="error">{errors[q.id]}</div>}
               {renderWarnings(q.id)}
@@ -1734,7 +2201,7 @@ const FormView: React.FC<FormViewProps> = ({
             data-has-error={errors[q.id] ? 'true' : undefined}
             data-has-warning={hasWarning(q.id) ? 'true' : undefined}
           >
-            <label>
+            <label style={labelStyle}>
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
@@ -1804,7 +2271,7 @@ const FormView: React.FC<FormViewProps> = ({
             data-has-error={errors[q.id] ? 'true' : undefined}
             data-has-warning={hasWarning(q.id) ? 'true' : undefined}
           >
-            <label>
+            <label style={labelStyle}>
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
@@ -2573,6 +3040,8 @@ const FormView: React.FC<FormViewProps> = ({
                                 if (hideField) return null;
                       const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
                       const forceStackedSubFieldLabel = (field as any)?.ui?.labelLayout === 'stacked';
+                      const hideLabel = Boolean((field as any)?.ui?.hideLabel);
+                      const labelStyle = hideLabel ? srOnly : undefined;
 
                                 switch (field.type) {
                                   case 'CHOICE': {
@@ -2587,7 +3056,7 @@ const FormView: React.FC<FormViewProps> = ({
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                               data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
-                                        <label>
+                                        <label style={labelStyle}>
                                           {resolveFieldLabel(field, language, field.id)}
                                           {field.required && <RequiredStar />}
                                         </label>
@@ -2633,7 +3102,7 @@ const FormView: React.FC<FormViewProps> = ({
                                               checked={!!subRow.values[field.id]}
                                               onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.checked)}
                                             />
-                                            <span className="ck-consent-text">
+                                            <span className="ck-consent-text" style={labelStyle}>
                                               {resolveFieldLabel(field, language, field.id)}
                                               {field.required && <RequiredStar />}
                                             </span>
@@ -2651,7 +3120,7 @@ const FormView: React.FC<FormViewProps> = ({
                                         data-has-error={errors[fieldPath] ? 'true' : undefined}
                                         data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                                       >
-                                        <label>
+                                        <label style={labelStyle}>
                                           {resolveFieldLabel(field, language, field.id)}
                                           {field.required && <RequiredStar />}
                                         </label>
@@ -2713,7 +3182,7 @@ const FormView: React.FC<FormViewProps> = ({
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                               data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
-                                        <label>
+                                        <label style={labelStyle}>
                                           {resolveFieldLabel(field, language, field.id)}
                                           {field.required && <RequiredStar />}
                                         </label>
@@ -2846,7 +3315,7 @@ const FormView: React.FC<FormViewProps> = ({
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                               data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
-                              <label>
+                              <label style={labelStyle}>
                                 {resolveFieldLabel(field, language, field.id)}
                                 {field.required && <RequiredStar />}
                     </label>
@@ -3138,6 +3607,8 @@ const FormView: React.FC<FormViewProps> = ({
                   ? 'ck-progress-good'
                   : 'ck-progress-bad'
                 : 'ck-progress-neutral';
+            const expandLabel = tSystem('lineItems.expand', language, 'Expand');
+            const collapseLabel = tSystem('lineItems.collapse', language, 'Collapse');
 
             const sectionHasError = (() => {
               const keys = Object.keys(errors || {});
@@ -3214,6 +3685,7 @@ const FormView: React.FC<FormViewProps> = ({
                         <span>
                           {requiredProgress.numerator}/{requiredProgress.totalRequired}
                         </span>
+                        <span className="ck-progress-label">{isCollapsed ? expandLabel : collapseLabel}</span>
                         <span className="ck-progress-caret">{isCollapsed ? '▸' : '▾'}</span>
                       </span>
                     </button>

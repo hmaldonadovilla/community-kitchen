@@ -427,6 +427,13 @@ components:
             Label/control layout hint.
             - auto: default behavior (inline on full-width rows; stacked in 2-up grids)
             - stacked: force label above control even for full-width rows
+        hideLabel:
+          type: boolean
+          description: |
+            When true, visually hide the field label in the edit view (kept for accessibility).
+
+            Use sparingly: labels help users understand fields. This is mainly useful when a field is already
+            clearly explained by surrounding UI, or when you render your own label elsewhere.
         summaryVisibility:
           type: string
           enum: [inherit, always, never]
@@ -474,6 +481,20 @@ components:
             UI mode for this line item group.
             - default: existing editor behavior
             - progressive: rows are collapsed by default and can be expanded once collapsed fields are valid
+        showItemPill:
+          type: boolean
+          description: |
+            Controls whether the "N items" pill is shown in the line item group header.
+            Default: true.
+        addButtonPlacement:
+          type: string
+          enum: [top, bottom, both, hidden]
+          description: |
+            Controls where the "Add" button is shown for the group (and for subgroups when configured there).
+            - top: header toolbar only
+            - bottom: footer toolbar only
+            - both: header + footer (default)
+            - hidden: hide the button entirely
         collapsedFields:
           type: array
           items:
@@ -831,6 +852,16 @@ components:
             Notes:
             - The List screen appears when at least one question is marked `listView: true` or when you provide `columns`.
             - Legacy top-level aliases (`listViewMetaColumns`, `listViewColumns`, `listViewLegend`) are still accepted but deprecated.
+        appHeader:
+          $ref: '#/components/schemas/AppHeaderConfig'
+          description: Optional app header branding (logo shown next to the title).
+        groupBehavior:
+          $ref: '#/components/schemas/GroupBehaviorConfig'
+          description: |
+            Optional behavior for collapsible group sections in the Edit view:
+            - auto-collapse completed sections
+            - optionally open the next incomplete section
+            - optionally auto-scroll expanded sections into view
         languages:
           type: array
           description: |
@@ -951,6 +982,38 @@ components:
             Optional per-view configuration for the top and bottom action bars (system + custom buttons).
             When omitted, the app uses the default layout.
       additionalProperties: true
+
+    AppHeaderConfig:
+      type: object
+      description: App header branding (logo shown in the top sticky header and drawer).
+      properties:
+        logo:
+          type: string
+          description: |
+            Optional logo image shown in the app header.
+
+            Accepts:
+            - A Google Drive file id (e.g., `"1AbcDEF...xyz"`)
+            - A Google Drive share URL (e.g., `"https://drive.google.com/file/d/<ID>/view?..."`)
+            - A direct `https://...` image URL
+
+            The app will normalize Drive links into a direct-view URL.
+      additionalProperties: false
+
+    GroupBehaviorConfig:
+      type: object
+      description: Behavior for collapsible group sections in the Edit view.
+      properties:
+        autoCollapseOnComplete:
+          type: boolean
+          description: When true, automatically collapse a section when it becomes complete (based on required progress).
+        autoOpenNextIncomplete:
+          type: boolean
+          description: When true, after auto-collapsing a completed section, automatically open the next incomplete section.
+        autoScrollOnExpand:
+          type: boolean
+          description: When true, scroll an expanded section into view (below the sticky header). Default is true when `autoCollapseOnComplete` is enabled.
+      additionalProperties: false
 
     ActionBarsConfig:
       type: object

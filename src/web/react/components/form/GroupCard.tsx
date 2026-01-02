@@ -60,6 +60,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({
                 {complete}/{total}
               </span>
             ) : null}
+            <span className="ck-progress-label">{collapsed ? 'Expand' : 'Collapse'}</span>
             <span className="ck-progress-caret">{collapsed ? '▸' : '▾'}</span>
           </span>
         </button>
