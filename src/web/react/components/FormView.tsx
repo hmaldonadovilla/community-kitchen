@@ -28,6 +28,7 @@ import { isEmptyValue } from '../utils/values';
 import {
   applyUploadConstraints,
   describeUploadItem,
+  resolveUploadRemainingHelperText,
   resolveRowDisclaimerText,
   toDateInputValue,
   toUploadItems
@@ -1462,7 +1463,7 @@ const FormView: React.FC<FormViewProps> = ({
   const processIncomingFiles = (question: WebQuestionDefinition, incoming: File[]) => {
     if (!incoming.length) return;
     const existing = toUploadItems(values[question.id]);
-    const { items, errorMessage } = applyUploadConstraints(question, existing, incoming);
+    const { items, errorMessage } = applyUploadConstraints(question, existing, incoming, language);
     handleFileFieldChange(question, items, errorMessage);
     const accepted = Math.max(0, items.length - existing.length);
     if (errorMessage) {
@@ -1747,7 +1748,7 @@ const FormView: React.FC<FormViewProps> = ({
     const currentRow = existingRows.find(r => r.id === rowId);
     const existingFiles = toUploadItems((currentRow?.values || {})[field.id] as any);
     const pseudo = { uploadConfig: field.uploadConfig } as unknown as WebQuestionDefinition;
-    const { items: files, errorMessage } = applyUploadConstraints(pseudo, existingFiles, incoming);
+    const { items: files, errorMessage } = applyUploadConstraints(pseudo, existingFiles, incoming, language);
 
     handleLineFieldChange(group, rowId, field, files as unknown as FieldValue);
     setErrors(prev => {
@@ -2246,22 +2247,41 @@ const FormView: React.FC<FormViewProps> = ({
         const allowedDisplay = (uploadConfig.allowedExtensions || []).map(ext =>
           ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
         );
-        const acceptAttr = allowedDisplay.length ? allowedDisplay.join(',') : undefined;
+        const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
+          .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
+          .filter(Boolean);
+        const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
         const maxed = uploadConfig.maxFiles ? items.length >= uploadConfig.maxFiles : false;
         const helperParts: string[] = [];
+        if (uploadConfig.minFiles && uploadConfig.minFiles > 1) {
+          helperParts.push(
+            tSystem(
+              uploadConfig.minFiles === 1 ? 'files.minFilesOne' : 'files.minFilesMany',
+              language,
+              uploadConfig.minFiles === 1 ? '1 file required' : '{count} files required',
+              { count: uploadConfig.minFiles }
+            )
+          );
+        }
         if (uploadConfig.maxFiles) {
-          helperParts.push(`${uploadConfig.maxFiles} file${uploadConfig.maxFiles > 1 ? 's' : ''} max`);
+          helperParts.push(
+            tSystem(
+              uploadConfig.maxFiles === 1 ? 'files.maxFilesOne' : 'files.maxFilesMany',
+              language,
+              uploadConfig.maxFiles === 1 ? '1 file max' : '{count} files max',
+              { count: uploadConfig.maxFiles }
+            )
+          );
         }
         if (uploadConfig.maxFileSizeMb) {
-          helperParts.push(`<= ${uploadConfig.maxFileSizeMb} MB each`);
+          helperParts.push(tSystem('files.maxSizeEach', language, '≤ {mb} MB each', { mb: uploadConfig.maxFileSizeMb }));
         }
-        if (allowedDisplay.length) {
-          helperParts.push(`Allowed: ${allowedDisplay.join(', ')}`);
+        const allowedAll = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean);
+        if (allowedAll.length) {
+          helperParts.push(tSystem('files.allowed', language, 'Allowed: {exts}', { exts: allowedAll.join(', ') }));
         }
         const remainingSlots =
-          uploadConfig.maxFiles && uploadConfig.maxFiles > items.length
-            ? `${uploadConfig.maxFiles - items.length} slot${uploadConfig.maxFiles - items.length > 1 ? 's' : ''} remaining`
-            : null;
+          uploadConfig.maxFiles && uploadConfig.maxFiles > items.length ? uploadConfig.maxFiles - items.length : null;
         const dragActive = !!dragState[q.id];
         return (
           <div
@@ -2346,8 +2366,12 @@ const FormView: React.FC<FormViewProps> = ({
                 {tSystem('files.title', language, 'Files')}
                 {items.length ? ` (${items.length})` : ''}
               </button>
+              {remainingSlots ? (
+                <div className="ck-upload-helper muted">
+                  {resolveUploadRemainingHelperText({ uploadConfig, language, remaining: remainingSlots })}
+                </div>
+              ) : null}
               </div>
-            {remainingSlots ? <div className="muted">{remainingSlots}</div> : null}
             <div style={srOnly} aria-live="polite">
               {uploadAnnouncements[q.id] || ''}
             </div>

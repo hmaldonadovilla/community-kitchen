@@ -316,7 +316,15 @@ This project uses TypeScript. You need to build the script before using it in Go
       {{ALWAYS_SHOW(MP_MEALS_REQUEST.FINAL_QTY)}}
       ```
 
-    - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with JSON keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`. The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
+    - **File uploads**: Set `Type` to `FILE_UPLOAD` and use the `Config (JSON/REF)` column with an `uploadConfig` JSON object. Common keys:
+      - `destinationFolderId`: Drive folder to store uploads
+      - `minFiles` / `maxFiles`: enforce minimum/maximum number of attachments (submit-time validation)
+      - `maxFileSizeMb`: per-file max size (rejected client-side)
+      - `allowedExtensions` and/or `allowedMimeTypes`: restrict types (validated client-side)
+      - `errorMessages`: optional localized override strings for upload validation errors
+      - `helperText`: optional localized helper text shown under the upload control (falls back to system strings)
+      - `compression`: optional client-side **image** compression (videos are uploaded as-is; prefer size limits)
+      The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
       - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).
       - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
     - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, locale, projection, limit, pageToken)` Apps Script function is included in `dist/Code.js` and used by the web UI. Use this when options need to stay in sync with another form or sheet.

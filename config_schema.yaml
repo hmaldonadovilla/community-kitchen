@@ -220,19 +220,135 @@ components:
         destinationFolderId:
           type: string
           description: Optional Drive folder ID where uploaded files should be stored.
+        minFiles:
+          type: integer
+          description: |
+            Minimum number of files required for this field.
+
+            - Enforced during submit validation (blocks submit when fewer than `minFiles` are attached).
+            - Not enforced during draft autosave.
         maxFiles:
           type: integer
           description: Maximum number of files allowed for this upload question.
         maxFileSizeMb:
           type: number
-          description: Maximum file size in MB. Files larger than this are ignored.
+          description: Maximum file size in MB (per file). Files larger than this are rejected by the web UI.
         allowedExtensions:
           type: array
           items:
             type: string
-          description: List of allowed file extensions (e.g., ['jpg', 'png', 'pdf']).
+          description: List of allowed file extensions (e.g., ['jpg', 'png', 'pdf']). Dots are optional ('.jpg' also works).
+        allowedMimeTypes:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of allowed MIME types (e.g., ['image/*', 'video/*', 'application/pdf']).
+            When present, a file is allowed if it matches at least one MIME type OR one allowed extension.
+        errorMessages:
+          $ref: '#/components/schemas/FileUploadErrorMessages'
+          description: Optional per-field localized overrides for upload validation messages.
+        helperText:
+          $ref: '#/components/schemas/FileUploadHelperText'
+          description: |
+            Optional helper text shown under the upload control (e.g. remaining attachments).
+            Supports template variables like `{count}`.
+            When omitted, the UI falls back to the built-in system strings (`files.remainingOne` / `files.remainingMany`).
+        compression:
+          $ref: '#/components/schemas/FileUploadCompressionConfig'
+          description: Optional client-side compression settings applied before upload.
       description: |
         Upload settings consumed by FILE_UPLOAD questions. The React UI renders drag-and-drop dropzones that enforce these caps, show remaining slots + total size, and announce state changes for assistive tech. When `CK_DEBUG` (and thus `__WEB_FORM_DEBUG__`) is enabled the form also emits `[ReactForm] upload.*` diagnostics in DevTools for every add/drop/remove.
+
+    FileUploadHelperText:
+      oneOf:
+        - $ref: '#/components/schemas/LocalizedString'
+        - $ref: '#/components/schemas/FileUploadHelperTextConfig'
+      description: |
+        Helper text configuration for FILE_UPLOAD UI.
+        - Use a single `LocalizedString` to apply the same template for any remaining count.
+        - Or use the object form to customize singular vs plural.
+
+    FileUploadHelperTextConfig:
+      type: object
+      properties:
+        remainingOne:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Helper text when exactly 1 slot remains. Variables: {count}
+        remainingMany:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+          Helper text when 2+ slots remain. Variables: {count}
+      description: Optional per-field overrides for remaining-slot helper text.
+
+    FileUploadErrorMessages:
+      type: object
+      properties:
+        minFiles:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown when fewer than `minFiles` are attached.
+            Variables: {field}, {min}, {plural}
+        maxFiles:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown when more than `maxFiles` are attached.
+            Variables: {field}, {max}, {plural}
+        maxFileSizeMb:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown when a selected file exceeds `maxFileSizeMb`.
+            Variables: {name}, {mb}
+        fileType:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown when a selected file does not match `allowedExtensions`/`allowedMimeTypes`.
+            Variables: {name}, {ext}, {exts}, {type}, {types}
+        compressFailed:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message used when client-side image compression fails (best-effort).
+            Variables: {name}
+      description: Optional per-field localized overrides for upload validation messages.
+
+    FileUploadCompressionConfig:
+      oneOf:
+        - type: boolean
+          description: |
+            Convenience form: when true, enables default image compression.
+            Equivalent to `{ "images": true }`.
+        - type: object
+          properties:
+            images:
+              oneOf:
+                - type: boolean
+                  description: When true, enable default image compression (resize + re-encode when smaller).
+                - type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Enable/disable image compression (defaults to true when object form is used).
+                    maxDimension:
+                      type: integer
+                      description: Maximum width/height in pixels after resizing (default 1600).
+                    quality:
+                      type: number
+                      description: JPEG/WebP quality (0..1, default 0.82). Ignored for PNG output.
+                    outputType:
+                      type: string
+                      enum: [keep, image/jpeg, image/webp]
+                      description: |
+                        Output MIME type for compressed images.
+                        - keep: keep the original image type when possible (default)
+                        - image/jpeg: re-encode to JPEG (smaller, lossy)
+                        - image/webp: re-encode to WebP (smaller, lossy)
+            videos:
+              type: boolean
+              description: |
+                When true, attempts to enable video compression. Note: video transcoding is not currently performed by the web app (videos upload as-is); prefer enforcing `maxFileSizeMb` for videos.
+          additionalProperties: false
+      description: Optional client-side compression settings applied before upload.
 
     DefaultValue:
       oneOf:

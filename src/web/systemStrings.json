@@ -136,8 +136,39 @@
     "uploaded": { "en": "Uploaded", "fr": "Téléversé", "nl": "Geüpload" },
     "maxFilesOne": { "en": "1 file max", "fr": "1 fichier max", "nl": "1 bestand max" },
     "maxFilesMany": { "en": "{count} files max", "fr": "{count} fichiers max", "nl": "{count} bestanden max" },
+    "minFilesOne": { "en": "1 file required", "fr": "1 fichier requis", "nl": "1 bestand vereist" },
+    "minFilesMany": { "en": "{count} files required", "fr": "{count} fichiers requis", "nl": "{count} bestanden vereist" },
     "maxSizeEach": { "en": "≤ {mb} MB each", "fr": "≤ {mb} MB chacun", "nl": "≤ {mb} MB elk" },
     "allowed": { "en": "Allowed: {exts}", "fr": "Autorisés : {exts}", "nl": "Toegestaan: {exts}" },
+    "remainingOne": { "en": "You can add 1 more file.", "fr": "Vous pouvez ajouter 1 fichier de plus.", "nl": "Je kunt nog 1 bestand toevoegen." },
+    "remainingMany": { "en": "You can add {count} more files.", "fr": "Vous pouvez ajouter encore {count} fichiers.", "nl": "Je kunt nog {count} bestanden toevoegen." },
+    "error": {
+      "minFiles": {
+        "en": "{field} requires at least {min} file{plural}.",
+        "fr": "{field} nécessite au moins {min} fichier{plural}.",
+        "nl": "{field} vereist minimaal {min} bestand{plural}."
+      },
+      "maxFiles": {
+        "en": "Maximum of {max} file{plural} allowed.",
+        "fr": "Maximum de {max} fichier{plural} autorisé.",
+        "nl": "Maximum {max} bestand{plural} toegestaan."
+      },
+      "maxFileSizeMb": {
+        "en": "{name} exceeds {mb} MB.",
+        "fr": "{name} dépasse {mb} Mo.",
+        "nl": "{name} is groter dan {mb} MB."
+      },
+      "fileType": {
+        "en": "{name} is not an allowed file type.",
+        "fr": "{name} n'est pas un type de fichier autorisé.",
+        "nl": "{name} is geen toegestaan bestandstype."
+      },
+      "compressFailed": {
+        "en": "Could not compress {name}. Uploading original.",
+        "fr": "Impossible de compresser {name}. Téléversement de l'original.",
+        "nl": "Kan {name} niet comprimeren. Origineel wordt geüpload."
+      }
+    },
     "emptyHint": {
       "en": "No files selected yet. Use “Add files” (or tap the upload icon in the form) to attach.",
       "fr": "Aucun fichier sélectionné. Utilisez « Ajouter des fichiers » (ou touchez l'icône d'envoi dans le formulaire) pour joindre.",

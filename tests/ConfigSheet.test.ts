@@ -252,14 +252,37 @@ describe('ConfigSheet', () => {
     const configSheet = mockSS.insertSheet('Config: Upload');
     const exampleRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
-      ['Q7', 'FILE_UPLOAD', 'Photo', 'Photo', 'Foto', true, '', '', '', 'Active', '{"maxFiles":2,"allowedExtensions":["jpg","png"],"destinationFolderId":"abc"}', '', '', '']
+      [
+        'Q7',
+        'FILE_UPLOAD',
+        'Photo',
+        'Photo',
+        'Foto',
+        true,
+        '',
+        '',
+        '',
+        'Active',
+        '{"minFiles":2,"maxFiles":3,"maxFileSizeMb":5,"allowedExtensions":["jpg","png"],"allowedMimeTypes":["image/*"],"errorMessages":{"minFiles":{"en":"Need {min} photos"}}, "helperText":{"en":"You can add {count} more photos."}, "compression":{"images":true},"destinationFolderId":"abc"}',
+        '',
+        '',
+        ''
+      ]
     ];
     (configSheet as any).setMockData(exampleRows);
 
     const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: Upload');
     expect(questions[0].uploadConfig).toBeDefined();
-    expect(questions[0].uploadConfig!.maxFiles).toBe(2);
+    expect(questions[0].uploadConfig!.minFiles).toBe(2);
+    expect(questions[0].uploadConfig!.maxFiles).toBe(3);
+    expect(questions[0].uploadConfig!.maxFileSizeMb).toBe(5);
     expect(questions[0].uploadConfig!.allowedExtensions).toEqual(['jpg', 'png']);
+    expect(questions[0].uploadConfig!.allowedMimeTypes).toEqual(['image/*']);
+    expect((questions[0].uploadConfig as any).errorMessages).toBeDefined();
+    expect(((questions[0].uploadConfig as any).errorMessages?.minFiles || {}).en).toBe('Need {min} photos');
+    expect((questions[0].uploadConfig as any).helperText).toBeDefined();
+    expect(((questions[0].uploadConfig as any).helperText || {}).en).toBe('You can add {count} more photos.');
+    expect((questions[0].uploadConfig as any).compression).toBeDefined();
     expect(questions[0].uploadConfig!.destinationFolderId).toBe('abc');
   });
 

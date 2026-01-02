@@ -1,6 +1,44 @@
 import { resolveLocalizedString } from '../../../i18n';
 import { FieldValue, LangCode, LineItemGroupUiConfig, WebQuestionDefinition } from '../../../types';
 import { ROW_SOURCE_KEY, parseRowSource } from '../../app/lineItems';
+import { tSystem } from '../../../systemStrings';
+
+type TemplateVars = Record<string, string | number | boolean | null | undefined>;
+
+const formatTemplate = (value: string, vars?: TemplateVars): string => {
+  if (!vars) return value;
+  return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
+    const raw = (vars as any)[key];
+    return raw === undefined || raw === null ? '' : String(raw);
+  });
+};
+
+export const resolveUploadRemainingHelperText = (args: {
+  uploadConfig?: any;
+  language: LangCode;
+  remaining: number;
+}): string => {
+  const count = Number(args.remaining);
+  if (!Number.isFinite(count) || count <= 0) return '';
+
+  const key = count === 1 ? 'remainingOne' : 'remainingMany';
+  const helperTextCfg = args.uploadConfig?.helperText;
+
+  const isObject = helperTextCfg && typeof helperTextCfg === 'object' && !Array.isArray(helperTextCfg);
+  const hasPerCountKeys = !!isObject && (Object.prototype.hasOwnProperty.call(helperTextCfg, 'remainingOne') || Object.prototype.hasOwnProperty.call(helperTextCfg, 'remainingMany'));
+
+  const customRaw = hasPerCountKeys ? (helperTextCfg as any)[key] : helperTextCfg;
+  const customResolved = customRaw ? resolveLocalizedString(customRaw as any, args.language, '') : '';
+  const custom = customResolved ? formatTemplate(customResolved, { count }) : '';
+  if (custom) return custom;
+
+  return tSystem(
+    count === 1 ? 'files.remainingOne' : 'files.remainingMany',
+    args.language,
+    count === 1 ? 'You can add 1 more file.' : 'You can add {count} more files.',
+    { count }
+  );
+};
 
 export const formatFileSize = (size: number) => {
   if (size < 1024) return `${size} B`;
@@ -130,33 +168,103 @@ export const toDateInputValue = (raw: unknown): string => {
 export const applyUploadConstraints = (
   question: WebQuestionDefinition,
   existing: Array<string | File>,
-  incoming: File[]
+  incoming: File[],
+  language: LangCode
 ): { items: Array<string | File>; errorMessage?: string } => {
   if (!incoming.length) {
     return { items: existing };
   }
-  const maxFiles = question.uploadConfig?.maxFiles;
-  const allowedExtensions = normalizeExtensions(question.uploadConfig?.allowedExtensions);
-  const maxBytes = question.uploadConfig?.maxFileSizeMb ? question.uploadConfig.maxFileSizeMb * 1024 * 1024 : undefined;
+  const uploadConfig = question.uploadConfig || ({} as any);
+  const maxFiles = uploadConfig?.maxFiles;
+  const allowedExtensions = normalizeExtensions(uploadConfig?.allowedExtensions);
+  const allowedMimeTypes: string[] = Array.isArray(uploadConfig?.allowedMimeTypes)
+    ? (uploadConfig.allowedMimeTypes || [])
+        .map((v: any) => (v !== undefined && v !== null ? v.toString().trim().toLowerCase() : ''))
+        .filter(Boolean)
+    : [];
+  const maxBytes = uploadConfig?.maxFileSizeMb ? uploadConfig.maxFileSizeMb * 1024 * 1024 : undefined;
   const next = [...existing];
   const errors: string[] = [];
+
+  const resolveUploadError = (args: {
+    custom?: any;
+    systemKey: string;
+    fallback: string;
+    vars?: TemplateVars;
+  }): string => {
+    const customText = args.custom ? resolveLocalizedString(args.custom, language, '') : '';
+    if (customText) return formatTemplate(customText, args.vars);
+    return tSystem(args.systemKey, language, args.fallback, args.vars);
+  };
+
+  const matchesAllowedMime = (mime: string): boolean => {
+    const m = (mime || '').toString().trim().toLowerCase();
+    if (!m) return false;
+    return allowedMimeTypes.some((allowed: string) => {
+      const a = (allowed || '').toString().trim().toLowerCase();
+      if (!a) return false;
+      if (a.endsWith('/*')) {
+        const prefix = a.slice(0, -1); // keep trailing slash
+        return m.startsWith(prefix);
+      }
+      return m === a;
+    });
+  };
+
+  const isAllowedType = (file: File): boolean => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const byExt = allowedExtensions.length ? allowedExtensions.includes(ext) : false;
+    const byMime = allowedMimeTypes.length ? matchesAllowedMime(file.type || '') : false;
+    if (!allowedExtensions.length && !allowedMimeTypes.length) return true;
+    // Treat extension and MIME lists as OR to be resilient across platforms.
+    return byExt || byMime;
+  };
+
   incoming.forEach(file => {
     const ext = (file.name.split('.').pop() || '').toLowerCase();
-    if (allowedExtensions.length && !allowedExtensions.includes(ext)) {
-      errors.push(`${file.name} is not an allowed file type.`);
+    if (!isAllowedType(file)) {
+      const allowedDisplay = allowedExtensions.map(e => (e.startsWith('.') ? e : `.${e}`));
+      errors.push(
+        resolveUploadError({
+          custom: uploadConfig?.errorMessages?.fileType,
+          systemKey: 'files.error.fileType',
+          fallback: '{name} is not an allowed file type.',
+          vars: {
+            name: file.name,
+            ext: ext || '',
+            exts: allowedDisplay.join(', '),
+            type: (file.type || '').toString(),
+            types: allowedMimeTypes.join(', ')
+          }
+        })
+      );
       return;
     }
     if (maxBytes && file.size > maxBytes) {
-      errors.push(`${file.name} exceeds ${question.uploadConfig?.maxFileSizeMb} MB.`);
+      errors.push(
+        resolveUploadError({
+          custom: uploadConfig?.errorMessages?.maxFileSizeMb,
+          systemKey: 'files.error.maxFileSizeMb',
+          fallback: '{name} exceeds {mb} MB.',
+          vars: { name: file.name, mb: uploadConfig?.maxFileSizeMb ?? '' }
+        })
+      );
       return;
     }
     if (maxFiles && next.length >= maxFiles) {
-      errors.push(`Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} reached.`);
+      errors.push(
+        resolveUploadError({
+          custom: uploadConfig?.errorMessages?.maxFiles,
+          systemKey: 'files.error.maxFiles',
+          fallback: 'Maximum of {max} file{plural} reached.',
+          vars: { max: maxFiles, plural: maxFiles > 1 ? 's' : '' }
+        })
+      );
       return;
     }
     next.push(file);
   });
-  return { items: next, errorMessage: errors.join(' ') || undefined };
+  return { items: next, errorMessage: errors.join(' · ') || undefined };
 };
 
 const asScalarString = (raw: unknown): string => {

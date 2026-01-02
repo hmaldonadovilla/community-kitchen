@@ -484,10 +484,69 @@ export class ConfigSheet {
     try {
       const parsed = JSON.parse(this.sanitizeJson(rawConfig));
       if (parsed && typeof parsed === 'object') {
-        if (parsed.destinationFolderId) config.destinationFolderId = parsed.destinationFolderId;
-        if (parsed.maxFiles) config.maxFiles = Number(parsed.maxFiles);
-        if (parsed.maxFileSizeMb) config.maxFileSizeMb = Number(parsed.maxFileSizeMb);
-        if (parsed.allowedExtensions) config.allowedExtensions = parsed.allowedExtensions;
+        const root: any =
+          (parsed as any).uploadConfig && typeof (parsed as any).uploadConfig === 'object' ? (parsed as any).uploadConfig : parsed;
+
+        const dest = root.destinationFolderId ?? root.destination_folder_id ?? root.folderId ?? root.folder_id;
+        if (dest !== undefined && dest !== null && dest.toString) config.destinationFolderId = dest.toString();
+
+        const minFiles = root.minFiles ?? root.min_files ?? root.minCount ?? root.min_count;
+        if (minFiles !== undefined && minFiles !== null) {
+          const n = Number(minFiles);
+          if (!isNaN(n)) config.minFiles = n;
+        }
+
+        const maxFiles = root.maxFiles ?? root.max_files ?? root.maxCount ?? root.max_count;
+        if (maxFiles !== undefined && maxFiles !== null) {
+          const n = Number(maxFiles);
+          if (!isNaN(n)) config.maxFiles = n;
+        }
+
+        const maxSize =
+          root.maxFileSizeMb ??
+          root.maxFileSizeMB ??
+          root.max_file_size_mb ??
+          root.max_size_mb ??
+          root.maxSizeMb ??
+          root.max_size;
+        if (maxSize !== undefined && maxSize !== null) {
+          const n = Number(maxSize);
+          if (!isNaN(n)) config.maxFileSizeMb = n;
+        }
+
+        const exts = root.allowedExtensions ?? root.allowed_extensions ?? root.extensions ?? root.exts ?? root.allowedExts;
+        if (Array.isArray(exts)) config.allowedExtensions = exts as any;
+        else if (typeof exts === 'string') {
+          config.allowedExtensions = exts
+            .split(/[|,\s]+/)
+            .map(s => s.trim())
+            .filter(Boolean);
+        }
+
+        const mimes =
+          root.allowedMimeTypes ?? root.allowed_mime_types ?? root.allowedTypes ?? root.allowed_types ?? root.mimeTypes ?? root.mimes;
+        if (Array.isArray(mimes)) config.allowedMimeTypes = mimes as any;
+        else if (typeof mimes === 'string') {
+          config.allowedMimeTypes = mimes
+            .split(/[|,\n]+/)
+            .map(s => s.trim())
+            .filter(Boolean);
+        }
+
+        const errorMessages = root.errorMessages ?? root.error_messages ?? root.errors ?? root.messages;
+        if (errorMessages && typeof errorMessages === 'object') config.errorMessages = errorMessages;
+
+        const helperText =
+          root.helperText ??
+          root.helper_text ??
+          root.remainingHelperText ??
+          root.remaining_helper_text ??
+          root.remainingText ??
+          root.remaining_text;
+        if (helperText !== undefined && helperText !== null) config.helperText = helperText;
+
+        const compression = root.compression ?? root.compress;
+        if (compression !== undefined) config.compression = compression;
       }
     } catch (_) {
       // Fallback to key=value;key=value syntax
@@ -501,6 +560,10 @@ export class ConfigSheet {
           case 'folderid':
             config.destinationFolderId = value;
             break;
+          case 'minfiles':
+          case 'mincount':
+            config.minFiles = Number(value);
+            break;
           case 'maxfiles':
             config.maxFiles = Number(value);
             break;
@@ -512,6 +575,11 @@ export class ConfigSheet {
           case 'allowedextensions':
             config.allowedExtensions = value.split('|').map(v => v.trim()).filter(Boolean);
             break;
+          case 'mimes':
+          case 'mimetypes':
+          case 'allowedmimetypes':
+            config.allowedMimeTypes = value.split('|').map(v => v.trim()).filter(Boolean);
+            break;
         }
       });
     }
@@ -522,22 +590,68 @@ export class ConfigSheet {
   private static normalizeUploadConfig(raw: any): FileUploadConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const cfg: FileUploadConfig = {};
-    if (raw.destinationFolderId !== undefined && raw.destinationFolderId !== null) {
-      cfg.destinationFolderId = raw.destinationFolderId.toString();
+    const root = raw.uploadConfig && typeof raw.uploadConfig === 'object' ? raw.uploadConfig : raw;
+    const dest = root.destinationFolderId ?? root.destination_folder_id ?? root.folderId ?? root.folder_id;
+    if (dest !== undefined && dest !== null) cfg.destinationFolderId = dest.toString();
+
+    const minFiles = root.minFiles ?? root.min_files ?? root.minCount ?? root.min_count;
+    if (minFiles !== undefined && minFiles !== null) {
+      const n = Number(minFiles);
+      if (!isNaN(n)) cfg.minFiles = n;
     }
-    if (raw.maxFiles !== undefined && raw.maxFiles !== null) {
-      const n = Number(raw.maxFiles);
+    const maxFiles = root.maxFiles ?? root.max_files ?? root.maxCount ?? root.max_count;
+    if (maxFiles !== undefined && maxFiles !== null) {
+      const n = Number(maxFiles);
       if (!isNaN(n)) cfg.maxFiles = n;
     }
-    if (raw.maxFileSizeMb !== undefined && raw.maxFileSizeMb !== null) {
-      const n = Number(raw.maxFileSizeMb);
+
+    const maxSize =
+      root.maxFileSizeMb ??
+      root.maxFileSizeMB ??
+      root.max_file_size_mb ??
+      root.max_size_mb ??
+      root.maxSizeMb ??
+      root.max_size;
+    if (maxSize !== undefined && maxSize !== null) {
+      const n = Number(maxSize);
       if (!isNaN(n)) cfg.maxFileSizeMb = n;
     }
-    if (Array.isArray(raw.allowedExtensions)) {
-      cfg.allowedExtensions = raw.allowedExtensions
-        .map((v: any) => (v !== undefined && v !== null ? v.toString() : ''))
+
+    const exts = root.allowedExtensions ?? root.allowed_extensions ?? root.extensions ?? root.exts ?? root.allowedExts;
+    if (Array.isArray(exts)) {
+      cfg.allowedExtensions = exts.map((v: any) => (v !== undefined && v !== null ? v.toString() : '')).filter(Boolean);
+    } else if (typeof exts === 'string') {
+      cfg.allowedExtensions = exts
+        .split(/[|,\s]+/)
+        .map(s => s.trim())
         .filter(Boolean);
     }
+
+    const mimes =
+      root.allowedMimeTypes ?? root.allowed_mime_types ?? root.allowedTypes ?? root.allowed_types ?? root.mimeTypes ?? root.mimes;
+    if (Array.isArray(mimes)) {
+      cfg.allowedMimeTypes = mimes.map((v: any) => (v !== undefined && v !== null ? v.toString() : '')).filter(Boolean);
+    } else if (typeof mimes === 'string') {
+      cfg.allowedMimeTypes = mimes
+        .split(/[|,\n]+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+
+    const errorMessages = root.errorMessages ?? root.error_messages ?? root.errors ?? root.messages;
+    if (errorMessages && typeof errorMessages === 'object') cfg.errorMessages = errorMessages;
+
+    const helperText =
+      root.helperText ??
+      root.helper_text ??
+      root.remainingHelperText ??
+      root.remaining_helper_text ??
+      root.remainingText ??
+      root.remaining_text;
+    if (helperText !== undefined && helperText !== null) cfg.helperText = helperText;
+
+    const compression = root.compression ?? root.compress;
+    if (compression !== undefined) cfg.compression = compression;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 

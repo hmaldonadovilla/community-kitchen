@@ -205,6 +205,14 @@ export const FORM_VIEW_STYLES = `
           flex: 0 0 auto;
           white-space: nowrap;
         }
+        /* File upload helper text (e.g., remaining files): always render on its own line below the controls. */
+        .form-card .field.inline-field > .ck-upload-helper,
+        .webform-overlay .field.inline-field > .ck-upload-helper,
+        .ck-upload-row > .ck-upload-helper {
+          flex: 0 0 100%;
+          width: 100%;
+          margin: 0;
+        }
         /* Per-field override: force *label* above the rest even for 1-up/full-width rows.
            Important: we only stack the label; the control and any action buttons (subgroup/info) should stay inline. */
         .form-card .field.inline-field.ck-label-stacked,

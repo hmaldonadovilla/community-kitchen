@@ -236,10 +236,59 @@ export interface QuestionUiConfig {
 
 export interface FileUploadConfig {
   destinationFolderId?: string;
+  /**
+   * Minimum number of files required to satisfy validation for this FILE_UPLOAD field.
+   * When set, the form will block submit until at least this many files are attached.
+   */
+  minFiles?: number;
   maxFiles?: number;
   maxFileSizeMb?: number;
   allowedExtensions?: string[];
+  /**
+   * Allowed MIME types for uploads. Supports wildcards like "image/*" and "video/*".
+   * When provided, files must match at least one MIME type OR an allowed extension (if extensions are also provided).
+   */
+  allowedMimeTypes?: string[];
+  /**
+   * Optional localized override messages for upload validation errors.
+   * Templates may include variables like {field}, {name}, {min}, {max}, {mb}, {exts}, {types}.
+   */
+  errorMessages?: FileUploadErrorMessages;
+  /**
+   * Optional client-side compression settings (applied before uploading to Drive).
+   * Note: Video compression is not performed by default (see docs).
+   */
+  compression?: FileUploadCompressionConfig;
+  /**
+   * Optional helper text shown under the upload control (e.g., "You can add 3 more photos.").
+   *
+   * - When omitted, the UI falls back to the built-in system strings.
+   * - Supports template variables like {count}.
+   */
+  helperText?: FileUploadHelperText;
 }
+
+export interface FileUploadErrorMessages {
+  minFiles?: LocalizedString;
+  maxFiles?: LocalizedString;
+  maxFileSizeMb?: LocalizedString;
+  fileType?: LocalizedString;
+  compressFailed?: LocalizedString;
+}
+
+export type FileUploadHelperText = LocalizedString | FileUploadHelperTextConfig;
+
+export interface FileUploadHelperTextConfig {
+  remainingOne?: LocalizedString;
+  remainingMany?: LocalizedString;
+}
+
+export type FileUploadCompressionConfig =
+  | {
+      images?: boolean | { enabled?: boolean; maxDimension?: number; quality?: number; outputType?: 'image/jpeg' | 'image/webp' | 'keep' };
+      videos?: boolean;
+    }
+  | undefined;
 
 export type SheetColumnRef = string | number;
 

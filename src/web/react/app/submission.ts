@@ -5,10 +5,105 @@ import { FormErrors, LineItemState } from '../types';
 import { resolveFieldLabel } from '../utils/labels';
 import { isEmptyValue } from '../utils/values';
 import { tSystem } from '../../systemStrings';
+import { resolveLocalizedString } from '../../i18n';
 import { buildMaybeFilePayload } from './filePayload';
 import { buildSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
+
+const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
+  if (!vars) return value;
+  return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
+    const raw = (vars as any)[key];
+    return raw === undefined || raw === null ? '' : String(raw);
+  });
+};
+
+const resolveUploadErrorMessage = (args: {
+  uploadConfig?: any;
+  language: LangCode;
+  kind: 'minFiles' | 'maxFiles';
+  fallback: string;
+  vars?: Record<string, string | number | boolean | null | undefined>;
+}): string => {
+  const custom = args.uploadConfig?.errorMessages?.[args.kind];
+  const customText = custom ? resolveLocalizedString(custom, args.language, '') : '';
+  if (customText) return formatTemplate(customText, args.vars);
+  const key = args.kind === 'minFiles' ? 'files.error.minFiles' : 'files.error.maxFiles';
+  return tSystem(key, args.language, args.fallback, args.vars);
+};
+
+const splitUploadString = (raw: string): string[] => {
+  const trimmed = (raw || '').toString().trim();
+  if (!trimmed) return [];
+  const commaParts = trimmed
+    .split(',')
+    .map(p => p.trim())
+    .filter(Boolean);
+  if (commaParts.length > 1) return commaParts;
+  const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
+  if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
+  return [trimmed];
+};
+
+const countUploadItems = (raw: any): number => {
+  if (raw === undefined || raw === null) return 0;
+  if (typeof raw === 'string') return splitUploadString(raw).length;
+  // Arrays can contain strings, File payloads, {url}, or File objects (before upload completes).
+  if (Array.isArray(raw)) return raw.reduce((acc, item) => acc + countUploadItems(item), 0);
+  try {
+    if (typeof FileList !== 'undefined' && raw instanceof FileList) return raw.length;
+  } catch (_) {
+    // ignore
+  }
+  try {
+    if (typeof File !== 'undefined' && raw instanceof File) return 1;
+  } catch (_) {
+    // ignore
+  }
+  if (typeof raw === 'object') {
+    const url = typeof (raw as any).url === 'string' ? ((raw as any).url as string).trim() : '';
+    if (url) return countUploadItems(url);
+    // dataUrl payloads built by buildFilePayload
+    if (typeof (raw as any).dataUrl === 'string' && ((raw as any).dataUrl as string).trim()) return 1;
+  }
+  return 0;
+};
+
+const validateUploadCounts = (args: {
+  value: any;
+  uploadConfig?: any;
+  required?: boolean;
+  language: LangCode;
+  fieldLabel: string;
+}): string => {
+  const { value, uploadConfig, required, language, fieldLabel } = args;
+  const count = countUploadItems(value);
+  const minCfg = uploadConfig?.minFiles;
+  const min = minCfg !== undefined && minCfg !== null ? Number(minCfg) : required ? 1 : undefined;
+  const maxCfg = uploadConfig?.maxFiles;
+  const max = maxCfg !== undefined && maxCfg !== null ? Number(maxCfg) : undefined;
+
+  if (min !== undefined && Number.isFinite(min) && min > 0 && count < min) {
+    return resolveUploadErrorMessage({
+      uploadConfig,
+      language,
+      kind: 'minFiles',
+      fallback: '{field} requires at least {min} file{plural}.',
+      vars: { field: fieldLabel, min, plural: min > 1 ? 's' : '' }
+    });
+  }
+  if (max !== undefined && Number.isFinite(max) && max > 0 && count > max) {
+    return resolveUploadErrorMessage({
+      uploadConfig,
+      language,
+      kind: 'maxFiles',
+      fallback: '{field} allows at most {max} file{plural}.',
+      vars: { field: fieldLabel, max, plural: max > 1 ? 's' : '' }
+    });
+  }
+  return '';
+};
 
 const isRowDisabledByExpandGate = (args: {
   ui: any;
@@ -96,6 +191,20 @@ export const validateForm = (args: {
       });
     }
 
+    if (q.type === 'FILE_UPLOAD' && !questionHidden) {
+      const fieldLabel = resolveFieldLabel(q as any, language, q.id);
+      const msg = validateUploadCounts({
+        value: values[q.id],
+        uploadConfig: (q as any).uploadConfig,
+        required: !!(q as any).required,
+        language,
+        fieldLabel
+      });
+      if (msg) {
+        allErrors[q.id] = msg;
+      }
+    }
+
     if (q.type === 'LINE_ITEM_GROUP' && q.lineItemConfig?.fields) {
       const rows = lineItems[q.id] || [];
       const ui = (q.lineItemConfig as any)?.ui;
@@ -152,9 +261,23 @@ export const validateForm = (args: {
             if (errs.length) rowValid = false;
           }
 
-          if (field.required) {
-            const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
-            if (hideField) return;
+          const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+          if (hideField) return;
+
+          if ((field as any).type === 'FILE_UPLOAD') {
+            const fieldLabel = resolveFieldLabel(field, language, field.id);
+            const msg = validateUploadCounts({
+              value: row.values[field.id],
+              uploadConfig: (field as any).uploadConfig,
+              required: !!field.required,
+              language,
+              fieldLabel
+            });
+            if (msg) {
+              allErrors[`${q.id}__${field.id}__${row.id}`] = msg;
+              rowValid = false;
+            }
+          } else if (field.required) {
             const val = row.values[field.id];
             if (isEmptyValue(val as any)) {
               const fieldLabel = resolveFieldLabel(field, language, field.id);
@@ -223,9 +346,23 @@ export const validateForm = (args: {
                   if (errs.length) rowValid = false;
                 }
 
-                if (field.required) {
-                  const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
-                  if (hide) return;
+                const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                if (hide) return;
+
+                if ((field as any).type === 'FILE_UPLOAD') {
+                  const fieldLabel = resolveFieldLabel(field, language, field.id);
+                  const msg = validateUploadCounts({
+                    value: subRow.values[field.id],
+                    uploadConfig: (field as any).uploadConfig,
+                    required: !!field.required,
+                    language,
+                    fieldLabel
+                  });
+                  if (msg) {
+                    allErrors[`${subKey}__${field.id}__${subRow.id}`] = msg;
+                    rowValid = false;
+                  }
+                } else if (field.required) {
                   const val = subRow.values[field.id];
                   if (isEmptyValue(val as any)) {
                     const fieldLabel = resolveFieldLabel(field, language, field.id);
@@ -259,7 +396,7 @@ export const validateForm = (args: {
               : tSystem('validation.completeAtLeastOneValidRow', language, 'Complete at least one valid row.')
             : tSystem('validation.atLeastOneLineItemRequired', language, 'At least one line item is required.');
       }
-    } else if ((q as any).required && !questionHidden && isEmptyValue(values[q.id])) {
+    } else if ((q as any).required && q.type !== 'FILE_UPLOAD' && !questionHidden && isEmptyValue(values[q.id])) {
       allErrors[q.id] = tSystem('validation.thisFieldRequired', language, 'This field is required.');
     }
   });
@@ -455,7 +592,7 @@ export const buildSubmissionPayload = async (args: {
   for (const q of definition.questions) {
     if (q.type === 'FILE_UPLOAD') {
       const rawAny = recomputed.values[q.id] as any;
-      payloadValues[q.id] = await buildMaybeFilePayload(rawAny, (q as any).uploadConfig?.maxFiles);
+      payloadValues[q.id] = await buildMaybeFilePayload(rawAny, (q as any).uploadConfig?.maxFiles, (q as any).uploadConfig);
     }
   }
 
@@ -488,7 +625,7 @@ export const buildSubmissionPayload = async (args: {
         const base: Record<string, any> = { ...(row.values || {}) };
 
         for (const f of lineFileFields) {
-          base[f.id] = await buildMaybeFilePayload(base[f.id], (f as any).uploadConfig?.maxFiles);
+          base[f.id] = await buildMaybeFilePayload(base[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
         }
 
         for (const sub of subGroups) {
@@ -521,7 +658,7 @@ export const buildSubmissionPayload = async (args: {
             subRowsToSave.map(async cr => {
               const child: Record<string, any> = { ...(cr.values || {}) };
               for (const f of subFileFields) {
-                child[f.id] = await buildMaybeFilePayload(child[f.id], (f as any).uploadConfig?.maxFiles);
+                child[f.id] = await buildMaybeFilePayload(child[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
               }
               return child;
             })

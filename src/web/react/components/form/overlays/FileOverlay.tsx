@@ -6,9 +6,11 @@ import type { LangCode } from '../../../../types';
 import { tSystem } from '../../../../systemStrings';
 
 export type UploadConfigLike = {
+  minFiles?: number;
   maxFiles?: number;
   maxFileSizeMb?: number;
   allowedExtensions?: string[];
+  allowedMimeTypes?: string[];
 };
 
 export type FileOverlayProps = {
@@ -83,7 +85,20 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   const allowedDisplay = (uploadConfig?.allowedExtensions || []).map(ext =>
     ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
   );
+  const allowedMimeDisplay = (uploadConfig?.allowedMimeTypes || [])
+    .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
+    .filter(Boolean);
   const helperParts: string[] = [];
+  if (uploadConfig?.minFiles && uploadConfig.minFiles > 1) {
+    helperParts.push(
+      tSystem(
+        uploadConfig.minFiles === 1 ? 'files.minFilesOne' : 'files.minFilesMany',
+        language,
+        uploadConfig.minFiles === 1 ? '1 file required' : '{count} files required',
+        { count: uploadConfig.minFiles }
+      )
+    );
+  }
   if (uploadConfig?.maxFiles) {
     helperParts.push(
       tSystem(
@@ -99,9 +114,10 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
       tSystem('files.maxSizeEach', language, '≤ {mb} MB each', { mb: uploadConfig.maxFileSizeMb })
     );
   }
-  if (allowedDisplay.length) {
+  const allowedAll = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean);
+  if (allowedAll.length) {
     helperParts.push(
-      tSystem('files.allowed', language, 'Allowed: {exts}', { exts: allowedDisplay.join(', ') })
+      tSystem('files.allowed', language, 'Allowed: {exts}', { exts: allowedAll.join(', ') })
     );
   }
 

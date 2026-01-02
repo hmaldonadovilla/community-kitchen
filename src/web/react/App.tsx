@@ -1349,7 +1349,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       }
 
       try {
-        const payloads = await buildFilePayload(fileItems, undefined);
+        const payloads = await buildFilePayload(fileItems, undefined, args.uploadConfig);
         const uploadRes = await uploadFilesApi([...existingUrls, ...payloads], args.uploadConfig);
         if (!uploadRes?.success) {
           const msg = (uploadRes?.message || 'Failed to upload files.').toString();

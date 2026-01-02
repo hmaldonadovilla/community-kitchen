@@ -122,7 +122,14 @@ Enabling `CK_DEBUG` also flips `window.__WEB_FORM_DEBUG__` on the web client, so
 - **Line-item header controls**: In `lineItemConfig.ui`, you can hide the items pill and move the Add button:
   - `showItemPill: false` hides the “N items” pill
   - `addButtonPlacement: "top"|"bottom"|"both"|"hidden"` controls where the Add button appears
-- **File uploads**: Set `Type` to `FILE_UPLOAD` and provide `uploadConfig` in the Config column (JSON). Supported keys: `destinationFolderId`, `maxFiles`, `maxFileSizeMb`, `allowedExtensions`.
+- **File uploads**: Set `Type` to `FILE_UPLOAD` and provide `uploadConfig` in the Config column (JSON). Supported keys:
+  - `destinationFolderId`
+  - `minFiles` / `maxFiles` (submit-time validation; e.g. require 2+ photos)
+  - `maxFileSizeMb` (per file; rejected in the web UI)
+  - `allowedExtensions` and/or `allowedMimeTypes` (type checks happen client-side before upload)
+  - `errorMessages` (optional localized overrides for upload validation text)
+  - `helperText` (optional localized helper text shown under the upload control; falls back to system strings)
+  - `compression` (optional client-side image compression; videos are uploaded as-is — prefer enforcing `maxFileSizeMb`)
 - **Filters**: Add `optionFilter` in the Config JSON to filter CHOICE/CHECKBOX options (works in line items too). `dependsOn` accepts a single field ID or an array for multi-field dependencies; for line items, it can also reference top-level fields. Build composite keys in `optionMap` by joining dependency values with `||`, plus a `*` fallback.  
   Example (inline map): `{ "optionFilter": { "dependsOn": ["Product","Supplier"], "optionMap": { "Carrots||Local": ["Crates"], "Carrots": ["Bags","Crates"], "*": ["Bags"] } } }`  
   Example (sheet-driven map): `{ "optionFilter": { "dependsOn": "Supplier", "optionMapRef": { "ref": "REF:Supplier_Map", "keyColumn": "Supplier", "lookupColumn": "Allowed options" } } }`
