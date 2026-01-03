@@ -115,6 +115,34 @@ export const formatTemplateValue = (value: any, fieldType?: string): string => {
     if (!iso) return '';
     return formatIsoDateLabel(iso);
   }
+
+  // Boolean readability: show status glyphs instead of "Yes/No" or "true/false".
+  // Note: keep numeric 0/1 as numbers unless the field type is explicitly boolean-like.
+  const t = (fieldType || '').toString().trim().toUpperCase();
+  const isBoolType = new Set(['CHECKBOX', 'BOOLEAN', 'YES_NO', 'YESNO', 'TOGGLE', 'SWITCH']).has(t);
+  const bool = (() => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (typeof value === 'number' && isBoolType) {
+      if (value === 1) return true;
+      if (value === 0) return false;
+    }
+    if (typeof value === 'string') {
+      const s = value.trim().toLowerCase();
+      if (!s) return null;
+      if (isBoolType) {
+        if (s === '1') return true;
+        if (s === '0') return false;
+      }
+      const truthy = new Set(['true', 'yes', 'y', 'oui', 'o', 'ja', 'j']);
+      const falsy = new Set(['false', 'no', 'n', 'non', 'nee']);
+      if (truthy.has(s)) return true;
+      if (falsy.has(s)) return false;
+    }
+    return null;
+  })();
+  if (bool !== null) return bool ? '✔' : '❌';
+
   if (Array.isArray(value)) {
     if (value.length && typeof value[0] === 'object') {
       return value

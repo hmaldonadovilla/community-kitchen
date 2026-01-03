@@ -112,6 +112,27 @@ export const CheckIcon: React.FC<{ size?: number; style?: React.CSSProperties; c
   </svg>
 );
 
+export const XIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
+  size = 22,
+  style,
+  className
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    focusable="false"
+    className={className}
+    style={{ width: size, height: size, ...(style as React.CSSProperties) }}
+  >
+    <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M6 6l12 12" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 export const PaperclipIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
   size = 24,
   style,

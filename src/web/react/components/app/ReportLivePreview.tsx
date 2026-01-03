@@ -10,12 +10,35 @@ import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from '../../utils/valueDisplay';
 import { GroupCard } from '../form/GroupCard';
 import { resolveGroupSectionKey } from '../form/grouping';
+import { CheckIcon, XIcon } from '../form/ui';
 import { shouldHideField } from '../../../rules/visibility';
 import { collectValidationWarnings } from '../../app/submission';
 
 type UploadLink = { url: string; label?: string };
 
 const looksLikeUrl = (s: string) => /^https?:\/\/\S+$/i.test((s || '').trim());
+
+const normalizeBooleanLike = (raw: any, fieldType?: string): boolean | null => {
+  if (raw === true) return true;
+  if (raw === false) return false;
+
+  const t = (fieldType || '').toString().trim().toUpperCase();
+  const isBoolType = new Set(['CHECKBOX', 'BOOLEAN', 'YES_NO', 'YESNO', 'TOGGLE', 'SWITCH']).has(t);
+  if (isBoolType) {
+    if (raw === 1 || raw === '1') return true;
+    if (raw === 0 || raw === '0') return false;
+  }
+
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!s) return null;
+
+  // English/French/Dutch common boolean strings + 1/0.
+  const truthy = new Set(['true', 'yes', 'y', 'oui', 'o', 'ja', 'j']);
+  const falsy = new Set(['false', 'no', 'n', 'non', 'nee']);
+  if (truthy.has(s)) return true;
+  if (falsy.has(s)) return false;
+  return null;
+};
 
 const extractUploadLinks = (value: any): UploadLink[] => {
   const links: UploadLink[] = [];
@@ -114,6 +137,25 @@ const renderValueForPreview = (
     if (!raw.trim()) return EMPTY_DISPLAY;
     return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{raw}</div>;
   }
+
+  // Improve readability for boolean-like values in Summary/PDF previews.
+  const bool = normalizeBooleanLike(value, fieldType);
+  if (bool !== null) {
+    return (
+      <span
+        role="img"
+        aria-label={bool ? tSystem('values.yes', language, 'Yes') : tSystem('values.no', language, 'No')}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          color: bool ? '#16a34a' : '#dc2626'
+        }}
+      >
+        {bool ? <CheckIcon size={28} /> : <XIcon size={28} />}
+      </span>
+    );
+  }
+
   return formatDisplayText(value, { language, optionSet, fieldType });
 };
 
@@ -145,9 +187,11 @@ const MetaCard: React.FC<{ label: string; children: React.ReactNode; fieldPath?:
         fontWeight: 800,
         marginBottom: 6,
         minWidth: 0,
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis'
+        whiteSpace: 'normal',
+        overflow: 'visible',
+        textOverflow: 'clip',
+        wordBreak: 'break-word',
+        overflowWrap: 'anywhere'
       }}
     >
       {label}
@@ -479,8 +523,8 @@ export const ReportLivePreview: React.FC<{
     [values, lineItems]
   );
 
-  const topQuestions = useMemo(() => {
-    const raw = definition.questions.filter(q => q.type !== 'LINE_ITEM_GROUP' && q.type !== 'BUTTON');
+  const summaryQuestions = useMemo(() => {
+    const raw = definition.questions.filter(q => q.type !== 'BUTTON');
     return raw.filter(q => isVisibleInSummary({ item: q, ctx: summaryCtx }));
   }, [definition.questions, summaryCtx]);
 
@@ -496,7 +540,7 @@ export const ReportLivePreview: React.FC<{
   const topSections = useMemo(() => {
     const map = new Map<string, Section>();
     let order = 0;
-    topQuestions.forEach(q => {
+    summaryQuestions.forEach(q => {
       const groupCfg: any = (q as any)?.group;
       const key = resolveGroupSectionKey(groupCfg);
       let title: string | undefined;
@@ -519,7 +563,7 @@ export const ReportLivePreview: React.FC<{
       }
     });
     return Array.from(map.values()).sort((a, b) => a.order - b.order);
-  }, [language, topQuestions]);
+  }, [language, summaryQuestions]);
 
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -540,11 +584,6 @@ export const ReportLivePreview: React.FC<{
       return next;
     });
   }, [topSections]);
-
-  const lineGroups = useMemo(() => {
-    const raw = definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP');
-    return raw.filter(q => isVisibleInSummary({ item: q, ctx: summaryCtx }));
-  }, [definition.questions, summaryCtx]);
 
   const warningInfo = useMemo(
     () =>
@@ -573,6 +612,74 @@ export const ReportLivePreview: React.FC<{
           <div key={`${fieldPath}-warning-${idx}`} className="warning">
             {m}
           </div>
+        ))}
+      </div>
+    );
+  };
+
+  type SectionItem =
+    | { kind: 'single'; q: WebQuestionDefinition }
+    | { kind: 'pair'; left: WebQuestionDefinition; right: WebQuestionDefinition; key: string }
+    | { kind: 'lineItemGroup'; q: WebQuestionDefinition };
+
+  const buildSectionItems = (questions: WebQuestionDefinition[]): SectionItem[] => {
+    const used = new Set<string>();
+    const items: SectionItem[] = [];
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!q || used.has(q.id)) continue;
+
+      if (q.type === 'LINE_ITEM_GROUP') {
+        used.add(q.id);
+        items.push({ kind: 'lineItemGroup', q });
+        continue;
+      }
+
+      const pairKey = q.type !== 'PARAGRAPH' && (q as any)?.pair ? (q as any).pair.toString() : '';
+      if (pairKey) {
+        for (let j = i + 1; j < questions.length; j++) {
+          const cand = questions[j];
+          if (!cand || used.has(cand.id)) continue;
+          if (cand.type === 'LINE_ITEM_GROUP') continue;
+          if (cand.type === 'PARAGRAPH') continue;
+          const candKey = (cand as any)?.pair ? (cand as any).pair.toString() : '';
+          if (candKey && candKey === pairKey) {
+            used.add(q.id);
+            used.add(cand.id);
+            items.push({ kind: 'pair', left: q, right: cand, key: `${pairKey}:${q.id}:${cand.id}` });
+            break;
+          }
+        }
+        if (used.has(q.id)) continue;
+      }
+
+      used.add(q.id);
+      items.push({ kind: 'single', q });
+    }
+    return items;
+  };
+
+  const renderLineItemGroup = (group: WebQuestionDefinition): React.ReactNode => {
+    const rows = lineItems[group.id] || [];
+    if (!rows.length) return null;
+    return (
+      <div data-field-path={group.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="muted" style={{ fontWeight: 800 }}>
+          {resolveLabel(group, language)}
+        </div>
+        {renderWarnings(group.id)}
+
+        {rows.map((row, idx) => (
+          <LineItemRowCard
+            key={row.id}
+            group={group}
+            row={row}
+            idx={idx}
+            language={language}
+            lineItems={lineItems}
+            values={values}
+            warningByField={(warningInfo as any)?.byField || {}}
+          />
         ))}
       </div>
     );
@@ -667,7 +774,52 @@ export const ReportLivePreview: React.FC<{
               alignItems: 'stretch'
             }}
           >
-            {section.questions.map((q: WebQuestionDefinition) => {
+            {buildSectionItems(section.questions).map(item => {
+              if (item.kind === 'lineItemGroup') {
+                const node = renderLineItemGroup(item.q);
+                if (!node) return null;
+                return (
+                  <div key={item.q.id} style={{ gridColumn: '1 / -1' }}>
+                    {node}
+                  </div>
+                );
+              }
+              if (item.kind === 'pair') {
+                const leftLabel = resolveLabel(item.left, language);
+                const rightLabel = resolveLabel(item.right, language);
+                const leftValue = values[item.left.id];
+                const rightValue = values[item.right.id];
+                return (
+                  <div
+                    key={item.key}
+                    style={{
+                      gridColumn: '1 / -1',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                      gap: 12,
+                      alignItems: 'stretch'
+                    }}
+                  >
+                    <MetaCard label={leftLabel} fieldPath={item.left.id}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div>
+                          {renderValueForPreview(leftValue, item.left.type, language, toOptionSet(item.left as any))}
+                        </div>
+                        {renderWarnings(item.left.id)}
+                      </div>
+                    </MetaCard>
+                    <MetaCard label={rightLabel} fieldPath={item.right.id}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div>
+                          {renderValueForPreview(rightValue, item.right.type, language, toOptionSet(item.right as any))}
+                        </div>
+                        {renderWarnings(item.right.id)}
+                      </div>
+                    </MetaCard>
+                  </div>
+                );
+              }
+              const q = item.q;
               const label = resolveLabel(q, language);
               const value = values[q.id];
               return (
@@ -698,33 +850,6 @@ export const ReportLivePreview: React.FC<{
           >
             {body}
           </GroupCard>
-        );
-      })}
-
-      {lineGroups.map((group: WebQuestionDefinition) => {
-        const rows = lineItems[group.id] || [];
-        if (!rows.length) return null;
-
-        return (
-          <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="muted" style={{ fontWeight: 800 }}>
-              {resolveLabel(group, language)}
-            </div>
-            {renderWarnings(group.id)}
-
-            {rows.map((row, idx) => (
-              <LineItemRowCard
-                key={row.id}
-                group={group}
-                row={row}
-                idx={idx}
-                language={language}
-                lineItems={lineItems}
-                values={values}
-                warningByField={(warningInfo as any)?.byField || {}}
-              />
-            ))}
-          </div>
         );
       })}
     </div>
