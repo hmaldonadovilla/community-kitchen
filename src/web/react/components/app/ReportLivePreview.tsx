@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { SummaryVisibility } from '../../../../types';
-import { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
+import { FieldValue, FileUploadConfig, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
 import { resolveLocalizedString } from '../../../i18n';
 import { toOptionSet } from '../../../core';
 import { tSystem } from '../../../systemStrings';
@@ -17,6 +17,23 @@ import { collectValidationWarnings } from '../../app/submission';
 type UploadLink = { url: string; label?: string };
 
 const looksLikeUrl = (s: string) => /^https?:\/\/\S+$/i.test((s || '').trim());
+
+const resolveLocalizedAny = (value: any, language: LangCode, fallback = ''): string => {
+  if (!value && fallback) return fallback;
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object') return fallback;
+  const key = (language || 'EN').toString().toLowerCase();
+  const upper = key.toUpperCase();
+  return (value as any)[key] || (value as any)[upper] || (value as any).en || (value as any).EN || fallback;
+};
+
+const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
+  if (!vars) return value;
+  return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
+    const raw = (vars as any)[key];
+    return raw === undefined || raw === null ? '' : String(raw);
+  });
+};
 
 const normalizeBooleanLike = (raw: any, fieldType?: string): boolean | null => {
   if (raw === true) return true;
@@ -110,11 +127,13 @@ const renderValueForPreview = (
   value: any,
   fieldType: string | undefined,
   language: LangCode,
-  optionSet?: any
+  optionSet?: any,
+  uploadConfig?: FileUploadConfig
 ): React.ReactNode => {
   if (fieldType === 'FILE_UPLOAD') {
     const links = extractUploadLinks(value);
     if (!links.length) return EMPTY_DISPLAY;
+    const cfgLabelTemplate = resolveLocalizedAny(uploadConfig?.linkLabel as any, language, '');
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {links.map((l, idx) => (
@@ -126,7 +145,9 @@ const renderValueForPreview = (
             style={{ color: '#1d4ed8', textDecoration: 'underline', fontWeight: 800 }}
             onClick={e => e.stopPropagation()}
           >
-            {l.label || tSystem('files.fileN', language, 'File {n}', { n: idx + 1 })}
+            {l.label ||
+              (cfgLabelTemplate ? formatTemplate(cfgLabelTemplate, { n: idx + 1 }) : '') ||
+              tSystem('files.fileN', language, 'File {n}', { n: idx + 1 })}
           </a>
         ))}
       </div>
@@ -341,7 +362,9 @@ const LineItemRowCard: React.FC<{
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-field-path={fieldPath}>
-                      <div>{renderValueForPreview(v, (field as any)?.type, language, optionSet)}</div>
+                      <div>
+                        {renderValueForPreview(v, (field as any)?.type, language, optionSet, (field as any)?.uploadConfig)}
+                      </div>
                       {renderWarnings(fieldPath)}
                     </div>
                   </td>
@@ -470,7 +493,15 @@ const LineItemRowCard: React.FC<{
                                         }}
                                       >
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-field-path={fieldPath}>
-                                          <div>{renderValueForPreview(cr?.values?.[sf.id], sf?.type, language, toOptionSet(sf))}</div>
+                                          <div>
+                                            {renderValueForPreview(
+                                              cr?.values?.[sf.id],
+                                              sf?.type,
+                                              language,
+                                              toOptionSet(sf),
+                                              (sf as any)?.uploadConfig
+                                            )}
+                                          </div>
                                           {renderWarnings(fieldPath)}
                                         </div>
                                       </td>
@@ -803,7 +834,13 @@ export const ReportLivePreview: React.FC<{
                     <MetaCard label={leftLabel} fieldPath={item.left.id}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <div>
-                          {renderValueForPreview(leftValue, item.left.type, language, toOptionSet(item.left as any))}
+                          {renderValueForPreview(
+                            leftValue,
+                            item.left.type,
+                            language,
+                            toOptionSet(item.left as any),
+                            (item.left as any)?.uploadConfig
+                          )}
                         </div>
                         {renderWarnings(item.left.id)}
                       </div>
@@ -811,7 +848,13 @@ export const ReportLivePreview: React.FC<{
                     <MetaCard label={rightLabel} fieldPath={item.right.id}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <div>
-                          {renderValueForPreview(rightValue, item.right.type, language, toOptionSet(item.right as any))}
+                          {renderValueForPreview(
+                            rightValue,
+                            item.right.type,
+                            language,
+                            toOptionSet(item.right as any),
+                            (item.right as any)?.uploadConfig
+                          )}
                         </div>
                         {renderWarnings(item.right.id)}
                       </div>
@@ -825,7 +868,9 @@ export const ReportLivePreview: React.FC<{
               return (
                 <MetaCard key={q.id} label={label} fieldPath={q.id}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div>{renderValueForPreview(value, q.type, language, toOptionSet(q as any))}</div>
+                    <div>
+                      {renderValueForPreview(value, q.type, language, toOptionSet(q as any), (q as any)?.uploadConfig)}
+                    </div>
                     {renderWarnings(q.id)}
                   </div>
                 </MetaCard>

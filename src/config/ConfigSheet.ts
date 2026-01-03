@@ -1,6 +1,5 @@
 import {
   AutoIncrementConfig,
-  BaseQuestionType,
   ButtonConfig,
   ChoiceControl,
   DataSourceConfig,
@@ -545,6 +544,15 @@ export class ConfigSheet {
           root.remaining_text;
         if (helperText !== undefined && helperText !== null) config.helperText = helperText;
 
+        const linkLabel =
+          root.linkLabel ??
+          root.link_label ??
+          root.fileLinkLabel ??
+          root.file_link_label ??
+          root.fileLabel ??
+          root.file_label;
+        if (linkLabel !== undefined && linkLabel !== null) (config as any).linkLabel = linkLabel;
+
         const uploadUi = root.ui ?? root.UI ?? root.uploadUi ?? root.upload_ui;
         if (uploadUi && typeof uploadUi === 'object') (config as any).ui = uploadUi;
         const uploadVariant =
@@ -671,6 +679,15 @@ export class ConfigSheet {
       root.remainingText ??
       root.remaining_text;
     if (helperText !== undefined && helperText !== null) cfg.helperText = helperText;
+
+    const linkLabel =
+      root.linkLabel ??
+      root.link_label ??
+      root.fileLinkLabel ??
+      root.file_link_label ??
+      root.fileLabel ??
+      root.file_label;
+    if (linkLabel !== undefined && linkLabel !== null) (cfg as any).linkLabel = linkLabel;
 
     const uploadUi = root.ui ?? root.UI ?? root.uploadUi ?? root.upload_ui;
     if (uploadUi && typeof uploadUi === 'object') (cfg as any).ui = uploadUi;
@@ -1629,6 +1646,23 @@ export class ConfigSheet {
               ? 'hidden'
               : undefined;
 
+    const allowRemoveAutoRows = normalizeBool(
+      rawUi.allowRemoveAutoRows ??
+        rawUi.autoRowsRemovable ??
+        rawUi.allowRemoveAuto ??
+        rawUi.allow_remove_auto_rows ??
+        rawUi.allow_remove_auto
+    );
+
+    const saveDisabledRows = normalizeBool(
+      rawUi.saveDisabledRows ??
+        rawUi.persistDisabledRows ??
+        rawUi.saveDisabledRowsOnSubmit ??
+        rawUi.persistDisabledRowsOnSubmit ??
+        rawUi.includeDisabledRowsOnSubmit ??
+        rawUi.include_disabled_rows_on_submit
+    );
+
     const cfg: LineItemGroupUiConfig = {};
     if (mode) cfg.mode = mode;
     if (collapsedFields && collapsedFields.length) cfg.collapsedFields = collapsedFields;
@@ -1637,6 +1671,8 @@ export class ConfigSheet {
     if (rowDisclaimer) (cfg as any).rowDisclaimer = rowDisclaimer;
     if (showItemPill !== undefined) (cfg as any).showItemPill = showItemPill;
     if (addButtonPlacement) (cfg as any).addButtonPlacement = addButtonPlacement;
+    if (allowRemoveAutoRows !== undefined) (cfg as any).allowRemoveAutoRows = allowRemoveAutoRows;
+    if (saveDisabledRows !== undefined) (cfg as any).saveDisabledRows = saveDisabledRows;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 

@@ -50,6 +50,7 @@ import { buildFilePayload } from './app/filePayload';
 import packageJson from '../../../package.json';
 import { resolveLabel } from './utils/labels';
 import { tSystem } from '../systemStrings';
+import { resolveLocalizedString } from '../i18n';
 
 type SubmissionMeta = {
   id?: string;
@@ -102,6 +103,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   });
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const submitConfirmedRef = useRef(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string>(record?.id || '');
   const [selectedRecordSnapshot, setSelectedRecordSnapshot] = useState<WebFormSubmission | null>(record || null);
   const [recordLoadingId, setRecordLoadingId] = useState<string | null>(null);
@@ -375,6 +378,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   useEffect(() => {
     if (view !== 'form') setValidationWarnings({ top: [], byField: {} });
   }, [view]);
+
+  // Close the submit confirmation dialog when navigating away.
+  useEffect(() => {
+    if (view === 'form') return;
+    if (!submitConfirmOpen) return;
+    setSubmitConfirmOpen(false);
+    submitConfirmedRef.current = false;
+  }, [submitConfirmOpen, view]);
+
+  // Escape closes the submit confirmation dialog.
+  useEffect(() => {
+    if (!submitConfirmOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSubmitConfirmOpen(false);
+    };
+    globalThis.addEventListener?.('keydown', onKeyDown as any);
+    return () => globalThis.removeEventListener?.('keydown', onKeyDown as any);
+  }, [submitConfirmOpen]);
 
   useEffect(() => {
     const updateMobile = () => {
@@ -1098,6 +1119,55 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
   const summaryViewEnabled = definition.summaryViewEnabled !== false;
   const copyCurrentRecordEnabled = definition.copyCurrentRecordEnabled !== false;
+  const submitButtonLabelResolved = useMemo(
+    () =>
+      resolveLocalizedString(
+        definition.submitButtonLabel,
+        language,
+        tSystem('submit.confirm', language, tSystem('actions.submit', language, 'Submit'))
+      ),
+    [definition.submitButtonLabel, language]
+  );
+  const submitConfirmTitle = useMemo(
+    () =>
+      resolveLocalizedString(
+        definition.submissionConfirmationTitle,
+        language,
+        tSystem('submit.confirmTitle', language, 'Confirm submission')
+      ),
+    [definition.submissionConfirmationTitle, language]
+  );
+  const submitConfirmMessage = useMemo(
+    () =>
+      resolveLocalizedString(
+        definition.submissionConfirmationMessage,
+        language,
+        tSystem('submit.confirmMessage', language, 'Are you ready to submit this record?')
+      ),
+    [definition.submissionConfirmationMessage, language]
+  );
+
+  const requestSubmit = useCallback(() => {
+    if (submitting) return;
+    if (recordLoadingId) return;
+    if (view !== 'form') return;
+    submitConfirmedRef.current = false;
+    logEvent('ui.submit.tap', { submitLabelOverridden: Boolean(definition.submitButtonLabel) });
+    formSubmitActionRef.current?.();
+  }, [definition.submitButtonLabel, logEvent, recordLoadingId, submitting, view]);
+
+  const cancelSubmitConfirm = useCallback(() => {
+    setSubmitConfirmOpen(false);
+    submitConfirmedRef.current = false;
+    logEvent('ui.submitConfirm.cancel');
+  }, [logEvent]);
+
+  const confirmSubmit = useCallback(() => {
+    setSubmitConfirmOpen(false);
+    submitConfirmedRef.current = true;
+    logEvent('ui.submitConfirm.confirm');
+    formSubmitActionRef.current?.();
+  }, [logEvent]);
   const autoSaveDebounceMs = (() => {
     const raw = definition.autoSave?.debounceMs;
     const n = raw === undefined || raw === null ? NaN : Number(raw);
@@ -1522,7 +1592,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       return;
     }
     clearStatus();
-    logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length });
+    logEvent('submit.validate.begin', { language, lineItemGroups: Object.keys(lineItems).length });
     try {
       setValidationWarnings(
         collectValidationWarnings({
@@ -1550,12 +1620,25 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     if (Object.keys(nextErrors).length) {
       setStatus(tSystem('validation.fixErrors', language, 'Please fix validation errors.'));
       setStatusLevel('error');
-      logEvent('submit.validationFailed');
+      submitConfirmedRef.current = false;
+      logEvent('submit.validate.failed');
       return;
     }
+    // Only show the submit confirmation overlay once the form is already valid.
+    if (!submitConfirmedRef.current) {
+      setSubmitConfirmOpen(true);
+      logEvent('ui.submitConfirm.openAfterValidation', {
+        configuredMessage: Boolean(definition.submissionConfirmationMessage),
+        submitLabelOverridden: Boolean(definition.submitButtonLabel)
+      });
+      return;
+    }
+    submitConfirmedRef.current = false;
+
     setSubmitting(true);
     setStatus(tSystem('actions.submitting', language, 'Submitting…'));
     setStatusLevel('info');
+    logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length });
     // Ensure submission messages are immediately visible, even if the user is scrolled deep in the form.
     try {
       if (typeof globalThis.scrollTo === 'function') {
@@ -1670,7 +1753,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           setStatus(`Submitted, but follow-up had issues: ${followupErrors.join(' · ')}`);
           setStatusLevel('error');
         } else {
-          setStatus('Submitted and closed.');
+          setStatus(tSystem('actions.submittedClosed', language, 'Submitted and closed.'));
           setStatusLevel('success');
         }
       }
@@ -1829,6 +1912,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         disabled={submitting || Boolean(recordLoadingId)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
+        submitLabel={definition.submitButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
         canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
@@ -1851,7 +1935,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           }
           setView('summary');
         }}
-        onSubmit={() => formSubmitActionRef.current?.()}
+        onSubmit={requestSubmit}
         onCustomButton={handleCustomButton}
         onDiagnostic={logEvent}
       />
@@ -1924,6 +2008,76 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         />
       )}
 
+      {submitConfirmOpen && view === 'form' ? (
+        <div
+          role="presentation"
+          onClick={cancelSubmitConfirm}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 12000,
+            background: 'rgba(15,23,42,0.46)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={submitConfirmTitle}
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: 'min(560px, 100%)',
+              background: '#ffffff',
+              borderRadius: 18,
+              border: '1px solid rgba(15,23,42,0.14)',
+              boxShadow: '0 30px 90px rgba(15,23,42,0.22)',
+              padding: 18
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 22, letterSpacing: -0.2, color: '#0f172a' }}>
+              {submitConfirmTitle}
+            </div>
+            <div className="muted" style={{ marginTop: 10, fontSize: 16, fontWeight: 700, lineHeight: 1.35 }}>
+              {submitConfirmMessage}
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 18, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={cancelSubmitConfirm}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(15, 23, 42, 0.18)',
+                  background: 'rgba(15,23,42,0.06)',
+                  color: '#0f172a',
+                  fontWeight: 900,
+                  minWidth: 110
+                }}
+              >
+                {tSystem('submit.cancel', language, tSystem('common.cancel', language, 'Cancel'))}
+              </button>
+              <button
+                type="button"
+                onClick={confirmSubmit}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(59,130,246,0.35)',
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  fontWeight: 900
+                }}
+              >
+                {submitButtonLabelResolved}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <ReportOverlay
         language={language}
         state={reportOverlay}
@@ -1937,6 +2091,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         disabled={submitting || Boolean(recordLoadingId)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
+        submitLabel={definition.submitButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
         canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
@@ -1959,7 +2114,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           }
           setView('summary');
         }}
-        onSubmit={() => formSubmitActionRef.current?.()}
+        onSubmit={requestSubmit}
         onCustomButton={handleCustomButton}
         onDiagnostic={logEvent}
       />

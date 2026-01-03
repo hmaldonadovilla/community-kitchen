@@ -254,6 +254,16 @@ components:
             Optional helper text shown under the upload control (e.g. remaining attachments).
             Supports template variables like `{count}`.
             When omitted, the UI falls back to the built-in system strings (`files.remainingOne` / `files.remainingMany`).
+        linkLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized label template for links shown for uploaded items (Summary/PDF).
+
+            Example:
+            - `{ "en": "Photo {n}", "fr": "Photo {n}", "nl": "Foto {n}" }`
+
+            Variables:
+            - `{n}`: 1-based index of the file within this field
         ui:
           $ref: '#/components/schemas/FileUploadUiConfig'
           description: Optional UI customization for how the upload control is rendered.
@@ -633,6 +643,25 @@ components:
             - bottom: footer toolbar only
             - both: header + footer (default)
             - hidden: hide the button entirely
+        allowRemoveAutoRows:
+          type: boolean
+          description: |
+            Controls whether rows marked as auto-generated (`__ckRowSource: "auto"`) can be removed in the UI.
+
+            - When `false`, the **Remove** button is hidden for auto rows (manual rows remain removable).
+            - Default: `true`.
+        saveDisabledRows:
+          type: boolean
+          description: |
+            Controls whether "disabled" progressive rows are persisted on submit.
+
+            A row is considered disabled when:
+            - `mode: "progressive"`
+            - `expandGate: "collapsedFieldsValid"`
+            - the row is still collapsed AND its collapsed fields are missing/invalid
+
+            - When `false` (default), these rows are filtered out of the submission payload.
+            - When `true`, they are included in the saved record (useful when you want them to appear in downstream PDFs).
         collapsedFields:
           type: array
           items:
@@ -1000,6 +1029,26 @@ components:
             - auto-collapse completed sections
             - optionally open the next incomplete section
             - optionally auto-scroll expanded sections into view
+        submissionConfirmationTitle:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional confirmation title shown **before** submitting (per language).
+
+            When the user taps **Submit**, the app shows a Confirm/Cancel overlay. This text is the title shown in that overlay.
+            When omitted, the UI falls back to localized system strings.
+        submissionConfirmationMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional confirmation message shown **before** submitting (per language).
+
+            When the user taps **Submit**, the app shows a Confirm/Cancel overlay. This text is the body message shown in that overlay.
+            When omitted, the UI falls back to localized system strings.
+        submitButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized label override for the **Submit** button in the React web app.
+
+            When omitted, the UI uses the default localized system label.
         languages:
           type: array
           description: |

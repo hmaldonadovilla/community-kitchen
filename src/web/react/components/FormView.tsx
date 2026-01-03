@@ -2331,7 +2331,11 @@ const FormView: React.FC<FormViewProps> = ({
                 type="button"
                 className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
                 aria-disabled={submitting ? 'true' : undefined}
-                aria-label={`${tSystem('files.title', language, 'Files')} ${pillText}`}
+                aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
+                  'files.title',
+                  language,
+                  'Files'
+                )} ${pillText}`}
                 onClick={() => {
                   if (submitting) return;
                   openFileOverlay({
@@ -2344,6 +2348,7 @@ const FormView: React.FC<FormViewProps> = ({
               >
                 {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
                 <span>{pillText}</span>
+                <span className="ck-progress-label">{tSystem('files.open', language, tSystem('common.open', language, 'Open'))}</span>
                 <span className="ck-progress-caret">▸</span>
               </button>
               {maxed ? (
@@ -3256,7 +3261,11 @@ const FormView: React.FC<FormViewProps> = ({
                                   type="button"
                                   className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
                                   aria-disabled={submitting ? 'true' : undefined}
-                                  aria-label={`${tSystem('files.title', language, 'Files')} ${pillText}`}
+                                  aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
+                                    'files.title',
+                                    language,
+                                    'Files'
+                                  )} ${pillText}`}
                                   onClick={() => {
                                     if (submitting) return;
                                     openFileOverlay({
@@ -3271,6 +3280,9 @@ const FormView: React.FC<FormViewProps> = ({
                                 >
                                   {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
                                   <span>{pillText}</span>
+                                  <span className="ck-progress-label">
+                                    {tSystem('files.open', language, tSystem('common.open', language, 'Open'))}
+                                  </span>
                                   <span className="ck-progress-caret">▸</span>
                                 </button>
                                 {maxed ? (

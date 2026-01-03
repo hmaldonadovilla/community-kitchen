@@ -122,6 +122,8 @@ Enabling `CK_DEBUG` also flips `window.__WEB_FORM_DEBUG__` on the web client, so
 - **Line-item header controls**: In `lineItemConfig.ui`, you can hide the items pill and move the Add button:
   - `showItemPill: false` hides the “N items” pill
   - `addButtonPlacement: "top"|"bottom"|"both"|"hidden"` controls where the Add button appears
+  - `allowRemoveAutoRows: false` hides the **Remove** button for rows marked `__ckRowSource: "auto"`
+  - `saveDisabledRows: true` includes disabled progressive rows in the submitted payload (so they can appear in downstream PDFs)
 - **File uploads**: Set `Type` to `FILE_UPLOAD` and provide `uploadConfig` in the Config column (JSON). Supported keys:
   - `destinationFolderId`
   - `minFiles` / `maxFiles` (submit-time validation; e.g. require 2+ photos)
@@ -129,6 +131,7 @@ Enabling `CK_DEBUG` also flips `window.__WEB_FORM_DEBUG__` on the web client, so
   - `allowedExtensions` and/or `allowedMimeTypes` (type checks happen client-side before upload)
   - `errorMessages` (optional localized overrides for upload validation text)
   - `helperText` (optional localized helper text shown under the upload control; falls back to system strings)
+  - `linkLabel` (optional localized label template used for file links in Summary/PDF; e.g. `"Photo {n}"`)
   - `ui.variant` (optional UI variant; set to `"progressive"` to show slots + checkmarks based on `minFiles`)
   - `ui.slotIcon` (`"camera"` | `"clip"`, optional; controls the icon shown in progressive slots)
   - `compression` (optional client-side image compression; videos are uploaded as-is — prefer enforcing `maxFileSizeMb`)
@@ -147,6 +150,8 @@ Enabling `CK_DEBUG` also flips `window.__WEB_FORM_DEBUG__` on the web client, so
 - **Rule-based list view columns (dashboard)**: Add computed/action columns with `"listViewColumns"` in the dashboard JSON. Use `type: "rule"` with `cases` to render an **Action** column like `Edit` / `View` / `Missing` based on any record field (including `status` and DATE fields). For link-out columns (e.g. open `pdfUrl`), set `hrefFieldId`. You can also set `icon` (`warning|check|error|info|external|lock|edit|view`) and define `"listViewLegend"` to show a legend under the table explaining icons.
 - **Draft autosave (optional)**: Enable background saves while editing by adding `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the dashboard JSON column. Draft saves run without validation, bump `Updated At`, and write the configured `Status`. Records with `Status = Closed` are read-only and do not autosave.
 - **Follow-up actions**: After submitting, the app automatically runs the configured actions (`Create PDF`, `Send PDF via email`, `Close record`). Add JSON to the “Follow-up Config (JSON)” column on the *Forms Dashboard* to point at template IDs, recipients, and target status values. See `SetupInstructions.md` for the full schema plus template guidance.
+- **Submit confirmation (optional title + message)**: When users tap **Submit**, the app shows a Confirm/Cancel overlay. You can customize the title (`submissionConfirmationTitle`) and message (`submissionConfirmationMessage`) per language via dashboard JSON (falls back to system strings when omitted).
+- **Submit button label (optional)**: Override the Submit button label per language via dashboard JSON `submitButtonLabel` (falls back to system strings when omitted).
 - **Language-aware templates & dynamic recipients**: Follow-up configs now accept per-language `pdfTemplateId` / `emailTemplateId` maps and recipient entries that look up emails via data sources (e.g., find the distributor row in “Distributor Data” and use its `email` column). The runtime picks the correct template for the submission’s language and expands placeholders before generating / emailing PDFs, including `emailCc` / `emailBcc` recipient lists when you need extra copies.
 - **Auto-increment IDs**: Any `TEXT` field can be tagged with `"autoIncrement": { "prefix": "MP-AA", "padLength": 6 }` in its Config JSON. When the user leaves that field blank, Apps Script generates sequential IDs (e.g., `MP-AA000001`) and stores the counter in script properties so numbers stay unique across sessions.
 - **Template-friendly placeholders**: PDF/email templates understand **ID-based** placeholders like `{{FIELD_ID}}` (recommended) and nested values such as `{{MP_DISTRIBUTOR.Address_Line_1}}` (taken from the data source row that provided the selected option). Line-item rows can be templated inside tables—create a row with placeholders like `{{MP_INGREDIENTS_LI.ING}}` and the service will duplicate the row for every line item. Use `{{CONSOLIDATED(MP_INGREDIENTS_LI.ALLERGEN)}}` to list the unique allergen values collected across the group.

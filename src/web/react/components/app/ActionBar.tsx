@@ -170,6 +170,7 @@ export const ActionBar: React.FC<{
   disabled: boolean;
   submitting?: boolean;
   readOnly?: boolean;
+  submitLabel?: LocalizedString;
   summaryEnabled: boolean;
   copyEnabled: boolean;
   canCopy: boolean;
@@ -190,6 +191,7 @@ export const ActionBar: React.FC<{
   disabled,
   submitting,
   readOnly,
+  submitLabel,
   summaryEnabled,
   copyEnabled,
   canCopy,
@@ -700,7 +702,7 @@ export const ActionBar: React.FC<{
               <span className="ck-bottom-label">
                 {submitting
                   ? tSystem('actions.submitting', language, 'Submitting…')
-                  : tSystem('actions.submit', language, 'Submit')}
+                  : resolveLocalizedString(submitLabel, language, tSystem('actions.submit', language, 'Submit'))}
               </span>
             </button>
           )}

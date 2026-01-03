@@ -1533,7 +1533,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   type="button"
                                   className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
                                   aria-disabled={submitting ? 'true' : undefined}
-                                  aria-label={`${tSystem('files.title', language, 'Files')} ${pillText}`}
+                                  aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
+                                    'files.title',
+                                    language,
+                                    'Files'
+                                  )} ${pillText}`}
                                   onClick={() => {
                                     if (submitting) return;
                                     openFileOverlay({
@@ -1548,6 +1552,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 >
                                   {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
                                   <span>{pillText}</span>
+                                  <span className="ck-progress-label">
+                                    {tSystem('files.open', language, tSystem('common.open', language, 'Open'))}
+                                  </span>
                                   <span className="ck-progress-caret">▸</span>
                                 </button>
                                 {subgroupTriggerNodes.length ? (
@@ -1729,9 +1736,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         : undefined
                     }
                   >
-                    <button type="button" onClick={() => removeLineRow(q.id, row.id)} style={buttonStyles.negative}>
-                      {tSystem('lineItems.remove', language, 'Remove')}
-                    </button>
+                    {((q.lineItemConfig as any)?.ui?.allowRemoveAutoRows === false && rowSource === 'auto') ? null : (
+                      <button type="button" onClick={() => removeLineRow(q.id, row.id)} style={buttonStyles.negative}>
+                        {tSystem('lineItems.remove', language, 'Remove')}
+                      </button>
+                    )}
                   </div>
                   {!isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
                     const subLabelResolved = resolveLocalizedString(
@@ -1934,6 +1943,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             lineItemConfig: { ...(sub as any), fields: sub.fields || [], subGroups: [] }
                           };
                           const targetGroup = subGroupDef;
+                          const subRowSource = parseRowSource((subRow.values as any)?.[ROW_SOURCE_KEY]);
+                          const allowRemoveAutoSubRows = (sub as any)?.ui?.allowRemoveAutoRows !== false;
+                          const canRemoveSubRow = allowRemoveAutoSubRows || subRowSource !== 'auto';
                           return (
                             <div
                               key={subRow.id}
@@ -2211,7 +2223,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                               type="button"
                                               className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
                                               aria-disabled={submitting ? 'true' : undefined}
-                                              aria-label={`${tSystem('files.title', language, 'Files')} ${pillText}`}
+                                              aria-label={`${tSystem(
+                                                'files.open',
+                                                language,
+                                                tSystem('common.open', language, 'Open')
+                                              )} ${tSystem('files.title', language, 'Files')} ${pillText}`}
                                               onClick={() => {
                                                 if (submitting) return;
                                                 openFileOverlay({
@@ -2226,6 +2242,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             >
                                               {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
                                               <span>{pillText}</span>
+                                              <span className="ck-progress-label">
+                                                {tSystem('files.open', language, tSystem('common.open', language, 'Open'))}
+                                              </span>
                                               <span className="ck-progress-caret">▸</span>
                                             </button>
                                             {maxed ? (
@@ -2361,15 +2380,17 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   />
                                 );
                               })()}
-                              <div className="line-actions">
-                                <button
-                                  type="button"
-                                  onClick={() => removeLineRow(subKey, subRow.id)}
-                                  style={buttonStyles.negative}
-                                >
-                                  {tSystem('lineItems.remove', language, 'Remove')}
-                                </button>
-                              </div>
+                              {canRemoveSubRow ? (
+                                <div className="line-actions">
+                                  <button
+                                    type="button"
+                                    onClick={() => removeLineRow(subKey, subRow.id)}
+                                    style={buttonStyles.negative}
+                                  >
+                                    {tSystem('lineItems.remove', language, 'Remove')}
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                           );
                         })}

@@ -103,7 +103,10 @@ export class DefinitionBuilder {
       createRecordPresetButtonsEnabled: form.createRecordPresetButtonsEnabled,
       actionBars: form.actionBars,
       appHeader: form.appHeader,
-      groupBehavior: form.groupBehavior
+      groupBehavior: form.groupBehavior,
+      submissionConfirmationMessage: form.submissionConfirmationMessage,
+      submissionConfirmationTitle: form.submissionConfirmationTitle,
+      submitButtonLabel: form.submitButtonLabel
     };
   }
 

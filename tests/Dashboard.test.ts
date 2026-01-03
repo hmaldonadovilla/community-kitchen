@@ -115,6 +115,54 @@ describe('Dashboard', () => {
     expect(forms[0].listViewTitle).toEqual({ en: 'My Records' });
   });
 
+  test('getForms parses submission confirmation message from dashboard config', () => {
+    const configJson = JSON.stringify({
+      submissionConfirmationMessage: { EN: 'Submitted — thank you.' }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].submissionConfirmationMessage).toEqual({ en: 'Submitted — thank you.' });
+  });
+
+  test('getForms parses submission confirmation title from dashboard config', () => {
+    const configJson = JSON.stringify({
+      submissionConfirmationTitle: { EN: 'Confirm send' }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].submissionConfirmationTitle).toEqual({ en: 'Confirm send' });
+  });
+
+  test('getForms parses submit button label from dashboard config', () => {
+    const configJson = JSON.stringify({
+      submitButtonLabel: { EN: 'Send' }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].submitButtonLabel).toEqual({ en: 'Send' });
+  });
+
   test('getForms parses autosave config from dashboard config', () => {
     const configJson = JSON.stringify({
       autoSave: { enabled: true, debounceMs: 1500, status: 'In progress' }

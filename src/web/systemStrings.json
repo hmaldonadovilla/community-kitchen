@@ -36,6 +36,7 @@
     "reports": { "en": "Reports", "fr": "Rapports", "nl": "Rapporten" },
     "submit": { "en": "Submit", "fr": "Envoyer", "nl": "Verzenden" },
     "submitting": { "en": "Submitting…", "fr": "Envoi…", "nl": "Verzenden…" },
+    "submittedClosed": { "en": "Submitted and closed.", "fr": "Envoyé et clôturé.", "nl": "Verzonden en gesloten." },
     "newRecord": { "en": "New record", "fr": "Nouvel enregistrement", "nl": "Nieuw record" },
     "copyCurrentRecord": { "en": "Copy current record", "fr": "Copier l'enregistrement actuel", "nl": "Huidig record kopiëren" },
     "viewSummary": { "en": "View summary", "fr": "Voir le résumé", "nl": "Samenvatting bekijken" },
@@ -49,6 +50,16 @@
     "actions": { "en": "Actions", "fr": "Actions", "nl": "Acties" },
     "actionsMenu": { "en": "Actions menu", "fr": "Menu des actions", "nl": "Actiemenu" },
     "closeActionsMenu": { "en": "Close actions menu", "fr": "Fermer le menu des actions", "nl": "Actiemenu sluiten" }
+  },
+  "submit": {
+    "confirmTitle": { "en": "Confirm submission", "fr": "Confirmer l'envoi", "nl": "Verzenden bevestigen" },
+    "confirmMessage": {
+      "en": "Are you ready to submit this record?",
+      "fr": "Êtes-vous prêt à envoyer cet enregistrement ?",
+      "nl": "Ben je klaar om dit record te verzenden?"
+    },
+    "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
+    "confirm": { "en": "Submit", "fr": "Envoyer", "nl": "Verzenden" }
   },
   "lineItems": {
     "expand": { "en": "Expand", "fr": "Ouvrir", "nl": "Openen" },
@@ -129,6 +140,7 @@
     "fileN": { "en": "File {n}", "fr": "Fichier {n}", "nl": "Bestand {n}" },
     "add": { "en": "Add files", "fr": "Ajouter des fichiers", "nl": "Bestanden toevoegen" },
     "view": { "en": "View files", "fr": "Voir les fichiers", "nl": "Bestanden bekijken" },
+    "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
     "clearAll": { "en": "Clear all", "fr": "Tout effacer", "nl": "Alles wissen" },
     "clearAllConfirm": { "en": "Clear all files?", "fr": "Supprimer tous les fichiers ?", "nl": "Alle bestanden verwijderen?" },
     "noneSelected": { "en": "No files selected.", "fr": "Aucun fichier sélectionné.", "nl": "Geen bestanden geselecteerd." },

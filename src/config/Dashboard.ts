@@ -129,6 +129,9 @@ export class Dashboard {
       const actionBars = dashboardConfig?.actionBars;
       const appHeader = dashboardConfig?.appHeader;
       const groupBehavior = dashboardConfig?.groupBehavior;
+      const submissionConfirmationMessage = dashboardConfig?.submissionConfirmationMessage;
+      const submissionConfirmationTitle = dashboardConfig?.submissionConfirmationTitle;
+      const submitButtonLabel = dashboardConfig?.submitButtonLabel;
       const languages = dashboardConfig?.languages;
       const defaultLanguage = dashboardConfig?.defaultLanguage;
       const languageSelectorEnabled = dashboardConfig?.languageSelectorEnabled;
@@ -155,6 +158,9 @@ export class Dashboard {
           actionBars,
           appHeader,
           groupBehavior,
+          submissionConfirmationMessage,
+          submissionConfirmationTitle,
+          submitButtonLabel,
           languages,
           defaultLanguage,
           languageSelectorEnabled
@@ -199,6 +205,9 @@ export class Dashboard {
     actionBars?: ActionBarsConfig;
     appHeader?: AppHeaderConfig;
     groupBehavior?: GroupBehaviorConfig;
+    submissionConfirmationMessage?: LocalizedString;
+    submissionConfirmationTitle?: LocalizedString;
+    submitButtonLabel?: LocalizedString;
     languages?: Array<'EN' | 'FR' | 'NL'>;
     defaultLanguage?: 'EN' | 'FR' | 'NL';
     languageSelectorEnabled?: boolean;
@@ -497,6 +506,42 @@ export class Dashboard {
             autoScrollOnExpand
           };
 
+    const submissionObj =
+      parsed.submission !== undefined && parsed.submission !== null && typeof parsed.submission === 'object' ? parsed.submission : undefined;
+    const submissionConfirmationRaw =
+      parsed.submissionConfirmationMessage !== undefined
+        ? parsed.submissionConfirmationMessage
+        : parsed.submitConfirmationMessage !== undefined
+          ? parsed.submitConfirmationMessage
+          : parsed.confirmationMessage !== undefined
+            ? parsed.confirmationMessage
+            : submissionObj && (submissionObj.confirmationMessage !== undefined || submissionObj.message !== undefined)
+              ? (submissionObj.confirmationMessage ?? submissionObj.message)
+              : undefined;
+    const submissionConfirmationMessage = normalizeLocalized(submissionConfirmationRaw);
+
+    const submissionTitleRaw =
+      parsed.submissionConfirmationTitle !== undefined
+        ? parsed.submissionConfirmationTitle
+        : parsed.submitConfirmationTitle !== undefined
+          ? parsed.submitConfirmationTitle
+          : parsed.confirmationTitle !== undefined
+            ? parsed.confirmationTitle
+            : submissionObj && (submissionObj.confirmationTitle !== undefined || submissionObj.title !== undefined)
+              ? (submissionObj.confirmationTitle ?? submissionObj.title)
+              : undefined;
+    const submissionConfirmationTitle = normalizeLocalized(submissionTitleRaw);
+
+    const submitButtonLabelRaw =
+      parsed.submitButtonLabel !== undefined
+        ? parsed.submitButtonLabel
+        : parsed.submitLabel !== undefined
+          ? parsed.submitLabel
+          : submissionObj && (submissionObj.submitButtonLabel !== undefined || submissionObj.submitLabel !== undefined)
+            ? (submissionObj.submitButtonLabel ?? submissionObj.submitLabel)
+            : undefined;
+    const submitButtonLabel = normalizeLocalized(submitButtonLabelRaw);
+
     if (
       !followup &&
       !listViewTitle &&
@@ -512,6 +557,9 @@ export class Dashboard {
       !actionBars &&
       !appHeader &&
       !groupBehavior &&
+      !submissionConfirmationMessage &&
+      !submissionConfirmationTitle &&
+      !submitButtonLabel &&
       !languages &&
       defaultLanguage === undefined &&
       languageSelectorEnabled === undefined
@@ -533,6 +581,9 @@ export class Dashboard {
       actionBars,
       appHeader,
       groupBehavior,
+      submissionConfirmationMessage,
+      submissionConfirmationTitle,
+      submitButtonLabel,
       languages,
       defaultLanguage,
       languageSelectorEnabled

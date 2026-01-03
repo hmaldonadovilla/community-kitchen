@@ -4,6 +4,23 @@ import { resolveSubgroupKey } from './utils';
 
 const looksLikeUrl = (s: string) => /^https?:\/\/\S+$/i.test((s || '').trim());
 
+const resolveLocalizedValue = (value: any, language?: string): string => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object') return '';
+  const langKey = (language || 'EN').toString().trim().toUpperCase();
+  const lower = (language || 'EN').toString().trim().toLowerCase();
+  return (value as any)[lower] || (value as any)[langKey] || (value as any).en || (value as any).EN || '';
+};
+
+const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
+  if (!vars) return value;
+  return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
+    const raw = (vars as any)[key];
+    return raw === undefined || raw === null ? '' : String(raw);
+  });
+};
+
 export const extractUploadUrls = (value: any): string[] => {
   const urls: string[] = [];
   const push = (raw: any) => {
@@ -41,7 +58,11 @@ export const extractUploadUrls = (value: any): string[] => {
   });
 };
 
-export const formatFileLinkLabel = (n: number, language?: string): string => {
+export const formatFileLinkLabel = (n: number, language?: string, linkLabel?: any): string => {
+  // Optional per-field label template override: e.g., { en: "Photo {n}", fr: "Photo {n}", nl: "Foto {n}" }.
+  const template = resolveLocalizedValue(linkLabel, language);
+  if (template) return formatTemplate(template, { n });
+
   const lang = (language || 'EN').toString().trim().toUpperCase();
   const base = lang.startsWith('FR') ? 'Fichier' : lang.startsWith('NL') ? 'Bestand' : 'File';
   return `${base} ${n}`;
@@ -68,20 +89,20 @@ export const linkifyUploadedFileUrls = (
     if (!targets.length) return;
 
     const urlToLabel: Record<string, string> = {};
-    const addValue = (raw: any) => {
+    const addValue = (raw: any, linkLabel?: any) => {
       const urls = extractUploadUrls(raw);
       urls.forEach((u, idx) => {
         const url = (u || '').toString().trim();
         if (!url) return;
         if (urlToLabel[url]) return;
-        urlToLabel[url] = formatFileLinkLabel(idx + 1, record.language);
+        urlToLabel[url] = formatFileLinkLabel(idx + 1, record.language, linkLabel);
       });
     };
 
     // Top-level FILE_UPLOAD questions
     questions.forEach(q => {
       if (q.type !== 'FILE_UPLOAD') return;
-      addValue((record.values as any)?.[q.id]);
+      addValue((record.values as any)?.[q.id], (q as any)?.uploadConfig?.linkLabel);
     });
 
     // Line item groups + subgroups
@@ -94,7 +115,7 @@ export const linkifyUploadedFileUrls = (
         const groupFields = (groupQ.lineItemConfig?.fields || []) as any[];
         groupFields.forEach(f => {
           if (((f as any)?.type || '').toString().toUpperCase() !== 'FILE_UPLOAD') return;
-          rows.forEach(row => addValue((row || {})[f.id]));
+          rows.forEach(row => addValue((row || {})[f.id], (f as any)?.uploadConfig?.linkLabel));
         });
 
         const subs = (groupQ.lineItemConfig?.subGroups || []) as any[];
@@ -106,7 +127,7 @@ export const linkifyUploadedFileUrls = (
             if (((f as any)?.type || '').toString().toUpperCase() !== 'FILE_UPLOAD') return;
             rows.forEach(row => {
               const children = Array.isArray((row || {})[subKey]) ? (((row as any)[subKey] as any[]) || []) : [];
-              children.forEach(child => addValue((child || {})[f.id]));
+              children.forEach(child => addValue((child || {})[f.id], (f as any)?.uploadConfig?.linkLabel));
             });
           });
         });

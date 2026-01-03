@@ -602,20 +602,24 @@ export const buildSubmissionPayload = async (args: {
     const isProgressive =
       ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
     const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
-    // Do not persist "disabled" rows: collapsed + progressive + expandGate=collapsedFieldsValid where collapsed fields aren't valid yet.
-    const rowsToSave = rows.filter(row => {
-      const collapseKey = `${q.id}::${row.id}`;
-      const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
-      return !isRowDisabledByExpandGate({
-        ui,
-        fields: q.lineItemConfig?.fields || [],
-        row: row as any,
-        topValues: recomputed.values,
-        language,
-        linePrefix: q.id,
-        rowCollapsed
-      });
-    });
+    const saveDisabledRows = ui?.saveDisabledRows === true;
+    // By default, do not persist "disabled" rows:
+    // collapsed + progressive + expandGate=collapsedFieldsValid where collapsed fields aren't valid yet.
+    const rowsToSave = saveDisabledRows
+      ? rows
+      : rows.filter(row => {
+          const collapseKey = `${q.id}::${row.id}`;
+          const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
+          return !isRowDisabledByExpandGate({
+            ui,
+            fields: q.lineItemConfig?.fields || [],
+            row: row as any,
+            topValues: recomputed.values,
+            language,
+            linePrefix: q.id,
+            rowCollapsed
+          });
+        });
     const lineFields = q.lineItemConfig?.fields || [];
     const lineFileFields = lineFields.filter(f => (f as any).type === 'FILE_UPLOAD');
     const subGroups = q.lineItemConfig?.subGroups || [];
@@ -639,19 +643,22 @@ export const buildSubmissionPayload = async (args: {
             Array.isArray(subUi?.collapsedFields) &&
             (subUi?.collapsedFields || []).length > 0;
           const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
-          const subRowsToSave = childRows.filter(cr => {
-            const subCollapseKey = `${childKey}::${cr.id}`;
-            const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
-            return !isRowDisabledByExpandGate({
-              ui: subUi,
-              fields: (sub as any).fields || [],
-              row: cr as any,
-              topValues: { ...(recomputed.values || {}), ...(row.values || {}) },
-              language,
-              linePrefix: childKey,
-              rowCollapsed: subRowCollapsed
-            });
-          });
+          const saveDisabledSubRows = subUi?.saveDisabledRows === true;
+          const subRowsToSave = saveDisabledSubRows
+            ? childRows
+            : childRows.filter(cr => {
+                const subCollapseKey = `${childKey}::${cr.id}`;
+                const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
+                return !isRowDisabledByExpandGate({
+                  ui: subUi,
+                  fields: (sub as any).fields || [],
+                  row: cr as any,
+                  topValues: { ...(recomputed.values || {}), ...(row.values || {}) },
+                  language,
+                  linePrefix: childKey,
+                  rowCollapsed: subRowCollapsed
+                });
+              });
           const subFields = (sub as any).fields || [];
           const subFileFields = subFields.filter((f: any) => f?.type === 'FILE_UPLOAD');
           base[key] = await Promise.all(

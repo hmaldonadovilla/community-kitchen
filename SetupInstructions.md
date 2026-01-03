@@ -182,6 +182,42 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+    - Want a **submit confirmation dialog** (Confirm/Cancel overlay) title? Set `submissionConfirmationTitle` (localized). When omitted, the UI uses system string defaults:
+
+      ```json
+      {
+        "submissionConfirmationTitle": {
+          "en": "Confirm submission",
+          "fr": "Confirmer l'envoi",
+          "nl": "Verzenden bevestigen"
+        }
+      }
+      ```
+
+    - Want a **submit confirmation dialog** (Confirm/Cancel overlay) message? Set `submissionConfirmationMessage` (localized). When omitted, the UI uses system string defaults:
+
+      ```json
+      {
+        "submissionConfirmationMessage": {
+          "en": "This will submit and close the record. Continue?",
+          "fr": "Cela enverra et clôturera l'enregistrement. Continuer ?",
+          "nl": "Dit verzendt en sluit het record. Doorgaan?"
+        }
+      }
+      ```
+
+    - Want to **override the Submit button label**? Set `submitButtonLabel` (localized). When omitted, the UI uses system string defaults:
+
+      ```json
+      {
+        "submitButtonLabel": {
+          "en": "Send",
+          "fr": "Envoyer",
+          "nl": "Verzenden"
+        }
+      }
+      ```
+
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved.
     - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
     - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
@@ -189,6 +225,8 @@ This project uses TypeScript. You need to build the script before using it in Go
         - Header controls:
           - `ui.showItemPill`: show/hide the “N items” pill in the line-item header (default: true)
           - `ui.addButtonPlacement`: where the Add button appears (`top`, `bottom`, `both`, `hidden`; default: `both`)
+          - `ui.allowRemoveAutoRows`: when `false`, hides the **Remove** button for rows marked `__ckRowSource: "auto"`
+          - `ui.saveDisabledRows`: when `true`, includes disabled progressive rows in the submitted payload (so they can appear in downstream PDFs)
         - Progressive disclosure (collapsed-by-default rows): in the LINE_ITEM_GROUP JSON, add a `ui` block. The collapsed view renders only `collapsedFields` (editable). The expand toggle is gated by `expandGate`:
             - The expand/collapse control is also a **progress pill** `completed/required` for required fields within that row.
 
@@ -323,6 +361,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       - `allowedExtensions` and/or `allowedMimeTypes`: restrict types (validated client-side)
       - `errorMessages`: optional localized override strings for upload validation errors
       - `helperText`: optional localized helper text shown under the upload control (falls back to system strings)
+      - `linkLabel`: optional localized label template used for file links in Summary/PDF (e.g. `"Photo {n}"`)
       - `ui.variant`: optional UI variant; set to `"progressive"` to show slots + checkmarks based on `minFiles`
       - `ui.slotIcon`: `"camera"` | `"clip"` (optional; controls the icon used in progressive slots)
       - `compression`: optional client-side **image** compression (videos are uploaded as-is; prefer size limits)

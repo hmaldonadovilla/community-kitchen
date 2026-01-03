@@ -267,6 +267,16 @@ export interface FileUploadConfig {
    */
   helperText?: FileUploadHelperText;
   /**
+   * Optional localized label template for links shown for uploaded items (Summary/PDF).
+   *
+   * Example:
+   * - { "en": "Photo {n}", "fr": "Photo {n}", "nl": "Foto {n}" }
+   *
+   * Variables:
+   * - {n}: 1-based index of the file within this field
+   */
+  linkLabel?: LocalizedString;
+  /**
    * Optional UI customization for how the upload control is rendered.
    * When omitted, the default dropzone + Files button UI is used.
    */
@@ -622,6 +632,27 @@ export interface LineItemGroupUiConfig {
    * Defaults to 'both' (top header + bottom toolbar).
    */
   addButtonPlacement?: 'top' | 'bottom' | 'both' | 'hidden';
+
+  /**
+   * Controls whether rows marked as auto-generated (`__ckRowSource: "auto"`) can be removed in the UI.
+   * When false, the Remove button is hidden for auto rows (manual rows remain removable).
+   *
+   * Default: true.
+   */
+  allowRemoveAutoRows?: boolean;
+
+  /**
+   * Controls whether "disabled" progressive rows are persisted on submit.
+   *
+   * A row is considered disabled when:
+   * - `mode: "progressive"`
+   * - `expandGate: "collapsedFieldsValid"`
+   * - the row is still collapsed AND its collapsed fields are missing/invalid
+   *
+   * When false (default), these rows are filtered out of the submission payload.
+   * When true, they are included in the saved record (useful when you want them to appear in downstream PDFs).
+   */
+  saveDisabledRows?: boolean;
 }
 
 export interface RowDisclaimerRule {
@@ -1011,6 +1042,27 @@ export interface FormConfig {
    * Optional behavior settings for collapsible group sections in the edit view (dashboard-level).
    */
   groupBehavior?: GroupBehaviorConfig;
+
+  /**
+   * Optional confirmation message shown to the user before submitting (Confirm/Cancel overlay).
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  submissionConfirmationMessage?: LocalizedString;
+
+  /**
+   * Optional confirmation title shown to the user before submitting (Confirm/Cancel overlay).
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  submissionConfirmationTitle?: LocalizedString;
+
+  /**
+   * Optional localized label override for the Submit button in the React web app.
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  submitButtonLabel?: LocalizedString;
 }
 
 export interface AppHeaderConfig {
@@ -1147,6 +1199,21 @@ export interface WebFormDefinition {
    * Optional behavior settings for collapsible group sections in the edit view.
    */
   groupBehavior?: GroupBehaviorConfig;
+
+  /**
+   * Optional confirmation message shown to the user before submitting (Confirm/Cancel overlay).
+   */
+  submissionConfirmationMessage?: LocalizedString;
+
+  /**
+   * Optional confirmation title shown to the user before submitting (Confirm/Cancel overlay).
+   */
+  submissionConfirmationTitle?: LocalizedString;
+
+  /**
+   * Optional localized label override for the Submit button in the React web app.
+   */
+  submitButtonLabel?: LocalizedString;
 }
 
 export interface WebFormSubmission {
