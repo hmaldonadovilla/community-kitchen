@@ -266,6 +266,11 @@ export interface FileUploadConfig {
    * - Supports template variables like {count}.
    */
   helperText?: FileUploadHelperText;
+  /**
+   * Optional UI customization for how the upload control is rendered.
+   * When omitted, the default dropzone + Files button UI is used.
+   */
+  ui?: FileUploadUiConfig;
 }
 
 export interface FileUploadErrorMessages {
@@ -281,6 +286,21 @@ export type FileUploadHelperText = LocalizedString | FileUploadHelperTextConfig;
 export interface FileUploadHelperTextConfig {
   remainingOne?: LocalizedString;
   remainingMany?: LocalizedString;
+}
+
+export interface FileUploadUiConfig {
+  /**
+   * Visual variant for the upload control.
+   * - `standard`: existing dropzone + Files button.
+   * - `progressive`: show a row of camera slots (based on minFiles/required) with checkmarks as files are added.
+   */
+  variant?: 'standard' | 'progressive';
+  /**
+   * Icon used for the progressive slots.
+   * - `camera`: use a camera icon (good for photo requirements).
+   * - `clip`: use a paperclip icon (good for generic file attachments).
+   */
+  slotIcon?: 'camera' | 'clip';
 }
 
 export type FileUploadCompressionConfig =

@@ -23,8 +23,24 @@ import {
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { FormErrors, LineItemState, OptionState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
-import { resolveRowDisclaimerText, resolveUploadRemainingHelperText, toDateInputValue, toUploadItems } from './utils';
-import { buttonStyles, PlusIcon, RequiredStar, srOnly, UploadIcon, withDisabled } from './ui';
+import {
+  getUploadMinRequired,
+  isUploadValueComplete,
+  resolveRowDisclaimerText,
+  toDateInputValue,
+  toUploadItems
+} from './utils';
+import {
+  buttonStyles,
+  CameraIcon,
+  CheckIcon,
+  EyeIcon,
+  PaperclipIcon,
+  PlusIcon,
+  RequiredStar,
+  srOnly,
+  withDisabled
+} from './ui';
 import { GroupedPairedFields } from './GroupedPairedFields';
 import { InfoTooltip } from './InfoTooltip';
 import { LineOverlayState } from './overlays/LineSelectOverlay';
@@ -817,7 +833,15 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                   if (hideField) return;
 
                   const val = row.values[field.id];
-                  if (field.required && isEmptyValue(val as any)) {
+                  const filled =
+                    field.type === 'FILE_UPLOAD'
+                      ? isUploadValueComplete({
+                          value: val as any,
+                          uploadConfig: (field as any).uploadConfig,
+                          required: !!field.required
+                        })
+                      : !isEmptyValue(val as any);
+                  if (field.required && !filled) {
                     missing.push(field.id);
                   }
 
@@ -873,7 +897,14 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                       }, { language, targetOptions: toOptionSet(field) })
                     : undefined;
                   const raw = field.valueMap ? mapped : (row.values || {})[field.id];
-                  const filled = !isEmptyValue(raw as any);
+                  const filled =
+                    field.type === 'FILE_UPLOAD'
+                      ? isUploadValueComplete({
+                          value: raw as any,
+                          uploadConfig: (field as any).uploadConfig,
+                          required: !!field.required
+                        })
+                      : !isEmptyValue(raw as any);
 
                   if (!!field.required) {
                     totalRequired += 1;
@@ -1423,6 +1454,34 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         case 'FILE_UPLOAD': {
                           const items = toUploadItems(row.values[field.id] as any);
                           const uploadConfig = (field as any).uploadConfig || {};
+                          const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
+                          const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{
+                            size?: number;
+                            style?: React.CSSProperties;
+                            className?: string;
+                          }>;
+                          const minRequired = getUploadMinRequired({ uploadConfig, required: !!field.required });
+                          const maxFiles = uploadConfig.maxFiles && uploadConfig.maxFiles > 0 ? uploadConfig.maxFiles : undefined;
+                          const denom = maxFiles ?? (minRequired > 0 ? minRequired : undefined);
+                          const displayCount = denom ? Math.min(items.length, denom) : items.length;
+                          const maxed = maxFiles ? items.length >= maxFiles : false;
+                          const isComplete = minRequired > 0 ? items.length >= minRequired : items.length > 0;
+                          const isEmpty = items.length === 0;
+                          const missing = minRequired > 0 ? Math.max(0, minRequired - items.length) : 0;
+                          const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
+                          const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
+                          const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
+                          const viewMode = maxed;
+                          const addDisabled = submitting;
+                          const LeftIcon = viewMode ? EyeIcon : SlotIcon;
+                          const leftLabel = viewMode
+                            ? tSystem('files.view', language, 'View files')
+                            : tSystem('files.add', language, 'Add files');
+                          const cameraStyleBase = viewMode
+                            ? buttonStyles.secondary
+                            : isEmpty
+                              ? buttonStyles.primary
+                              : buttonStyles.secondary;
                           const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
                             ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
                           );
@@ -1430,40 +1489,6 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                             .filter(Boolean);
                           const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
-                          const maxed = uploadConfig.maxFiles ? items.length >= uploadConfig.maxFiles : false;
-                          const helperParts: string[] = [];
-                          if (uploadConfig.minFiles && uploadConfig.minFiles > 1) {
-                            helperParts.push(
-                              tSystem(
-                                uploadConfig.minFiles === 1 ? 'files.minFilesOne' : 'files.minFilesMany',
-                                language,
-                                uploadConfig.minFiles === 1 ? '1 file required' : '{count} files required',
-                                { count: uploadConfig.minFiles }
-                              )
-                            );
-                          }
-                          if (uploadConfig.maxFiles) {
-                            helperParts.push(
-                              tSystem(
-                                uploadConfig.maxFiles === 1 ? 'files.maxFilesOne' : 'files.maxFilesMany',
-                                language,
-                                uploadConfig.maxFiles === 1 ? '1 file max' : '{count} files max',
-                                { count: uploadConfig.maxFiles }
-                              )
-                            );
-                          }
-                          if (uploadConfig.maxFileSizeMb) {
-                            helperParts.push(
-                              tSystem('files.maxSizeEach', language, '≤ {mb} MB each', { mb: uploadConfig.maxFileSizeMb })
-                            );
-                          }
-                          const allowedAll = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean);
-                          if (allowedAll.length) {
-                            helperParts.push(tSystem('files.allowed', language, 'Allowed: {exts}', { exts: allowedAll.join(', ') }));
-                          }
-                          const remainingSlots =
-                            uploadConfig.maxFiles && uploadConfig.maxFiles > items.length ? uploadConfig.maxFiles - items.length : null;
-                          const dragActive = !!dragState[fieldPath];
                           return (
                             <div
                               key={field.id}
@@ -1477,68 +1502,40 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 {field.required && <RequiredStar />}
                               </label>
                               <div className="ck-upload-row">
-                                <div
-                                  role="button"
-                                  tabIndex={0}
-                                  aria-disabled={maxed || submitting}
-                                  className="ck-upload-dropzone"
-                                  onClick={() => {
-                                    if (maxed || submitting) return;
-                                    fileInputsRef.current[fieldPath]?.click();
-                                  }}
-                                  onKeyDown={e => {
-                                    if (maxed || submitting) return;
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      fileInputsRef.current[fieldPath]?.click();
-                                    }
-                                  }}
-                                  onDragEnter={e => {
-                                    e.preventDefault();
-                                    if (submitting) return;
-                                    incrementDrag(fieldPath);
-                                  }}
-                                  onDragOver={e => e.preventDefault()}
-                                  onDragLeave={e => {
-                                    e.preventDefault();
-                                    if (submitting) return;
-                                    decrementDrag(fieldPath);
-                                  }}
-                                  onDrop={e =>
-                                    handleLineFileDrop({ group: q, rowId: row.id, field, fieldPath, event: e })
-                                  }
-                                  style={{
-                                    border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
-                                    borderRadius: 12,
-                                    padding: '10px 12px',
-                                    background: dragActive ? '#e0f2fe' : maxed || submitting ? '#f1f5f9' : '#f8fafc',
-                                    color: '#0f172a',
-                                    cursor: maxed || submitting ? 'not-allowed' : 'pointer',
-                                    transition: 'border-color 120ms ease, background 120ms ease',
-                                    boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none',
-                                    flex: 1,
-                                    minWidth: 0,
-                                    minHeight: 'var(--control-height)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 10
-                                  }}
-                                >
-                                  <UploadIcon />
-                                  {items.length ? <span className="pill">{items.length}</span> : null}
-                                  <span style={srOnly}>
-                                    {dragActive
-                                      ? 'Release to upload files'
-                                      : maxed
-                                        ? 'Maximum files selected'
-                                        : 'Click to browse'}
-                                  </span>
-                                </div>
                                 <button
                                   type="button"
-                                  className="ck-upload-files-btn"
-                                  onClick={() =>
+                                  className="ck-upload-camera-btn"
+                                  disabled={addDisabled}
+                                  style={withDisabled(cameraStyleBase, addDisabled)}
+                                  aria-label={leftLabel}
+                                  title={leftLabel}
+                                  onClick={() => {
+                                    if (addDisabled) return;
+                                    if (viewMode) {
+                                      onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
+                                      openFileOverlay({
+                                        scope: 'line',
+                                        title: resolveFieldLabel(field, language, field.id),
+                                        group: q,
+                                        rowId: row.id,
+                                        field,
+                                        fieldPath
+                                      });
+                                      return;
+                                    }
+                                    onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
+                                    fileInputsRef.current[fieldPath]?.click();
+                                  }}
+                                >
+                                  <LeftIcon style={{ width: '62%', height: '62%' }} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
+                                  aria-disabled={submitting ? 'true' : undefined}
+                                  aria-label={`${tSystem('files.title', language, 'Files')} ${pillText}`}
+                                  onClick={() => {
+                                    if (submitting) return;
                                     openFileOverlay({
                                       scope: 'line',
                                       title: resolveFieldLabel(field, language, field.id),
@@ -1546,21 +1543,24 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       rowId: row.id,
                                       field,
                                       fieldPath
-                                    })
-                                  }
-                                  disabled={submitting}
-                                  style={withDisabled(buttonStyles.secondary, submitting)}
-                                  title={helperParts.length ? helperParts.join(' | ') : undefined}
+                                    });
+                                  }}
                                 >
-                                  {tSystem('files.title', language, 'Files')}
-                                  {items.length ? ` (${items.length})` : ''}
+                                  {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
+                                  <span>{pillText}</span>
+                                  <span className="ck-progress-caret">▸</span>
                                 </button>
                                 {subgroupTriggerNodes.length ? (
                                   <div className="ck-field-actions">{subgroupTriggerNodes}</div>
                                 ) : null}
-                                {remainingSlots ? (
-                                  <div className="ck-upload-helper muted">
-                                    {resolveUploadRemainingHelperText({ uploadConfig, language, remaining: remainingSlots })}
+                                {maxed ? (
+                                  <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Max reached.')}</div>
+                                ) : showMissingHelper ? (
+                                  <div className="ck-upload-helper muted" aria-live="polite">
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                      <SlotIcon style={{ width: '1.05em', height: '1.05em' }} />
+                                      {tSystem('common.more', language, '+{count} more', { count: missing })}
+                                    </span>
                                   </div>
                                 ) : null}
                               </div>
@@ -1687,6 +1687,13 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               }, { language, targetOptions: toOptionSet(field) })
                             : undefined;
                           const raw = field.valueMap ? mapped : (row.values || {})[field.id];
+                          if (field.type === 'FILE_UPLOAD') {
+                            return isUploadValueComplete({
+                              value: raw as any,
+                              uploadConfig: (field as any).uploadConfig,
+                              required: !!field.required
+                            });
+                          }
                           return !isEmptyValue(raw as any);
                         }}
                       />
@@ -2125,6 +2132,34 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     case 'FILE_UPLOAD': {
                                       const items = toUploadItems(subRow.values[field.id] as any);
                                       const uploadConfig = (field as any).uploadConfig || {};
+                                      const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
+                                      const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{
+                                        size?: number;
+                                        style?: React.CSSProperties;
+                                        className?: string;
+                                      }>;
+                                      const minRequired = getUploadMinRequired({ uploadConfig, required: !!field.required });
+                                      const maxFiles = uploadConfig.maxFiles && uploadConfig.maxFiles > 0 ? uploadConfig.maxFiles : undefined;
+                                      const denom = maxFiles ?? (minRequired > 0 ? minRequired : undefined);
+                                      const displayCount = denom ? Math.min(items.length, denom) : items.length;
+                                      const maxed = maxFiles ? items.length >= maxFiles : false;
+                                      const isComplete = minRequired > 0 ? items.length >= minRequired : items.length > 0;
+                                      const isEmpty = items.length === 0;
+                                      const missing = minRequired > 0 ? Math.max(0, minRequired - items.length) : 0;
+                                      const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
+                                      const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
+                                      const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
+                                      const viewMode = maxed;
+                                      const addDisabled = submitting;
+                                      const LeftIcon = viewMode ? EyeIcon : SlotIcon;
+                                      const leftLabel = viewMode
+                                        ? tSystem('files.view', language, 'View files')
+                                        : tSystem('files.add', language, 'Add files');
+                                      const cameraStyleBase = viewMode
+                                        ? buttonStyles.secondary
+                                        : isEmpty
+                                          ? buttonStyles.primary
+                                          : buttonStyles.secondary;
                                       const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
                                         ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
                                       );
@@ -2132,8 +2167,6 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                         .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                                         .filter(Boolean);
                                       const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
-                                      const maxed = uploadConfig.maxFiles ? items.length >= uploadConfig.maxFiles : false;
-                                      const dragActive = !!dragState[fieldPath];
                                       return (
                                         <div
                                           key={field.id}
@@ -2147,78 +2180,40 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             {field.required && <RequiredStar />}
                                           </label>
                                           <div className="ck-upload-row">
-                                            <div
-                                              role="button"
-                                              tabIndex={0}
-                                              aria-disabled={maxed || submitting}
-                                              className="ck-upload-dropzone"
-                                              onClick={() => {
-                                                if (maxed || submitting) return;
-                                                fileInputsRef.current[fieldPath]?.click();
-                                              }}
-                                              onKeyDown={e => {
-                                                if (maxed || submitting) return;
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                  e.preventDefault();
-                                                  fileInputsRef.current[fieldPath]?.click();
-                                                }
-                                              }}
-                                              onDragEnter={e => {
-                                                e.preventDefault();
-                                                if (submitting) return;
-                                                incrementDrag(fieldPath);
-                                              }}
-                                              onDragOver={e => e.preventDefault()}
-                                              onDragLeave={e => {
-                                                e.preventDefault();
-                                                if (submitting) return;
-                                                decrementDrag(fieldPath);
-                                              }}
-                                              onDrop={e =>
-                                                handleLineFileDrop({
-                                                  group: targetGroup,
-                                                  rowId: subRow.id,
-                                                  field,
-                                                  fieldPath,
-                                                  event: e
-                                                })
-                                              }
-                                              style={{
-                                                border: dragActive ? '2px solid #0ea5e9' : '1px dashed #94a3b8',
-                                                borderRadius: 12,
-                                                padding: '10px 12px',
-                                                background: dragActive
-                                                  ? '#e0f2fe'
-                                                  : maxed || submitting
-                                                    ? '#f1f5f9'
-                                                    : '#f8fafc',
-                                                color: '#0f172a',
-                                                cursor: maxed || submitting ? 'not-allowed' : 'pointer',
-                                                transition: 'border-color 120ms ease, background 120ms ease',
-                                                boxShadow: dragActive ? '0 0 0 3px rgba(14,165,233,0.2)' : 'none',
-                                                flex: 1,
-                                                minWidth: 0,
-                                                minHeight: 'var(--control-height)',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: 10
-                                              }}
-                                            >
-                                              <UploadIcon />
-                                              {items.length ? <span className="pill">{items.length}</span> : null}
-                                              <span style={srOnly}>
-                                                {dragActive
-                                                  ? 'Release to upload files'
-                                                  : maxed
-                                                    ? 'Maximum files selected'
-                                                    : 'Click to browse'}
-                                              </span>
-                                            </div>
                                             <button
                                               type="button"
-                                              className="ck-upload-files-btn"
-                                              onClick={() =>
+                                              className="ck-upload-camera-btn"
+                                              disabled={addDisabled}
+                                              style={withDisabled(cameraStyleBase, addDisabled)}
+                                              aria-label={leftLabel}
+                                              title={leftLabel}
+                                              onClick={() => {
+                                                if (addDisabled) return;
+                                                if (viewMode) {
+                                                  onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
+                                                  openFileOverlay({
+                                                    scope: 'line',
+                                                    title: resolveFieldLabel(field, language, field.id),
+                                                    group: targetGroup,
+                                                    rowId: subRow.id,
+                                                    field,
+                                                    fieldPath
+                                                  });
+                                                  return;
+                                                }
+                                                onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
+                                                fileInputsRef.current[fieldPath]?.click();
+                                              }}
+                                            >
+                                              <LeftIcon style={{ width: '62%', height: '62%' }} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
+                                              aria-disabled={submitting ? 'true' : undefined}
+                                              aria-label={`${tSystem('files.title', language, 'Files')} ${pillText}`}
+                                              onClick={() => {
+                                                if (submitting) return;
                                                 openFileOverlay({
                                                   scope: 'line',
                                                   title: resolveFieldLabel(field, language, field.id),
@@ -2226,14 +2221,23 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                                   rowId: subRow.id,
                                                   field,
                                                   fieldPath
-                                                })
-                                              }
-                                              disabled={submitting}
-                                              style={withDisabled(buttonStyles.secondary, submitting)}
+                                                });
+                                              }}
                                             >
-                                              {tSystem('files.title', language, 'Files')}
-                                              {items.length ? ` (${items.length})` : ''}
+                                              {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
+                                              <span>{pillText}</span>
+                                              <span className="ck-progress-caret">▸</span>
                                             </button>
+                                            {maxed ? (
+                                              <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Max reached.')}</div>
+                                            ) : showMissingHelper ? (
+                                              <div className="ck-upload-helper muted" aria-live="polite">
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                                  <SlotIcon style={{ width: '1.05em', height: '1.05em' }} />
+                                                  {tSystem('common.more', language, '+{count} more', { count: missing })}
+                                                </span>
+                                              </div>
+                                            ) : null}
                                           </div>
                                           <div style={srOnly} aria-live="polite">
                                             {uploadAnnouncements[fieldPath] || ''}
@@ -2345,6 +2349,13 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           }, { language, targetOptions: toOptionSet(field) })
                                         : undefined;
                                       const raw = field.valueMap ? mapped : (subRow.values || {})[field.id];
+                                      if (field.type === 'FILE_UPLOAD') {
+                                        return isUploadValueComplete({
+                                          value: raw as any,
+                                          uploadConfig: (field as any).uploadConfig,
+                                          required: !!field.required
+                                        });
+                                      }
                                       return !isEmptyValue(raw as any);
                                     }}
                                   />

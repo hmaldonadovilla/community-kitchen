@@ -34,6 +34,110 @@ export const UploadIcon: React.FC<{ size?: number }> = ({ size = 28 }) => (
   </svg>
 );
 
+export const CameraIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
+  size = 28,
+  style,
+  className
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    focusable="false"
+    className={className}
+    style={{ width: size, height: size, ...(style as React.CSSProperties) }}
+  >
+    <path
+      d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="14" r="3.5" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
+
+export const EyeIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
+  size = 24,
+  style,
+  className
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    focusable="false"
+    className={className}
+    style={{ width: size, height: size, ...(style as React.CSSProperties) }}
+  >
+    <path
+      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
+
+export const CheckIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
+  size = 22,
+  style,
+  className
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    focusable="false"
+    className={className}
+    style={{ width: size, height: size, ...(style as React.CSSProperties) }}
+  >
+    <path
+      d="M20 6L9 17l-5-5"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const PaperclipIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
+  size = 24,
+  style,
+  className
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    focusable="false"
+    className={className}
+    style={{ width: size, height: size, ...(style as React.CSSProperties) }}
+  >
+    <path
+      d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.19 9.19a2 2 0 0 1-2.83-2.83l8.48-8.48"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export const PlusIcon: React.FC<{ size?: number }> = ({ size = 28 }) => (
   <svg
     width={size}

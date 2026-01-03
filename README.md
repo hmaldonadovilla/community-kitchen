@@ -129,6 +129,8 @@ Enabling `CK_DEBUG` also flips `window.__WEB_FORM_DEBUG__` on the web client, so
   - `allowedExtensions` and/or `allowedMimeTypes` (type checks happen client-side before upload)
   - `errorMessages` (optional localized overrides for upload validation text)
   - `helperText` (optional localized helper text shown under the upload control; falls back to system strings)
+  - `ui.variant` (optional UI variant; set to `"progressive"` to show slots + checkmarks based on `minFiles`)
+  - `ui.slotIcon` (`"camera"` | `"clip"`, optional; controls the icon shown in progressive slots)
   - `compression` (optional client-side image compression; videos are uploaded as-is — prefer enforcing `maxFileSizeMb`)
 - **Filters**: Add `optionFilter` in the Config JSON to filter CHOICE/CHECKBOX options (works in line items too). `dependsOn` accepts a single field ID or an array for multi-field dependencies; for line items, it can also reference top-level fields. Build composite keys in `optionMap` by joining dependency values with `||`, plus a `*` fallback.  
   Example (inline map): `{ "optionFilter": { "dependsOn": ["Product","Supplier"], "optionMap": { "Carrots||Local": ["Crates"], "Carrots": ["Bags","Crates"], "*": ["Bags"] } } }`  

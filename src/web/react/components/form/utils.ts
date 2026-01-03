@@ -128,6 +128,20 @@ export const toUploadItems = (value: FieldValue): Array<string | File> => {
   return out;
 };
 
+export const getUploadMinRequired = (args: { uploadConfig?: any; required?: boolean }): number => {
+  const raw = args.uploadConfig?.minFiles;
+  const n = raw !== undefined && raw !== null ? Number(raw) : NaN;
+  if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  return args.required ? 1 : 0;
+};
+
+export const isUploadValueComplete = (args: { value: FieldValue; uploadConfig?: any; required?: boolean }): boolean => {
+  const items = toUploadItems(args.value);
+  const min = getUploadMinRequired({ uploadConfig: args.uploadConfig, required: args.required });
+  if (min > 0) return items.length >= min;
+  return items.length > 0;
+};
+
 const pad2 = (n: number) => n.toString().padStart(2, '0');
 
 export const toDateInputValue = (raw: unknown): string => {

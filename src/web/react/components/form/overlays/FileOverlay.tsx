@@ -82,45 +82,6 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
 
   if (!open) return null;
 
-  const allowedDisplay = (uploadConfig?.allowedExtensions || []).map(ext =>
-    ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-  );
-  const allowedMimeDisplay = (uploadConfig?.allowedMimeTypes || [])
-    .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
-    .filter(Boolean);
-  const helperParts: string[] = [];
-  if (uploadConfig?.minFiles && uploadConfig.minFiles > 1) {
-    helperParts.push(
-      tSystem(
-        uploadConfig.minFiles === 1 ? 'files.minFilesOne' : 'files.minFilesMany',
-        language,
-        uploadConfig.minFiles === 1 ? '1 file required' : '{count} files required',
-        { count: uploadConfig.minFiles }
-      )
-    );
-  }
-  if (uploadConfig?.maxFiles) {
-    helperParts.push(
-      tSystem(
-        uploadConfig.maxFiles === 1 ? 'files.maxFilesOne' : 'files.maxFilesMany',
-        language,
-        uploadConfig.maxFiles === 1 ? '1 file max' : '{count} files max',
-        { count: uploadConfig.maxFiles }
-      )
-    );
-  }
-  if (uploadConfig?.maxFileSizeMb) {
-    helperParts.push(
-      tSystem('files.maxSizeEach', language, '≤ {mb} MB each', { mb: uploadConfig.maxFileSizeMb })
-    );
-  }
-  const allowedAll = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean);
-  if (allowedAll.length) {
-    helperParts.push(
-      tSystem('files.allowed', language, 'Allowed: {exts}', { exts: allowedAll.join(', ') })
-    );
-  }
-
   let selectionLabel = tSystem('files.noneSelected', language, 'No files selected.');
   if (items.length) {
     const base =
@@ -169,15 +130,22 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
             {items.length ? (
               <button
                 type="button"
-                onClick={onClearAll}
+                onClick={() => {
+                  const msg = tSystem('files.clearAllConfirm', language, 'Clear all files?');
+                  const ok =
+                    typeof globalThis !== 'undefined' && typeof (globalThis as any).confirm === 'function'
+                      ? (globalThis as any).confirm(msg)
+                      : true;
+                  if (!ok) return;
+                  onClearAll();
+                }}
                 disabled={submitting}
                 style={withDisabled(buttonStyles.negative, submitting)}
               >
                 {tSystem('files.clearAll', language, 'Clear all')}
               </button>
             ) : null}
-            {helperParts.length ? <span className="muted">{helperParts.join(' | ')}</span> : null}
-            {maxed ? <span className="muted">{tSystem('files.maxSelected', language, 'Maximum files selected.')}</span> : null}
+            {maxed ? <span className="muted">{tSystem('files.maxReached', language, 'Max reached.')}</span> : null}
           </div>
 
           {items.length ? (
@@ -210,40 +178,31 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                   }
                   return null;
                 })();
-                const thumbNode = (() => {
-                  if (!thumbUrl) {
-                    return (
-                      <span className="muted" style={{ fontSize: 22, fontWeight: 800 }}>
-                        {isExisting ? '↗' : '⧉'}
-                      </span>
-                    );
-                  }
-                  if (href) {
-                    return (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ display: 'block', width: '100%', height: '100%' }}
-                      >
-                        <img
-                          src={thumbUrl}
-                          alt={name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                          loading="lazy"
-                        />
-                      </a>
-                    );
-                  }
-                  return (
-                    <img
-                      src={thumbUrl}
-                      alt={name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      loading="lazy"
-                    />
-                  );
-                })();
+                const thumbInner = thumbUrl ? (
+                  <img
+                    src={thumbUrl}
+                    alt={name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="muted" style={{ fontSize: 22, fontWeight: 800 }}>
+                    {isExisting ? '↗' : '⧉'}
+                  </span>
+                );
+                const thumbNode = href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'block', width: '100%', height: '100%' }}
+                    aria-label={`${tSystem('common.open', language, 'Open')} ${name}`}
+                  >
+                    {thumbInner}
+                  </a>
+                ) : (
+                  thumbInner
+                );
                 return (
                   <li
                     key={`${name}-${idx}`}
@@ -276,18 +235,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 700, wordBreak: 'break-word' }}>
-                          {href ? (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ color: '#2563eb', textDecoration: 'underline' }}
-                            >
-                              {name}
-                            </a>
-                          ) : (
-                            name
-                          )}
+                          {name}
                         </div>
                         <div className="muted" style={{ fontSize: 20 }}>
                           {meta}

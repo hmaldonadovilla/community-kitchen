@@ -254,6 +254,9 @@ components:
             Optional helper text shown under the upload control (e.g. remaining attachments).
             Supports template variables like `{count}`.
             When omitted, the UI falls back to the built-in system strings (`files.remainingOne` / `files.remainingMany`).
+        ui:
+          $ref: '#/components/schemas/FileUploadUiConfig'
+          description: Optional UI customization for how the upload control is rendered.
         compression:
           $ref: '#/components/schemas/FileUploadCompressionConfig'
           description: Optional client-side compression settings applied before upload.
@@ -279,8 +282,27 @@ components:
         remainingMany:
           $ref: '#/components/schemas/LocalizedString'
           description: |
-          Helper text when 2+ slots remain. Variables: {count}
+            Helper text when 2+ slots remain. Variables: {count}
       description: Optional per-field overrides for remaining-slot helper text.
+
+    FileUploadUiConfig:
+      type: object
+      properties:
+        variant:
+          type: string
+          enum: [standard, progressive]
+          description: |
+            Visual variant for the upload control.
+            - `standard`: existing dropzone + Files button.
+            - `progressive`: show camera slots (based on `minFiles`/`required`) with checkmarks as files are added.
+        slotIcon:
+          type: string
+          enum: [camera, clip]
+          description: |
+            Icon used for the progressive slots.
+            - `camera`: camera icon (good for photo requirements).
+            - `clip`: paperclip icon (good for generic file attachments).
+      description: Optional UI customization for FILE_UPLOAD controls.
 
     FileUploadErrorMessages:
       type: object

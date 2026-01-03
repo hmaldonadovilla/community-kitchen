@@ -323,6 +323,8 @@ This project uses TypeScript. You need to build the script before using it in Go
       - `allowedExtensions` and/or `allowedMimeTypes`: restrict types (validated client-side)
       - `errorMessages`: optional localized override strings for upload validation errors
       - `helperText`: optional localized helper text shown under the upload control (falls back to system strings)
+      - `ui.variant`: optional UI variant; set to `"progressive"` to show slots + checkmarks based on `minFiles`
+      - `ui.slotIcon`: `"camera"` | `"clip"` (optional; controls the icon used in progressive slots)
       - `compression`: optional client-side **image** compression (videos are uploaded as-is; prefer size limits)
       The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
       - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).

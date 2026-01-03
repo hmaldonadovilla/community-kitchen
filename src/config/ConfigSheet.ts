@@ -545,6 +545,28 @@ export class ConfigSheet {
           root.remaining_text;
         if (helperText !== undefined && helperText !== null) config.helperText = helperText;
 
+        const uploadUi = root.ui ?? root.UI ?? root.uploadUi ?? root.upload_ui;
+        if (uploadUi && typeof uploadUi === 'object') (config as any).ui = uploadUi;
+        const uploadVariant =
+          root.uiVariant ??
+          root.ui_variant ??
+          root.variant ??
+          root.uploadVariant ??
+          root.upload_variant ??
+          root.displayVariant ??
+          root.display_variant;
+        const progressiveFlag = root.progressive ?? root.progressiveUi ?? root.progressive_ui;
+        if (progressiveFlag === true) {
+          (config as any).ui = (config as any).ui || {};
+          (config as any).ui.variant = 'progressive';
+        } else if (uploadVariant !== undefined && uploadVariant !== null) {
+          const v = uploadVariant.toString().trim().toLowerCase();
+          if (v === 'progressive' || v === 'standard') {
+            (config as any).ui = (config as any).ui || {};
+            (config as any).ui.variant = v;
+          }
+        }
+
         const compression = root.compression ?? root.compress;
         if (compression !== undefined) config.compression = compression;
       }
@@ -649,6 +671,28 @@ export class ConfigSheet {
       root.remainingText ??
       root.remaining_text;
     if (helperText !== undefined && helperText !== null) cfg.helperText = helperText;
+
+    const uploadUi = root.ui ?? root.UI ?? root.uploadUi ?? root.upload_ui;
+    if (uploadUi && typeof uploadUi === 'object') (cfg as any).ui = uploadUi;
+    const uploadVariant =
+      root.uiVariant ??
+      root.ui_variant ??
+      root.variant ??
+      root.uploadVariant ??
+      root.upload_variant ??
+      root.displayVariant ??
+      root.display_variant;
+    const progressiveFlag = root.progressive ?? root.progressiveUi ?? root.progressive_ui;
+    if (progressiveFlag === true) {
+      (cfg as any).ui = (cfg as any).ui || {};
+      (cfg as any).ui.variant = 'progressive';
+    } else if (uploadVariant !== undefined && uploadVariant !== null) {
+      const v = uploadVariant.toString().trim().toLowerCase();
+      if (v === 'progressive' || v === 'standard') {
+        (cfg as any).ui = (cfg as any).ui || {};
+        (cfg as any).ui.variant = v;
+      }
+    }
 
     const compression = root.compression ?? root.compress;
     if (compression !== undefined) cfg.compression = compression;

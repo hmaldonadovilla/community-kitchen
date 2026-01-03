@@ -201,9 +201,79 @@ export const FORM_VIEW_STYLES = `
           flex: 1 1 260px;
           min-width: 0;
         }
-        .ck-upload-row > .ck-upload-files-btn {
+        .ck-upload-row > .ck-upload-files-btn,
+        .ck-upload-row > .ck-upload-add-btn {
           flex: 0 0 auto;
           white-space: nowrap;
+        }
+        .ck-upload-row > .ck-upload-camera-btn {
+          flex: 0 0 auto;
+        }
+        .ck-upload-camera-btn {
+          padding: 0 !important;
+          width: var(--control-height);
+          min-width: var(--control-height);
+          justify-content: center;
+        }
+        /* Upload "status + menu" pill (tap to manage) */
+        .ck-upload-pill-btn {
+          appearance: none;
+          background: none;
+          border: none;
+          /* reuse ck-progress-pill visuals, but allow it to flex */
+          flex: 1 1 180px;
+          min-width: 0;
+          justify-content: center;
+        }
+        .ck-progress-pill.ck-progress-info {
+          background: #e0f2fe;
+          border-color: rgba(14, 165, 233, 0.28);
+          color: #0c4a6e;
+        }
+        /* Progressive upload UI: camera slots + checkmarks (opt-in via uploadConfig.ui.variant = "progressive") */
+        .ck-upload-progress {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          flex-wrap: nowrap;
+          width: 100%;
+          min-width: 0;
+        }
+        .ck-upload-progress-item {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 1 1 0;
+          min-width: 0;
+          /* Fill available width, but don't exceed the control height (keeps the row compact). */
+          max-width: calc(var(--control-height) - 12px);
+          aspect-ratio: 1 / 1;
+          border-radius: 32%;
+          background: rgba(118, 118, 128, 0.08);
+          border: 1px solid rgba(15, 23, 42, 0.14);
+          color: rgba(15, 23, 42, 0.7);
+        }
+        .ck-upload-progress-item--done {
+          background: #dcfce7;
+          border-color: rgba(22, 163, 74, 0.25);
+          color: #166534;
+        }
+        .ck-upload-progress-check {
+          position: absolute;
+          bottom: -18%;
+          right: -18%;
+          width: 60%;
+          height: 60%;
+          border-radius: 999px;
+          background: #dcfce7;
+          border: 2px solid #ffffff;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #166534;
+          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
         }
         /* File upload helper text (e.g., remaining files): always render on its own line below the controls. */
         .form-card .field.inline-field > .ck-upload-helper,
