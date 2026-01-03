@@ -2037,10 +2037,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               padding: 18
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 22, letterSpacing: -0.2, color: '#0f172a' }}>
+            <div style={{ fontWeight: 900, fontSize: 48, letterSpacing: -0.2, color: '#0f172a' }}>
               {submitConfirmTitle}
             </div>
-            <div className="muted" style={{ marginTop: 10, fontSize: 16, fontWeight: 700, lineHeight: 1.35 }}>
+            <div className="muted" style={{ marginTop: 10, fontSize: 32, fontWeight: 700, lineHeight: 1.35 }}>
               {submitConfirmMessage}
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 18, flexWrap: 'wrap' }}>

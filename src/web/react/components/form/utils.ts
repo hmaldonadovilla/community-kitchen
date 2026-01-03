@@ -144,17 +144,27 @@ export const isUploadValueComplete = (args: { value: FieldValue; uploadConfig?: 
 
 const pad2 = (n: number) => n.toString().padStart(2, '0');
 
+const formatLocalYmd = (d: Date): string => {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
 export const toDateInputValue = (raw: unknown): string => {
   if (raw === undefined || raw === null) return '';
   if (raw instanceof Date) {
     const t = raw.getTime();
-    return isNaN(t) ? '' : raw.toISOString().slice(0, 10);
+    return Number.isNaN(t) ? '' : formatLocalYmd(raw);
   }
   const s = raw.toString().trim();
   if (!s) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const isoPrefix = s.match(/^(\d{4}-\d{2}-\d{2})[T\s]/);
-  if (isoPrefix) return isoPrefix[1];
+  if (isoPrefix) {
+    // Apps Script often serializes DATE cells as ISO timestamps (e.g. "2026-01-02T23:00:00.000Z")
+    // depending on spreadsheet/script timezone. Parse as an instant then format to local YYYY-MM-DD.
+    const parsed = new Date(s);
+    return Number.isNaN(parsed.getTime()) ? isoPrefix[1] : formatLocalYmd(parsed);
+  }
 
   const dm = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if (dm) {
@@ -176,7 +186,7 @@ export const toDateInputValue = (raw: unknown): string => {
   }
 
   const parsed = new Date(s);
-  return isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+  return Number.isNaN(parsed.getTime()) ? '' : formatLocalYmd(parsed);
 };
 
 export const applyUploadConstraints = (

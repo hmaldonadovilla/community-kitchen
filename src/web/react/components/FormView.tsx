@@ -49,6 +49,7 @@ import { FileOverlay } from './form/overlays/FileOverlay';
 import { InfoOverlay } from './form/overlays/InfoOverlay';
 import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectOverlay';
 import { InfoTooltip } from './form/InfoTooltip';
+import { DateInput } from './form/DateInput';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { PairedRowGrid } from './form/PairedRowGrid';
@@ -2129,6 +2130,14 @@ const FormView: React.FC<FormViewProps> = ({
                 readOnly={!!q.valueMap}
                 rows={((q as any)?.ui as any)?.paragraphRows || 4}
               />
+            ) : q.type === 'DATE' ? (
+              <DateInput
+                value={inputValue}
+                language={language}
+                readOnly={!!q.valueMap}
+                ariaLabel={resolveLabel(q, language)}
+                onChange={next => handleFieldChange(q, next)}
+              />
             ) : (
               <input
                 type={q.type === 'DATE' ? 'date' : 'text'}
@@ -3350,12 +3359,22 @@ const FormView: React.FC<FormViewProps> = ({
                                 {resolveFieldLabel(field, language, field.id)}
                                 {field.required && <RequiredStar />}
                     </label>
-                              <input
-                                type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
-                                value={fieldValue}
-                                onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
-                                readOnly={!!field.valueMap}
-                              />
+                              {field.type === 'DATE' ? (
+                                <DateInput
+                                  value={fieldValue}
+                                  language={language}
+                                  readOnly={!!field.valueMap}
+                                  ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                  onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
+                                />
+                              ) : (
+                                <input
+                                  type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
+                                  value={fieldValue}
+                                  onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
+                                  readOnly={!!field.valueMap}
+                                />
+                              )}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                               {renderWarnings(fieldPath)}
           </div>

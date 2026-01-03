@@ -41,6 +41,7 @@ import {
   srOnly,
   withDisabled
 } from './ui';
+import { DateInput } from './DateInput';
 import { GroupedPairedFields } from './GroupedPairedFields';
 import { InfoTooltip } from './InfoTooltip';
 import { LineOverlayState } from './overlays/LineSelectOverlay';
@@ -1635,6 +1636,14 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 readOnly={!!field.valueMap}
                                 rows={(field as any)?.ui?.paragraphRows || 4}
                               />
+                            ) : field.type === 'DATE' ? (
+                              <DateInput
+                                value={fieldValue}
+                                language={language}
+                                readOnly={!!field.valueMap}
+                                ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                onChange={next => handleLineFieldChange(q, row.id, field, next)}
+                              />
                             ) : (
                               <input
                                 type={field.type === 'DATE' ? 'date' : 'text'}
@@ -2328,6 +2337,14 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
                                             readOnly={!!field.valueMap}
                                             rows={(field as any)?.ui?.paragraphRows || 4}
+                                          />
+                                        ) : field.type === 'DATE' ? (
+                                          <DateInput
+                                            value={fieldValue}
+                                            language={language}
+                                            readOnly={!!field.valueMap}
+                                            ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                            onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
                                           />
                                         ) : (
                                           <input

@@ -105,12 +105,14 @@ export const FORM_VIEW_STYLES = `
         .form-card .field.inline-field > .inline-options,
         .form-card .field.inline-field > .ck-choice-control,
         .form-card .field.inline-field > .ck-number-stepper,
+        .form-card .field.inline-field > .ck-date-input-wrap,
         .webform-overlay .field.inline-field > input,
         .webform-overlay .field.inline-field > select,
         .webform-overlay .field.inline-field > textarea,
         .webform-overlay .field.inline-field > .inline-options,
         .webform-overlay .field.inline-field > .ck-choice-control,
-        .webform-overlay .field.inline-field > .ck-number-stepper {
+        .webform-overlay .field.inline-field > .ck-number-stepper,
+        .webform-overlay .field.inline-field > .ck-date-input-wrap {
           /* Account for the horizontal gap (12px) so 50/50 doesn't wrap on narrow screens. */
           flex: 1 1 calc(50% - 6px);
           min-width: 0;
@@ -599,6 +601,41 @@ export const FORM_VIEW_STYLES = `
         .form-card input[type="date"]::-webkit-calendar-picker-indicator,
         .webform-overlay input[type="date"]::-webkit-calendar-picker-indicator {
           margin: 0;
+        }
+
+        /* DATE overlay: keep native picker, but show formatted text on top when not focused. */
+        .ck-date-input-wrap {
+          position: relative;
+          width: 100%;
+          min-width: 0;
+        }
+        .ck-date-input-wrap > input.ck-date-input {
+          width: 100%;
+          min-width: 0;
+        }
+        .ck-date-input.ck-date-input--overlay {
+          color: transparent;
+          -webkit-text-fill-color: transparent;
+        }
+        .ck-date-input.ck-date-input--overlay::-webkit-date-and-time-value,
+        .ck-date-input.ck-date-input--overlay::-webkit-datetime-edit {
+          color: transparent;
+          -webkit-text-fill-color: transparent;
+        }
+        .ck-date-overlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          /* Match base control padding (see WebFormTemplate). Leave room for the calendar icon. */
+          padding: 18px 56px 18px 22px;
+          font-weight: 400;
+          display: flex;
+          align-items: center;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: clip;
+          color: var(--text);
+          font-size: var(--ck-font-control);
         }
         .ck-line-grid > .field,
         .ck-pair-grid > .field {
