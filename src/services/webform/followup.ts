@@ -17,6 +17,7 @@ import {
   renderPdfBytesFromTemplate,
   renderPdfFromTemplate
 } from './followup/docRenderer';
+import { renderMarkdownFromTemplate } from './followup/markdownRenderer';
 
 /**
  * Follow-up actions + Doc template rendering (PDF/email/html).
@@ -164,6 +165,23 @@ export class FollowupService {
     namePrefix?: string;
   }): { success: boolean; message?: string; html?: string } {
     return renderHtmlFromTemplate({
+      dataSources: this.dataSources,
+      ...args
+    });
+  }
+
+  /**
+   * Render a Markdown (text) template stored in Drive using placeholder rules, returning the expanded Markdown.
+   * The web client converts it to HTML for a fast in-app preview.
+   */
+  public renderMarkdownFromTemplate(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    record: WebFormSubmission;
+    templateIdMap: any;
+    namePrefix?: string;
+  }): { success: boolean; message?: string; markdown?: string; fileName?: string } {
+    return renderMarkdownFromTemplate({
       dataSources: this.dataSources,
       ...args
     });

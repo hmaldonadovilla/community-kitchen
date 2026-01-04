@@ -11,6 +11,7 @@ import { replaceLineItemPlaceholders } from '../../src/services/webform/followup
 import { shouldRenderCollapsedOnlyForProgressiveRow } from '../../src/services/webform/followup/progressiveRows';
 import { applyOrderBy, consolidateConsolidatedTableRows } from '../../src/services/webform/followup/tableConsolidation';
 import { extractLineItemPlaceholders } from '../../src/services/webform/followup/tableDirectives';
+import { applyMarkdownLineItemBlocks } from '../../src/services/webform/followup/markdownLineItemBlocks';
 
 describe('FollowupService table directives', () => {
   it('extracts GROUP_TABLE directives from table text', () => {
@@ -74,6 +75,108 @@ describe('FollowupService table directives', () => {
         { key: 'CAT', values: ['Other'] }
       ]
     });
+  });
+
+  it('applies ORDER_BY / EXCLUDE_WHEN directives to markdown line-item blocks (subgroup)', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'MEAL_TYPE', type: 'TEXT', labelEn: 'Meal type', required: false }] as any,
+        subGroups: [
+          {
+            id: 'MP_INGREDIENTS_LI',
+            fields: [
+              { id: 'CAT', type: 'TEXT', labelEn: 'Category', required: false },
+              { id: 'ING', type: 'TEXT', labelEn: 'Ingredient', required: false }
+            ]
+          } as any
+        ]
+      }
+    } as any;
+
+    const markdown = `
+## Category
+{{MP_MEALS_REQUEST.MP_INGREDIENTS_LI.CAT}} - {{MP_MEALS_REQUEST.MP_INGREDIENTS_LI.ING}}
+{{ORDER_BY(CAT ASC, ING ASC)}}
+{{EXCLUDE_WHEN(CAT=Other)}}
+`.trim();
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          MEAL_TYPE: 'Dinner',
+          MP_INGREDIENTS_LI: [
+            { CAT: 'Other', ING: 'Salt' },
+            { CAT: 'Fruit', ING: 'Apple' },
+            { CAT: 'Fruit', ING: 'Banana' }
+          ]
+        }
+      ]
+    };
+
+    const rendered = applyMarkdownLineItemBlocks({ markdown, questions: [group], lineItemRows });
+    // Directives removed
+    expect(rendered).not.toContain('ORDER_BY(');
+    expect(rendered).not.toContain('EXCLUDE_WHEN(');
+    // Excluded CAT=Other row removed
+    expect(rendered).not.toContain('Other - Salt');
+    // Sorted output
+    expect(rendered).toContain('Fruit - Apple');
+    expect(rendered).toContain('Fruit - Banana');
+  });
+
+  it('markdown line-item blocks tolerate spaces and CONSOLIDATED_TABLE(GROUP.SUBGROUP.FIELD)', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'MEAL_TYPE', type: 'TEXT', labelEn: 'Meal type', required: false }] as any,
+        subGroups: [
+          {
+            id: 'MP_INGREDIENTS_LI',
+            fields: [
+              { id: 'ALLERGEN', type: 'TEXT', labelEn: 'Allergen', required: false },
+              { id: 'ING', type: 'TEXT', labelEn: 'Ingredient', required: false }
+            ]
+          } as any
+        ]
+      }
+    } as any;
+
+    const markdown = `
+| Allergen |
+| --- |
+| {{ MP_MEALS_REQUEST . MP_INGREDIENTS_LI . ALLERGEN }} |
+| {{ CONSOLIDATED_TABLE( MP_MEALS_REQUEST . MP_INGREDIENTS_LI . ALLERGEN ) }} |
+`.trim();
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          MEAL_TYPE: 'Dinner',
+          MP_INGREDIENTS_LI: [{ ALLERGEN: 'Gluten', ING: 'Flour' }, { ALLERGEN: 'Gluten', ING: 'Bread' }]
+        }
+      ]
+    };
+
+    const rendered = applyMarkdownLineItemBlocks({ markdown, questions: [group], lineItemRows });
+    expect(rendered).not.toContain('CONSOLIDATED_TABLE(');
+    // Placeholder removed (replaced with value; deduped by consolidated table directive)
+    expect(rendered).toContain('Gluten');
+    expect(rendered).not.toContain('{{');
   });
 
   it('in progressive mode, PDF table placeholders populate all fields by default', () => {

@@ -1122,6 +1122,23 @@ export class ConfigSheet {
       return config;
     }
 
+    if (action === 'renderMarkdownTemplate') {
+      const templateId =
+        cfgRaw.templateId ??
+        cfgRaw.template ??
+        cfgRaw.markdownTemplateId ??
+        cfgRaw.markdownId ??
+        cfgRaw.mdTemplateId ??
+        cfgRaw.mdId;
+      if (!templateId) return undefined;
+      const config: ButtonConfig = {
+        action: 'renderMarkdownTemplate',
+        templateId: templateId as any
+      } as any;
+      if (placements.length) (config as any).placements = placements as any;
+      return config;
+    }
+
     if (action === 'createRecordPreset') {
       const presetRaw = cfgRaw.presetValues ?? cfgRaw.preset ?? cfgRaw.values ?? cfgRaw.defaults;
       if (!presetRaw || typeof presetRaw !== 'object') return undefined;

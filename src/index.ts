@@ -110,6 +110,12 @@ export function uploadFiles(files: any, uploadConfig?: any): any {
   return service.uploadFiles(files, uploadConfig);
 }
 
+export function prefetchTemplates(formKey: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.prefetchTemplates(formKey);
+}
+
 export function renderDocTemplate(formObject: WebFormSubmission, buttonId: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
@@ -126,6 +132,12 @@ export function renderDocTemplateHtml(formObject: WebFormSubmission, buttonId: s
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.renderDocTemplateHtml(formObject, buttonId);
+}
+
+export function renderMarkdownTemplate(formObject: WebFormSubmission, buttonId: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderMarkdownTemplate(formObject, buttonId);
 }
 
 export function renderSubmissionReportHtml(formObject: WebFormSubmission): any {

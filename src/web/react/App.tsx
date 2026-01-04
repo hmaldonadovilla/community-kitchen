@@ -15,7 +15,9 @@ import {
   submit,
   triggerFollowup,
   uploadFilesApi,
+  prefetchTemplatesApi,
   renderDocTemplatePdfPreviewApi,
+  renderMarkdownTemplateApi,
   ListResponse,
   ListItem,
   fetchRecordById,
@@ -48,6 +50,7 @@ import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import packageJson from '../../../package.json';
+import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveLabel } from './utils/labels';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
@@ -63,6 +66,42 @@ type DraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused'
 
 // Build marker to verify deployed bundle version in UI
 const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
+
+// GitHub-flavored markdown styles (base from github-markdown-css, with CK sizing overrides).
+const MARKDOWN_PREVIEW_STYLES = `
+  .ck-markdown-scroll {
+    padding: 16px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ck-markdown-body.markdown-body {
+    /* Scale up GitHub defaults to match CK typography tokens */
+    font-size: var(--ck-font-control);
+    line-height: 1.5;
+    color: var(--text);
+    background: transparent;
+  }
+  .ck-markdown-body.markdown-body h1 {
+    font-size: calc(var(--ck-font-control) * 1.35);
+    font-weight: 900;
+  }
+  .ck-markdown-body.markdown-body h2 {
+    font-size: calc(var(--ck-font-control) * 1.18);
+    font-weight: 900;
+  }
+  .ck-markdown-body.markdown-body h3 {
+    font-size: calc(var(--ck-font-control) * 1.06);
+    font-weight: 900;
+  }
+  .ck-markdown-body.markdown-body table {
+    width: 100%;
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+`;
 
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
@@ -91,8 +130,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     title: '',
     pdfPhase: 'idle'
   });
-  const reportPdfObjectUrlsRef = useRef<string[]>([]);
   const reportPdfSeqRef = useRef<number>(0);
+  const templatePrefetchFormKeyRef = useRef<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [validationWarnings, setValidationWarnings] = useState<{
     top: Array<{ message: string; fieldPath: string }>;
@@ -140,6 +179,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     },
     [debugEnabled]
   );
+
+  // Prefetch Drive templates early so report rendering can skip "first read" latency.
+  useEffect(() => {
+    const key = (formKey || '').toString().trim();
+    if (!key) return;
+    if (templatePrefetchFormKeyRef.current === key) return;
+    templatePrefetchFormKeyRef.current = key;
+
+    logEvent('templates.prefetch.start', { formKey: key });
+    prefetchTemplatesApi(key)
+      .then(res => {
+        logEvent('templates.prefetch.ok', {
+          success: Boolean(res?.success),
+          message: (res as any)?.message || null,
+          counts: (res as any)?.counts || null
+        });
+      })
+      .catch(err => {
+        const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to prefetch templates.';
+        logEvent('templates.prefetch.failed', { formKey: key, message: msg });
+      });
+  }, [formKey, logEvent]);
 
   useEffect(() => {
     // Enforce language config changes from the definition.
@@ -867,7 +928,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         const cfg: any = (q as any)?.button;
         if (!cfg || typeof cfg !== 'object') return null;
         const action = (cfg.action || '').toString().trim();
-        if (action === 'renderDocTemplate') {
+        if (action === 'renderDocTemplate' || action === 'renderMarkdownTemplate') {
           if (!cfg.templateId) return null;
         } else if (action === 'createRecordPreset') {
           if (!createPresetEnabled) return null;
@@ -898,8 +959,51 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     return URL.createObjectURL(blob);
   }, []);
 
+  const openPdfPreviewWindow = useCallback(
+    (args: { title: string; subtitle?: string; language: LangCode }) => {
+      try {
+        const w = globalThis.window?.open('', '_blank');
+        if (!w) return null;
+        try {
+          const title = (args.title || '').toString();
+          const subtitle = (args.subtitle || '').toString();
+          const loading = tSystem('report.generatingPdf', args.language, 'Generating PDF…');
+          const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>
+    <style>
+      body { margin: 0; padding: 24px; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial; color: #0f172a; background: #ffffff; }
+      .sub { margin-top: 8px; font-weight: 700; color: rgba(15,23,42,0.7); }
+      .box { margin-top: 22px; padding: 18px 18px; border: 1px solid rgba(148,163,184,0.45); border-radius: 16px; background: rgba(148,163,184,0.10); font-weight: 900; font-size: 20px; }
+    </style>
+  </head>
+  <body>
+    <div style="font-weight: 900; font-size: 26px;">${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+    ${subtitle ? `<div class="sub">${subtitle.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ``}
+    <div class="box">${loading.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+  </body>
+</html>`;
+          w.document.open();
+          w.document.write(html);
+          w.document.close();
+        } catch (_) {
+          // best effort
+        }
+        return w;
+      } catch (_) {
+        return null;
+      }
+    },
+    []
+  );
+
   const generateReportPdfPreview = useCallback(
-    async (buttonId: string) => {
+    async (args: { buttonId: string; popup?: Window | null }) => {
+      const buttonId = args.buttonId;
+      const popup = args.popup || null;
       const seq = ++reportPdfSeqRef.current;
       const parsedRef = parseButtonRef(buttonId || '');
       const baseId = parsedRef.id;
@@ -913,15 +1017,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
       setReportOverlay(prev => ({
         ...(prev || { title: '' }),
-        // Keep the report generation inside the app (iOS suspends background tabs and can stall callbacks).
-        open: true,
+        // Track busy state for inline buttons, but do not open an in-app overlay for PDFs.
+        open: false,
+        kind: 'pdf',
         buttonId,
         title,
         subtitle: definition.title,
         pdfPhase: 'rendering',
         pdfObjectUrl: undefined,
         pdfFileName: undefined,
-        pdfMessage: undefined
+        pdfMessage: undefined,
+        markdown: undefined
       }));
       const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
       const templateIdShort =
@@ -949,51 +1055,58 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         if (seq !== reportPdfSeqRef.current) return;
         if (!res?.success || !res?.pdfBase64) {
           const msg = (res?.message || 'Failed to generate PDF preview.').toString();
-          setReportOverlay(prev => {
-            if (!prev?.open || prev.buttonId !== buttonId) return prev;
-            return { ...prev, pdfPhase: 'error', pdfMessage: msg };
-          });
+          setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'error', pdfMessage: msg }));
+          try {
+            if (popup && !popup.closed) {
+              popup.document.open();
+              popup.document.write(`<pre style="white-space:pre-wrap;font-family:ui-sans-serif,system-ui;padding:18px;">${msg}</pre>`);
+              popup.document.close();
+            }
+          } catch (_) {
+            // ignore
+          }
           logEvent('report.pdfPreview.error', { buttonId, message: msg });
           return;
         }
         const mimeType = (res.mimeType || 'application/pdf').toString();
         const objectUrl = base64ToPdfObjectUrl(res.pdfBase64, mimeType);
-        reportPdfObjectUrlsRef.current.push(objectUrl);
-        // Keep a small buffer of recent object URLs so multiple opened PDFs keep working.
-        // Revoke the oldest ones to avoid unbounded memory growth.
-        while (reportPdfObjectUrlsRef.current.length > 4) {
-          const old = reportPdfObjectUrlsRef.current.shift();
-          if (old) {
-            try {
-              URL.revokeObjectURL(old);
-            } catch (_) {
-              // ignore
-            }
+
+        // Open the blob URL (prefer the pre-opened popup window to avoid async popup blocking).
+        let opened = false;
+        try {
+          if (popup && !popup.closed) {
+            popup.location.href = objectUrl;
+            opened = true;
+          }
+        } catch (_) {
+          opened = false;
+        }
+        if (!opened) {
+          // Fallback: navigate this tab (guaranteed allowed). User can use Back to return.
+          try {
+            globalThis.location?.assign?.(objectUrl);
+            opened = true;
+          } catch (_) {
+            // ignore
           }
         }
 
-        const fileName = (res.fileName || 'report.pdf').toString();
-        // Show overlay with Open/Download buttons (no embedded preview).
-        setReportOverlay(prev => {
-          if (prev?.buttonId !== buttonId) return prev;
-          return {
-            ...prev,
-            open: true,
-            pdfPhase: 'ready',
-            pdfObjectUrl: objectUrl,
-            pdfFileName: fileName,
-            pdfMessage: undefined
-          };
-        });
-        logEvent('report.pdfPreview.ok', { buttonId, fileName: (res.fileName || '').toString() });
+        setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'idle', pdfMessage: undefined }));
+        logEvent('report.pdfPreview.ok', { buttonId, opened });
       } catch (err: any) {
         if (seq !== reportPdfSeqRef.current) return;
         const msg = (err?.message || err?.toString?.() || 'Failed to generate PDF preview.').toString();
         // Always surface errors in-app as well.
-        setReportOverlay(prev => {
-          if (prev?.buttonId !== buttonId) return prev;
-          return { ...prev, open: true, pdfPhase: 'error', pdfMessage: msg };
-        });
+        setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'error', pdfMessage: msg }));
+        try {
+          if (popup && !popup.closed) {
+            popup.document.open();
+            popup.document.write(`<pre style="white-space:pre-wrap;font-family:ui-sans-serif,system-ui;padding:18px;">${msg}</pre>`);
+            popup.document.close();
+          }
+        } catch (_) {
+          // ignore
+        }
         logEvent('report.pdfPreview.exception', { buttonId, message: msg });
       }
     },
@@ -1001,10 +1114,96 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   );
 
   const openReport = useCallback(
-    (buttonId: string) => {
-      void generateReportPdfPreview(buttonId);
+    (args: { buttonId: string; popup?: Window | null }) => {
+      void generateReportPdfPreview({ buttonId: args.buttonId, popup: args.popup });
     },
     [generateReportPdfPreview]
+  );
+
+  const generateReportMarkdownPreview = useCallback(
+    async (buttonId: string) => {
+      const seq = ++reportPdfSeqRef.current;
+      const parsedRef = parseButtonRef(buttonId || '');
+      const baseId = parsedRef.id;
+      const qIdx = parsedRef.qIdx;
+      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
+      const btn =
+        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
+          ? indexed
+          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Preview');
+
+      setReportOverlay(prev => ({
+        ...(prev || { title: '' }),
+        open: true,
+        kind: 'markdown',
+        buttonId,
+        title,
+        subtitle: definition.title,
+        pdfPhase: 'rendering',
+        pdfObjectUrl: undefined,
+        pdfFileName: undefined,
+        pdfMessage: undefined,
+        markdown: undefined
+      }));
+
+      const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
+      const templateIdShort =
+        templateIdResolved && templateIdResolved.length > 12
+          ? `${templateIdResolved.slice(0, 5)}…${templateIdResolved.slice(-5)}`
+          : templateIdResolved;
+      logEvent('report.markdownPreview.start', { buttonId: baseId, qIdx: qIdx ?? null, templateId: templateIdShort || null });
+
+      try {
+        const existingRecordId = resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        });
+        const draft = buildDraftPayload({
+          definition,
+          formKey,
+          language: languageRef.current,
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current,
+          existingRecordId
+        });
+
+        const res = await renderMarkdownTemplateApi(draft, buttonId);
+        if (seq !== reportPdfSeqRef.current) return;
+        if (!res?.success || !res?.markdown) {
+          const msg = (res?.message || 'Failed to render preview.').toString();
+          setReportOverlay(prev => {
+            if (!prev?.open || prev.buttonId !== buttonId) return prev;
+            return { ...prev, pdfPhase: 'error', pdfMessage: msg };
+          });
+          logEvent('report.markdownPreview.error', { buttonId, message: msg });
+          return;
+        }
+
+        setReportOverlay(prev => {
+          if (prev?.buttonId !== buttonId) return prev;
+          return { ...prev, open: true, kind: 'markdown', pdfPhase: 'ready', markdown: res.markdown, pdfMessage: undefined };
+        });
+        logEvent('report.markdownPreview.ok', { buttonId, markdownLength: (res.markdown || '').toString().length });
+      } catch (err: any) {
+        if (seq !== reportPdfSeqRef.current) return;
+        const msg = (err?.message || err?.toString?.() || 'Failed to render preview.').toString();
+        setReportOverlay(prev => {
+          if (prev?.buttonId !== buttonId) return prev;
+          return { ...prev, open: true, pdfPhase: 'error', pdfMessage: msg };
+        });
+        logEvent('report.markdownPreview.exception', { buttonId, message: msg });
+      }
+    },
+    [definition, formKey, logEvent, parseButtonRef, resolveTemplateIdForClient]
+  );
+
+  const openMarkdown = useCallback(
+    (buttonId: string) => {
+      void generateReportMarkdownPreview(buttonId);
+    },
+    [generateReportMarkdownPreview]
   );
 
   const createRecordFromPreset = useCallback(
@@ -1089,7 +1288,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       logEvent('ui.customButton.click', { buttonId: baseId, qIdx: qIdx ?? null, action: action || null });
 
       if (action === 'renderDocTemplate') {
-        openReport(buttonId);
+        const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Report');
+        const popup = openPdfPreviewWindow({ title, subtitle: definition.title, language: languageRef.current });
+        if (!popup) {
+          logEvent('report.pdfPreview.popupBlocked', { buttonId: baseId, qIdx: qIdx ?? null });
+        } else {
+          logEvent('report.pdfPreview.popupOpened', { buttonId: baseId, qIdx: qIdx ?? null });
+        }
+        openReport({ buttonId, popup });
+        return;
+      }
+      if (action === 'renderMarkdownTemplate') {
+        openMarkdown(buttonId);
         return;
       }
       if (action === 'createRecordPreset') {
@@ -1099,7 +1309,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
       logEvent('ui.customButton.unsupported', { buttonId: baseId, qIdx: qIdx ?? null, action: action || null });
     },
-    [createRecordFromPreset, definition.questions, logEvent, openReport, parseButtonRef]
+    [createRecordFromPreset, definition.title, definition.questions, logEvent, openMarkdown, openPdfPreviewWindow, openReport, parseButtonRef]
   );
 
   const closeReportOverlay = useCallback(() => {
@@ -1108,10 +1318,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setReportOverlay(prev => ({
       ...(prev || { title: '' }),
       open: false,
+      kind: 'pdf',
       pdfPhase: 'idle',
       pdfObjectUrl: undefined,
       pdfFileName: undefined,
       pdfMessage: undefined,
+      markdown: undefined,
       buttonId: undefined
     }));
   }, []);
@@ -1811,7 +2023,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     } else if (requested === 'summary') {
       setView(summaryViewEnabled ? 'summary' : 'form');
     } else {
-      setView(summaryViewEnabled ? (isClosed ? 'summary' : 'form') : 'form');
+      const nextView = summaryViewEnabled && isClosed ? 'summary' : 'form';
+      setView(nextView);
     }
   };
 
@@ -1880,6 +2093,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       }
     >
       <style>{FORM_VIEW_STYLES}</style>
+      <style>{githubMarkdownCss}</style>
+      <style>{MARKDOWN_PREVIEW_STYLES}</style>
       <AppHeader
         title={definition.title || 'Form'}
         logoUrl={definition.appHeader?.logoUrl}
@@ -1968,7 +2183,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             onExternalScrollConsumed={() => setExternalScrollAnchor(null)}
             onSelectionEffect={runSelectionEffects}
             onUploadFiles={uploadFieldUrls}
-            onReportButton={openReport}
+            onReportButton={handleCustomButton}
             reportBusy={reportOverlay.pdfPhase === 'rendering'}
             reportBusyId={reportOverlay.buttonId || null}
             onDiagnostic={logEvent}

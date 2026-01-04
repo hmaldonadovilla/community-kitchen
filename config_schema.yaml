@@ -188,6 +188,35 @@ components:
           properties:
             action:
               type: string
+              enum: [renderMarkdownTemplate]
+              description: |
+                Render a Markdown template stored in Google Drive (plain text / .md) using the same placeholder rules
+                as Doc templates (e.g., `{{FIELD_ID}}`, consolidated placeholders, etc), then show it immediately in-app.
+
+                This is designed for a **single-click preview** experience (no Drive/Docs preview pages, no extra "Open" clicks).
+            templateId:
+              $ref: '#/components/schemas/TemplateIdMap'
+              description: Google Drive file id config (string, language map, or `cases` selector) for the Markdown template.
+            placements:
+              type: array
+              items:
+                type: string
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+              description: |
+                Where the button should surface in the web UI.
+                - `form`: render inline as a normal field in the form view.
+                - `formSummaryMenu`: appear inside the Summary button menu while editing.
+                - `summaryBar`: appear in the bottom action bar on the Summary view (menu if multiple).
+                - `topBar`: appear in the action bar directly under the header (all views).
+                - `topBarList`: appear in the top action bar on the List view.
+                - `topBarForm`: appear in the top action bar on the Form (edit) view.
+                - `topBarSummary`: appear in the top action bar on the Summary view.
+                - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+          required: [action, templateId]
+        - type: object
+          properties:
+            action:
+              type: string
               enum: [createRecordPreset]
               description: Create a new record and prefill field values.
             presetValues:
@@ -1319,7 +1348,7 @@ components:
             - Actions menu PDFs only: `"id": "actions", "actions": ["renderDocTemplate"]`
           items:
             type: string
-            enum: [renderDocTemplate, createRecordPreset]
+            enum: [renderDocTemplate, renderMarkdownTemplate, createRecordPreset]
         summaryBehavior:
           type: string
           enum: [auto, navigate, menu]
@@ -1361,7 +1390,7 @@ components:
           description: Optional filter by action type (e.g. only show createRecordPreset buttons).
           items:
             type: string
-            enum: [renderDocTemplate, createRecordPreset]
+            enum: [renderDocTemplate, renderMarkdownTemplate, createRecordPreset]
       additionalProperties: true
 
     TemplateIdBase:

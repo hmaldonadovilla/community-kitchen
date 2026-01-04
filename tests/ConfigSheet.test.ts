@@ -332,6 +332,45 @@ describe('ConfigSheet', () => {
     });
   });
 
+  test('getQuestions parses BUTTON renderMarkdownTemplate config JSON', () => {
+    const configSheet = mockSS.insertSheet('Config: MarkdownButtons');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'BTN_MD',
+        'BUTTON',
+        'Preview SOP (Markdown)',
+        'Aperçu SOP (Markdown)',
+        'SOP (Markdown) bekijken',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "button": {
+            "action": "renderMarkdownTemplate",
+            "templateId": { "EN": "drive-file-id-en", "FR": "drive-file-id-fr" },
+            "placements": ["form", "topBar", "unknownPlacement"]
+          }
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: MarkdownButtons');
+    expect(questions.length).toBe(1);
+    expect(questions[0].type).toBe('BUTTON');
+    expect((questions[0] as any).button).toEqual({
+      action: 'renderMarkdownTemplate',
+      templateId: { EN: 'drive-file-id-en', FR: 'drive-file-id-fr' },
+      placements: ['form', 'topBar']
+    });
+  });
+
   test('getQuestions parses dataSource config JSON for choice fields', () => {
     const configSheet = mockSS.insertSheet('Config: DataSource');
     const exampleRows = [

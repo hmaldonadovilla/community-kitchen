@@ -69,7 +69,7 @@ export interface ActionBarSystemItemConfig {
    * Optional filter for which custom button actions to include when this system item sources custom buttons.
    * Useful for:
    * - Create menu: include only `createRecordPreset`
-   * - Actions menu: include only `renderDocTemplate`
+   * - Actions menu: include only `renderDocTemplate` / `renderMarkdownTemplate`
    */
   actions?: ButtonAction[];
   /**
@@ -150,7 +150,7 @@ export type ButtonPreviewMode = 'pdf' | 'live';
  * Primary use case: render a Google Doc template (with placeholders / consolidated directives)
  * into a PDF preview from the web app.
  */
-export type ButtonAction = 'renderDocTemplate' | 'createRecordPreset';
+export type ButtonAction = 'renderDocTemplate' | 'renderMarkdownTemplate' | 'createRecordPreset';
 
 export interface RenderDocTemplateButtonConfig {
   action: 'renderDocTemplate';
@@ -185,6 +185,21 @@ export interface RenderDocTemplateButtonConfig {
   folderId?: string;
 }
 
+export interface RenderMarkdownTemplateButtonConfig {
+  /**
+   * Render a Markdown template stored in Google Drive (plain text / .md file) using the same placeholder
+   * rules as Doc templates (e.g., `{{FIELD_ID}}`, consolidated placeholders, etc).
+   *
+   * The rendered Markdown is converted to HTML for a fast in-app preview.
+   */
+  action: 'renderMarkdownTemplate';
+  /**
+   * Google Drive file id (or language map) for the Markdown template.
+   */
+  templateId: TemplateIdMap;
+  placements?: ButtonPlacement[];
+}
+
 export interface CreateRecordPresetButtonConfig {
   action: 'createRecordPreset';
   /**
@@ -197,7 +212,7 @@ export interface CreateRecordPresetButtonConfig {
   placements?: ButtonPlacement[];
 }
 
-export type ButtonConfig = RenderDocTemplateButtonConfig | CreateRecordPresetButtonConfig;
+export type ButtonConfig = RenderDocTemplateButtonConfig | RenderMarkdownTemplateButtonConfig | CreateRecordPresetButtonConfig;
 
 export interface QuestionUiConfig {
   /**

@@ -71,6 +71,26 @@ export interface RenderDocTemplatePdfPreviewResult {
   message?: string;
 }
 
+export interface RenderMarkdownTemplateResult {
+  success: boolean;
+  markdown?: string;
+  message?: string;
+}
+
+export interface PrefetchTemplatesResult {
+  success: boolean;
+  message?: string;
+  counts?: {
+    markdownRequested: number;
+    markdownCacheHit: number;
+    markdownLoaded: number;
+    markdownSkippedCache: number;
+    markdownFailed: number;
+    docOk: number;
+    docFailed: number;
+  };
+}
+
 export interface RenderDocPreviewResult {
   success: boolean;
   previewFileId?: string;
@@ -159,6 +179,12 @@ export const renderDocTemplatePdfPreviewApi = (
 
 export const renderDocTemplateHtmlApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocPreviewResult> =>
   runAppsScript<RenderDocPreviewResult>('renderDocTemplateHtml', payload, buttonId);
+
+export const renderMarkdownTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderMarkdownTemplateResult> =>
+  runAppsScript<RenderMarkdownTemplateResult>('renderMarkdownTemplate', payload, buttonId);
+
+export const prefetchTemplatesApi = (formKey: string): Promise<PrefetchTemplatesResult> =>
+  runAppsScript<PrefetchTemplatesResult>('prefetchTemplates', formKey);
 
 export const renderSubmissionReportHtmlApi = (payload: SubmissionPayload): Promise<RenderDocPreviewResult> =>
   runAppsScript<RenderDocPreviewResult>('renderSubmissionReportHtml', payload);

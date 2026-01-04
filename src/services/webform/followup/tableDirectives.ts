@@ -193,7 +193,8 @@ export const extractLineItemPlaceholders = (
 ): Array<{ groupId: string; subGroupId?: string; fieldId: string }> => {
   const matches: Array<{ groupId: string; subGroupId?: string; fieldId: string }> = [];
   if (!text) return matches;
-  const pattern = /{{([A-Z0-9_]+)(?:\.([A-Z0-9_]+))?\.([A-Z0-9_]+)}}/gi;
+  // Allow incidental spaces inside {{ ... }} and around "." to tolerate Markdown/text templates.
+  const pattern = /{{\s*([A-Z0-9_]+)\s*(?:\.\s*([A-Z0-9_]+)\s*)?\.\s*([A-Z0-9_]+)\s*}}/gi;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
     matches.push({
@@ -252,7 +253,7 @@ export const extractLineItemPlaceholders = (
   // Row-scoped consolidated placeholders should still cause the row to be processed by the table renderer,
   // even when they are the only tokens present in the row.
   // We treat them as "group-only" placeholders so they do NOT trigger subgroup (child-row) rendering.
-  const consolidatedRowPattern = /{{CONSOLIDATED_ROW\(([A-Z0-9_]+)\.([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/gi;
+  const consolidatedRowPattern = /{{\s*CONSOLIDATED_ROW\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\)\s*}}/gi;
   let cm: RegExpExecArray | null;
   while ((cm = consolidatedRowPattern.exec(text)) !== null) {
     matches.push({

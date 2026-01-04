@@ -612,7 +612,7 @@ export class Dashboard {
       'topBarSummary',
       'listBar'
     ]);
-    const allowedActions = new Set<ButtonAction>(['renderDocTemplate', 'createRecordPreset']);
+    const allowedActions = new Set<ButtonAction>(['renderDocTemplate', 'renderMarkdownTemplate', 'createRecordPreset']);
 
     const normalizePlacements = (raw: any): ButtonPlacement[] => {
       if (raw === undefined || raw === null) return [];

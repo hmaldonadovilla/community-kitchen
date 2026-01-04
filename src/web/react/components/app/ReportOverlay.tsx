@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { buttonStyles } from '../form/ui';
 import { FullPageOverlay } from '../form/overlays/FullPageOverlay';
+import { MarkdownPreview } from './MarkdownPreview';
 import type { LangCode } from '../../../types';
 import { tSystem } from '../../../systemStrings';
 
@@ -9,10 +10,12 @@ export type ReportOverlayState = {
   buttonId?: string;
   title: string;
   subtitle?: string;
+  kind?: 'pdf' | 'markdown';
   pdfPhase?: 'idle' | 'rendering' | 'ready' | 'error';
   pdfObjectUrl?: string;
   pdfFileName?: string;
   pdfMessage?: string;
+  markdown?: string;
 };
 
 export const ReportOverlay: React.FC<{
@@ -27,49 +30,10 @@ export const ReportOverlay: React.FC<{
     pdfPhase,
     pdfMessage,
     pdfObjectUrl,
-    pdfFileName
   } = state;
   if (!open) return null;
 
-  const headerActions = useMemo(() => {
-    const actions: React.ReactNode[] = [];
-    if (pdfObjectUrl) {
-      actions.push(
-        <a
-          key="open"
-          href={pdfObjectUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            ...buttonStyles.secondary,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textDecoration: 'none'
-          }}
-        >
-          {tSystem('common.open', language, 'Open')}
-        </a>
-      );
-      actions.push(
-        <a
-          key="download"
-          href={pdfObjectUrl}
-          download={pdfFileName || 'report.pdf'}
-          style={{
-            ...buttonStyles.secondary,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textDecoration: 'none'
-          }}
-        >
-          {tSystem('common.download', language, 'Download')}
-        </a>
-      );
-    }
-    return actions;
-  }, [language, pdfFileName, pdfObjectUrl]);
+  const kind: 'pdf' | 'markdown' = state.kind === 'markdown' ? 'markdown' : 'pdf';
 
   return (
     <FullPageOverlay
@@ -77,33 +41,54 @@ export const ReportOverlay: React.FC<{
       zIndex={10030}
       title={title || tSystem('report.title', language, 'Report')}
       subtitle={subtitle}
-      leftAction={
-        headerActions.length ? (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{headerActions}</div>
-        ) : undefined
-      }
       rightAction={
         <button type="button" onClick={onClose} style={buttonStyles.secondary}>
           {tSystem('common.close', language, 'Close')}
         </button>
       }
     >
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {pdfPhase === 'rendering' ? (
           <div style={{ padding: 16 }} className="status">
-            {tSystem('report.generatingPdf', language, 'Generating PDF…')}
+            {kind === 'pdf'
+              ? tSystem('report.generatingPdf', language, 'Generating PDF…')
+              : tSystem('report.renderingMarkdown', language, 'Rendering…')}
           </div>
         ) : null}
         {pdfPhase === 'error' ? (
           <div style={{ padding: 16 }} className="error">
-            {pdfMessage || tSystem('report.failedPdf', language, 'Failed to generate PDF.')}
+            {pdfMessage ||
+              (kind === 'pdf'
+                ? tSystem('report.failedPdf', language, 'Failed to generate PDF.')
+                : tSystem('report.failedMarkdown', language, 'Failed to render preview.'))}
           </div>
         ) : null}
 
-        {pdfPhase === 'ready' && pdfObjectUrl ? (
-          <div style={{ padding: 16 }} className="status">
-            {tSystem('report.pdfReady', language, 'PDF ready. Use Open (or Download) above.')}
+        {kind === 'pdf' && pdfPhase === 'ready' && pdfObjectUrl ? (
+          <div style={{ padding: 16, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <iframe
+                title={title || tSystem('report.title', language, 'Report')}
+                src={pdfObjectUrl}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: '1px solid rgba(148,163,184,0.45)',
+                  borderRadius: 16,
+                  background: '#ffffff'
+                }}
+              />
+            </div>
+            <div className="muted" style={{ fontSize: 14, fontWeight: 700 }}>
+              <a href={pdfObjectUrl} target="_blank" rel="noopener noreferrer">
+                {tSystem('summary.openPdf', language, tSystem('common.open', language, 'Open'))}
+              </a>
+            </div>
           </div>
+        ) : null}
+
+        {kind === 'markdown' && pdfPhase === 'ready' && state.markdown ? (
+          <MarkdownPreview markdown={state.markdown} />
         ) : null}
       </div>
     </FullPageOverlay>

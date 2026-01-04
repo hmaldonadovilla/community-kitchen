@@ -20,6 +20,7 @@ import { UploadService } from './webform/uploads';
 import { buildReactTemplate } from './webform/template';
 import { loadDedupRules } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
+import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -243,6 +244,98 @@ export class WebFormService {
   }
 
   /**
+   * Prefetch Doc/Markdown templates to make subsequent render actions faster.
+   *
+   * - Markdown templates: read template text from Drive and store in CacheService (when small enough).
+   * - Doc templates: best-effort warmup of Drive file metadata (Doc body/copies cannot be cached safely).
+   */
+  public prefetchTemplates(formKey: string): {
+    success: boolean;
+    message?: string;
+    counts?: {
+      markdownRequested: number;
+      markdownCacheHit: number;
+      markdownLoaded: number;
+      markdownSkippedCache: number;
+      markdownFailed: number;
+      docOk: number;
+      docFailed: number;
+    };
+  } {
+    const key = (formKey || '').toString().trim();
+    if (!key) return { success: false, message: 'formKey is required.' };
+    const { form, questions } = this.getFormContext(key);
+
+    const markdownMaps: any[] = [];
+    const docMaps: any[] = [];
+
+    // Follow-up templates (Doc-based)
+    if (form.followupConfig?.pdfTemplateId) docMaps.push(form.followupConfig.pdfTemplateId);
+    if (form.followupConfig?.emailTemplateId) docMaps.push(form.followupConfig.emailTemplateId);
+
+    // BUTTON templates
+    questions
+      .filter(q => q && q.type === 'BUTTON')
+      .forEach(q => {
+        const cfg: any = (q as any).button;
+        if (!cfg || !cfg.templateId) return;
+        const action = (cfg.action || '').toString().trim();
+        if (action === 'renderMarkdownTemplate') markdownMaps.push(cfg.templateId);
+        else if (action === 'renderDocTemplate') docMaps.push(cfg.templateId);
+      });
+
+    const markdownTemplateIds = Array.from(
+      new Set(
+        markdownMaps
+          .flatMap(map => collectTemplateIdsFromMap(map))
+          .map(id => (id || '').toString().trim())
+          .filter(Boolean)
+      )
+    );
+    const docTemplateIds = Array.from(
+      new Set(
+        docMaps
+          .flatMap(map => collectTemplateIdsFromMap(map))
+          .map(id => (id || '').toString().trim())
+          .filter(Boolean)
+      )
+    );
+
+    debugLog('templates.prefetch.start', { formKey: key, markdown: markdownTemplateIds.length, doc: docTemplateIds.length });
+
+    const md = prefetchMarkdownTemplateIds(markdownTemplateIds);
+
+    let docOk = 0;
+    let docFailed = 0;
+    docTemplateIds.forEach(id => {
+      try {
+        const f = DriveApp.getFileById(id);
+        // Warm basic metadata (forces Drive fetch + permission check).
+        (f.getName ? f.getName() : '').toString();
+        docOk += 1;
+      } catch (_) {
+        docFailed += 1;
+      }
+    });
+
+    debugLog('templates.prefetch.done', { formKey: key, markdown: md, docOk, docFailed });
+
+    return {
+      success: true,
+      message: 'Prefetch complete.',
+      counts: {
+        markdownRequested: md.requested,
+        markdownCacheHit: md.cacheHit,
+        markdownLoaded: md.loaded,
+        markdownSkippedCache: md.skipped,
+        markdownFailed: md.failed,
+        docOk,
+        docFailed
+      }
+    };
+  }
+
+  /**
    * One-time maintenance: migrate legacy label-based Doc placeholders to ID-based placeholders.
    *
    * This updates the Google Doc template(s) in-place (body/header/footer).
@@ -411,6 +504,43 @@ export class WebFormService {
     const cleanupToken = this.issuePreviewCleanupToken(result.fileId);
     debugLog('renderDocTemplateHtml.ok', { formKey, buttonId: btn.id, fileId: result.fileId });
     return { success: true, previewFileId: result.fileId, previewUrl: result.previewUrl, cleanupToken };
+  }
+
+  /**
+   * Render a configured BUTTON field's Markdown template (Drive text file) into expanded Markdown for preview.
+   * This does not write anything to the destination tab and does not persist any Drive artifacts.
+   */
+  public renderMarkdownTemplate(
+    formObject: WebFormSubmission,
+    buttonId: string
+  ): { success: boolean; markdown?: string; fileName?: string; message?: string } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    if (!formKey) {
+      return { success: false, message: 'Form key is required.' };
+    }
+    const { form, questions } = this.getFormContext(formKey);
+    const parsed = this.parseButtonRef((buttonId || '').toString());
+    const btn = this.resolveButtonQuestion(questions, parsed);
+    const cfg: any = (btn as any)?.button;
+    if (!btn || !cfg || cfg.action !== 'renderMarkdownTemplate' || !cfg.templateId) {
+      return { success: false, message: `Unknown or misconfigured button "${buttonId}".` };
+    }
+
+    const record = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    debugLog('renderMarkdownTemplate.start', { formKey, buttonId: btn.id, language: record.language });
+    const result = this.followups.renderMarkdownFromTemplate({
+      form,
+      questions,
+      record,
+      templateIdMap: cfg.templateId,
+      namePrefix: `${form.title || 'Form'} - ${btn.qEn || btn.id}`
+    });
+    if (!result.success || !result.markdown) {
+      debugLog('renderMarkdownTemplate.failed', { formKey, buttonId: btn.id, message: result.message || 'failed' });
+      return { success: false, message: result.message || 'Failed to render Markdown.' };
+    }
+    debugLog('renderMarkdownTemplate.ok', { formKey, buttonId: btn.id, fileName: result.fileName || '' });
+    return { success: true, markdown: result.markdown, fileName: result.fileName };
   }
 
   /**

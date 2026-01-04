@@ -102,6 +102,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       ```json
       { "listView": { "title": { "en": "My Records" } } }
       ```
+
     - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
       - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.
 
@@ -722,7 +723,7 @@ Use `type: "addLineItemsFromDataSource"` when you want a CHOICE/CHECKBOX field�
    - `groupId`: destination line-item group ID (must exist in the same form definition).
    - `lookupField`: column from the data source used to match the selected value. Defaults to the first column or the data source `mapping.value`.
    - `dataField`: column that contains a JSON array/object describing the rows to add (e.g., `Ingredients` = `[{"ING":"Carrots","QTY":"2","UNIT":"kg"}]`).
-   - `lineItemMapping`: map of line-item field ids → keys/paths in each JSON entry. Dot notation is supported for nested objects.  
+   - `lineItemMapping`: map of line-item field ids → keys/paths in each JSON entry. Dot notation is supported for nested objects.
      - Prefix a path with `$row.` to copy values from the originating line-item row (the row whose fields triggered the effect). Example: `"lineItemMapping": { "ING": "ING", "QTY": "QTY", "UNIT": "UNIT", "RECIPE": "$row.RECIPE" }` copies the row’s `RECIPE` field into each generated ingredient line so you can keep track of the source dish; add that field to `aggregateBy` if you need separate buckets per recipe.
    - `aggregateBy`: non-numeric fields used to build a dedupe key. Identical values across these fields are merged into a single row.
    - `aggregateNumericFields`: numeric fields that should be summed when aggregation occurs. All line-item fields typed as NUMBER are automatically included.
@@ -909,7 +910,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 - **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` anywhere inside the table you want duplicated per recipe. The renderer will:
   1. Create a copy of the entire table for every distinct value of the referenced field (`RECIPE` in this example).
   2. Replace the directive placeholder with the group value (so you can show it in the heading).
-  3. Populate the table rows with only the line items that belong to that recipe. If multiple line-item rows share the same recipe, the table’s placeholder rows will repeat for each matching row (e.g., you may see “Portions/Recipe/Core temp” repeated).  
+  3. Populate the table rows with only the line items that belong to that recipe. If multiple line-item rows share the same recipe, the table’s placeholder rows will repeat for each matching row (e.g., you may see “Portions/Recipe/Core temp” repeated).
   Combine this with row-level placeholders (e.g., `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`) to print a dedicated ingredient table per dish without manually duplicating sections in the template.
 - **Zebra striping (readability)**: Generated rows inside `GROUP_TABLE` and `CONSOLIDATED_TABLE` outputs use **alternating row background colors** automatically (no configuration needed).
 - **Per-row line item sections (recommended for key/value “section tables”)**: Add a directive placeholder like `{{ROW_TABLE(MP_MEALS_REQUEST.MEAL_TYPE)}}` anywhere inside the table you want duplicated once per line-item row (even if the title field repeats). The renderer will:
@@ -944,9 +945,10 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 ### BUTTON fields (custom actions)
 
-`BUTTON` questions render as **custom actions** in the web UI. Two actions are supported:
+`BUTTON` questions render as **custom actions** in the web UI. Three actions are supported:
 
-- **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into an in-app **PDF preview**. The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written).
+- **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into an in-app **PDF preview**. The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written). The PDF is shown immediately once ready (no extra “Open” click).
+- **Markdown template preview** (`action: "renderMarkdownTemplate"`): read a Markdown template from Google Drive (plain text / `.md`), replace placeholders, and show the rendered content immediately in-app (fast preview, no Drive/Docs preview pages).
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
 
 ### UI tips (React edit + Summary)
@@ -968,6 +970,18 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 ```
 
 `templateId` supports the same structure as `pdfTemplateId` / `emailTemplateId` (string, language map, or `cases` selector).
+
+#### Example: Markdown preview button
+
+```json
+{
+  "button": {
+    "action": "renderMarkdownTemplate",
+    "templateId": { "EN": "MARKDOWN_FILE_ID_EN", "FR": "MARKDOWN_FILE_ID_FR", "NL": "MARKDOWN_FILE_ID_NL" },
+    "placements": ["form", "formSummaryMenu", "summaryBar", "topBarSummary"]
+  }
+}
+```
 
 #### Example: create record with preset values
 
@@ -992,7 +1006,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - The current UI always opens an **in-app PDF preview** (generated in-memory; no Drive PDF file).
 
 - **Placements**:
-  - `form`: render inline as a normal field in the edit form (**PDF preview only** today).
+  - `form`: render inline as a normal field in the edit form (**PDF/Markdown preview**).
   - `formSummaryMenu`: appear inside the Summary button menu while editing.
   - `summaryBar`: appear in the Summary view bottom action bar (menu if multiple).
   - `topBar`: appear in the global action bar directly under the header (**all views**).

@@ -82,7 +82,8 @@ export const replaceLineItemPlaceholders = (
   }
 
   const replaced = template.replace(
-    /{{([A-Z0-9_]+)(?:\.([A-Z0-9_]+))?\.([A-Z0-9_]+)}}/gi,
+    // Allow incidental spaces inside {{ ... }} and around "." to tolerate Markdown/text templates.
+    /{{\s*([A-Z0-9_]+)\s*(?:\.\s*([A-Z0-9_]+)\s*)?\.\s*([A-Z0-9_]+)\s*}}/gi,
     (_, groupId, maybeSub, fieldKey) => {
       if (groupId.toUpperCase() !== normalizedGroupId) return '';
       const token = maybeSub
@@ -128,7 +129,7 @@ export const replaceLineItemPlaceholders = (
   // Row-scoped consolidated values for nested subgroups (useful inside ROW_TABLE blocks).
   // Example: {{CONSOLIDATED_ROW(MP_DISHES.INGREDIENTS.ALLERGEN)}}
   return withAlwaysShow.replace(
-    /{{CONSOLIDATED_ROW\(([A-Z0-9_]+)\.([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/gi,
+    /{{\s*CONSOLIDATED_ROW\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\)\s*}}/gi,
     (_m, groupIdRaw: string, subGroupIdRaw: string, fieldIdRaw: string) => {
       const groupId = (groupIdRaw || '').toString().toUpperCase();
       if (groupId !== normalizedGroupId) return '';
