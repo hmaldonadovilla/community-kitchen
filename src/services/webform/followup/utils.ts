@@ -45,6 +45,7 @@ export const escapeRegExp = (value: string): string => {
 
 export const normalizeToIsoDate = (value: any): string | undefined => {
   if (value === undefined || value === null) return undefined;
+  const pad2 = (n: number): string => n.toString().padStart(2, '0');
   // Google Sheets numeric serial dates (roughly 1900 epoch)
   if (typeof value === 'number') {
     const days = Number(value);
@@ -55,7 +56,25 @@ export const normalizeToIsoDate = (value: any): string | undefined => {
     return undefined;
   }
   if (value instanceof Date) {
-    return value.toISOString().slice(0, 10);
+    // IMPORTANT:
+    // - Date objects coming from Sheets/Docs are often "midnight" in the sheet/script timezone.
+    // - Using toISOString() converts to UTC, which can shift the calendar day (e.g. CET -> previous day).
+    // Prefer formatting in the script timezone when available, and fall back to local calendar fields.
+    try {
+      const tz =
+        typeof Session !== 'undefined' && (Session as any)?.getScriptTimeZone
+          ? (Session as any).getScriptTimeZone()
+          : undefined;
+      if (tz && typeof Utilities !== 'undefined' && (Utilities as any)?.formatDate) {
+        return (Utilities as any).formatDate(value, tz, 'yyyy-MM-dd');
+      }
+    } catch (_) {
+      // ignore, fall back
+    }
+    const year = value.getFullYear();
+    const month = pad2(value.getMonth() + 1);
+    const day = pad2(value.getDate());
+    return `${year}-${month}-${day}`;
   }
   // Handle date-like strings from Sheets without coercing plain numbers
   if (typeof value === 'string') {

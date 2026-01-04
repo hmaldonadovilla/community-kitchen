@@ -306,6 +306,24 @@ let uuidCounter = 0;
 
 (global as any).Utilities = {
   sleep: jest.fn(),
+  formatDate: (date: any, timeZone: string, pattern: string) => {
+    const d = date instanceof Date ? date : new Date(date);
+    const tz = (timeZone || 'UTC').toString();
+    if ((pattern || '').toString() === 'yyyy-MM-dd') {
+      const parts = new Intl.DateTimeFormat('en', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(d);
+      const year = parts.find(p => p.type === 'year')?.value || '0000';
+      const month = parts.find(p => p.type === 'month')?.value || '01';
+      const day = parts.find(p => p.type === 'day')?.value || '01';
+      return `${year}-${month}-${day}`;
+    }
+    // Best-effort fallback for other patterns used in tests.
+    return d.toISOString();
+  },
   base64Encode: (input: any) => {
     if (Array.isArray(input)) {
       return Buffer.from(input).toString('base64');
@@ -324,4 +342,9 @@ let uuidCounter = 0;
     getContentType: () => mime || 'application/octet-stream',
     getName: () => name || 'blob'
   })
+};
+
+(global as any).Session = {
+  // Use a non-UTC timezone so tests can catch accidental UTC conversions.
+  getScriptTimeZone: () => 'Europe/Brussels'
 };

@@ -1,10 +1,65 @@
 import { DataSourceConfig, PaginatedResult, QuestionConfig } from '../../types';
 import { decodePageToken, encodePageToken } from './pagination';
 import { normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } from './recordSchema';
+import { debugLog } from './debug';
 
 export class DataSourceService {
-  private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
+  private readonly ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private dataSourceCache: Record<string, PaginatedResult<any>>;
+
+  private stringify(value: any): string {
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (value instanceof Error) return value.message || value.toString();
+    if (value instanceof Date) return value.toISOString();
+    try {
+      return JSON.stringify(value);
+    } catch (err) {
+      const errorText = (() => {
+        if (!err) return 'unknown';
+        if (err instanceof Error) return err.message || err.toString();
+        if (typeof err === 'string') return err;
+        if (typeof err === 'object') {
+          try {
+            return JSON.stringify(err);
+          } catch (error_) {
+            debugLog('dataSources.stringify.errorObject.failed', {
+              error: error_ instanceof Error ? error_.message || error_.toString() : 'unknown'
+            });
+            return 'unknown';
+          }
+        }
+        if (typeof err === 'number' || typeof err === 'boolean' || typeof err === 'bigint') return String(err);
+        if (typeof err === 'symbol') return err.toString();
+        if (typeof err === 'function') return err.name ? `[function ${err.name}]` : '[function]';
+        return 'unknown';
+      })();
+      debugLog('dataSources.stringify.failed', {
+        error: errorText
+      });
+      return String(value);
+    }
+  }
+
+  private resolveMappingAliases(mapping: Record<string, string> | undefined, sourceKey: string): string[] {
+    if (!mapping) return [];
+    const raw = (sourceKey || '').toString();
+    if (!raw) return [];
+    const normalized = normalizeHeaderToken(raw);
+    const aliases = new Set<string>();
+    Object.entries(mapping).forEach(([k, v]) => {
+      if (v === undefined || v === null) return;
+      const keyNorm = normalizeHeaderToken(k);
+      const valNorm = normalizeHeaderToken(v);
+      // Support both mapping styles:
+      // - source -> target (e.g., DIST_NAME -> value)
+      // - target -> source (e.g., value -> DIST_NAME)
+      if (keyNorm === normalized) aliases.add(v.toString());
+      if (valNorm === normalized) aliases.add(k.toString());
+    });
+    return Array.from(aliases).filter(a => normalizeHeaderToken(a) !== normalized);
+  }
 
   constructor(ss: GoogleAppsScript.Spreadsheet.Spreadsheet) {
     this.ss = ss;
@@ -28,7 +83,12 @@ export class DataSourceService {
           try {
             const external = SpreadsheetApp.openById(sheetId);
             return tabName ? external.getSheetByName(tabName) : external.getSheets()[0] || null;
-          } catch (_) {
+          } catch (err) {
+            debugLog('dataSources.openById.failed', {
+              sheetId,
+              tabName,
+              error: this.stringify(err) || 'unknown'
+            });
             return null;
           }
         })()
@@ -41,7 +101,17 @@ export class DataSourceService {
 
     const columns = this.buildHeaderIndex(headers);
     const localeKey = (config.localeKey || '').toString().trim().toLowerCase() || undefined;
-    const effectiveProjection = (config.projection && config.projection.length) ? config.projection : (projection && projection.length ? projection : headers);
+    // When no projection is provided, default to using canonical bracket keys (`Label [ID]` => `ID`) for stable outputs.
+    const headerKeys = headers.map(h => {
+      const parsed = parseHeaderKey(h);
+      return (parsed.key || h || '').toString();
+    });
+    const configProjection = Array.isArray(config.projection) ? (config.projection as string[]) : undefined;
+    const effectiveProjection = (() => {
+      if (configProjection?.length) return configProjection;
+      if (projection?.length) return projection;
+      return headerKeys;
+    })();
 
     const offset = decodePageToken(pageToken);
     const maxRows = Math.max(0, sheet.getLastRow() - 1);
@@ -62,17 +132,27 @@ export class DataSourceService {
         });
 
     const items = filtered.map(row => {
-      if (effectiveProjection.length === 1 && !config.mapping) {
+      const hasMapping = !!(config.mapping && typeof config.mapping === 'object');
+      if (effectiveProjection.length === 1 && hasMapping === false) {
         const fid = effectiveProjection[0];
         const idx = columns[fid.toLowerCase()];
-        return idx !== undefined ? row[idx] : '';
+        return idx === undefined ? '' : row[idx];
       }
       const obj: Record<string, any> = {};
       effectiveProjection.forEach((fid: string) => {
-        const idx = columns[fid.toLowerCase()];
-        const target = (config.mapping && config.mapping[fid]) || fid;
+        const rawKey = (fid || '').toString();
+        if (!rawKey) return;
+        const idx = columns[rawKey.toLowerCase()];
         if (idx !== undefined) {
-          obj[target] = row[idx];
+          const cell = row[idx];
+          // Always include the raw projection key (this is what the web app uses for option lookups).
+          obj[rawKey] = cell;
+          // Also include alias keys derived from mapping (supports both directions).
+          const aliases = this.resolveMappingAliases(config.mapping, rawKey);
+          aliases.forEach(alias => {
+            if (!alias) return;
+            if (obj[alias] === undefined) obj[alias] = cell;
+          });
         }
       });
       return obj;
@@ -106,24 +186,26 @@ export class DataSourceService {
     if (!this.dataSourceCache[cacheKey]) {
       // Force a "details" fetch that is not constrained by ds.projection.
       // (fetchDataSource() will fall back to reading the sheet headers when projection is omitted.)
-      const detailsConfig = { ...(ds as any), projection: undefined };
+      // IMPORTANT: For template placeholders we want stable keys like `DIST_ADDR_1`, not mapped keys like `value`.
+      // So we ignore `ds.mapping` for the details fetch and expose raw/canonical column IDs.
+      const detailsConfig = { ...(ds as any), projection: undefined, mapping: undefined };
       this.dataSourceCache[cacheKey] = this.fetchDataSource(detailsConfig, language, undefined, ds.limit);
     }
     const response = this.dataSourceCache[cacheKey];
-    const items = Array.isArray(response.items) ? response.items : [];
+    const isRecord = (val: any): val is Record<string, any> => !!val && typeof val === 'object';
+    const items = Array.isArray(response.items) ? response.items.filter(isRecord) : [];
     const lookupFields = this.buildDataSourceLookupFields(ds);
     for (const item of items) {
-      if (!item || typeof item !== 'object') continue;
-      const matchField = lookupFields.find(field => (item as any)[field] !== undefined);
+      const matchField = lookupFields.find(field => item[field] !== undefined);
       if (!matchField) continue;
-      const candidate = (item as any)[matchField];
+      const candidate = item[matchField];
       if (!candidate) continue;
       if (candidate.toString().trim().toLowerCase() === normalized) {
         const result: Record<string, string> = {};
         Object.entries(item).forEach(([key, val]) => {
           if (val === undefined || val === null) return;
-          const text = val instanceof Date ? val.toISOString() : val.toString();
-          const sanitizedKey = key.replace(/\s+/g, '_').toUpperCase();
+          const text = this.stringify(val);
+          const sanitizedKey = key.split(/\s+/).join('_').toUpperCase();
           result[sanitizedKey] = text;
         });
         return result;
@@ -136,7 +218,9 @@ export class DataSourceService {
     if (sheetIdOverride || tabNameOverride) {
       return { sheetId: sheetIdOverride, tabName: tabNameOverride || raw };
     }
-    const delim = raw.includes('::') ? '::' : raw.includes('|') ? '|' : null;
+    let delim: string | null = null;
+    if (raw.includes('::')) delim = '::';
+    else if (raw.includes('|')) delim = '|';
     if (!delim) return { tabName: raw };
     const [sheetId, tabName] = raw.split(delim);
     return { sheetId: sheetId || undefined, tabName: tabName || undefined };
@@ -166,7 +250,7 @@ export class DataSourceService {
         }
       });
     }
-    if (ds.projection && ds.projection.length) {
+    if (ds.projection?.length) {
       fields.push(ds.projection[0]);
     }
     fields.push('value');

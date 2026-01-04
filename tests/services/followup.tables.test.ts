@@ -56,6 +56,13 @@ describe('FollowupService table directives', () => {
     expect(formatTemplateValue('2025-12-21')).toBe('2025-12-21');
   });
 
+  it('formats Date objects using script timezone (avoids UTC day-shift)', () => {
+    // Midnight in Europe/Brussels is 23:00Z the previous day (in winter time).
+    // If we used toISOString().slice(0,10), this would render as 2026-01-02.
+    const sheetDate = new Date('2026-01-03T00:00:00+01:00');
+    expect(formatTemplateValue(sheetDate, 'DATE')).toBe('Sat, 03-Jan-2026');
+  });
+
   it('extracts ORDER_BY directives from table text', () => {
     const table = { getText: () => '{{ORDER_BY(CAT ASC, ING:DESC, -QTY)}}' };
     expect(extractOrderByDirective(table as any)).toEqual({

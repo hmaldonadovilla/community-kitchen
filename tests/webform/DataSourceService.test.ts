@@ -48,4 +48,32 @@ describe('DataSourceService', () => {
     expect((res.items[0] as any).NAME).toBe('Alpha');
     expect((res.items[0] as any).VALUE).toBe('1');
   });
+
+  test('preserves raw projection keys for options-mode mappings (target -> source)', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Distributor Data');
+    sheet.setMockData([
+      ['Distributor Name [DIST_NAME]', 'Email [DIST_EMAIL]'],
+      ['Croix-Rouge Belliard', 'dist@example.com']
+    ]);
+
+    const service = new DataSourceService(ss);
+    const res = service.fetchDataSource(
+      {
+        id: 'Distributor Data',
+        projection: ['DIST_NAME', 'DIST_EMAIL'],
+        // Common UI config: mapping indicates which source column is used as "value"
+        // (the frontend reads row[mapping.value]).
+        mapping: { value: 'DIST_NAME' }
+      },
+      'EN'
+    );
+
+    expect(res.items.length).toBe(1);
+    // Raw keys must exist for the web app
+    expect((res.items[0] as any).DIST_NAME).toBe('Croix-Rouge Belliard');
+    expect((res.items[0] as any).DIST_EMAIL).toBe('dist@example.com');
+    // Alias key is also populated for compatibility
+    expect((res.items[0] as any).value).toBe('Croix-Rouge Belliard');
+  });
 });
