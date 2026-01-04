@@ -1,6 +1,6 @@
 {
   "name": "community-kitchen-forms",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "Google Apps Script for Community Kitchen Forms",
   "scripts": {
     "build": "npm run build:web && npm run build:web:react && npm run build:server && npm run check:bundle",
