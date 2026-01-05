@@ -109,6 +109,10 @@
   "list": {
     "title": { "en": "Records", "fr": "Enregistrements", "nl": "Records" },
     "searchPlaceholder": { "en": "Search records", "fr": "Rechercher", "nl": "Zoeken" },
+    "searchByText": { "en": "🔍", "fr": "🔍", "nl": "🔍" },
+    "searchByDate": { "en": "🔍 by date", "fr": "🔍 par date", "nl": "🔍 op datum" },
+    "clearSearch": { "en": "Clear", "fr": "Effacer", "nl": "Wissen" },
+    "searchDateLabel": { "en": "Filter by date", "fr": "Filtrer par date", "nl": "Filteren op datum" },
     "sortBy": { "en": "Sort by", "fr": "Trier par", "nl": "Sorteer op" },
     "asc": { "en": "Asc", "fr": "Croissant", "nl": "Oplopend" },
     "desc": { "en": "Desc", "fr": "Décroissant", "nl": "Aflopend" },
@@ -204,7 +208,7 @@
   },
   "validation": {
     "thisFieldRequired": { "en": "This field is required.", "fr": "Ce champ est requis.", "nl": "Dit veld is verplicht." },
-    "fixErrors": { "en": "Please fix validation errors.", "fr": "Veuillez corriger les erreurs de validation.", "nl": "Corrigeer de validatiefouten." },
+    "fixErrors": { "en": "You are almost done. Please complete the missing sections.", "fr": "Vous avez presque terminé. Veuillez compléter les sections manquantes.", "nl": "Je bent bijna klaar. Vul de ontbrekende secties in." },
     "warningsTitle": { "en": "Warnings", "fr": "Avertissements", "nl": "Waarschuwingen" },
     "fieldRequired": { "en": "{field} is required.", "fr": "{field} est requis.", "nl": "{field} is verplicht." },
     "completeAtLeastOneRowFillCollapsed": {

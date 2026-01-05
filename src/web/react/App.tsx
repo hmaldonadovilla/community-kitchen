@@ -25,8 +25,10 @@ import {
 } from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
+import { ListViewIcon } from './components/ListViewIcon';
 import { AppHeader } from './components/app/AppHeader';
 import { ActionBar } from './components/app/ActionBar';
+import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -49,9 +51,11 @@ import {
 import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
+import { buildListViewLegendItems } from './app/listViewLegend';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveLabel } from './utils/labels';
+import { EMPTY_DISPLAY, formatDisplayText } from './utils/valueDisplay';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 
@@ -133,6 +137,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const reportPdfSeqRef = useRef<number>(0);
   const templatePrefetchFormKeyRef = useRef<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
+  const formNavigateToFieldRef = useRef<((fieldKey: string) => void) | null>(null);
+  const [validationAttempted, setValidationAttempted] = useState(false);
+  const [validationNoticeHidden, setValidationNoticeHidden] = useState(false);
   const [validationWarnings, setValidationWarnings] = useState<{
     top: Array<{ message: string; fieldPath: string }>;
     byField: Record<string, string[]>;
@@ -299,6 +306,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       setValues(mapped.values);
       setLineItems(mapped.lineItems);
       setErrors({});
+      setValidationWarnings({ top: [], byField: {} });
+      setValidationAttempted(false);
+      setValidationNoticeHidden(false);
       setSelectedRecordId(id);
       setSelectedRecordSnapshot(snapshot);
       setLastSubmissionMeta({
@@ -434,10 +444,43 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     logEvent('status.cleared');
   }, [logEvent]);
 
+  const navigateToFieldFromHeaderNotice = useCallback(
+    (fieldPath: string) => {
+      const key = (fieldPath || '').toString();
+      if (!key) return;
+      const nav = formNavigateToFieldRef.current;
+      if (nav) {
+        nav(key);
+        logEvent('validation.notice.navigate', { fieldPath: key });
+        return;
+      }
+      // Best-effort fallback (should be rare): still try to surface the top of the form.
+      try {
+        globalThis.scrollTo?.({ top: 0, left: 0, behavior: 'smooth' } as any);
+      } catch (_) {
+        try {
+          globalThis.scrollTo?.(0, 0);
+        } catch (_) {
+          // ignore
+        }
+      }
+      logEvent('validation.notice.navigateFallback', { fieldPath: key });
+    },
+    [logEvent]
+  );
+
+  const dismissValidationNotice = useCallback(() => {
+    setValidationNoticeHidden(true);
+    logEvent('validation.notice.dismiss');
+  }, [logEvent]);
+
   // Warnings are surfaced as transient "submission messages" in Form view.
   // Summary/PDF compute warnings from record values, so clear when leaving the Form view.
   useEffect(() => {
-    if (view !== 'form') setValidationWarnings({ top: [], byField: {} });
+    if (view === 'form') return;
+    setValidationWarnings({ top: [], byField: {} });
+    setValidationAttempted(false);
+    setValidationNoticeHidden(false);
   }, [view]);
 
   // Close the submit confirmation dialog when navigating away.
@@ -842,6 +885,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setValues(mapped.values);
     setLineItems(mapped.lineItems);
     setErrors({});
+    setValidationWarnings({ top: [], byField: {} });
+    setValidationAttempted(false);
+    setValidationNoticeHidden(false);
     setStatus(null);
     setStatusLevel(null);
     setSelectedRecordId('');
@@ -873,6 +919,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setSelectedRecordSnapshot(null);
     setLastSubmissionMeta(null);
     setErrors({});
+    setValidationWarnings({ top: [], byField: {} });
+    setValidationAttempted(false);
+    setValidationNoticeHidden(false);
     setStatus(null);
     setStatusLevel(null);
     setView('form');
@@ -1350,13 +1399,62 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     [definition.submissionConfirmationTitle, language]
   );
   const submitConfirmMessage = useMemo(
-    () =>
-      resolveLocalizedString(
+    () => {
+      const base = resolveLocalizedString(
         definition.submissionConfirmationMessage,
         language,
         tSystem('submit.confirmMessage', language, 'Are you ready to submit this record?')
-      ),
-    [definition.submissionConfirmationMessage, language]
+      );
+      if (!base) return base;
+      // Fast path: no placeholders to expand.
+      if (base.indexOf('{') < 0) return base;
+
+      const vars: Record<string, string> = {};
+
+      // Include meta fields (best-effort) in case you want to reference them in the dialog.
+      if (selectedRecordId) vars.id = selectedRecordId;
+      if (lastSubmissionMeta?.createdAt) vars.createdAt = lastSubmissionMeta.createdAt;
+      if (lastSubmissionMeta?.updatedAt) vars.updatedAt = lastSubmissionMeta.updatedAt;
+      if (lastSubmissionMeta?.status) vars.status = lastSubmissionMeta.status;
+
+      (definition.questions || []).forEach(q => {
+        if (!q || !q.id) return;
+        const fieldId = q.id.toString();
+        if (!fieldId) return;
+        const raw = values[fieldId];
+        if (raw === undefined || raw === null || raw === '') return;
+
+        // Prefer dataSource-hydrated options (if loaded) for localized display.
+        const dsKey = q.dataSource ? optionKey(fieldId) : '';
+        const optionSet =
+          (dsKey && optionState[dsKey]) ? (optionState[dsKey] as any) : ((q as any).options as any | undefined);
+
+        const display = formatDisplayText(raw as any, { language, optionSet, fieldType: q.type });
+        const resolved = display === EMPTY_DISPLAY ? '' : display;
+        if (!resolved) return;
+        vars[fieldId] = resolved;
+        vars[fieldId.toUpperCase()] = resolved;
+      });
+
+      // Supports {FIELD_ID} and {{FIELD_ID}} (spaces tolerated).
+      return base.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|\{\s*([a-zA-Z0-9_.]+)\s*\}/g, (match, a, b) => {
+        const key = ((a || b || '') as string).toString().trim();
+        if (!key) return match;
+        const value = vars[key] ?? vars[key.toUpperCase()];
+        return value === undefined || value === null ? match : value;
+      });
+    },
+    [
+      definition.questions,
+      definition.submissionConfirmationMessage,
+      language,
+      lastSubmissionMeta?.createdAt,
+      lastSubmissionMeta?.status,
+      lastSubmissionMeta?.updatedAt,
+      optionState,
+      selectedRecordId,
+      values
+    ]
   );
 
   const requestSubmit = useCallback(() => {
@@ -1804,6 +1902,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       return;
     }
     clearStatus();
+    setValidationAttempted(true);
+    setValidationNoticeHidden(false);
     logEvent('submit.validate.begin', { language, lineItemGroups: Object.keys(lineItems).length });
     try {
       setValidationWarnings(
@@ -1830,8 +1930,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
-      setStatus(tSystem('validation.fixErrors', language, 'Please fix validation errors.'));
-      setStatusLevel('error');
       submitConfirmedRef.current = false;
       logEvent('submit.validate.failed');
       return;
@@ -2080,6 +2178,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     );
   })();
 
+  const topBarNotice =
+    view === 'form' &&
+    validationAttempted &&
+    !validationNoticeHidden &&
+    (Object.keys(errors || {}).length > 0 || (validationWarnings.top || []).length > 0) ? (
+      <ValidationHeaderNotice
+        language={language}
+        errors={errors}
+        warnings={validationWarnings.top}
+        onDismiss={dismissValidationNotice}
+        onNavigateToField={navigateToFieldFromHeaderNotice}
+      />
+    ) : null;
+
+  const listLegendItems = useMemo(() => {
+    const cols = ((definition.listView?.columns as any) || []) as any[];
+    return buildListViewLegendItems(cols as any, definition.listView?.legend, language);
+  }, [definition.listView?.columns, definition.listView?.legend, language]);
+
+  useEffect(() => {
+    if (view !== 'list') return;
+    if (!listLegendItems.length) return;
+    logEvent('list.legend.enabled', {
+      count: listLegendItems.length,
+      icons: listLegendItems.map(i => i.icon).filter(Boolean)
+    });
+  }, [logEvent, listLegendItems, view]);
+
+  const bottomBarNotice =
+    view === 'list' && listLegendItems.length ? (
+      <div className="ck-list-legend ck-list-legend--bottomBar" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
+        <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
+        {listLegendItems.map((item, idx) => (
+          <span key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
+            {item.icon ? <ListViewIcon name={item.icon} /> : null}
+            <span>{item.text}</span>
+          </span>
+        ))}
+      </div>
+    ) : null;
+
   return (
     <div
       className={`page${view === 'form' ? ' ck-page-form' : ''}`}
@@ -2133,6 +2272,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
         customButtons={customButtons as any}
         actionBars={definition.actionBars}
+        notice={topBarNotice}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}
@@ -2167,6 +2307,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             setLineItems={setLineItems}
             onSubmit={handleSubmit}
             submitActionRef={formSubmitActionRef}
+            navigateToFieldRef={formNavigateToFieldRef}
             submitting={submitting || isClosedRecord || Boolean(recordLoadingId)}
             errors={errors}
             setErrors={setErrors}
@@ -2174,6 +2315,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             statusTone={statusLevel}
             warningTop={validationWarnings.top}
             warningByField={validationWarnings.byField}
+            showWarningsBanner={false}
             onStatusClear={clearStatus}
             optionState={optionState}
             setOptionState={setOptionState}
@@ -2312,6 +2454,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
         customButtons={customButtons as any}
         actionBars={definition.actionBars}
+        notice={bottomBarNotice}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}

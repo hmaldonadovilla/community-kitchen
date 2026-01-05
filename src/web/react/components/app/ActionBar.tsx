@@ -176,6 +176,11 @@ export const ActionBar: React.FC<{
   canCopy: boolean;
   customButtons: CustomButton[];
   actionBars?: ActionBarsConfig;
+  /**
+   * Optional notice rendered under the top action bar capsule.
+   * Intended for validation summaries that must remain visible while scrolling.
+   */
+  notice?: React.ReactNode;
   onHome: () => void;
   onCreateNew: () => void;
   onCreateCopy: () => void;
@@ -197,6 +202,7 @@ export const ActionBar: React.FC<{
   canCopy,
   customButtons,
   actionBars,
+  notice,
   onHome,
   onCreateNew,
   onCreateCopy,
@@ -402,7 +408,7 @@ export const ActionBar: React.FC<{
 
   const showSubmit = resolved.wantsSubmit && viewKey === 'form' && !readOnly;
 
-  if (!resolved.capsule.length && !showSubmit) return null;
+  if (!resolved.capsule.length && !showSubmit && !notice) return null;
 
   const navClass = position === 'bottom' ? 'ck-bottom-bar' : 'ck-top-action-bar';
   const navLabel =
@@ -577,6 +583,9 @@ export const ActionBar: React.FC<{
       {menu && menu.startsWith('menu:') ? renderCustomMenuOverlay(openMenuDef) : null}
 
       <nav className={navClass} aria-label={navLabel} data-sticky={topSticky ? '1' : '0'}>
+        {position === 'bottom' && notice ? (
+          <div className="ck-bottom-bar-inner ck-actionbar-notice-inner ck-actionbar-notice-inner--bottom">{notice}</div>
+        ) : null}
         <div className="ck-bottom-bar-inner">
           <div className="ck-bottom-capsule" aria-label={tSystem('app.navigation', language, 'Navigation')}>
             {resolved.capsule.map((it, idx) => {
@@ -707,6 +716,10 @@ export const ActionBar: React.FC<{
             </button>
           )}
         </div>
+
+        {position === 'top' && notice ? (
+          <div className="ck-bottom-bar-inner ck-actionbar-notice-inner">{notice}</div>
+        ) : null}
       </nav>
     </>
   );

@@ -78,6 +78,19 @@ This project uses TypeScript. You need to build the script before using it in Go
 
         Works for both top-level questions and line-item fields.
 
+    - **Custom required-field message (localized)**: For required fields, you can override the default required error message by adding `requiredMessage` to the field’s Config JSON. The message supports `{field}` (resolved to the localized field label).
+      - For `FILE_UPLOAD` fields, this is used when the effective minimum is 1 (i.e., `required: true` with no `minFiles`, or `uploadConfig.minFiles: 1`). For higher minimums, use `uploadConfig.errorMessages.minFiles`.
+
+        ```json
+        {
+          "requiredMessage": {
+            "en": "Please complete {field}.",
+            "fr": "Veuillez remplir {field}.",
+            "nl": "Vul {field} in."
+          }
+        }
+        ```
+
     - **Summary view field visibility**: By default, the Summary view only shows fields that are currently visible in the Form view (i.e., not hidden by `visibility`). You can override this per field (and per line-item field/subgroup field) via `ui.summaryVisibility`:
 
         ```json
@@ -102,6 +115,16 @@ This project uses TypeScript. You need to build the script before using it in Go
       ```json
       { "listView": { "title": { "en": "My Records" } } }
       ```
+
+    - Want to replace the default keyword search with **search by date**? Set `listView.search`:
+
+      ```json
+      { "listView": { "search": { "mode": "date", "dateFieldId": "DATE" } } }
+      ```
+
+      Notes:
+      - `dateFieldId` should usually be a `DATE` question id.
+      - The list view automatically fetches this field for filtering even if it is not shown as a visible column.
 
     - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
       - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.
@@ -149,7 +172,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
-      Optional: show a **legend below the table** to explain icons / table elements. The legend is **only shown when you define it** (recommended when you use `icon` in rule columns):
+      Optional: show a **legend in the sticky bottom bar** to explain icons / table elements. The legend is **only shown when you define it** (recommended when you use `icon` in rule columns):
 
       ```json
       {
@@ -195,14 +218,15 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
-    - Want a **submit confirmation dialog** (Confirm/Cancel overlay) message? Set `submissionConfirmationMessage` (localized). When omitted, the UI uses system string defaults:
+    - Want a **submit confirmation dialog** (Confirm/Cancel overlay) message? Set `submissionConfirmationMessage` (localized). When omitted, the UI uses system string defaults.
+      You can include record placeholders using `{FIELD_ID}` (or `{{FIELD_ID}}`) and the UI will substitute the **current record values** (localized display where possible):
 
       ```json
       {
         "submissionConfirmationMessage": {
-          "en": "This will submit and close the record. Continue?",
-          "fr": "Cela enverra et clôturera l'enregistrement. Continuer ?",
-          "nl": "Dit verzendt en sluit het record. Doorgaan?"
+          "en": "This report confirms that the checks were completed by {COOK} on {DATE}, in accordance with the Kitchen Safety & Cleaning Checks procedure.",
+          "fr": "Ce rapport confirme que les contrôles ont été effectués par {COOK} le {DATE}, conformément à la procédure Kitchen Safety & Cleaning Checks.",
+          "nl": "Dit rapport bevestigt dat de controles zijn uitgevoerd door {COOK} op {DATE}, volgens de Kitchen Safety & Cleaning Checks procedure."
         }
       }
       ```
@@ -608,7 +632,7 @@ This project uses TypeScript. You need to build the script before using it in Go
        The same operators (`equals`, `greaterThan`, `lessThan`) and actions (`required`, `min`, `max`, `allowed`, `disallowed`) work inside line items.
     - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
       - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
-      - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; search/sort run client-side on the loaded rows (totalCount is capped at 200).
+      - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; search runs client-side (keyword search by default, or date search via `listView.search`), and sorting is done by clicking a column header (totalCount is capped at 200).
     - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
     - **Quick recipe for the new features**:
       - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:

@@ -141,6 +141,11 @@ interface FormViewProps {
    * FormView-specific behavior (e.g., validation navigation).
    */
   submitActionRef?: React.MutableRefObject<(() => void) | null>;
+  /**
+   * Optional imperative navigation hook so the app shell can scroll to an error/warning field
+   * (expanding groups/rows/overlays as needed).
+   */
+  navigateToFieldRef?: React.MutableRefObject<((fieldKey: string) => void) | null>;
   submitting: boolean;
   errors: FormErrors;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
@@ -148,6 +153,11 @@ interface FormViewProps {
   statusTone?: StatusTone | null;
   warningTop?: Array<{ message: string; fieldPath: string }>;
   warningByField?: Record<string, string[]>;
+  /**
+   * When false, do not render the top "Warnings" banner inside the form body.
+   * (Used when warnings are surfaced in the sticky header instead.)
+   */
+  showWarningsBanner?: boolean;
   onStatusClear?: () => void;
   optionState: OptionState;
   setOptionState: React.Dispatch<React.SetStateAction<OptionState>>;
@@ -204,6 +214,7 @@ const FormView: React.FC<FormViewProps> = ({
   setLineItems,
   onSubmit,
   submitActionRef,
+  navigateToFieldRef,
   submitting,
   errors,
   setErrors,
@@ -211,6 +222,7 @@ const FormView: React.FC<FormViewProps> = ({
   statusTone,
   warningTop,
   warningByField,
+  showWarningsBanner = true,
   onStatusClear,
   optionState,
   setOptionState,
@@ -1168,6 +1180,14 @@ const FormView: React.FC<FormViewProps> = ({
       subgroupOverlay.subKey
     ]
   );
+
+  useEffect(() => {
+    if (!navigateToFieldRef) return;
+    navigateToFieldRef.current = navigateToFieldKey;
+    return () => {
+      navigateToFieldRef.current = null;
+    };
+  }, [navigateToFieldKey, navigateToFieldRef]);
 
   const closeInfoOverlay = useCallback(() => {
     setInfoOverlay({ open: false });
@@ -3537,7 +3557,7 @@ const FormView: React.FC<FormViewProps> = ({
   return (
     <>
       <div className="ck-form-sections">
-        {warningTop && warningTop.length ? (
+        {showWarningsBanner && warningTop && warningTop.length ? (
           <div
             role="status"
             style={{

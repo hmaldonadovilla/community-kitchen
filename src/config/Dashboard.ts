@@ -15,6 +15,7 @@ import {
   GroupBehaviorConfig,
   ListViewColumnConfig,
   ListViewLegendItem,
+  ListViewSearchConfig,
   LocalizedString
 } from '../types';
 
@@ -122,6 +123,7 @@ export class Dashboard {
       const listViewMetaColumns = dashboardConfig?.listViewMetaColumns;
       const listViewColumns = dashboardConfig?.listViewColumns;
       const listViewLegend = dashboardConfig?.listViewLegend;
+      const listViewSearch = dashboardConfig?.listViewSearch;
       const autoSave = dashboardConfig?.autoSave;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
@@ -151,6 +153,7 @@ export class Dashboard {
           listViewMetaColumns,
           listViewColumns,
           listViewLegend,
+          listViewSearch,
           autoSave,
           summaryViewEnabled,
           copyCurrentRecordEnabled,
@@ -198,6 +201,7 @@ export class Dashboard {
     listViewMetaColumns?: string[];
     listViewColumns?: ListViewColumnConfig[];
     listViewLegend?: ListViewLegendItem[];
+    listViewSearch?: ListViewSearchConfig;
     autoSave?: AutoSaveConfig;
     summaryViewEnabled?: boolean;
     copyCurrentRecordEnabled?: boolean;
@@ -380,6 +384,18 @@ export class Dashboard {
         ? (parsed.listView.legend ?? parsed.listView.listViewLegend)
         : undefined;
     const listViewLegend = this.normalizeListViewLegend(legendRaw);
+
+    const listViewSearchRaw =
+      parsed.listViewSearch !== undefined
+        ? parsed.listViewSearch
+        : parsed.listSearch !== undefined
+        ? parsed.listSearch
+        : listViewObj && listViewObj.search !== undefined
+        ? listViewObj.search
+        : listViewObj && listViewObj.searchMode !== undefined
+        ? listViewObj.searchMode
+        : undefined;
+    const listViewSearch = this.normalizeListViewSearch(listViewSearchRaw);
     const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
     const summaryViewEnabled = (() => {
       if (parsed.summaryViewEnabled !== undefined) return Boolean(parsed.summaryViewEnabled);
@@ -550,6 +566,7 @@ export class Dashboard {
       !hasMetaSetting &&
       !listViewColumns?.length &&
       !listViewLegend?.length &&
+      !listViewSearch &&
       !autoSave &&
       summaryViewEnabled === undefined &&
       copyCurrentRecordEnabled === undefined &&
@@ -574,6 +591,7 @@ export class Dashboard {
       listViewMetaColumns,
       listViewColumns,
       listViewLegend,
+      listViewSearch,
       autoSave,
       summaryViewEnabled,
       copyCurrentRecordEnabled,
@@ -1018,6 +1036,59 @@ export class Dashboard {
       push((entry as any).icon, (entry as any).text ?? (entry as any).label ?? (entry as any).description);
     });
     return items.length ? items : undefined;
+  }
+
+  private normalizeListViewSearch(value: any): ListViewSearchConfig | undefined {
+    if (value === undefined || value === null) return undefined;
+
+    const normalizeMode = (raw: any): 'text' | 'date' | undefined => {
+      if (!raw) return undefined;
+      const mode = raw.toString().trim().toLowerCase();
+      if (!mode) return undefined;
+      if (mode === 'text' || mode === 'default' || mode === 'keyword') return 'text';
+      if (mode === 'date' || mode === 'bydate' || mode === 'dateonly') return 'date';
+      return undefined;
+    };
+
+    // Support compact string forms:
+    // - "text"
+    // - "date"
+    // - "date:FIELD_ID"
+    if (typeof value === 'string') {
+      const raw = value.trim();
+      if (!raw) return undefined;
+      const split = raw.split(':');
+      if (split.length >= 2) {
+        const mode = normalizeMode(split[0]);
+        if (mode === 'date') {
+          const dateFieldId = split
+            .slice(1)
+            .join(':')
+            .trim();
+          return dateFieldId ? { mode: 'date', dateFieldId } : { mode: 'date' };
+        }
+      }
+      const mode = normalizeMode(raw);
+      return mode ? { mode } : undefined;
+    }
+
+    if (typeof value !== 'object') return undefined;
+    const mode = normalizeMode((value as any).mode ?? (value as any).type ?? (value as any).kind ?? (value as any).searchMode);
+    if (!mode) return undefined;
+    if (mode !== 'date') return { mode };
+
+    const fidRaw =
+      (value as any).dateFieldId !== undefined
+        ? (value as any).dateFieldId
+        : (value as any).fieldId !== undefined
+        ? (value as any).fieldId
+        : (value as any).dateField !== undefined
+        ? (value as any).dateField
+        : (value as any).field !== undefined
+        ? (value as any).field
+        : undefined;
+    const dateFieldId = fidRaw !== undefined && fidRaw !== null ? fidRaw.toString().trim() : '';
+    return dateFieldId ? { mode: 'date', dateFieldId } : { mode: 'date' };
   }
 
   private normalizeTemplateId(value: any): FollowupConfig['pdfTemplateId'] {

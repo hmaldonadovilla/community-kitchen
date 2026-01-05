@@ -7,12 +7,13 @@ import { formatDateEeeDdMmmYyyy } from '../../utils/valueDisplay';
  * (EEE, dd-MMM-yyyy) when the control is not focused.
  */
 export const DateInput: React.FC<{
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   language: LangCode;
   readOnly?: boolean;
   ariaLabel?: string;
-}> = ({ value, onChange, language, readOnly, ariaLabel }) => {
+}> = ({ id, value, onChange, language, readOnly, ariaLabel }) => {
   const [focused, setFocused] = useState(false);
   const [typing, setTyping] = useState(false);
 
@@ -30,6 +31,7 @@ export const DateInput: React.FC<{
   return (
     <div className="ck-date-input-wrap">
       <input
+        id={id}
         type="date"
         className={`ck-date-input${showOverlay ? ' ck-date-input--overlay' : ''}`}
         value={value}

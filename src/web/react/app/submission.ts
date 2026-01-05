@@ -74,10 +74,11 @@ const validateUploadCounts = (args: {
   value: any;
   uploadConfig?: any;
   required?: boolean;
+  requiredMessage?: any;
   language: LangCode;
   fieldLabel: string;
 }): string => {
-  const { value, uploadConfig, required, language, fieldLabel } = args;
+  const { value, uploadConfig, required, requiredMessage, language, fieldLabel } = args;
   const count = countUploadItems(value);
   const minCfg = uploadConfig?.minFiles;
   const min = minCfg !== undefined && minCfg !== null ? Number(minCfg) : required ? 1 : undefined;
@@ -85,13 +86,21 @@ const validateUploadCounts = (args: {
   const max = maxCfg !== undefined && maxCfg !== null ? Number(maxCfg) : undefined;
 
   if (min !== undefined && Number.isFinite(min) && min > 0 && count < min) {
-    return resolveUploadErrorMessage({
-      uploadConfig,
-      language,
-      kind: 'minFiles',
-      fallback: '{field} requires at least {min} file{plural}.',
-      vars: { field: fieldLabel, min, plural: min > 1 ? 's' : '' }
-    });
+    const vars = { field: fieldLabel, min, plural: min > 1 ? 's' : '' };
+
+    // 1) uploadConfig errorMessages override everything (most specific)
+    const uploadCustom = uploadConfig?.errorMessages?.minFiles;
+    const uploadCustomText = uploadCustom ? resolveLocalizedString(uploadCustom, language, '') : '';
+    if (uploadCustomText) return formatTemplate(uploadCustomText, vars);
+
+    // 2) requiredMessage: treat minFiles=1 as "required"
+    if (min === 1) {
+      const requiredText = requiredMessage ? resolveLocalizedString(requiredMessage, language, '') : '';
+      if (requiredText) return formatTemplate(requiredText, vars);
+    }
+
+    // 3) default/system message
+    return tSystem('files.error.minFiles', language, '{field} requires at least {min} file{plural}.', vars);
   }
   if (max !== undefined && Number.isFinite(max) && max > 0 && count > max) {
     return resolveUploadErrorMessage({
@@ -197,6 +206,7 @@ export const validateForm = (args: {
         value: values[q.id],
         uploadConfig: (q as any).uploadConfig,
         required: !!(q as any).required,
+        requiredMessage: (q as any).requiredMessage,
         language,
         fieldLabel
       });
@@ -270,6 +280,7 @@ export const validateForm = (args: {
               value: row.values[field.id],
               uploadConfig: (field as any).uploadConfig,
               required: !!field.required,
+              requiredMessage: (field as any).requiredMessage,
               language,
               fieldLabel
             });
@@ -281,12 +292,10 @@ export const validateForm = (args: {
             const val = row.values[field.id];
             if (isEmptyValue(val as any)) {
               const fieldLabel = resolveFieldLabel(field, language, field.id);
-              allErrors[`${q.id}__${field.id}__${row.id}`] = tSystem(
-                'validation.fieldRequired',
-                language,
-                '{field} is required.',
-                { field: fieldLabel }
-              );
+              const custom = resolveLocalizedString((field as any)?.requiredMessage, language, '');
+              allErrors[`${q.id}__${field.id}__${row.id}`] = custom
+                ? formatTemplate(custom, { field: fieldLabel })
+                : tSystem('validation.fieldRequired', language, '{field} is required.', { field: fieldLabel });
               rowValid = false;
             }
           }
@@ -355,6 +364,7 @@ export const validateForm = (args: {
                     value: subRow.values[field.id],
                     uploadConfig: (field as any).uploadConfig,
                     required: !!field.required,
+                    requiredMessage: (field as any).requiredMessage,
                     language,
                     fieldLabel
                   });
@@ -366,12 +376,10 @@ export const validateForm = (args: {
                   const val = subRow.values[field.id];
                   if (isEmptyValue(val as any)) {
                     const fieldLabel = resolveFieldLabel(field, language, field.id);
-                    allErrors[`${subKey}__${field.id}__${subRow.id}`] = tSystem(
-                      'validation.fieldRequired',
-                      language,
-                      '{field} is required.',
-                      { field: fieldLabel }
-                    );
+                    const custom = resolveLocalizedString((field as any)?.requiredMessage, language, '');
+                    allErrors[`${subKey}__${field.id}__${subRow.id}`] = custom
+                      ? formatTemplate(custom, { field: fieldLabel })
+                      : tSystem('validation.fieldRequired', language, '{field} is required.', { field: fieldLabel });
                     rowValid = false;
                   }
                 }
@@ -397,7 +405,11 @@ export const validateForm = (args: {
             : tSystem('validation.atLeastOneLineItemRequired', language, 'At least one line item is required.');
       }
     } else if ((q as any).required && q.type !== 'FILE_UPLOAD' && !questionHidden && isEmptyValue(values[q.id])) {
-      allErrors[q.id] = tSystem('validation.thisFieldRequired', language, 'This field is required.');
+      const fieldLabel = resolveFieldLabel(q as any, language, q.id);
+      const custom = resolveLocalizedString((q as any)?.requiredMessage, language, '');
+      allErrors[q.id] = custom
+        ? formatTemplate(custom, { field: fieldLabel })
+        : tSystem('validation.fieldRequired', language, '{field} is required.', { field: fieldLabel });
     }
   });
 

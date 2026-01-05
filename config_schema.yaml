@@ -29,6 +29,12 @@ components:
         required:
           type: boolean
           description: Whether the question is mandatory.
+        requiredMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized validation message used when this required field is empty.
+            Supports `{field}` placeholder (resolved to the localized field label).
+            For `FILE_UPLOAD` questions, this is used when the effective minimum is 1.
         defaultValue:
           $ref: '#/components/schemas/DefaultValue'
           description: |
@@ -445,6 +451,12 @@ components:
           type: string
         required:
           type: boolean
+        requiredMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized validation message used when this required field is empty.
+            Supports `{field}` placeholder (resolved to the localized field label).
+            For `FILE_UPLOAD` line-item fields, this is used when the effective minimum is 1.
         defaultValue:
           $ref: '#/components/schemas/DefaultValue'
           description: |
@@ -1072,6 +1084,10 @@ components:
 
             When the user taps **Submit**, the app shows a Confirm/Cancel overlay. This text is the body message shown in that overlay.
             When omitted, the UI falls back to localized system strings.
+
+            Placeholders:
+            - You can include `{FIELD_ID}` (or `{{FIELD_ID}}`) and the UI will substitute the current record’s values.
+            - `{field}` is reserved for required-field messages; prefer `{FIELD_ID}` for record values.
         submitButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -1689,6 +1705,23 @@ components:
           items:
             type: string
             enum: [createdAt, updatedAt, status, pdfUrl]
+        search:
+          type: object
+          description: |
+            Controls the List view search UI/behavior.
+
+            - Default is `mode: text` (free-text search across visible list columns + system columns).
+            - When `mode: date`, the List view shows a date picker and filters records by a specific date field.
+          properties:
+            mode:
+              type: string
+              enum: [text, date]
+              description: Search mode (defaults to `text`).
+            dateFieldId:
+              type: string
+              description: |
+                When `mode: date`, filter on this field id (typically a `DATE` question id).
+                The list fetch projection is automatically expanded to include this field so filtering works even if the field is not visible as a column.
         legend:
           type: array
           description: |

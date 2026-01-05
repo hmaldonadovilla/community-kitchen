@@ -707,6 +707,12 @@ export interface LineItemFieldConfig {
   labelNl: string;
   required: boolean;
   /**
+   * Optional localized validation message used when this required field is empty.
+   *
+   * Supports `{field}` placeholder (resolved to the localized field label).
+   */
+  requiredMessage?: LocalizedString;
+  /**
    * Optional default value used when creating new rows (manual/auto/selectionEffect) or when the field is missing.
    *
    * This is applied only when the row value is missing (not present), so it does not override user edits.
@@ -920,6 +926,12 @@ export interface QuestionConfig {
   qNl: string;
   required: boolean;
   /**
+   * Optional localized validation message used when this required field is empty.
+   *
+   * Supports `{field}` placeholder (resolved to the localized field label).
+   */
+  requiredMessage?: LocalizedString;
+  /**
    * Optional default value used when creating a new record (or when the field is missing in a saved record).
    *
    * This is applied only when the field has no value in the payload (i.e., missing), so it does not override user edits.
@@ -1002,6 +1014,10 @@ export interface FormConfig {
    * Use this to explain the meaning of icons used in rule-based columns (e.g., warning/check/error).
    */
   listViewLegend?: ListViewLegendItem[];
+  /**
+   * Optional override for the list view search UI/behavior (recommended: `listView.search`).
+   */
+  listViewSearch?: ListViewConfig['search'];
   /**
    * Enabled languages for the web app UI (max 3).
    *
@@ -1118,6 +1134,12 @@ export interface WebQuestionDefinition {
     nl: string;
   };
   required: boolean;
+  /**
+   * Optional localized validation message used when this required field is empty.
+   *
+   * Supports `{field}` placeholder (resolved to the localized field label).
+   */
+  requiredMessage?: LocalizedString;
   /**
    * Optional default value used when creating a new record (or when the field is missing in a saved record).
    *
@@ -1360,10 +1382,28 @@ export interface ListViewLegendItem {
   text: LocalizedString;
 }
 
+export interface ListViewSearchConfig {
+  /**
+   * Default: `text`.
+   * - `text`: free-text search across the fields rendered in the list view (and system columns like status/pdfUrl).
+   * - `date`: date picker filtering against a specific date field.
+   */
+  mode?: 'text' | 'date';
+  /**
+   * When `mode = "date"`, the field id to filter on (usually a `DATE` question id).
+   * Can also be a meta column (`createdAt` / `updatedAt`) if those are included in the list view projection.
+   */
+  dateFieldId?: string;
+}
+
 export interface ListViewConfig {
   title?: LocalizedString;
   columns: ListViewColumnConfig[];
   metaColumns?: string[];
+  /**
+   * Optional list search configuration (defaults to text search).
+   */
+  search?: ListViewSearchConfig;
   /**
    * Optional legend shown below the list view table to explain icons/visual indicators.
    */

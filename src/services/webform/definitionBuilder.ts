@@ -46,6 +46,7 @@ export class DefinitionBuilder {
         nl: q.qNl
       },
       required: q.required,
+      requiredMessage: q.requiredMessage,
       defaultValue: q.defaultValue,
       ui: q.ui,
       header: q.header,
@@ -81,7 +82,8 @@ export class DefinitionBuilder {
       form.listViewLegend,
       form.listViewTitle,
       form.listViewDefaultSort,
-      form.listViewPageSize
+      form.listViewPageSize,
+      form.listViewSearch
     );
 
     return {
@@ -161,7 +163,8 @@ export class DefinitionBuilder {
     legend?: ListViewConfig['legend'],
     title?: ListViewConfig['title'],
     defaultSortOverride?: ListViewConfig['defaultSort'],
-    pageSizeOverride?: ListViewConfig['pageSize']
+    pageSizeOverride?: ListViewConfig['pageSize'],
+    searchOverride?: ListViewConfig['search']
   ): ListViewConfig | undefined {
     const listQuestions = questions.filter(q => q.listView);
     const customColumns = Array.isArray(dashboardColumns) ? dashboardColumns : [];
@@ -204,6 +207,7 @@ export class DefinitionBuilder {
     if (title) out.title = title;
     if (legend && Array.isArray(legend) && legend.length) out.legend = legend;
     if (pageSizeOverride && Number.isFinite(pageSizeOverride)) out.pageSize = pageSizeOverride;
+    if (searchOverride) out.search = searchOverride;
     return out;
   }
 

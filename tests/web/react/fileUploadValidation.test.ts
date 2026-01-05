@@ -27,6 +27,33 @@ describe('validateForm FILE_UPLOAD uploadConfig constraints', () => {
     expect(errors.PHOTOS).toBe('Photos requires at least 2 files.');
   });
 
+  it('uses requiredMessage when FILE_UPLOAD minFiles is 1', () => {
+    const definition: any = {
+      title: 'Test',
+      destinationTab: 'Test',
+      languages: ['EN'],
+      questions: [
+        {
+          id: 'PHOTO',
+          type: 'FILE_UPLOAD',
+          required: true,
+          label: { en: 'Photo' },
+          requiredMessage: { en: 'Please upload {field}.' },
+          uploadConfig: { minFiles: 1 }
+        }
+      ]
+    };
+
+    const errors = validateForm({
+      definition,
+      language: 'EN' as any,
+      values: { PHOTO: [] } as any,
+      lineItems: {} as any
+    });
+
+    expect(errors.PHOTO).toBe('Please upload Photo.');
+  });
+
   it('enforces minFiles for FILE_UPLOAD fields inside LINE_ITEM_GROUP rows', () => {
     const definition: any = {
       title: 'Test',

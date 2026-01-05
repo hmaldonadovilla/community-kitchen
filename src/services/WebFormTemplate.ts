@@ -396,14 +396,87 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
-        align-items: flex-end;
+        align-items: center;
         margin-bottom: 12px;
       }
-      .list-toolbar input[type="search"] {
-        flex: 1 1 220px;
+      .list-toolbar .ck-list-search-label {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: 800;
+        color: var(--muted);
+        /* Match list/table typography (same as column headers). */
+        font-size: var(--ck-font-control);
+        margin-bottom: 0;
+        white-space: nowrap;
+      }
+      .list-toolbar .ck-list-search-control {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: 100%;
+        position: relative;
+      }
+      .list-toolbar .ck-list-search-control .ck-date-input-wrap {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+      .list-toolbar .ck-list-search-control .ck-date-input-wrap > input.ck-date-input {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+      .list-toolbar input[type="search"],
+      .list-toolbar input[type="date"] {
+        width: 100%;
         padding: 8px 10px;
         border: 1px solid var(--border);
         border-radius: 10px;
+      }
+      .list-toolbar input[type="date"]::-webkit-date-and-time-value {
+        min-width: 0;
+        max-width: 100%;
+        text-align: left;
+      }
+      /* Hide native iOS/WebKit search clear so we can show our own red "×". */
+      .list-toolbar input[type="search"]::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+        appearance: none;
+        display: none;
+      }
+      /* Leave room for the clear icon on the right side. */
+      .list-toolbar .ck-list-search-control input[type="search"],
+      .list-toolbar .ck-list-search-control input[type="date"] {
+        padding-right: 0px;
+      }
+      /* When DateInput overlay is active, leave room for the clear icon too. */
+      .list-toolbar .ck-list-search-control .ck-date-overlay {
+        padding-right: 84px;
+      }
+      .list-toolbar .ck-list-search-clear-icon {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        border: none;
+        background: transparent;
+        color: var(--danger);
+        font-weight: 900;
+        font-size: 1.2em;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: none;
+      }
+      .list-toolbar .ck-list-search-clear-icon:focus-visible {
+        outline: 4px solid rgba(255, 59, 48, 0.28);
+        outline-offset: 3px;
       }
       .list-toolbar .sort-control {
         display: flex;
@@ -428,6 +501,27 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         text-align: left;
         word-break: break-word;
       }
+      .ck-list-sort-header {
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        font-weight: inherit;
+        color: inherit;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .ck-list-sort-header:focus-visible {
+        outline: 4px solid rgba(0, 122, 255, 0.28);
+        outline-offset: 3px;
+        border-radius: 10px;
+      }
+      .ck-list-sort-indicator { font-size: 0.85em; opacity: 0.75; }
       .truncate-link {
         display: inline-block;
         max-width: 100%;
@@ -487,6 +581,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         align-items: center;
         color: var(--muted);
         font-size: 0.85em;
+      }
+      .ck-list-legend--bottomBar {
+        margin-top: 0;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 2px 0;
       }
       .ck-list-legend-title {
         font-weight: 800;
@@ -568,12 +669,17 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         left: 0;
         right: 0;
         bottom: var(--vv-bottom);
-        padding: 12px 18px max(12px, var(--safe-bottom));
+        /* Add extra breathing room above iPhone curved corners / home indicator. */
+        padding: 12px 32px max(32px, calc(var(--safe-bottom) + 10px));
         background: rgba(242, 242, 247, 0.92);
         border-top: 1px solid rgba(60, 60, 67, 0.22);
         backdrop-filter: saturate(180%) blur(18px);
         -webkit-backdrop-filter: saturate(180%) blur(18px);
         z-index: 2000;
+      }
+      .ck-bottom-bar .ck-actionbar-notice-inner {
+        display: block;
+        margin-bottom: 10px;
       }
       .ck-bottom-bar-inner {
         max-width: 1100px;

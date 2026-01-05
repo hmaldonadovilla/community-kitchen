@@ -14,6 +14,7 @@ import {
   LineItemSelectorConfig,
   LineItemTotalConfig,
   ListViewSortConfig,
+  LocalizedString,
   OptionMapRefConfig,
   OptionFilter,
   QuestionGroupConfig,
@@ -159,6 +160,7 @@ export class ConfigSheet {
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
       const header = this.parseHeaderFlag([rawConfig, optionFilterRaw, validationRaw]);
+      const requiredMessage = this.parseRequiredMessage([rawConfig, optionFilterRaw, validationRaw]);
       const group = this.parseQuestionGroup([rawConfig, optionFilterRaw, validationRaw]);
       const pair = this.parsePairKey([rawConfig, optionFilterRaw, validationRaw]);
       const ui = this.parseQuestionUi([rawConfig, optionFilterRaw, validationRaw]);
@@ -179,6 +181,7 @@ export class ConfigSheet {
         qFr: row[idxQFr],
         qNl: row[idxQNl],
         required: type === 'BUTTON' ? false : !!row[idxRequired],
+        requiredMessage,
         defaultValue,
         ui,
         header,
@@ -1444,6 +1447,29 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static parseRequiredMessage(rawConfigs: Array<string | undefined>): LocalizedString | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const parsed = this.safeParseObject(raw);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const candidate =
+        (parsed as any).requiredMessage ??
+        (parsed as any).required_message ??
+        (parsed as any).requiredErrorMessage ??
+        (parsed as any).required_error_message;
+      if (candidate === undefined || candidate === null) continue;
+      if (typeof candidate === 'string') {
+        const trimmed = candidate.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof candidate === 'object') {
+        // LocalizedString shape; pass through.
+        return candidate as LocalizedString;
+      }
+    }
+    return undefined;
+  }
+
   private static normalizeQuestionGroup(raw: any): QuestionGroupConfig | undefined {
     if (raw === undefined || raw === null) return undefined;
     if (typeof raw === 'string' || typeof raw === 'number') {
@@ -1871,6 +1897,7 @@ export class ConfigSheet {
       const ui = this.parseQuestionUi([rawConfig]);
       const group = this.parseQuestionGroup([rawConfig]);
       const pair = this.parsePairKey([rawConfig]);
+      const requiredMessage = this.parseRequiredMessage([rawConfig]);
       const uploadConfig =
         fieldType === 'FILE_UPLOAD'
           ? this.parseUploadConfig(rawConfig || (row[6] ? row[6].toString().trim() : ''))
@@ -1882,6 +1909,7 @@ export class ConfigSheet {
         labelFr: row[3] || '',
         labelNl: row[4] || '',
         required: !!row[5],
+        requiredMessage,
         defaultValue,
         group,
         pair,
@@ -1930,6 +1958,10 @@ export class ConfigSheet {
         : undefined;
     const pair = pairCandidate !== undefined && pairCandidate !== null ? pairCandidate.toString().trim() : undefined;
     const defaultValue = this.normalizeDefaultValue(field?.defaultValue ?? field?.default);
+    const requiredMessageCandidate =
+      field?.requiredMessage ?? field?.required_message ?? field?.requiredErrorMessage ?? field?.required_error_message;
+    const requiredMessage =
+      requiredMessageCandidate !== undefined && requiredMessageCandidate !== null ? (requiredMessageCandidate as LocalizedString) : undefined;
     return {
       id: field?.id || `LI${idx + 1}`,
       type: baseType,
@@ -1937,6 +1969,7 @@ export class ConfigSheet {
       labelFr: field?.labelFr || '',
       labelNl: field?.labelNl || '',
       required: !!field?.required,
+      requiredMessage,
       defaultValue,
       group,
       pair: pair || undefined,

@@ -6,8 +6,9 @@ import { tSystem } from '../../systemStrings';
 import { fetchBatch, fetchList, ListItem, ListResponse } from '../api';
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
-import { buildListViewLegendItems } from '../app/listViewLegend';
+import { normalizeToIsoDateLocal } from '../app/listViewSearch';
 import { ListViewIcon } from './ListViewIcon';
+import { DateInput } from './form/DateInput';
 
 interface ListViewProps {
   formKey: string;
@@ -44,6 +45,11 @@ const ListView: React.FC<ListViewProps> = ({
   const [searchValue, setSearchValue] = useState('');
   const [sortField, setSortField] = useState<string>(defaultSortField);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
+
+  const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date';
+  const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
+  const dateSearchEnabled = listSearchMode === 'date' && !!dateSearchFieldId;
+  const searchInputId = 'ck-list-search';
 
   useEffect(() => {
     if (cachedResponse?.items?.length) {
@@ -103,8 +109,11 @@ const ListView: React.FC<ListViewProps> = ({
       }
       add(fid);
     });
+    if (dateSearchEnabled && dateSearchFieldId) {
+      add(dateSearchFieldId);
+    }
     return Array.from(ids);
-  }, [columns]);
+  }, [columns, dateSearchEnabled, dateSearchFieldId]);
 
   const activeFetchRef = useRef(0);
 
@@ -236,25 +245,22 @@ const ListView: React.FC<ListViewProps> = ({
     setSortDirection(defaultSortDirection);
   }, [formKey, refreshToken, defaultSortField, defaultSortDirection]);
 
-  const sortOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const options: Array<{ id: string; label: string }> = [];
-    const push = (id: string, label: string) => {
-      if (!id || seen.has(id)) return;
-      seen.add(id);
-      options.push({ id, label });
-    };
-    columns.forEach(col => {
-      if (!isSortableColumn(col)) return;
-      const fid = (col as any).fieldId;
-      const label = isRuleColumn(col) ? (col as any).label : (col as any).label;
-      push(fid, resolveLocalizedString(label, language, fid));
-    });
-    push('updatedAt', resolveLocalizedString({ en: 'Updated', fr: 'Mis à jour', nl: 'Bijgewerkt' }, language, 'Updated'));
-    push('createdAt', resolveLocalizedString({ en: 'Created', fr: 'Créé', nl: 'Aangemaakt' }, language, 'Created'));
-    push('status', resolveLocalizedString({ en: 'Status', fr: 'Statut', nl: 'Status' }, language, 'Status'));
-    return options;
-  }, [columns, language]);
+  useEffect(() => {
+    // Reset paging when filtering changes to avoid landing on an empty page after narrowing results.
+    setPageIndex(0);
+  }, [searchValue]);
+
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    if (listSearchMode === 'date') {
+      onDiagnostic('list.search.mode', { mode: 'date', dateFieldId: dateSearchFieldId });
+      if (!dateSearchFieldId) {
+        onDiagnostic('list.search.invalidConfig', { mode: 'date', dateFieldId: dateSearchFieldId });
+      }
+      return;
+    }
+    onDiagnostic('list.search.mode', { mode: 'text' });
+  }, [dateSearchFieldId, listSearchMode, onDiagnostic]);
 
   const searchableFieldIds = useMemo(() => {
     const ids = new Set<string>();
@@ -264,11 +270,6 @@ const ListView: React.FC<ListViewProps> = ({
   }, [columns]);
 
   const ruleColumns = useMemo(() => columns.filter(isRuleColumn) as ListViewRuleColumnConfig[], [columns]);
-
-  const legendItems = useMemo(
-    () => buildListViewLegendItems(columns, definition.listView?.legend, language),
-    [columns, definition.listView?.legend, language]
-  );
 
   useEffect(() => {
     if (!onDiagnostic) return;
@@ -281,14 +282,12 @@ const ListView: React.FC<ListViewProps> = ({
     onDiagnostic('list.ruleColumns.enabled', { columns: deps });
   }, [onDiagnostic, ruleColumns]);
 
-  useEffect(() => {
-    if (!onDiagnostic) return;
-    if (!legendItems.length) return;
-    onDiagnostic('list.legend.enabled', {
-      count: legendItems.length,
-      icons: legendItems.map(i => i.icon).filter(Boolean)
-    });
-  }, [legendItems, onDiagnostic]);
+  const defaultDirectionForField = (fieldId: string): 'asc' | 'desc' => {
+    if (fieldId === 'createdAt' || fieldId === 'updatedAt') return 'desc';
+    const t = (questionTypeById[fieldId] || '').toString().toUpperCase();
+    if (t === 'DATE' || t === 'DATETIME') return 'desc';
+    return 'asc';
+  };
 
   const compareValues = (a: any, b: any): number => {
     if (a === b) return 0;
@@ -322,24 +321,32 @@ const ListView: React.FC<ListViewProps> = ({
             return (next || row) as ListItem;
           })
         : baseItems;
-    const keyword = searchValue.trim().toLowerCase();
-    const filtered = keyword
-      ? items.filter(row =>
-          searchableFieldIds.some(fieldId => {
-            const raw = (row as any)[fieldId];
-            if (raw === undefined || raw === null) return false;
-            const value = Array.isArray(raw) ? raw.join(' ') : `${raw}`;
-            return value.toLowerCase().includes(keyword);
-          })
-        )
-      : items;
+    const trimmed = searchValue.trim();
+    const filtered =
+      dateSearchEnabled && trimmed
+        ? items.filter(row => normalizeToIsoDateLocal((row as any)[dateSearchFieldId]) === trimmed)
+        : dateSearchEnabled
+          ? items
+          : trimmed
+            ? (() => {
+                const keyword = trimmed.toLowerCase();
+                return items.filter(row =>
+                  searchableFieldIds.some(fieldId => {
+                    const raw = (row as any)[fieldId];
+                    if (raw === undefined || raw === null) return false;
+                    const value = Array.isArray(raw) ? raw.join(' ') : `${raw}`;
+                    return value.toLowerCase().includes(keyword);
+                  })
+                );
+              })()
+            : items;
     const field = sortField || 'updatedAt';
     const sorted = [...filtered].sort((rowA, rowB) => {
       const result = compareValues((rowA as any)[field], (rowB as any)[field]);
       return sortDirection === 'asc' ? result : -result;
     });
     return sorted;
-  }, [allItems, language, ruleColumns, searchValue, searchableFieldIds, sortField, sortDirection]);
+  }, [allItems, dateSearchEnabled, dateSearchFieldId, language, ruleColumns, searchValue, searchableFieldIds, sortField, sortDirection]);
 
   const pagedItems = useMemo(() => {
     const start = pageIndex * pageSize;
@@ -588,31 +595,44 @@ const ListView: React.FC<ListViewProps> = ({
     <div className="card">
       <h3>{resolveLocalizedString(definition.listView?.title, language, tSystem('list.title', language, 'Records'))}</h3>
       <div className="list-toolbar">
-        <input
-          type="search"
-          placeholder={tSystem('list.searchPlaceholder', language, 'Search records')}
-          value={searchValue}
-          onChange={e => setSearchValue(e.target.value)}
-        />
-        <label className="sort-control">
-          {tSystem('list.sortBy', language, 'Sort by')}
-          <select value={sortField} onChange={e => setSortField(e.target.value)}>
-            {sortOptions.map(option => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        <label className="ck-list-search-label" htmlFor={searchInputId}>
+          {dateSearchEnabled
+            ? tSystem('list.searchByDate', language, '🔍 Search by date')
+            : tSystem('list.searchByText', language, '🔍 Search')}
         </label>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => setSortDirection(dir => (dir === 'asc' ? 'desc' : 'asc'))}
-        >
-          {sortDirection === 'asc'
-            ? tSystem('list.asc', language, 'Asc')
-            : tSystem('list.desc', language, 'Desc')}
-        </button>
+        <div className="ck-list-search-control">
+          {dateSearchEnabled ? (
+            <DateInput
+              id={searchInputId}
+              value={searchValue}
+              language={language}
+              ariaLabel={tSystem('list.searchDateLabel', language, 'Filter by date')}
+              onChange={next => setSearchValue(next)}
+            />
+          ) : (
+            <input
+              id={searchInputId}
+              type="search"
+              placeholder={tSystem('list.searchPlaceholder', language, 'Search records')}
+              aria-label={tSystem('list.searchPlaceholder', language, 'Search records')}
+              value={searchValue}
+              onChange={e => setSearchValue(e.target.value)}
+            />
+          )}
+          {searchValue.trim() ? (
+            <button
+              type="button"
+              className="ck-list-search-clear-icon"
+              aria-label={tSystem('list.clearSearch', language, 'Clear')}
+              onClick={() => {
+                setSearchValue('');
+                onDiagnostic?.('list.search.clear', { mode: dateSearchEnabled ? 'date' : 'text' });
+              }}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : null}
+        </div>
       </div>
       {loading && <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>}
       {error && <div className="error">{error}</div>}
@@ -623,14 +643,9 @@ const ListView: React.FC<ListViewProps> = ({
               {columns.map(col => (
                 <th
                   key={col.fieldId}
-                  onClick={
-                    isSortableColumn(col)
-                      ? () => {
-                          const nextField = col.fieldId;
-                          setSortField(nextField);
-                          setSortDirection(prev => (sortField === nextField ? (prev === 'asc' ? 'desc' : 'asc') : 'desc'));
-                        }
-                      : undefined
+                  scope="col"
+                  aria-sort={
+                    sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
                   }
                   style={{
                     maxWidth: 180,
@@ -639,7 +654,31 @@ const ListView: React.FC<ListViewProps> = ({
                     cursor: isSortableColumn(col) ? 'pointer' : 'default'
                   }}
                 >
-                  {resolveLocalizedString(col.label, language, col.fieldId)}
+                  {isSortableColumn(col) ? (
+                    <button
+                      type="button"
+                      className="ck-list-sort-header"
+                      onClick={() => {
+                        const nextField = col.fieldId;
+                        if (sortField === nextField) {
+                          setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setSortField(nextField);
+                          setSortDirection(defaultDirectionForField(nextField));
+                        }
+                        setPageIndex(0);
+                      }}
+                    >
+                      <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
+                      {sortField === col.fieldId ? (
+                        <span className="ck-list-sort-indicator" aria-hidden="true">
+                          {sortDirection === 'asc' ? '▲' : '▼'}
+                        </span>
+                      ) : null}
+                    </button>
+                  ) : (
+                    resolveLocalizedString(col.label, language, col.fieldId)
+                  )}
                 </th>
               ))}
             </tr>
@@ -672,17 +711,6 @@ const ListView: React.FC<ListViewProps> = ({
           </tbody>
         </table>
       </div>
-      {legendItems.length ? (
-        <div className="ck-list-legend" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
-          <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
-          {legendItems.map((item, idx) => (
-            <span key={`legend-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
-              {item.icon ? <ListViewIcon name={item.icon} /> : null}
-              <span>{item.text}</span>
-            </span>
-          ))}
-        </div>
-      ) : null}
       <div className="actions" style={{ justifyContent: 'space-between' }}>
         <button
           type="button"

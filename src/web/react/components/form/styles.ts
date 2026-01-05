@@ -40,6 +40,82 @@ export const FORM_VIEW_STYLES = `
           position: sticky;
           top: var(--ck-header-height, 0px);
         }
+        .ck-top-action-bar .ck-actionbar-notice-inner {
+          /* Stack a full-width notice region under the capsule row. */
+          display: block;
+          margin-top: 10px;
+        }
+        .ck-validation-notice {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .ck-validation-banner {
+          padding: 12px 14px;
+          border-radius: 14px;
+          font-weight: 900;
+          color: #0f172a;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          box-sizing: border-box;
+        }
+        .ck-validation-banner--error {
+          border: 1px solid #fca5a5;
+          background: #fee2e2;
+        }
+        .ck-validation-banner--warning {
+          border: 1px solid #fdba74;
+          background: #ffedd5;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 8px;
+        }
+        .ck-validation-banner__titleRow {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .ck-validation-banner__title {
+          font-weight: 900;
+        }
+        .ck-validation-banner__list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          font-weight: 800;
+        }
+        .ck-validation-banner__more {
+          font-weight: 900;
+          opacity: 0.85;
+        }
+        .ck-validation-banner__link,
+        .ck-validation-banner__warning {
+          border: none;
+          background: transparent;
+          padding: 0;
+          margin: 0;
+          text-align: left;
+          font: inherit;
+          color: inherit;
+          cursor: pointer;
+        }
+        .ck-validation-banner__hide {
+          flex: 0 0 auto;
+          border-radius: 999px;
+          border: 1px solid rgba(15, 23, 42, 0.16);
+          background: rgba(255, 255, 255, 0.55);
+          padding: 6px 10px;
+          font-weight: 900;
+          font-size: calc(var(--ck-font-pill) * 0.95);
+          line-height: 1;
+          color: #0f172a;
+          cursor: pointer;
+          box-shadow: none;
+          white-space: nowrap;
+        }
 
         .form-card input,
         .form-card select,
