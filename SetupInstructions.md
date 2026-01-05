@@ -531,7 +531,8 @@ This project uses TypeScript. You need to build the script before using it in Go
       - Warning rules (non-blocking): set `"level": "warning"` to surface a message without blocking submit.
         - You can use normal rules (`when` + `then`) or **message-only** rules (`when` + `message`, omit `then`) to show a warning when the condition matches.
         - Optional: `"warningDisplay": "top" | "field" | "both"` to control where warnings render in the UI (edit + summary). Defaults to `"top"`.
-        - Warnings are shown in the UI and Summary view. In PDFs, warnings are only rendered when the template includes `{{VALIDATION_WARNINGS}}`.
+        - Optional: `"warningView": "edit" | "summary" | "both"` to control which UI view shows the warning. Defaults to `"both"`.
+        - Warnings are shown in the UI based on `warningView`. In PDFs, warnings are only rendered when the template includes `{{VALIDATION_WARNINGS}}`.
       - Scope rules to follow-up only: add `"phase": "followup"` to a rule when it should only block follow-up actions (e.g., require `FINAL_QTY` during follow-up but keep it optional on submit).
 
     - Computed fields (`derivedValue`):
@@ -1109,6 +1110,19 @@ Example (show `createRecordPreset` buttons inside the **Create** menu on the bot
   - Behavior when disabled:
     - Clicking a record in the list always opens the **Form** view (Closed records are read-only).
     - The Summary action in the bottom bar is hidden; if `BUTTON` actions are configured for the form summary menu, an **Actions** menu is shown instead.
+
+- **Optional: portrait-only mode (avoid landscape)**:
+  - In the dashboard “Follow-up Config (JSON)” column, set `"portraitOnly": true`.
+  - Behavior when enabled:
+    - On phone-sized screens, landscape orientation shows a blocking “rotate to portrait” message.
+    - Note: browsers (especially iOS Safari) cannot reliably lock orientation; this is a UI guardrail.
+
+- **Optional: preserve option order (disable alphabetical sorting)**:
+  - By default, CHOICE/CHECKBOX options are sorted alphabetically by the localized label.
+  - This is a **per-field** setting (so you can mix alphabetical + source ordering in the same form).
+  - To preserve your configured order (config sheets / optionFilter / data sources), set `"optionSort": "source"` on:
+    - Any top-level CHOICE/CHECKBOX question (in the question’s **Config (JSON/REF)** column JSON)
+    - Any line-item/subgroup CHOICE/CHECKBOX field (in the line-item field’s **Config** column JSON, or inside the `lineItemConfig.fields[]` object)
 
 - **Optional: disable “Copy current record”**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"copyCurrentRecordEnabled": false`.

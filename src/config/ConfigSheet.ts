@@ -15,6 +15,7 @@ import {
   LineItemTotalConfig,
   ListViewSortConfig,
   LocalizedString,
+  OptionSortMode,
   OptionMapRefConfig,
   OptionFilter,
   QuestionGroupConfig,
@@ -164,6 +165,8 @@ export class ConfigSheet {
       const group = this.parseQuestionGroup([rawConfig, optionFilterRaw, validationRaw]);
       const pair = this.parsePairKey([rawConfig, optionFilterRaw, validationRaw]);
       const ui = this.parseQuestionUi([rawConfig, optionFilterRaw, validationRaw]);
+      const optionSort =
+        type === 'CHOICE' || type === 'CHECKBOX' ? this.parseOptionSort([rawConfig, optionFilterRaw, validationRaw]) : undefined;
       const selectionEffects = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseSelectionEffects(rawConfig) : undefined;
       const statusRaw = row[idxStatus] ? row[idxStatus].toString().trim().toLowerCase() : 'active';
       const status = statusRaw === 'archived' ? 'Archived' : 'Active';
@@ -184,6 +187,7 @@ export class ConfigSheet {
         requiredMessage,
         defaultValue,
         ui,
+        optionSort,
         header,
         group:
           group ||
@@ -1517,6 +1521,57 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static normalizeBoolean(input: any): boolean | undefined {
+    if (input === undefined || input === null) return undefined;
+    if (typeof input === 'boolean') return input;
+    if (typeof input === 'number') return input !== 0;
+    const s = input.toString().trim().toLowerCase();
+    if (!s) return undefined;
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
+    return undefined;
+  }
+
+  private static normalizeOptionSortMode(raw: any, preserveOrderRaw?: any): OptionSortMode | undefined {
+    const s = raw !== undefined && raw !== null ? raw.toString().trim().toLowerCase() : '';
+    if (s === 'source' || s === 'original' || s === 'config' || s === 'preserve' || s === 'none') return 'source';
+    if (s === 'alphabetical' || s === 'alpha' || s === 'label') return 'alphabetical';
+    const preserve = this.normalizeBoolean(preserveOrderRaw);
+    if (preserve === true) return 'source';
+    if (preserve === false) return 'alphabetical';
+    return undefined;
+  }
+
+  private static parseOptionSort(rawConfigs: Array<string | undefined>): OptionSortMode | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const parsed = this.safeParseObject(raw);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const obj: any = parsed as any;
+      const sortRaw =
+        obj.optionSort !== undefined
+          ? obj.optionSort
+          : obj.optionsSort !== undefined
+            ? obj.optionsSort
+            : obj.optionSorting !== undefined
+              ? obj.optionSorting
+              : obj.optionsSorting !== undefined
+                ? obj.optionsSorting
+                : undefined;
+      const preserveRaw =
+        obj.preserveOptionOrder !== undefined
+          ? obj.preserveOptionOrder
+          : obj.keepOptionOrder !== undefined
+            ? obj.keepOptionOrder
+            : obj.disableOptionSorting !== undefined
+              ? obj.disableOptionSorting
+              : undefined;
+      const normalized = this.normalizeOptionSortMode(sortRaw, preserveRaw);
+      if (normalized) return normalized;
+    }
+    return undefined;
+  }
+
   private static normalizeChoiceControl(raw: any): ChoiceControl | undefined {
     if (raw === undefined || raw === null) return undefined;
     const candidate = raw.toString().trim().toLowerCase();
@@ -1897,6 +1952,8 @@ export class ConfigSheet {
       const ui = this.parseQuestionUi([rawConfig]);
       const group = this.parseQuestionGroup([rawConfig]);
       const pair = this.parsePairKey([rawConfig]);
+      const optionSort =
+        fieldType === 'CHOICE' || fieldType === 'CHECKBOX' ? this.parseOptionSort([rawConfig]) : undefined;
       const requiredMessage = this.parseRequiredMessage([rawConfig]);
       const uploadConfig =
         fieldType === 'FILE_UPLOAD'
@@ -1914,6 +1971,7 @@ export class ConfigSheet {
         group,
         pair,
         ui,
+        optionSort,
         options,
         optionsFr,
         optionsNl,
@@ -1962,6 +2020,10 @@ export class ConfigSheet {
       field?.requiredMessage ?? field?.required_message ?? field?.requiredErrorMessage ?? field?.required_error_message;
     const requiredMessage =
       requiredMessageCandidate !== undefined && requiredMessageCandidate !== null ? (requiredMessageCandidate as LocalizedString) : undefined;
+    const optionSort = this.normalizeOptionSortMode(
+      field?.optionSort ?? field?.optionsSort ?? field?.optionSorting ?? field?.optionsSorting,
+      field?.preserveOptionOrder ?? field?.keepOptionOrder ?? field?.disableOptionSorting
+    );
     return {
       id: field?.id || `LI${idx + 1}`,
       type: baseType,
@@ -1974,6 +2036,7 @@ export class ConfigSheet {
       group,
       pair: pair || undefined,
       ui,
+      optionSort,
       options: Array.isArray(field?.options) ? field.options : [],
       optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],
       optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : [],

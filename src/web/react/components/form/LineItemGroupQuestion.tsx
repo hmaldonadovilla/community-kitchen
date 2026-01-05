@@ -199,6 +199,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
   } = ctx;
 
   const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
+  const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
+    const raw = (field as any)?.optionSort;
+    const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    return s === 'source' ? 'source' : 'alphabetical';
+  };
 
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
@@ -282,7 +287,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     if (!valid) return { valid: false, desired: [], depVals };
     const opts = buildOptionSetForLineField(anchorField, groupKey);
     const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-    const localized = buildLocalizedOptions(opts, allowed, language);
+    const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
     const seen = new Set<string>();
     const desired: string[] = [];
     localized.forEach(opt => {
@@ -590,7 +595,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                   ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
                   const depVals = dependencyIds.map(dep => toDependencyValue(values[dep]));
                   const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-                  const localized = buildLocalizedOptions(opts, allowed, language);
+                  const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
                   const deduped = Array.from(
                     new Set(localized.map(opt => opt.value).filter(Boolean))
                   );
@@ -1019,7 +1024,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
                                     ? [...allowedField, choiceVal]
                                     : allowedField;
-                                const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language);
+                                const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(titleField) });
                                 const selectedOpt = optsField.find(opt => opt.value === choiceVal);
                                 const displayLabel = (selectedOpt?.label || choiceVal || '').toString();
                                 return (
@@ -1095,7 +1100,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   if (val && !acc.includes(val)) acc.push(val);
                                   return acc;
                                 }, [...allowedField]);
-                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language);
+                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(titleField) });
                                 return (
                                   <div
                                     className={`field inline-field${titleField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
@@ -1268,7 +1273,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                       currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
                         ? [...allowedField, currentVal]
                         : allowedField;
-                    const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language);
+                    const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
                     const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
                     if (hideField) return null;
 
@@ -1371,7 +1376,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           if (val && !acc.includes(val)) acc.push(val);
                           return acc;
                         }, [...allowedField]);
-                        const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language);
+                        const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
                         if (isConsentCheckbox) {
                           return (
                             <div
@@ -1817,7 +1822,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorValue)
                               );
                               const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-                              const localized = buildLocalizedOptions(opts, allowed, language);
+                              const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
                               const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
                               setOverlay({
                                 open: true,
@@ -2015,7 +2020,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                         return acc;
                                       }, [...allowedWithCurrent])
                                     : allowedWithCurrent;
-                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language);
+                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language, { sort: optionSortFor(field) });
                                 const hideField = shouldHideField(field.visibility, subCtx, {
                                   rowId: subRow.id,
                                   linePrefix: subKey

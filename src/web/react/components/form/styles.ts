@@ -45,6 +45,43 @@ export const FORM_VIEW_STYLES = `
           display: block;
           margin-top: 10px;
         }
+
+        /* Portrait-only mode: block landscape with a friendly rotate prompt. */
+        .ck-orientation-blocker {
+          position: fixed;
+          inset: 0;
+          z-index: 13000;
+          background: rgba(242, 242, 247, 0.94);
+          backdrop-filter: saturate(180%) blur(18px);
+          -webkit-backdrop-filter: saturate(180%) blur(18px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          box-sizing: border-box;
+        }
+        .ck-orientation-blocker__card {
+          width: min(720px, 100%);
+          background: #ffffff;
+          border-radius: 18px;
+          border: 1px solid rgba(15, 23, 42, 0.14);
+          box-shadow: 0 30px 90px rgba(15, 23, 42, 0.22);
+          padding: 18px;
+          text-align: center;
+          color: #0f172a;
+        }
+        .ck-orientation-blocker__title {
+          font-weight: 950;
+          font-size: 44px;
+          letter-spacing: -0.2px;
+        }
+        .ck-orientation-blocker__body {
+          margin-top: 10px;
+          font-weight: 800;
+          font-size: 32px;
+          line-height: 1.35;
+          color: rgba(15, 23, 42, 0.82);
+        }
         .ck-validation-notice {
           display: flex;
           flex-direction: column;

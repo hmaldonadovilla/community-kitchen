@@ -623,7 +623,8 @@ export const ReportLivePreview: React.FC<{
         language,
         values,
         lineItems,
-        phase: 'submit'
+        phase: 'submit',
+        uiView: 'summary'
       }),
     [definition, language, lineItems, values]
   );

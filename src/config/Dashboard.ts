@@ -131,6 +131,7 @@ export class Dashboard {
       const actionBars = dashboardConfig?.actionBars;
       const appHeader = dashboardConfig?.appHeader;
       const groupBehavior = dashboardConfig?.groupBehavior;
+      const portraitOnly = dashboardConfig?.portraitOnly;
       const submissionConfirmationMessage = dashboardConfig?.submissionConfirmationMessage;
       const submissionConfirmationTitle = dashboardConfig?.submissionConfirmationTitle;
       const submitButtonLabel = dashboardConfig?.submitButtonLabel;
@@ -161,6 +162,7 @@ export class Dashboard {
           actionBars,
           appHeader,
           groupBehavior,
+          portraitOnly,
           submissionConfirmationMessage,
           submissionConfirmationTitle,
           submitButtonLabel,
@@ -209,6 +211,7 @@ export class Dashboard {
     actionBars?: ActionBarsConfig;
     appHeader?: AppHeaderConfig;
     groupBehavior?: GroupBehaviorConfig;
+    portraitOnly?: boolean;
     submissionConfirmationMessage?: LocalizedString;
     submissionConfirmationTitle?: LocalizedString;
     submitButtonLabel?: LocalizedString;
@@ -558,6 +561,37 @@ export class Dashboard {
             : undefined;
     const submitButtonLabel = normalizeLocalized(submitButtonLabelRaw);
 
+    const normalizeBoolean = (input: any): boolean | undefined => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'boolean') return input;
+      if (typeof input === 'number') return input !== 0;
+      const s = input.toString().trim().toLowerCase();
+      if (!s) return undefined;
+      if (s === 'true' || s === '1' || s === 'yes' || s === 'y') return true;
+      if (s === 'false' || s === '0' || s === 'no' || s === 'n') return false;
+      return Boolean(input);
+    };
+
+    const uiObj = parsed.ui !== undefined && parsed.ui !== null && typeof parsed.ui === 'object' ? parsed.ui : undefined;
+
+    const portraitOnlyRaw =
+      parsed.portraitOnly !== undefined
+        ? parsed.portraitOnly
+        : parsed.lockPortrait !== undefined
+          ? parsed.lockPortrait
+          : parsed.portraitModeOnly !== undefined
+            ? parsed.portraitModeOnly
+            : parsed.disableLandscape !== undefined
+              ? parsed.disableLandscape
+              : parsed.avoidLandscape !== undefined
+                ? parsed.avoidLandscape
+                : uiObj && uiObj.portraitOnly !== undefined
+                  ? uiObj.portraitOnly
+                  : uiObj && uiObj.lockPortrait !== undefined
+                    ? uiObj.lockPortrait
+                    : undefined;
+    const portraitOnly = normalizeBoolean(portraitOnlyRaw);
+
     if (
       !followup &&
       !listViewTitle &&
@@ -574,6 +608,7 @@ export class Dashboard {
       !actionBars &&
       !appHeader &&
       !groupBehavior &&
+      portraitOnly === undefined &&
       !submissionConfirmationMessage &&
       !submissionConfirmationTitle &&
       !submitButtonLabel &&
@@ -599,6 +634,7 @@ export class Dashboard {
       actionBars,
       appHeader,
       groupBehavior,
+      portraitOnly,
       submissionConfirmationMessage,
       submissionConfirmationTitle,
       submitButtonLabel,

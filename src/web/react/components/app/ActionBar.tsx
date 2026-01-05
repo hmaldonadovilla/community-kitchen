@@ -170,6 +170,11 @@ export const ActionBar: React.FC<{
   disabled: boolean;
   submitting?: boolean;
   readOnly?: boolean;
+  /**
+   * Optional UI override: hide the Edit button even if it is configured for this view.
+   * Used to suppress Edit on Summary for Closed records.
+   */
+  hideEdit?: boolean;
   submitLabel?: LocalizedString;
   summaryEnabled: boolean;
   copyEnabled: boolean;
@@ -196,6 +201,7 @@ export const ActionBar: React.FC<{
   disabled,
   submitting,
   readOnly,
+  hideEdit,
   submitLabel,
   summaryEnabled,
   copyEnabled,
@@ -296,6 +302,7 @@ export const ActionBar: React.FC<{
       }
 
       if (cfg.id === 'edit') {
+        if (hideEdit) return;
         capsule.push({ kind: 'edit' });
         return;
       }
@@ -380,6 +387,7 @@ export const ActionBar: React.FC<{
   }, [
     copyEnabled,
     customButtons,
+    hideEdit,
     globalHideHomeWhenActive,
     language,
     summaryEnabled,

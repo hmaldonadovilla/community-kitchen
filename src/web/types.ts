@@ -85,6 +85,13 @@ export interface ValidationError {
    * - both: show in both places
    */
   warningDisplay?: 'top' | 'field' | 'both';
+  /**
+   * Optional warning view hint (UI only).
+   * - edit: show only on the edit (form) view
+   * - summary: show only on the summary view
+   * - both: show on both views
+   */
+  warningView?: 'edit' | 'summary' | 'both';
 }
 
 export interface VisibilityContext {

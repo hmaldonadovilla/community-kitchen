@@ -27,6 +27,13 @@ export type ChoiceControl = 'auto' | 'select' | 'radio' | 'segmented' | 'switch'
 export type LabelLayout = 'auto' | 'stacked';
 
 /**
+ * Option ordering for CHOICE/CHECKBOX inputs in the web app.
+ * - alphabetical: sort by the localized label (default)
+ * - source: preserve source order (as defined in config sheets / optionFilter / data sources)
+ */
+export type OptionSortMode = 'alphabetical' | 'source';
+
+/**
  * Summary view visibility behavior for a field.
  * - inherit: follow normal `visibility` rules (default)
  * - always: show even if hidden by `visibility`
@@ -465,6 +472,14 @@ export interface ValidationRule {
    */
   warningDisplay?: 'top' | 'field' | 'both';
   /**
+   * Warning-only view preference for UI surfaces.
+   * Defaults to "both".
+   * - edit: show warnings only on the edit (form) view
+   * - summary: show warnings only on the summary view
+   * - both: show warnings on both views
+   */
+  warningView?: 'edit' | 'summary' | 'both';
+  /**
    * Optional phase scoping. Defaults to "both".
    * - submit: apply only on form submission
    * - followup: apply only on follow-up actions
@@ -721,6 +736,12 @@ export interface LineItemFieldConfig {
   defaultValue?: DefaultValue;
   ui?: QuestionUiConfig;
   /**
+   * Optional option ordering override for this field (CHOICE/CHECKBOX).
+   * - alphabetical: sort by the localized label (default)
+   * - source: preserve source order (as defined in config sheets / optionFilter / data sources)
+   */
+  optionSort?: OptionSortMode;
+  /**
    * Optional group card configuration for the edit view (works inside line item rows + subgroup overlays).
    */
   group?: QuestionGroupConfig;
@@ -940,6 +961,12 @@ export interface QuestionConfig {
   defaultValue?: DefaultValue;
   ui?: QuestionUiConfig;
   /**
+   * Optional option ordering override for this field (CHOICE/CHECKBOX).
+   * - alphabetical: sort by the localized label (default)
+   * - source: preserve source order (as defined in config sheets / optionFilter / data sources)
+   */
+  optionSort?: OptionSortMode;
+  /**
    * @deprecated Replaced by `group: { header: true, title: "Header" }` (rendered in the form body).
    * When true, this field is rendered in the sticky header area of the edit view (still editable).
    */
@@ -1073,6 +1100,12 @@ export interface FormConfig {
    * Optional behavior settings for collapsible group sections in the edit view (dashboard-level).
    */
   groupBehavior?: GroupBehaviorConfig;
+  /**
+   * Optional UI setting: when true, block landscape orientation in the web app (shows a "rotate to portrait" message).
+   *
+   * Note: browsers cannot reliably lock orientation; this is a UI guardrail for phones.
+   */
+  portraitOnly?: boolean;
 
   /**
    * Optional confirmation message shown to the user before submitting (Confirm/Cancel overlay).
@@ -1148,6 +1181,12 @@ export interface WebQuestionDefinition {
    */
   defaultValue?: DefaultValue;
   ui?: QuestionUiConfig;
+  /**
+   * Optional option ordering override for this field (CHOICE/CHECKBOX).
+   * - alphabetical: sort by the localized label (default)
+   * - source: preserve source order (as defined in config sheets / optionFilter / data sources)
+   */
+  optionSort?: OptionSortMode;
   /**
    * @deprecated Replaced by `group: { header: true, title: "Header" }` (rendered in the form body).
    * When true, this field is rendered in the sticky header area of the edit view (still editable).
@@ -1236,6 +1275,12 @@ export interface WebFormDefinition {
    * Optional behavior settings for collapsible group sections in the edit view.
    */
   groupBehavior?: GroupBehaviorConfig;
+  /**
+   * Optional UI setting: when true, block landscape orientation in the web app (shows a "rotate to portrait" message).
+   *
+   * Note: browsers cannot reliably lock orientation; this is a UI guardrail for phones.
+   */
+  portraitOnly?: boolean;
 
   /**
    * Optional confirmation message shown to the user before submitting (Confirm/Cancel overlay).

@@ -428,19 +428,32 @@ const normalizeWarningDisplay = (raw: any): 'top' | 'field' | 'both' => {
   return 'top';
 };
 
+const normalizeWarningView = (raw: any): 'edit' | 'summary' | 'both' => {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (s === 'edit' || s === 'form') return 'edit';
+  if (s === 'summary') return 'summary';
+  return 'both';
+};
+
 export const collectValidationWarnings = (args: {
   definition: WebFormDefinition;
   language: LangCode;
   values: Record<string, FieldValue>;
   lineItems: LineItemState;
   phase?: 'submit' | 'followup';
+  uiView?: 'edit' | 'summary';
 }): WarningCollection => {
-  const { definition, language, values, lineItems, phase = 'submit' } = args;
+  const { definition, language, values, lineItems, phase = 'submit', uiView } = args;
   const ctx = buildValidationContext(values, lineItems);
   const top: Array<{ message: string; fieldPath: string }> = [];
   const topSeen = new Set<string>();
   const byField: Record<string, string[]> = {};
   const fieldSeen: Record<string, Set<string>> = {};
+  const allowWarning = (rawWarningView: any): boolean => {
+    if (!uiView) return true;
+    const view = normalizeWarningView(rawWarningView);
+    return view === 'both' || view === uiView;
+  };
 
   const pushTop = (fieldPath: string, msg: string) => {
     const fp = (fieldPath || '').toString();
@@ -492,7 +505,7 @@ export const collectValidationWarnings = (args: {
         }
       } as any);
       issues
-        .filter(i => (i as any)?.level === 'warning')
+        .filter(i => (i as any)?.level === 'warning' && allowWarning((i as any)?.warningView))
         .forEach(i => pushIssue(i.fieldId, i.message, (i as any)?.warningDisplay));
     }
 
@@ -528,7 +541,7 @@ export const collectValidationWarnings = (args: {
         if (!issues.length) return;
         const fieldIds = new Set<string>((q.lineItemConfig?.fields || []).map(f => (f?.id || '').toString()));
         issues
-          .filter(i => (i as any)?.level === 'warning')
+          .filter(i => (i as any)?.level === 'warning' && allowWarning((i as any)?.warningView))
           .forEach(i => {
             const targetId = (i.fieldId || '').toString();
             const fieldPath = fieldIds.has(targetId) ? `${q.id}__${targetId}__${row.id}` : targetId;
@@ -571,7 +584,7 @@ export const collectValidationWarnings = (args: {
               if (!issues.length) return;
               const fieldIds = new Set<string>(((sub as any).fields || []).map((f: any) => (f?.id || '').toString()));
               issues
-                .filter((i: any) => i?.level === 'warning')
+                .filter((i: any) => i?.level === 'warning' && allowWarning(i?.warningView))
                 .forEach((i: any) => {
                   const targetId = (i.fieldId || '').toString();
                   const fieldPath = fieldIds.has(targetId) ? `${subKey}__${targetId}__${subRow.id}` : targetId;

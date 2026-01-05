@@ -49,6 +49,7 @@ export class DefinitionBuilder {
       requiredMessage: q.requiredMessage,
       defaultValue: q.defaultValue,
       ui: q.ui,
+      optionSort: q.optionSort,
       header: q.header,
       group: q.group,
       pair: q.pair,
@@ -106,6 +107,7 @@ export class DefinitionBuilder {
       actionBars: form.actionBars,
       appHeader: form.appHeader,
       groupBehavior: form.groupBehavior,
+      portraitOnly: form.portraitOnly,
       submissionConfirmationMessage: form.submissionConfirmationMessage,
       submissionConfirmationTitle: form.submissionConfirmationTitle,
       submitButtonLabel: form.submitButtonLabel

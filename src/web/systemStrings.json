@@ -10,6 +10,12 @@
     "closeMenu": { "en": "Close menu", "fr": "Fermer le menu", "nl": "Menu sluiten" },
     "selectLanguage": { "en": "Select language", "fr": "Choisir la langue", "nl": "Taal kiezen" },
     "closedReadOnly": { "en": "Closed (read-only)", "fr": "Fermé (lecture seule)", "nl": "Gesloten (alleen lezen)" },
+    "rotatePortraitTitle": { "en": "Rotate your device", "fr": "Tournez votre appareil", "nl": "Draai je toestel" },
+    "rotatePortraitBody": {
+      "en": "This form works best in portrait mode. Please rotate back.",
+      "fr": "Ce formulaire fonctionne mieux en mode portrait. Veuillez revenir en mode portrait.",
+      "nl": "Dit formulier werkt het best in portretmodus. Draai terug."
+    },
     "topActions": { "en": "Actions", "fr": "Actions", "nl": "Acties" }
   },
   "draft": {

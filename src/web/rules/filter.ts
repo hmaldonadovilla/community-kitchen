@@ -36,7 +36,12 @@ const normalizeValue = (value: string | number | null | undefined): string => {
   return value.toString();
 };
 
-export function buildLocalizedOptions(options: OptionSet, allowed: string[], language: LangCode): OptionItem[] {
+export function buildLocalizedOptions(
+  options: OptionSet,
+  allowed: string[],
+  language: LangCode,
+  opts?: { sort?: 'alphabetical' | 'source' }
+): OptionItem[] {
   const langKey = (language || 'en').toString().toLowerCase();
   const labels = (options as any)[langKey] || options.en || [];
   const baseOpts = options.en || labels;
@@ -79,16 +84,19 @@ export function buildLocalizedOptions(options: OptionSet, allowed: string[], lan
     items.push(buildItem(normalized, idx));
   });
 
-  const collator =
-    typeof Intl !== 'undefined' && typeof Intl.Collator === 'function'
-      ? new Intl.Collator(langKey, { sensitivity: 'base' })
-      : undefined;
-  items.sort((a, b) => {
-    const cmp = collator ? collator.compare(a.label, b.label) : a.label.localeCompare(b.label);
-    if (cmp !== 0) return cmp;
-    // stable tie-breaker by original order
-    return (a as any).originalIndex - (b as any).originalIndex;
-  });
+  const normalizedSort: 'alphabetical' | 'source' = opts?.sort === 'source' ? 'source' : 'alphabetical';
+  if (normalizedSort === 'alphabetical') {
+    const collator =
+      typeof Intl !== 'undefined' && typeof Intl.Collator === 'function'
+        ? new Intl.Collator(langKey, { sensitivity: 'base' })
+        : undefined;
+    items.sort((a, b) => {
+      const cmp = collator ? collator.compare(a.label, b.label) : a.label.localeCompare(b.label);
+      if (cmp !== 0) return cmp;
+      // stable tie-breaker by original order
+      return (a as any).originalIndex - (b as any).originalIndex;
+    });
+  }
 
   // strip helper property
   return items.map(item => ({

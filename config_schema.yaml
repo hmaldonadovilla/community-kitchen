@@ -46,6 +46,14 @@ components:
           description: |
             Optional UI hints for how this question should render in the edit view.
             Most fields can stay on `auto` and the UI will choose an iOS-friendly control based on option count; you can override per field.
+        optionSort:
+          type: string
+          enum: [alphabetical, source]
+          description: |
+            Optional option ordering override for this field (CHOICE/CHECKBOX).
+
+            - `alphabetical` (default): sort by the localized label.
+            - `source`: preserve the source order (as defined in config sheets / optionFilter / data sources).
         group:
           $ref: '#/components/schemas/QuestionGroupConfig'
           description: |
@@ -466,6 +474,14 @@ components:
         ui:
           $ref: '#/components/schemas/QuestionUiConfig'
           description: Optional UI hints for how this line item field should render (e.g., use segmented/radio/select for CHOICE).
+        optionSort:
+          type: string
+          enum: [alphabetical, source]
+          description: |
+            Optional option ordering override for this field (CHOICE/CHECKBOX).
+
+            - `alphabetical` (default): sort by the localized label.
+            - `source`: preserve the source order (as defined in config sheets / optionFilter / data sources).
         group:
           $ref: '#/components/schemas/QuestionGroupConfig'
           description: |
@@ -1070,6 +1086,14 @@ components:
             - auto-collapse completed sections
             - optionally open the next incomplete section
             - optionally auto-scroll expanded sections into view
+        portraitOnly:
+          type: boolean
+          description: |
+            Optional UI setting for the web app: when true, **block landscape orientation** with a “rotate to portrait” message.
+
+            Notes:
+            - Browsers cannot reliably lock orientation (especially on iOS Safari). This is a UI guardrail, not a hard lock.
+            - Intended for phone-sized screens to avoid awkward “landscape compact” layouts.
         submissionConfirmationTitle:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -2020,6 +2044,14 @@ components:
             - top: show in the warnings banner only
             - field: show only under the target field
             - both: show in both places
+        warningView:
+          type: string
+          enum: [edit, summary, both]
+          description: |
+            Warning-only view preference for UI surfaces. Defaults to `both`.
+            - edit: show warnings only on the edit (form) view
+            - summary: show warnings only on the summary view
+            - both: show warnings on both views
         when:
           type: object
           properties:

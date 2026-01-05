@@ -238,6 +238,11 @@ const FormView: React.FC<FormViewProps> = ({
   onDiagnostic
 }) => {
   const ROW_SOURCE_KEY = '__ckRowSource';
+  const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
+    const raw = (field as any)?.optionSort;
+    const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    return s === 'source' ? 'source' : 'alphabetical';
+  };
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
     const list = key && warningByField ? (warningByField as any)[key] : undefined;
@@ -2054,7 +2059,7 @@ const FormView: React.FC<FormViewProps> = ({
     const currentVal = values[q.id];
     const allowedWithCurrent =
       currentVal && typeof currentVal === 'string' && !allowed.includes(currentVal) ? [...allowed, currentVal] : allowed;
-    const opts = buildLocalizedOptions(optionSet, allowedWithCurrent, language);
+    const opts = buildLocalizedOptions(optionSet, allowedWithCurrent, language, { sort: optionSortFor(q) });
         const hidden = shouldHideField(q.visibility, {
           getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
         });
@@ -2478,7 +2483,7 @@ const FormView: React.FC<FormViewProps> = ({
           .filter(Boolean)
           .map(dep => toDependencyValue(values[dep as string]))
       );
-      const opts = buildLocalizedOptions(optionSet, allowed, language);
+      const opts = buildLocalizedOptions(optionSet, allowed, language, { sort: optionSortFor(q) });
       if (opts.length === 1 && isEmptyValue(values[q.id]) && values[q.id] !== opts[0].value) {
         pendingDefaults.push({ question: q, value: opts[0].value });
       }
@@ -2546,7 +2551,7 @@ const FormView: React.FC<FormViewProps> = ({
                       optionSetField,
                       dependencyIds.map(dep => toDependencyValue(row.values[dep] ?? values[dep]))
                     );
-              const optsField = buildLocalizedOptions(optionSetField, allowedField, language);
+              const optsField = buildLocalizedOptions(optionSetField, allowedField, language, { sort: optionSortFor(field) });
               const currentValue = row.values[field.id];
               if (optsField.length === 1 && isEmptyValue(currentValue) && currentValue !== optsField[0].value) {
                 pendingLineDefaults.push({
@@ -2797,7 +2802,7 @@ const FormView: React.FC<FormViewProps> = ({
                               ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
               const depVals = dependencyIds.map(dep => toDependencyValue(parentRowValues[dep] ?? values[dep] ?? subSelectorValue));
                               const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-                              const localized = buildLocalizedOptions(opts, allowed, language);
+                              const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
                               const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
                               setOverlay({
                                 open: true,
@@ -3000,7 +3005,7 @@ const FormView: React.FC<FormViewProps> = ({
                   const choiceValStr = (choiceVal || '').toString();
                   const allowedWithCurrent =
                     choiceValStr && !allowedField.includes(choiceValStr) ? [...allowedField, choiceValStr] : allowedField;
-                  const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language);
+                  const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(anchorField) });
                   const selectedOpt = optsField.find(opt => opt.value === choiceValStr);
                   return (selectedOpt?.label || choiceValStr || '').toString();
                 }
@@ -3078,7 +3083,7 @@ const FormView: React.FC<FormViewProps> = ({
                                         return acc;
                                       }, [...allowedWithCurrent])
                                     : allowedWithCurrent;
-                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language);
+                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language, { sort: optionSortFor(field) });
                       const hideField = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
                                 if (hideField) return null;
                       const fieldPath = `${subKey}__${field.id}__${subRow.id}`;

@@ -174,6 +174,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   );
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isCompact, setIsCompact] = useState<boolean>(false);
+  const [isLandscape, setIsLandscape] = useState<boolean>(false);
   const [debugEnabled] = useState<boolean>(() => detectDebug());
   const logEvent = useCallback(
     (event: string, payload?: Record<string, unknown>) => {
@@ -186,6 +187,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     },
     [debugEnabled]
   );
+
+  const portraitOnlyEnabled = definition.portraitOnly === true;
+  const blockLandscape = portraitOnlyEnabled && isMobile && isLandscape;
+
+  useEffect(() => {
+    if (!portraitOnlyEnabled) return;
+    logEvent('ui.portraitOnly.enabled', { enabled: true });
+
+    // Best-effort orientation lock (works in some browsers, usually requires full-screen / user gesture).
+    try {
+      const screenAny = (globalThis as any).screen;
+      const orientation = screenAny?.orientation;
+      if (orientation && typeof orientation.lock === 'function') {
+        Promise.resolve()
+          .then(() => orientation.lock('portrait'))
+          .then(() => logEvent('ui.orientation.lock.ok', { mode: 'portrait' }))
+          .catch((err: any) =>
+            logEvent('ui.orientation.lock.failed', {
+              mode: 'portrait',
+              message: (err?.message || err?.toString?.() || 'lock failed').toString()
+            })
+          );
+      } else {
+        logEvent('ui.orientation.lock.unavailable', { mode: 'portrait' });
+      }
+    } catch (err: any) {
+      logEvent('ui.orientation.lock.failed', {
+        mode: 'portrait',
+        message: (err?.message || err?.toString?.() || 'lock failed').toString()
+      });
+    }
+  }, [logEvent, portraitOnlyEnabled]);
+
+  useEffect(() => {
+    if (!portraitOnlyEnabled) return;
+    if (!isMobile) return;
+    logEvent(blockLandscape ? 'ui.orientation.blocked' : 'ui.orientation.allowed', {
+      landscape: isLandscape,
+      blocked: blockLandscape
+    });
+  }, [blockLandscape, isLandscape, isMobile, logEvent, portraitOnlyEnabled]);
 
   // Prefetch Drive templates early so report rendering can skip "first read" latency.
   useEffect(() => {
@@ -515,12 +557,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const uaBased = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       const mobile = widthBased || uaBased;
       setIsMobile(mobile);
+      setIsLandscape(landscapeBased);
       setIsCompact(mobile && shortBased && landscapeBased);
     };
     updateMobile();
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', updateMobile);
-      return () => window.removeEventListener('resize', updateMobile);
+      window.addEventListener('orientationchange', updateMobile);
+      return () => {
+        window.removeEventListener('resize', updateMobile);
+        window.removeEventListener('orientationchange', updateMobile);
+      };
     }
     return undefined;
   }, []);
@@ -1912,7 +1959,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           language,
           values,
           lineItems,
-          phase: 'submit'
+          phase: 'submit',
+          uiView: 'edit'
         })
       );
     } catch (err: any) {
@@ -2259,6 +2307,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onDiagnostic={logEvent}
       />
 
+      {blockLandscape ? (
+        <div
+          className="ck-orientation-blocker"
+          role="dialog"
+          aria-modal="true"
+          aria-label={tSystem('app.rotatePortraitTitle', language, 'Rotate your device')}
+        >
+          <div className="ck-orientation-blocker__card">
+            <div className="ck-orientation-blocker__title">
+              {tSystem('app.rotatePortraitTitle', language, 'Rotate your device')}
+            </div>
+            <div className="ck-orientation-blocker__body">
+              {tSystem('app.rotatePortraitBody', language, 'This form works best in portrait mode. Please rotate back.')}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <ActionBar
         position="top"
         language={language}
@@ -2266,6 +2332,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         disabled={submitting || Boolean(recordLoadingId)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
+        hideEdit={view === 'summary' && isClosedRecord}
         submitLabel={definition.submitButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
@@ -2448,6 +2515,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         disabled={submitting || Boolean(recordLoadingId)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
+        hideEdit={view === 'summary' && isClosedRecord}
         submitLabel={definition.submitButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}

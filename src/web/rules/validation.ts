@@ -180,6 +180,18 @@ export function evaluateRules(rules: ValidationRule[], ctx: ValidationContext): 
       const warningDisplay: 'top' | 'field' | 'both' =
         warningDisplayStr === 'field' || warningDisplayStr === 'both' ? (warningDisplayStr as any) : 'top';
 
+      const warningViewRaw = (rule as any)?.warningView;
+      const warningViewStr = typeof warningViewRaw === 'string' ? warningViewRaw.trim().toLowerCase() : '';
+      const warningView: 'edit' | 'summary' | 'both' =
+        warningViewStr === 'edit' || warningViewStr === 'form'
+          ? 'edit'
+          : warningViewStr === 'summary'
+          ? 'summary'
+          : 'both';
+      if (warningViewStr && warningView !== warningViewStr) {
+        validationLog('warningView.normalized', { raw: warningViewRaw, normalized: warningView });
+      }
+
       const whenFieldId = (rule as any)?.when?.fieldId;
       if (!whenFieldId) return;
       const whenValue = ctx.getValue(whenFieldId);
@@ -197,7 +209,8 @@ export function evaluateRules(rules: ValidationRule[], ctx: ValidationContext): 
           message: msg,
           scope: 'main',
           level,
-          warningDisplay: level === 'warning' ? warningDisplay : undefined
+          warningDisplay: level === 'warning' ? warningDisplay : undefined,
+          warningView: level === 'warning' ? warningView : undefined
         });
         return;
       }
@@ -211,7 +224,8 @@ export function evaluateRules(rules: ValidationRule[], ctx: ValidationContext): 
         message: msg,
         scope: 'main',
         level,
-        warningDisplay: level === 'warning' ? warningDisplay : undefined
+        warningDisplay: level === 'warning' ? warningDisplay : undefined,
+        warningView: level === 'warning' ? warningView : undefined
       });
     } catch (err) {
       validationLog('rule.eval.failed', { error: err ? err.toString() : 'unknown' });
