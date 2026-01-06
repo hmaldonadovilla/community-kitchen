@@ -147,6 +147,15 @@ interface FormViewProps {
    */
   navigateToFieldRef?: React.MutableRefObject<((fieldKey: string) => void) | null>;
   submitting: boolean;
+  /**
+   * When true, the form is in a dedup-conflict lock state: only dedup key fields should remain editable.
+   */
+  dedupLockActive?: boolean;
+  /**
+   * Field ids that are allowed to be edited while `dedupLockActive` is true.
+   * (Typically the dedup rule composite keys, e.g. DATE + CHECK_FREQ.)
+   */
+  dedupKeyFieldIds?: string[];
   errors: FormErrors;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
   status?: string | null;
@@ -202,6 +211,7 @@ interface FormViewProps {
   onReportButton?: (buttonId: string) => void;
   reportBusy?: boolean;
   reportBusyId?: string | null;
+  onUserEdit?: (args: { scope: 'top' | 'line'; fieldPath: string; fieldId?: string; groupId?: string; rowId?: string }) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
@@ -216,6 +226,8 @@ const FormView: React.FC<FormViewProps> = ({
   submitActionRef,
   navigateToFieldRef,
   submitting,
+  dedupLockActive,
+  dedupKeyFieldIds,
   errors,
   setErrors,
   status,
@@ -235,6 +247,7 @@ const FormView: React.FC<FormViewProps> = ({
   onReportButton,
   reportBusy,
   reportBusyId,
+  onUserEdit,
   onDiagnostic
 }) => {
   const ROW_SOURCE_KEY = '__ckRowSource';
@@ -242,6 +255,20 @@ const FormView: React.FC<FormViewProps> = ({
     const raw = (field as any)?.optionSort;
     const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
     return s === 'source' ? 'source' : 'alphabetical';
+  };
+  const dedupAllowSet = useMemo(() => {
+    const set = new Set<string>();
+    (dedupKeyFieldIds || []).forEach(id => {
+      const k = (id || '').toString().trim();
+      if (k) set.add(k);
+    });
+    return set;
+  }, [dedupKeyFieldIds]);
+  const isFieldLockedByDedup = (fieldId: string): boolean => {
+    if (!dedupLockActive) return false;
+    const k = (fieldId || '').toString().trim();
+    if (!k) return true;
+    return !dedupAllowSet.has(k);
   };
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
@@ -969,9 +996,10 @@ const FormView: React.FC<FormViewProps> = ({
       options: OptionLike[];
       required: boolean;
       override?: string | null;
+      disabled?: boolean;
       onChange: (next: string) => void;
     }) => {
-      const { fieldPath, value, options, required, override, onChange } = args;
+      const { fieldPath, value, options, required, override, disabled, onChange } = args;
       const decision = computeChoiceControlVariant(options, required, override);
 
       const prev = choiceVariantLogRef.current[fieldPath];
@@ -1001,7 +1029,9 @@ const FormView: React.FC<FormViewProps> = ({
                     role="radio"
                     aria-checked={active}
                     title={opt.label}
+                    disabled={!!disabled}
                     onClick={() => {
+                      if (disabled) return;
                       if (!required && active) {
                         onChange('');
                         return;
@@ -1029,7 +1059,11 @@ const FormView: React.FC<FormViewProps> = ({
                     name={name}
                     value={opt.value}
                     checked={(value || '') === (opt.value || '')}
-                    onChange={e => onChange(e.target.value)}
+                    disabled={!!disabled}
+                    onChange={e => {
+                      if (disabled) return;
+                      onChange(e.target.value);
+                    }}
                   />
                   <span>{opt.label}</span>
                 </label>
@@ -1042,7 +1076,14 @@ const FormView: React.FC<FormViewProps> = ({
           if (!map) {
             // fallback
             return (
-              <select value={value || ''} onChange={e => onChange(e.target.value)}>
+              <select
+                value={value || ''}
+                disabled={!!disabled}
+                onChange={e => {
+                  if (disabled) return;
+                  onChange(e.target.value);
+                }}
+              >
                 <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
                 {options.map(opt => (
                   <option key={opt.value} value={opt.value}>
@@ -1059,7 +1100,11 @@ const FormView: React.FC<FormViewProps> = ({
                 <input
                   type="checkbox"
                   checked={checked}
-                  onChange={e => onChange(e.target.checked ? map.trueValue : map.falseValue)}
+                  disabled={!!disabled}
+                  onChange={e => {
+                    if (disabled) return;
+                    onChange(e.target.checked ? map.trueValue : map.falseValue);
+                  }}
                 />
                 <span className="ck-switch-track" aria-hidden="true" />
               </label>
@@ -1069,7 +1114,14 @@ const FormView: React.FC<FormViewProps> = ({
         case 'select':
         default:
           return (
-            <select value={value || ''} onChange={e => onChange(e.target.value)}>
+            <select
+              value={value || ''}
+              disabled={!!disabled}
+              onChange={e => {
+                if (disabled) return;
+                onChange(e.target.value);
+              }}
+            >
               <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
               {options.map(opt => (
                 <option key={opt.value} value={opt.value}>
@@ -1546,6 +1598,11 @@ const FormView: React.FC<FormViewProps> = ({
       resetNativeFileInput(question.id);
       return;
     }
+    if (submitting || question.readOnly === true) {
+      onDiagnostic?.('upload.add.blocked', { scope: 'top', questionId: question.id, reason: submitting ? 'submitting' : 'readOnly' });
+      resetNativeFileInput(question.id);
+      return;
+    }
     processIncomingFiles(question, Array.from(list));
     resetNativeFileInput(question.id);
   };
@@ -1553,6 +1610,7 @@ const FormView: React.FC<FormViewProps> = ({
   const handleFileDrop = (question: WebQuestionDefinition, event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (submitting) return;
+    if (question.readOnly === true) return;
     if (!event.dataTransfer?.files?.length) return;
     processIncomingFiles(question, Array.from(event.dataTransfer.files));
     onDiagnostic?.('upload.drop', { questionId: question.id, count: event.dataTransfer.files.length });
@@ -1560,6 +1618,8 @@ const FormView: React.FC<FormViewProps> = ({
   };
 
   const removeFile = (question: WebQuestionDefinition, index: number) => {
+    if (submitting) return;
+    if (question.readOnly === true) return;
     const existing = toUploadItems(values[question.id]);
     if (!existing.length) return;
     const removed = existing[index];
@@ -1573,6 +1633,8 @@ const FormView: React.FC<FormViewProps> = ({
   };
 
   const clearFiles = (question: WebQuestionDefinition) => {
+    if (submitting) return;
+    if (question.readOnly === true) return;
     handleFileFieldChange(question, []);
     resetDrag(question.id);
     resetNativeFileInput(question.id);
@@ -1694,6 +1756,17 @@ const FormView: React.FC<FormViewProps> = ({
   };
 
   const handleFieldChange = (q: WebQuestionDefinition, value: FieldValue) => {
+    if (submitting) return;
+    if ((q as any)?.valueMap) return;
+    if (q.readOnly === true) {
+      onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'readOnly' });
+      return;
+    }
+    if (dedupLockActive && isFieldLockedByDedup(q.id)) {
+      onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'dedupConflict' });
+      return;
+    }
+    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id });
     if (onStatusClear) onStatusClear();
     const baseValues = { ...values, [q.id]: value };
     const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(definition, baseValues, lineItems, {
@@ -1714,6 +1787,27 @@ const FormView: React.FC<FormViewProps> = ({
   };
 
   const handleLineFieldChange = (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => {
+    if (submitting) return;
+    if (field?.valueMap) return;
+    if (field?.readOnly === true) {
+      onDiagnostic?.('field.change.blocked', { scope: 'line', fieldPath: `${group.id}__${field?.id || ''}__${rowId}`, reason: 'readOnly' });
+      return;
+    }
+    if (dedupLockActive && isFieldLockedByDedup((field?.id || '').toString())) {
+      onDiagnostic?.('field.change.blocked', {
+        scope: 'line',
+        fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
+        reason: 'dedupConflict'
+      });
+      return;
+    }
+    onUserEdit?.({
+      scope: 'line',
+      fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
+      fieldId: (field?.id || '').toString(),
+      groupId: group.id,
+      rowId
+    });
     if (onStatusClear) onStatusClear();
     const existingRows = lineItems[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
@@ -1849,6 +1943,11 @@ const FormView: React.FC<FormViewProps> = ({
       resetNativeFileInput(fieldPath);
       return;
     }
+    if (submitting || field?.readOnly === true) {
+      onDiagnostic?.('upload.add.blocked', { scope: 'line', fieldPath, reason: submitting ? 'submitting' : 'readOnly' });
+      resetNativeFileInput(fieldPath);
+      return;
+    }
     processIncomingFilesForLineField({ group, rowId, field, fieldPath, incoming: Array.from(list) });
     resetNativeFileInput(fieldPath);
   };
@@ -1863,6 +1962,7 @@ const FormView: React.FC<FormViewProps> = ({
     const { group, rowId, field, fieldPath, event } = args;
     event.preventDefault();
     if (submitting) return;
+    if (field?.readOnly === true) return;
     if (!event.dataTransfer?.files?.length) return;
     processIncomingFilesForLineField({ group, rowId, field, fieldPath, incoming: Array.from(event.dataTransfer.files) });
     onDiagnostic?.('upload.drop', { fieldPath, count: event.dataTransfer.files.length, scope: 'line' });
@@ -1877,6 +1977,8 @@ const FormView: React.FC<FormViewProps> = ({
     index: number;
   }) => {
     const { group, rowId, field, fieldPath, index } = args;
+    if (submitting) return;
+    if (field?.readOnly === true) return;
     const existingRows = lineItems[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
     const existingFiles = toUploadItems((currentRow?.values || {})[field.id] as any);
@@ -1898,6 +2000,8 @@ const FormView: React.FC<FormViewProps> = ({
 
   const clearLineFiles = (args: { group: WebQuestionDefinition; rowId: string; field: any; fieldPath: string }) => {
     const { group, rowId, field, fieldPath } = args;
+    if (submitting) return;
+    if (field?.readOnly === true) return;
     handleLineFieldChange(group, rowId, field, [] as unknown as FieldValue);
     setErrors(prev => {
       const copy = { ...prev };
@@ -1917,17 +2021,17 @@ const FormView: React.FC<FormViewProps> = ({
 
   const resolveVisibilityValue = useCallback(
     (fieldId: string): FieldValue | undefined => {
-      const direct = values[fieldId];
-      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-      // scan all line item groups for the first non-empty occurrence
-      for (const rows of Object.values(lineItems)) {
-        if (!Array.isArray(rows)) continue;
-        for (const row of rows) {
-          const v = (row as LineItemRowState).values[fieldId];
-          if (v !== undefined && v !== null && v !== '') return v as FieldValue;
-        }
+    const direct = values[fieldId];
+    if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+    // scan all line item groups for the first non-empty occurrence
+    for (const rows of Object.values(lineItems)) {
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const v = (row as LineItemRowState).values[fieldId];
+        if (v !== undefined && v !== null && v !== '') return v as FieldValue;
       }
-      return undefined;
+    }
+    return undefined;
     },
     [lineItems, values]
   );
@@ -2124,8 +2228,8 @@ const FormView: React.FC<FormViewProps> = ({
               </label>
               <NumberStepper
                 value={numberText}
-                disabled={submitting}
-                readOnly={!!q.valueMap}
+                disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
+                readOnly={!!q.valueMap || q.readOnly === true}
                 ariaLabel={resolveFieldLabel(q, language, q.id)}
                 onChange={next => handleFieldChange(q, next)}
               />
@@ -2152,14 +2256,16 @@ const FormView: React.FC<FormViewProps> = ({
               <textarea
                 value={inputValue}
                 onChange={e => handleFieldChange(q, e.target.value)}
-                readOnly={!!q.valueMap}
+                readOnly={!!q.valueMap || q.readOnly === true}
+                disabled={submitting || isFieldLockedByDedup(q.id)}
                 rows={((q as any)?.ui as any)?.paragraphRows || 4}
               />
             ) : q.type === 'DATE' ? (
               <DateInput
                 value={inputValue}
                 language={language}
-                readOnly={!!q.valueMap}
+                readOnly={!!q.valueMap || q.readOnly === true}
+                disabled={submitting || isFieldLockedByDedup(q.id)}
                 ariaLabel={resolveLabel(q, language)}
                 onChange={next => handleFieldChange(q, next)}
               />
@@ -2168,7 +2274,8 @@ const FormView: React.FC<FormViewProps> = ({
                 type="text"
                 value={inputValue}
                 onChange={e => handleFieldChange(q, e.target.value)}
-                readOnly={!!q.valueMap}
+                readOnly={!!q.valueMap || q.readOnly === true}
+                disabled={submitting || isFieldLockedByDedup(q.id)}
               />
             )}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
@@ -2196,6 +2303,7 @@ const FormView: React.FC<FormViewProps> = ({
               options: opts,
               required: !!q.required,
               override: q.ui?.control,
+              disabled: submitting || q.readOnly === true || isFieldLockedByDedup(q.id),
               onChange: next => handleFieldChange(q, next)
             })}
             {(() => {
@@ -2228,13 +2336,17 @@ const FormView: React.FC<FormViewProps> = ({
                   type="checkbox"
                   checked={!!values[q.id]}
                   aria-label={hideFieldLabel ? consentLabel : undefined}
-                  onChange={e => handleFieldChange(q, e.target.checked)}
+                  disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
+                  onChange={e => {
+                    if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
+                    handleFieldChange(q, e.target.checked);
+                  }}
                 />
                 {!hideFieldLabel ? (
-                  <span className="ck-consent-text">
+                <span className="ck-consent-text">
                     {consentLabel}
-                    {q.required && <RequiredStar />}
-                  </span>
+                  {q.required && <RequiredStar />}
+                </span>
                 ) : null}
               </label>
               {errors[q.id] && <div className="error">{errors[q.id]}</div>}
@@ -2260,7 +2372,9 @@ const FormView: React.FC<FormViewProps> = ({
                   <input
                     type="checkbox"
                     checked={selected.includes(opt.value)}
+                    disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
                     onChange={e => {
+                      if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
                         const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
                       handleFieldChange(q, next);
                     }}
@@ -2316,8 +2430,9 @@ const FormView: React.FC<FormViewProps> = ({
           .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
           .filter(Boolean);
         const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
-        const viewMode = maxed;
-        const addDisabled = submitting;
+        const readOnly = q.readOnly === true;
+        const locked = isFieldLockedByDedup(q.id);
+        const viewMode = readOnly || maxed || locked;
         const LeftIcon = viewMode ? EyeIcon : SlotIcon;
         const leftLabel = viewMode
           ? tSystem('files.view', language, 'View files')
@@ -2339,12 +2454,12 @@ const FormView: React.FC<FormViewProps> = ({
               <button
                 type="button"
                 className="ck-upload-camera-btn"
-                disabled={addDisabled}
-                style={withDisabled(cameraStyleBase, addDisabled)}
+                disabled={submitting}
+                style={withDisabled(cameraStyleBase, submitting)}
                 aria-label={leftLabel}
                 title={leftLabel}
-                onClick={() => {
-                  if (addDisabled) return;
+              onClick={() => {
+                  if (submitting) return;
                   if (viewMode) {
                     onDiagnostic?.('upload.view.click', { scope: 'top', fieldPath: q.id, currentCount: items.length });
                     openFileOverlay({
@@ -2355,8 +2470,9 @@ const FormView: React.FC<FormViewProps> = ({
                     });
                     return;
                   }
+                  if (readOnly) return;
                   onDiagnostic?.('upload.add.click', { scope: 'top', fieldPath: q.id, currentCount: items.length });
-                  fileInputsRef.current[q.id]?.click();
+                fileInputsRef.current[q.id]?.click();
                 }}
               >
                 <LeftIcon style={{ width: '62%', height: '62%' }} />
@@ -2393,7 +2509,7 @@ const FormView: React.FC<FormViewProps> = ({
                     <SlotIcon style={{ width: '1.05em', height: '1.05em' }} />
                     {tSystem('common.more', language, '+{count} more', { count: missing })}
                   </span>
-                </div>
+              </div>
               ) : null}
             </div>
             <div style={srOnly} aria-live="polite">
@@ -2406,6 +2522,7 @@ const FormView: React.FC<FormViewProps> = ({
               type="file"
               multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
               accept={acceptAttr}
+                disabled={submitting || locked || readOnly}
               style={{ display: 'none' }}
               onChange={e => handleFileInputChange(q, e.target.files)}
             />
@@ -2426,7 +2543,7 @@ const FormView: React.FC<FormViewProps> = ({
               setValues,
               lineItems,
               setLineItems,
-              submitting,
+              submitting: submitting || isFieldLockedByDedup(q.id),
               errors,
               setErrors,
               warningByField,
@@ -3114,6 +3231,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 options: optsField,
                                 required: !!field.required,
                                 override: (field as any)?.ui?.control,
+                                disabled: submitting || (field as any)?.readOnly === true,
                                 onChange: next => handleLineFieldChange(subGroupDef, subRow.id, field, next)
                               })}
                                         {(() => {
@@ -3148,7 +3266,11 @@ const FormView: React.FC<FormViewProps> = ({
                                             <input
                                               type="checkbox"
                                               checked={!!subRow.values[field.id]}
-                                              onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.checked)}
+                                              disabled={submitting || (field as any)?.readOnly === true}
+                                              onChange={e => {
+                                                if (submitting || (field as any)?.readOnly === true) return;
+                                                handleLineFieldChange(subGroupDef, subRow.id, field, e.target.checked);
+                                              }}
                                             />
                                             <span className="ck-consent-text" style={labelStyle}>
                                               {resolveFieldLabel(field, language, field.id)}
@@ -3178,7 +3300,9 @@ const FormView: React.FC<FormViewProps> = ({
                                               <input
                                                 type="checkbox"
                                                 checked={selected.includes(opt.value)}
+                                                disabled={submitting || (field as any)?.readOnly === true}
                                                 onChange={e => {
+                                                  if (submitting || (field as any)?.readOnly === true) return;
                                                   const next = e.target.checked
                                                     ? [...selected, opt.value]
                                                     : selected.filter(v => v !== opt.value);
@@ -3233,8 +3357,8 @@ const FormView: React.FC<FormViewProps> = ({
                           const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
                           const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
                           const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
-                          const viewMode = maxed;
-                          const addDisabled = submitting;
+                          const readOnly = (field as any)?.readOnly === true;
+                          const viewMode = readOnly || maxed;
                           const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                           const leftLabel = viewMode
                             ? tSystem('files.view', language, 'View files')
@@ -3267,12 +3391,12 @@ const FormView: React.FC<FormViewProps> = ({
                                 <button
                                   type="button"
                                   className="ck-upload-camera-btn"
-                                  disabled={addDisabled}
-                                  style={withDisabled(cameraStyleBase, addDisabled)}
+                                  disabled={submitting}
+                                  style={withDisabled(cameraStyleBase, submitting)}
                                   aria-label={leftLabel}
                                   title={leftLabel}
                                   onClick={() => {
-                                    if (addDisabled) return;
+                                    if (submitting) return;
                                     if (viewMode) {
                                       onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                                       openFileOverlay({
@@ -3285,6 +3409,7 @@ const FormView: React.FC<FormViewProps> = ({
                                       });
                                       return;
                                     }
+                                    if (readOnly) return;
                                     onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
                                     fileInputsRef.current[fieldPath]?.click();
                                   }}
@@ -3388,17 +3513,18 @@ const FormView: React.FC<FormViewProps> = ({
                                 <DateInput
                                   value={fieldValue}
                                   language={language}
-                                  readOnly={!!field.valueMap}
+                                  readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                   ariaLabel={resolveFieldLabel(field, language, field.id)}
                                   onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
                                 />
                               ) : (
-                                <input
-                                  type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
-                                  value={fieldValue}
-                                  onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
-                                  readOnly={!!field.valueMap}
-                                />
+                              <input
+                                type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
+                                value={fieldValue}
+                                onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
+                                  readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                  disabled={submitting || (field as any)?.readOnly === true}
+                              />
                               )}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                               {renderWarnings(fieldPath)}
@@ -3486,6 +3612,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     const fieldPath = isTop ? (fileOverlay.question!.id || '') : (fileOverlay.fieldPath || '');
     const uploadConfig: any = isTop ? (fileOverlay.question as any)?.uploadConfig || {} : (fileOverlay.field as any)?.uploadConfig || {};
+    const readOnly = Boolean(isTop ? (fileOverlay.question as any)?.readOnly : (fileOverlay.field as any)?.readOnly);
     const items = (() => {
       if (isTop) return toUploadItems(values[(fileOverlay.question as any).id]);
       const groupId = (fileOverlay.group as any).id;
@@ -3499,13 +3626,13 @@ const FormView: React.FC<FormViewProps> = ({
     const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
 
     const onAdd = () => {
-      if (submitting) return;
+      if (submitting || readOnly) return;
       if (maxed) return;
       fileInputsRef.current[fieldPath]?.click();
     };
 
     const onClearAll = () => {
-      if (submitting) return;
+      if (submitting || readOnly) return;
       if (isTop) {
         clearFiles(fileOverlay.question!);
       } else {
@@ -3519,7 +3646,7 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const onRemoveAt = (idx: number) => {
-      if (submitting) return;
+      if (submitting || readOnly) return;
       if (isTop) {
         removeFile(fileOverlay.question!, idx);
       } else {
@@ -3539,6 +3666,7 @@ const FormView: React.FC<FormViewProps> = ({
         language={language}
         title={title}
         submitting={submitting}
+        readOnly={readOnly}
         items={items}
         uploadConfig={uploadConfig}
         onAdd={onAdd}

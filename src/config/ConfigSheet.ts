@@ -165,6 +165,7 @@ export class ConfigSheet {
       const group = this.parseQuestionGroup([rawConfig, optionFilterRaw, validationRaw]);
       const pair = this.parsePairKey([rawConfig, optionFilterRaw, validationRaw]);
       const ui = this.parseQuestionUi([rawConfig, optionFilterRaw, validationRaw]);
+      const readOnly = this.parseReadOnly([rawConfig, optionFilterRaw, validationRaw]);
       const optionSort =
         type === 'CHOICE' || type === 'CHECKBOX' ? this.parseOptionSort([rawConfig, optionFilterRaw, validationRaw]) : undefined;
       const selectionEffects = (type === 'CHOICE' || type === 'CHECKBOX') ? this.parseSelectionEffects(rawConfig) : undefined;
@@ -187,6 +188,7 @@ export class ConfigSheet {
         requiredMessage,
         defaultValue,
         ui,
+        readOnly,
         optionSort,
         header,
         group:
@@ -1532,6 +1534,31 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static parseReadOnly(rawConfigs: Array<string | undefined>): boolean | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const parsed = this.safeParseObject(raw);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const obj: any = parsed as any;
+      const direct =
+        obj.readOnly !== undefined
+          ? obj.readOnly
+          : obj.readonly !== undefined
+            ? obj.readonly
+            : obj.locked !== undefined
+              ? obj.locked
+              : obj.disableEdit !== undefined
+                ? obj.disableEdit
+                : obj.disabled !== undefined
+                  ? obj.disabled
+                  : undefined;
+      const nestedUi = obj.ui && typeof obj.ui === 'object' ? (obj.ui.readOnly ?? obj.ui.readonly) : undefined;
+      const normalized = this.normalizeBoolean(direct !== undefined ? direct : nestedUi);
+      if (normalized !== undefined) return normalized;
+    }
+    return undefined;
+  }
+
   private static normalizeOptionSortMode(raw: any, preserveOrderRaw?: any): OptionSortMode | undefined {
     const s = raw !== undefined && raw !== null ? raw.toString().trim().toLowerCase() : '';
     if (s === 'source' || s === 'original' || s === 'config' || s === 'preserve' || s === 'none') return 'source';
@@ -1952,6 +1979,7 @@ export class ConfigSheet {
       const ui = this.parseQuestionUi([rawConfig]);
       const group = this.parseQuestionGroup([rawConfig]);
       const pair = this.parsePairKey([rawConfig]);
+      const readOnly = this.parseReadOnly([rawConfig]);
       const optionSort =
         fieldType === 'CHOICE' || fieldType === 'CHECKBOX' ? this.parseOptionSort([rawConfig]) : undefined;
       const requiredMessage = this.parseRequiredMessage([rawConfig]);
@@ -1971,6 +1999,7 @@ export class ConfigSheet {
         group,
         pair,
         ui,
+        readOnly,
         optionSort,
         options,
         optionsFr,
@@ -2006,6 +2035,12 @@ export class ConfigSheet {
     const derivedValue = this.normalizeDerivedValue(field?.derivedValue);
     const ui = this.normalizeQuestionUi(field?.ui || field?.view || field?.layout);
     const group = this.normalizeQuestionGroup(field?.group || field?.section || field?.card);
+    const readOnly = (() => {
+      const direct =
+        field?.readOnly ?? field?.readonly ?? field?.locked ?? field?.disableEdit ?? field?.disabled ?? field?.disable ?? undefined;
+      const nested = field?.ui && typeof field.ui === 'object' ? (field.ui.readOnly ?? field.ui.readonly) : undefined;
+      return this.normalizeBoolean(direct !== undefined ? direct : nested);
+    })();
     const pairCandidate =
       field?.pair !== undefined
         ? field.pair
@@ -2036,6 +2071,7 @@ export class ConfigSheet {
       group,
       pair: pair || undefined,
       ui,
+      readOnly,
       optionSort,
       options: Array.isArray(field?.options) ? field.options : [],
       optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],

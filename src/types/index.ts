@@ -736,6 +736,14 @@ export interface LineItemFieldConfig {
   defaultValue?: DefaultValue;
   ui?: QuestionUiConfig;
   /**
+   * When true, this field is read-only in the edit (form) view (within line item rows and subgroup overlays).
+   *
+   * Notes:
+   * - The value is still included in submissions.
+   * - Intended for fields set by `defaultValue`, `derivedValue`, or preset row generation.
+   */
+  readOnly?: boolean;
+  /**
    * Optional option ordering override for this field (CHOICE/CHECKBOX).
    * - alphabetical: sort by the localized label (default)
    * - source: preserve source order (as defined in config sheets / optionFilter / data sources)
@@ -961,6 +969,14 @@ export interface QuestionConfig {
   defaultValue?: DefaultValue;
   ui?: QuestionUiConfig;
   /**
+   * When true, this field is read-only in the edit (form) view.
+   *
+   * Notes:
+   * - The value is still included in submissions.
+   * - Intended for fields set by `defaultValue`, `derivedValue`, or `createRecordPreset` buttons.
+   */
+  readOnly?: boolean;
+  /**
    * Optional option ordering override for this field (CHOICE/CHECKBOX).
    * - alphabetical: sort by the localized label (default)
    * - source: preserve source order (as defined in config sheets / optionFilter / data sources)
@@ -1082,6 +1098,13 @@ export interface FormConfig {
    */
   copyCurrentRecordEnabled?: boolean;
   /**
+   * Enable/disable the standard "New record" create action in the React web app.
+   *
+   * When false, users can only create records via `createRecordPreset` buttons (or Copy, if enabled).
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  createNewRecordEnabled?: boolean;
+  /**
    * Enable/disable `createRecordPreset` BUTTON actions in the React web app.
    * When false, these custom buttons are ignored (not shown in any action bars).
    * Configured via the dashboard “Follow-up Config (JSON)” column.
@@ -1188,6 +1211,14 @@ export interface WebQuestionDefinition {
    */
   optionSort?: OptionSortMode;
   /**
+   * When true, this field is read-only in the edit (form) view.
+   *
+   * Notes:
+   * - The value is still included in submissions.
+   * - Intended for fields set by `defaultValue`, `derivedValue`, or `createRecordPreset` buttons.
+   */
+  readOnly?: boolean;
+  /**
    * @deprecated Replaced by `group: { header: true, title: "Header" }` (rendered in the form body).
    * When true, this field is rendered in the sticky header area of the edit view (still editable).
    */
@@ -1258,6 +1289,12 @@ export interface WebFormDefinition {
    * When false, the Create button always creates a new record (no copy option).
    */
   copyCurrentRecordEnabled?: boolean;
+  /**
+   * Enable/disable the standard "New record" create action in the React web app.
+   *
+   * When false, users can only create records via `createRecordPreset` buttons (or Copy, if enabled).
+   */
+  createNewRecordEnabled?: boolean;
   /**
    * Enable/disable `createRecordPreset` BUTTON actions in the React web app.
    * When false, these custom buttons are ignored (not shown in any action bars).

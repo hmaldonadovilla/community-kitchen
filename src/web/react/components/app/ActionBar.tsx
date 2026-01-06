@@ -168,6 +168,11 @@ export const ActionBar: React.FC<{
   language: LangCode;
   view: View;
   disabled: boolean;
+  /**
+   * Optional override: disable only the primary Submit button while keeping navigation usable.
+   * Useful for flows like dedup checks where the form must not be submittable, but the user should still be able to navigate.
+   */
+  submitDisabled?: boolean;
   submitting?: boolean;
   readOnly?: boolean;
   /**
@@ -175,6 +180,11 @@ export const ActionBar: React.FC<{
    * Used to suppress Edit on Summary for Closed records.
    */
   hideEdit?: boolean;
+  /**
+   * Enable/disable the standard "New record" action (blank record create).
+   * When false, the Create menu only shows preset buttons (and/or Copy current record if enabled).
+   */
+  createNewEnabled?: boolean;
   submitLabel?: LocalizedString;
   summaryEnabled: boolean;
   copyEnabled: boolean;
@@ -199,9 +209,11 @@ export const ActionBar: React.FC<{
   language,
   view,
   disabled,
+  submitDisabled,
   submitting,
   readOnly,
   hideEdit,
+  createNewEnabled,
   submitLabel,
   summaryEnabled,
   copyEnabled,
@@ -245,6 +257,7 @@ export const ActionBar: React.FC<{
   const globalHideHomeWhenActive = Boolean(actionBars?.system?.home?.hideWhenActive);
 
   const resolved = useMemo(() => {
+    const allowNewRecord = createNewEnabled !== false;
     const capsule: Array<
       | { kind: 'home'; hideWhenActive: boolean }
       | { kind: 'create'; showMenu: boolean; showCopy: boolean; presetButtons: CustomButton[] }
@@ -291,12 +304,16 @@ export const ActionBar: React.FC<{
             : (customButtons || []).filter(b => b.action === 'createRecordPreset')
           : [];
 
+        const hasCopy = viewKey !== 'list' && copyEnabled && showCopy;
+        const hasAnyCreateAction = allowNewRecord || presetButtons.length > 0 || hasCopy;
+        if (!hasAnyCreateAction) return;
+
         const forceMenu = cfg.menuBehavior === 'menu';
         const showMenu =
           forceMenu ||
           presetButtons.length > 0 ||
           // Preserve existing behavior: Copy menu is only shown on form/summary by default.
-          (viewKey !== 'list' && copyEnabled && showCopy);
+          hasCopy;
         capsule.push({ kind: 'create', showMenu, showCopy, presetButtons });
         return;
       }
@@ -386,6 +403,7 @@ export const ActionBar: React.FC<{
     return { capsule, menus, wantsSubmit };
   }, [
     copyEnabled,
+    createNewEnabled,
     customButtons,
     hideEdit,
     globalHideHomeWhenActive,
@@ -429,6 +447,10 @@ export const ActionBar: React.FC<{
     if (disabled) return;
     if (args.showMenu) {
       setMenu(current => (current === 'create' ? null : 'create'));
+      return;
+    }
+    if (createNewEnabled === false) {
+      onDiagnostic?.('ui.createNew.disabled', { view: viewKey });
       return;
     }
     onCreateNew();
@@ -485,20 +507,22 @@ export const ActionBar: React.FC<{
             onClick={() => setMenu(null)}
           />
           <div className="ck-bottom-menu" aria-label={tSystem('actions.createMenu', language, 'Create menu')}>
-            <button
-              type="button"
-              className="ck-bottom-menu-item ck-bottom-menu-item--primary"
-              disabled={disabled}
-              onClick={() => {
-                setMenu(null);
-                onCreateNew();
-              }}
-            >
-              <IconWrap>
-                <PlusIcon />
-              </IconWrap>
-              {tSystem('actions.newRecord', language, 'New record')}
-            </button>
+            {createNewEnabled !== false ? (
+              <button
+                type="button"
+                className="ck-bottom-menu-item ck-bottom-menu-item--primary"
+                disabled={disabled}
+                onClick={() => {
+                  setMenu(null);
+                  onCreateNew();
+                }}
+              >
+                <IconWrap>
+                  <PlusIcon />
+                </IconWrap>
+                {tSystem('actions.newRecord', language, 'New record')}
+              </button>
+            ) : null}
             {resolved.capsule
               .filter(it => it.kind === 'create')
               .flatMap(it => (it.kind === 'create' ? it.presetButtons : []))
@@ -712,7 +736,7 @@ export const ActionBar: React.FC<{
           </div>
 
           {showSubmit && (
-            <button type="button" className="ck-bottom-submit" onClick={onSubmit} disabled={disabled}>
+            <button type="button" className="ck-bottom-submit" onClick={onSubmit} disabled={disabled || submitDisabled}>
               <IconWrap>
                 <CheckIcon />
               </IconWrap>

@@ -6,7 +6,7 @@ import {
   RecordMetadata,
   WebFormSubmission
 } from '../../types';
-import { evaluateDedupConflict, ExistingRecord } from '../dedup';
+import { evaluateDedupConflict, ExistingRecord, findDedupConflict, DedupConflict } from '../dedup';
 import { CacheEtagManager } from './cache';
 import { buildResponsesRecordSchema, normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } from './recordSchema';
 import { HeaderColumns, RecordContext } from './types';
@@ -224,23 +224,30 @@ export class SubmissionService {
         }
       }
 
+      // Ensure DATE fields are stored as "date-only" values in Sheets (midnight local time).
+      if (q.type === 'DATE') {
+        value = this.normalizeDateOnlyCell(value);
+      }
+
       candidateValues[q.id] = value ?? '';
       setIf(colIdx, value ?? '');
     });
 
-    // Dedup check against existing rows (form scope only)
-    // Skip for draft autosave (no validation required until submit).
-    if (saveMode !== 'draft' && dedupRules && dedupRules.length) {
+    // Dedup check against existing rows (form scope only).
+    // We enforce this for drafts and submits so duplicates cannot be created via autosave races.
+    const shouldDedupCheck = Boolean(dedupRules && dedupRules.length);
+    if (shouldDedupCheck) {
       const existingRows = Math.max(0, sheet.getLastRow() - 1);
       if (existingRows > 0) {
         const data = sheet.getRange(2, 1, existingRows, headers.length).getValues();
-        const existing: ExistingRecord[] = data.map(row => {
+        const existing: ExistingRecord[] = data.map((row, idx) => {
           const vals: Record<string, any> = {};
           Object.entries(columns.fields).forEach(([fid, idx]) => {
             vals[fid] = row[(idx as number) - 1];
           });
           return {
             id: columns.recordId ? row[columns.recordId - 1] : '',
+            rowNumber: 2 + idx,
             values: vals
           };
         });
@@ -274,6 +281,85 @@ export class SubmissionService {
     }
 
     return { success: true, message: 'Saved to sheet', meta };
+  }
+
+  /**
+   * Check whether the given (possibly new) record would violate any dedup rule.
+   *
+   * This is used by the React client to block creating new records from preset buttons
+   * (and to pause draft autosave) once all dedup keys are populated.
+   */
+  checkDedupConflict(
+    formObject: WebFormSubmission,
+    form: FormConfig,
+    questions: QuestionConfig[],
+    dedupRules: DedupRule[]
+  ): { success: boolean; conflict?: DedupConflict; message?: string } {
+    try {
+      const langValue = Array.isArray((formObject as any).language)
+        ? ((formObject as any).language[(formObject as any).language.length - 1] || (formObject as any).language[0])
+        : (formObject as any).language;
+      const languageRaw = (langValue || 'EN').toString().toUpperCase();
+      const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
+
+      if (!dedupRules || !dedupRules.length) return { success: true };
+
+      const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+
+      const incomingId = ((formObject as any).id && (formObject as any).id.trim)
+        ? ((formObject as any).id as any).trim()
+        : (formObject as any).id;
+      const recordId = incomingId ? incomingId.toString() : '';
+
+      // Build candidate values (best-effort) without mutating the sheet (no uploads / no auto-increment).
+      const candidateValues: Record<string, any> = {};
+      questions
+        .filter(q => q && q.type !== 'BUTTON')
+        .forEach(q => {
+          let value: any = '';
+          if (q.type === 'LINE_ITEM_GROUP') {
+            const rawLineItems = (formObject as any)[`${q.id}_json`] || (formObject as any)[q.id];
+            value = rawLineItems ?? '';
+          } else if (q.type === 'FILE_UPLOAD') {
+            // Dedup rules should not rely on FILE_UPLOAD; treat as raw value.
+            value = (formObject as any)[q.id];
+          } else {
+            value = (formObject as any)[q.id];
+            if (Array.isArray(value)) value = value.join(', ');
+          }
+          // Match `saveSubmissionWithId` behavior: normalize DATE fields to date-only so dedup comparisons
+          // are consistent whether the client sends "YYYY-MM-DD", a Date instance, or a serialized date string.
+          if (q.type === 'DATE') {
+            value = this.normalizeDateOnlyCell(value);
+          }
+          candidateValues[q.id] = value ?? '';
+        });
+
+      const existingRows = Math.max(0, sheet.getLastRow() - 1);
+      if (existingRows <= 0) return { success: true };
+
+      const data = sheet.getRange(2, 1, existingRows, headers.length).getValues();
+      const existing: ExistingRecord[] = data.map((row, idx) => {
+        const vals: Record<string, any> = {};
+        Object.entries(columns.fields).forEach(([fid, idx]) => {
+          vals[fid] = row[(idx as number) - 1];
+        });
+        return {
+          id: columns.recordId ? row[columns.recordId - 1] : '',
+          rowNumber: 2 + idx,
+          values: vals
+        };
+      });
+
+      const conflict = findDedupConflict(dedupRules, { id: recordId, values: candidateValues }, existing, language);
+      if (!conflict) return { success: true };
+      return { success: true, conflict };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: (err?.message || err?.toString?.() || 'Failed to check dedup.').toString()
+      };
+    }
   }
 
   ensureDestination(
@@ -558,6 +644,58 @@ export class SubmissionService {
       // ignore
     }
     return value.toString();
+  }
+
+  private normalizeDateOnlyCell(value: any): any {
+    if (value === undefined || value === null || value === '') return '';
+
+    const toYmd = (d: Date): string => {
+      try {
+        if (typeof Utilities !== 'undefined' && Utilities?.formatDate && typeof Session !== 'undefined' && Session?.getScriptTimeZone) {
+          return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        }
+      } catch (_) {
+        // fall through
+      }
+      const y = d.getFullYear();
+      const m = (d.getMonth() + 1).toString().padStart(2, '0');
+      const day = d.getDate().toString().padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    const fromYmd = (ymd: string): Date | null => {
+      const m = (ymd || '').toString().trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return null;
+      const year = Number(m[1]);
+      const month = Number(m[2]);
+      const day = Number(m[3]);
+      if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+      return new Date(year, month - 1, day);
+    };
+
+    if (value instanceof Date) {
+      const ymd = toYmd(value);
+      return fromYmd(ymd) || value;
+    }
+
+    if (typeof value === 'string') {
+      const s = value.toString().trim();
+      if (!s) return '';
+      const direct = fromYmd(s);
+      if (direct) return direct;
+      try {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          const ymd = toYmd(d);
+          return fromYmd(ymd) || direct || s;
+        }
+      } catch (_) {
+        // ignore
+      }
+      return s;
+    }
+
+    return value;
   }
 
   private generateAutoIncrementValue(

@@ -28,6 +28,18 @@ describe('evaluateDedupConflict', () => {
     expect(res).toBe('Duplicate');
   });
 
+  it('matches DATE cells (Date objects) against YYYY-MM-DD strings', () => {
+    const res = evaluateDedupConflict(
+      [rule],
+      { id: 'new', values: { name: 'Soup', date: '2024-01-01' } },
+      [
+        { id: 'existing', values: { name: 'soup', date: new Date('2024-01-01T00:00:00.000Z') } }
+      ],
+      'en'
+    );
+    expect(res).toBe('Duplicate');
+  });
+
   it('ignores self when ids match', () => {
     const res = evaluateDedupConflict(
       [rule],

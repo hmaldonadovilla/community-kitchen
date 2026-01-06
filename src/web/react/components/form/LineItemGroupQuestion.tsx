@@ -79,6 +79,7 @@ export interface ChoiceControlArgs {
   options: Array<{ value: string; label: string; tooltip?: string }>;
   required: boolean;
   override?: string | null;
+  disabled?: boolean;
   onChange: (next: string) => void;
 }
 
@@ -1119,8 +1120,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           <input
                                             type="checkbox"
                                             checked={selected.includes(opt.value)}
-                                            disabled={titleLocked}
+                                            disabled={titleLocked || (titleField as any)?.readOnly === true}
                                             onChange={e => {
+                                              if (titleLocked || (titleField as any)?.readOnly === true) return;
                                               const next = e.target.checked
                                                 ? [...selected, opt.value]
                                                 : selected.filter(v => v !== opt.value);
@@ -1340,6 +1342,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   options: optsField,
                                   required: !!field.required,
                                   override: (field as any)?.ui?.control,
+                                  disabled: submitting || (field as any)?.readOnly === true,
                                   onChange: next => handleLineFieldChange(q, row.id, field, next)
                                 })}
                                 {(() => {
@@ -1390,7 +1393,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 <input
                                   type="checkbox"
                                   checked={!!row.values[field.id]}
-                                  onChange={e => handleLineFieldChange(q, row.id, field, e.target.checked)}
+                                  disabled={submitting || (field as any)?.readOnly === true}
+                                  onChange={e => {
+                                    if (submitting || (field as any)?.readOnly === true) return;
+                                    handleLineFieldChange(q, row.id, field, e.target.checked);
+                                  }}
                                 />
                                 <span className="ck-consent-text" style={labelStyle}>
                                   {resolveFieldLabel(field, language, field.id)}
@@ -1423,7 +1430,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   <input
                                     type="checkbox"
                                     checked={selected.includes(opt.value)}
+                                    disabled={submitting || (field as any)?.readOnly === true}
                                     onChange={e => {
+                                      if (submitting || (field as any)?.readOnly === true) return;
                                       const next = e.target.checked
                                         ? [...selected, opt.value]
                                         : selected.filter(v => v !== opt.value);
@@ -1477,8 +1486,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
                           const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
                           const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
-                          const viewMode = maxed;
-                          const addDisabled = submitting;
+                          const readOnly = (field as any)?.readOnly === true;
+                          const viewMode = readOnly || maxed;
                           const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                           const leftLabel = viewMode
                             ? tSystem('files.view', language, 'View files')
@@ -1511,12 +1520,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 <button
                                   type="button"
                                   className="ck-upload-camera-btn"
-                                  disabled={addDisabled}
-                                  style={withDisabled(cameraStyleBase, addDisabled)}
+                                  disabled={submitting}
+                                  style={withDisabled(cameraStyleBase, submitting)}
                                   aria-label={leftLabel}
                                   title={leftLabel}
                                   onClick={() => {
-                                    if (addDisabled) return;
+                                    if (submitting) return;
                                     if (viewMode) {
                                       onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                                       openFileOverlay({
@@ -1529,6 +1538,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       });
                                       return;
                                     }
+                                    if (readOnly) return;
                                     onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
                                     fileInputsRef.current[fieldPath]?.click();
                                   }}
@@ -1630,7 +1640,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               <NumberStepper
                                 value={numberText}
                                 disabled={submitting}
-                                readOnly={!!field.valueMap}
+                                readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
                                 onChange={next => handleLineFieldChange(q, row.id, field, next)}
                               />
@@ -1638,14 +1648,14 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               <textarea
                                 value={fieldValue}
                                 onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                                readOnly={!!field.valueMap}
+                                readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                 rows={(field as any)?.ui?.paragraphRows || 4}
                               />
                             ) : field.type === 'DATE' ? (
                               <DateInput
                                 value={fieldValue}
                                 language={language}
-                                readOnly={!!field.valueMap}
+                                readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
                                 onChange={next => handleLineFieldChange(q, row.id, field, next)}
                               />
@@ -1654,7 +1664,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 type={field.type === 'DATE' ? 'date' : 'text'}
                                 value={fieldValue}
                                 onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                                readOnly={!!field.valueMap}
+                                readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                               />
                             )}
                               {subgroupTriggerNodes.length ? (
@@ -2055,6 +2065,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             options: optsField,
                                             required: !!field.required,
                                             override: (field as any)?.ui?.control,
+                                            disabled: submitting || (field as any)?.readOnly === true,
                                             onChange: next => handleLineFieldChange(targetGroup, subRow.id, field, next)
                                           })}
                                         {(() => {
@@ -2102,9 +2113,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                                 <input
                                                   type="checkbox"
                                                   checked={!!subRow.values[field.id]}
-                                                  onChange={e =>
-                                                    handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked)
-                                                  }
+                                                  disabled={submitting || (field as any)?.readOnly === true}
+                                                  onChange={e => {
+                                                    if (submitting || (field as any)?.readOnly === true) return;
+                                                    handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked);
+                                                  }}
                                                 />
                                               </label>
                                             </div>
@@ -2115,7 +2128,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                               <input
                                                 type="checkbox"
                                                 checked={selected.includes(opt.value)}
+                                                disabled={submitting || (field as any)?.readOnly === true}
                                                 onChange={e => {
+                                                  if (submitting || (field as any)?.readOnly === true) return;
                                                   const next = e.target.checked
                                                     ? [...selected, opt.value]
                                                     : selected.filter(v => v !== opt.value);
@@ -2175,8 +2190,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
                                       const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
                                       const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
-                                      const viewMode = maxed;
-                                      const addDisabled = submitting;
+                                      const readOnly = (field as any)?.readOnly === true;
+                                      const viewMode = readOnly || maxed;
                                       const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                                       const leftLabel = viewMode
                                         ? tSystem('files.view', language, 'View files')
@@ -2209,12 +2224,12 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             <button
                                               type="button"
                                               className="ck-upload-camera-btn"
-                                              disabled={addDisabled}
-                                              style={withDisabled(cameraStyleBase, addDisabled)}
+                                              disabled={submitting}
+                                              style={withDisabled(cameraStyleBase, submitting)}
                                               aria-label={leftLabel}
                                               title={leftLabel}
                                               onClick={() => {
-                                                if (addDisabled) return;
+                                                if (submitting) return;
                                                 if (viewMode) {
                                                   onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                                                   openFileOverlay({
@@ -2227,6 +2242,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                                   });
                                                   return;
                                                 }
+                                                if (readOnly) return;
                                                 onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
                                                 fileInputsRef.current[fieldPath]?.click();
                                               }}
@@ -2332,7 +2348,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           <NumberStepper
                                             value={numberText}
                                             disabled={submitting}
-                                            readOnly={!!field.valueMap}
+                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
                                           />
@@ -2340,14 +2356,14 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           <textarea
                                             value={fieldValue}
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                            readOnly={!!field.valueMap}
+                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                             rows={(field as any)?.ui?.paragraphRows || 4}
                                           />
                                         ) : field.type === 'DATE' ? (
                                           <DateInput
                                             value={fieldValue}
                                             language={language}
-                                            readOnly={!!field.valueMap}
+                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
                                           />
@@ -2356,7 +2372,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             type={field.type === 'DATE' ? 'date' : 'text'}
                                             value={fieldValue}
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                            readOnly={!!field.valueMap}
+                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                           />
                                         )}
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}

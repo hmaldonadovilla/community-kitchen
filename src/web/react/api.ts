@@ -18,6 +18,17 @@ export interface SubmissionResult {
   meta?: { id?: string; createdAt?: string; updatedAt?: string };
 }
 
+export interface DedupConflictCheckResult {
+  success: boolean;
+  conflict?: {
+    ruleId: string;
+    message: string;
+    existingRecordId?: string;
+    existingRowNumber?: number;
+  };
+  message?: string;
+}
+
 export interface ListItem {
   id: string;
   createdAt?: string;
@@ -132,6 +143,9 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
 
 export const submit = (payload: SubmissionPayload): Promise<SubmissionResult> =>
   runAppsScript<SubmissionResult>('saveSubmissionWithId', payload);
+
+export const checkDedupConflictApi = (payload: SubmissionPayload): Promise<DedupConflictCheckResult> =>
+  runAppsScript<DedupConflictCheckResult>('checkDedupConflict', payload);
 
 export const fetchList = (
   formKey: string,

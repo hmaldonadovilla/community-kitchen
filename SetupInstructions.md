@@ -879,9 +879,9 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        }
        ```
 
-     Use `{{FIELD_ID}}` tokens (or slugified labels) in the Doc; the runtime replaces them with the submitted values (line items render as bullet summaries).  
-   - `pdfFolderId` (optional): target Drive folder for generated PDFs; falls back to the spreadsheet’s parent folder.  
-   - `emailTemplateId`: Google Doc containing the email body. Same structure as `pdfTemplateId` (string, language map, or `cases` selector). Tokens work the same as in the PDF template.  
+     Use `{{FIELD_ID}}` tokens (or slugified labels) in the Doc; the runtime replaces them with the submitted values (line items render as bullet summaries).
+   - `pdfFolderId` (optional): target Drive folder for generated PDFs; falls back to the spreadsheet’s parent folder.
+   - `emailTemplateId`: Google Doc containing the email body. Same structure as `pdfTemplateId` (string, language map, or `cases` selector). Tokens work the same as in the PDF template.
    - `emailRecipients`: list of addresses. Entries can be plain strings (placeholders allowed) or objects describing a data source lookup:
      - `recordFieldId`: the form/line-item field whose submitted value should be used as the lookup key.
      - `dataSource`: standard data source config (sheet/tab reference, projection, limit, etc.).
@@ -889,20 +889,20 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
      - `valueField`: column containing the email address to use.
      - `fallbackEmail` (optional): used when the lookup fails.
    - `emailCc` / `emailBcc`: same structure as `emailRecipients`, useful for copying chefs/managers automatically.
-   - `statusFieldId` (optional): question ID to overwrite when actions run. If omitted we use the auto-generated `Status` column in the response tab.  
+   - `statusFieldId` (optional): question ID to overwrite when actions run. If omitted we use the auto-generated `Status` column in the response tab.
    - `statusTransitions`: strings written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
    - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes the configured `status` (default `In progress`). If the record’s status is `Closed`, the edit view becomes read-only and autosave stops.
 
 2. **Provide templates**:
-   - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).  
+   - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).
    - Store the Doc IDs in the dashboard JSON. When the action runs we copy the Doc, replace tokens, export to PDF, and (optionally) email it as an attachment.
 
 3. **Run actions**:
-   - After submit, the Summary step now surfaces “Create PDF”, “Send PDF via email”, and “Close record” buttons when a record ID is available.  
+   - After submit, the Summary step now surfaces “Create PDF”, “Send PDF via email”, and “Close record” buttons when a record ID is available.
    - The list view gained the `⋮` action menu so you can trigger the same follow-ups (or open the record) without leaving the table. Search/filter/sort all run client-side, so it feels instant even with ~200 rows.
 
 4. **Status & links**:
-   - The response tab automatically gains `Status` and `PDF URL` columns. Actions update those cells plus any custom `statusFieldId` you provided.  
+   - The response tab automatically gains `Status` and `PDF URL` columns. Actions update those cells plus any custom `statusFieldId` you provided.
    - Every action also refreshes the list view cache, so the new status is visible after a second or two.
      - *List view support*: The web app list view is paginated and shows `createdAt`/`updatedAt`. Configure which columns to display via the form definition’s `listView` (field ids). Backend uses `fetchSubmissions`/`fetchSubmissionById`; save uses `saveSubmissionWithId`.
      - *Dedup rules*: Create a sheet named `<Config Sheet Name> Dedup` (e.g., `Config: Fridge Dedup`) with columns:
@@ -914,6 +914,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        6) Message (string or localized JSON)
 
        Example row: `uniqueNameDate | form | name,date | caseInsensitive | reject | {"en":"Duplicate entry","fr":"Entrée dupliquée"}`. On submit, duplicates are rejected and the message is returned to the frontend.
+       - Note: DATE fields are supported even when Google Sheets stores them as Date cells (Apps Script `Date` values); the dedup matcher normalizes them to `yyyy-MM-dd` before comparing.
 
 ### Web App (Custom UI)
 
@@ -1124,10 +1125,25 @@ Example (show `createRecordPreset` buttons inside the **Create** menu on the bot
     - Any top-level CHOICE/CHECKBOX question (in the question’s **Config (JSON/REF)** column JSON)
     - Any line-item/subgroup CHOICE/CHECKBOX field (in the line-item field’s **Config** column JSON, or inside the `lineItemConfig.fields[]` object)
 
+- **Optional: make a field read-only in the Edit view**:
+  - Set `"readOnly": true` in the field’s **Config** JSON.
+  - Supported for:
+    - Top-level questions (in the question’s **Config (JSON/REF)** column JSON)
+    - Line-item fields and subgroup fields (in the line-item field’s **Config** column JSON, or inside the `lineItemConfig.fields[]` objects)
+  - Notes:
+    - The value is still included in submissions.
+    - Intended for fields set by `defaultValue`, `derivedValue`, or `createRecordPreset` buttons.
+
 - **Optional: disable “Copy current record”**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"copyCurrentRecordEnabled": false`.
   - Behavior when disabled:
     - The Create button always starts a **New record** (no copy option).
+
+- **Optional: disable “New record” (blank record creation)**:
+  - In the dashboard “Follow-up Config (JSON)” column, set `"createNewRecordEnabled": false`.
+  - Behavior when disabled:
+    - The Create menu no longer shows **New record**.
+    - Users can only create records via `createRecordPreset` buttons (and/or Copy current record, if enabled).
 
 - **Optional: disable create preset buttons**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"createRecordPresetButtonsEnabled": false`.

@@ -13,6 +13,7 @@ import {
 import {
   BootstrapContext,
   submit,
+  checkDedupConflictApi,
   triggerFollowup,
   uploadFilesApi,
   prefetchTemplatesApi,
@@ -67,6 +68,45 @@ type SubmissionMeta = {
 };
 
 type DraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused';
+
+const computeDedupSignatureFromValues = (rulesRaw: any, values: Record<string, any>): string => {
+  const rules: any[] = Array.isArray(rulesRaw) ? rulesRaw : [];
+  if (!rules.length) return '';
+  const normalizeKeyValue = (raw: any): string => {
+    if (raw === undefined || raw === null) return '';
+    if (Array.isArray(raw)) return raw.map(v => (v === undefined || v === null ? '' : v.toString())).join('|');
+    return raw.toString();
+  };
+  const parts: string[] = [];
+  rules.forEach(rule => {
+    if (!rule) return;
+    const keys = Array.isArray(rule.keys) ? rule.keys : [];
+    if (!keys.length) return;
+    const onConflict = (rule.onConflict || 'reject').toString().trim().toLowerCase();
+    if (onConflict !== 'reject') return;
+    const vals = keys.map((k: any) => normalizeKeyValue((values as any)[(k || '').toString()]));
+    if (vals.some(v => !v || !v.trim())) return;
+    parts.push(`${(rule.id || '').toString()}:${vals.map(v => v.trim()).join('||')}`);
+  });
+  return parts.sort().join('|');
+};
+
+const computeDedupKeyFieldIdMap = (rulesRaw: any): Record<string, true> => {
+  const rules: any[] = Array.isArray(rulesRaw) ? rulesRaw : [];
+  const map: Record<string, true> = {};
+  rules.forEach(rule => {
+    if (!rule) return;
+    const keys = Array.isArray(rule.keys) ? rule.keys : [];
+    if (!keys.length) return;
+    const onConflict = (rule.onConflict || 'reject').toString().trim().toLowerCase();
+    if (onConflict !== 'reject') return;
+    keys.forEach((k: any) => {
+      const id = (k || '').toString().trim();
+      if (id) map[id] = true;
+    });
+  });
+  return map;
+};
 
 // Build marker to verify deployed bundle version in UI
 const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
@@ -149,6 +189,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   });
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
+  type DedupConflictInfo = { ruleId: string; message: string; existingRecordId?: string; existingRowNumber?: number };
+  const [dedupChecking, setDedupChecking] = useState<boolean>(false);
+  const [dedupConflict, setDedupConflict] = useState<DedupConflictInfo | null>(null);
+  const [dedupNotice, setDedupNotice] = useState<DedupConflictInfo | null>(null);
+  const dedupCheckingRef = useRef<boolean>(false);
+  const dedupConflictRef = useRef<DedupConflictInfo | null>(null);
+  const dedupSignatureRef = useRef<string>('');
+  const dedupCheckSeqRef = useRef<number>(0);
+  const dedupCheckTimerRef = useRef<number | null>(null);
+  const lastDedupCheckedSignatureRef = useRef<string>('');
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const submitConfirmedRef = useRef(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string>(record?.id || '');
@@ -187,6 +237,58 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     },
     [debugEnabled]
   );
+
+  const handleUserEdit = useCallback(
+    (args: { scope: 'top' | 'line'; fieldPath: string; fieldId?: string }) => {
+      try {
+        const fieldPath = (args?.fieldPath || '').toString();
+        const fieldId = (args?.fieldId || '').toString();
+        // Clear stale dedup notice on any new user edit.
+        if (dedupNotice) setDedupNotice(null);
+
+        // Arm autosave on first user edit during create-flow (segmented controls won't emit native input events).
+        if (createFlowRef.current && !createFlowUserEditedRef.current) {
+          createFlowUserEditedRef.current = true;
+          logEvent('autosave.armed.userEdit', { fieldPath: fieldPath || fieldId || null });
+        }
+
+        // For top-level dedup keys (reject rules): hold autosave until dedup check completes.
+        const isDedupKey =
+          (fieldId && dedupKeyFieldIdsRef.current[fieldId]) || (fieldPath && dedupKeyFieldIdsRef.current[fieldPath]);
+        if (args?.scope === 'top' && isDedupKey) {
+          // Cancel any pending/in-flight dedup check; the next render will schedule a new one for the updated signature.
+          if (dedupCheckTimerRef.current) {
+            globalThis.clearTimeout(dedupCheckTimerRef.current);
+            dedupCheckTimerRef.current = null;
+          }
+          dedupCheckSeqRef.current += 1; // invalidate in-flight responses
+          lastDedupCheckedSignatureRef.current = ''; // force re-check for next signature
+          dedupHoldRef.current = true;
+          autoSaveDirtyRef.current = true;
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          setDraftSave({ phase: 'idle' });
+          logEvent('autosave.hold.dedupKeyChange', {
+            fieldId: fieldId || fieldPath || null,
+            fieldPath: fieldPath || fieldId || null
+          });
+        }
+      } catch (_) {
+        // ignore
+      }
+    },
+    [dedupNotice, logEvent]
+  );
+
+  useEffect(() => {
+    dedupCheckingRef.current = dedupChecking;
+  }, [dedupChecking]);
+
+  useEffect(() => {
+    dedupConflictRef.current = dedupConflict;
+  }, [dedupConflict]);
 
   const portraitOnlyEnabled = definition.portraitOnly === true;
   const blockLandscape = portraitOnlyEnabled && isMobile && isLandscape;
@@ -289,6 +391,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const selectedRecordIdRef = useRef<string>(selectedRecordId);
   const selectedRecordSnapshotRef = useRef<WebFormSubmission | null>(selectedRecordSnapshot);
   const lastSubmissionMetaRef = useRef<SubmissionMeta | null>(lastSubmissionMeta);
+  /**
+   * Tracks whether the current form session represents a "create new record" flow (blank/new preset/copy),
+   * even after autosave generates a record id. Used to enforce dedup rules on drafts without breaking edits
+   * of existing records loaded from the list.
+   */
+  const createFlowRef = useRef<boolean>(false);
+  /**
+   * In create-flow, autosave must NOT create drafts until the user actually changes a field value.
+   * Defaults/derived values/preset values alone should not trigger autosave.
+   */
+  const createFlowUserEditedRef = useRef<boolean>(false);
+  const dedupHoldRef = useRef<boolean>(false);
+  // Initialize immediately so the very first user interaction can be dedup-held (before effects run).
+  const dedupKeyFieldIdsRef = useRef<Record<string, true>>(computeDedupKeyFieldIdMap((definition as any)?.dedupRules));
 
   useEffect(() => {
     viewRef.current = view;
@@ -315,6 +431,48 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     lastSubmissionMetaRef.current = lastSubmissionMeta;
   }, [lastSubmissionMeta]);
 
+  // Arm autosave for create-flow ONLY after the user actually changes a field value.
+  // (We intentionally do NOT arm autosave when values are populated by defaultValue/derivedValue/createRecordPreset.)
+  useEffect(() => {
+    const onFieldChange = (e: Event) => {
+      try {
+        if (viewRef.current !== 'form') return;
+        if (!createFlowRef.current) return;
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
+        const tag = ((target as any).tagName || '').toString().toLowerCase();
+        if (tag !== 'input' && tag !== 'select' && tag !== 'textarea') return;
+        const fieldPath = (target.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
+        if (!fieldPath) return;
+        if (!createFlowUserEditedRef.current) {
+          createFlowUserEditedRef.current = true;
+          logEvent('autosave.armed.userEdit', { fieldPath });
+        }
+
+        if (dedupKeyFieldIdsRef.current[fieldPath]) {
+          dedupHoldRef.current = true;
+          autoSaveDirtyRef.current = true;
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          // Avoid confusing "Draft saved" banners while we're validating dedup keys.
+          setDraftSave({ phase: 'idle' });
+          logEvent('autosave.hold.dedupKeyChange', { fieldPath });
+        }
+      } catch (_) {
+        // ignore
+      }
+    };
+
+    document.addEventListener('input', onFieldChange, true);
+    document.addEventListener('change', onFieldChange, true);
+    return () => {
+      document.removeEventListener('input', onFieldChange, true);
+      document.removeEventListener('change', onFieldChange, true);
+    };
+  }, [logEvent]);
+
   const [listCache, setListCache] = useState<{ response: ListResponse | null; records: Record<string, WebFormSubmission> }>(() => {
     const globalAny = globalThis as any;
     const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
@@ -334,6 +492,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     (snapshot: WebFormSubmission) => {
       const id = snapshot?.id;
       if (!snapshot || !id) return;
+      // Switching records: cancel any in-flight dedup check so stale responses can't affect the new record.
+      if (dedupCheckTimerRef.current) {
+        globalThis.clearTimeout(dedupCheckTimerRef.current);
+        dedupCheckTimerRef.current = null;
+      }
+      dedupCheckSeqRef.current += 1;
+      lastDedupCheckedSignatureRef.current = '';
+      dedupCheckingRef.current = false;
+      dedupConflictRef.current = null;
+      setDedupChecking(false);
+      setDedupConflict(null);
+      setDedupNotice(null);
+      const currentId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+      // Loading a snapshot from the server/list is an "edit existing record" flow,
+      // except when we are reloading the CURRENT draft record during create-flow.
+      const isReloadingCurrentCreateFlow = createFlowRef.current && currentId && currentId === id;
+      if (!isReloadingCurrentCreateFlow) {
+        createFlowRef.current = false;
+      }
+      createFlowUserEditedRef.current = true;
+      dedupHoldRef.current = false;
       const normalized = normalizeRecordValues(definition, snapshot.values || {});
       const initialLineItems = buildInitialLineItems(definition, normalized);
       const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
@@ -370,9 +554,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   );
 
   const loadRecordSnapshot = useCallback(
-    async (recordId: string, rowNumberHint?: number) => {
+    async (recordId: string, rowNumberHint?: number): Promise<boolean> => {
       const candidateRow = rowNumberHint && Number.isFinite(rowNumberHint) && rowNumberHint >= 2 ? rowNumberHint : undefined;
-      if (!recordId && !candidateRow) return;
+      if (!recordId && !candidateRow) return false;
       const seq = ++recordFetchSeqRef.current;
       const startedAt = Date.now();
       setRecordLoadingId(recordId || (candidateRow ? `row:${candidateRow}` : null));
@@ -384,7 +568,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         // Prefer row-number fetch when available (avoids expensive ID scans and works even if legacy endpoints exist).
         if (candidateRow) {
           snapshot = await fetchRecordByRowNumber(formKey, candidateRow);
-          if (seq !== recordFetchSeqRef.current) return;
+          if (seq !== recordFetchSeqRef.current) return false;
           if (recordId && snapshot && snapshot.id && snapshot.id !== recordId) {
             // Row hint might be stale; fall back to ID to avoid loading the wrong record.
             logEvent('record.fetch.rowNumberMismatch', {
@@ -399,16 +583,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         if (!snapshot && recordId) {
           snapshot = await fetchRecordById(formKey, recordId);
         }
-        if (seq !== recordFetchSeqRef.current) return;
+        if (seq !== recordFetchSeqRef.current) return false;
         if (!snapshot) throw new Error('Record not found.');
         applyRecordSnapshot(snapshot);
         logEvent('record.fetch.done', { recordId: snapshot.id || recordId, durationMs: Date.now() - startedAt });
+        return true;
       } catch (err: any) {
-        if (seq !== recordFetchSeqRef.current) return;
+        if (seq !== recordFetchSeqRef.current) return false;
         const message = (err?.message || err?.toString?.() || 'Failed to load record.').toString();
         setRecordLoadError(message);
         setRecordLoadingId(null);
         logEvent('record.fetch.error', { recordId, message, rowNumberHint, durationMs: Date.now() - startedAt });
+        return false;
       }
     },
     [applyRecordSnapshot, formKey, logEvent]
@@ -919,12 +1105,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, [debugEnabled]);
 
   const handleSubmitAnother = useCallback(() => {
+    createFlowRef.current = true;
+    createFlowUserEditedRef.current = false;
+    dedupHoldRef.current = false;
     autoSaveDirtyRef.current = false;
     if (autoSaveTimerRef.current) {
       globalThis.clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;
     }
     setDraftSave({ phase: 'idle' });
+    setDedupChecking(false);
+    setDedupConflict(null);
+    setDedupNotice(null);
+    dedupCheckingRef.current = false;
+    dedupConflictRef.current = null;
+    lastDedupCheckedSignatureRef.current = '';
     const normalized = normalizeRecordValues(definition);
     const initialLineItems = buildInitialLineItems(definition);
     const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
@@ -951,6 +1146,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, []);
 
   const handleDuplicateCurrent = useCallback(() => {
+    createFlowRef.current = true;
+    createFlowUserEditedRef.current = false;
+    dedupHoldRef.current = false;
     // Preserve current values/line items but clear record context so the next submit creates a new record.
     autoSaveDirtyRef.current = false;
     if (autoSaveTimerRef.current) {
@@ -958,6 +1156,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       autoSaveTimerRef.current = null;
     }
     setDraftSave({ phase: 'idle' });
+    setDedupChecking(false);
+    setDedupConflict(null);
+    setDedupNotice(null);
+    dedupCheckingRef.current = false;
+    dedupConflictRef.current = null;
+    lastDedupCheckedSignatureRef.current = '';
     const cleared = clearAutoIncrementFields(definition, values, lineItems);
     lastAutoSaveSeenRef.current = { values: cleared.values, lineItems: cleared.lineItems };
     setValues(cleared.values);
@@ -1182,10 +1386,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           try {
             globalThis.location?.assign?.(objectUrl);
             opened = true;
-          } catch (_) {
-            // ignore
+            } catch (_) {
+              // ignore
+            }
           }
-        }
 
         setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'idle', pdfMessage: undefined }));
         logEvent('report.pdfPreview.ok', { buttonId, opened });
@@ -1306,6 +1510,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     (args: { buttonId: string; presetValues: Record<string, any> }) => {
       const { buttonId, presetValues } = args;
 
+      createFlowRef.current = true;
+      createFlowUserEditedRef.current = false;
+      dedupHoldRef.current = false;
       // Creating a preset record is a "new record" flow: clear draft autosave and record context.
       autoSaveDirtyRef.current = false;
       if (autoSaveTimerRef.current) {
@@ -1313,6 +1520,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         autoSaveTimerRef.current = null;
       }
       setDraftSave({ phase: 'idle' });
+      setDedupChecking(false);
+      setDedupConflict(null);
+      setDedupNotice(null);
+      dedupCheckingRef.current = false;
+      dedupConflictRef.current = null;
+      lastDedupCheckedSignatureRef.current = '';
 
       const parsedRef = parseButtonRef(buttonId || '');
       const baseId = parsedRef.id;
@@ -1539,6 +1752,177 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     return raw.trim().toLowerCase() === 'closed';
   })();
 
+  const dedupSignature = useMemo(
+    () => computeDedupSignatureFromValues((definition as any)?.dedupRules, values as any),
+    [definition, values]
+  );
+
+  const dedupKeyFieldIds = useMemo(() => {
+    const rules: any[] = Array.isArray((definition as any)?.dedupRules) ? ((definition as any).dedupRules as any[]) : [];
+    if (!rules.length) return [] as string[];
+    const ids = new Set<string>();
+    rules.forEach(rule => {
+      if (!rule) return;
+      const keys = Array.isArray(rule.keys) ? rule.keys : [];
+      if (!keys.length) return;
+      const onConflict = (rule.onConflict || 'reject').toString().trim().toLowerCase();
+      if (onConflict !== 'reject') return;
+      keys.forEach((k: any) => {
+        const id = (k || '').toString().trim();
+        if (id) ids.add(id);
+      });
+    });
+    return Array.from(ids);
+  }, [definition]);
+
+  useEffect(() => {
+    const next: Record<string, true> = {};
+    (dedupKeyFieldIds || []).forEach(id => {
+      const k = (id || '').toString().trim();
+      if (k) next[k] = true;
+    });
+    dedupKeyFieldIdsRef.current = next;
+  }, [dedupKeyFieldIds]);
+
+  const dedupLockActive = view === 'form' && Boolean(dedupConflict) && dedupKeyFieldIds.length > 0;
+
+  useEffect(() => {
+    dedupSignatureRef.current = dedupSignature;
+  }, [dedupSignature]);
+
+  // Dedup precheck (server-side) so we can block duplicate creation early (before autosave/submit).
+  useEffect(() => {
+    // Only relevant while editing.
+    if (view !== 'form') return;
+
+    const signature = (dedupSignature || '').toString();
+    const existingRecordId = resolveExistingRecordId({
+      selectedRecordId,
+      selectedRecordSnapshot,
+      lastSubmissionMetaId: lastSubmissionMeta?.id || null
+    });
+    const candidateId = existingRecordId ? existingRecordId.toString() : '';
+    // Only de-duplicate by signature; the candidate id can change after draft creation and should not force a re-check.
+    const checkKey = signature;
+
+    // Clear pending timer (signature might be changing).
+    if (dedupCheckTimerRef.current) {
+      globalThis.clearTimeout(dedupCheckTimerRef.current);
+      dedupCheckTimerRef.current = null;
+    }
+
+    if (!signature) {
+      lastDedupCheckedSignatureRef.current = '';
+      dedupCheckingRef.current = false;
+      dedupConflictRef.current = null;
+      setDedupChecking(false);
+      setDedupConflict(null);
+      return;
+    }
+
+    if (checkKey === lastDedupCheckedSignatureRef.current) return;
+    lastDedupCheckedSignatureRef.current = checkKey;
+    // Update refs synchronously so autosave gating cannot race on state updates.
+    dedupCheckingRef.current = true;
+    dedupConflictRef.current = null;
+    setDedupChecking(true);
+    setDedupConflict(null);
+    logEvent('dedup.check.start', { recordId: candidateId || null, signatureLen: signature.length });
+
+    // Debounce to avoid spamming Apps Script while the user is still selecting values.
+    dedupCheckTimerRef.current = globalThis.setTimeout(() => {
+      const seq = ++dedupCheckSeqRef.current;
+      const payload = buildDraftPayload({
+        definition,
+        formKey,
+        language: languageRef.current,
+        values: valuesRef.current,
+        lineItems: lineItemsRef.current,
+        existingRecordId: candidateId || undefined
+      }) as any;
+
+      checkDedupConflictApi(payload)
+        .then(res => {
+          if (seq !== dedupCheckSeqRef.current) return;
+          dedupCheckingRef.current = false;
+          setDedupChecking(false);
+
+          if (!res?.success) {
+            const msg = (res?.message || 'Failed to check duplicates.').toString();
+            logEvent('dedup.check.failed', { recordId: candidateId || null, message: msg });
+            // Fail closed only for new record creation (so we don't create duplicates on autosave).
+            if (!candidateId) {
+              const conflictObj = { ruleId: 'dedupCheckFailed', message: msg };
+              dedupConflictRef.current = conflictObj;
+              setDedupConflict({ ruleId: 'dedupCheckFailed', message: msg });
+            }
+            return;
+          }
+
+          const conflict = (res as any)?.conflict || null;
+          if (conflict && conflict.message) {
+            const message = (conflict.message || '').toString();
+            const conflictObj = {
+              ruleId: (conflict.ruleId || 'dedup').toString(),
+              message,
+              existingRecordId: conflict.existingRecordId ? conflict.existingRecordId.toString() : undefined,
+              existingRowNumber: Number.isFinite(Number(conflict.existingRowNumber)) ? Number(conflict.existingRowNumber) : undefined
+            };
+            dedupConflictRef.current = conflictObj;
+            setDedupNotice(conflictObj);
+            // Cancel any pending autosave for the now-invalid (duplicate) values.
+            autoSaveDirtyRef.current = false;
+            if (autoSaveTimerRef.current) {
+              globalThis.clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            // Hide stale "Draft saved" banner while dedup is blocking.
+            setDraftSave({ phase: 'idle' });
+            setDedupConflict(conflictObj);
+            logEvent('dedup.conflict', {
+              recordId: candidateId || null,
+              ruleId: (conflict.ruleId || '').toString(),
+              existingRecordId: conflict.existingRecordId ? conflict.existingRecordId.toString() : null
+            });
+            return;
+          }
+
+          dedupConflictRef.current = null;
+          setDedupConflict(null);
+          logEvent('dedup.ok', { recordId: candidateId || null });
+        })
+        .catch(err => {
+          if (seq !== dedupCheckSeqRef.current) return;
+          dedupCheckingRef.current = false;
+          setDedupChecking(false);
+          const msg = (err?.message || err?.toString?.() || 'Failed to check duplicates.').toString();
+          logEvent('dedup.check.exception', { recordId: candidateId || null, message: msg });
+          if (!candidateId) {
+            const conflictObj = { ruleId: 'dedupCheckFailed', message: msg };
+            dedupConflictRef.current = conflictObj;
+            setDedupConflict({ ruleId: 'dedupCheckFailed', message: msg });
+          }
+        });
+    }, 350) as any;
+
+    return () => {
+      if (dedupCheckTimerRef.current) {
+        globalThis.clearTimeout(dedupCheckTimerRef.current);
+        dedupCheckTimerRef.current = null;
+      }
+    };
+  }, [
+    dedupSignature,
+    definition,
+    formKey,
+    loadRecordSnapshot,
+    logEvent,
+    selectedRecordId,
+    selectedRecordSnapshot,
+    lastSubmissionMeta?.id,
+    view
+  ]);
+
   const performAutoSave = useCallback(
     async (reason: string) => {
       if (!autoSaveEnabled) return;
@@ -1553,7 +1937,54 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return;
       }
 
+      // In create-flow, do not autosave until the user actually changes a field value.
+      if (createFlowRef.current && !createFlowUserEditedRef.current) return;
+
+      // If a dedup-key change is being validated (or dedup precheck is running), hold autosave until resolved.
+      if (dedupHoldRef.current || dedupCheckingRef.current) return;
+
       if (!autoSaveDirtyRef.current) return;
+
+      const existingRecordId = resolveExistingRecordId({
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+      });
+
+      const isCreateFlow = createFlowRef.current || !existingRecordId;
+
+      // If this is a CREATE flow and dedup keys are populated, avoid saving drafts until the precheck completes.
+      const currentDedupSignature = computeDedupSignatureFromValues((definition as any)?.dedupRules, valuesRef.current as any);
+      if (isCreateFlow && currentDedupSignature) {
+        if (dedupCheckingRef.current) {
+          // Keep dirty so we retry once the check completes.
+          autoSaveDirtyRef.current = true;
+          // Re-attempt autosave shortly; avoids getting stuck in a "dirty" state once the check completes.
+          try {
+            if (autoSaveTimerRef.current) {
+              globalThis.clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            autoSaveTimerRef.current = globalThis.setTimeout(() => {
+              void performAutoSave('dedupPrecheck.wait');
+            }, 600) as any;
+          } catch (_) {
+            // ignore
+          }
+          logEvent('autosave.blocked.dedup.checking', { signatureLen: currentDedupSignature.length });
+          return;
+        }
+        const conflict = dedupConflictRef.current;
+        if (conflict && conflict.message) {
+          const msg = conflict.message.toString();
+          // Hide draft banner while blocked by dedup; the sticky dedup notice is the single source of truth.
+          setDraftSave({ phase: 'idle' });
+          // Do not keep retrying autosave until the user changes values.
+          autoSaveDirtyRef.current = false;
+          logEvent('autosave.blocked.dedup.conflict', { ruleId: conflict.ruleId, message: msg });
+          return;
+        }
+      }
       if (autoSaveInFlightRef.current) {
         autoSaveQueuedRef.current = true;
         return;
@@ -1568,12 +1999,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       logEvent('autosave.begin', { reason, debounceMs: autoSaveDebounceMs });
 
       try {
-        const existingRecordId = resolveExistingRecordId({
-          selectedRecordId: selectedRecordIdRef.current,
-          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-        });
-
         const payload = buildDraftPayload({
           definition,
           formKey,
@@ -1584,12 +2009,53 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }) as any;
         payload.__ckSaveMode = 'draft';
         payload.__ckStatus = autoSaveStatusValue;
+        payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
 
         const res = await submit(payload);
         const ok = !!res?.success;
         const msg = (res?.message || '').toString();
         if (!ok) {
           const errText = msg || 'Autosave failed.';
+          // If autosave failed while dedup keys are populated, perform a server-side dedup check
+          // so we can show the dedup banner (instead of a generic autosave error).
+          if (currentDedupSignature) {
+            try {
+              const chk = await checkDedupConflictApi(payload);
+              const conflict = (chk as any)?.conflict || null;
+              if ((chk as any)?.success && conflict && conflict.message) {
+                const conflictObj = {
+                  ruleId: (conflict.ruleId || 'dedup').toString(),
+                  message: (conflict.message || '').toString() || tSystem('dedup.duplicate', languageRef.current, 'Duplicate record.'),
+                  existingRecordId: conflict.existingRecordId ? conflict.existingRecordId.toString() : undefined,
+                  existingRowNumber: Number.isFinite(Number(conflict.existingRowNumber)) ? Number(conflict.existingRowNumber) : undefined
+                };
+                dedupConflictRef.current = conflictObj;
+                dedupHoldRef.current = true; // block any further autosave retries until user resolves the conflict
+                setDedupNotice(conflictObj);
+                setDedupConflict(conflictObj);
+                // Hide draft error banner; the dedup notice is the single source of truth.
+                setDraftSave({ phase: 'idle' });
+                autoSaveDirtyRef.current = false;
+                if (autoSaveTimerRef.current) {
+                  globalThis.clearTimeout(autoSaveTimerRef.current);
+                  autoSaveTimerRef.current = null;
+                }
+                logEvent('autosave.dedupDetected.afterFailure', {
+                  reason,
+                  recordId: existingRecordId || null,
+                  ruleId: conflictObj.ruleId,
+                  existingRecordId: conflictObj.existingRecordId || null,
+                  isCreateFlow
+                });
+                return;
+              }
+            } catch (err: any) {
+              logEvent('autosave.dedupCheckAfterFailure.exception', {
+                reason,
+                message: (err?.message || err?.toString?.() || 'failed').toString()
+              });
+            }
+          }
           // If the server rejects because the record was closed, lock the UI.
           if (errText.toLowerCase().includes('closed')) {
             setLastSubmissionMeta(prev => ({ ...(prev || {}), status: 'Closed' }));
@@ -1634,8 +2100,51 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
       }
     },
-    [autoSaveDebounceMs, autoSaveEnabled, autoSaveStatusValue, definition, formKey, invalidateListCache, logEvent]
+    [autoSaveDebounceMs, autoSaveEnabled, autoSaveStatusValue, definition, formKey, invalidateListCache, loadRecordSnapshot, logEvent]
   );
+
+  // Release autosave hold after dedup evaluation completes (or keys become incomplete),
+  // and persist any pending changes once it's safe.
+  useEffect(() => {
+    if (!autoSaveEnabled) return;
+    if (view !== 'form') {
+      dedupHoldRef.current = false;
+      return;
+    }
+    if (!dedupHoldRef.current) return;
+
+    const signature = (dedupSignature || '').toString();
+    // If keys are incomplete, there's no dedup evaluation to wait for.
+    if (!signature) {
+      dedupHoldRef.current = false;
+    } else {
+      // Do NOT release hold until we've at least started a dedup check for this signature.
+      // This prevents a race where autosave resumes before the precheck effect schedules the server call.
+      if (lastDedupCheckedSignatureRef.current !== signature) return;
+      if (dedupCheckingRef.current) return;
+      if (dedupConflictRef.current) return;
+      // Keys are complete, check finished, and no conflict -> release hold.
+      dedupHoldRef.current = false;
+    }
+
+    // In create-flow, autosave must still wait for the first real user edit.
+    if (createFlowRef.current && !createFlowUserEditedRef.current) return;
+    if (!autoSaveDirtyRef.current) return;
+    if (submittingRef.current) return;
+    // Queue a debounced autosave now that we are unblocked.
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setDraftSave(prev => {
+      if (prev.phase === 'saving') return prev;
+      if (prev.phase === 'dirty') return prev;
+      return { phase: 'dirty' };
+    });
+    autoSaveTimerRef.current = globalThis.setTimeout(() => {
+      void performAutoSave('dedupHold.release');
+    }, autoSaveDebounceMs) as any;
+  }, [autoSaveDebounceMs, autoSaveEnabled, dedupChecking, dedupConflict, dedupSignature, performAutoSave, view]);
 
   // Debounced autosave trigger on edits.
   useEffect(() => {
@@ -1652,8 +2161,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: 'Closed (read-only)' }));
       return;
     }
+    // In create-flow, do not autosave until the user actually changes a field value.
+    if (createFlowRef.current && !createFlowUserEditedRef.current) return;
 
     autoSaveDirtyRef.current = true;
+    if (dedupHoldRef.current || dedupCheckingRef.current) {
+      dedupHoldRef.current = true;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      return;
+    }
     setDraftSave(prev => {
       if (prev.phase === 'saving') return prev;
       if (prev.phase === 'dirty') return prev;
@@ -1726,6 +2245,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }) || '';
 
       if (!recordId) {
+        const signature = (dedupSignatureRef.current || '').toString();
+        if (signature) {
+          if (dedupCheckingRef.current) {
+            const msg = 'Checking duplicates…';
+            logEvent('upload.ensureRecord.blocked.dedup.checking', { fieldPath: args.fieldPath });
+            return { success: false, message: msg };
+          }
+          const conflict = dedupConflictRef.current;
+          if (conflict && conflict.message) {
+            const msg = conflict.message.toString();
+            logEvent('upload.ensureRecord.blocked.dedup.conflict', { fieldPath: args.fieldPath, ruleId: conflict.ruleId });
+            return { success: false, message: msg };
+          }
+        }
         try {
           setDraftSave({ phase: 'saving' });
           const draft = buildDraftPayload({
@@ -1737,6 +2270,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           }) as any;
           draft.__ckSaveMode = 'draft';
           draft.__ckStatus = autoSaveStatusValue;
+          draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
           const res = await submit(draft);
           if (!res?.success) {
             const msg = (res?.message || 'Failed to create draft record.').toString();
@@ -1825,6 +2359,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }) as any;
         draft2.__ckSaveMode = 'draft';
         draft2.__ckStatus = autoSaveStatusValue;
+        draft2.__ckCreateFlow = createFlowRef.current ? '1' : '';
 
         const res2 = await submit(draft2);
         if (!res2?.success) {
@@ -1982,6 +2517,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       logEvent('submit.validate.failed');
       return;
     }
+
+    // Dedup precheck: block submit early once all dedup keys are populated.
+    if (dedupSignature) {
+      if (dedupChecking) {
+        setStatus('Checking duplicates…');
+        setStatusLevel('info');
+        submitConfirmedRef.current = false;
+        logEvent('submit.blocked.dedup.checking');
+        return;
+      }
+      const conflict = dedupConflict;
+      if (conflict && conflict.message) {
+        const msg = conflict.message.toString();
+        setStatus(msg);
+        setStatusLevel('error');
+        submitConfirmedRef.current = false;
+        logEvent('submit.blocked.dedup.conflict', {
+          ruleId: conflict.ruleId,
+          existingRecordId: conflict.existingRecordId || null
+        });
+        return;
+      }
+    }
+
     // Only show the submit confirmation overlay once the form is already valid.
     if (!submitConfirmedRef.current) {
       setSubmitConfirmOpen(true);
@@ -2033,23 +2592,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
       }
       const res = await submit(payload);
-      const message = res.message || (res.success ? 'Submitted' : 'Submit failed');
+      if (!res) {
+        logEvent('submit.emptyResponse', { formKey, existingRecordId: existingRecordId || null });
+      }
+      const ok = Boolean(res?.success);
+      const message = (res?.message || (ok ? 'Submitted' : 'Submit failed')).toString();
       setStatus(message);
-      setStatusLevel(res.success ? 'success' : 'error');
-      if (!res.success) {
-        logEvent('submit.error', { message, meta: res.meta });
+      setStatusLevel(ok ? 'success' : 'error');
+      if (!ok) {
+        logEvent('submit.error', { message, meta: (res as any)?.meta || null });
         return;
       }
-      logEvent('submit.success', { recordId: res.meta?.id });
+      logEvent('submit.success', { recordId: (res as any)?.meta?.id });
 
-      const recordId = (res.meta?.id || existingRecordId || selectedRecordId || '').toString();
+      const recordId = (((res as any)?.meta?.id) || existingRecordId || selectedRecordId || '').toString();
       if (recordId) setSelectedRecordId(recordId);
 
       setLastSubmissionMeta(prev => ({
         id: recordId || prev?.id || selectedRecordId,
-        createdAt: res.meta?.createdAt || prev?.createdAt,
-        updatedAt: res.meta?.updatedAt || prev?.updatedAt,
-        status: (res.meta as any)?.status || prev?.status || null
+        createdAt: (res as any)?.meta?.createdAt || prev?.createdAt,
+        updatedAt: (res as any)?.meta?.updatedAt || prev?.updatedAt,
+        status: ((res as any)?.meta as any)?.status || prev?.status || null
       }));
 
       // Run follow-up actions automatically (and close the record) now that the Follow-up view is removed.
@@ -2226,7 +2789,89 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     );
   })();
 
-  const topBarNotice =
+  const dedupTopNotice =
+    view === 'form' && (dedupChecking || !!dedupConflict || !!dedupNotice) ? (
+      <div
+        role="status"
+        aria-live="polite"
+        style={{
+          padding: '12px 14px',
+          borderRadius: 14,
+          border: (dedupConflict || dedupNotice) && !dedupChecking ? '1px solid #fca5a5' : '1px solid rgba(148,163,184,0.55)',
+          background: (dedupConflict || dedupNotice) && !dedupChecking ? '#fee2e2' : 'rgba(148,163,184,0.10)',
+          color: '#0f172a',
+          fontWeight: 800,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10
+        }}
+      >
+        <div>
+          {dedupChecking
+            ? tSystem('dedup.checking', language, 'Checking duplicates…')
+            : ((dedupConflict || dedupNotice)?.message || tSystem('dedup.duplicate', language, 'Duplicate record.'))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {(dedupConflict || dedupNotice)?.existingRecordId ? (
+            <button
+              type="button"
+              onClick={() => {
+                const conflictAny = (dedupConflict || dedupNotice) as any;
+                const id = (conflictAny?.existingRecordId || '').toString().trim();
+                const rowNumberRaw = conflictAny?.existingRowNumber;
+                const rowNumber =
+                  rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
+                    ? undefined
+                    : Number(rowNumberRaw);
+                if (!id) return;
+                // Clear transient dedup state before navigating.
+                if (dedupCheckTimerRef.current) {
+                  globalThis.clearTimeout(dedupCheckTimerRef.current);
+                  dedupCheckTimerRef.current = null;
+                }
+                dedupCheckSeqRef.current += 1;
+                lastDedupCheckedSignatureRef.current = '';
+                dedupHoldRef.current = false;
+                dedupCheckingRef.current = false;
+                dedupConflictRef.current = null;
+                setDedupChecking(false);
+                setDedupConflict(null);
+                setDedupNotice(null);
+                // Cancel any pending autosave from the now-invalid draft values.
+                autoSaveDirtyRef.current = false;
+                if (autoSaveTimerRef.current) {
+                  globalThis.clearTimeout(autoSaveTimerRef.current);
+                  autoSaveTimerRef.current = null;
+                }
+                setDraftSave({ phase: 'idle' });
+                logEvent('dedup.openExisting.click', { existingRecordId: id });
+                // Prefer row-number fetch when available to avoid fragile ID lookups.
+                const loadPromise = rowNumber && rowNumber >= 2
+                  ? loadRecordSnapshot('', rowNumber)
+                  : loadRecordSnapshot(id);
+                void loadPromise.then(ok => {
+                  if (!ok) return;
+                  // Prefer summary when enabled (closed records are read-only).
+                  setView(summaryViewEnabled ? 'summary' : 'form');
+                });
+              }}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid rgba(15,23,42,0.18)',
+                background: '#ffffff',
+                color: '#0f172a',
+                fontWeight: 900
+              }}
+            >
+              {tSystem('dedup.openExisting', language, 'Open existing')}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    ) : null;
+
+  const validationTopNotice =
     view === 'form' &&
     validationAttempted &&
     !validationNoticeHidden &&
@@ -2238,6 +2883,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onDismiss={dismissValidationNotice}
         onNavigateToField={navigateToFieldFromHeaderNotice}
       />
+    ) : null;
+
+  const topBarNotice =
+    dedupTopNotice || validationTopNotice ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {dedupTopNotice}
+        {validationTopNotice}
+      </div>
     ) : null;
 
   const listLegendItems = useMemo(() => {
@@ -2330,9 +2983,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || Boolean(recordLoadingId)}
+        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
+        createNewEnabled={definition.createNewRecordEnabled !== false}
         submitLabel={definition.submitButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
@@ -2364,7 +3019,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
       {view === 'form' && (
         <>
-          {draftBanner}
+          {dedupChecking || dedupConflict ? null : draftBanner}
           <FormView
             definition={definition}
             language={language}
@@ -2376,6 +3031,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             submitActionRef={formSubmitActionRef}
             navigateToFieldRef={formNavigateToFieldRef}
             submitting={submitting || isClosedRecord || Boolean(recordLoadingId)}
+            dedupLockActive={dedupLockActive}
+            dedupKeyFieldIds={dedupKeyFieldIds}
             errors={errors}
             setErrors={setErrors}
             status={status}
@@ -2395,6 +3052,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             onReportButton={handleCustomButton}
             reportBusy={reportOverlay.pdfPhase === 'rendering'}
             reportBusyId={reportOverlay.buttonId || null}
+            onUserEdit={handleUserEdit}
             onDiagnostic={logEvent}
           />
         </>
@@ -2513,9 +3171,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || Boolean(recordLoadingId)}
+        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
+        createNewEnabled={definition.createNewRecordEnabled !== false}
         submitLabel={definition.submitButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}

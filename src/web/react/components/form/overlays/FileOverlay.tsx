@@ -19,6 +19,7 @@ export type FileOverlayProps = {
   title: string;
   zIndex?: number;
   submitting: boolean;
+  readOnly?: boolean;
   items: Array<string | File>;
   uploadConfig?: UploadConfigLike;
   onAdd: () => void;
@@ -33,6 +34,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   title,
   zIndex = 10030,
   submitting,
+  readOnly,
   items,
   uploadConfig,
   onAdd,
@@ -43,6 +45,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   const files = useMemo(() => items.filter((it): it is File => isFileInstance(it)), [items]);
   const totalBytes = useMemo(() => files.reduce((sum, file) => sum + (file?.size || 0), 0), [files]);
   const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
+  const locked = submitting || readOnly === true;
 
   const driveIdFromUrl = (url: string): string | null => {
     const m1 = /\/file\/d\/([a-zA-Z0-9_-]+)/.exec(url);
@@ -105,7 +108,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
       }
     >
       <fieldset
-        disabled={submitting}
+        disabled={locked}
         style={{
           border: 0,
           padding: 0,
@@ -122,8 +125,8 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
             <button
               type="button"
               onClick={onAdd}
-              disabled={submitting || maxed}
-              style={withDisabled(buttonStyles.primary, submitting || maxed)}
+              disabled={locked || maxed}
+              style={withDisabled(buttonStyles.primary, locked || maxed)}
             >
               {tSystem('files.add', language, 'Add files')}
             </button>
@@ -139,8 +142,8 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                   if (!ok) return;
                   onClearAll();
                 }}
-                disabled={submitting}
-                style={withDisabled(buttonStyles.negative, submitting)}
+                disabled={locked}
+                style={withDisabled(buttonStyles.negative, locked)}
               >
                 {tSystem('files.clearAll', language, 'Clear all')}
               </button>
@@ -242,7 +245,12 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                         </div>
                       </div>
                     </div>
-                    <button type="button" onClick={() => onRemoveAt(idx)} style={buttonStyles.negative}>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAt(idx)}
+                      disabled={locked}
+                      style={withDisabled(buttonStyles.negative, locked)}
+                    >
                       {tSystem('lineItems.remove', language, 'Remove')}
                     </button>
                   </li>

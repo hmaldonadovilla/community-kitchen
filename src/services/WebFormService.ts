@@ -234,6 +234,17 @@ export class WebFormService {
     return this.submissions.saveSubmissionWithId(formObject, form, questions, dedupRules);
   }
 
+  /**
+   * Lightweight dedup precheck used by the React client to avoid creating duplicate records
+   * (e.g., when presets/defaults populate dedup keys).
+   */
+  public checkDedupConflict(formObject: WebFormSubmission): { success: boolean; conflict?: any; message?: string } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    const { form, questions } = this.getFormContextLite(formKey);
+    const dedupRules = loadDedupRules(this.ss, form.configSheet);
+    return this.submissions.checkDedupConflict(formObject, form, questions, dedupRules);
+  }
+
   public triggerFollowupAction(
     formKey: string,
     recordId: string,

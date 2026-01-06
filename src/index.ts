@@ -104,6 +104,12 @@ export function saveSubmissionWithId(formObject: WebFormSubmission): { success: 
   return service.saveSubmissionWithId(formObject);
 }
 
+export function checkDedupConflict(formObject: WebFormSubmission): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.checkDedupConflict(formObject);
+}
+
 export function uploadFiles(files: any, uploadConfig?: any): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

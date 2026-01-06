@@ -46,6 +46,14 @@ components:
           description: |
             Optional UI hints for how this question should render in the edit view.
             Most fields can stay on `auto` and the UI will choose an iOS-friendly control based on option count; you can override per field.
+        readOnly:
+          type: boolean
+          description: |
+            When `true`, this field is **read-only** in the Edit view (users cannot change it).
+
+            Notes:
+            - The value is still included in submissions.
+            - Intended for fields set by `defaultValue`, `derivedValue`, or `createRecordPreset` buttons.
         optionSort:
           type: string
           enum: [alphabetical, source]
@@ -474,6 +482,14 @@ components:
         ui:
           $ref: '#/components/schemas/QuestionUiConfig'
           description: Optional UI hints for how this line item field should render (e.g., use segmented/radio/select for CHOICE).
+        readOnly:
+          type: boolean
+          description: |
+            When `true`, this line item field is **read-only** in the Edit view (users cannot change it).
+
+            Notes:
+            - The value is still included in submissions.
+            - Intended for fields set by `defaultValue`, `derivedValue`, or auto/preset row generation.
         optionSort:
           type: string
           enum: [alphabetical, source]
@@ -1225,6 +1241,14 @@ components:
 
             - When `true` (default), Create opens a menu: New record / Copy current record.
             - When `false`, Create always starts a New record (no copy option).
+        createNewRecordEnabled:
+          type: boolean
+          description: |
+            Enable/disable the standard "New record" action in the Create menu.
+
+            - When `true` (default), users can start a blank New record from the Create button/menu.
+            - When `false`, the "New record" entry is hidden and the Create button will not start a blank record.
+              Use `createRecordPreset` buttons for record creation.
         createRecordPresetButtonsEnabled:
           type: boolean
           description: |

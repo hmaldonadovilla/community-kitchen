@@ -12,10 +12,12 @@ export const DateInput: React.FC<{
   onChange: (value: string) => void;
   language: LangCode;
   readOnly?: boolean;
+  disabled?: boolean;
   ariaLabel?: string;
-}> = ({ id, value, onChange, language, readOnly, ariaLabel }) => {
+}> = ({ id, value, onChange, language, readOnly, disabled, ariaLabel }) => {
   const [focused, setFocused] = useState(false);
   const [typing, setTyping] = useState(false);
+  const isDisabled = Boolean(disabled || readOnly);
 
   const isValidYmd = /^\d{4}-\d{2}-\d{2}$/.test((value || '').trim());
   // Show overlay when:
@@ -35,10 +37,15 @@ export const DateInput: React.FC<{
         type="date"
         className={`ck-date-input${showOverlay ? ' ck-date-input--overlay' : ''}`}
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={e => {
+          if (isDisabled) return;
+          onChange(e.target.value);
+        }}
         readOnly={readOnly}
+        disabled={isDisabled}
         aria-label={ariaLabel}
         onFocus={() => {
+          if (isDisabled) return;
           setFocused(true);
           setTyping(false);
         }}
@@ -46,7 +53,10 @@ export const DateInput: React.FC<{
           setFocused(false);
           setTyping(false);
         }}
-        onKeyDown={() => setTyping(true)}
+        onKeyDown={() => {
+          if (isDisabled) return;
+          setTyping(true);
+        }}
       />
       {showOverlay && display ? (
         <div className="ck-date-overlay" aria-hidden="true">

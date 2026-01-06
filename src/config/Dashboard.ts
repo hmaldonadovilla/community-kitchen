@@ -127,6 +127,7 @@ export class Dashboard {
       const autoSave = dashboardConfig?.autoSave;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
+      const createNewRecordEnabled = dashboardConfig?.createNewRecordEnabled;
       const createRecordPresetButtonsEnabled = dashboardConfig?.createRecordPresetButtonsEnabled;
       const actionBars = dashboardConfig?.actionBars;
       const appHeader = dashboardConfig?.appHeader;
@@ -158,6 +159,7 @@ export class Dashboard {
           autoSave,
           summaryViewEnabled,
           copyCurrentRecordEnabled,
+          createNewRecordEnabled,
           createRecordPresetButtonsEnabled,
           actionBars,
           appHeader,
@@ -207,6 +209,7 @@ export class Dashboard {
     autoSave?: AutoSaveConfig;
     summaryViewEnabled?: boolean;
     copyCurrentRecordEnabled?: boolean;
+    createNewRecordEnabled?: boolean;
     createRecordPresetButtonsEnabled?: boolean;
     actionBars?: ActionBarsConfig;
     appHeader?: AppHeaderConfig;
@@ -415,6 +418,17 @@ export class Dashboard {
       return undefined;
     })();
 
+    const createNewRecordEnabled = (() => {
+      if (parsed.createNewRecordEnabled !== undefined) return Boolean(parsed.createNewRecordEnabled);
+      if (parsed.newRecordEnabled !== undefined) return Boolean(parsed.newRecordEnabled);
+      if (parsed.createBlankRecordEnabled !== undefined) return Boolean(parsed.createBlankRecordEnabled);
+      if (parsed.disableCreateNewRecord !== undefined) return !Boolean(parsed.disableCreateNewRecord);
+      if (parsed.disableNewRecord !== undefined) return !Boolean(parsed.disableNewRecord);
+      if (parsed.disableCreateNew !== undefined) return !Boolean(parsed.disableCreateNew);
+      if (parsed.onlyPresetCreate !== undefined) return !Boolean(parsed.onlyPresetCreate);
+      return undefined;
+    })();
+
     const createRecordPresetButtonsEnabled = (() => {
       if (parsed.createRecordPresetButtonsEnabled !== undefined) return Boolean(parsed.createRecordPresetButtonsEnabled);
       if (parsed.createRecordPresetEnabled !== undefined) return Boolean(parsed.createRecordPresetEnabled);
@@ -604,6 +618,7 @@ export class Dashboard {
       !autoSave &&
       summaryViewEnabled === undefined &&
       copyCurrentRecordEnabled === undefined &&
+      createNewRecordEnabled === undefined &&
       createRecordPresetButtonsEnabled === undefined &&
       !actionBars &&
       !appHeader &&
@@ -630,6 +645,7 @@ export class Dashboard {
       autoSave,
       summaryViewEnabled,
       copyCurrentRecordEnabled,
+      createNewRecordEnabled,
       createRecordPresetButtonsEnabled,
       actionBars,
       appHeader,
