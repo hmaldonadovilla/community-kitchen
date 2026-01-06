@@ -2,6 +2,7 @@ import React from 'react';
 import { buttonStyles } from '../form/ui';
 import { FullPageOverlay } from '../form/overlays/FullPageOverlay';
 import { MarkdownPreview } from './MarkdownPreview';
+import { HtmlPreview } from './HtmlPreview';
 import type { LangCode } from '../../../types';
 import { tSystem } from '../../../systemStrings';
 
@@ -10,19 +11,22 @@ export type ReportOverlayState = {
   buttonId?: string;
   title: string;
   subtitle?: string;
-  kind?: 'pdf' | 'markdown';
+  kind?: 'pdf' | 'markdown' | 'html';
   pdfPhase?: 'idle' | 'rendering' | 'ready' | 'error';
   pdfObjectUrl?: string;
   pdfFileName?: string;
   pdfMessage?: string;
   markdown?: string;
+  html?: string;
 };
 
 export const ReportOverlay: React.FC<{
   language: LangCode;
   state: ReportOverlayState;
   onClose: () => void;
-}> = ({ state, language, onClose }) => {
+  onOpenFiles?: (fieldId: string) => void;
+  onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
+}> = ({ state, language, onClose, onOpenFiles, onDiagnostic }) => {
   const {
     open,
     title,
@@ -33,7 +37,8 @@ export const ReportOverlay: React.FC<{
   } = state;
   if (!open) return null;
 
-  const kind: 'pdf' | 'markdown' = state.kind === 'markdown' ? 'markdown' : 'pdf';
+  const kind: 'pdf' | 'markdown' | 'html' =
+    state.kind === 'markdown' ? 'markdown' : state.kind === 'html' ? 'html' : 'pdf';
 
   return (
     <FullPageOverlay
@@ -52,7 +57,9 @@ export const ReportOverlay: React.FC<{
           <div style={{ padding: 16 }} className="status">
             {kind === 'pdf'
               ? tSystem('report.generatingPdf', language, 'Generating PDF…')
-              : tSystem('report.renderingMarkdown', language, 'Rendering…')}
+              : kind === 'markdown'
+                ? tSystem('report.renderingMarkdown', language, 'Rendering…')
+                : tSystem('report.renderingHtml', language, 'Rendering…')}
           </div>
         ) : null}
         {pdfPhase === 'error' ? (
@@ -60,7 +67,9 @@ export const ReportOverlay: React.FC<{
             {pdfMessage ||
               (kind === 'pdf'
                 ? tSystem('report.failedPdf', language, 'Failed to generate PDF.')
-                : tSystem('report.failedMarkdown', language, 'Failed to render preview.'))}
+                : kind === 'markdown'
+                  ? tSystem('report.failedMarkdown', language, 'Failed to render preview.')
+                  : tSystem('report.failedHtml', language, 'Failed to render preview.'))}
           </div>
         ) : null}
 
@@ -89,6 +98,10 @@ export const ReportOverlay: React.FC<{
 
         {kind === 'markdown' && pdfPhase === 'ready' && state.markdown ? (
           <MarkdownPreview markdown={state.markdown} />
+        ) : null}
+
+        {kind === 'html' && pdfPhase === 'ready' && state.html ? (
+          <HtmlPreview html={state.html} onOpenFiles={onOpenFiles} onDiagnostic={onDiagnostic} />
         ) : null}
       </div>
     </FullPageOverlay>

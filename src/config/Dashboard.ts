@@ -126,6 +126,7 @@ export class Dashboard {
       const listViewSearch = dashboardConfig?.listViewSearch;
       const autoSave = dashboardConfig?.autoSave;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
+      const summaryHtmlTemplateId = dashboardConfig?.summaryHtmlTemplateId;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
       const createNewRecordEnabled = dashboardConfig?.createNewRecordEnabled;
       const createRecordPresetButtonsEnabled = dashboardConfig?.createRecordPresetButtonsEnabled;
@@ -158,6 +159,7 @@ export class Dashboard {
           listViewSearch,
           autoSave,
           summaryViewEnabled,
+          summaryHtmlTemplateId,
           copyCurrentRecordEnabled,
           createNewRecordEnabled,
           createRecordPresetButtonsEnabled,
@@ -208,6 +210,7 @@ export class Dashboard {
     listViewSearch?: ListViewSearchConfig;
     autoSave?: AutoSaveConfig;
     summaryViewEnabled?: boolean;
+    summaryHtmlTemplateId?: FollowupConfig['pdfTemplateId'];
     copyCurrentRecordEnabled?: boolean;
     createNewRecordEnabled?: boolean;
     createRecordPresetButtonsEnabled?: boolean;
@@ -410,6 +413,25 @@ export class Dashboard {
       if (parsed.disableSummaryView !== undefined) return !Boolean(parsed.disableSummaryView);
       return undefined;
     })();
+
+    const summaryHtmlTemplateId = (() => {
+      const direct =
+        parsed.summaryHtmlTemplateId !== undefined
+          ? parsed.summaryHtmlTemplateId
+          : parsed.summaryHtmlTemplate !== undefined
+            ? parsed.summaryHtmlTemplate
+            : parsed.summaryTemplateId !== undefined
+              ? parsed.summaryTemplateId
+              : undefined;
+      if (direct !== undefined) return this.normalizeTemplateId(direct);
+      // Optional nested form: { summary: { htmlTemplateId: ... } }
+      if (parsed.summary && typeof parsed.summary === 'object') {
+        const nested = (parsed.summary as any).htmlTemplateId ?? (parsed.summary as any).summaryHtmlTemplateId;
+        if (nested !== undefined) return this.normalizeTemplateId(nested);
+      }
+      return undefined;
+    })();
+
     const copyCurrentRecordEnabled = (() => {
       if (parsed.copyCurrentRecordEnabled !== undefined) return Boolean(parsed.copyCurrentRecordEnabled);
       if (parsed.copyEnabled !== undefined) return Boolean(parsed.copyEnabled);
@@ -617,6 +639,7 @@ export class Dashboard {
       !listViewSearch &&
       !autoSave &&
       summaryViewEnabled === undefined &&
+      !summaryHtmlTemplateId &&
       copyCurrentRecordEnabled === undefined &&
       createNewRecordEnabled === undefined &&
       createRecordPresetButtonsEnabled === undefined &&
@@ -644,6 +667,7 @@ export class Dashboard {
       listViewSearch,
       autoSave,
       summaryViewEnabled,
+      summaryHtmlTemplateId,
       copyCurrentRecordEnabled,
       createNewRecordEnabled,
       createRecordPresetButtonsEnabled,
@@ -682,7 +706,7 @@ export class Dashboard {
       'topBarSummary',
       'listBar'
     ]);
-    const allowedActions = new Set<ButtonAction>(['renderDocTemplate', 'renderMarkdownTemplate', 'createRecordPreset']);
+    const allowedActions = new Set<ButtonAction>(['renderDocTemplate', 'renderMarkdownTemplate', 'renderHtmlTemplate', 'createRecordPreset']);
 
     const normalizePlacements = (raw: any): ButtonPlacement[] => {
       if (raw === undefined || raw === null) return [];
@@ -911,7 +935,7 @@ export class Dashboard {
     const metaSet = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
     const allowedRuleStyles = new Set(['link', 'warning', 'muted', 'default']);
     const allowedIcons = new Set(['warning', 'check', 'error', 'info', 'external', 'lock', 'edit', 'view']);
-    const allowedOpenViews = new Set(['auto', 'form', 'summary']);
+    const allowedOpenViews = new Set(['auto', 'form', 'summary', 'button']);
 
     const normalizeLocalized = (input: any): any => {
       if (input === undefined || input === null) return undefined;
@@ -1021,7 +1045,27 @@ export class Dashboard {
         const colHrefFieldId = colHrefRaw !== undefined && colHrefRaw !== null ? colHrefRaw.toString().trim() : '';
         if (colHrefFieldId) out.hrefFieldId = colHrefFieldId;
         const openViewRaw = ((entry as any).openView ?? (entry as any).open ?? (entry as any).view ?? '').toString().trim().toLowerCase();
-        if (openViewRaw && allowedOpenViews.has(openViewRaw)) out.openView = openViewRaw;
+        if (openViewRaw && allowedOpenViews.has(openViewRaw)) {
+          if (openViewRaw === 'button') {
+            const openButtonRaw =
+              (entry as any).openButtonId !== undefined
+                ? (entry as any).openButtonId
+                : (entry as any).buttonId !== undefined
+                  ? (entry as any).buttonId
+                  : (entry as any).openButton !== undefined
+                    ? (entry as any).openButton
+                    : (entry as any).actionButtonId !== undefined
+                      ? (entry as any).actionButtonId
+                      : undefined;
+            const openButtonId = openButtonRaw !== undefined && openButtonRaw !== null ? openButtonRaw.toString().trim() : '';
+            if (openButtonId) {
+              out.openView = openViewRaw;
+              out.openButtonId = openButtonId;
+            }
+          } else {
+            out.openView = openViewRaw;
+          }
+        }
         if ((entry as any).sortable !== undefined) out.sortable = Boolean((entry as any).sortable);
         columns.push(out as ListViewColumnConfig);
         return;

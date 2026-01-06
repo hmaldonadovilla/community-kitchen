@@ -19,6 +19,7 @@ import {
   prefetchTemplatesApi,
   renderDocTemplatePdfPreviewApi,
   renderMarkdownTemplateApi,
+  renderHtmlTemplateApi,
   ListResponse,
   ListItem,
   fetchRecordById,
@@ -33,6 +34,7 @@ import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice'
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
+import { FileOverlay } from './components/form/overlays/FileOverlay';
 import { FormErrors, LineItemState, OptionState, View } from './types';
 import {
   buildDraftPayload,
@@ -59,6 +61,7 @@ import { resolveLabel } from './utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from './utils/valueDisplay';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
+import { toUploadItems } from './components/form/utils';
 
 type SubmissionMeta = {
   id?: string;
@@ -147,6 +150,46 @@ const MARKDOWN_PREVIEW_STYLES = `
   }
 `;
 
+const HTML_PREVIEW_STYLES = `
+  .ck-html-preview {
+    padding: 16px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ck-html-preview__content {
+    color: var(--text);
+  }
+  .ck-file-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(148,163,184,0.55);
+    background: rgba(148,163,184,0.10);
+    color: #0f172a;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .ck-file-icon__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    color: #991b1b;
+    font-weight: 900;
+    font-size: 14px;
+    line-height: 1;
+  }
+`;
+
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
     'EN' | 'FR' | 'NL'
@@ -174,6 +217,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     title: '',
     pdfPhase: 'idle'
   });
+  const [readOnlyFilesOverlay, setReadOnlyFilesOverlay] = useState<{
+    open: boolean;
+    fieldId?: string;
+    title?: string;
+    items: Array<string | File>;
+    uploadConfig?: any;
+  }>({ open: false, items: [] });
   const reportPdfSeqRef = useRef<number>(0);
   const templatePrefetchFormKeyRef = useRef<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -529,6 +579,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       }
       setDraftSave({ phase: 'idle' });
       lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
+      // Keep refs in sync immediately so any follow-up actions (e.g. list-triggered button previews) can use
+      // the freshly loaded record values without waiting for a re-render.
+      valuesRef.current = mapped.values;
+      lineItemsRef.current = mapped.lineItems;
+      selectedRecordIdRef.current = id;
+      selectedRecordSnapshotRef.current = snapshot;
       setValues(mapped.values);
       setLineItems(mapped.lineItems);
       setErrors({});
@@ -543,6 +599,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         updatedAt: snapshot.updatedAt,
         status: snapshot.status || null
       });
+      lastSubmissionMetaRef.current = {
+        id,
+        createdAt: snapshot.createdAt,
+        updatedAt: snapshot.updatedAt,
+        status: snapshot.status || null
+      };
       setRecordLoadingId(null);
       setRecordLoadError(null);
       setListCache(prev => ({
@@ -1228,7 +1290,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         const cfg: any = (q as any)?.button;
         if (!cfg || typeof cfg !== 'object') return null;
         const action = (cfg.action || '').toString().trim();
-        if (action === 'renderDocTemplate' || action === 'renderMarkdownTemplate') {
+        if (action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate') {
           if (!cfg.templateId) return null;
         } else if (action === 'createRecordPreset') {
           if (!createPresetEnabled) return null;
@@ -1327,7 +1389,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         pdfObjectUrl: undefined,
         pdfFileName: undefined,
         pdfMessage: undefined,
-        markdown: undefined
+        markdown: undefined,
+        html: undefined
       }));
       const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
       const templateIdShort =
@@ -1444,7 +1507,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         pdfObjectUrl: undefined,
         pdfFileName: undefined,
         pdfMessage: undefined,
-        markdown: undefined
+        markdown: undefined,
+        html: undefined
       }));
 
       const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
@@ -1483,7 +1547,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
         setReportOverlay(prev => {
           if (prev?.buttonId !== buttonId) return prev;
-          return { ...prev, open: true, kind: 'markdown', pdfPhase: 'ready', markdown: res.markdown, pdfMessage: undefined };
+          return {
+            ...prev,
+            open: true,
+            kind: 'markdown',
+            pdfPhase: 'ready',
+            markdown: res.markdown,
+            html: undefined,
+            pdfMessage: undefined
+          };
         });
         logEvent('report.markdownPreview.ok', { buttonId, markdownLength: (res.markdown || '').toString().length });
       } catch (err: any) {
@@ -1504,6 +1576,93 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       void generateReportMarkdownPreview(buttonId);
     },
     [generateReportMarkdownPreview]
+  );
+
+  const generateReportHtmlPreview = useCallback(
+    async (buttonId: string) => {
+      const seq = ++reportPdfSeqRef.current;
+      const parsedRef = parseButtonRef(buttonId || '');
+      const baseId = parsedRef.id;
+      const qIdx = parsedRef.qIdx;
+      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
+      const btn =
+        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
+          ? indexed
+          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Preview');
+
+      setReportOverlay(prev => ({
+        ...(prev || { title: '' }),
+        open: true,
+        kind: 'html',
+        buttonId,
+        title,
+        subtitle: definition.title,
+        pdfPhase: 'rendering',
+        pdfObjectUrl: undefined,
+        pdfFileName: undefined,
+        pdfMessage: undefined,
+        markdown: undefined,
+        html: undefined
+      }));
+
+      const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
+      const templateIdShort =
+        templateIdResolved && templateIdResolved.length > 12
+          ? `${templateIdResolved.slice(0, 5)}…${templateIdResolved.slice(-5)}`
+          : templateIdResolved;
+      logEvent('report.htmlPreview.start', { buttonId: baseId, qIdx: qIdx ?? null, templateId: templateIdShort || null });
+
+      try {
+        const existingRecordId = resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        });
+        const draft = buildDraftPayload({
+          definition,
+          formKey,
+          language: languageRef.current,
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current,
+          existingRecordId
+        });
+
+        const res = await renderHtmlTemplateApi(draft, buttonId);
+        if (seq !== reportPdfSeqRef.current) return;
+        if (!res?.success || !res?.html) {
+          const msg = (res?.message || 'Failed to render preview.').toString();
+          setReportOverlay(prev => {
+            if (!prev?.open || prev.buttonId !== buttonId) return prev;
+            return { ...prev, pdfPhase: 'error', pdfMessage: msg };
+          });
+          logEvent('report.htmlPreview.error', { buttonId, message: msg });
+          return;
+        }
+
+        setReportOverlay(prev => {
+          if (prev?.buttonId !== buttonId) return prev;
+          return { ...prev, open: true, kind: 'html', pdfPhase: 'ready', html: res.html, markdown: undefined, pdfMessage: undefined };
+        });
+        logEvent('report.htmlPreview.ok', { buttonId, htmlLength: (res.html || '').toString().length });
+      } catch (err: any) {
+        if (seq !== reportPdfSeqRef.current) return;
+        const msg = (err?.message || err?.toString?.() || 'Failed to render preview.').toString();
+        setReportOverlay(prev => {
+          if (prev?.buttonId !== buttonId) return prev;
+          return { ...prev, open: true, pdfPhase: 'error', pdfMessage: msg };
+        });
+        logEvent('report.htmlPreview.exception', { buttonId, message: msg });
+      }
+    },
+    [definition, formKey, logEvent, parseButtonRef, resolveTemplateIdForClient]
+  );
+
+  const openHtml = useCallback(
+    (buttonId: string) => {
+      void generateReportHtmlPreview(buttonId);
+    },
+    [generateReportHtmlPreview]
   );
 
   const createRecordFromPreset = useCallback(
@@ -1611,6 +1770,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         openMarkdown(buttonId);
         return;
       }
+      if (action === 'renderHtmlTemplate') {
+        openHtml(buttonId);
+        return;
+      }
       if (action === 'createRecordPreset') {
         createRecordFromPreset({ buttonId, presetValues: (cfg?.presetValues || {}) as any });
         return;
@@ -1618,7 +1781,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
       logEvent('ui.customButton.unsupported', { buttonId: baseId, qIdx: qIdx ?? null, action: action || null });
     },
-    [createRecordFromPreset, definition.title, definition.questions, logEvent, openMarkdown, openPdfPreviewWindow, openReport, parseButtonRef]
+    [
+      createRecordFromPreset,
+      definition.title,
+      definition.questions,
+      logEvent,
+      openHtml,
+      openMarkdown,
+      openPdfPreviewWindow,
+      openReport,
+      parseButtonRef
+    ]
   );
 
   const closeReportOverlay = useCallback(() => {
@@ -1633,9 +1806,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       pdfFileName: undefined,
       pdfMessage: undefined,
       markdown: undefined,
+      html: undefined,
       buttonId: undefined
     }));
   }, []);
+
+  const closeReadOnlyFilesOverlay = useCallback(() => {
+    setReadOnlyFilesOverlay(prev => ({ ...prev, open: false }));
+    logEvent('filesOverlay.readOnly.close');
+  }, [logEvent]);
+
+  const openReadOnlyFilesOverlay = useCallback(
+    (fieldIdRaw: string) => {
+      const fieldId = (fieldIdRaw || '').toString().trim();
+      if (!fieldId) return;
+      const q = definition.questions.find(qq => qq && qq.type === 'FILE_UPLOAD' && qq.id === fieldId) as any;
+      if (!q) {
+        logEvent('filesOverlay.readOnly.unknownField', { fieldId });
+        return;
+      }
+      const items = toUploadItems(valuesRef.current[fieldId] as any);
+      const title = resolveLabel(q, languageRef.current) || tSystem('files.title', languageRef.current, 'Files');
+      const uploadConfig = (q as any)?.uploadConfig || undefined;
+      setReadOnlyFilesOverlay({ open: true, fieldId, title, items, uploadConfig });
+      logEvent('filesOverlay.readOnly.open', { fieldId, count: items.length });
+    },
+    [definition.questions, logEvent]
+  );
 
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
   const summaryViewEnabled = definition.summaryViewEnabled !== false;
@@ -2701,13 +2898,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const handleRecordSelect = (
     row: ListItem,
     fullRecord?: WebFormSubmission,
-    opts?: { openView?: 'auto' | 'form' | 'summary' }
+    opts?: { openView?: 'auto' | 'form' | 'summary' | 'button'; openButtonId?: string }
   ) => {
     const sourceRecord = fullRecord || listCache.records[row.id] || null;
     setStatus(null);
     setStatusLevel(null);
     setRecordLoadError(null);
     setSelectedRecordId(row.id);
+
+    const requested = (opts?.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
+    const openButtonId = (opts?.openButtonId || '').toString().trim();
+    const shouldTriggerButton = requested === 'button' && !!openButtonId;
+    const isAllowedListTriggeredAction = (buttonRef: string): boolean => {
+      const parsed = parseButtonRef(buttonRef || '');
+      const baseId = parsed.id;
+      const qIdx = parsed.qIdx;
+      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
+      const btn =
+        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
+          ? indexed
+          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const cfg: any = btn ? (btn as any).button : null;
+      const action = (cfg?.action || '').toString().trim();
+      return action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate';
+    };
 
     if (sourceRecord) {
       applyRecordSnapshot(sourceRecord);
@@ -2720,13 +2934,35 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         status: row.status ? row.status.toString() : null
       });
       const rowNumberHint = Number((row as any).__rowNumber);
-      loadRecordSnapshot(row.id, Number.isFinite(rowNumberHint) ? rowNumberHint : undefined);
+      loadRecordSnapshot(row.id, Number.isFinite(rowNumberHint) ? rowNumberHint : undefined).then(ok => {
+        if (!ok) return;
+        if (shouldTriggerButton) {
+          if (!isAllowedListTriggeredAction(openButtonId)) {
+            logEvent('list.openButton.ignored', { openButtonId, reason: 'unsupportedAction' });
+            return;
+          }
+          logEvent('list.openButton.trigger', { openButtonId });
+          handleCustomButton(openButtonId);
+        }
+      });
     }
 
     const statusRaw = ((sourceRecord?.status || row.status || '') as any)?.toString?.() || '';
     const isClosed = statusRaw.trim().toLowerCase() === 'closed';
     // When Summary view is disabled, always open the Form view (closed records are read-only).
-    const requested = (opts?.openView || 'auto') as 'auto' | 'form' | 'summary';
+    if (shouldTriggerButton) {
+      // Stay on the list view; the button action will open a preview overlay when the record snapshot is ready.
+      if (sourceRecord) {
+        if (!isAllowedListTriggeredAction(openButtonId)) {
+          logEvent('list.openButton.ignored', { openButtonId, reason: 'unsupportedAction' });
+          return;
+        }
+        logEvent('list.openButton.trigger', { openButtonId });
+        handleCustomButton(openButtonId);
+      }
+      return;
+    }
+
     if (requested === 'form') {
       setView('form');
     } else if (requested === 'summary') {
@@ -2935,6 +3171,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       <style>{FORM_VIEW_STYLES}</style>
       <style>{githubMarkdownCss}</style>
       <style>{MARKDOWN_PREVIEW_STYLES}</style>
+      <style>{HTML_PREVIEW_STYLES}</style>
       <AppHeader
         title={definition.title || 'Form'}
         logoUrl={definition.appHeader?.logoUrl}
@@ -3061,6 +3298,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       {view === 'summary' && (
         <SummaryView
           definition={definition}
+          formKey={formKey}
           language={language}
           values={values}
           lineItems={lineItems}
@@ -3069,6 +3307,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           selectedRecordId={selectedRecordId}
           recordLoadingId={recordLoadingId}
           currentRecord={currentRecord}
+          onOpenFiles={openReadOnlyFilesOverlay}
+          onDiagnostic={logEvent}
         />
       )}
       {view === 'list' && (
@@ -3164,6 +3404,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         state={reportOverlay}
         onClose={closeReportOverlay}
+        onOpenFiles={openReadOnlyFilesOverlay}
+        onDiagnostic={logEvent}
+      />
+
+      <FileOverlay
+        open={readOnlyFilesOverlay.open}
+        language={language}
+        title={readOnlyFilesOverlay.title || tSystem('files.title', language, 'Files')}
+        zIndex={10040}
+        submitting={submitting}
+        readOnly={true}
+        items={readOnlyFilesOverlay.items}
+        uploadConfig={readOnlyFilesOverlay.uploadConfig}
+        onAdd={() => undefined}
+        onClearAll={() => undefined}
+        onRemoveAt={() => undefined}
+        onClose={closeReadOnlyFilesOverlay}
       />
 
       <ActionBar

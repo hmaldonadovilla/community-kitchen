@@ -205,7 +205,13 @@
     "generatingPdf": { "en": "Generating PDF…", "fr": "Génération du PDF…", "nl": "PDF genereren…" },
     "failedPdf": { "en": "Failed to generate PDF.", "fr": "Échec de génération du PDF.", "nl": "PDF genereren mislukt." },
     "renderingMarkdown": { "en": "Rendering…", "fr": "Rendu…", "nl": "Weergave…" },
+    "renderingHtml": { "en": "Rendering…", "fr": "Rendu…", "nl": "Weergave…" },
     "failedMarkdown": {
+      "en": "Failed to render preview.",
+      "fr": "Échec du rendu de l'aperçu.",
+      "nl": "Voorbeeld renderen mislukt."
+    },
+    "failedHtml": {
       "en": "Failed to render preview.",
       "fr": "Échec du rendu de l'aperçu.",
       "nl": "Voorbeeld renderen mislukt."

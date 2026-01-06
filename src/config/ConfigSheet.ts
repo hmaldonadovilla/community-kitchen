@@ -1148,6 +1148,24 @@ export class ConfigSheet {
       return config;
     }
 
+    if (action === 'renderHtmlTemplate') {
+      const templateId =
+        cfgRaw.templateId ??
+        cfgRaw.template ??
+        cfgRaw.htmlTemplateId ??
+        cfgRaw.htmlId ??
+        cfgRaw.templateHtmlId ??
+        cfgRaw.templateHtml ??
+        cfgRaw.templateIdHtml;
+      if (!templateId) return undefined;
+      const config: ButtonConfig = {
+        action: 'renderHtmlTemplate',
+        templateId: templateId as any
+      } as any;
+      if (placements.length) (config as any).placements = placements as any;
+      return config;
+    }
+
     if (action === 'createRecordPreset') {
       const presetRaw = cfgRaw.presetValues ?? cfgRaw.preset ?? cfgRaw.values ?? cfgRaw.defaults;
       if (!presetRaw || typeof presetRaw !== 'object') return undefined;

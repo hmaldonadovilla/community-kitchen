@@ -157,7 +157,7 @@ export type ButtonPreviewMode = 'pdf' | 'live';
  * Primary use case: render a Google Doc template (with placeholders / consolidated directives)
  * into a PDF preview from the web app.
  */
-export type ButtonAction = 'renderDocTemplate' | 'renderMarkdownTemplate' | 'createRecordPreset';
+export type ButtonAction = 'renderDocTemplate' | 'renderMarkdownTemplate' | 'renderHtmlTemplate' | 'createRecordPreset';
 
 export interface RenderDocTemplateButtonConfig {
   action: 'renderDocTemplate';
@@ -207,6 +207,21 @@ export interface RenderMarkdownTemplateButtonConfig {
   placements?: ButtonPlacement[];
 }
 
+export interface RenderHtmlTemplateButtonConfig {
+  /**
+   * Render an HTML template stored in Google Drive (text/html or text/plain) using the same placeholder
+   * rules as Doc templates (e.g., `{{FIELD_ID}}`, consolidated placeholders, line-item directives, etc).
+   *
+   * The rendered HTML is displayed directly in the web app.
+   */
+  action: 'renderHtmlTemplate';
+  /**
+   * Google Drive file id (or language map) for the HTML template.
+   */
+  templateId: TemplateIdMap;
+  placements?: ButtonPlacement[];
+}
+
 export interface CreateRecordPresetButtonConfig {
   action: 'createRecordPreset';
   /**
@@ -219,7 +234,11 @@ export interface CreateRecordPresetButtonConfig {
   placements?: ButtonPlacement[];
 }
 
-export type ButtonConfig = RenderDocTemplateButtonConfig | RenderMarkdownTemplateButtonConfig | CreateRecordPresetButtonConfig;
+export type ButtonConfig =
+  | RenderDocTemplateButtonConfig
+  | RenderMarkdownTemplateButtonConfig
+  | RenderHtmlTemplateButtonConfig
+  | CreateRecordPresetButtonConfig;
 
 export interface QuestionUiConfig {
   /**
@@ -1092,6 +1111,13 @@ export interface FormConfig {
    */
   summaryViewEnabled?: boolean;
   /**
+   * Optional HTML template used to fully replace the Summary view UI.
+   *
+   * When set, the Summary view renders this Drive HTML template (with placeholders) instead of the built-in summary UI.
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  summaryHtmlTemplateId?: TemplateIdMap;
+  /**
    * Enable/disable the "Copy current record" action in the React web app.
    * When false, the Create button always creates a new record (no copy option).
    * Configured via the dashboard “Follow-up Config (JSON)” column.
@@ -1285,6 +1311,10 @@ export interface WebFormDefinition {
    */
   summaryViewEnabled?: boolean;
   /**
+   * Optional HTML template used to fully replace the Summary view UI.
+   */
+  summaryHtmlTemplateId?: TemplateIdMap;
+  /**
    * Enable/disable the "Copy current record" action in the React web app.
    * When false, the Create button always creates a new record (no copy option).
    */
@@ -1440,8 +1470,13 @@ export interface ListViewRuleColumnConfig {
    * - auto: preserve the app's default "list row click" behavior
    * - form: force the edit view (Closed records will be read-only)
    * - summary: force Summary view (if enabled; otherwise falls back to form)
+   * - button: run a configured custom BUTTON action (e.g. renderDocTemplate/renderMarkdownTemplate/renderHtmlTemplate)
    */
-  openView?: 'auto' | 'form' | 'summary';
+  openView?: 'auto' | 'form' | 'summary' | 'button';
+  /**
+   * When `openView = "button"`, the BUTTON field id (or encoded id via `__ckQIdx=`) to trigger.
+   */
+  openButtonId?: string;
   /**
    * When true, allow sorting by the computed text value.
    * Defaults to false (rule columns are usually "actions" rather than sortable data).

@@ -14,7 +14,11 @@ interface ListViewProps {
   formKey: string;
   definition: WebFormDefinition;
   language: LangCode;
-  onSelect: (row: ListItem, record?: WebFormSubmission, opts?: { openView?: 'auto' | 'form' | 'summary' }) => void;
+  onSelect: (
+    row: ListItem,
+    record?: WebFormSubmission,
+    opts?: { openView?: 'auto' | 'form' | 'summary' | 'button'; openButtonId?: string }
+  ) => void;
   cachedResponse?: ListResponse | null;
   cachedRecords?: Record<string, WebFormSubmission>;
   refreshToken?: number;
@@ -432,7 +436,9 @@ const ListView: React.FC<ListViewProps> = ({
     const text = resolveLocalizedString(cell.text, language, EMPTY_DISPLAY);
     const style = (cell?.style || 'link').toString();
     const icon = cell?.icon ? <ListViewIcon name={cell.icon} /> : null;
-    const openView = (col.openView || 'auto') as 'auto' | 'form' | 'summary';
+    const openButtonId = ((col as any).openButtonId || '').toString().trim();
+    const openViewRaw = (col.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
+    const openView = openViewRaw === 'button' && !openButtonId ? 'auto' : openViewRaw;
     const className =
       style === 'warning'
         ? 'ck-list-nav ck-list-nav--warning'
@@ -483,8 +489,16 @@ const ListView: React.FC<ListViewProps> = ({
         className={className}
         onClick={e => {
           e.stopPropagation();
-          onDiagnostic?.('list.ruleColumn.click', { columnId: col.fieldId, openView, text });
-          onSelect(row, row?.id ? records[row.id] : undefined, { openView });
+          onDiagnostic?.('list.ruleColumn.click', {
+            columnId: col.fieldId,
+            openView,
+            openButtonId: openView === 'button' ? openButtonId : null,
+            text
+          });
+          onSelect(row, row?.id ? records[row.id] : undefined, {
+            openView,
+            openButtonId: openView === 'button' ? openButtonId : undefined
+          });
         }}
       >
         {icon}

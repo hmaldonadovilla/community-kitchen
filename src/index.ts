@@ -2,6 +2,7 @@ import { FormGenerator } from './services/FormGenerator';
 import { ConfigSheet } from './config/ConfigSheet';
 import { WebFormService } from './services/WebFormService';
 import { WebFormSubmission } from './types';
+import { bumpTemplateCacheEpoch } from './services/webform/followup/templateCacheEpoch';
 
 export function setup(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -12,7 +13,20 @@ export function setup(): void {
 export function createAllForms(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const generator = new FormGenerator(ss);
+
+  // IMPORTANT:
+  // - HTML/Markdown templates are cached in CacheService for performance.
+  // - If you replace a Drive file but keep the same fileId, CacheService may still return the old content
+  //   until TTL expires. Bumping the epoch forces immediate refresh on next render/prefetch.
+  const bust = bumpTemplateCacheEpoch();
+
   const results = generator.createAllForms();
+
+  if (bust.success && bust.epoch) {
+    results.unshift(`✅ Template caches flushed (epoch ${bust.epoch}).`);
+  } else {
+    results.unshift(`⚠️ Template cache flush skipped: ${(bust.message || 'unknown error').toString()}`);
+  }
   
   Logger.log('=== Form Generation Results ===');
   results.forEach((result: string) => Logger.log(result));
@@ -146,10 +160,22 @@ export function renderMarkdownTemplate(formObject: WebFormSubmission, buttonId: 
   return service.renderMarkdownTemplate(formObject, buttonId);
 }
 
+export function renderHtmlTemplate(formObject: WebFormSubmission, buttonId: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderHtmlTemplate(formObject, buttonId);
+}
+
 export function renderSubmissionReportHtml(formObject: WebFormSubmission): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.renderSubmissionReportHtml(formObject);
+}
+
+export function renderSummaryHtmlTemplate(formObject: WebFormSubmission): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderSummaryHtmlTemplate(formObject);
 }
 
 export function trashPreviewArtifact(cleanupToken: string): any {

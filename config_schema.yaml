@@ -171,6 +171,7 @@ components:
                 Render a Google Doc template (with placeholders + consolidated directives) into a PDF preview.
 
                 Notes:
+                - Use `{{DEFAULT(KEY, "fallback")}}` to render a fallback value when a placeholder is empty.
                 - Generated rows inside `GROUP_TABLE` and `CONSOLIDATED_TABLE` outputs use alternating row background colors (zebra striping) automatically.
             templateId:
               $ref: '#/components/schemas/TemplateIdMap'
@@ -216,9 +217,47 @@ components:
                 as Doc templates (e.g., `{{FIELD_ID}}`, consolidated placeholders, etc), then show it immediately in-app.
 
                 This is designed for a **single-click preview** experience (no Drive/Docs preview pages, no extra "Open" clicks).
+
+                Placeholder helpers:
+                - `{{DEFAULT(KEY, "fallback")}}`: use a fallback value when the referenced placeholder is empty.
             templateId:
               $ref: '#/components/schemas/TemplateIdMap'
               description: Google Drive file id config (string, language map, or `cases` selector) for the Markdown template.
+            placements:
+              type: array
+              items:
+                type: string
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+              description: |
+                Where the button should surface in the web UI.
+                - `form`: render inline as a normal field in the form view.
+                - `formSummaryMenu`: appear inside the Summary button menu while editing.
+                - `summaryBar`: appear in the bottom action bar on the Summary view (menu if multiple).
+                - `topBar`: appear in the action bar directly under the header (all views).
+                - `topBarList`: appear in the top action bar on the List view.
+                - `topBarForm`: appear in the top action bar on the Form (edit) view.
+                - `topBarSummary`: appear in the top action bar on the Summary view.
+                - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+          required: [action, templateId]
+        - type: object
+          properties:
+            action:
+              type: string
+              enum: [renderHtmlTemplate]
+              description: |
+                Render an HTML template stored in Google Drive (text/html or text/plain) using the same placeholder rules
+                as Doc templates (e.g., `{{FIELD_ID}}`, consolidated placeholders, line-item directives), then show it immediately in-app.
+
+                This is designed for a **single-click preview** experience (no Drive/Docs preview pages, no extra "Open" clicks).
+
+                Placeholder helpers:
+                - `{{DEFAULT(KEY, "fallback")}}`: use a fallback value when the referenced placeholder is empty.
+
+                HTML-only placeholder:
+                - `{{FILES_ICON(FIELD_ID)}}`: replaced by a clickable file icon button (opens a read-only Files overlay).
+            templateId:
+              $ref: '#/components/schemas/TemplateIdMap'
+              description: Google Drive file id config (string, language map, or `cases` selector) for the HTML template.
             placements:
               type: array
               items:
@@ -1234,6 +1273,13 @@ components:
 
             - When `true` (default), clicking a **Closed** record in the list opens the Summary view.
             - When `false`, list-row clicks always open the **Edit** view (Closed records will be read-only).
+        summaryHtmlTemplateId:
+          $ref: '#/components/schemas/TemplateIdMap'
+          description: |
+            Optional HTML template to fully replace the built-in Summary view UI.
+
+            - When set, the Summary view renders this HTML template (Drive file) with placeholders.
+            - If rendering fails, the app falls back to the built-in Summary view.
         copyCurrentRecordEnabled:
           type: boolean
           description: |
@@ -1412,7 +1458,7 @@ components:
             - Actions menu PDFs only: `"id": "actions", "actions": ["renderDocTemplate"]`
           items:
             type: string
-            enum: [renderDocTemplate, renderMarkdownTemplate, createRecordPreset]
+            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset]
         summaryBehavior:
           type: string
           enum: [auto, navigate, menu]
@@ -1454,7 +1500,7 @@ components:
           description: Optional filter by action type (e.g. only show createRecordPreset buttons).
           items:
             type: string
-            enum: [renderDocTemplate, renderMarkdownTemplate, createRecordPreset]
+            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset]
       additionalProperties: true
 
     TemplateIdBase:
@@ -1580,12 +1626,19 @@ components:
             Cases can override via `cases[].hrefFieldId`.
         openView:
           type: string
-          enum: [auto, form, summary]
+          enum: [auto, form, summary, button]
           description: |
             Which view opens when clicking the computed cell:
             - `auto`: preserve default list click behavior
             - `form`: force edit view (Closed records are read-only)
             - `summary`: force Summary view (falls back to form if Summary is disabled)
+            - `button`: run a configured custom BUTTON action for the record (opens a preview overlay)
+        openButtonId:
+          type: string
+          description: |
+            When `openView: "button"`, the BUTTON id (or encoded id via `__ckQIdx=`) to trigger.
+
+            Note: only preview-style buttons are allowed (renderDocTemplate / renderMarkdownTemplate / renderHtmlTemplate).
         sortable:
           type: boolean
           description: When true, allow sorting by the computed text value (default false).

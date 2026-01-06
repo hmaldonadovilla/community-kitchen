@@ -2179,7 +2179,8 @@ const FormView: React.FC<FormViewProps> = ({
         const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : ['form'];
         const showInForm = placements.includes('form');
         // Inline BUTTON fields are currently only used for report rendering.
-        if (!showInForm || (action !== 'renderDocTemplate' && action !== 'renderMarkdownTemplate')) return null;
+        if (!showInForm || (action !== 'renderDocTemplate' && action !== 'renderMarkdownTemplate' && action !== 'renderHtmlTemplate'))
+          return null;
 
         const label = resolveLabel(q, language);
         const busyThis = !!reportBusy && reportBusyId === q.id;

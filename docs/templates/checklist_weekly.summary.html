@@ -1,0 +1,289 @@
+<!--
+  Community Kitchen – Storage & Cleaning Checks (Summary HTML Template)
+
+  Notes:
+  - Keep placeholders as plain text tokens like {{FIELD_ID}} (do NOT split tokens across spans).
+  - FILE_UPLOAD icons (HTML-only): {{FILES_ICON(FIELD_ID)}} opens the read-only Files overlay in-app.
+  - This template is designed to be injected into the CK web app (not a standalone web page).
+-->
+
+<style>
+  .ck-summary-template {
+    /* inherit app typography; avoid fixed pt/px sizes so it scales nicely on iOS */
+    color: #0f172a;
+    font-size: 0.94em; /* slightly denser than the app default */
+    margin: -8px; /* counter the preview container padding so more content fits */
+  }
+
+  .ck-summary-template * {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  .ck-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .ck-meta {
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    background: rgba(148, 163, 184, 0.1);
+    border-radius: 12px;
+    padding: 10px 10px;
+    min-width: 0;
+  }
+
+  .ck-meta-label {
+    font-weight: 900;
+    font-size: 0.66em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(15, 23, 42, 0.65);
+    margin-bottom: 4px;
+  }
+
+  .ck-meta-value {
+    font-weight: 900;
+    font-size: 0.9em;
+    color: #0f172a;
+    line-height: 1.15;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .ck-divider {
+    border: 0;
+    height: 1px;
+    background: rgba(148, 163, 184, 0.55);
+    margin: 10px 0;
+  }
+
+  .ck-section-title {
+    margin: 0 0 8px 0;
+    font-weight: 900;
+    font-size: 0.88em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(15, 23, 42, 0.65);
+  }
+
+  .ck-subtitle {
+    margin: 10px 0 8px 0;
+    font-weight: 900;
+    font-size: 0.98em;
+    color: #0f172a;
+  }
+
+  .ck-checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  /* If a checklist has an odd number of items, make the last card span full width */
+  .ck-checklist > .ck-check:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .ck-check {
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    background: rgba(118, 118, 128, 0.06);
+    border-radius: 12px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .ck-mark {
+    flex: 0 0 auto;
+    width: 1.6em;
+    text-align: center;
+    font-weight: 900;
+    line-height: 1.2;
+    font-size: 1em;
+  }
+
+  .ck-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 800;
+    line-height: 1.15;
+    color: #0f172a;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .ck-right {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* If the FILES_ICON() placeholder renders nothing, don't reserve space */
+  .ck-right:empty {
+    display: none;
+  }
+
+  .ck-muted {
+    color: rgba(15, 23, 42, 0.55);
+    font-weight: 700;
+  }
+
+  .ck-callouts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  /* If there is only one callout, let it span full width */
+  .ck-callouts > .ck-callout:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .ck-callout {
+    border: 1px solid rgba(251, 146, 60, 0.55);
+    background: rgba(251, 146, 60, 0.10);
+    border-radius: 12px;
+    padding: 10px 10px;
+    min-width: 0;
+  }
+
+  .ck-callout-title {
+    font-weight: 900;
+    font-size: 0.82em;
+    margin-bottom: 4px;
+  }
+
+  .ck-callout-body {
+    font-weight: 700;
+    line-height: 1.15;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .ck-callout-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .ck-callout-icon {
+    flex: 0 0 auto;
+  }
+
+  /* If the FILES_ICON() placeholder renders nothing, don't reserve space */
+  .ck-callout-icon:empty {
+    display: none;
+  }
+
+  /* Make FILES_ICON buttons smaller so they don’t force extra height */
+  .ck-summary-template .ck-file-icon {
+    padding: 6px 10px !important;
+    border-radius: 12px !important;
+    font-size: 15px !important;
+    line-height: 1 !important;
+  }
+
+  /* Slightly smaller badge in compact summary */
+  .ck-summary-template .ck-file-icon__badge {
+    min-width: 22px !important;
+    height: 22px !important;
+    padding: 0 7px !important;
+    font-size: 13px !important;
+  }
+
+  /* Ultra-narrow devices: stack a bit to avoid unreadably tiny columns */
+  @media (max-width: 330px) {
+    .ck-meta-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .ck-callouts {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="ck-summary-template">
+  <div class="ck-meta-grid">
+    <div class="ck-meta">
+      <div class="ck-meta-label">Check frequency</div>
+      <div class="ck-meta-value">{{CHECK_FREQ}}</div>
+    </div>
+    <div class="ck-meta">
+      <div class="ck-meta-label">Date</div>
+      <div class="ck-meta-value">{{DATE}}</div>
+    </div>
+    <div class="ck-meta">
+      <div class="ck-meta-label">Responsible</div>
+      <div class="ck-meta-value">{{COOK}}</div>
+    </div>
+  </div>
+
+  <div class="ck-callouts">
+    <div class="ck-callout">
+      <div class="ck-callout-title">Issues current shift</div>
+      <div class="ck-callout-body">
+        <span class="ck-callout-text">{{DEFAULT(ISSUES, "No issues")}}</span>
+        <span class="ck-callout-icon">{{FILES_ICON(ISSUES_EVD)}}</span>
+      </div>
+    </div>
+  </div>
+
+  <hr class="ck-divider" />
+
+  <div class="ck-section-title">Checks</div>
+
+  <div class="ck-subtitle">Deep clean</div>
+  <ul class="ck-checklist">
+    <li class="ck-check">
+      <span class="ck-mark">{{WK_FRIDGE}}</span>
+      <span class="ck-text">Fridges (shelves, seals)</span>
+      <span class="ck-right">{{FILES_ICON(WK_FRIDGE_PH)}}</span>
+    </li>
+    <li class="ck-check">
+      <span class="ck-mark">{{WK_FREEZER}}</span>
+      <span class="ck-text">Freezers (interior)</span>
+      <span class="ck-right">{{FILES_ICON(WK_FREEZER_PH)}}</span>
+    </li>
+  </ul>
+
+  <div class="ck-subtitle">Kitchen cleaning</div>
+  <ul class="ck-checklist">
+    <li class="ck-check">
+      <span class="ck-mark">{{WK_BINS}}</span>
+      <span class="ck-text">Clean & disinfect bins</span>
+      <span class="ck-right">{{FILES_ICON(WK_BINS_PH)}}</span>
+    </li>
+    <li class="ck-check">
+      <span class="ck-mark">{{WK_DRANIS}}</span>
+      <span class="ck-text">Clean drains & sinks</span>
+      <span class="ck-right">{{FILES_ICON(WK_DRANIS_PH)}}</span>
+    </li>
+    <li class="ck-check">
+      <span class="ck-mark">{{WK_EQUIP}}</span>
+      <span class="ck-text">Clean small equipment & storage</span>
+      <span class="ck-right">{{FILES_ICON(WK_EQUIP_PH)}}</span>
+    </li>
+  </ul>
+
+  <div class="ck-subtitle">Disposal</div>
+  <ul class="ck-checklist">
+    <li class="ck-check"><span class="ck-mark">{{WK_EXPIRED}}</span><span class="ck-text">Expired dry food discarded</span></li>
+  </ul>
+</div>
+
+

@@ -68,6 +68,189 @@ export const formatFileLinkLabel = (n: number, language?: string, linkLabel?: an
   return `${base} ${n}`;
 };
 
+const escapeHtml = (value: string): string => {
+  const s = (value || '').toString();
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+const escapeHtmlAttr = (value: string): string => escapeHtml(value);
+
+/**
+ * Build a URL -> label map for all FILE_UPLOAD fields in a record (top-level + line items).
+ * Used by:
+ * - PDF/Doc rendering (convert raw URLs into labelled hyperlinks)
+ * - HTML template rendering (same UX as Summary view: labelled links, not full URLs)
+ */
+export const buildUploadedFileUrlToLabelMap = (
+  questions: QuestionConfig[],
+  record: WebFormSubmission
+): Record<string, string> => {
+  const urlToLabel: Record<string, string> = {};
+
+  const addValue = (raw: any, linkLabel?: any) => {
+    const urls = extractUploadUrls(raw);
+    urls.forEach((u, idx) => {
+      const url = (u || '').toString().trim();
+      if (!url) return;
+      if (urlToLabel[url]) return;
+      urlToLabel[url] = formatFileLinkLabel(idx + 1, record.language, linkLabel);
+    });
+  };
+
+  // Top-level FILE_UPLOAD questions
+  (questions || []).forEach(q => {
+    if (!q || q.type !== 'FILE_UPLOAD') return;
+    addValue((record.values as any)?.[q.id], (q as any)?.uploadConfig?.linkLabel);
+  });
+
+  // Line item groups + subgroups
+  (questions || [])
+    .filter(q => q && q.type === 'LINE_ITEM_GROUP')
+    .forEach(groupQ => {
+      const rows = Array.isArray((record.values as any)?.[groupQ.id]) ? (((record.values as any)[groupQ.id] as any[]) || []) : [];
+      if (!rows.length) return;
+
+      const groupFields = (groupQ.lineItemConfig?.fields || []) as any[];
+      groupFields.forEach(f => {
+        if (((f as any)?.type || '').toString().toUpperCase() !== 'FILE_UPLOAD') return;
+        rows.forEach(row => addValue((row || {})[f.id], (f as any)?.uploadConfig?.linkLabel));
+      });
+
+      const subs = (groupQ.lineItemConfig?.subGroups || []) as any[];
+      subs.forEach(sub => {
+        const subKey = resolveSubgroupKey(sub as any);
+        if (!subKey) return;
+        const subFields = (sub.fields || []) as any[];
+        subFields.forEach(f => {
+          if (((f as any)?.type || '').toString().toUpperCase() !== 'FILE_UPLOAD') return;
+          rows.forEach(row => {
+            const children = Array.isArray((row || {})[subKey]) ? (((row as any)[subKey] as any[]) || []) : [];
+            children.forEach(child => addValue((child || {})[f.id], (f as any)?.uploadConfig?.linkLabel));
+          });
+        });
+      });
+    });
+
+  return urlToLabel;
+};
+
+/**
+ * Replace plain file-upload URLs in an HTML string with labelled hyperlinks.
+ *
+ * Why:
+ * - FILE_UPLOAD values are stored as Drive URLs.
+ * - In HTML templates, a placeholder like {{FIELD_ID}} would otherwise render as the full URL.
+ * - This function converts those URLs to readable labels (e.g. "File 1") with clickable links.
+ *
+ * Safety:
+ * - Only replaces in text nodes (not inside tags/attributes) to avoid breaking markup.
+ * - Skips text inside existing <a>...</a> to avoid nested anchors.
+ */
+export const linkifyUploadedFileUrlsInHtml = (
+  html: string,
+  questions: QuestionConfig[],
+  record: WebFormSubmission
+): string => {
+  const raw = (html || '').toString();
+  if (!raw.trim()) return raw;
+
+  const urlToLabel = buildUploadedFileUrlToLabelMap(questions, record);
+  const entries = Object.entries(urlToLabel).filter(([u, l]) => Boolean(u) && Boolean(l));
+  if (!entries.length) return raw;
+
+  const markers = entries.map(([url, label], idx) => ({
+    url,
+    label,
+    marker: `__CK_FILE_URL__${idx}__`
+  }));
+
+  // First pass: insert markers only in text segments outside tags and outside existing anchors.
+  let out = '';
+  let textBuf = '';
+  let tagBuf = '';
+  let inTag = false;
+  let quote: string | null = null;
+  let inAnchor = false;
+
+  const flushText = () => {
+    if (!textBuf) return;
+    let t = textBuf;
+    if (!inAnchor) {
+      markers.forEach(m => {
+        const re = new RegExp(escapeRegExp(m.url), 'g');
+        t = t.replace(re, m.marker);
+      });
+    }
+    out += t;
+    textBuf = '';
+  };
+
+  const finishTag = (tag: string) => {
+    // Update anchor state based on the tag we just closed.
+    // Note: we keep this intentionally simple and robust for well-formed HTML.
+    if (/^<\s*\/\s*a\b/i.test(tag)) {
+      inAnchor = false;
+    } else if (/^<\s*a\b/i.test(tag) && !/\/\s*>$/.test(tag)) {
+      inAnchor = true;
+    }
+    out += tag;
+  };
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (!inTag) {
+      if (ch === '<') {
+        flushText();
+        inTag = true;
+        quote = null;
+        tagBuf = '<';
+      } else {
+        textBuf += ch;
+      }
+      continue;
+    }
+
+    // inside tag
+    tagBuf += ch;
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '>') {
+      // tag finished
+      finishTag(tagBuf);
+      tagBuf = '';
+      inTag = false;
+      quote = null;
+    }
+  }
+
+  // Flush any trailing buffer(s)
+  if (inTag && tagBuf) out += tagBuf;
+  flushText();
+
+  // Second pass: replace markers with <a> tags (safe because we don't do URL replacements anymore).
+  let finalHtml = out;
+  markers.forEach(m => {
+    const href = escapeHtmlAttr(m.url);
+    const label = escapeHtml(m.label);
+    const anchor = `<a class="ck-file-link" href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    const re = new RegExp(escapeRegExp(m.marker), 'g');
+    finalHtml = finalHtml.replace(re, anchor);
+  });
+
+  return finalHtml;
+};
+
 /**
  * FILE_UPLOAD fields are stored as Drive URLs (comma-separated). In the rendered PDF we want:
  * - correct links (each file URL is clickable)
@@ -88,50 +271,7 @@ export const linkifyUploadedFileUrls = (
     if (footer) targets.push(footer as any);
     if (!targets.length) return;
 
-    const urlToLabel: Record<string, string> = {};
-    const addValue = (raw: any, linkLabel?: any) => {
-      const urls = extractUploadUrls(raw);
-      urls.forEach((u, idx) => {
-        const url = (u || '').toString().trim();
-        if (!url) return;
-        if (urlToLabel[url]) return;
-        urlToLabel[url] = formatFileLinkLabel(idx + 1, record.language, linkLabel);
-      });
-    };
-
-    // Top-level FILE_UPLOAD questions
-    questions.forEach(q => {
-      if (q.type !== 'FILE_UPLOAD') return;
-      addValue((record.values as any)?.[q.id], (q as any)?.uploadConfig?.linkLabel);
-    });
-
-    // Line item groups + subgroups
-    questions
-      .filter(q => q.type === 'LINE_ITEM_GROUP')
-      .forEach(groupQ => {
-        const rows = Array.isArray((record.values as any)?.[groupQ.id]) ? (((record.values as any)[groupQ.id] as any[]) || []) : [];
-        if (!rows.length) return;
-
-        const groupFields = (groupQ.lineItemConfig?.fields || []) as any[];
-        groupFields.forEach(f => {
-          if (((f as any)?.type || '').toString().toUpperCase() !== 'FILE_UPLOAD') return;
-          rows.forEach(row => addValue((row || {})[f.id], (f as any)?.uploadConfig?.linkLabel));
-        });
-
-        const subs = (groupQ.lineItemConfig?.subGroups || []) as any[];
-        subs.forEach(sub => {
-          const subKey = resolveSubgroupKey(sub as any);
-          if (!subKey) return;
-          const subFields = (sub.fields || []) as any[];
-          subFields.forEach(f => {
-            if (((f as any)?.type || '').toString().toUpperCase() !== 'FILE_UPLOAD') return;
-            rows.forEach(row => {
-              const children = Array.isArray((row || {})[subKey]) ? (((row as any)[subKey] as any[]) || []) : [];
-              children.forEach(child => addValue((child || {})[f.id], (f as any)?.uploadConfig?.linkLabel));
-            });
-          });
-        });
-      });
+    const urlToLabel = buildUploadedFileUrlToLabelMap(questions, record);
 
     const entries = Object.entries(urlToLabel);
     if (!entries.length) return;

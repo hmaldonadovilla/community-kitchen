@@ -21,6 +21,7 @@ import { buildReactTemplate } from './webform/template';
 import { loadDedupRules } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
+import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -269,6 +270,11 @@ export class WebFormService {
       markdownLoaded: number;
       markdownSkippedCache: number;
       markdownFailed: number;
+      htmlRequested: number;
+      htmlCacheHit: number;
+      htmlLoaded: number;
+      htmlSkippedCache: number;
+      htmlFailed: number;
       docOk: number;
       docFailed: number;
     };
@@ -278,11 +284,14 @@ export class WebFormService {
     const { form, questions } = this.getFormContext(key);
 
     const markdownMaps: any[] = [];
+    const htmlMaps: any[] = [];
     const docMaps: any[] = [];
 
     // Follow-up templates (Doc-based)
     if (form.followupConfig?.pdfTemplateId) docMaps.push(form.followupConfig.pdfTemplateId);
     if (form.followupConfig?.emailTemplateId) docMaps.push(form.followupConfig.emailTemplateId);
+    // Summary replacement (HTML)
+    if (form.summaryHtmlTemplateId) htmlMaps.push(form.summaryHtmlTemplateId);
 
     // BUTTON templates
     questions
@@ -292,6 +301,7 @@ export class WebFormService {
         if (!cfg || !cfg.templateId) return;
         const action = (cfg.action || '').toString().trim();
         if (action === 'renderMarkdownTemplate') markdownMaps.push(cfg.templateId);
+        else if (action === 'renderHtmlTemplate') htmlMaps.push(cfg.templateId);
         else if (action === 'renderDocTemplate') docMaps.push(cfg.templateId);
       });
 
@@ -311,10 +321,24 @@ export class WebFormService {
           .filter(Boolean)
       )
     );
+    const htmlTemplateIds = Array.from(
+      new Set(
+        htmlMaps
+          .flatMap(map => collectTemplateIdsFromMap(map))
+          .map(id => (id || '').toString().trim())
+          .filter(Boolean)
+      )
+    );
 
-    debugLog('templates.prefetch.start', { formKey: key, markdown: markdownTemplateIds.length, doc: docTemplateIds.length });
+    debugLog('templates.prefetch.start', {
+      formKey: key,
+      markdown: markdownTemplateIds.length,
+      html: htmlTemplateIds.length,
+      doc: docTemplateIds.length
+    });
 
     const md = prefetchMarkdownTemplateIds(markdownTemplateIds);
+    const html = prefetchHtmlTemplateIds(htmlTemplateIds);
 
     let docOk = 0;
     let docFailed = 0;
@@ -329,7 +353,7 @@ export class WebFormService {
       }
     });
 
-    debugLog('templates.prefetch.done', { formKey: key, markdown: md, docOk, docFailed });
+    debugLog('templates.prefetch.done', { formKey: key, markdown: md, html, docOk, docFailed });
 
     return {
       success: true,
@@ -340,6 +364,11 @@ export class WebFormService {
         markdownLoaded: md.loaded,
         markdownSkippedCache: md.skipped,
         markdownFailed: md.failed,
+        htmlRequested: html.requested,
+        htmlCacheHit: html.cacheHit,
+        htmlLoaded: html.loaded,
+        htmlSkippedCache: html.skipped,
+        htmlFailed: html.failed,
         docOk,
         docFailed
       }
@@ -555,6 +584,43 @@ export class WebFormService {
   }
 
   /**
+   * Render a configured BUTTON field's HTML template (Drive HTML/text file) into expanded HTML for preview.
+   * This does not write anything to the destination tab and does not persist any Drive artifacts.
+   */
+  public renderHtmlTemplate(
+    formObject: WebFormSubmission,
+    buttonId: string
+  ): { success: boolean; html?: string; fileName?: string; message?: string } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    if (!formKey) {
+      return { success: false, message: 'Form key is required.' };
+    }
+    const { form, questions } = this.getFormContext(formKey);
+    const parsed = this.parseButtonRef((buttonId || '').toString());
+    const btn = this.resolveButtonQuestion(questions, parsed);
+    const cfg: any = (btn as any)?.button;
+    if (!btn || !cfg || cfg.action !== 'renderHtmlTemplate' || !cfg.templateId) {
+      return { success: false, message: `Unknown or misconfigured button "${buttonId}".` };
+    }
+
+    const record = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    debugLog('renderHtmlTemplate.start', { formKey, buttonId: btn.id, language: record.language });
+    const result = this.followups.renderHtmlFromHtmlTemplate({
+      form,
+      questions,
+      record,
+      templateIdMap: cfg.templateId,
+      namePrefix: `${form.title || 'Form'} - ${btn.qEn || btn.id}`
+    });
+    if (!result.success || !result.html) {
+      debugLog('renderHtmlTemplate.failed', { formKey, buttonId: btn.id, message: result.message || 'failed' });
+      return { success: false, message: result.message || 'Failed to render HTML.' };
+    }
+    debugLog('renderHtmlTemplate.ok', { formKey, buttonId: btn.id, fileName: result.fileName || '' });
+    return { success: true, html: result.html, fileName: result.fileName };
+  }
+
+  /**
    * Render the configured follow-up PDF template into a previewable Doc copy (used by the Summary view).
    * This does not write anything to the destination tab.
    */
@@ -587,6 +653,39 @@ export class WebFormService {
     const cleanupToken = this.issuePreviewCleanupToken(result.fileId);
     debugLog('renderSubmissionReportHtml.ok', { formKey, fileId: result.fileId });
     return { success: true, previewFileId: result.fileId, previewUrl: result.previewUrl, cleanupToken };
+  }
+
+  /**
+   * Render the configured Summary HTML template (if any) into an expanded HTML string.
+   * Used to fully replace the Summary view UI in the React web app.
+   */
+  public renderSummaryHtmlTemplate(
+    formObject: WebFormSubmission
+  ): { success: boolean; html?: string; fileName?: string; message?: string } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    if (!formKey) {
+      return { success: false, message: 'Form key is required.' };
+    }
+    const { form, questions } = this.getFormContext(formKey);
+    const templateId = form.summaryHtmlTemplateId;
+    if (!templateId) {
+      return { success: false, message: 'No summary HTML template configured for this form.' };
+    }
+    const record = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    debugLog('renderSummaryHtmlTemplate.start', { formKey, language: record.language });
+    const result = this.followups.renderHtmlFromHtmlTemplate({
+      form,
+      questions,
+      record,
+      templateIdMap: templateId,
+      namePrefix: `${form.title || 'Form'} - Summary`
+    });
+    if (!result.success || !result.html) {
+      debugLog('renderSummaryHtmlTemplate.failed', { formKey, message: result.message || 'failed' });
+      return { success: false, message: result.message || 'Failed to render summary.' };
+    }
+    debugLog('renderSummaryHtmlTemplate.ok', { formKey, fileName: result.fileName || '' });
+    return { success: true, html: result.html, fileName: result.fileName };
   }
 
   /**

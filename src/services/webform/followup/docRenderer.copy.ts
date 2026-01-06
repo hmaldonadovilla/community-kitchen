@@ -1,7 +1,7 @@
 import { FollowupConfig, FormConfig, QuestionConfig, TemplateIdMap, WebFormSubmission } from '../../../types';
 import { DataSourceService } from '../dataSources';
 import { debugLog } from '../debug';
-import { addPlaceholderVariants, escapeRegExp } from './utils';
+import { addPlaceholderVariants, applyPlaceholders, escapeRegExp } from './utils';
 import { addConsolidatedPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
 import { resolveTemplateId } from './recipients';
@@ -49,6 +49,38 @@ export const renderDocCopyFromTemplate = (args: {
     const targets: any[] = [body];
     if (header) targets.push(header as any);
     if (footer) targets.push(footer as any);
+
+    // Apply DEFAULT() placeholders first so fallbacks can still include normal tokens.
+    // Example: {{DEFAULT(COOK, "Unknown")}} or {{DEFAULT({{COOK}}, "Unknown")}}
+    try {
+      const DEFAULT_RE = /{{\s*DEFAULT\s*\(\s*[\s\S]*?\s*\)\s*}}/gi;
+      targets.forEach(t => {
+        let text = '';
+        try {
+          text = t && typeof t.getText === 'function' ? (t.getText() || '').toString() : '';
+        } catch (_) {
+          text = '';
+        }
+        if (!text || !text.includes('DEFAULT')) return;
+        const matches = text.match(DEFAULT_RE) || [];
+        const unique = Array.from(new Set(matches.map(m => (m || '').toString()).filter(Boolean)));
+        unique.forEach(token => {
+          const replacement = applyPlaceholders(token, placeholders);
+          const pattern = escapeRegExp(token);
+          try {
+            if (t && typeof t.replaceText === 'function') {
+              t.replaceText(pattern, replacement ?? '');
+            } else if (t && typeof t.editAsText === 'function') {
+              t.editAsText().replaceText(pattern, replacement ?? '');
+            }
+          } catch (_) {
+            // best effort
+          }
+        });
+      });
+    } catch (_) {
+      // best effort; don't fail rendering due to DEFAULT placeholder processing
+    }
 
     // Replace placeholders across the full document, including header/footer.
     Object.entries(placeholders).forEach(([token, value]) => {

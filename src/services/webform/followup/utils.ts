@@ -215,9 +215,104 @@ export const addPlaceholderVariants = (
   });
 };
 
+const stripOuterQuotes = (value: string): string => {
+  const s = (value || '').toString().trim();
+  if (!s) return '';
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    return s.slice(1, -1);
+  }
+  return s;
+};
+
+const splitFunctionArgs = (raw: string): string[] => {
+  const input = (raw || '').toString();
+  const args: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === ',') {
+      args.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) args.push(current.trim());
+  return args;
+};
+
+const normalizePlaceholderKey = (raw: string): string => {
+  let key = (raw || '').toString().trim();
+  if (!key) return '';
+  // Allow DEFAULT({{FIELD_ID}}, "x") by stripping the outer token braces.
+  if (key.startsWith('{{') && key.endsWith('}}')) {
+    key = key.slice(2, -2).trim();
+  }
+  // Tolerate whitespace around dotted paths: "A . B . C" -> "A.B.C"
+  key = key
+    .split('.')
+    .map(seg => seg.trim())
+    .filter(Boolean)
+    .join('.');
+  return key;
+};
+
+const resolvePlaceholderValueFromMap = (placeholders: Record<string, string>, keyRaw: string): string => {
+  const key = normalizePlaceholderKey(keyRaw);
+  if (!key) return '';
+  const variants = buildPlaceholderKeys(key);
+  for (const v of variants) {
+    const token = `{{${v}}}`;
+    if (Object.prototype.hasOwnProperty.call(placeholders, token)) {
+      return (placeholders[token] ?? '').toString();
+    }
+  }
+  // As a last resort, try raw key without variant transforms.
+  const rawToken = `{{${key}}}`;
+  if (Object.prototype.hasOwnProperty.call(placeholders, rawToken)) {
+    return (placeholders[rawToken] ?? '').toString();
+  }
+  return '';
+};
+
+/**
+ * DEFAULT() placeholder function:
+ * - Syntax: {{DEFAULT(KEY, "fallback")}}
+ * - If KEY resolves to an empty string, renders the fallback value instead.
+ *
+ * Works in Doc templates (PDF/email), Markdown templates, and HTML templates.
+ */
+const applyDefaultPlaceholders = (template: string, placeholders: Record<string, string>): string => {
+  const DEFAULT_RE = /{{\s*DEFAULT\s*\(\s*([\s\S]*?)\s*\)\s*}}/gi;
+  const input = (template || '').toString();
+  if (!input.includes('DEFAULT')) return input;
+  return input.replace(DEFAULT_RE, (fullMatch: string, innerRaw: string) => {
+    const inner = (innerRaw || '').toString().trim();
+    if (!inner) return fullMatch;
+    const args = splitFunctionArgs(inner);
+    if (args.length < 2) return fullMatch;
+    const keyArg = stripOuterQuotes(args[0] || '');
+    const fallbackArg = stripOuterQuotes(args.slice(1).join(',') || '');
+    const current = resolvePlaceholderValueFromMap(placeholders, keyArg);
+    if (current && current.toString().trim()) return current;
+    return fallbackArg || '';
+  });
+};
+
 export const applyPlaceholders = (template: string, placeholders: Record<string, string>): string => {
   if (!template) return '';
-  let output = template;
+  let output = applyDefaultPlaceholders(template, placeholders);
   Object.entries(placeholders).forEach(([token, value]) => {
     output = output.replace(new RegExp(escapeRegExp(token), 'g'), value ?? '');
     // Relaxed matcher to tolerate incidental spaces around tokens in the Doc

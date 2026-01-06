@@ -151,6 +151,31 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+      Optional: instead of opening Form/Summary, you can make a rule column run a **custom BUTTON action** (preview) by using:
+      - `"openView": "button"`
+      - `"openButtonId": "<BUTTON_QUESTION_ID>"` (or the encoded id containing `__ckQIdx=` when needed)
+
+      Example: clicking the cell opens a configured HTML template preview button:
+
+      ```json
+      {
+        "listView": {
+          "columns": [
+            {
+              "type": "rule",
+              "fieldId": "report",
+              "label": { "en": "Report" },
+              "openView": "button",
+              "openButtonId": "BTN_REPORT_HTML",
+              "cases": [
+                { "text": "Open report", "style": "link", "icon": "view" }
+              ]
+            }
+          ]
+        }
+      }
+      ```
+
       Tip: to make a `style: "link"` case open a URL stored in another field (e.g. `pdfUrl`), set `hrefFieldId` on the column or the case:
 
       ```json
@@ -932,6 +957,10 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - **Template migration (one-time)**: Run `migrateFormTemplatesToIdPlaceholders(formKey)` to rewrite legacy label-based placeholders to ID-based placeholders in-place for a form’s configured templates (follow-up templates + `BUTTON` doc templates).
 - **Validation warnings**: Use `{{VALIDATION_WARNINGS}}` to place non-blocking validation warnings (rules with `"level": "warning"`) in the template. Warnings are only rendered in the PDF when this placeholder is present.
 - **Data source columns**: When a CHOICE/CHECKBOX question comes from a data source, you can access the columns returned in its `projection` via `{{QUESTION_ID.Column_Name}}` (spaces become underscores). Example: `{{MP_DISTRIBUTOR.Address_Line_1}}`, `{{MP_DISTRIBUTOR.CITY}}`, `{{MP_DISTRIBUTOR.EMAIL}}`.
+- **Default fallback values**: Use `{{DEFAULT(KEY, "fallback")}}` to render a fallback string when the referenced placeholder is empty.
+  - Example: `{{DEFAULT(COOK, "Unknown")}}`
+  - KEY can be a normal placeholder key (e.g., `COOK`, `MP_DISTRIBUTOR.EMAIL`) or even `{{COOK}}` (braces are tolerated).
+  - Works in **Doc templates (PDF/email)** and also in **Markdown/HTML templates**.
 - **Line item tables**: Build a table row whose cells contain placeholders such as `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`. The service duplicates that row for every line item entry and replaces the placeholders per row. Empty groups simply clear the template row.
 - **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` anywhere inside the table you want duplicated per recipe. The renderer will:
   1. Create a copy of the entire table for every distinct value of the referenced field (`RECIPE` in this example).
@@ -971,11 +1000,22 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 ### BUTTON fields (custom actions)
 
-`BUTTON` questions render as **custom actions** in the web UI. Three actions are supported:
+`BUTTON` questions render as **custom actions** in the web UI. Four actions are supported:
 
 - **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into an in-app **PDF preview**. The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written). The PDF is shown immediately once ready (no extra “Open” click).
 - **Markdown template preview** (`action: "renderMarkdownTemplate"`): read a Markdown template from Google Drive (plain text / `.md`), replace placeholders, and show the rendered content immediately in-app (fast preview, no Drive/Docs preview pages).
+- **HTML template preview** (`action: "renderHtmlTemplate"`): read an HTML template from Google Drive (`.html` / `text/html` or `text/plain`), replace placeholders, and show the rendered content immediately in-app (fast preview). HTML templates also support a file-icon placeholder:
+  - `{{FILES_ICON(FIELD_ID)}}` → a clickable file icon button that opens the field’s files in a **read-only Files overlay** (works from List/Summary/Form).
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
+
+#### Refreshing templates when keeping the same Drive file ID
+
+Markdown/HTML template contents are cached in Apps Script `CacheService` for speed. If you **replace/update the Drive file content** but keep the **same file ID**, the cached version can be used until TTL expires.
+
+To force an immediate refresh:
+
+- Run **Community Kitchen → Create/Update All Forms** from the Google Sheet menu.
+- This bumps a template-cache “epoch”, so the next render/prefetch reads the latest template from Drive.
 
 ### UI tips (React edit + Summary)
 
@@ -1004,6 +1044,18 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   "button": {
     "action": "renderMarkdownTemplate",
     "templateId": { "EN": "MARKDOWN_FILE_ID_EN", "FR": "MARKDOWN_FILE_ID_FR", "NL": "MARKDOWN_FILE_ID_NL" },
+    "placements": ["form", "formSummaryMenu", "summaryBar", "topBarSummary"]
+  }
+}
+```
+
+#### Example: HTML preview button
+
+```json
+{
+  "button": {
+    "action": "renderHtmlTemplate",
+    "templateId": { "EN": "HTML_FILE_ID_EN", "FR": "HTML_FILE_ID_FR", "NL": "HTML_FILE_ID_NL" },
     "placements": ["form", "formSummaryMenu", "summaryBar", "topBarSummary"]
   }
 }
@@ -1111,6 +1163,12 @@ Example (show `createRecordPreset` buttons inside the **Create** menu on the bot
   - Behavior when disabled:
     - Clicking a record in the list always opens the **Form** view (Closed records are read-only).
     - The Summary action in the bottom bar is hidden; if `BUTTON` actions are configured for the form summary menu, an **Actions** menu is shown instead.
+
+- **Optional: replace the Summary view with an HTML template**:
+  - In the dashboard “Follow-up Config (JSON)” column, set `"summaryHtmlTemplateId"` to a Drive HTML template id.
+  - `summaryHtmlTemplateId` supports the same structure as other template id configs (string, language map, or `cases` selector).
+  - When set, the Summary view renders the HTML template (with placeholders) instead of the built-in Summary UI.
+  - If template rendering fails, the app shows an error and falls back to the built-in Summary view.
 
 - **Optional: portrait-only mode (avoid landscape)**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"portraitOnly": true`.

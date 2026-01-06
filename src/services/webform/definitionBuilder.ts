@@ -103,6 +103,7 @@ export class DefinitionBuilder {
       followup: form.followupConfig,
       autoSave: form.autoSave,
       summaryViewEnabled: form.summaryViewEnabled,
+      summaryHtmlTemplateId: form.summaryHtmlTemplateId,
       copyCurrentRecordEnabled: form.copyCurrentRecordEnabled,
       createNewRecordEnabled: form.createNewRecordEnabled,
       createRecordPresetButtonsEnabled: form.createRecordPresetButtonsEnabled,
