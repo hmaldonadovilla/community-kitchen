@@ -121,7 +121,12 @@ export const renderHtmlFromHtmlTemplate = (args: {
       }
       raw = res.raw;
       mimeType = (res.mimeType || 'text/html').toString();
-      setCachedHtmlTemplate(templateId, raw, form.templateCacheTtlSeconds);
+      // Only cache Drive-sourced templates; bundled templates are already local.
+      if (mimeType.toLowerCase() !== 'bundle') {
+        setCachedHtmlTemplate(templateId, raw, form.templateCacheTtlSeconds);
+      } else {
+        debugLog('followup.htmlTemplate.bundleHit', { templateId });
+      }
       debugLog('followup.htmlTemplate.cacheMiss', { templateId, mimeType, cached: false });
     }
 

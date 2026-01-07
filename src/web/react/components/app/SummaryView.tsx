@@ -4,6 +4,8 @@ import { tSystem } from '../../../systemStrings';
 import { LineItemState } from '../../types';
 import { buildDraftPayload } from '../../app/submission';
 import { peekSummaryHtmlTemplateCache, renderSummaryHtmlTemplateApi } from '../../api';
+import { isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from '../../app/bundledHtmlClientRenderer';
+import { resolveTemplateIdForRecord } from '../../app/templateId';
 import { HtmlPreview } from './HtmlPreview';
 import { ReportLivePreview } from './ReportLivePreview';
 
@@ -71,6 +73,35 @@ export const SummaryView: React.FC<{
       lineItems,
       existingRecordId
     });
+    const resolvedTemplateId = resolveTemplateIdForRecord(definition.summaryHtmlTemplateId as any, draft.values || {}, draft.language);
+    const isBundled = isBundledHtmlTemplateId(resolvedTemplateId || '');
+    if (isBundled) {
+      setSummaryHtml({ phase: 'rendering' });
+      onDiagnostic?.('summary.htmlTemplate.bundle.render.start', { recordId: existingRecordId || null });
+      renderBundledHtmlTemplateClient({
+        definition,
+        payload: draft as any,
+        templateIdMap: definition.summaryHtmlTemplateId as any
+      })
+        .then(res => {
+          if (seq !== seqRef.current) return;
+          if (!res?.success || !res?.html) {
+            const msg = (res?.message || 'Failed to render summary.').toString();
+            setSummaryHtml({ phase: 'error', message: msg });
+            onDiagnostic?.('summary.htmlTemplate.bundle.render.error', { message: msg });
+            return;
+          }
+          setSummaryHtml({ phase: 'ready', html: res.html });
+          onDiagnostic?.('summary.htmlTemplate.bundle.render.ok', { htmlLength: (res.html || '').toString().length });
+        })
+        .catch(err => {
+          if (seq !== seqRef.current) return;
+          const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to render summary.';
+          setSummaryHtml({ phase: 'error', message: msg });
+          onDiagnostic?.('summary.htmlTemplate.bundle.render.exception', { message: msg });
+        });
+      return;
+    }
     const cached = peekSummaryHtmlTemplateCache(draft);
     if (cached?.success && cached?.html) {
       setSummaryHtml({ phase: 'ready', html: cached.html });

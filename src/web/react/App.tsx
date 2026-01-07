@@ -21,6 +21,7 @@ import {
   renderMarkdownTemplateApi,
   renderHtmlTemplateApi,
   renderSummaryHtmlTemplateApi,
+  clearHtmlRenderClientCache,
   ListResponse,
   ListItem,
   fetchRecordById,
@@ -45,6 +46,8 @@ import {
   resolveExistingRecordId,
   validateForm
 } from './app/submission';
+import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from './app/bundledHtmlClientRenderer';
+import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { detectDebug } from './app/utils';
 import {
@@ -63,6 +66,7 @@ import { EMPTY_DISPLAY, formatDisplayText } from './utils/valueDisplay';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { toUploadItems } from './components/form/utils';
+import { clearFetchDataSourceCache } from '../data/dataSources';
 
 type SubmissionMeta = {
   id?: string;
@@ -627,19 +631,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             lineItems: mapped.lineItems,
             existingRecordId: id
           });
-          logEvent('summary.htmlTemplate.prefetch.start', { recordId: id });
-          void renderSummaryHtmlTemplateApi(payload)
-            .then(res => {
-              if (res?.success && res?.html) {
-                logEvent('summary.htmlTemplate.prefetch.ok', { recordId: id, htmlLength: (res.html || '').toString().length });
-              } else {
-                logEvent('summary.htmlTemplate.prefetch.skip', { recordId: id, success: !!res?.success });
-              }
+          const resolved = resolveTemplateIdForRecord((definition as any).summaryHtmlTemplateId, payload.values || {}, payload.language);
+          if (isBundledHtmlTemplateId(resolved || '')) {
+            logEvent('summary.htmlTemplate.bundle.prefetch.start', { recordId: id });
+            void renderBundledHtmlTemplateClient({
+              definition,
+              payload: payload as any,
+              templateIdMap: (definition as any).summaryHtmlTemplateId
             })
-            .catch(err => {
-              const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed';
-              logEvent('summary.htmlTemplate.prefetch.error', { recordId: id, message: msg });
-            });
+              .then(res => {
+                if (res?.success && res?.html) {
+                  logEvent('summary.htmlTemplate.bundle.prefetch.ok', { recordId: id, htmlLength: (res.html || '').toString().length });
+                } else {
+                  logEvent('summary.htmlTemplate.bundle.prefetch.skip', { recordId: id, success: !!res?.success });
+                }
+              })
+              .catch(err => {
+                const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed';
+                logEvent('summary.htmlTemplate.bundle.prefetch.error', { recordId: id, message: msg });
+              });
+          } else {
+            logEvent('summary.htmlTemplate.prefetch.start', { recordId: id });
+            void renderSummaryHtmlTemplateApi(payload)
+              .then(res => {
+                if (res?.success && res?.html) {
+                  logEvent('summary.htmlTemplate.prefetch.ok', { recordId: id, htmlLength: (res.html || '').toString().length });
+                } else {
+                  logEvent('summary.htmlTemplate.prefetch.skip', { recordId: id, success: !!res?.success });
+                }
+              })
+              .catch(err => {
+                const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed';
+                logEvent('summary.htmlTemplate.prefetch.error', { recordId: id, message: msg });
+              });
+          }
         } catch (err: any) {
           logEvent('summary.htmlTemplate.prefetch.exception', { recordId: id, message: err?.message || err });
         }
@@ -696,6 +721,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   );
 
   const handleGlobalRefresh = useCallback(async () => {
+    // Clear client caches (data sources + rendered HTML) to avoid stale derived content without requiring a full reload.
+    try {
+      clearFetchDataSourceCache();
+      clearBundledHtmlClientCaches();
+      clearHtmlRenderClientCache();
+      logEvent('cache.client.clear', { scope: 'refresh' });
+    } catch (err: any) {
+      logEvent('cache.client.clear.error', { message: err?.message || err?.toString?.() || 'unknown' });
+    }
     invalidateListCache();
     if (!selectedRecordId) return;
     await loadRecordSnapshot(selectedRecordId);
@@ -1661,7 +1695,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           existingRecordId
         });
 
-        const res = await renderHtmlTemplateApi(draft, buttonId);
+        const templateIdMap = btn ? (btn as any)?.button?.templateId : undefined;
+        const resolved = resolveTemplateIdForRecord(templateIdMap, draft.values || {}, draft.language);
+        const useBundled = isBundledHtmlTemplateId(resolved || '');
+        if (useBundled) {
+          logEvent('report.htmlPreview.bundle.start', { buttonId: baseId, qIdx: qIdx ?? null });
+        }
+        const res = useBundled
+          ? await renderBundledHtmlTemplateClient({
+              definition,
+              payload: draft as any,
+              templateIdMap,
+              buttonId
+            })
+          : await renderHtmlTemplateApi(draft, buttonId);
         if (seq !== reportPdfSeqRef.current) return;
         if (!res?.success || !res?.html) {
           const msg = (res?.message || 'Failed to render preview.').toString();
@@ -1669,7 +1716,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             if (!prev?.open || prev.buttonId !== buttonId) return prev;
             return { ...prev, pdfPhase: 'error', pdfMessage: msg };
           });
-          logEvent('report.htmlPreview.error', { buttonId, message: msg });
+          logEvent(useBundled ? 'report.htmlPreview.bundle.error' : 'report.htmlPreview.error', { buttonId, message: msg });
           return;
         }
 
@@ -1677,7 +1724,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           if (prev?.buttonId !== buttonId) return prev;
           return { ...prev, open: true, kind: 'html', pdfPhase: 'ready', html: res.html, markdown: undefined, pdfMessage: undefined };
         });
-        logEvent('report.htmlPreview.ok', { buttonId, htmlLength: (res.html || '').toString().length });
+        logEvent(useBundled ? 'report.htmlPreview.bundle.ok' : 'report.htmlPreview.ok', {
+          buttonId,
+          htmlLength: (res.html || '').toString().length
+        });
       } catch (err: any) {
         if (seq !== reportPdfSeqRef.current) return;
         const msg = (err?.message || err?.toString?.() || 'Failed to render preview.').toString();

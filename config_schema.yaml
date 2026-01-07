@@ -1529,6 +1529,12 @@ components:
     TemplateIdBase:
       oneOf:
         - type: string
+          description: |
+            Template reference (string).
+
+            - Default: a Google Drive file id (for Doc/Markdown/HTML templates)
+            - HTML-only shortcut: use `bundle:<filename>` to load an HTML template embedded from `/docs/templates/<filename>` at build time.
+              This is faster and avoids Drive/cache dependencies (rendered client-side; may call `fetchDataSource` if projection placeholders are present), but requires a redeploy to update.
         - type: object
           additionalProperties:
             type: string

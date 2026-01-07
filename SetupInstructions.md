@@ -1028,7 +1028,14 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 - **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into an in-app **PDF preview**. The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written). The PDF is shown immediately once ready (no extra “Open” click).
 - **Markdown template preview** (`action: "renderMarkdownTemplate"`): read a Markdown template from Google Drive (plain text / `.md`), replace placeholders, and show the rendered content immediately in-app (fast preview, no Drive/Docs preview pages).
-- **HTML template preview** (`action: "renderHtmlTemplate"`): read an HTML template from Google Drive (`.html` / `text/html` or `text/plain`), replace placeholders, and show the rendered content immediately in-app (fast preview). HTML templates also support a file-icon placeholder:
+- **HTML template preview** (`action: "renderHtmlTemplate"`): render an HTML template and show it immediately in-app (fast preview). You can source the template from:
+  - **Google Drive**: use a Drive file id (same as before)
+  - **Bundled template**: use `bundle:<filename>` to load from `/docs/templates/<filename>` embedded into the deployment bundle at build time.
+    - Rendered **client-side** (no `renderHtmlTemplate` Apps Script call).
+    - If the template references data-source projections like `{{FIELD_ID.PROJECTION_KEY}}` for a `dataSource`-backed field, the client will call `fetchDataSource` to resolve those values.
+    - Requires redeploy to update.
+  
+  HTML templates also support a file-icon placeholder:
   - `{{FILES_ICON(FIELD_ID)}}` → a clickable file icon button that opens the field’s files in a **read-only Files overlay** (works from List/Summary/Form).
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
 
@@ -1037,6 +1044,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 Markdown/HTML template contents are cached in Apps Script `CacheService` for speed.
 
 Notes:
+
 - Apps Script `CacheService` has a hard max TTL of **6 hours**.
 - You can configure the TTL per form via `templateCacheTtlSeconds` in the dashboard **Follow-up Config (JSON)**:
 
@@ -1089,7 +1097,7 @@ To force an immediate refresh:
 {
   "button": {
     "action": "renderHtmlTemplate",
-    "templateId": { "EN": "HTML_FILE_ID_EN", "FR": "HTML_FILE_ID_FR", "NL": "HTML_FILE_ID_NL" },
+    "templateId": { "EN": "bundle:checklist_am.summary.html" },
     "placements": ["form", "formSummaryMenu", "summaryBar", "topBarSummary"]
   }
 }
@@ -1199,7 +1207,9 @@ Example (show `createRecordPreset` buttons inside the **Create** menu on the bot
     - The Summary action in the bottom bar is hidden; if `BUTTON` actions are configured for the form summary menu, an **Actions** menu is shown instead.
 
 - **Optional: replace the Summary view with an HTML template**:
-  - In the dashboard “Follow-up Config (JSON)” column, set `"summaryHtmlTemplateId"` to a Drive HTML template id.
+  - In the dashboard “Follow-up Config (JSON)” column, set `"summaryHtmlTemplateId"` to either:
+    - a **Drive** HTML template id, or
+    - a **bundled** template key: `bundle:<filename>` (loads `/docs/templates/<filename>` embedded into the deployment bundle at build time; rendered client-side; may fetch dataSource projections as needed)
   - `summaryHtmlTemplateId` supports the same structure as other template id configs (string, language map, or `cases` selector).
   - When set, the Summary view renders the HTML template (with placeholders) instead of the built-in Summary UI.
   - If template rendering fails, the app shows an error and falls back to the built-in Summary view.

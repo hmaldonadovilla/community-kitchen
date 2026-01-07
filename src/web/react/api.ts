@@ -200,6 +200,17 @@ export const peekHtmlTemplateCache = (payload: SubmissionPayload, buttonId: stri
   return hit.result;
 };
 
+/**
+ * Clear the in-memory client cache for Apps Script-rendered HTML templates.
+ *
+ * This is useful for the app-level "Refresh" action to avoid stale HTML when
+ * downstream data sources (projections) change.
+ */
+export const clearHtmlRenderClientCache = (): void => {
+  htmlRenderCache.clear();
+  htmlRenderInflight.clear();
+};
+
 export interface PrefetchTemplatesResult {
   success: boolean;
   message?: string;

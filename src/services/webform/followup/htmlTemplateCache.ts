@@ -7,6 +7,7 @@
  */
 
 import { getTemplateCacheEpoch } from './templateCacheEpoch';
+import { getBundledHtmlTemplateRaw, parseBundledHtmlTemplateId } from './bundledHtmlTemplates';
 
 const CACHE_PREFIX = 'ck.htmlTemplate.v1:'; // keep stable; epoch is appended dynamically
 const MAX_CACHE_TTL_SECONDS = 60 * 60 * 6; // 6 hours (CacheService hard cap)
@@ -67,6 +68,16 @@ export const readHtmlTemplateRawFromDrive = (
 ): { success: boolean; raw?: string; mimeType?: string; message?: string } => {
   const id = (templateId || '').toString().trim();
   if (!id) return { success: false, message: 'templateId is required.' };
+
+  // Bundle source: "bundle:<filename>" refers to /docs/templates/<filename> embedded at build time.
+  const bundledKey = parseBundledHtmlTemplateId(id);
+  if (bundledKey) {
+    const raw = getBundledHtmlTemplateRaw(bundledKey);
+    if (!raw) {
+      return { success: false, message: `Bundled HTML template not found: ${bundledKey}`, mimeType: 'bundle' };
+    }
+    return { success: true, raw, mimeType: 'bundle' };
+  }
   try {
     const file = DriveApp.getFileById(id);
     const mimeType = (file.getMimeType ? file.getMimeType() : '').toString();
@@ -117,6 +128,17 @@ export const prefetchHtmlTemplateIds = (
   let failed = 0;
 
   unique.forEach(id => {
+    // Bundled templates never need Drive reads; treat as an instant hit (or a failure if missing).
+    const bundledKey = parseBundledHtmlTemplateId(id);
+    if (bundledKey) {
+      const raw = getBundledHtmlTemplateRaw(bundledKey);
+      if (raw && raw.trim()) {
+        cacheHit += 1;
+      } else {
+        failed += 1;
+      }
+      return;
+    }
     const cached = getCachedHtmlTemplate(id);
     if (cached && cached.trim()) {
       cacheHit += 1;

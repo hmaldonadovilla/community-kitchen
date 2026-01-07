@@ -99,6 +99,17 @@ export async function fetchDataSource(
   });
 }
 
+/**
+ * Clear the in-memory client cache for fetchDataSource().
+ *
+ * This cache is intentionally session-only (no localStorage) so a page refresh always resets it.
+ * We also expose this so the app "Refresh" action can avoid stale option/projection lookups
+ * without requiring a full browser reload.
+ */
+export function clearFetchDataSourceCache(): void {
+  cache.clear();
+}
+
 export async function resolveQuestionOptionsFromSource(
   question: DataSourceTarget,
   language: LangCode
