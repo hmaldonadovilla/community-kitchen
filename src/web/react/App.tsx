@@ -83,11 +83,11 @@ const computeDedupSignatureFromValues = (rulesRaw: any, values: Record<string, a
   const parts: string[] = [];
   rules.forEach(rule => {
     if (!rule) return;
-    const keys = Array.isArray(rule.keys) ? rule.keys : [];
+    const keys: any[] = Array.isArray(rule.keys) ? rule.keys : [];
     if (!keys.length) return;
     const onConflict = (rule.onConflict || 'reject').toString().trim().toLowerCase();
     if (onConflict !== 'reject') return;
-    const vals = keys.map((k: any) => normalizeKeyValue((values as any)[(k || '').toString()]));
+    const vals: string[] = keys.map((k: any) => normalizeKeyValue((values as any)[(k || '').toString()]));
     if (vals.some(v => !v || !v.trim())) return;
     parts.push(`${(rule.id || '').toString()}:${vals.map(v => v.trim()).join('||')}`);
   });
@@ -165,22 +165,23 @@ const HTML_PREVIEW_STYLES = `
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(148,163,184,0.55);
-    background: rgba(148,163,184,0.10);
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(15,23,42,0.16);
+    background: rgba(248,250,252,0.95);
     color: #0f172a;
     font-weight: 900;
-    font-size: 20px; /* makes 📷/📎 icons larger in HTML templates */
+    font-size: 24px; /* makes 📷/📎 icons larger in HTML templates */
     cursor: pointer;
+    box-shadow: 0 1px 0 rgba(15,23,42,0.06);
   }
   .ck-file-icon__badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    height: 28px;
-    padding: 0 8px;
+    min-width: 30px;
+    height: 30px;
+    padding: 0 9px;
     border-radius: 999px;
     background: rgba(239,68,68,0.12);
     border: 1px solid rgba(239,68,68,0.35);

@@ -158,6 +158,9 @@ export const linkifyUploadedFileUrlsInHtml = (
 ): string => {
   const raw = (html || '').toString();
   if (!raw.trim()) return raw;
+  // Fast path: if the rendered HTML doesn't contain any URLs, there's nothing to linkify.
+  // (Avoid scanning record values and building a URL map.)
+  if (!raw.includes('http')) return raw;
 
   const urlToLabel = buildUploadedFileUrlToLabelMap(questions, record);
   const entries = Object.entries(urlToLabel).filter(([u, l]) => Boolean(u) && Boolean(l));

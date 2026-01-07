@@ -264,6 +264,16 @@ export interface QuestionUiConfig {
    */
   hideLabel?: boolean;
   /**
+   * Summary-only override for label visibility.
+   *
+   * - When omitted, the Summary view inherits from `hideLabel`.
+   * - When `true`, hide the label in the native Summary view (kept for accessibility).
+   * - When `false`, show the label in the native Summary view (even if `hideLabel` is true).
+   *
+   * Note: This applies to the built-in React Summary view (`ReportLivePreview`). It does not affect custom HTML templates.
+   */
+  summaryHideLabel?: boolean;
+  /**
    * Whether this field should appear in the Summary view.
    * Default is `inherit` (only show when the field is visible in the Form view).
    */
@@ -1047,6 +1057,15 @@ export interface FormConfig {
   appUrl?: string;
   rowIndex: number;
   followupConfig?: FollowupConfig;
+  /**
+   * CacheService TTL (seconds) for cached HTML/Markdown templates for this form.
+   *
+   * Notes:
+   * - Apps Script CacheService has a hard max TTL of 6 hours (21600s).
+   * - When omitted (recommended) or set to 0/negative, the app uses the maximum TTL and relies on the template cache epoch
+   *   ("Create/Update All Forms") to flush templates immediately when you update Drive files.
+   */
+  templateCacheTtlSeconds?: number;
   /**
    * Optional override for the list view heading/title.
    *

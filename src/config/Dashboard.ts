@@ -117,6 +117,7 @@ export class Dashboard {
       const formId = colFormId >= 0 ? row[colFormId] : undefined;
       const dashboardConfig = colFollowup >= 0 ? this.parseDashboardConfig(row[colFollowup]) : undefined;
       const followupConfig = dashboardConfig?.followup;
+      const templateCacheTtlSeconds = dashboardConfig?.templateCacheTtlSeconds;
       const listViewTitle = dashboardConfig?.listViewTitle;
       const listViewDefaultSort = dashboardConfig?.listViewDefaultSort;
       const listViewPageSize = dashboardConfig?.listViewPageSize;
@@ -150,6 +151,7 @@ export class Dashboard {
           formId,
           rowIndex: dataStartRow + index,
           followupConfig,
+          templateCacheTtlSeconds,
           listViewTitle,
           listViewDefaultSort,
           listViewPageSize,
@@ -201,6 +203,7 @@ export class Dashboard {
     raw: any
   ): {
     followup?: FollowupConfig;
+    templateCacheTtlSeconds?: number;
     listViewTitle?: LocalizedString;
     listViewDefaultSort?: { fieldId: string; direction?: 'asc' | 'desc' };
     listViewPageSize?: number;
@@ -294,6 +297,56 @@ export class Dashboard {
     }
 
     const followup = this.buildFollowupConfig(parsed);
+
+    const templateCacheObj =
+      parsed.templateCache !== undefined && parsed.templateCache !== null && typeof parsed.templateCache === 'object'
+        ? parsed.templateCache
+        : undefined;
+    const ttlSecondsRaw =
+      parsed.templateCacheTtlSeconds !== undefined
+        ? parsed.templateCacheTtlSeconds
+        : parsed.templateCacheTTLSeconds !== undefined
+        ? parsed.templateCacheTTLSeconds
+        : parsed.templateCacheTtl !== undefined
+        ? parsed.templateCacheTtl
+        : parsed.templateCacheTTL !== undefined
+        ? parsed.templateCacheTTL
+        : parsed.templateCacheTtlSec !== undefined
+        ? parsed.templateCacheTtlSec
+        : parsed.templateCacheTtlSecondsLegacy !== undefined
+        ? parsed.templateCacheTtlSecondsLegacy
+        : templateCacheObj && templateCacheObj.ttlSeconds !== undefined
+        ? templateCacheObj.ttlSeconds
+        : templateCacheObj && templateCacheObj.ttl !== undefined
+        ? templateCacheObj.ttl
+        : undefined;
+    const ttlHoursRaw =
+      parsed.templateCacheTtlHours !== undefined
+        ? parsed.templateCacheTtlHours
+        : parsed.templateCacheTTLHours !== undefined
+        ? parsed.templateCacheTTLHours
+        : parsed.templateCacheHours !== undefined
+        ? parsed.templateCacheHours
+        : templateCacheObj && templateCacheObj.ttlHours !== undefined
+        ? templateCacheObj.ttlHours
+        : undefined;
+
+    const normalizeTtlSeconds = (raw: any): number | undefined => {
+      if (raw === undefined || raw === null || raw === '') return undefined;
+      if (typeof raw === 'string') {
+        const s = raw.trim().toLowerCase();
+        if (!s) return undefined;
+        if (s === 'none' || s === 'no' || s === 'off' || s === 'disabled' || s === 'false') return undefined;
+      }
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return undefined;
+      if (n <= 0) return undefined;
+      // CacheService hard cap is 6 hours (21600s).
+      return Math.max(30, Math.min(21600, Math.round(n)));
+    };
+
+    const templateCacheTtlSeconds =
+      normalizeTtlSeconds(ttlSecondsRaw) ?? (ttlHoursRaw !== undefined ? normalizeTtlSeconds(Number(ttlHoursRaw) * 3600) : undefined);
     const normalizeLocalized = (input: any): any => {
       if (input === undefined || input === null) return undefined;
       if (typeof input === 'string') {
@@ -649,6 +702,7 @@ export class Dashboard {
 
     if (
       !followup &&
+      templateCacheTtlSeconds === undefined &&
       !listViewTitle &&
       !listViewDefaultSort &&
       listViewPageSize === undefined &&
@@ -677,6 +731,7 @@ export class Dashboard {
     }
     return {
       followup,
+      templateCacheTtlSeconds,
       listViewTitle,
       listViewDefaultSort,
       listViewPageSize,

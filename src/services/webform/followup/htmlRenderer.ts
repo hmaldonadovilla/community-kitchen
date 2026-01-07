@@ -121,7 +121,7 @@ export const renderHtmlFromHtmlTemplate = (args: {
       }
       raw = res.raw;
       mimeType = (res.mimeType || 'text/html').toString();
-      setCachedHtmlTemplate(templateId, raw);
+      setCachedHtmlTemplate(templateId, raw, form.templateCacheTtlSeconds);
       debugLog('followup.htmlTemplate.cacheMiss', { templateId, mimeType, cached: false });
     }
 

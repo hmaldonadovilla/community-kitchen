@@ -32,7 +32,8 @@ const triggerFollowup = (formKey: string, recordId: string, action: string) =>
 
 const resolveLabel = (q: WebQuestionDefinition, language: LangCode) => {
   const key = (language || 'en').toString().toLowerCase();
-  return q.label?.[key] || q.label?.en || q.id;
+  const label: any = (q as any)?.label;
+  return (label && label[key]) || (label && label.en) || q.id;
 };
 
 const resolveOptions = (q: WebQuestionDefinition, language: LangCode): string[] => {

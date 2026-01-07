@@ -238,6 +238,9 @@ const escapeHtmlText = (value: string): string => {
  */
 export const formatTemplateValueForHtml = (value: any, fieldType?: string): string => {
   const text = formatTemplateValue(value, fieldType);
+  // HTML templates: render the positive boolean mark as a green emoji for readability.
+  // (This keeps output as plain text, so it remains safe inside templates.)
+  if (text === '✔') return '✅';
   const t = (fieldType || '').toString().trim().toUpperCase();
   if (t !== 'PARAGRAPH') return text;
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -359,15 +362,53 @@ const applyDefaultPlaceholders = (template: string, placeholders: Record<string,
 export const applyPlaceholders = (template: string, placeholders: Record<string, string>): string => {
   if (!template) return '';
   let output = applyDefaultPlaceholders(template, placeholders);
-  Object.entries(placeholders).forEach(([token, value]) => {
-    output = output.replace(new RegExp(escapeRegExp(token), 'g'), value ?? '');
-    // Relaxed matcher to tolerate incidental spaces around tokens in the Doc
+
+  const entries = Object.entries(placeholders || {});
+  if (!entries.length) return output;
+
+  // Build a fast lookup keyed by the inner token (without braces).
+  // This lets us do a single-pass regex replacement over the template instead of N full-string scans.
+  const byInner: Record<string, string> = {};
+  entries.forEach(([token, value]) => {
+    if (!token) return;
+    const v = value ?? '';
     if (token.startsWith('{{') && token.endsWith('}}')) {
-      const inner = token.slice(2, -2);
-      const relaxed = new RegExp(`{{\\s*${escapeRegExp(inner)}\\s*}}`, 'g');
-      output = output.replace(relaxed, value ?? '');
+      const inner = token.slice(2, -2).trim();
+      if (inner) byInner[inner] = v;
+      return;
     }
+    byInner[token.trim()] = v;
   });
+
+  // Replace any {{ ... }} token in one pass.
+  // - Trims incidental whitespace inside braces.
+  // - Falls back to case variants (upper/lower/title) for convenience.
+  const TOKEN_RE = /{{\s*([\s\S]*?)\s*}}/g;
+  output = output.replace(TOKEN_RE, (fullMatch: string, innerRaw: string) => {
+    const inner = (innerRaw || '').toString().trim();
+    if (!inner) return fullMatch;
+
+    const direct = byInner[inner];
+    if (direct !== undefined) return direct;
+
+    const normalized = normalizePlaceholderKey(inner);
+    if (normalized) {
+      const normalizedDirect = byInner[normalized];
+      if (normalizedDirect !== undefined) return normalizedDirect;
+      for (const v of buildPlaceholderKeys(normalized)) {
+        const hit = byInner[v];
+        if (hit !== undefined) return hit;
+      }
+    }
+
+    for (const v of buildPlaceholderKeys(inner)) {
+      const hit = byInner[v];
+      if (hit !== undefined) return hit;
+    }
+
+    return fullMatch;
+  });
+
   return output;
 };
 

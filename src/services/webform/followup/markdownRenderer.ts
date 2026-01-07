@@ -45,7 +45,7 @@ export const renderMarkdownFromTemplate = (args: {
       }
       raw = res.raw;
       mimeType = (res.mimeType || 'text/plain').toString();
-      setCachedMarkdownTemplate(templateId, raw);
+      setCachedMarkdownTemplate(templateId, raw, form.templateCacheTtlSeconds);
       debugLog('followup.markdown.cacheMiss', { templateId, mimeType, cached: false });
     }
 

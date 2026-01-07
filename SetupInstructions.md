@@ -70,13 +70,31 @@ This project uses TypeScript. You need to build the script before using it in Go
         { "ui": { "labelLayout": "stacked" } }
         ```
 
-    - **Hide/remove a field label**: To visually hide a field label (kept for accessibility), set `ui.hideLabel: true`:
+    - **Hide/remove a field label**: To visually hide a field label (kept for accessibility), set `ui.hideLabel: true`.
+
+        By default this hides the label in:
+        - the **Edit (form) view**, and
+        - the **native Summary view** (React summary / `ReportLivePreview`).
 
         ```json
         { "ui": { "hideLabel": true } }
         ```
 
-        Works for both top-level questions and line-item fields.
+        **Override for native Summary**: Use `ui.summaryHideLabel`:
+
+        - Hide label in Edit, but show label in native Summary:
+
+        ```json
+        { "ui": { "hideLabel": true, "summaryHideLabel": false } }
+        ```
+
+        - Show label in Edit, but hide label in native Summary:
+
+        ```json
+        { "ui": { "summaryHideLabel": true } }
+        ```
+
+        Works for both top-level questions and line-item fields. Note: custom **HTML Summary templates** control labels via the template HTML itself (this setting does not modify template markup).
 
     - **Custom required-field message (localized)**: For required fields, you can override the default required error message by adding `requiredMessage` to the field’s Config JSON. The message supports `{field}` (resolved to the localized field label).
       - For `FILE_UPLOAD` fields, this is used when the effective minimum is 1 (i.e., `required: true` with no `minFiles`, or `uploadConfig.minFiles: 1`). For higher minimums, use `uploadConfig.errorMessages.minFiles`.
@@ -1016,7 +1034,17 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 #### Refreshing templates when keeping the same Drive file ID
 
-Markdown/HTML template contents are cached in Apps Script `CacheService` for speed. If you **replace/update the Drive file content** but keep the **same file ID**, the cached version can be used until TTL expires.
+Markdown/HTML template contents are cached in Apps Script `CacheService` for speed.
+
+Notes:
+- Apps Script `CacheService` has a hard max TTL of **6 hours**.
+- You can configure the TTL per form via `templateCacheTtlSeconds` in the dashboard **Follow-up Config (JSON)**:
+
+```json
+{ "templateCacheTtlSeconds": 21600 }
+```
+
+When omitted (recommended) or set to `0`/negative, the app uses the maximum TTL and relies on the cache “epoch” flush below.
 
 To force an immediate refresh:
 

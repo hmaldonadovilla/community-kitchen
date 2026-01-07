@@ -1696,11 +1696,22 @@ export class ConfigSheet {
       return undefined;
     };
     const hideLabel = normalizeBool(rawUi.hideLabel ?? rawUi.hide_label ?? rawUi.noLabel ?? rawUi.no_label ?? rawUi.removeLabel);
+    const summaryHideLabel = normalizeBool(
+      rawUi.summaryHideLabel ??
+        rawUi.summary_hide_label ??
+        rawUi.hideSummaryLabel ??
+        rawUi.hide_summary_label ??
+        rawUi.summaryNoLabel ??
+        rawUi.summary_no_label ??
+        rawUi.noSummaryLabel ??
+        rawUi.no_summary_label
+    );
     const paragraphRows = this.normalizeParagraphRows(rawUi.paragraphRows ?? rawUi.paragraph_rows ?? rawUi.textareaRows ?? rawUi.textarea_rows);
     const cfg: QuestionUiConfig = {};
     if (control) cfg.control = control;
     if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
     if (hideLabel === true) cfg.hideLabel = true;
+    if (summaryHideLabel !== undefined) cfg.summaryHideLabel = summaryHideLabel;
     if (summaryVisibility) cfg.summaryVisibility = summaryVisibility;
     if (paragraphRows) (cfg as any).paragraphRows = paragraphRows;
     return Object.keys(cfg).length ? cfg : undefined;

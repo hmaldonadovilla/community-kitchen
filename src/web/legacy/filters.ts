@@ -36,7 +36,8 @@ function applyFilterToElement(
     select.innerHTML = '';
     combined.forEach(base => {
       const optIdx = Array.isArray(options.en) ? options.en.indexOf(base) : -1;
-      const label = optIdx >= 0 ? ((options[langKey] || [])[optIdx] || base) : base;
+      const localized = langKey === 'fr' ? options.fr : langKey === 'nl' ? options.nl : options.en;
+      const label = optIdx >= 0 ? (localized?.[optIdx] || base) : base;
       const opt = document.createElement('option');
       opt.value = base;
       opt.dataset.enLabel = optIdx >= 0 ? (options.en?.[optIdx] || base) : base;

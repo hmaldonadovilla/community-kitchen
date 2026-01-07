@@ -9,8 +9,16 @@
 import { getTemplateCacheEpoch } from './templateCacheEpoch';
 
 const CACHE_PREFIX = 'ck.mdTemplate.v1:'; // keep stable; epoch is appended dynamically
-const CACHE_TTL_SECONDS = 60 * 60 * 6; // 6 hours
+const MAX_CACHE_TTL_SECONDS = 60 * 60 * 6; // 6 hours (CacheService hard cap)
 const MAX_CACHE_CHARS = 90_000; // stay under CacheService limits with some headroom
+
+const normalizeCacheTtlSeconds = (ttlSeconds?: number): number => {
+  if (ttlSeconds === undefined || ttlSeconds === null) return MAX_CACHE_TTL_SECONDS;
+  const n = Number(ttlSeconds);
+  if (!Number.isFinite(n) || n <= 0) return MAX_CACHE_TTL_SECONDS;
+  // Keep a small floor for sanity; CacheService requires a positive integer.
+  return Math.max(30, Math.min(MAX_CACHE_TTL_SECONDS, Math.round(n)));
+};
 
 const getScriptCache = (): GoogleAppsScript.Cache.Cache | null => {
   try {
@@ -39,7 +47,7 @@ export const getCachedMarkdownTemplate = (templateId: string): string | null => 
   }
 };
 
-export const setCachedMarkdownTemplate = (templateId: string, raw: string): boolean => {
+export const setCachedMarkdownTemplate = (templateId: string, raw: string, ttlSeconds?: number): boolean => {
   const key = getMarkdownTemplateCacheKey(templateId);
   const cache = getScriptCache();
   if (!cache) return false;
@@ -47,7 +55,7 @@ export const setCachedMarkdownTemplate = (templateId: string, raw: string): bool
   if (!value.trim()) return false;
   if (value.length > MAX_CACHE_CHARS) return false;
   try {
-    cache.put(key, value, CACHE_TTL_SECONDS);
+    cache.put(key, value, normalizeCacheTtlSeconds(ttlSeconds));
     return true;
   } catch (_) {
     return false;
@@ -86,7 +94,8 @@ export const readMarkdownTemplateRawFromDrive = (
 };
 
 export const prefetchMarkdownTemplateIds = (
-  templateIds: string[]
+  templateIds: string[],
+  ttlSeconds?: number
 ): { requested: number; cacheHit: number; loaded: number; skipped: number; failed: number } => {
   const ids = Array.isArray(templateIds)
     ? templateIds.map(id => (id || '').toString().trim()).filter(Boolean)
@@ -111,7 +120,7 @@ export const prefetchMarkdownTemplateIds = (
       failed += 1;
       return;
     }
-    const didCache = setCachedMarkdownTemplate(id, res.raw);
+    const didCache = setCachedMarkdownTemplate(id, res.raw, ttlSeconds);
     if (!didCache) skipped += 1;
     loaded += 1;
   });

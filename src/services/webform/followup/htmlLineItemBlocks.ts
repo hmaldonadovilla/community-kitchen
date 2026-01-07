@@ -194,6 +194,20 @@ export const applyHtmlLineItemBlocks = (args: {
   });
   if (!Object.keys(groupLookup).length) return raw;
 
+  // Fast path:
+  // Most HTML templates don't use line-item row expansion. Avoid scanning/replacing every <tr>/<li>
+  // unless we detect subgroup placeholders or explicit directives.
+  const hasDirective = /{{\s*(ORDER_BY|EXCLUDE_WHEN|CONSOLIDATED_TABLE)\s*\(/i.test(raw);
+  const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const groupUnion = Object.keys(groupLookup)
+    .map(id => escapeRegExp((id || '').toString()))
+    .filter(Boolean)
+    .join('|');
+  const hasSubgroupPlaceholders = groupUnion
+    ? new RegExp(`{{\\s*(?:${groupUnion})\\s*\\.\\s*[A-Z0-9_]+\\s*\\.`, 'i').test(raw)
+    : false;
+  if (!hasDirective && !hasSubgroupPlaceholders) return raw;
+
   // Expand <tr> blocks first (most common for line items).
   let out = raw.replace(/<tr\b[\s\S]*?<\/tr>/gi, match =>
     expandBlock({ blockText: match, groupLookup, lineItemRows })

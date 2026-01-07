@@ -694,6 +694,16 @@ components:
 
             Use sparingly: labels help users understand fields. This is mainly useful when a field is already
             clearly explained by surrounding UI, or when you render your own label elsewhere.
+        summaryHideLabel:
+          type: boolean
+          description: |
+            Summary-only override for label visibility (native React Summary view).
+
+            - When omitted, Summary inherits from `hideLabel`.
+            - When `true`, hide the label in the native Summary view (kept for accessibility).
+            - When `false`, show the label in the native Summary view (even if `hideLabel` is true).
+
+            Note: This applies to the built-in React Summary view (`ReportLivePreview`). It does not affect custom HTML templates.
         summaryVisibility:
           type: string
           enum: [inherit, always, never]
@@ -1280,6 +1290,16 @@ components:
 
             - When set, the Summary view renders this HTML template (Drive file) with placeholders.
             - If rendering fails, the app falls back to the built-in Summary view.
+        templateCacheTtlSeconds:
+          type: number
+          description: |
+            CacheService TTL (seconds) used when caching **HTML and Markdown templates** for this form.
+
+            Notes:
+            - Apps Script CacheService has a hard max TTL of **6 hours** (21600 seconds).
+            - When omitted (recommended) or set to `0`/negative, the app uses the maximum TTL and relies on the template cache epoch
+              (flushed automatically by **Create/Update All Forms**) to refresh templates immediately when you update Drive files.
+            - When set, values are clamped to `[30, 21600]`.
         copyCurrentRecordEnabled:
           type: boolean
           description: |

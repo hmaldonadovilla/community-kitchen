@@ -337,8 +337,10 @@ export class WebFormService {
       doc: docTemplateIds.length
     });
 
-    const md = prefetchMarkdownTemplateIds(markdownTemplateIds);
-    const html = prefetchHtmlTemplateIds(htmlTemplateIds);
+    const ttlSeconds = form.templateCacheTtlSeconds;
+    debugLog('templates.prefetch.cacheTtl', { formKey: key, ttlSeconds: ttlSeconds ?? null });
+    const md = prefetchMarkdownTemplateIds(markdownTemplateIds, ttlSeconds);
+    const html = prefetchHtmlTemplateIds(htmlTemplateIds, ttlSeconds);
 
     let docOk = 0;
     let docFailed = 0;

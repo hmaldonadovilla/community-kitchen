@@ -118,6 +118,7 @@ export {
   LocalizedString,
   OptionFilter,
   QuestionGroupConfig,
+  FileUploadConfig,
   SummaryVisibility,
   VisibilityConfig,
   ValidationRule,

@@ -10,7 +10,7 @@ import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from '../../utils/valueDisplay';
 import { GroupCard } from '../form/GroupCard';
 import { resolveGroupSectionKey } from '../form/grouping';
-import { CameraIcon, CheckIcon, PaperclipIcon, XIcon } from '../form/ui';
+import { CameraIcon, CheckIcon, PaperclipIcon, XIcon, srOnly } from '../form/ui';
 import { shouldHideField } from '../../../rules/visibility';
 import { collectValidationWarnings } from '../../app/submission';
 import { FileOverlay } from '../form/overlays/FileOverlay';
@@ -43,6 +43,14 @@ const normalizeSummaryVisibility = (raw: any): SummaryVisibility => {
   if (v === 'always') return 'always';
   if (v === 'never') return 'never';
   return 'inherit';
+};
+
+const resolveSummaryHideLabel = (item: any): boolean => {
+  const ui = item?.ui;
+  if (!ui || typeof ui !== 'object') return false;
+  if ((ui as any).summaryHideLabel === true) return true;
+  if ((ui as any).summaryHideLabel === false) return false;
+  return (ui as any).hideLabel === true;
 };
 
 const isVisibleInSummary = (args: {
@@ -93,7 +101,7 @@ const renderValueForPreview = (
         }}
         aria-label={tSystem('files.open', language, 'Open files')}
       >
-        <SlotIcon size={26} />
+        <SlotIcon size={32} />
         <span className="ck-file-icon__badge">{count}</span>
       </button>
     );
@@ -133,7 +141,12 @@ type RecordMeta = {
   pdfUrl?: string;
 };
 
-const MetaCard: React.FC<{ label: React.ReactNode; children: React.ReactNode; fieldPath?: string }> = ({ label, children, fieldPath }) => (
+const MetaCard: React.FC<{
+  label: React.ReactNode;
+  hideLabel?: boolean;
+  children: React.ReactNode;
+  fieldPath?: string;
+}> = ({ label, hideLabel, children, fieldPath }) => (
   <div
     data-field-path={fieldPath}
     style={{
@@ -147,21 +160,25 @@ const MetaCard: React.FC<{ label: React.ReactNode; children: React.ReactNode; fi
       flexDirection: 'column'
     }}
   >
-    <div
-      className="muted"
-      style={{
-        fontWeight: 800,
-        marginBottom: 6,
-        minWidth: 0,
-        whiteSpace: 'normal',
-        overflow: 'visible',
-        textOverflow: 'clip',
-        wordBreak: 'break-word',
-        overflowWrap: 'anywhere'
-      }}
-    >
-      {label}
-    </div>
+    {hideLabel ? (
+      <div style={srOnly}>{label}</div>
+    ) : (
+      <div
+        className="muted"
+        style={{
+          fontWeight: 800,
+          marginBottom: 6,
+          minWidth: 0,
+          whiteSpace: 'normal',
+          overflow: 'visible',
+          textOverflow: 'clip',
+          wordBreak: 'break-word',
+          overflowWrap: 'anywhere'
+        }}
+      >
+        {label}
+      </div>
+    )}
     <div
       style={{
         fontWeight: 800,
@@ -287,11 +304,39 @@ const LineItemRowCard: React.FC<{
             {visibleFields.map((field, fieldIdx) => {
               const stripe = fieldIdx % 2 === 1;
               const label = resolveFieldLabel(field as any, language, field.id);
+              const hideLabel = resolveSummaryHideLabel(field);
               const v = row.values[field.id];
               const optionSet = toOptionSet(field as any);
               // Avoid duplicating the anchor field if it's already used as the title.
               if (anchorId && field.id === anchorId) return null;
               const fieldPath = `${group.id}__${field.id}__${row.id}`;
+              if (hideLabel) {
+                return (
+                  <tr key={field.id}>
+                    <td
+                      colSpan={2}
+                      style={{
+                        padding: '10px 10px',
+                        borderBottom: '1px solid rgba(148,163,184,0.25)',
+                        background: stripe ? 'rgba(241,245,249,0.55)' : 'transparent',
+                        fontWeight: 700,
+                        wordBreak: 'break-word'
+                      }}
+                    >
+                      <span style={srOnly}>{label}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-field-path={fieldPath}>
+                        <div>
+                          {renderValueForPreview(v, (field as any)?.type, language, optionSet, (field as any)?.uploadConfig, {
+                            fileTitle: `${label} — ${title}`,
+                            onOpenFiles
+                          })}
+                        </div>
+                        {renderWarnings(fieldPath)}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
               return (
                 <tr key={field.id}>
                   <td
@@ -403,20 +448,24 @@ const LineItemRowCard: React.FC<{
                           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
                             <thead>
                               <tr>
-                                {subFields.map((sf: any) => (
-                                  <th
-                                    key={`${subKey}.${sf.id}`}
-                                    style={{
-                                      textAlign: 'left',
-                                      padding: '8px 8px',
-                                      borderBottom: '1px solid rgba(148,163,184,0.25)',
-                                      color: '#475569',
-                                      fontWeight: 800
-                                    }}
-                                  >
-                                    {resolveFieldLabel(sf, language, sf.id)}
-                                  </th>
-                                ))}
+                                    {subFields.map((sf: any) => {
+                                      const headerLabel = resolveFieldLabel(sf, language, sf.id);
+                                      const hideHeaderLabel = resolveSummaryHideLabel(sf);
+                                      return (
+                                        <th
+                                          key={`${subKey}.${sf.id}`}
+                                          style={{
+                                            textAlign: 'left',
+                                            padding: '8px 8px',
+                                            borderBottom: '1px solid rgba(148,163,184,0.25)',
+                                            color: '#475569',
+                                            fontWeight: 800
+                                          }}
+                                        >
+                                          {hideHeaderLabel ? <span style={srOnly}>{headerLabel}</span> : headerLabel}
+                                        </th>
+                                      );
+                                    })}
                               </tr>
                             </thead>
                             <tbody>
@@ -691,11 +740,17 @@ export const ReportLivePreview: React.FC<{
   const renderLineItemGroup = (group: WebQuestionDefinition): React.ReactNode => {
     const rows = lineItems[group.id] || [];
     if (!rows.length) return null;
+    const groupLabel = resolveLabel(group, language);
+    const hideGroupLabel = resolveSummaryHideLabel(group);
     return (
       <div data-field-path={group.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div className="muted" style={{ fontWeight: 800 }}>
-          {resolveLabel(group, language)}
-        </div>
+        {hideGroupLabel ? (
+          <div style={srOnly}>{groupLabel}</div>
+        ) : (
+          <div className="muted" style={{ fontWeight: 800 }}>
+            {groupLabel}
+          </div>
+        )}
         {renderWarnings(group.id)}
 
         {rows.map((row, idx) => (
@@ -821,6 +876,8 @@ export const ReportLivePreview: React.FC<{
                 const rightLabel = resolveLabel(item.right, language);
                 const leftValue = values[item.left.id];
                 const rightValue = values[item.right.id];
+                const hideLeftLabel = resolveSummaryHideLabel(item.left);
+                const hideRightLabel = resolveSummaryHideLabel(item.right);
                 return (
                   <div
                     key={item.key}
@@ -832,7 +889,7 @@ export const ReportLivePreview: React.FC<{
                       alignItems: 'stretch'
                     }}
                   >
-                    <MetaCard label={leftLabel} fieldPath={item.left.id}>
+                    <MetaCard label={leftLabel} hideLabel={hideLeftLabel} fieldPath={item.left.id}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <div>
                           {renderValueForPreview(
@@ -847,7 +904,7 @@ export const ReportLivePreview: React.FC<{
                         {renderWarnings(item.left.id)}
                       </div>
                     </MetaCard>
-                    <MetaCard label={rightLabel} fieldPath={item.right.id}>
+                    <MetaCard label={rightLabel} hideLabel={hideRightLabel} fieldPath={item.right.id}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <div>
                           {renderValueForPreview(
@@ -869,6 +926,7 @@ export const ReportLivePreview: React.FC<{
               const label = resolveLabel(q, language);
               const value = values[q.id];
               const optionSet = toOptionSet(q as any);
+              const hideLabel = resolveSummaryHideLabel(q);
 
               // Consent checkboxes: display the same ✔/✖ icon, but prefix it before the label (like a checklist line).
               const hasAnyOption = !!(
@@ -879,6 +937,23 @@ export const ReportLivePreview: React.FC<{
               const isConsentCheckbox = q.type === 'CHECKBOX' && !(q as any)?.dataSource && !hasAnyOption;
               if (isConsentCheckbox) {
                 const checked = normalizeBooleanLike(value, q.type) === true;
+                if (hideLabel) {
+                  return (
+                    <div key={q.id} style={{ gridColumn: '1 / -1' }}>
+                      <MetaCard label={label} hideLabel={true} fieldPath={q.id}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div>
+                            {renderValueForPreview(value, q.type, language, optionSet, (q as any)?.uploadConfig, {
+                              fileTitle: label,
+                              onOpenFiles: openFilesOverlay
+                            })}
+                          </div>
+                          {renderWarnings(q.id)}
+                        </div>
+                      </MetaCard>
+                    </div>
+                  );
+                }
                 const labelNode = (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
                     <span
@@ -904,7 +979,7 @@ export const ReportLivePreview: React.FC<{
               }
 
               const card = (
-                <MetaCard label={label} fieldPath={q.id}>
+                <MetaCard label={label} hideLabel={hideLabel} fieldPath={q.id}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div>
                       {renderValueForPreview(value, q.type, language, optionSet, (q as any)?.uploadConfig, {
