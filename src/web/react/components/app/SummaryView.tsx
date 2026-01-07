@@ -3,7 +3,7 @@ import { FieldValue, LangCode, WebFormDefinition, WebFormSubmission } from '../.
 import { tSystem } from '../../../systemStrings';
 import { LineItemState } from '../../types';
 import { buildDraftPayload } from '../../app/submission';
-import { renderSummaryHtmlTemplateApi } from '../../api';
+import { peekSummaryHtmlTemplateCache, renderSummaryHtmlTemplateApi } from '../../api';
 import { HtmlPreview } from './HtmlPreview';
 import { ReportLivePreview } from './ReportLivePreview';
 
@@ -63,7 +63,6 @@ export const SummaryView: React.FC<{
     if (!useSummaryHtml) return;
     if (recordLoadingId) return;
     const seq = ++seqRef.current;
-    setSummaryHtml({ phase: 'rendering' });
     const draft = buildDraftPayload({
       definition,
       formKey,
@@ -72,6 +71,16 @@ export const SummaryView: React.FC<{
       lineItems,
       existingRecordId
     });
+    const cached = peekSummaryHtmlTemplateCache(draft);
+    if (cached?.success && cached?.html) {
+      setSummaryHtml({ phase: 'ready', html: cached.html });
+      onDiagnostic?.('summary.htmlTemplate.cacheHit', {
+        recordId: existingRecordId || null,
+        htmlLength: (cached.html || '').toString().length
+      });
+      return;
+    }
+    setSummaryHtml({ phase: 'rendering' });
     onDiagnostic?.('summary.htmlTemplate.render.start', { recordId: existingRecordId || null });
     renderSummaryHtmlTemplateApi(draft)
       .then(res => {

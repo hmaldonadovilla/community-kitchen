@@ -20,6 +20,7 @@ import {
   renderDocTemplatePdfPreviewApi,
   renderMarkdownTemplateApi,
   renderHtmlTemplateApi,
+  renderSummaryHtmlTemplateApi,
   ListResponse,
   ListItem,
   fetchRecordById,
@@ -613,8 +614,38 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         response: prev.response,
         records: { ...prev.records, [id]: snapshot }
       }));
+
+      // Prefetch Summary HTML template (client-side cached) so Summary view is instant when users tap it.
+      // Do NOT await: this should run in parallel with any other async work.
+      if ((definition as any)?.summaryHtmlTemplateId && definition.summaryViewEnabled !== false) {
+        try {
+          const payload = buildDraftPayload({
+            definition,
+            formKey,
+            language: languageRef.current,
+            values: mapped.values,
+            lineItems: mapped.lineItems,
+            existingRecordId: id
+          });
+          logEvent('summary.htmlTemplate.prefetch.start', { recordId: id });
+          void renderSummaryHtmlTemplateApi(payload)
+            .then(res => {
+              if (res?.success && res?.html) {
+                logEvent('summary.htmlTemplate.prefetch.ok', { recordId: id, htmlLength: (res.html || '').toString().length });
+              } else {
+                logEvent('summary.htmlTemplate.prefetch.skip', { recordId: id, success: !!res?.success });
+              }
+            })
+            .catch(err => {
+              const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed';
+              logEvent('summary.htmlTemplate.prefetch.error', { recordId: id, message: msg });
+            });
+        } catch (err: any) {
+          logEvent('summary.htmlTemplate.prefetch.exception', { recordId: id, message: err?.message || err });
+        }
+      }
     },
-    [definition]
+    [definition, formKey, logEvent]
   );
 
   const loadRecordSnapshot = useCallback(

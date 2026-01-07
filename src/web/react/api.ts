@@ -95,6 +95,111 @@ export interface RenderHtmlTemplateResult {
   message?: string;
 }
 
+// ----------------------------
+// Client-side HTML render cache
+// ----------------------------
+// Goal: avoid re-calling Apps Script when reopening the same record/template with the same values.
+// This is intentionally in-memory only (per browser session) to keep invalidation simple and safe.
+
+type HtmlRenderCacheEntry = { result: RenderHtmlTemplateResult; cachedAtMs: number };
+
+const MAX_HTML_RENDER_CACHE_ENTRIES = 40;
+
+const htmlRenderCache = new Map<string, HtmlRenderCacheEntry>();
+const htmlRenderInflight = new Map<string, Promise<RenderHtmlTemplateResult>>();
+
+const pruneHtmlRenderCache = () => {
+  if (htmlRenderCache.size <= MAX_HTML_RENDER_CACHE_ENTRIES) return;
+  // Simple FIFO eviction based on insertion order.
+  const toEvict = htmlRenderCache.size - MAX_HTML_RENDER_CACHE_ENTRIES;
+  let evicted = 0;
+  for (const key of htmlRenderCache.keys()) {
+    htmlRenderCache.delete(key);
+    evicted += 1;
+    if (evicted >= toEvict) break;
+  }
+};
+
+const stableStringifyForCacheKey = (value: any): string => {
+  const seen = new WeakSet<object>();
+  const normalize = (v: any): any => {
+    if (v === null || v === undefined) return v;
+    const t = typeof v;
+    if (t === 'string' || t === 'number' || t === 'boolean') return v;
+    if (Array.isArray(v)) return v.map(normalize);
+    if (t === 'object') {
+      // Avoid cycles; payloads should be acyclic, but be defensive.
+      if (seen.has(v)) return '[Circular]';
+      seen.add(v);
+      try {
+        if (typeof (v as any).toJSON === 'function') return normalize((v as any).toJSON());
+      } catch (_) {
+        // ignore
+      }
+      const out: Record<string, any> = {};
+      Object.keys(v)
+        .sort()
+        .forEach(k => {
+          out[k] = normalize((v as any)[k]);
+        });
+      return out;
+    }
+    // Fallback for functions/symbols/bigints (should not happen in payloads)
+    try {
+      return String(v);
+    } catch (_) {
+      return '';
+    }
+  };
+  return JSON.stringify(normalize(value));
+};
+
+const fnv1a32 = (str: string): string => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+};
+
+const buildValuesSignature = (values: Record<string, any> | undefined | null): string => {
+  if (!values) return '0';
+  // Exclude redundant `*_json` keys (line-item serialization duplicates) to keep hashing cheaper.
+  const compact: Record<string, any> = {};
+  Object.keys(values).forEach(k => {
+    if (k && k.endsWith('_json')) return;
+    compact[k] = (values as any)[k];
+  });
+  return fnv1a32(stableStringifyForCacheKey(compact));
+};
+
+const buildSummaryHtmlCacheKey = (payload: SubmissionPayload): string => {
+  const recordId = (payload.id || '').toString();
+  const valuesSig = buildValuesSignature(payload.values);
+  return `summary|${payload.formKey}|${payload.language}|${recordId}|${valuesSig}`;
+};
+
+const buildButtonHtmlCacheKey = (payload: SubmissionPayload, buttonId: string): string => {
+  const recordId = (payload.id || '').toString();
+  const valuesSig = buildValuesSignature(payload.values);
+  return `button|${payload.formKey}|${payload.language}|${recordId}|${buttonId}|${valuesSig}`;
+};
+
+export const peekSummaryHtmlTemplateCache = (payload: SubmissionPayload): RenderHtmlTemplateResult | null => {
+  const key = buildSummaryHtmlCacheKey(payload);
+  const hit = htmlRenderCache.get(key);
+  if (!hit?.result?.success || !hit?.result?.html) return null;
+  return hit.result;
+};
+
+export const peekHtmlTemplateCache = (payload: SubmissionPayload, buttonId: string): RenderHtmlTemplateResult | null => {
+  const key = buildButtonHtmlCacheKey(payload, buttonId);
+  const hit = htmlRenderCache.get(key);
+  if (!hit?.result?.success || !hit?.result?.html) return null;
+  return hit.result;
+};
+
 export interface PrefetchTemplatesResult {
   success: boolean;
   message?: string;
@@ -209,8 +314,28 @@ export const renderDocTemplateHtmlApi = (payload: SubmissionPayload, buttonId: s
 export const renderMarkdownTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderMarkdownTemplateResult> =>
   runAppsScript<RenderMarkdownTemplateResult>('renderMarkdownTemplate', payload, buttonId);
 
-export const renderHtmlTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderHtmlTemplateResult> =>
-  runAppsScript<RenderHtmlTemplateResult>('renderHtmlTemplate', payload, buttonId);
+export const renderHtmlTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderHtmlTemplateResult> => {
+  const key = buildButtonHtmlCacheKey(payload, buttonId);
+  const cached = htmlRenderCache.get(key);
+  if (cached?.result?.success && cached?.result?.html) {
+    return Promise.resolve(cached.result);
+  }
+  const inflight = htmlRenderInflight.get(key);
+  if (inflight) return inflight;
+  const promise = runAppsScript<RenderHtmlTemplateResult>('renderHtmlTemplate', payload, buttonId)
+    .then(res => {
+      if (res?.success && res?.html) {
+        htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });
+        pruneHtmlRenderCache();
+      }
+      return res;
+    })
+    .finally(() => {
+      htmlRenderInflight.delete(key);
+    });
+  htmlRenderInflight.set(key, promise);
+  return promise;
+};
 
 export const prefetchTemplatesApi = (formKey: string): Promise<PrefetchTemplatesResult> =>
   runAppsScript<PrefetchTemplatesResult>('prefetchTemplates', formKey);
@@ -218,8 +343,28 @@ export const prefetchTemplatesApi = (formKey: string): Promise<PrefetchTemplates
 export const renderSubmissionReportHtmlApi = (payload: SubmissionPayload): Promise<RenderDocPreviewResult> =>
   runAppsScript<RenderDocPreviewResult>('renderSubmissionReportHtml', payload);
 
-export const renderSummaryHtmlTemplateApi = (payload: SubmissionPayload): Promise<RenderHtmlTemplateResult> =>
-  runAppsScript<RenderHtmlTemplateResult>('renderSummaryHtmlTemplate', payload);
+export const renderSummaryHtmlTemplateApi = (payload: SubmissionPayload): Promise<RenderHtmlTemplateResult> => {
+  const key = buildSummaryHtmlCacheKey(payload);
+  const cached = htmlRenderCache.get(key);
+  if (cached?.result?.success && cached?.result?.html) {
+    return Promise.resolve(cached.result);
+  }
+  const inflight = htmlRenderInflight.get(key);
+  if (inflight) return inflight;
+  const promise = runAppsScript<RenderHtmlTemplateResult>('renderSummaryHtmlTemplate', payload)
+    .then(res => {
+      if (res?.success && res?.html) {
+        htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });
+        pruneHtmlRenderCache();
+      }
+      return res;
+    })
+    .finally(() => {
+      htmlRenderInflight.delete(key);
+    });
+  htmlRenderInflight.set(key, promise);
+  return promise;
+};
 
 export const trashPreviewArtifactApi = (cleanupToken: string): Promise<TrashPreviewResult> =>
   runAppsScript<TrashPreviewResult>('trashPreviewArtifact', cleanupToken);
