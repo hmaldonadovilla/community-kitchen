@@ -1711,7 +1711,9 @@ export class ConfigSheet {
       if (!raw) continue;
       const parsed = this.safeParseObject(raw);
       if (!parsed || typeof parsed !== 'object') continue;
-      const ui = this.normalizeQuestionUi(parsed.ui || parsed.view || parsed.layout);
+      // Support UI keys both nested under `ui/view/layout` and at the top-level for convenience.
+      // (e.g., `{ "summaryVisibility": "always" }` instead of `{ "ui": { "summaryVisibility": "always" } }`)
+      const ui = this.normalizeQuestionUi((parsed as any).ui || (parsed as any).view || (parsed as any).layout || parsed);
       if (ui) return ui;
     }
     return undefined;

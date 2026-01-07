@@ -111,7 +111,7 @@ export const SummaryView: React.FC<{
         </div>
       )}
 
-      <div className="card" style={{ padding: 16 }}>
+      <div className="card" style={{ padding: 12 }}>
         {useSummaryHtml ? (
           <>
             {summaryHtml.phase === 'rendering' ? (

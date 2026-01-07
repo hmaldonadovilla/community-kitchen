@@ -164,28 +164,29 @@ const HTML_PREVIEW_STYLES = `
   .ck-file-icon {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: 12px;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 14px;
     border: 1px solid rgba(148,163,184,0.55);
     background: rgba(148,163,184,0.10);
     color: #0f172a;
     font-weight: 900;
+    font-size: 20px; /* makes 📷/📎 icons larger in HTML templates */
     cursor: pointer;
   }
   .ck-file-icon__badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 24px;
-    height: 24px;
+    min-width: 28px;
+    height: 28px;
     padding: 0 8px;
     border-radius: 999px;
     background: rgba(239,68,68,0.12);
     border: 1px solid rgba(239,68,68,0.35);
     color: #991b1b;
     font-weight: 900;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1;
   }
 `;

@@ -1328,7 +1328,7 @@ components:
 
     GroupBehaviorConfig:
       type: object
-      description: Behavior for collapsible group sections in the Edit view.
+      description: Behavior for collapsible group sections in the Edit (form) view and Summary view.
       properties:
         autoCollapseOnComplete:
           type: boolean
@@ -1339,6 +1339,9 @@ components:
         autoScrollOnExpand:
           type: boolean
           description: When true, scroll an expanded section into view (below the sticky header). Default is true when `autoCollapseOnComplete` is enabled.
+        summaryExpandAll:
+          type: boolean
+          description: When true, keep collapsible group sections expanded in the Summary view (native React summary).
       additionalProperties: false
 
     ActionBarsConfig:

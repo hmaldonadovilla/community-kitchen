@@ -179,8 +179,12 @@ export const formatTemplateValue = (value: any, fieldType?: string): string => {
       .map(([key, val]) => `${key}: ${val ?? ''}`)
       .join(', ');
   }
-  const asIsoDate = normalizeToIsoDate(value);
-  if (asIsoDate) return asIsoDate;
+  // Only auto-detect date-like strings when the field type is unknown.
+  // For explicit non-date fields (e.g. PARAGRAPH), we must not coerce values and accidentally drop text.
+  if (!fieldType) {
+    const asIsoDate = normalizeToIsoDate(value);
+    if (asIsoDate) return asIsoDate;
+  }
   return value.toString();
 };
 
@@ -205,14 +209,56 @@ export const addPlaceholderVariants = (
   map: Record<string, string>,
   key: string,
   value: any,
-  fieldType?: string
+  fieldType?: string,
+  formatValue?: (value: any, fieldType?: string) => string
 ): void => {
   if (!key) return;
   const keys = buildPlaceholderKeys(key);
-  const text = formatTemplateValue(value, fieldType);
+  const text = formatValue ? formatValue(value, fieldType) : formatTemplateValue(value, fieldType);
   keys.forEach(token => {
     map[`{{${token}}}`] = text;
   });
+};
+
+const escapeHtmlText = (value: string): string => {
+  return (value || '')
+    .toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+/**
+ * HTML template value formatter:
+ * - Keep default formatting for most fields.
+ * - For PARAGRAPH fields, preserve user-entered line breaks by emitting <br/>.
+ *   (Also escapes HTML so user input can't break templates.)
+ */
+export const formatTemplateValueForHtml = (value: any, fieldType?: string): string => {
+  const text = formatTemplateValue(value, fieldType);
+  const t = (fieldType || '').toString().trim().toUpperCase();
+  if (t !== 'PARAGRAPH') return text;
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const escaped = escapeHtmlText(normalized);
+  return escaped.replace(/\n/g, '<br/>');
+};
+
+/**
+ * Markdown template value formatter:
+ * - Keep default formatting for most fields.
+ * - For PARAGRAPH fields, preserve user-entered line breaks using Markdown hard breaks.
+ *   Also escapes <, >, & so values can't be interpreted as raw HTML in markdown.
+ */
+export const formatTemplateValueForMarkdown = (value: any, fieldType?: string): string => {
+  const text = formatTemplateValue(value, fieldType);
+  const t = (fieldType || '').toString().trim().toUpperCase();
+  if (t !== 'PARAGRAPH') return text;
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const escaped = normalized.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Markdown hard break: two spaces at end of line, then newline.
+  return escaped.replace(/\n/g, '  \n');
 };
 
 const stripOuterQuotes = (value: string): string => {

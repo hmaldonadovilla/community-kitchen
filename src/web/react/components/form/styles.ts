@@ -777,6 +777,10 @@ export const FORM_VIEW_STYLES = `
         .ck-summary-view .ck-progress-pill {
           background: rgba(118, 118, 128, 0.10);
         }
+        /* Summary view: use more horizontal space for the card grid (less side padding). */
+        .ck-summary-view .ck-group-body {
+          padding: 16px 14px 18px;
+        }
         .ck-group-stack {
           display: flex;
           flex-direction: column;

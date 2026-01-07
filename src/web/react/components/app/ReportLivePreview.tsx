@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SummaryVisibility } from '../../../../types';
 import { FieldValue, FileUploadConfig, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
 import { resolveLocalizedString } from '../../../i18n';
@@ -10,30 +10,11 @@ import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from '../../utils/valueDisplay';
 import { GroupCard } from '../form/GroupCard';
 import { resolveGroupSectionKey } from '../form/grouping';
-import { CheckIcon, XIcon } from '../form/ui';
+import { CameraIcon, CheckIcon, PaperclipIcon, XIcon } from '../form/ui';
 import { shouldHideField } from '../../../rules/visibility';
 import { collectValidationWarnings } from '../../app/submission';
-
-type UploadLink = { url: string; label?: string };
-
-const looksLikeUrl = (s: string) => /^https?:\/\/\S+$/i.test((s || '').trim());
-
-const resolveLocalizedAny = (value: any, language: LangCode, fallback = ''): string => {
-  if (!value && fallback) return fallback;
-  if (typeof value === 'string') return value;
-  if (!value || typeof value !== 'object') return fallback;
-  const key = (language || 'EN').toString().toLowerCase();
-  const upper = key.toUpperCase();
-  return (value as any)[key] || (value as any)[upper] || (value as any).en || (value as any).EN || fallback;
-};
-
-const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
-  if (!vars) return value;
-  return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
-    const raw = (vars as any)[key];
-    return raw === undefined || raw === null ? '' : String(raw);
-  });
-};
+import { FileOverlay } from '../form/overlays/FileOverlay';
+import { toUploadItems } from '../form/utils';
 
 const normalizeBooleanLike = (raw: any, fieldType?: string): boolean | null => {
   if (raw === true) return true;
@@ -57,52 +38,6 @@ const normalizeBooleanLike = (raw: any, fieldType?: string): boolean | null => {
   return null;
 };
 
-const extractUploadLinks = (value: any): UploadLink[] => {
-  const links: UploadLink[] = [];
-  const push = (url: any, label?: any) => {
-    const u = String(url ?? '').trim();
-    if (!u) return;
-    // Allow comma/newline separated URL strings.
-    u.split(/[,\n]+/g)
-      .map((p: string) => p.trim())
-      .filter(Boolean)
-      .forEach((part: string) => {
-        if (!looksLikeUrl(part)) return;
-        links.push({ url: part, label: label !== undefined && label !== null ? String(label) : undefined });
-      });
-  };
-
-  if (Array.isArray(value)) {
-    value.forEach(v => {
-      if (!v) return;
-      if (typeof v === 'string') {
-        push(v);
-        return;
-      }
-      if (typeof v === 'object') {
-        const obj: any = v;
-        if (typeof obj.url === 'string') push(obj.url, obj.name || obj.label);
-      }
-    });
-  } else if (typeof value === 'object' && value) {
-    const obj: any = value;
-    if (typeof obj.url === 'string') push(obj.url, obj.name || obj.label);
-  } else if (typeof value === 'string') {
-    push(value);
-  }
-
-  // De-dupe by URL, preserving order.
-  const seen = new Set<string>();
-  const ordered: UploadLink[] = [];
-  links.forEach(l => {
-    if (!l?.url) return;
-    if (seen.has(l.url)) return;
-    seen.add(l.url);
-    ordered.push(l);
-  });
-  return ordered;
-};
-
 const normalizeSummaryVisibility = (raw: any): SummaryVisibility => {
   const v = (raw || '').toString().trim().toLowerCase();
   if (v === 'always') return 'always';
@@ -123,34 +58,44 @@ const isVisibleInSummary = (args: {
   return true;
 };
 
+type OpenFilesOverlayFn = (args: { title: string; value: FieldValue; uploadConfig?: FileUploadConfig }) => void;
+
+type RenderPreviewOpts = {
+  fileTitle?: string;
+  onOpenFiles?: OpenFilesOverlayFn;
+};
+
 const renderValueForPreview = (
   value: any,
   fieldType: string | undefined,
   language: LangCode,
   optionSet?: any,
-  uploadConfig?: FileUploadConfig
+  uploadConfig?: FileUploadConfig,
+  opts?: RenderPreviewOpts
 ): React.ReactNode => {
   if (fieldType === 'FILE_UPLOAD') {
-    const links = extractUploadLinks(value);
-    if (!links.length) return EMPTY_DISPLAY;
-    const cfgLabelTemplate = resolveLocalizedAny(uploadConfig?.linkLabel as any, language, '');
+    const items = toUploadItems(value as any);
+    if (!items.length) return EMPTY_DISPLAY;
+
+    const count = items.length;
+    const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
+    const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{ size?: number }>;
+    const title = (opts?.fileTitle || tSystem('files.title', language, 'Files')).toString();
+
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {links.map((l, idx) => (
-          <a
-            key={`${l.url}-${idx}`}
-            href={l.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: '#1d4ed8', textDecoration: 'underline', fontWeight: 800 }}
-            onClick={e => e.stopPropagation()}
-          >
-            {l.label ||
-              (cfgLabelTemplate ? formatTemplate(cfgLabelTemplate, { n: idx + 1 }) : '') ||
-              tSystem('files.fileN', language, 'File {n}', { n: idx + 1 })}
-          </a>
-        ))}
-      </div>
+      <button
+        type="button"
+        className="ck-file-icon"
+        onClick={e => {
+          e.preventDefault();
+          e.stopPropagation();
+          opts?.onOpenFiles?.({ title, value: value as any, uploadConfig });
+        }}
+        aria-label={tSystem('files.open', language, 'Open files')}
+      >
+        <SlotIcon size={26} />
+        <span className="ck-file-icon__badge">{count}</span>
+      </button>
     );
   }
   if (fieldType === 'PARAGRAPH') {
@@ -188,7 +133,7 @@ type RecordMeta = {
   pdfUrl?: string;
 };
 
-const MetaCard: React.FC<{ label: string; children: React.ReactNode; fieldPath?: string }> = ({ label, children, fieldPath }) => (
+const MetaCard: React.FC<{ label: React.ReactNode; children: React.ReactNode; fieldPath?: string }> = ({ label, children, fieldPath }) => (
   <div
     data-field-path={fieldPath}
     style={{
@@ -241,8 +186,18 @@ const LineItemRowCard: React.FC<{
   lineItems: LineItemState;
   values: Record<string, FieldValue>;
   warningByField?: Record<string, string[]>;
-}> = ({ group, row, idx, language, lineItems, values, warningByField }) => {
-  const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
+  expandAllSubgroups?: boolean;
+  onOpenFiles?: OpenFilesOverlayFn;
+}> = ({ group, row, idx, language, lineItems, values, warningByField, expandAllSubgroups, onOpenFiles }) => {
+  const [openSubs, setOpenSubs] = useState<Record<string, boolean>>(() => {
+    if (!expandAllSubgroups) return {};
+    const init: Record<string, boolean> = {};
+    (group.lineItemConfig?.subGroups || []).forEach(sub => {
+      const subKey = resolveSubgroupKey(sub as any);
+      if (subKey) init[subKey] = true;
+    });
+    return init;
+  });
   const anchorId = group.lineItemConfig?.anchorFieldId;
   const fields = (group.lineItemConfig?.fields || []).filter(f => f.id !== 'ITEM_FILTER');
   const subGroups = group.lineItemConfig?.subGroups || [];
@@ -363,7 +318,10 @@ const LineItemRowCard: React.FC<{
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-field-path={fieldPath}>
                       <div>
-                        {renderValueForPreview(v, (field as any)?.type, language, optionSet, (field as any)?.uploadConfig)}
+                        {renderValueForPreview(v, (field as any)?.type, language, optionSet, (field as any)?.uploadConfig, {
+                          fileTitle: `${label} — ${title}`,
+                          onOpenFiles
+                        })}
                       </div>
                       {renderWarnings(fieldPath)}
                     </div>
@@ -392,7 +350,7 @@ const LineItemRowCard: React.FC<{
                 })
               );
               if (!subFields.length) return null;
-              const open = !!openSubs[subKey];
+              const open = expandAllSubgroups ? true : !!openSubs[subKey];
 
               return (
                 <React.Fragment key={subKey}>
@@ -411,24 +369,30 @@ const LineItemRowCard: React.FC<{
                         <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {subLabel}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => toggleSub(subKey)}
-                          style={{
-                            border: '1px solid rgba(29,78,216,0.35)',
-                            background: 'rgba(29,78,216,0.12)',
-                            color: '#1d4ed8',
-                            borderRadius: 999,
-                            padding: '8px 12px',
-                            fontWeight: 900,
-                            cursor: 'pointer',
-                            minHeight: 34,
-                            boxShadow: '0 1px 0 rgba(15,23,42,0.06)'
-                          }}
-                        >
-                          {open ? tSystem('summary.hide', language, 'Hide') : tSystem('summary.show', language, 'Show')}{' '}
-                          {open ? '▾' : '▸'} ({childRows.length})
-                        </button>
+                        {expandAllSubgroups ? (
+                          <span className="muted" style={{ fontWeight: 900 }}>
+                            ({childRows.length})
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleSub(subKey)}
+                            style={{
+                              border: '1px solid rgba(29,78,216,0.35)',
+                              background: 'rgba(29,78,216,0.12)',
+                              color: '#1d4ed8',
+                              borderRadius: 999,
+                              padding: '8px 12px',
+                              fontWeight: 900,
+                              cursor: 'pointer',
+                              minHeight: 34,
+                              boxShadow: '0 1px 0 rgba(15,23,42,0.06)'
+                            }}
+                          >
+                            {open ? tSystem('summary.hide', language, 'Hide') : tSystem('summary.show', language, 'Show')}{' '}
+                            {open ? '▾' : '▸'} ({childRows.length})
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -499,7 +463,11 @@ const LineItemRowCard: React.FC<{
                                               sf?.type,
                                               language,
                                               toOptionSet(sf),
-                                              (sf as any)?.uploadConfig
+                                              (sf as any)?.uploadConfig,
+                                              {
+                                                fileTitle: `${resolveFieldLabel(sf, language, sf.id)} — ${subLabel} — ${title}`,
+                                                onOpenFiles
+                                              }
                                             )}
                                           </div>
                                           {renderWarnings(fieldPath)}
@@ -596,7 +564,10 @@ export const ReportLivePreview: React.FC<{
     return Array.from(map.values()).sort((a, b) => a.order - b.order);
   }, [language, summaryQuestions]);
 
+  const summaryExpandAll = Boolean(definition.groupBehavior?.summaryExpandAll);
+
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    if (summaryExpandAll) return {};
     const init: Record<string, boolean> = {};
     topSections.forEach(s => {
       if (s.collapsible && s.defaultCollapsed) init[`summary:${s.key}`] = true;
@@ -606,6 +577,7 @@ export const ReportLivePreview: React.FC<{
 
   // Ensure newly added sections respect defaultCollapsed without resetting user toggles.
   useEffect(() => {
+    if (summaryExpandAll) return;
     setCollapsedSections(prev => {
       const next = { ...prev };
       topSections.forEach(s => {
@@ -614,7 +586,7 @@ export const ReportLivePreview: React.FC<{
       });
       return next;
     });
-  }, [topSections]);
+  }, [summaryExpandAll, topSections]);
 
   const warningInfo = useMemo(
     () =>
@@ -648,6 +620,31 @@ export const ReportLivePreview: React.FC<{
       </div>
     );
   };
+
+  const [filesOverlay, setFilesOverlay] = useState<{
+    open: boolean;
+    title: string;
+    items: Array<string | File>;
+    uploadConfig?: FileUploadConfig;
+  }>({ open: false, title: '', items: [] });
+
+  const closeFilesOverlay = useCallback(() => {
+    setFilesOverlay(prev => ({ ...prev, open: false }));
+  }, []);
+
+  const openFilesOverlay = useCallback<OpenFilesOverlayFn>(
+    ({ title, value, uploadConfig }) => {
+      const items = toUploadItems(value);
+      if (!items.length) return;
+      setFilesOverlay({
+        open: true,
+        title: title || tSystem('files.title', language, 'Files'),
+        items,
+        uploadConfig
+      });
+    },
+    [language]
+  );
 
   type SectionItem =
     | { kind: 'single'; q: WebQuestionDefinition }
@@ -711,6 +708,8 @@ export const ReportLivePreview: React.FC<{
             lineItems={lineItems}
             values={values}
             warningByField={(warningInfo as any)?.byField || {}}
+            expandAllSubgroups={summaryExpandAll}
+            onOpenFiles={openFilesOverlay}
           />
         ))}
       </div>
@@ -796,7 +795,8 @@ export const ReportLivePreview: React.FC<{
 
       {topSections.map(section => {
         const sectionKey = `summary:${section.key}`;
-        const collapsed = section.collapsible ? !!collapsedSections[sectionKey] : false;
+        const canCollapse = section.collapsible && !summaryExpandAll;
+        const collapsed = canCollapse ? !!collapsedSections[sectionKey] : false;
         const body = (
           <div
             style={{
@@ -840,7 +840,8 @@ export const ReportLivePreview: React.FC<{
                             item.left.type,
                             language,
                             toOptionSet(item.left as any),
-                            (item.left as any)?.uploadConfig
+                            (item.left as any)?.uploadConfig,
+                            { fileTitle: leftLabel, onOpenFiles: openFilesOverlay }
                           )}
                         </div>
                         {renderWarnings(item.left.id)}
@@ -854,7 +855,8 @@ export const ReportLivePreview: React.FC<{
                             item.right.type,
                             language,
                             toOptionSet(item.right as any),
-                            (item.right as any)?.uploadConfig
+                            (item.right as any)?.uploadConfig,
+                            { fileTitle: rightLabel, onOpenFiles: openFilesOverlay }
                           )}
                         </div>
                         {renderWarnings(item.right.id)}
@@ -866,16 +868,65 @@ export const ReportLivePreview: React.FC<{
               const q = item.q;
               const label = resolveLabel(q, language);
               const value = values[q.id];
-              return (
-                <MetaCard key={q.id} label={label} fieldPath={q.id}>
+              const optionSet = toOptionSet(q as any);
+
+              // Consent checkboxes: display the same ✔/✖ icon, but prefix it before the label (like a checklist line).
+              const hasAnyOption = !!(
+                (optionSet?.en && optionSet.en.length) ||
+                (optionSet?.fr && optionSet.fr.length) ||
+                (optionSet?.nl && optionSet.nl.length)
+              );
+              const isConsentCheckbox = q.type === 'CHECKBOX' && !(q as any)?.dataSource && !hasAnyOption;
+              if (isConsentCheckbox) {
+                const checked = normalizeBooleanLike(value, q.type) === true;
+                const labelNode = (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        color: checked ? '#16a34a' : '#dc2626'
+                      }}
+                    >
+                      {checked ? <CheckIcon size={22} /> : <XIcon size={22} />}
+                    </span>
+                    <span>{label}</span>
+                  </span>
+                );
+                return (
+                  <div key={q.id} style={{ gridColumn: '1 / -1' }}>
+                    <MetaCard label={labelNode} fieldPath={q.id}>
+                      {renderWarnings(q.id)}
+                    </MetaCard>
+                  </div>
+                );
+              }
+
+              const card = (
+                <MetaCard label={label} fieldPath={q.id}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div>
-                      {renderValueForPreview(value, q.type, language, toOptionSet(q as any), (q as any)?.uploadConfig)}
+                      {renderValueForPreview(value, q.type, language, optionSet, (q as any)?.uploadConfig, {
+                        fileTitle: label,
+                        onOpenFiles: openFilesOverlay
+                      })}
                     </div>
                     {renderWarnings(q.id)}
                   </div>
                 </MetaCard>
               );
+
+              // Reserve the whole row for top-level PARAGRAPH fields (so they don't share a line on wider screens).
+              if (q.type === 'PARAGRAPH') {
+                return (
+                  <div key={q.id} style={{ gridColumn: '1 / -1' }}>
+                    {card}
+                  </div>
+                );
+              }
+
+              return <React.Fragment key={q.id}>{card}</React.Fragment>;
             })}
           </div>
         );
@@ -885,10 +936,10 @@ export const ReportLivePreview: React.FC<{
             key={sectionKey}
             groupKey={sectionKey}
             title={section.title}
-            collapsible={section.collapsible}
+            collapsible={canCollapse}
             collapsed={collapsed}
             onToggleCollapsed={
-              section.collapsible
+              canCollapse
                 ? () => setCollapsedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))
                 : undefined
             }
@@ -898,6 +949,22 @@ export const ReportLivePreview: React.FC<{
           </GroupCard>
         );
       })}
+
+      {filesOverlay.open ? (
+        <FileOverlay
+          open={filesOverlay.open}
+          language={language}
+          title={filesOverlay.title || tSystem('files.title', language, 'Files')}
+          submitting={false}
+          readOnly={true}
+          items={filesOverlay.items}
+          uploadConfig={filesOverlay.uploadConfig as any}
+          onAdd={() => {}}
+          onClearAll={() => {}}
+          onRemoveAt={() => {}}
+          onClose={closeFilesOverlay}
+        />
+      ) : null}
     </div>
   );
 };

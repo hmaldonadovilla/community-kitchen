@@ -231,6 +231,12 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+    - Want the **native Summary view** to keep sections **expanded** (no default-collapsed groups)? Set:
+
+      ```json
+      { "groupBehavior": { "summaryExpandAll": true } }
+      ```
+
     - Want a **submit confirmation dialog** (Confirm/Cancel overlay) title? Set `submissionConfirmationTitle` (localized). When omitted, the UI uses system string defaults:
 
       ```json

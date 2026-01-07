@@ -1200,6 +1200,14 @@ export interface GroupBehaviorConfig {
    * When true, scroll the expanded section to the top (below the sticky header).
    */
   autoScrollOnExpand?: boolean;
+  /**
+   * When true, keep collapsible group sections expanded in the Summary view (native React summary).
+   *
+   * Notes:
+   * - This overrides per-group `defaultCollapsed` on the Summary view only.
+   * - Intended for "report-like" summary pages where users should not have to expand each section.
+   */
+  summaryExpandAll?: boolean;
 }
 
 export interface FormResult {

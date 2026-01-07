@@ -552,13 +552,32 @@ export class Dashboard {
         : parsed.autoScrollOnExpand !== undefined
         ? Boolean(parsed.autoScrollOnExpand)
         : undefined;
+    const summaryExpandAll =
+      groupBehaviorObj &&
+      (groupBehaviorObj.summaryExpandAll !== undefined ||
+        groupBehaviorObj.summaryKeepExpanded !== undefined ||
+        groupBehaviorObj.expandAllInSummary !== undefined ||
+        groupBehaviorObj.keepExpandedInSummary !== undefined)
+        ? Boolean(
+            groupBehaviorObj.summaryExpandAll ??
+              groupBehaviorObj.summaryKeepExpanded ??
+              groupBehaviorObj.expandAllInSummary ??
+              groupBehaviorObj.keepExpandedInSummary
+          )
+        : parsed.summaryExpandAll !== undefined
+          ? Boolean(parsed.summaryExpandAll)
+          : undefined;
     const groupBehavior: GroupBehaviorConfig | undefined =
-      autoCollapseOnComplete === undefined && autoOpenNextIncomplete === undefined && autoScrollOnExpand === undefined
+      autoCollapseOnComplete === undefined &&
+      autoOpenNextIncomplete === undefined &&
+      autoScrollOnExpand === undefined &&
+      summaryExpandAll === undefined
         ? undefined
         : {
             autoCollapseOnComplete,
             autoOpenNextIncomplete,
-            autoScrollOnExpand
+            autoScrollOnExpand,
+            summaryExpandAll
           };
 
     const submissionObj =

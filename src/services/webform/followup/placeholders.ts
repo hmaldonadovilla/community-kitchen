@@ -44,23 +44,25 @@ export const buildPlaceholderMap = (args: {
   questions: QuestionConfig[];
   lineItemRows: Record<string, any[]>;
   dataSources: DataSourceService;
+  formatValue?: (value: any, fieldType?: string) => string;
 }): Record<string, string> => {
-  const { record, questions, lineItemRows, dataSources } = args;
+  const { record, questions, lineItemRows, dataSources, formatValue } = args;
+  const fmt = formatValue || formatTemplateValue;
   const map: Record<string, string> = {};
-  addPlaceholderVariants(map, 'RECORD_ID', record.id || '');
-  addPlaceholderVariants(map, 'FORM_KEY', record.formKey || '');
-  addPlaceholderVariants(map, 'CREATED_AT', record.createdAt || '');
-  addPlaceholderVariants(map, 'UPDATED_AT', record.updatedAt || '');
-  addPlaceholderVariants(map, 'STATUS', record.status || '');
-  addPlaceholderVariants(map, 'PDF_URL', record.pdfUrl || '');
-  addPlaceholderVariants(map, 'LANGUAGE', record.language || '');
+  addPlaceholderVariants(map, 'RECORD_ID', record.id || '', undefined, formatValue);
+  addPlaceholderVariants(map, 'FORM_KEY', record.formKey || '', undefined, formatValue);
+  addPlaceholderVariants(map, 'CREATED_AT', record.createdAt || '', undefined, formatValue);
+  addPlaceholderVariants(map, 'UPDATED_AT', record.updatedAt || '', undefined, formatValue);
+  addPlaceholderVariants(map, 'STATUS', record.status || '', undefined, formatValue);
+  addPlaceholderVariants(map, 'PDF_URL', record.pdfUrl || '', undefined, formatValue);
+  addPlaceholderVariants(map, 'LANGUAGE', record.language || '', undefined, formatValue);
 
   questions.forEach(q => {
     if (q.type === 'BUTTON') return;
     const value = record.values ? (record.values as any)[q.id] : '';
-    addPlaceholderVariants(map, q.id, value, q.type);
+    addPlaceholderVariants(map, q.id, value, q.type, formatValue);
     const labelToken = slugifyPlaceholder(q.qEn || q.id);
-    addPlaceholderVariants(map, labelToken, value, q.type);
+    addPlaceholderVariants(map, labelToken, value, q.type, formatValue);
 
     if (q.type === 'LINE_ITEM_GROUP') {
       const rows = lineItemRows[q.id] || [];
@@ -68,12 +70,13 @@ export const buildPlaceholderMap = (args: {
         const values = rows
           .map(row => (row as any)[field.id])
           .filter(val => val !== undefined && val !== null && val !== '')
-          .map(val => formatTemplateValue(val, (field as any).type));
+          .map(val => fmt(val, (field as any).type));
         if (!values.length) return;
         const joined = values.join('\n');
-        addPlaceholderVariants(map, `${q.id}.${field.id}`, joined);
+        // Joined values are inherently multi-line; treat them as PARAGRAPH for renderer formatting.
+        addPlaceholderVariants(map, `${q.id}.${field.id}`, joined, 'PARAGRAPH', formatValue);
         const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
-        addPlaceholderVariants(map, `${q.id}.${fieldSlug}`, joined);
+        addPlaceholderVariants(map, `${q.id}.${fieldSlug}`, joined, 'PARAGRAPH', formatValue);
       });
 
       (q.lineItemConfig?.subGroups || []).forEach(sub => {
@@ -85,9 +88,9 @@ export const buildPlaceholderMap = (args: {
             (sub.fields || []).forEach(field => {
               const raw = subRow?.[field.id];
               if (raw === undefined || raw === null || raw === '') return;
-              addPlaceholderVariants(map, `${q.id}.${subKey}.${field.id}`, raw, (field as any).type);
+              addPlaceholderVariants(map, `${q.id}.${subKey}.${field.id}`, raw, (field as any).type, formatValue);
               const slug = slugifyPlaceholder(field.labelEn || field.id);
-              addPlaceholderVariants(map, `${q.id}.${subKey}.${slug}`, raw, (field as any).type);
+              addPlaceholderVariants(map, `${q.id}.${subKey}.${slug}`, raw, (field as any).type, formatValue);
             });
           });
         });
@@ -96,7 +99,7 @@ export const buildPlaceholderMap = (args: {
       const dsDetails = dataSources.lookupDataSourceDetails(q as any, value, record.language);
       if (dsDetails) {
         Object.entries(dsDetails).forEach(([key, val]) => {
-          addPlaceholderVariants(map, `${q.id}.${key}`, val);
+          addPlaceholderVariants(map, `${q.id}.${key}`, val, undefined, formatValue);
         });
       }
     }
@@ -104,7 +107,7 @@ export const buildPlaceholderMap = (args: {
 
   // Fallback: include any raw record.values entries not already populated (helps when a header/id mismatch prevented mapping)
   Object.entries((record.values as any) || {}).forEach(([key, rawVal]) => {
-    const formatted = formatTemplateValue(rawVal);
+    const formatted = fmt(rawVal);
     const tokens = [key, key.toUpperCase(), key.toLowerCase()];
     tokens.forEach(t => {
       const ph = `{{${t}}}`;

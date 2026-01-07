@@ -4,7 +4,7 @@ import { debugLog } from '../debug';
 import { resolveTemplateId } from './recipients';
 import { addConsolidatedPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
-import { addPlaceholderVariants, applyPlaceholders } from './utils';
+import { addPlaceholderVariants, applyPlaceholders, formatTemplateValueForMarkdown } from './utils';
 import {
   getCachedMarkdownTemplate,
   readMarkdownTemplateRawFromDrive,
@@ -50,10 +50,22 @@ export const renderMarkdownFromTemplate = (args: {
     }
 
     const lineItemRows = collectLineItemRows(record, questions);
-    const placeholders = buildPlaceholderMap({ record, questions, lineItemRows, dataSources });
+    const placeholders = buildPlaceholderMap({
+      record,
+      questions,
+      lineItemRows,
+      dataSources,
+      formatValue: formatTemplateValueForMarkdown
+    });
     addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
     const validationWarnings = collectValidationWarnings(questions, record);
-    addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));
+    addPlaceholderVariants(
+      placeholders,
+      'VALIDATION_WARNINGS',
+      validationWarnings.join('\n'),
+      'PARAGRAPH',
+      formatTemplateValueForMarkdown
+    );
 
     // Apply Doc-like line-item directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE) for markdown blocks,
     // then apply normal placeholder replacement across the full document.

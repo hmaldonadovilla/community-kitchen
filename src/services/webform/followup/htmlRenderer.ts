@@ -4,7 +4,7 @@ import { debugLog } from '../debug';
 import { resolveTemplateId } from './recipients';
 import { addConsolidatedPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
-import { addPlaceholderVariants, applyPlaceholders } from './utils';
+import { addPlaceholderVariants, applyPlaceholders, formatTemplateValueForHtml } from './utils';
 import {
   getCachedHtmlTemplate,
   readHtmlTemplateRawFromDrive,
@@ -126,10 +126,16 @@ export const renderHtmlFromHtmlTemplate = (args: {
     }
 
     const lineItemRows = collectLineItemRows(record, questions);
-    const placeholders = buildPlaceholderMap({ record, questions, lineItemRows, dataSources });
+    const placeholders = buildPlaceholderMap({
+      record,
+      questions,
+      lineItemRows,
+      dataSources,
+      formatValue: formatTemplateValueForHtml
+    });
     addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
     const validationWarnings = collectValidationWarnings(questions, record);
-    addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));
+    addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'), 'PARAGRAPH', formatTemplateValueForHtml);
     addFileIconPlaceholders(placeholders, questions, record);
 
     // Apply Doc-like line-item directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE) for HTML blocks,
