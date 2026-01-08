@@ -218,6 +218,19 @@ export class WebFormService {
     return this.listing.fetchSubmissionsBatch(form, questions, projection, pageSize, pageToken, includePageRecords, recordIds);
   }
 
+  public fetchSubmissionsSortedBatch(
+    formKey: string,
+    projection?: string[],
+    pageSize: number = 10,
+    pageToken?: string,
+    includePageRecords: boolean = true,
+    recordIds?: string[],
+    sort?: { fieldId?: string; direction?: string }
+  ): SubmissionBatchResult<Record<string, any>> {
+    const { form, questions } = this.getFormContextLite(formKey);
+    return this.listing.fetchSubmissionsSortedBatch(form, questions, projection, pageSize, pageToken, includePageRecords, recordIds, sort);
+  }
+
   public fetchSubmissionById(formKey: string, id: string): WebFormSubmission | null {
     const { form, questions } = this.getFormContextLite(formKey);
     return this.listing.fetchSubmissionById(form, questions, id);

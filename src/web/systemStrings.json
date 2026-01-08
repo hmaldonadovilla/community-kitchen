@@ -128,6 +128,12 @@
     "pageOf": { "en": "Page {page} of {total}", "fr": "Page {page} sur {total}", "nl": "Pagina {page} van {total}" },
     "recordsCountOne": { "en": "{count} record", "fr": "{count} enregistrement", "nl": "{count} record" },
     "recordsCountMany": { "en": "{count} records", "fr": "{count} enregistrements", "nl": "{count} records" },
+    "recordsLoadedOfTotal": {
+      "en": "{loaded} / {total} records",
+      "fr": "{loaded} / {total} enregistrements",
+      "nl": "{loaded} / {total} records"
+    },
+    "loadingMore": { "en": "Loading more…", "fr": "Chargement supplémentaire…", "nl": "Meer laden…" },
     "legend": {
       "title": { "en": "Legend", "fr": "Légende", "nl": "Legenda" },
       "warning": { "en": "Warning", "fr": "Avertissement", "nl": "Waarschuwing" },

@@ -136,7 +136,11 @@ components:
           description: Status of the question. Archived questions are ignored during form generation.
         listViewSort:
           type: object
-          description: Optional list-view sort metadata applied when rendering saved submissions.
+          description: |
+            Optional list-view sort metadata applied when rendering saved submissions.
+
+            If multiple questions have `listViewSort`, they are applied in ascending `priority` order
+            (priority 1 = primary sort, priority 2 = tie-breaker, etc).
           properties:
             direction:
               type: string

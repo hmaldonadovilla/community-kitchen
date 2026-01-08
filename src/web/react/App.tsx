@@ -22,6 +22,8 @@ import {
   renderHtmlTemplateApi,
   renderSummaryHtmlTemplateApi,
   clearHtmlRenderClientCache,
+  fetchSortedBatch,
+  ListSort,
   ListResponse,
   ListItem,
   fetchRecordById,
@@ -50,6 +52,7 @@ import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId, renderBundledHtm
 import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { detectDebug } from './app/utils';
+import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import {
   buildInitialLineItems,
   clearAutoIncrementFields,
@@ -538,12 +541,289 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     return { response, records };
   });
   const [listRefreshToken, setListRefreshToken] = useState(0);
-  const invalidateListCache = useCallback(() => {
+  const requestListRefresh = useCallback((opts?: { clearResponse?: boolean }) => {
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
     // back to the list does not reintroduce slow record fetches.
-    setListCache(prev => ({ response: null, records: prev.records }));
+    setListCache(prev => ({ response: opts?.clearResponse ? null : prev.response, records: prev.records }));
     setListRefreshToken(token => token + 1);
   }, []);
+
+  const [listFetch, setListFetch] = useState<{
+    phase: 'idle' | 'loading' | 'prefetching' | 'error';
+    message?: string;
+    loaded?: number;
+    total?: number;
+    pages?: number;
+  }>(() => ({ phase: 'idle' }));
+  const listFetchSeqRef = useRef(0);
+  const listPrefetchKeyRef = useRef<string>('');
+  const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
+
+  useEffect(() => {
+    listRecordsRef.current = listCache.records || {};
+  }, [listCache.records]);
+
+  const listViewProjection = useMemo(() => {
+    const cols = (definition.listView?.columns || []) as any[];
+    if (!cols.length) return [] as string[];
+    const meta = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
+    const ids = new Set<string>();
+    const add = (fid: string) => {
+      const id = (fid || '').toString().trim();
+      if (!id || meta.has(id)) return;
+      ids.add(id);
+    };
+    cols.forEach(col => {
+      const fid = (col as any)?.fieldId;
+      if (!fid) return;
+      if ((col as any)?.type === 'rule') {
+        collectListViewRuleColumnDependencies(col as any).forEach(add);
+        return;
+      }
+      add(fid);
+    });
+    const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date';
+    const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
+    if (listSearchMode === 'date' && dateSearchFieldId) {
+      add(dateSearchFieldId);
+    }
+    return Array.from(ids);
+  }, [definition.listView]);
+
+  useEffect(() => {
+    // If the server already embedded a complete list at bootstrap and the user hasn't requested refresh,
+    // do nothing. (Refresh requests increment listRefreshToken).
+    if (listRefreshToken === 0 && listCache.response?.items?.length && !listCache.response?.nextPageToken) {
+      setListFetch({ phase: 'idle' });
+      return;
+    }
+    if (!definition.listView) return;
+    const key = `${formKey}::${listRefreshToken}`;
+    if (listPrefetchKeyRef.current === key) return;
+    listPrefetchKeyRef.current = key;
+    const seq = ++listFetchSeqRef.current;
+    const startedAt = Date.now();
+
+    const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
+    const sort: ListSort | null = definition.listView?.defaultSort?.fieldId
+      ? {
+          fieldId: definition.listView.defaultSort.fieldId,
+          direction: (definition.listView.defaultSort.direction || 'desc') as any
+        }
+      : null;
+
+    const projection = listViewProjection.length ? listViewProjection : undefined;
+    const hasExisting = Boolean(listCache.response?.items?.length);
+
+    setListFetch({
+      phase: hasExisting ? 'prefetching' : 'loading',
+      loaded: hasExisting ? (listCache.response?.items?.length || 0) : 0,
+      total: listCache.response?.totalCount || undefined,
+      pages: 0
+    });
+    logEvent('list.sorted.prefetch.start', {
+      formKey,
+      pageSize,
+      projectionCount: projection ? projection.length : 0,
+      sortField: sort?.fieldId || null,
+      sortDirection: sort?.direction || null,
+      keepExisting: hasExisting
+    });
+
+    void (async () => {
+      try {
+        const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+        let token: string | undefined = undefined;
+        let aggregated: ListItem[] = [];
+        let pages = 0;
+        let lastList: ListResponse | null = null;
+
+        do {
+          // Step 1: fetch the next list page (sorted).
+          // We INCLUDE record hydration for the page to avoid N per-row roundtrips (which can hit Apps Script quotas
+          // and cause intermittent `null` responses in the client).
+          //
+          // Note: keep pageSize reasonably small via config; very large per-page hydration can still be heavy.
+          let batch: any = null;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            batch = await fetchSortedBatch(formKey, projection, pageSize, token, true, undefined, sort);
+            if (seq !== listFetchSeqRef.current) return;
+            if (batch && typeof batch === 'object') break;
+            logEvent('list.sorted.prefetch.retry', { attempt: attempt + 1, token: token || null, resType: batch === null ? 'null' : typeof batch });
+            await sleep(250 * (attempt + 1));
+          }
+          if (seq !== listFetchSeqRef.current) return;
+          const list = (() => {
+            if (batch && typeof batch === 'object') {
+              const maybeList = (batch as any).list;
+              if (maybeList && Array.isArray((maybeList as any).items)) return maybeList as ListResponse;
+              if (Array.isArray((batch as any).items)) return batch as any as ListResponse;
+            }
+            return null;
+          })();
+          if (!list || !Array.isArray((list as any).items)) {
+            const resType = batch === null ? 'null' : typeof batch;
+            const keys = batch && typeof batch === 'object' ? Object.keys(batch as any).slice(0, 15) : [];
+            logEvent('list.sorted.prefetch.invalidResponse', { resType, keys });
+            throw new Error('The server returned invalid list data (fetchSubmissionsSortedBatch).');
+          }
+
+          lastList = list;
+          const items = (list.items || []) as ListItem[];
+          aggregated = aggregated.concat(items);
+          token = (list as any).nextPageToken;
+          pages += 1;
+
+          setListCache(prev => ({
+            response: { ...list, items: aggregated },
+            records: { ...(prev.records || {}), ...(((batch as any)?.records as Record<string, WebFormSubmission>) || {}) }
+          }));
+
+          setListFetch({
+            phase: token ? 'prefetching' : 'idle',
+            loaded: aggregated.length,
+            total: (list as any).totalCount || aggregated.length,
+            pages
+          });
+
+          logEvent('list.sorted.prefetch.page', {
+            page: pages,
+            pageItems: items.length,
+            aggregated: aggregated.length,
+            totalCount: (list as any).totalCount,
+            hasNext: Boolean(token),
+            durationMs: Date.now() - startedAt
+          });
+
+          if (!token || aggregated.length >= ((list as any).totalCount || 200)) {
+            token = undefined;
+          }
+        } while (token);
+
+        if (seq !== listFetchSeqRef.current) return;
+        if (lastList) {
+          // Ensure the cached list is marked "complete" (no nextPageToken) once prefetch finishes.
+          setListCache(prev => ({
+            response: { ...lastList!, items: aggregated, nextPageToken: undefined },
+            records: prev.records
+          }));
+        }
+        setListFetch({ phase: 'idle', loaded: aggregated.length, total: lastList?.totalCount || aggregated.length, pages });
+        logEvent('list.sorted.prefetch.done', {
+          pages,
+          items: aggregated.length,
+          durationMs: Date.now() - startedAt
+        });
+      } catch (err: any) {
+        if (seq !== listFetchSeqRef.current) return;
+        const msg = (err?.message || err?.toString?.() || 'Failed to load list.').toString();
+        setListFetch(prev => ({ ...prev, phase: 'error', message: msg }));
+        logEvent('list.sorted.prefetch.error', { message: msg });
+      }
+    })();
+    // Do NOT cancel on view changes; this prefetch should continue in the background.
+  }, [definition.listView, formKey, listCache.response, listRefreshToken, listViewProjection, logEvent]);
+
+  /**
+   * Merge a locally-known record update into the cached list rows so navigating back to the list
+   * does NOT require a server refetch. Other users' changes still require an explicit Refresh.
+   */
+  const upsertListCacheRow = useCallback(
+    (args: {
+      recordId: string;
+      values?: Record<string, any>;
+      createdAt?: string;
+      updatedAt?: string;
+      status?: string | null;
+      pdfUrl?: string;
+    }) => {
+      const recordId = (args.recordId || '').toString();
+      if (!recordId) return;
+      setListCache(prev => {
+        const nextRecords = { ...(prev.records || {}) };
+        const existing = nextRecords[recordId];
+        if (existing) {
+          nextRecords[recordId] = {
+            ...existing,
+            createdAt: args.createdAt || existing.createdAt,
+            updatedAt: args.updatedAt || existing.updatedAt,
+            status: args.status !== undefined ? (args.status as any) : existing.status,
+            pdfUrl: args.pdfUrl !== undefined ? (args.pdfUrl as any) : (existing as any).pdfUrl,
+            values: args.values ? { ...(existing.values as any), ...(args.values as any) } : existing.values
+          } as any;
+        } else {
+          nextRecords[recordId] = {
+            id: recordId,
+            formKey,
+            language,
+            createdAt: args.createdAt,
+            updatedAt: args.updatedAt,
+            status: args.status || undefined,
+            pdfUrl: args.pdfUrl,
+            values: args.values || {},
+            lineItems: {},
+            submittedAt: undefined
+          } as any;
+        }
+
+        const response = prev.response;
+        if (!response || !Array.isArray((response as any).items)) {
+          return { response: prev.response, records: nextRecords };
+        }
+
+        const metaKeys = new Set(['id', '__rowNumber', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
+        const values = (args.values || {}) as any;
+        let found = false;
+        const nextItems = (response.items || []).map((row: any) => {
+          if (!row || row.id !== recordId) return row;
+          found = true;
+          const patched: any = { ...row };
+          if (args.createdAt) patched.createdAt = args.createdAt;
+          if (args.updatedAt) patched.updatedAt = args.updatedAt;
+          if (args.status !== undefined) patched.status = args.status || undefined;
+          if (args.pdfUrl !== undefined) patched.pdfUrl = args.pdfUrl;
+          Object.keys(patched).forEach(k => {
+            if (metaKeys.has(k)) return;
+            if (values[k] !== undefined) patched[k] = values[k];
+          });
+          return patched;
+        });
+
+        // If the record isn't present in the cached list yet (new record created during this session),
+        // insert a best-effort row so it appears without a refetch.
+        if (!found) {
+          const cols: any[] = Array.isArray((definition as any)?.listView?.columns) ? ((definition as any).listView.columns as any[]) : [];
+          const dateSearchFieldId = (((definition as any)?.listView?.search as any)?.dateFieldId || '').toString().trim();
+          const fieldIds = new Set<string>();
+          cols.forEach(c => {
+            const fid = (c?.fieldId || '').toString().trim();
+            if (fid) fieldIds.add(fid);
+            if ((c as any)?.type === 'rule') {
+              collectListViewRuleColumnDependencies(c as any).forEach(dep => {
+                const d = (dep || '').toString().trim();
+                if (d) fieldIds.add(d);
+              });
+            }
+          });
+          if (dateSearchFieldId) fieldIds.add(dateSearchFieldId);
+          const row: any = { id: recordId };
+          if (args.createdAt) row.createdAt = args.createdAt;
+          if (args.updatedAt) row.updatedAt = args.updatedAt;
+          if (args.status !== undefined) row.status = args.status || undefined;
+          if (args.pdfUrl !== undefined) row.pdfUrl = args.pdfUrl;
+          Array.from(fieldIds).forEach(fid => {
+            if (metaKeys.has(fid)) return;
+            if (values[fid] !== undefined) row[fid] = values[fid];
+          });
+          nextItems.unshift(row);
+        }
+
+        const nextTotal = Math.max(Number((response as any).totalCount || 0) || 0, nextItems.length);
+        return { response: { ...(response as any), items: nextItems, totalCount: nextTotal }, records: nextRecords };
+      });
+    },
+    [definition, formKey, language]
+  );
 
   const applyRecordSnapshot = useCallback(
     (snapshot: WebFormSubmission) => {
@@ -618,6 +898,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         response: prev.response,
         records: { ...prev.records, [id]: snapshot }
       }));
+      // Also update any cached list row so navigating back to the list reflects this snapshot without refetching.
+      try {
+        upsertListCacheRow({
+          recordId: id,
+          values: (snapshot.values as any) || {},
+          createdAt: snapshot.createdAt,
+          updatedAt: snapshot.updatedAt,
+          status: (snapshot.status as any) || null,
+          pdfUrl: (snapshot as any).pdfUrl
+        });
+      } catch (_) {
+        // ignore
+      }
 
       // Prefetch Summary HTML template (client-side cached) so Summary view is instant when users tap it.
       // Do NOT await: this should run in parallel with any other async work.
@@ -670,7 +963,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
       }
     },
-    [definition, formKey, logEvent]
+    [definition, formKey, logEvent, upsertListCacheRow]
   );
 
   const loadRecordSnapshot = useCallback(
@@ -730,10 +1023,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     } catch (err: any) {
       logEvent('cache.client.clear.error', { message: err?.message || err?.toString?.() || 'unknown' });
     }
-    invalidateListCache();
+    // Trigger a list refresh, but keep the current list visible until new data arrives.
+    requestListRefresh({ clearResponse: false });
     if (!selectedRecordId) return;
     await loadRecordSnapshot(selectedRecordId);
-  }, [invalidateListCache, loadRecordSnapshot, selectedRecordId]);
+  }, [loadRecordSnapshot, requestListRefresh, selectedRecordId]);
 
   const loadOptionsForField = useCallback(
     (field: any, groupId?: string) => {
@@ -2359,7 +2653,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           status: autoSaveStatusValue
         }));
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
-        invalidateListCache();
+        // Keep list view up-to-date without triggering a refetch.
+        upsertListCacheRow({
+          recordId: newId,
+          // Only patch keys that already exist in list rows (upsertListCacheRow does this safely).
+          values: valuesRef.current as any,
+          createdAt: (res?.meta?.createdAt || '').toString() || undefined,
+          updatedAt: updatedAt || undefined,
+          status: autoSaveStatusValue
+        });
         logEvent('autosave.success', { reason, recordId: newId || null, updatedAt: updatedAt || null });
       } catch (err: any) {
         const errText = (err?.message || err?.toString?.() || 'Autosave failed.').toString();
@@ -2380,7 +2682,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
       }
     },
-    [autoSaveDebounceMs, autoSaveEnabled, autoSaveStatusValue, definition, formKey, invalidateListCache, loadRecordSnapshot, logEvent]
+    [autoSaveDebounceMs, autoSaveEnabled, autoSaveStatusValue, definition, formKey, loadRecordSnapshot, logEvent, upsertListCacheRow]
   );
 
   // Release autosave hold after dedup evaluation completes (or keys become incomplete),
@@ -2572,7 +2874,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             status: autoSaveStatusValue
           }));
           setDraftSave({ phase: 'saved', updatedAt: (res?.meta?.updatedAt || '').toString() || undefined });
-          invalidateListCache();
+          // Keep list view up-to-date without triggering a refetch.
+          upsertListCacheRow({
+            recordId,
+            values: valuesRef.current as any,
+            createdAt: (res?.meta?.createdAt || '').toString() || undefined,
+            updatedAt: (res?.meta?.updatedAt || '').toString() || undefined,
+            status: autoSaveStatusValue
+          });
           logEvent('upload.ensureRecord.saved', { recordId, fieldPath: args.fieldPath });
         } catch (err: any) {
           const msg = (err?.message || err?.toString?.() || 'Failed to create draft record.').toString();
@@ -2656,7 +2965,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           status: autoSaveStatusValue
         }));
         setDraftSave({ phase: 'saved', updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined });
-        invalidateListCache();
+        // Keep list view up-to-date without triggering a refetch.
+        upsertListCacheRow({
+          recordId,
+          values: nextValues as any,
+          updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined,
+          status: autoSaveStatusValue
+        });
         logEvent('upload.saveUrls.success', { fieldPath: args.fieldPath, recordId, urls: urls.length });
         return { success: true };
       } catch (err: any) {
@@ -2665,7 +2980,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return { success: false, message: msg };
       }
     },
-    [autoSaveStatusValue, definition, formKey, invalidateListCache, isClosedRecord, logEvent]
+    [autoSaveStatusValue, definition, formKey, isClosedRecord, logEvent, upsertListCacheRow]
   );
 
   useEffect(() => {
@@ -2926,7 +3241,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               continue;
             }
 
-            invalidateListCache();
+            // Keep list view up-to-date without triggering a refetch.
+            upsertListCacheRow({
+              recordId,
+              updatedAt: (r.updatedAt || '').toString() || undefined,
+              status: (r.status || null) as any,
+              pdfUrl: (r.pdfUrl || '').toString() || undefined
+            });
             logEvent('followup.auto.success', { action, recordId, status: r.status || null });
             setLastSubmissionMeta(prev => ({
               ...(prev || { id: recordId }),
@@ -2968,7 +3289,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
       }
       setView(summaryViewEnabled ? 'summary' : 'form');
-      invalidateListCache();
     } catch (err: any) {
       setStatus(err?.message || 'Submit failed');
       setStatusLevel('error');
@@ -3403,12 +3723,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           cachedRecords={listCache.records}
           refreshToken={listRefreshToken}
           onDiagnostic={logEvent}
-          onCache={({ response, records }) => {
-            setListCache(prev => ({
-              response,
-              records: { ...prev.records, ...records }
-            }));
-          }}
+          autoFetch={false}
+          loading={listFetch.phase === 'loading'}
+          prefetching={listFetch.phase === 'prefetching'}
+          error={listFetch.phase === 'error' ? (listFetch.message || 'Failed to load list.') : null}
           onSelect={handleRecordSelect}
         />
       )}

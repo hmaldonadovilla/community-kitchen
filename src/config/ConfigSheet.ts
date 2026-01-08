@@ -259,6 +259,7 @@ export class ConfigSheet {
     const idxQNl = findHeader(['question (nl)'], 4);
     const idxRequired = findHeader(['required'], 5);
     const idxStatus = findHeader(['status'], 9);
+    const idxConfig = findHeader(['config', 'config (json/ref)'], 10);
     const idxListView = findHeader(['list view', 'list view?'], 14);
 
     return data.map(row => {
@@ -266,6 +267,9 @@ export class ConfigSheet {
       const statusRaw = row[idxStatus] ? row[idxStatus].toString().trim().toLowerCase() : 'active';
       const status = statusRaw === 'archived' ? 'Archived' : 'Active';
       const listViewFlag = row[idxListView] !== '' && row[idxListView] !== null ? !!row[idxListView] : false;
+      const rawConfig = row[idxConfig] ? row[idxConfig].toString().trim() : '';
+      const listViewSort =
+        listViewFlag && rawConfig && /listview/i.test(rawConfig) ? this.parseListViewSort(rawConfig) : undefined;
 
       return {
         id: row[0] ? row[0].toString() : '',
@@ -288,7 +292,7 @@ export class ConfigSheet {
         visibility: undefined,
         clearOnChange: false,
         selectionEffects: undefined,
-        listViewSort: undefined,
+        listViewSort,
         autoIncrement: undefined,
         valueMap: undefined,
         derivedValue: undefined

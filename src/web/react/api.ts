@@ -47,6 +47,8 @@ export interface BatchResponse {
   records: Record<string, WebFormSubmission>;
 }
 
+export type ListSort = { fieldId?: string; direction?: 'asc' | 'desc' };
+
 export interface DataSourceRequest {
   source: DataSourceConfig;
   locale?: LangCode;
@@ -291,6 +293,17 @@ export const fetchBatch = (
   recordIds?: string[]
 ): Promise<BatchResponse> =>
   runAppsScript<BatchResponse>('fetchSubmissionsBatch', formKey, projection, pageSize, pageToken, includePageRecords, recordIds);
+
+export const fetchSortedBatch = (
+  formKey: string,
+  projection?: string[],
+  pageSize?: number,
+  pageToken?: string,
+  includePageRecords: boolean = true,
+  recordIds?: string[],
+  sort?: ListSort | null
+): Promise<BatchResponse> =>
+  runAppsScript<BatchResponse>('fetchSubmissionsSortedBatch', formKey, projection, pageSize, pageToken, includePageRecords, recordIds, sort || null);
 
 export const fetchRecordById = (formKey: string, id: string): Promise<WebFormSubmission | null> =>
   runAppsScript<WebFormSubmission | null>('fetchSubmissionById', formKey, id);

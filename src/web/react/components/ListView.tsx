@@ -24,6 +24,14 @@ interface ListViewProps {
   refreshToken?: number;
   onCache?: (payload: { response: ListResponse; records: Record<string, WebFormSubmission> }) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
+  /**
+   * When false, ListView becomes presentational only and will NOT issue list fetch requests.
+   * (Used when list fetching/prefetching is handled at the App level so it can continue across views.)
+   */
+  autoFetch?: boolean;
+  loading?: boolean;
+  prefetching?: boolean;
+  error?: string | null;
 }
 
 const ListView: React.FC<ListViewProps> = ({
@@ -35,10 +43,15 @@ const ListView: React.FC<ListViewProps> = ({
   cachedRecords,
   refreshToken = 0,
   onCache,
-  onDiagnostic
+  onDiagnostic,
+  autoFetch = true,
+  loading: loadingProp,
+  prefetching: prefetchingProp,
+  error: errorProp
 }) => {
   const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
   const [loading, setLoading] = useState(false);
+  const [prefetching, setPrefetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [records, setRecords] = useState<Record<string, WebFormSubmission>>(cachedRecords || {});
   const [allItems, setAllItems] = useState<ListItem[]>(cachedResponse?.items || []);
@@ -54,6 +67,10 @@ const ListView: React.FC<ListViewProps> = ({
   const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
   const dateSearchEnabled = listSearchMode === 'date' && !!dateSearchFieldId;
   const searchInputId = 'ck-list-search';
+
+  const uiLoading = loadingProp !== undefined ? Boolean(loadingProp) : loading;
+  const uiPrefetching = prefetchingProp !== undefined ? Boolean(prefetchingProp) : prefetching;
+  const uiError = errorProp !== undefined ? errorProp : error;
 
   useEffect(() => {
     if (cachedResponse?.items?.length) {
@@ -121,12 +138,179 @@ const ListView: React.FC<ListViewProps> = ({
 
   const activeFetchRef = useRef(0);
 
-  const fetchAllPages = async () => {
+  const encodePageTokenClient = (offset: number): string => {
+    const n = Math.max(0, Math.floor(Number(offset) || 0));
+    const text = n.toString();
+    try {
+      // Apps Script uses Utilities.base64Encode(offset.toString()) for page tokens.
+      // In the browser, btoa() matches that for ASCII strings.
+      if (typeof globalThis !== 'undefined' && typeof (globalThis as any).btoa === 'function') {
+        return (globalThis as any).btoa(text);
+      }
+    } catch (_) {
+      // ignore
+    }
+    // Best-effort fallback: return the raw offset string (may not decode on server if base64 is required).
+    return text;
+  };
+
+  const isResponseComplete = (res: ListResponse | null | undefined): boolean => {
+    if (!res || !Array.isArray((res as any).items)) return false;
+    if ((res as any).nextPageToken) return false;
+    const total = Number((res as any).totalCount || 0);
+    if (!Number.isFinite(total) || total <= 0) return (res.items || []).length > 0;
+    return (res.items || []).length >= total;
+  };
+
+  const fetchListPage = async (args: {
+    token?: string;
+    pageSize: number;
+    includePageRecords: boolean;
+  }): Promise<{ list: ListResponse; records: Record<string, WebFormSubmission> }> => {
+    // Primary path: use batch endpoint (more reliable in the presence of stale/duplicate `fetchSubmissions` functions).
+    let listRes: ListResponse | null | undefined;
+    let recordsRes: Record<string, WebFormSubmission> = {};
+    try {
+      const batch = await fetchBatch(
+        formKey,
+        projection.length ? projection : undefined,
+        args.pageSize,
+        args.token,
+        args.includePageRecords
+      );
+      const list = (batch as any)?.list as ListResponse | undefined;
+      if (list && Array.isArray((list as any).items)) {
+        listRes = list;
+      }
+      if (args.includePageRecords && batch && typeof (batch as any).records === 'object') {
+        recordsRes = ((batch as any).records || {}) as Record<string, WebFormSubmission>;
+      }
+    } catch (_) {
+      listRes = undefined;
+      recordsRes = {};
+    }
+
+    // Legacy fallback: attempt direct list endpoint if batch is unavailable.
+    if (!listRes) {
+      listRes = await fetchList(
+        formKey,
+        projection.length ? projection : undefined,
+        args.pageSize,
+        args.token
+      );
+      recordsRes = {};
+    }
+
+    return { list: listRes, records: recordsRes };
+  };
+
+  const fetchFirstPageThenPrefetch = async () => {
     const requestId = ++activeFetchRef.current;
     const startedAt = Date.now();
-    const fetchPageSize = Math.min(50, Math.max(pageSize, 25));
+    const firstPageSize = Math.max(1, Math.min(pageSize, 50));
+    const backgroundPageSize = Math.min(50, Math.max(pageSize, 25));
 
+    const cachedHasItems = Boolean(cachedResponse?.items?.length);
+    const cachedIsComplete = isResponseComplete(cachedResponse);
+    const cachedToken = cachedResponse?.nextPageToken;
+
+    // If we already have a complete cached list, do nothing.
+    if (cachedHasItems && cachedIsComplete) {
+      setLoading(false);
+      setPrefetching(false);
+      setError(null);
+      onDiagnostic?.('list.cache.used', {
+        formKey,
+        items: cachedResponse?.items?.length || 0,
+        totalCount: cachedResponse?.totalCount,
+        complete: true
+      });
+      return;
+    }
+
+    // If we have a partial cached list, resume background prefetch from its page token.
+    if (cachedHasItems && cachedToken) {
+      setLoading(false);
+      setPrefetching(true);
+      setError(null);
+      onDiagnostic?.('list.fetch.resume', {
+        formKey,
+        cachedItems: cachedResponse?.items?.length || 0,
+        totalCount: cachedResponse?.totalCount,
+        backgroundPageSize,
+        projectionCount: projection.length
+      });
+
+      void (async () => {
+        try {
+          let token: string | undefined = cachedToken;
+          let aggregated: ListItem[] = [...(cachedResponse?.items || [])];
+          let lastResponse: ListResponse | null = null;
+          let page = 0;
+
+          onDiagnostic?.('list.fetch.background.start', {
+            formKey,
+            firstPageSize,
+            backgroundPageSize,
+            startOffsetItems: aggregated.length
+          });
+
+          while (token) {
+            const { list } = await fetchListPage({ token, pageSize: backgroundPageSize, includePageRecords: false });
+            if (requestId !== activeFetchRef.current) return;
+            if (!list || !Array.isArray((list as any).items)) {
+              const resType = list === null ? 'null' : typeof list;
+              const keys = list && typeof list === 'object' ? Object.keys(list as any).slice(0, 12) : [];
+              onDiagnostic?.('list.fetch.invalidResponse', { hasResponse: !!list, resType, keys, phase: 'background' });
+              break;
+            }
+            lastResponse = list;
+            const items = list.items || [];
+            aggregated = aggregated.concat(items);
+            token = list.nextPageToken;
+            page += 1;
+
+            setAllItems([...aggregated]);
+            setTotalCount(list.totalCount || aggregated.length);
+            onCache?.({ response: { ...list, items: aggregated }, records: {} });
+
+            onDiagnostic?.('list.fetch.background.page', {
+              page,
+              pageItems: items.length,
+              aggregated: aggregated.length,
+              totalCount: list.totalCount,
+              hasNext: !!token,
+              durationMs: Date.now() - startedAt
+            });
+
+            if (!token || aggregated.length >= (list.totalCount || 200)) {
+              token = undefined;
+            }
+          }
+
+          if (requestId !== activeFetchRef.current) return;
+          if (lastResponse) {
+            onCache?.({ response: { ...lastResponse, items: aggregated, nextPageToken: undefined }, records: {} });
+          }
+          setPrefetching(false);
+          onDiagnostic?.('list.fetch.background.done', {
+            pages: page,
+            items: aggregated.length,
+            durationMs: Date.now() - startedAt
+          });
+        } catch (err: any) {
+          if (requestId !== activeFetchRef.current) return;
+          const message = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
+          setPrefetching(false);
+          onDiagnostic?.('list.fetch.background.error', { message });
+        }
+      })();
+      return;
+    }
+
+    // No cache (or cache empty): fetch just the first UI page ASAP, then prefetch the rest in the background.
     setLoading(true);
+    setPrefetching(false);
     setError(null);
     setAllItems([]);
     setTotalCount(0);
@@ -134,90 +318,196 @@ const ListView: React.FC<ListViewProps> = ({
     onDiagnostic?.('list.fetch.start', {
       formKey,
       uiPageSize: pageSize,
-      fetchPageSize,
+      firstPageSize,
+      backgroundPageSize,
       projectionCount: projection.length
     });
 
     try {
-      let token: string | undefined;
-      let aggregated: ListItem[] = [];
-      let lastResponse: ListResponse | null = null;
-      let page = 0;
+      // Use listViewSort (defaultSort) to prioritize fetching the most relevant rows for the initial page.
+      // Since the server list endpoint is paginated by sheet row order, we "tail-fetch" for desc date/datetime/meta sorts.
+      const defaultSortIsRuleColumn = columns.some(c => c.fieldId === defaultSortField && isRuleColumn(c));
+      const sortType =
+        defaultSortField === 'createdAt' || defaultSortField === 'updatedAt' ? 'DATETIME' : (questionTypeById[defaultSortField] || '');
+      const shouldTailFetchFirst =
+        !defaultSortIsRuleColumn &&
+        defaultSortDirection === 'desc' &&
+        (defaultSortField === 'createdAt' ||
+          defaultSortField === 'updatedAt' ||
+          sortType.toString().toUpperCase() === 'DATE' ||
+          sortType.toString().toUpperCase() === 'DATETIME');
 
-      do {
-        // Primary path: use batch endpoint (more reliable in the presence of stale/duplicate `fetchSubmissions` functions).
-        let res: ListResponse | null | undefined;
-        try {
-          const batch = await fetchBatch(
-            formKey,
-            projection.length ? projection : undefined,
-            fetchPageSize,
-            token,
-            false
-          );
-          const list = (batch as any)?.list as ListResponse | undefined;
-          if (list && Array.isArray((list as any).items)) {
-            res = list;
-          }
-        } catch (_) {
-          res = undefined;
-        }
+      let list: ListResponse | null = null;
+      let pageRecords: Record<string, WebFormSubmission> = {};
 
-        // Legacy fallback: attempt direct list endpoint if batch is unavailable.
-        if (!res) {
-          res = await fetchList(
-            formKey,
-            projection.length ? projection : undefined,
-            fetchPageSize,
-            token
-          );
-        }
+      const firstPageStrategy: 'head' | 'tail' = shouldTailFetchFirst ? 'tail' : 'head';
+      if (firstPageStrategy === 'tail') {
+        onDiagnostic?.('list.fetch.firstPage.strategy', {
+          formKey,
+          strategy: 'tail',
+          sortField: defaultSortField,
+          sortDirection: defaultSortDirection,
+          sortType
+        });
+
+        // Step 1: cheap meta fetch to learn totalCount, then fetch the last page-sized window.
+        const meta = await fetchListPage({ token: undefined, pageSize: 1, includePageRecords: false });
         if (requestId !== activeFetchRef.current) return;
-        if (!res || !Array.isArray((res as any).items)) {
-          const resType = res === null ? 'null' : typeof res;
-          const keys = res && typeof res === 'object' ? Object.keys(res as any).slice(0, 12) : [];
-          onDiagnostic?.('list.fetch.invalidResponse', { hasResponse: !!res, resType, keys });
-          setError(
-            'The server returned no list data. This usually means your Apps Script project has an older `fetchSubmissions` function still present (or the latest dist/Code.js was not fully pasted). Open Apps Script → search for `function fetchSubmissions` and ensure there is only one definition, then redeploy.'
-          );
-          break;
-        }
-        lastResponse = res;
-        const items = res.items || [];
-        aggregated = aggregated.concat(items);
-        token = res.nextPageToken;
-        page += 1;
+        const total = Number((meta?.list as any)?.totalCount || 0);
+        const totalCount = Number.isFinite(total) ? total : 0;
+        const lastOffset = Math.max(0, totalCount - firstPageSize);
+        const token = lastOffset > 0 ? encodePageTokenClient(lastOffset) : undefined;
 
-        setAllItems([...aggregated]);
-        setTotalCount(res.totalCount || aggregated.length);
+        onDiagnostic?.('list.fetch.firstPage.tail', { formKey, totalCount, lastOffset, firstPageSize });
 
-        onDiagnostic?.('list.fetch.page', {
-          page,
-          pageItems: items.length,
-          aggregated: aggregated.length,
-          totalCount: res.totalCount,
-          hasNext: !!token,
-          durationMs: Date.now() - startedAt
+        const tail = await fetchListPage({ token, pageSize: firstPageSize, includePageRecords: true });
+        list = tail?.list || null;
+        pageRecords = tail?.records || {};
+      } else {
+        onDiagnostic?.('list.fetch.firstPage.strategy', {
+          formKey,
+          strategy: 'head',
+          sortField: defaultSortField,
+          sortDirection: defaultSortDirection
         });
 
-        if (!token || aggregated.length >= (res.totalCount || 200)) {
-          token = undefined;
-        }
-      } while (token);
-
-      setPageIndex(0);
-      if (lastResponse) {
-        onCache?.({
-          response: { ...lastResponse, items: aggregated, nextPageToken: undefined },
-          records: {}
+        onDiagnostic?.('list.fetch.firstPage.start', { formKey, firstPageSize });
+        const first = await fetchListPage({
+          token: undefined,
+          pageSize: firstPageSize,
+          includePageRecords: true
         });
+        list = first?.list || null;
+        pageRecords = first?.records || {};
       }
 
-      onDiagnostic?.('list.fetch.done', {
-        pages: page,
-        items: aggregated.length,
+      if (requestId !== activeFetchRef.current) return;
+      if (!list || !Array.isArray((list as any).items)) {
+        const resType = list === null ? 'null' : typeof list;
+        const keys = list && typeof list === 'object' ? Object.keys(list as any).slice(0, 12) : [];
+        onDiagnostic?.('list.fetch.invalidResponse', { hasResponse: !!list, resType, keys, phase: 'firstPage' });
+        setError(
+          'The server returned no list data. This usually means your Apps Script project has an older `fetchSubmissions` function still present (or the latest dist/Code.js was not fully pasted). Open Apps Script → search for `function fetchSubmissions` and ensure there is only one definition, then redeploy.'
+        );
+        return;
+      }
+
+      const firstItems = list.items || [];
+      setAllItems(firstItems);
+      setTotalCount(list.totalCount || firstItems.length);
+      setPageIndex(0);
+      if (pageRecords && Object.keys(pageRecords).length) {
+        setRecords(prev => ({ ...prev, ...pageRecords }));
+      }
+      onCache?.({ response: list, records: pageRecords || {} });
+
+      onDiagnostic?.('list.fetch.firstPage.ok', {
+        formKey,
+        items: firstItems.length,
+        totalCount: list.totalCount,
+        hasNext: !!list.nextPageToken,
+        hydratedRecords: pageRecords ? Object.keys(pageRecords).length : 0,
         durationMs: Date.now() - startedAt
       });
+
+      // Unblock UI ASAP after the first page.
+      setLoading(false);
+
+      // Background prefetch: fetch remaining pages (list only) without blocking UI.
+      const mergeUniqueItems = (existing: ListItem[], incoming: ListItem[]): ListItem[] => {
+        const out = [...existing];
+        const seen = new Set<string>();
+        existing.forEach(i => {
+          const id = (i?.id || '').toString();
+          if (id) seen.add(id);
+        });
+        incoming.forEach(i => {
+          const id = (i?.id || '').toString();
+          if (!id || seen.has(id)) return;
+          seen.add(id);
+          out.push(i);
+        });
+        return out;
+      };
+
+      // For "tail" strategy we still want to prefetch the rest of the dataset from the start (head),
+      // because the tail page has no nextPageToken even though there are older records.
+      const initialBackgroundToken = firstPageStrategy === 'tail' ? undefined : list.nextPageToken;
+      const totalCount = list.totalCount || 0;
+      if (firstItems.length >= (totalCount || 200) || (firstPageStrategy === 'head' && !initialBackgroundToken)) {
+        setPrefetching(false);
+        onDiagnostic?.('list.fetch.done', { pages: 1, items: firstItems.length, durationMs: Date.now() - startedAt });
+        return;
+      }
+
+      setPrefetching(true);
+      onDiagnostic?.('list.fetch.background.start', {
+        formKey,
+        backgroundPageSize,
+        startOffsetItems: firstItems.length
+      });
+
+      void (async () => {
+        try {
+          let token: string | undefined = initialBackgroundToken;
+          let firstBackgroundFetch = firstPageStrategy === 'tail'; // tail strategy starts with head token=undefined
+          let aggregated: ListItem[] = [...firstItems];
+          let lastResponse: ListResponse | null = list;
+          let page = 1;
+
+          while (firstBackgroundFetch || token) {
+            const pageToken = firstBackgroundFetch ? undefined : token;
+            firstBackgroundFetch = false;
+            const { list: pageList } = await fetchListPage({ token: pageToken, pageSize: backgroundPageSize, includePageRecords: false });
+            if (requestId !== activeFetchRef.current) return;
+            if (!pageList || !Array.isArray((pageList as any).items)) {
+              const resType = pageList === null ? 'null' : typeof pageList;
+              const keys = pageList && typeof pageList === 'object' ? Object.keys(pageList as any).slice(0, 12) : [];
+              onDiagnostic?.('list.fetch.invalidResponse', { hasResponse: !!pageList, resType, keys, phase: 'background' });
+              break;
+            }
+
+            lastResponse = pageList;
+            const items = pageList.items || [];
+            aggregated = mergeUniqueItems(aggregated, items);
+            token = pageList.nextPageToken;
+            page += 1;
+
+            setAllItems([...aggregated]);
+            setTotalCount(pageList.totalCount || aggregated.length);
+            onCache?.({ response: { ...pageList, items: aggregated }, records: {} });
+
+            onDiagnostic?.('list.fetch.background.page', {
+              page,
+              pageItems: items.length,
+              aggregated: aggregated.length,
+              totalCount: pageList.totalCount,
+              hasNext: !!token,
+              durationMs: Date.now() - startedAt
+            });
+
+            if (!token || aggregated.length >= (pageList.totalCount || 200)) {
+              token = undefined;
+            }
+          }
+
+          if (requestId !== activeFetchRef.current) return;
+          if (lastResponse) {
+            onCache?.({ response: { ...lastResponse, items: aggregated, nextPageToken: undefined }, records: {} });
+          }
+          setPrefetching(false);
+          onDiagnostic?.('list.fetch.background.done', {
+            pages: page,
+            items: aggregated.length,
+            durationMs: Date.now() - startedAt
+          });
+        } catch (err: any) {
+          if (requestId !== activeFetchRef.current) return;
+          const message = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
+          setPrefetching(false);
+          onDiagnostic?.('list.fetch.background.error', { message });
+        }
+      })();
     } catch (err: any) {
       if (requestId !== activeFetchRef.current) return;
       const message = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
@@ -231,16 +521,28 @@ const ListView: React.FC<ListViewProps> = ({
   };
 
   useEffect(() => {
+    if (!autoFetch) return;
+    // If we already have cached items, never refetch on navigation. Users can explicitly Refresh.
     if (cachedResponse?.items?.length) {
-      onDiagnostic?.('list.bootstrap.used', {
+      setLoading(false);
+      setPrefetching(false);
+      setError(null);
+      onDiagnostic?.('list.cache.used', {
+        formKey,
         items: cachedResponse.items.length,
-        totalCount: cachedResponse.totalCount
+        totalCount: cachedResponse.totalCount,
+        complete: isResponseComplete(cachedResponse)
       });
       return;
     }
-    fetchAllPages();
+
+    fetchFirstPageThenPrefetch();
+    return () => {
+      // Cancel any in-flight list fetch when switching forms/refreshing/unmounting.
+      activeFetchRef.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formKey, refreshToken]);
+  }, [autoFetch, formKey, refreshToken]);
 
   useEffect(() => {
     setPageIndex(0);
@@ -361,6 +663,9 @@ const ListView: React.FC<ListViewProps> = ({
   const totalPages = Math.max(1, Math.ceil(visibleItems.length / pageSize));
   const showPrev = pageIndex > 0;
   const showNext = pageIndex < totalPages - 1;
+  const loadedCount = (allItems || []).length;
+  const trimmedSearch = searchValue.trim();
+  const showLoadedOfTotal = !trimmedSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
 
   const formatDateOnly = (value: any): string | null => {
     if (value === undefined || value === null || value === '') return null;
@@ -648,8 +953,14 @@ const ListView: React.FC<ListViewProps> = ({
           ) : null}
         </div>
       </div>
-      {loading && <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>}
-      {error && <div className="error">{error}</div>}
+      {uiLoading ? (
+        <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
+      ) : uiPrefetching ? (
+        <div className="status muted" style={{ opacity: 0.9 }}>
+          {tSystem('list.loadingMore', language, 'Loading more…')}
+        </div>
+      ) : null}
+      {uiError && <div className="error">{uiError}</div>}
       <div className="list-table-wrapper">
         <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
           <thead>
@@ -737,12 +1048,14 @@ const ListView: React.FC<ListViewProps> = ({
         <div className="muted" style={{ alignSelf: 'center' }}>
           {tSystem('list.pageOf', language, 'Page {page} of {total}', { page: totalPages ? pageIndex + 1 : 0, total: totalPages })}{' '}
           •{' '}
-          {tSystem(
-            (visibleItems.length || totalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
-            language,
-            (visibleItems.length || totalCount) === 1 ? '{count} record' : '{count} records',
-            { count: visibleItems.length || totalCount }
-          )}
+          {showLoadedOfTotal
+            ? tSystem('list.recordsLoadedOfTotal', language, '{loaded} / {total} records', { loaded: loadedCount, total: totalCount })
+            : tSystem(
+                (visibleItems.length || totalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
+                language,
+                (visibleItems.length || totalCount) === 1 ? '{count} record' : '{count} records',
+                { count: visibleItems.length || totalCount }
+              )}
         </div>
         <button type="button" onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))} disabled={!showNext}>
           {tSystem('list.next', language, 'Next')}

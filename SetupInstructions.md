@@ -120,7 +120,10 @@ This project uses TypeScript. You need to build the script before using it in Go
         - `always`: show even if hidden by `visibility`
         - `never`: never show in summary
 
-    - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON. Lower priorities win; when nothing is specified we fall back to `updatedAt desc`.
+    - Optional: add a `List View?` column (to the right of Validation Rules). Mark `TRUE` on the fields you want to show in the list view; if at least one is `TRUE`, the form starts in list mode automatically. Labels come from the question text. You can also define the default sort for a given column by adding `"listViewSort": { "direction": "desc", "priority": 1 }` to that question’s Config JSON.
+      - Lower `priority` numbers are evaluated first.
+      - If multiple fields have `listViewSort`, they are applied as **tie-breakers in priority order** (priority 1 = primary, priority 2 = secondary, etc).
+      - When nothing is specified we fall back to `updatedAt desc`.
     - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
       - Recommended (consolidated): use `listView.metaColumns` instead:
 
