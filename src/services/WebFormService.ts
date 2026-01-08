@@ -18,10 +18,11 @@ import { ListingService } from './webform/listing';
 import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
 import { buildReactTemplate } from './webform/template';
-import { loadDedupRules } from './dedup';
+import { loadDedupRules, computeDedupSignature } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
 import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
+import { ensureRecordIndexSheet } from './webform/recordIndex';
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -241,6 +242,20 @@ export class WebFormService {
     return this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber);
   }
 
+  /**
+   * Cheap record version check used by the React client to validate cached records.
+   */
+  public getRecordVersion(
+    formKey: string,
+    recordId: string,
+    rowNumberHint?: number
+  ): { success: boolean; id?: string; rowNumber?: number; dataVersion?: number; updatedAt?: string; message?: string } {
+    // Keep this very lightweight: avoid loading questions/dedup rules or ensuring destination headers.
+    // The index sheet is designed so base columns are fixed and rows align with destination row numbers.
+    const form = this.definitionBuilder.findForm(formKey);
+    return this.submissions.getRecordVersion(form, recordId, rowNumberHint);
+  }
+
   public saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     const { form, questions } = this.getFormContext(formKey);
@@ -257,6 +272,50 @@ export class WebFormService {
     const { form, questions } = this.getFormContextLite(formKey);
     const dedupRules = loadDedupRules(this.ss, form.configSheet);
     return this.submissions.checkDedupConflict(formObject, form, questions, dedupRules);
+  }
+
+  /**
+   * Installable trigger entrypoint: handle manual edits to destination "Responses" tabs.
+   *
+   * Goal:
+   * - keep Data Version monotonic
+   * - keep record index + dedup signatures up-to-date
+   * - bump server etag so cached list/record reads remain consistent with manual writes
+   */
+  public onResponsesEdit(e: GoogleAppsScript.Events.SheetsOnEdit): void {
+    try {
+      const range = (e as any)?.range as GoogleAppsScript.Spreadsheet.Range | undefined;
+      if (!range) return;
+      const sheet = range.getSheet();
+      const sheetName = sheet.getName();
+      if (!sheetName) return;
+
+      // Ignore internal/system sheets.
+      if (sheetName.startsWith('Config')) return;
+      if (sheetName === 'Forms Dashboard') return;
+      if (sheetName.endsWith(' Dedup')) return;
+      if (sheetName.startsWith('__CK_INDEX__')) return;
+
+      const forms = this.dashboard.getForms();
+      const match = forms.find(f => {
+        const dest = (f.destinationTab || `${f.title} Responses`).toString();
+        return dest === sheetName;
+      });
+      if (!match) return;
+
+      const questions = ConfigSheet.getQuestionsLite(this.ss, match.configSheet).filter(q => q.status === 'Active');
+      const dedupRules = loadDedupRules(this.ss, match.configSheet);
+
+      this.submissions.handleManualDestinationEdits({
+        form: match,
+        questions,
+        dedupRules,
+        startRow: range.getRow(),
+        numRows: range.getNumRows()
+      });
+    } catch (_) {
+      // ignore trigger errors
+    }
   }
 
   public triggerFollowupAction(
@@ -388,6 +447,172 @@ export class WebFormService {
         docFailed
       }
     };
+  }
+
+  /**
+   * Phase 1 maintenance: rebuild record indexes for one form (or all forms).
+   *
+   * This backfills:
+   * - "Data Version" column (defaults to 1 when missing)
+   * - Record IDs for legacy rows missing an id
+   * - Record index sheet rows (id, rowNumber, dataVersion, timestamps, dedup signatures)
+   *
+   * Notes:
+   * - Intended to be run manually from the spreadsheet menu after deployment, especially when existing data exists.
+   * - Uses batching to keep Apps Script memory usage predictable.
+   */
+  public rebuildIndexes(formKey?: string): { success: boolean; message?: string; results?: any[] } {
+    try {
+      const forms = (() => {
+        if (formKey) return [this.definitionBuilder.findForm(formKey)];
+        return this.dashboard.getForms();
+      })();
+      if (!forms.length) return { success: true, message: 'No forms found.' };
+
+      const results: any[] = [];
+      const BATCH = 2000;
+
+      forms.forEach(form => {
+        const dest = form.destinationTab || `${form.title} Responses`;
+        const questions = ConfigSheet.getQuestionsLite(this.ss, form.configSheet).filter(q => q.status === 'Active');
+        const dedupRules = loadDedupRules(this.ss, form.configSheet);
+        const effectiveDedupRules = (dedupRules || []).filter(r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form');
+
+        const { sheet, columns } = this.submissions.ensureDestination(dest, questions);
+        const lastRow = sheet.getLastRow();
+        const total = Math.max(0, lastRow - 1);
+        if (!columns.recordId || !columns.dataVersion) {
+          results.push({ formKey: form.configSheet, destination: dest, success: false, message: 'Missing Record ID / Data Version columns.' });
+          return;
+        }
+
+        const idx = ensureRecordIndexSheet(this.ss, sheet.getName(), effectiveDedupRules);
+        const width = idx.columns.headerWidth;
+        const asIso = (value: any): string => {
+          if (value instanceof Date) return value.toISOString();
+          if (!value) return '';
+          try {
+            const d = new Date(value);
+            if (!isNaN(d.getTime())) return d.toISOString();
+          } catch (_) {
+            // ignore
+          }
+          try {
+            return value.toString();
+          } catch (_) {
+            return '';
+          }
+        };
+
+        // Union of dedup key columns
+        const keyIds = Array.from(
+          new Set(
+            effectiveDedupRules
+              .flatMap(r => (Array.isArray(r.keys) ? r.keys : []))
+              .map(k => (k || '').toString().trim())
+              .filter(Boolean)
+          )
+        );
+        const keyCols: Array<{ keyId: string; colIdx: number }> = keyIds
+          .map(keyId => ({ keyId, colIdx: columns.fields[keyId] }))
+          .filter(entry => Number.isFinite(entry.colIdx) && entry.colIdx > 0);
+
+        let updatedIds = 0;
+        let updatedVersions = 0;
+        let indexedRows = 0;
+
+        for (let offset = 0; offset < total; offset += BATCH) {
+          const startRow = 2 + offset;
+          const rows = Math.min(BATCH, total - offset);
+          if (rows <= 0) break;
+
+          const idVals = sheet.getRange(startRow, columns.recordId, rows, 1).getValues().map(r => (r[0] || '').toString());
+          const versionVals = sheet.getRange(startRow, columns.dataVersion, rows, 1).getValues().map(r => r[0]);
+          const createdVals = columns.createdAt ? sheet.getRange(startRow, columns.createdAt, rows, 1).getValues().map(r => r[0]) : new Array(rows).fill(undefined);
+          const updatedVals = columns.updatedAt ? sheet.getRange(startRow, columns.updatedAt, rows, 1).getValues().map(r => r[0]) : new Array(rows).fill(undefined);
+
+          const keyValuesById: Record<string, any[]> = {};
+          keyCols.forEach(({ keyId, colIdx }) => {
+            keyValuesById[keyId] = sheet.getRange(startRow, colIdx, rows, 1).getValues().map(r => r[0]);
+          });
+
+          const nextIds: any[][] = [];
+          const nextVersions: any[][] = [];
+          const indexMatrix: any[][] = new Array(rows).fill(null).map(() => new Array(width).fill(''));
+
+          for (let i = 0; i < rows; i += 1) {
+            const rowNumber = startRow + i;
+            let id = (idVals[i] || '').toString().trim();
+            if (!id) {
+              id = Utilities.getUuid ? Utilities.getUuid() : `uuid-${Math.random().toString(16).slice(2)}`;
+              updatedIds += 1;
+            }
+            const rawV = Number(versionVals[i]);
+            const v = Number.isFinite(rawV) && rawV > 0 ? rawV : 1;
+            if (!(Number.isFinite(rawV) && rawV > 0)) updatedVersions += 1;
+
+            const createdIso = asIso(createdVals[i]) || '';
+            const updatedIso = asIso(updatedVals[i]) || '';
+
+            // Compute dedup signatures for this row
+            const valuesForKeys: Record<string, any> = {};
+            keyCols.forEach(({ keyId }) => {
+              valuesForKeys[keyId] = keyValuesById[keyId] ? keyValuesById[keyId][i] : '';
+            });
+            const dedupSignatures: Record<string, string> = {};
+            effectiveDedupRules.forEach(rule => {
+              const sig = computeDedupSignature(rule, valuesForKeys);
+              if (!sig) return;
+              dedupSignatures[(rule.id || '').toString()] = sig;
+            });
+
+            nextIds.push([id]);
+            nextVersions.push([v]);
+
+            const rowValues = indexMatrix[i];
+            rowValues[idx.columns.recordId - 1] = id;
+            rowValues[idx.columns.rowNumber - 1] = rowNumber;
+            rowValues[idx.columns.dataVersion - 1] = v;
+            rowValues[idx.columns.updatedAtIso - 1] = updatedIso || '';
+            rowValues[idx.columns.createdAtIso - 1] = createdIso || '';
+            Object.entries(dedupSignatures).forEach(([ruleIdRaw, sig]) => {
+              const ruleId = (ruleIdRaw || '').toString().trim().replace(/\s+/g, '_');
+              const col = (idx.columns.dedupByRuleId as any)[ruleId] as number | undefined;
+              if (!col) return;
+              rowValues[col - 1] = sig;
+            });
+          }
+
+          // Write back any repairs (ids/versions) and index batch.
+          sheet.getRange(startRow, columns.recordId, rows, 1).setValues(nextIds);
+          sheet.getRange(startRow, columns.dataVersion, rows, 1).setValues(nextVersions);
+          idx.sheet.getRange(startRow, 1, rows, width).setValues(indexMatrix);
+          indexedRows += rows;
+        }
+
+        // Invalidate caches after maintenance.
+        try {
+          this.cacheManager.bumpSheetEtag(sheet, columns, 'rebuildIndexes');
+        } catch (_) {
+          // ignore
+        }
+
+        results.push({
+          formKey: form.configSheet,
+          destination: dest,
+          success: true,
+          totalRows: total,
+          indexedRows,
+          repairedIds: updatedIds,
+          repairedVersions: updatedVersions
+        });
+      });
+
+      return { success: true, message: 'Index rebuild complete.', results };
+    } catch (err: any) {
+      const msg = (err?.message || err?.toString?.() || 'Failed to rebuild indexes.').toString();
+      return { success: false, message: msg };
+    }
   }
 
   /**

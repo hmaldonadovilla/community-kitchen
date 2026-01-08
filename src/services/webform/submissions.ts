@@ -6,11 +6,19 @@ import {
   RecordMetadata,
   WebFormSubmission
 } from '../../types';
-import { evaluateDedupConflict, ExistingRecord, findDedupConflict, DedupConflict } from '../dedup';
+import { evaluateDedupConflict, ExistingRecord, findDedupConflict, DedupConflict, computeDedupSignature } from '../dedup';
 import { CacheEtagManager } from './cache';
 import { buildResponsesRecordSchema, normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } from './recordSchema';
 import { HeaderColumns, RecordContext } from './types';
 import { UploadService } from './uploads';
+import {
+  ensureRecordIndexSheet,
+  getRecordIndexSheetName,
+  findRowNumberInRecordIndex,
+  readDataVersionFromRecordIndex,
+  writeRecordIndexRow
+} from './recordIndex';
+import { normalizeToIsoDate } from './followup/utils';
 
 const AUTO_INCREMENT_PROPERTY_PREFIX = 'CK_AUTO_';
 
@@ -84,7 +92,26 @@ export class SubmissionService {
     const languageRaw = (langValue || 'EN').toString().toUpperCase();
     const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
 
-    const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+    const lock = (() => {
+      try {
+        return (typeof LockService !== 'undefined' && (LockService as any).getDocumentLock)
+          ? (LockService as any).getDocumentLock()
+          : null;
+      } catch (_) {
+        return null;
+      }
+    })();
+    try {
+      try {
+        if (lock && typeof lock.tryLock === 'function') {
+          // Best-effort: keep short to avoid blocking the UI too long.
+          lock.tryLock(8000);
+        }
+      } catch (_) {
+        // ignore lock failures
+      }
+
+      const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
 
     const now = new Date();
     const incomingId = ((formObject as any).id && (formObject as any).id.trim)
@@ -94,11 +121,21 @@ export class SubmissionService {
 
     // Find existing row by id
     let existingRowIdx = -1;
-    if (columns.recordId) {
-      const dataRows = Math.max(0, sheet.getLastRow() - 1);
-      const idRange =
-        dataRows > 0 ? sheet.getRange(2, columns.recordId, dataRows, 1).getValues() : [];
-      existingRowIdx = idRange.findIndex(r => (r[0] || '').toString() === recordId);
+    const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
+    // Prefer the record index (fast, avoids scanning 100k ids).
+    try {
+      const idx = ensureRecordIndexSheet(this.ss, destinationName, dedupRules);
+      const rowNumber = findRowNumberInRecordIndex(idx.sheet, recordId);
+      if (rowNumber >= 2) {
+        existingRowIdx = rowNumber - 2;
+      }
+    } catch (_) {
+      existingRowIdx = -1;
+    }
+    // Fallback: scan using TextFinder / getValues (tests)
+    if (existingRowIdx < 0 && columns.recordId) {
+      const rowIndex = this.findRowIndexById(sheet, columns, recordId);
+      existingRowIdx = rowIndex >= 2 ? rowIndex - 2 : -1;
     }
 
     const valuesArray = new Array(headers.length).fill('');
@@ -120,6 +157,59 @@ export class SubmissionService {
     const updatedAtVal = existingRowIdx >= 0 ? now : createdAtVal;
     setIf(columns.createdAt, createdAtVal);
     setIf(columns.updatedAt, updatedAtVal);
+
+    // DataVersion: monotonic server-owned integer
+    const previousVersion = (() => {
+      if (existingRowIdx < 0) return 0;
+      if (!columns.dataVersion) return 0;
+      try {
+        const raw = sheet.getRange(2 + existingRowIdx, columns.dataVersion, 1, 1).getValues()[0][0];
+        const n = Number(raw);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      } catch (_) {
+        return 0;
+      }
+    })();
+
+    // Optimistic locking (best-effort):
+    // - The client includes __ckClientDataVersion (the version it last loaded/saw).
+    // - If the sheet already has a higher version, the record was modified elsewhere; reject to avoid overwriting.
+    try {
+      const clientRaw = (formObject as any).__ckClientDataVersion;
+      const clientVersion = clientRaw === undefined || clientRaw === null ? Number.NaN : Number(clientRaw);
+      if (
+        existingRowIdx >= 0 &&
+        columns.dataVersion &&
+        Number.isFinite(clientVersion) &&
+        clientVersion > 0 &&
+        previousVersion > 0 &&
+        clientVersion < previousVersion
+      ) {
+        const existingUpdatedAt = (() => {
+          if (!columns.updatedAt) return undefined;
+          try {
+            const raw = sheet.getRange(2 + existingRowIdx, columns.updatedAt, 1, 1).getValues()[0][0];
+            return this.asIso(raw);
+          } catch (_) {
+            return undefined;
+          }
+        })();
+        return {
+          success: false,
+          message: 'This record was modified by another user. Please refresh.',
+          meta: {
+            id: recordId.toString(),
+            dataVersion: previousVersion || undefined,
+            updatedAt: existingUpdatedAt,
+            rowNumber: existingRowIdx >= 0 ? 2 + existingRowIdx : undefined
+          }
+        };
+      }
+    } catch (_) {
+      // ignore optimistic lock failures; fall back to last-write-wins
+    }
+    const nextVersion = previousVersion + 1;
+    setIf(columns.dataVersion, nextVersion);
 
     // Draft autosave: write status + protect closed records from background saves.
     const saveMode = ((formObject as any).__ckSaveMode || '').toString().trim().toLowerCase();
@@ -233,33 +323,103 @@ export class SubmissionService {
       setIf(colIdx, value ?? '');
     });
 
-    // Dedup check against existing rows (form scope only).
-    // We enforce this for drafts and submits so duplicates cannot be created via autosave races.
-    const shouldDedupCheck = Boolean(dedupRules && dedupRules.length);
-    if (shouldDedupCheck) {
-      const existingRows = Math.max(0, sheet.getLastRow() - 1);
-      if (existingRows > 0) {
-        const data = sheet.getRange(2, 1, existingRows, headers.length).getValues();
-        const existing: ExistingRecord[] = data.map((row, idx) => {
-          const vals: Record<string, any> = {};
-          Object.entries(columns.fields).forEach(([fid, idx]) => {
-            vals[fid] = row[(idx as number) - 1];
+    // Dedup check (indexed): search dedup signatures in the record index sheet.
+    const effectiveDedupRules = (dedupRules || []).filter(r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form');
+    if (effectiveDedupRules.length) {
+      try {
+        const idx = ensureRecordIndexSheet(this.ss, destinationName, effectiveDedupRules);
+        const lastRow = idx.sheet.getLastRow();
+        const dataRows = Math.max(0, lastRow - 1);
+
+        // Safety: if the index has not been rebuilt for an existing dataset, signature lookups can miss duplicates.
+        // In that case, block writes and instruct the operator to run the rebuild menu action.
+        const destLastRow = sheet.getLastRow();
+        if (destLastRow >= 2) {
+          try {
+            const destTopId = (sheet.getRange(2, columns.recordId || 1, 1, 1).getValues()[0][0] || '').toString().trim();
+            const idxTopId = (idx.sheet.getRange(2, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
+            const destLastId = (sheet.getRange(destLastRow, columns.recordId || 1, 1, 1).getValues()[0][0] || '').toString().trim();
+            const idxLastId = (idx.sheet.getRange(destLastRow, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
+            const looksUnbuilt = (destTopId && !idxTopId) || (destLastId && !idxLastId);
+            if (looksUnbuilt && destLastRow > 2) {
+              return {
+                success: false,
+                message:
+                  'Dedup index is not built for this form yet. Run "Community Kitchen → Rebuild Indexes (Data Version + Dedup)" and try again.',
+                meta: { id: recordId, createdAt: createdAtVal, updatedAt: undefined }
+              };
+            }
+          } catch (_) {
+            // ignore; proceed
+          }
+        }
+        for (const rule of effectiveDedupRules) {
+          const sig = computeDedupSignature(rule, candidateValues);
+          if (!sig) continue;
+          const ruleId = (rule.id || '').toString().trim().replace(/\s+/g, '_');
+          const col = (idx.columns.dedupByRuleId as any)[ruleId] as number | undefined;
+          if (!col || dataRows <= 0) continue;
+          let matchRow = -1;
+          try {
+            const range = idx.sheet.getRange(2, col, dataRows, 1);
+            const finder = (range as any).createTextFinder ? (range as any).createTextFinder(sig) : null;
+            if (finder && typeof finder.matchEntireCell === 'function') {
+              const match = finder.matchEntireCell(true).findNext();
+              if (match && typeof match.getRow === 'function') {
+                matchRow = match.getRow();
+              }
+            }
+          } catch (_) {
+            matchRow = -1;
+          }
+          if (matchRow >= 2) {
+            // Ignore self when updating (same destination row).
+            const selfRow = existingRowIdx >= 0 ? 2 + existingRowIdx : -1;
+            if (selfRow >= 2 && matchRow === selfRow) continue;
+            // Read existing record id from index row.
+            let existingId = '';
+            try {
+              existingId = (idx.sheet.getRange(matchRow, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString();
+            } catch (_) {
+              existingId = '';
+            }
+            const conflict = findDedupConflict([rule], { id: recordId, values: candidateValues }, [{ id: existingId, rowNumber: matchRow, values: candidateValues }], language);
+            // If we couldn't resolve message via findDedupConflict (because we didn't load actual values), fall back:
+            const message = conflict?.message || (rule.message ? (typeof rule.message === 'string' ? rule.message : (rule.message as any)[language.toLowerCase()] || (rule.message as any).en) : 'Duplicate record.');
+            return {
+              success: false,
+              message: message || 'Duplicate record.',
+              meta: { id: recordId, createdAt: createdAtVal, updatedAt: undefined }
+            };
+          }
+        }
+      } catch (_) {
+        // If index is unavailable, fall back to the legacy scan-based approach (small sheets / tests).
+        const existingRows = Math.max(0, sheet.getLastRow() - 1);
+        if (existingRows > 0) {
+          const data = sheet.getRange(2, 1, existingRows, headers.length).getValues();
+          const existing: ExistingRecord[] = data.map((row, idx) => {
+            const vals: Record<string, any> = {};
+            Object.entries(columns.fields).forEach(([fid, idx]) => {
+              vals[fid] = row[(idx as number) - 1];
+            });
+            return {
+              id: columns.recordId ? row[columns.recordId - 1] : '',
+              rowNumber: 2 + idx,
+              values: vals
+            };
           });
-          return {
-            id: columns.recordId ? row[columns.recordId - 1] : '',
-            rowNumber: 2 + idx,
-            values: vals
-          };
-        });
-        const conflict = evaluateDedupConflict(dedupRules, { id: recordId, values: candidateValues }, existing, language);
-        if (conflict) {
-          return { success: false, message: conflict, meta: { id: recordId, createdAt: createdAtVal, updatedAt: undefined } };
+          const conflict = evaluateDedupConflict(dedupRules, { id: recordId, values: candidateValues }, existing, language);
+          if (conflict) {
+            return { success: false, message: conflict, meta: { id: recordId, createdAt: createdAtVal, updatedAt: undefined } };
+          }
         }
       }
     }
 
+    const destinationRowNumber = existingRowIdx >= 0 ? (2 + existingRowIdx) : (sheet.getLastRow() + 1);
     if (existingRowIdx >= 0) {
-      sheet.getRange(2 + existingRowIdx, 1, 1, headers.length).setValues([valuesArray]);
+      sheet.getRange(destinationRowNumber, 1, 1, headers.length).setValues([valuesArray]);
     } else {
       sheet.appendRow(valuesArray);
     }
@@ -267,7 +427,9 @@ export class SubmissionService {
     const meta: RecordMetadata = {
       id: recordId,
       createdAt: createdAtVal instanceof Date ? createdAtVal.toISOString() : createdAtVal,
-      updatedAt: updatedAtVal instanceof Date ? updatedAtVal.toISOString() : updatedAtVal
+      updatedAt: updatedAtVal instanceof Date ? updatedAtVal.toISOString() : updatedAtVal,
+      dataVersion: nextVersion,
+      rowNumber: destinationRowNumber
     };
 
     const newEtag = this.cacheManager.bumpSheetEtag(
@@ -280,7 +442,39 @@ export class SubmissionService {
       this.cacheManager.cacheRecord(form.configSheet, newEtag, cachedRecord);
     }
 
+    // Update record index row (best-effort).
+    try {
+      const idx = ensureRecordIndexSheet(this.ss, destinationName, effectiveDedupRules);
+      const dedupSignatures: Record<string, string> = {};
+      effectiveDedupRules.forEach(rule => {
+        const sig = computeDedupSignature(rule, candidateValues);
+        if (!sig) return;
+        dedupSignatures[(rule.id || '').toString()] = sig;
+      });
+      writeRecordIndexRow({
+        indexSheet: idx.sheet,
+        columns: idx.columns,
+        rowNumber: destinationRowNumber,
+        recordId,
+        dataVersion: nextVersion,
+        updatedAtIso: meta.updatedAt ? meta.updatedAt.toString() : '',
+        createdAtIso: meta.createdAt ? meta.createdAt.toString() : '',
+        dedupSignatures
+      });
+    } catch (_) {
+      // ignore
+    }
+
     return { success: true, message: 'Saved to sheet', meta };
+    } finally {
+      try {
+        if (lock && typeof lock.releaseLock === 'function') {
+          lock.releaseLock();
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
   }
 
   /**
@@ -305,6 +499,7 @@ export class SubmissionService {
       if (!dedupRules || !dedupRules.length) return { success: true };
 
       const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+      const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
 
       const incomingId = ((formObject as any).id && (formObject as any).id.trim)
         ? ((formObject as any).id as any).trim()
@@ -335,25 +530,112 @@ export class SubmissionService {
           candidateValues[q.id] = value ?? '';
         });
 
-      const existingRows = Math.max(0, sheet.getLastRow() - 1);
-      if (existingRows <= 0) return { success: true };
+      const effectiveDedupRules = (dedupRules || []).filter(r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form');
+      if (!effectiveDedupRules.length) return { success: true };
 
-      const data = sheet.getRange(2, 1, existingRows, headers.length).getValues();
-      const existing: ExistingRecord[] = data.map((row, idx) => {
-        const vals: Record<string, any> = {};
-        Object.entries(columns.fields).forEach(([fid, idx]) => {
-          vals[fid] = row[(idx as number) - 1];
+      // Indexed lookup via record index sheet (preferred).
+      try {
+        const idx = ensureRecordIndexSheet(this.ss, destinationName, effectiveDedupRules);
+        const lastRow = idx.sheet.getLastRow();
+        const dataRows = Math.max(0, lastRow - 1);
+        if (dataRows <= 0) return { success: true };
+
+        // Safety: block indexed dedup checks when indexes have not been rebuilt for an existing dataset.
+        const destLastRow = sheet.getLastRow();
+        if (destLastRow >= 2) {
+          try {
+            const destTopId = (sheet.getRange(2, columns.recordId || 1, 1, 1).getValues()[0][0] || '').toString().trim();
+            const idxTopId = (idx.sheet.getRange(2, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
+            const destLastId = (sheet.getRange(destLastRow, columns.recordId || 1, 1, 1).getValues()[0][0] || '').toString().trim();
+            const idxLastId = (idx.sheet.getRange(destLastRow, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
+            const looksUnbuilt = (destTopId && !idxTopId) || (destLastId && !idxLastId);
+            if (looksUnbuilt && destLastRow > 2) {
+              return {
+                success: false,
+                message:
+                  'Dedup index is not built for this form yet. Run "Community Kitchen → Rebuild Indexes (Data Version + Dedup)" and try again.'
+              };
+            }
+          } catch (_) {
+            // ignore
+          }
+        }
+
+        for (const rule of effectiveDedupRules) {
+          const sig = computeDedupSignature(rule, candidateValues);
+          if (!sig) continue;
+          const ruleId = (rule.id || '').toString().trim().replace(/\s+/g, '_');
+          const col = (idx.columns.dedupByRuleId as any)[ruleId] as number | undefined;
+          if (!col) continue;
+
+          let matchRow = -1;
+          try {
+            const range = idx.sheet.getRange(2, col, dataRows, 1);
+            const finder = (range as any).createTextFinder ? (range as any).createTextFinder(sig) : null;
+            if (finder && typeof finder.matchEntireCell === 'function') {
+              const match = finder.matchEntireCell(true).findNext();
+              if (match && typeof match.getRow === 'function') {
+                matchRow = match.getRow();
+              }
+            }
+          } catch (_) {
+            matchRow = -1;
+          }
+          if (matchRow < 2) continue;
+
+          let existingId = '';
+          try {
+            existingId = (idx.sheet.getRange(matchRow, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString();
+          } catch (_) {
+            existingId = '';
+          }
+          if (recordId && existingId && existingId === recordId) {
+            // Self-match (editing an existing record).
+            continue;
+          }
+
+          const conflict = findDedupConflict(
+            [rule],
+            { id: recordId, values: candidateValues },
+            [{ id: existingId, rowNumber: matchRow, values: candidateValues }],
+            language
+          );
+          if (conflict) {
+            // Ensure rowNumber is surfaced even if the helper couldn't infer it.
+            return {
+              success: true,
+              conflict: {
+                ...conflict,
+                existingRecordId: conflict.existingRecordId || existingId || undefined,
+                existingRowNumber: conflict.existingRowNumber || matchRow
+              }
+            };
+          }
+        }
+
+        return { success: true };
+      } catch (_) {
+        // Fall back to legacy scan-based approach (small sheets / tests).
+        const existingRows = Math.max(0, sheet.getLastRow() - 1);
+        if (existingRows <= 0) return { success: true };
+
+        const data = sheet.getRange(2, 1, existingRows, headers.length).getValues();
+        const existing: ExistingRecord[] = data.map((row, idx) => {
+          const vals: Record<string, any> = {};
+          Object.entries(columns.fields).forEach(([fid, idx]) => {
+            vals[fid] = row[(idx as number) - 1];
+          });
+          return {
+            id: columns.recordId ? row[columns.recordId - 1] : '',
+            rowNumber: 2 + idx,
+            values: vals
+          };
         });
-        return {
-          id: columns.recordId ? row[columns.recordId - 1] : '',
-          rowNumber: 2 + idx,
-          values: vals
-        };
-      });
 
-      const conflict = findDedupConflict(dedupRules, { id: recordId, values: candidateValues }, existing, language);
-      if (!conflict) return { success: true };
-      return { success: true, conflict };
+        const conflict = findDedupConflict(dedupRules, { id: recordId, values: candidateValues }, existing, language);
+        if (!conflict) return { success: true };
+        return { success: true, conflict };
+      }
     } catch (err: any) {
       return {
         success: false,
@@ -371,7 +653,7 @@ export class SubmissionService {
       sheet = this.ss.insertSheet(destinationTab);
     }
 
-    const metaHeaders = ['Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'];
+    const metaHeaders = ['Record ID', 'Data Version', 'Created At', 'Updated At', 'Status', 'PDF URL'];
     const lastColumn = Math.max(sheet.getLastColumn(), 1);
     const rawHeaderRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0] || [];
     const rawExistingHeaders = rawHeaderRow.map(h => (h ? h.toString().trim() : ''));
@@ -484,6 +766,7 @@ export class SubmissionService {
       timestamp: this.findHeader(headers, ['timestamp']),
       language: this.findHeader(headers, ['language']),
       recordId: this.findHeader(headers, ['record id', 'id']),
+      dataVersion: this.findHeader(headers, ['data version', 'data_version', 'dataversion']),
       createdAt: this.findHeader(headers, ['created at']),
       updatedAt: this.findHeader(headers, ['updated at']),
       status: this.findHeader(headers, ['status']),
@@ -519,6 +802,11 @@ export class SubmissionService {
           // keep raw string
         }
       }
+      // Ensure DATE fields are returned as canonical YYYY-MM-DD strings so the client never sees timezone-shifted Dates.
+      if (q.type === 'DATE') {
+        const iso = normalizeToIsoDate(value);
+        value = iso || '';
+      }
       values[q.id] = value ?? '';
     });
     const languageIdx = columns.language ? columns.language - 1 : 1;
@@ -526,6 +814,11 @@ export class SubmissionService {
     const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
     const statusValue = columns.status ? rowValues[columns.status - 1] : '';
     const pdfLinkValue = columns.pdfUrl ? rowValues[columns.pdfUrl - 1] : '';
+    const dataVersionRaw = columns.dataVersion ? rowValues[columns.dataVersion - 1] : undefined;
+    const dataVersion = (() => {
+      const n = Number(dataVersionRaw);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    })();
     return {
       formKey,
       language,
@@ -533,6 +826,7 @@ export class SubmissionService {
       id: recordId,
       createdAt: columns.createdAt ? this.asIso(rowValues[columns.createdAt - 1]) : undefined,
       updatedAt: columns.updatedAt ? this.asIso(rowValues[columns.updatedAt - 1]) : undefined,
+      dataVersion,
       status: statusValue ? statusValue.toString() : undefined,
       pdfUrl: pdfLinkValue ? pdfLinkValue.toString() : undefined
     };
@@ -549,6 +843,252 @@ export class SubmissionService {
     const rowValues = sheet.getRange(rowIndex, 1, 1, headers.length).getValues()[0];
     const record = this.buildSubmissionRecord(form.configSheet, questions, columns, rowValues, recordId);
     return { sheet, headers, columns, rowIndex, rowValues, record };
+  }
+
+  /**
+   * Fetch the current server-owned dataVersion for a record (cheap), plus the rowNumber when resolvable.
+   *
+   * This is used by the web client to validate cached records (read-after-write consistency) without
+   * downloading the entire record payload.
+   */
+  getRecordVersion(
+    form: FormConfig,
+    recordId: string,
+    rowNumberHint?: number
+  ): { success: boolean; id?: string; rowNumber?: number; dataVersion?: number; updatedAt?: string; message?: string } {
+    const id = (recordId || '').toString().trim();
+    if (!id) return { success: false, message: 'Record ID is required.' };
+
+    try {
+      const destinationName = (form.destinationTab || `${form.title} Responses`).toString();
+
+      // Prefer record index sheet (fast, constant-time updates).
+      // Index sheet rows align with destination row numbers, so rowNumberHint can be used directly.
+      const idxSheetName = getRecordIndexSheetName(destinationName);
+      const idxSheet = this.ss.getSheetByName(idxSheetName);
+      if (idxSheet) {
+        const readIdxRow = (row: number): { idAtRow: string; dv?: number; updatedAt?: string } | null => {
+          if (!Number.isFinite(row) || row < 2) return null;
+          try {
+            // Base columns are stable:
+            // 1 Record ID, 2 Row, 3 Data Version, 4 Updated At (ISO)
+            const vals = idxSheet.getRange(row, 1, 1, 4).getValues()[0] || [];
+            const idAtRow = (vals[0] || '').toString().trim();
+            const dvRaw = vals[2];
+            const dvNum = Number(dvRaw);
+            const dv = Number.isFinite(dvNum) && dvNum > 0 ? dvNum : undefined;
+            const updatedAt = (vals[3] || '').toString() || undefined;
+            return { idAtRow, dv, updatedAt };
+          } catch (_) {
+            return null;
+          }
+        };
+
+        const hintedRow = Number(rowNumberHint);
+        if (Number.isFinite(hintedRow) && hintedRow >= 2) {
+          const rowInfo = readIdxRow(hintedRow);
+          if (rowInfo && rowInfo.idAtRow && rowInfo.idAtRow === id) {
+            return { success: true, id, rowNumber: hintedRow, dataVersion: rowInfo.dv, updatedAt: rowInfo.updatedAt };
+          }
+        }
+
+        const rowNumber = findRowNumberInRecordIndex(idxSheet, id);
+        if (rowNumber >= 2) {
+          const rowInfo = readIdxRow(rowNumber);
+          if (rowInfo) {
+            return { success: true, id, rowNumber, dataVersion: rowInfo.dv, updatedAt: rowInfo.updatedAt };
+          }
+          // Shouldn't happen, but keep legacy helpers as a fallback.
+          const dv = readDataVersionFromRecordIndex(idxSheet, rowNumber, { recordId: 1, rowNumber: 2, dataVersion: 3, updatedAtIso: 4, createdAtIso: 5, dedupByRuleId: {}, headerWidth: 5 } as any) || undefined;
+          return { success: true, id, rowNumber, dataVersion: dv || undefined };
+        }
+      }
+
+      // Fallback: read destination sheet directly (slower).
+      const sheet = this.ss.getSheetByName(destinationName);
+      if (!sheet) return { success: true, id, dataVersion: undefined, rowNumber: undefined };
+
+      const lastColumn = Math.max(sheet.getLastColumn(), 1);
+      const rawHeaderRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0] || [];
+      let recordIdCol = 0;
+      let dataVersionCol = 0;
+      let updatedAtCol = 0;
+      for (let i = 0; i < rawHeaderRow.length; i += 1) {
+        const raw = rawHeaderRow[i] ? rawHeaderRow[i].toString().trim() : '';
+        const header = sanitizeHeaderCellText(raw);
+        const norm = normalizeHeaderToken(header);
+        if (!recordIdCol && norm === 'record id') recordIdCol = i + 1;
+        else if (!dataVersionCol && norm === 'data version') dataVersionCol = i + 1;
+        else if (!updatedAtCol && norm === 'updated at') updatedAtCol = i + 1;
+      }
+      if (!recordIdCol) return { success: true, id, dataVersion: undefined, rowNumber: undefined };
+
+      const hintedRow = Number(rowNumberHint);
+      if (Number.isFinite(hintedRow) && hintedRow >= 2) {
+        try {
+          const idAtRow = (sheet.getRange(hintedRow, recordIdCol, 1, 1).getValues()[0][0] || '').toString().trim();
+          if (idAtRow && idAtRow === id) {
+            const dvRaw = dataVersionCol ? sheet.getRange(hintedRow, dataVersionCol, 1, 1).getValues()[0][0] : undefined;
+            const dvNum = Number(dvRaw);
+            const dataVersion = Number.isFinite(dvNum) && dvNum > 0 ? dvNum : undefined;
+            const updatedAt = updatedAtCol ? this.asIso(sheet.getRange(hintedRow, updatedAtCol, 1, 1).getValues()[0][0]) : undefined;
+            return { success: true, id, rowNumber: hintedRow, dataVersion, updatedAt };
+          }
+        } catch (_) {
+          // ignore hint mismatch
+        }
+      }
+
+      try {
+        const lastRow = sheet.getLastRow();
+        const dataRows = Math.max(0, lastRow - 1);
+        if (dataRows > 0) {
+          const range = sheet.getRange(2, recordIdCol, dataRows, 1);
+          const finder = (range as any).createTextFinder ? (range as any).createTextFinder(id) : null;
+          if (finder && typeof finder.matchEntireCell === 'function') {
+            const match = finder.matchEntireCell(true).findNext();
+            if (match && typeof match.getRow === 'function') {
+              const rowNumber = match.getRow();
+              const dvRaw = dataVersionCol ? sheet.getRange(rowNumber, dataVersionCol, 1, 1).getValues()[0][0] : undefined;
+              const dvNum = Number(dvRaw);
+              const dataVersion = Number.isFinite(dvNum) && dvNum > 0 ? dvNum : undefined;
+              const updatedAt = updatedAtCol ? this.asIso(sheet.getRange(rowNumber, updatedAtCol, 1, 1).getValues()[0][0]) : undefined;
+              return { success: true, id, rowNumber, dataVersion, updatedAt };
+            }
+          }
+        }
+      } catch (_) {
+        // ignore
+      }
+
+      return { success: true, id, dataVersion: undefined, rowNumber: undefined };
+    } catch (err: any) {
+      const msg = (err?.message || err?.toString?.() || 'Failed to read record version.').toString();
+      return { success: false, message: msg };
+    }
+  }
+
+  /**
+   * Phase 0/1: keep "Data Version" + record indexes consistent when users manually edit the destination sheet.
+   *
+   * This is intended to be called from an installable `onEdit` trigger.
+   * Script-driven writes (from this web app) do not fire onEdit, so this mainly covers direct sheet edits.
+   */
+  handleManualDestinationEdits(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    dedupRules: DedupRule[];
+    startRow: number;
+    numRows: number;
+  }): void {
+    const { form, questions, dedupRules, startRow, numRows } = args;
+    const fromRow = Math.max(2, Math.round(Number(startRow) || 0));
+    const count = Math.max(0, Math.round(Number(numRows) || 0));
+    if (count <= 0) return;
+
+    const { sheet, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+    const lastRow = sheet.getLastRow();
+    const toRow = Math.min(lastRow, fromRow + count - 1);
+    if (toRow < 2 || fromRow > toRow) return;
+    const rows = toRow - fromRow + 1;
+
+    if (!columns.recordId || !columns.dataVersion) {
+      // Without these columns we can't maintain the version/index guarantees.
+      return;
+    }
+
+    const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
+    const effectiveDedupRules = (dedupRules || []).filter(r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form');
+    const idx = ensureRecordIndexSheet(this.ss, destinationName, effectiveDedupRules);
+
+    // Read current Record IDs and versions in bulk.
+    const recordIds = sheet.getRange(fromRow, columns.recordId, rows, 1).getValues().map(r => (r[0] || '').toString());
+    const versionsRaw = sheet.getRange(fromRow, columns.dataVersion, rows, 1).getValues().map(r => r[0]);
+    const createdAtRaw = columns.createdAt ? sheet.getRange(fromRow, columns.createdAt, rows, 1).getValues().map(r => r[0]) : new Array(rows).fill(undefined);
+    const now = new Date();
+
+    const nextVersions: any[][] = [];
+    const nextIds: any[][] = [];
+    const updatedAtUpdates: any[][] = [];
+
+    for (let i = 0; i < rows; i += 1) {
+      let id = (recordIds[i] || '').toString().trim();
+      if (!id) {
+        id = this.generateUuid();
+      }
+      const prev = Number(versionsRaw[i]);
+      const next = Number.isFinite(prev) && prev > 0 ? prev + 1 : 1;
+      nextIds.push([id]);
+      nextVersions.push([next]);
+      updatedAtUpdates.push([now]);
+    }
+
+    // Write back any missing ids + bumped versions + updatedAt.
+    sheet.getRange(fromRow, columns.recordId, rows, 1).setValues(nextIds);
+    sheet.getRange(fromRow, columns.dataVersion, rows, 1).setValues(nextVersions);
+    if (columns.updatedAt) {
+      sheet.getRange(fromRow, columns.updatedAt, rows, 1).setValues(updatedAtUpdates);
+    }
+
+    // Build dedup key column reads (union of keys across rules).
+    const keyIds = Array.from(
+      new Set(
+        effectiveDedupRules
+          .flatMap(r => (Array.isArray(r.keys) ? r.keys : []))
+          .map(k => (k || '').toString().trim())
+          .filter(Boolean)
+      )
+    );
+    const keyColMap: Record<string, number> = {};
+    keyIds.forEach(k => {
+      const colIdx = columns.fields[k];
+      if (colIdx) keyColMap[k] = colIdx;
+    });
+    const keyValuesById: Record<string, any[]> = {};
+    Object.entries(keyColMap).forEach(([keyId, colIdx]) => {
+      keyValuesById[keyId] = sheet.getRange(fromRow, colIdx, rows, 1).getValues().map(r => r[0]);
+    });
+
+    // Build index rows and write in one batch.
+    const width = idx.columns.headerWidth;
+    const indexMatrix: any[][] = new Array(rows).fill(null).map(() => new Array(width).fill(''));
+    for (let i = 0; i < rows; i += 1) {
+      const rowNumber = fromRow + i;
+      const recordId = (nextIds[i][0] || '').toString();
+      const dataVersion = Number(nextVersions[i][0]) || 1;
+      const createdIso = this.asIso(createdAtRaw[i]) || '';
+      const updatedIso = now.toISOString();
+
+      const dedupSignatures: Record<string, string> = {};
+      if (effectiveDedupRules.length) {
+        const valuesForKeys: Record<string, any> = {};
+        Object.keys(keyColMap).forEach(k => {
+          valuesForKeys[k] = keyValuesById[k] ? keyValuesById[k][i] : '';
+        });
+        effectiveDedupRules.forEach(rule => {
+          const sig = computeDedupSignature(rule, valuesForKeys);
+          if (!sig) return;
+          dedupSignatures[(rule.id || '').toString()] = sig;
+        });
+      }
+
+      const rowValues = indexMatrix[i];
+      rowValues[idx.columns.recordId - 1] = recordId;
+      rowValues[idx.columns.rowNumber - 1] = rowNumber;
+      rowValues[idx.columns.dataVersion - 1] = dataVersion;
+      rowValues[idx.columns.updatedAtIso - 1] = updatedIso;
+      rowValues[idx.columns.createdAtIso - 1] = createdIso;
+      Object.entries(dedupSignatures).forEach(([ruleIdRaw, sig]) => {
+        const ruleId = (ruleIdRaw || '').toString().trim().replace(/\s+/g, '_');
+        const col = (idx.columns.dedupByRuleId as any)[ruleId] as number | undefined;
+        if (!col) return;
+        rowValues[col - 1] = sig;
+      });
+    }
+    idx.sheet.getRange(fromRow, 1, rows, width).setValues(indexMatrix);
+
+    // Invalidate server caches for this destination sheet.
+    this.cacheManager.bumpSheetEtag(sheet, columns, 'manualEdit.bumpDataVersion');
   }
 
   refreshRecordCache(
@@ -628,10 +1168,23 @@ export class SubmissionService {
     if (!columns.recordId) return -1;
     const dataRows = Math.max(0, sheet.getLastRow() - 1);
     if (dataRows <= 0) return -1;
+    // Prefer TextFinder (fast, avoids getValues for 100k rows).
+    try {
+      const range = sheet.getRange(2, columns.recordId, dataRows, 1);
+      const finder = (range as any).createTextFinder ? (range as any).createTextFinder(recordId) : null;
+      if (finder && typeof finder.matchEntireCell === 'function') {
+        const match = finder.matchEntireCell(true).findNext();
+        if (match && typeof match.getRow === 'function') {
+          return match.getRow();
+        }
+      }
+    } catch (_) {
+      // fall back below
+    }
+    // Fallback (tests): scan values
     const idRange = sheet.getRange(2, columns.recordId, dataRows, 1).getValues();
     const matchIndex = idRange.findIndex(r => (r[0] || '').toString() === recordId);
-    if (matchIndex < 0) return -1;
-    return 2 + matchIndex;
+    return matchIndex < 0 ? -1 : (2 + matchIndex);
   }
 
   private asIso(value: any): string | undefined {

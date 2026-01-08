@@ -50,6 +50,12 @@ export function onConfigEdit(e: GoogleAppsScript.Events.SheetsOnEdit): void {
   ConfigSheet.handleOptionEdit(ss, e);
 }
 
+export function onResponsesEdit(e: GoogleAppsScript.Events.SheetsOnEdit): void {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  service.onResponsesEdit(e);
+}
+
 export function doGet(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
@@ -124,6 +130,25 @@ export function fetchSubmissionByRowNumber(formKey: string, rowNumber: number): 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.fetchSubmissionByRowNumber(formKey, rowNumber);
+}
+
+export function getRecordVersion(formKey: string, recordId: string, rowNumberHint?: number): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.getRecordVersion(formKey, recordId, rowNumberHint);
+}
+
+export function rebuildIndexes(formKey?: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  const res = service.rebuildIndexes(formKey);
+  try {
+    const msg = res?.success ? (res.message || 'Index rebuild complete.') : (res?.message || 'Index rebuild failed.');
+    Browser.msgBox('Rebuild Indexes', msg.toString(), Browser.Buttons.OK);
+  } catch (_) {
+    // ignore
+  }
+  return res;
 }
 
 export function saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
@@ -214,16 +239,31 @@ export function installTriggers(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   // Check if trigger already exists to avoid duplicates
   const triggers = ScriptApp.getProjectTriggers();
-  const existing = triggers.find(t => t.getHandlerFunction() === 'onConfigEdit');
+  const hasConfig = triggers.some(t => t.getHandlerFunction() === 'onConfigEdit');
+  const hasResponses = triggers.some(t => t.getHandlerFunction() === 'onResponsesEdit');
   
-  if (!existing) {
+  if (!hasConfig) {
     ScriptApp.newTrigger('onConfigEdit')
       .forSpreadsheet(ss)
       .onEdit()
       .create();
-    Browser.msgBox('Trigger installed! You can now use the "Edit Options" checkboxes.');
+  }
+
+  if (!hasResponses) {
+    ScriptApp.newTrigger('onResponsesEdit')
+      .forSpreadsheet(ss)
+      .onEdit()
+      .create();
+  }
+
+  if (!hasConfig && !hasResponses) {
+    Browser.msgBox('Triggers installed! (Options + Response indexing)');
+  } else if (!hasConfig && hasResponses) {
+    Browser.msgBox('Trigger installed! (Options)');
+  } else if (hasConfig && !hasResponses) {
+    Browser.msgBox('Trigger installed! (Response indexing)');
   } else {
-    Browser.msgBox('Trigger already installed.');
+    Browser.msgBox('Triggers already installed.');
   }
 }
 
@@ -231,8 +271,9 @@ export function onOpen(): void {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Community Kitchen')
     .addItem('Setup Forms', 'setup')
-    .addItem('Install Triggers (Required for Options)', 'installTriggers')
+    .addItem('Install Triggers (Options + Response indexing)', 'installTriggers')
     .addItem('Create/Update All Forms', 'createAllForms')
+    .addItem('Rebuild Indexes (Data Version + Dedup)', 'rebuildIndexes')
     .addItem('Update & Translate Responses to English', 'translateAllResponses')
     .addToUi();
 }

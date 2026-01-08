@@ -39,7 +39,10 @@ describe('WebFormService submitWebForm', () => {
     expect(rows[1][0]).toBe('FR');           // Language
     expect(rows[1][1]).toBe('Alice');        // Q1
     expect(rows[1][2]).toBe('Blue');         // Q2
-    expect(rows[1][4]).toBeInstanceOf(Date); // Created At
+    const header = rows[0] || [];
+    const createdIdx = header.findIndex((col: string) => col === 'Created At');
+    expect(createdIdx).toBeGreaterThan(-1);
+    expect(rows[1][createdIdx]).toBeInstanceOf(Date); // Created At
   });
 
   test('new submissions set Updated At equal to Created At', () => {

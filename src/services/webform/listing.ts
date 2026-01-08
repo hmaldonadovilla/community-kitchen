@@ -492,6 +492,7 @@ export class ListingService {
     add(columns.timestamp);
     add(columns.language);
     add(columns.recordId);
+    add(columns.dataVersion);
     add(columns.createdAt);
     add(columns.updatedAt);
     add(columns.status);

@@ -27,7 +27,8 @@ import {
   ListResponse,
   ListItem,
   fetchRecordById,
-  fetchRecordByRowNumber
+  fetchRecordByRowNumber,
+  getRecordVersionApi
 } from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
@@ -75,6 +76,7 @@ type SubmissionMeta = {
   id?: string;
   createdAt?: string;
   updatedAt?: string;
+  dataVersion?: number;
   status?: string | null;
 };
 
@@ -259,6 +261,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const dedupCheckSeqRef = useRef<number>(0);
   const dedupCheckTimerRef = useRef<number | null>(null);
   const lastDedupCheckedSignatureRef = useRef<string>('');
+  type RecordStaleInfo = {
+    recordId: string;
+    message: string;
+    cachedVersion?: number;
+    serverVersion?: number;
+    serverRow?: number;
+  };
+  const [recordStale, setRecordStale] = useState<RecordStaleInfo | null>(null);
+  const recordStaleRef = useRef<RecordStaleInfo | null>(null);
+  const submitPrecheckInFlightRef = useRef<boolean>(false);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const submitConfirmedRef = useRef(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string>(record?.id || '');
@@ -349,6 +361,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   useEffect(() => {
     dedupConflictRef.current = dedupConflict;
   }, [dedupConflict]);
+
+  useEffect(() => {
+    recordStaleRef.current = recordStale;
+  }, [recordStale]);
 
   const portraitOnlyEnabled = definition.portraitOnly === true;
   const blockLandscape = portraitOnlyEnabled && isMobile && isLandscape;
@@ -451,6 +467,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const selectedRecordIdRef = useRef<string>(selectedRecordId);
   const selectedRecordSnapshotRef = useRef<WebFormSubmission | null>(selectedRecordSnapshot);
   const lastSubmissionMetaRef = useRef<SubmissionMeta | null>(lastSubmissionMeta);
+  // Tracks the last known server-owned dataVersion for the currently open record (used for optimistic locking).
+  const recordDataVersionRef = useRef<number | null>(
+    record && Number.isFinite(Number((record as any).dataVersion)) ? Number((record as any).dataVersion) : null
+  );
+  // Tracks the last known rowNumber for the currently open record (used for fast O(1) version checks via the index sheet).
+  const recordRowNumberRef = useRef<number | null>(
+    record && Number.isFinite(Number((record as any).__rowNumber)) ? Number((record as any).__rowNumber) : null
+  );
   /**
    * Tracks whether the current form session represents a "create new record" flow (blank/new preset/copy),
    * even after autosave generates a record id. Used to enforce dedup rules on drafts without breaking edits
@@ -835,12 +859,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         dedupCheckTimerRef.current = null;
       }
       dedupCheckSeqRef.current += 1;
-      lastDedupCheckedSignatureRef.current = '';
       dedupCheckingRef.current = false;
       dedupConflictRef.current = null;
       setDedupChecking(false);
       setDedupConflict(null);
       setDedupNotice(null);
+      // Applying a fresh snapshot clears any "stale record" banner and updates our base dataVersion.
+      recordStaleRef.current = null;
+      setRecordStale(null);
+      recordDataVersionRef.current =
+        snapshot && Number.isFinite(Number((snapshot as any).dataVersion)) ? Number((snapshot as any).dataVersion) : null;
+      // Best-effort: capture rowNumber when present on the snapshot.
+      if (snapshot && Number.isFinite(Number((snapshot as any).__rowNumber))) {
+        recordRowNumberRef.current = Number((snapshot as any).__rowNumber);
+      }
       const currentId =
         resolveExistingRecordId({
           selectedRecordId: selectedRecordIdRef.current,
@@ -858,6 +890,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const normalized = normalizeRecordValues(definition, snapshot.values || {});
       const initialLineItems = buildInitialLineItems(definition, normalized);
       const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
+      // Treat the loaded snapshot's dedup signature as "already checked" so we don't spam dedup checks
+      // on every record navigation. Subsequent edits of dedup-key fields will force a re-check.
+      try {
+        const baseline = computeDedupSignatureFromValues((definition as any)?.dedupRules, mapped.values as any);
+        lastDedupCheckedSignatureRef.current = (baseline || '').toString();
+        dedupSignatureRef.current = lastDedupCheckedSignatureRef.current;
+      } catch (_) {
+        lastDedupCheckedSignatureRef.current = '';
+      }
       // Avoid autosaving immediately due to state hydration from a server snapshot.
       autoSaveDirtyRef.current = false;
       if (autoSaveTimerRef.current) {
@@ -884,12 +925,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         id,
         createdAt: snapshot.createdAt,
         updatedAt: snapshot.updatedAt,
+        dataVersion: (snapshot as any).dataVersion,
         status: snapshot.status || null
       });
       lastSubmissionMetaRef.current = {
         id,
         createdAt: snapshot.createdAt,
         updatedAt: snapshot.updatedAt,
+        dataVersion: (snapshot as any).dataVersion,
         status: snapshot.status || null
       };
       setRecordLoadingId(null);
@@ -966,10 +1009,63 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     [definition, formKey, logEvent, upsertListCacheRow]
   );
 
+  const markRecordStale = useCallback(
+    (args: {
+      reason: string;
+      recordId: string;
+      cachedVersion?: number | null;
+      serverVersion?: number | null;
+      serverRow?: number | null;
+    }) => {
+      const currentId = (selectedRecordIdRef.current || '').toString().trim();
+      const targetId = (args.recordId || '').toString().trim();
+      if (currentId && targetId && currentId !== targetId) return;
+      const id = currentId || targetId;
+      if (!id) return;
+
+      const toNum = (v: any): number | undefined => {
+        const n = v === undefined || v === null ? Number.NaN : Number(v);
+        return Number.isFinite(n) ? n : undefined;
+      };
+      const cachedVersion = args.cachedVersion !== undefined ? toNum(args.cachedVersion) : undefined;
+      const serverVersion = args.serverVersion !== undefined ? toNum(args.serverVersion) : undefined;
+      const serverRow = args.serverRow !== undefined ? toNum(args.serverRow) : undefined;
+
+      const message = tSystem(
+        'record.stale',
+        languageRef.current,
+        'This record was modified by another user. Please refresh.'
+      );
+      const next: RecordStaleInfo = { recordId: id, message, cachedVersion, serverVersion, serverRow };
+      recordStaleRef.current = next;
+      setRecordStale(next);
+
+      // Cancel draft autosave so we don't overwrite remote changes.
+      autoSaveDirtyRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+
+      logEvent('record.stale.detected', {
+        reason: args.reason,
+        recordId: id,
+        cachedVersion: cachedVersion ?? null,
+        serverVersion: serverVersion ?? null,
+        serverRow: serverRow ?? null
+      });
+    },
+    [logEvent]
+  );
+
   const loadRecordSnapshot = useCallback(
     async (recordId: string, rowNumberHint?: number): Promise<boolean> => {
       const candidateRow = rowNumberHint && Number.isFinite(rowNumberHint) && rowNumberHint >= 2 ? rowNumberHint : undefined;
       if (!recordId && !candidateRow) return false;
+      if (candidateRow) {
+        recordRowNumberRef.current = candidateRow;
+      }
       const seq = ++recordFetchSeqRef.current;
       const startedAt = Date.now();
       setRecordLoadingId(recordId || (candidateRow ? `row:${candidateRow}` : null));
@@ -1543,6 +1639,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     dedupCheckingRef.current = false;
     dedupConflictRef.current = null;
     lastDedupCheckedSignatureRef.current = '';
+    recordStaleRef.current = null;
+    setRecordStale(null);
+    recordDataVersionRef.current = null;
+    recordRowNumberRef.current = null;
     const normalized = normalizeRecordValues(definition);
     const initialLineItems = buildInitialLineItems(definition);
     const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
@@ -1585,6 +1685,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     dedupCheckingRef.current = false;
     dedupConflictRef.current = null;
     lastDedupCheckedSignatureRef.current = '';
+    recordStaleRef.current = null;
+    setRecordStale(null);
+    recordDataVersionRef.current = null;
+    recordRowNumberRef.current = null;
     const cleared = clearAutoIncrementFields(definition, values, lineItems);
     lastAutoSaveSeenRef.current = { values: cleared.values, lineItems: cleared.lineItems };
     setValues(cleared.values);
@@ -2062,6 +2166,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       dedupCheckingRef.current = false;
       dedupConflictRef.current = null;
       lastDedupCheckedSignatureRef.current = '';
+      recordStaleRef.current = null;
+      setRecordStale(null);
+      recordDataVersionRef.current = null;
+      recordRowNumberRef.current = null;
 
       const parsedRef = parseButtonRef(buttonId || '');
       const baseId = parsedRef.id;
@@ -2511,6 +2619,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return;
       }
 
+      // If the record is stale (modified elsewhere), do not autosave; user must refresh first.
+      if (recordStaleRef.current) {
+        autoSaveDirtyRef.current = false;
+        if (autoSaveTimerRef.current) {
+          globalThis.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+        setDraftSave({ phase: 'idle' });
+        logEvent('autosave.blocked.recordStale', { reason, recordId: (recordStaleRef.current.recordId || '').toString() });
+        return;
+      }
+
       // In create-flow, do not autosave until the user actually changes a field value.
       if (createFlowRef.current && !createFlowUserEditedRef.current) return;
 
@@ -2584,12 +2704,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         payload.__ckSaveMode = 'draft';
         payload.__ckStatus = autoSaveStatusValue;
         payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
+        const baseVersion = recordDataVersionRef.current;
+        if (existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
+          payload.__ckClientDataVersion = Number(baseVersion);
+        }
 
         const res = await submit(payload);
         const ok = !!res?.success;
         const msg = (res?.message || '').toString();
         if (!ok) {
           const errText = msg || 'Autosave failed.';
+          const lower = errText.toLowerCase();
+          const isStale = lower.includes('modified by another user') || lower.includes('please refresh');
+          if (isStale) {
+            const serverVersionRaw = Number((res as any)?.meta?.dataVersion);
+            markRecordStale({
+              reason: 'autosave.rejected.stale',
+              recordId: (existingRecordId || '').toString(),
+              cachedVersion: Number.isFinite(Number(baseVersion)) ? Number(baseVersion) : null,
+              serverVersion: Number.isFinite(serverVersionRaw) ? serverVersionRaw : null,
+              serverRow: null
+            });
+            return;
+          }
           // If autosave failed while dedup keys are populated, perform a server-side dedup check
           // so we can show the dedup banner (instead of a generic autosave error).
           if (currentDedupSignature) {
@@ -2645,11 +2782,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         const newId = (res?.meta?.id || existingRecordId || '').toString();
         const updatedAt = (res?.meta?.updatedAt || '').toString();
         if (newId) setSelectedRecordId(newId);
+        // Successful save => record is now at least as fresh as the server; clear stale banner + bump local version.
+        recordStaleRef.current = null;
+        setRecordStale(null);
+        const nextDataVersion = Number((res as any)?.meta?.dataVersion);
+        if (Number.isFinite(nextDataVersion) && nextDataVersion > 0) {
+          recordDataVersionRef.current = nextDataVersion;
+        }
+        const nextRowNumber = Number((res as any)?.meta?.rowNumber);
+        if (Number.isFinite(nextRowNumber) && nextRowNumber >= 2) {
+          recordRowNumberRef.current = nextRowNumber;
+        }
         setLastSubmissionMeta(prev => ({
           ...(prev || {}),
           id: newId || prev?.id,
           createdAt: res?.meta?.createdAt || prev?.createdAt,
           updatedAt: updatedAt || prev?.updatedAt,
+          dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion)) ? Number((res as any).meta.dataVersion) : prev?.dataVersion,
           status: autoSaveStatusValue
         }));
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
@@ -2711,6 +2860,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
     // In create-flow, autosave must still wait for the first real user edit.
     if (createFlowRef.current && !createFlowUserEditedRef.current) return;
+    // If the record is stale, do not resume autosave; user must refresh first.
+    if (recordStaleRef.current) return;
     if (!autoSaveDirtyRef.current) return;
     if (submittingRef.current) return;
     // Queue a debounced autosave now that we are unblocked.
@@ -2745,6 +2896,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
     // In create-flow, do not autosave until the user actually changes a field value.
     if (createFlowRef.current && !createFlowUserEditedRef.current) return;
+    // If the record is stale (modified elsewhere), do not schedule autosave.
+    if (recordStaleRef.current) {
+      autoSaveDirtyRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+      logEvent('autosave.blocked.recordStale', { reason: 'debouncedTrigger' });
+      return;
+    }
 
     autoSaveDirtyRef.current = true;
     if (dedupHoldRef.current || dedupCheckingRef.current) {
@@ -2790,6 +2952,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       if (viewRef.current !== 'form') return { success: false, message: 'Not in form view.' };
       if (submittingRef.current) return { success: false, message: 'Submitting.' };
       if (isClosedRecord) return { success: false, message: 'Closed (read-only).' };
+      if (recordStaleRef.current) {
+        // Block uploads (they require draft saves) until the user refreshes the record.
+        return {
+          success: false,
+          message:
+            recordStaleRef.current.message ||
+            tSystem('record.stale', languageRef.current, 'This record was modified by another user. Please refresh.')
+        };
+      }
 
       // Ensure we don't have a pending debounced draft save that might race with this sequence.
       if (autoSaveTimerRef.current) {
@@ -2871,8 +3042,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             id: recordId,
             createdAt: res?.meta?.createdAt || prev?.createdAt,
             updatedAt: res?.meta?.updatedAt || prev?.updatedAt,
+            dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion)) ? Number((res as any).meta.dataVersion) : prev?.dataVersion,
             status: autoSaveStatusValue
           }));
+          recordStaleRef.current = null;
+          setRecordStale(null);
+          const dv = Number((res as any)?.meta?.dataVersion);
+          if (Number.isFinite(dv) && dv > 0) {
+            recordDataVersionRef.current = dv;
+          }
+          const rn = Number((res as any)?.meta?.rowNumber);
+          if (Number.isFinite(rn) && rn >= 2) {
+            recordRowNumberRef.current = rn;
+          }
           setDraftSave({ phase: 'saved', updatedAt: (res?.meta?.updatedAt || '').toString() || undefined });
           // Keep list view up-to-date without triggering a refetch.
           upsertListCacheRow({
@@ -2949,19 +3131,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         draft2.__ckSaveMode = 'draft';
         draft2.__ckStatus = autoSaveStatusValue;
         draft2.__ckCreateFlow = createFlowRef.current ? '1' : '';
+        const baseVersion = recordDataVersionRef.current;
+        if (recordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
+          draft2.__ckClientDataVersion = Number(baseVersion);
+        }
 
         const res2 = await submit(draft2);
         if (!res2?.success) {
           const msg = (res2?.message || 'Failed to save uploaded file URLs.').toString();
+          const lower = msg.toLowerCase();
+          const isStale = lower.includes('modified by another user') || lower.includes('please refresh');
+          if (isStale) {
+            const serverVersionRaw = Number((res2 as any)?.meta?.dataVersion);
+            markRecordStale({
+              reason: 'upload.saveUrls.rejected.stale',
+              recordId,
+              cachedVersion: Number.isFinite(Number(baseVersion)) ? Number(baseVersion) : null,
+              serverVersion: Number.isFinite(serverVersionRaw) ? serverVersionRaw : null,
+              serverRow: null
+            });
+            return { success: false, message: msg };
+          }
           logEvent('upload.saveUrls.error', { fieldPath: args.fieldPath, recordId, message: msg });
           setDraftSave({ phase: 'error', message: msg });
           return { success: false, message: msg };
         }
 
+        recordStaleRef.current = null;
+        setRecordStale(null);
+        const dv2 = Number((res2 as any)?.meta?.dataVersion);
+        if (Number.isFinite(dv2) && dv2 > 0) {
+          recordDataVersionRef.current = dv2;
+        }
+        const rn2 = Number((res2 as any)?.meta?.rowNumber);
+        if (Number.isFinite(rn2) && rn2 >= 2) {
+          recordRowNumberRef.current = rn2;
+        }
         setLastSubmissionMeta(prev => ({
           ...(prev || {}),
           id: recordId,
           updatedAt: (res2?.meta?.updatedAt || prev?.updatedAt) as any,
+          dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : prev?.dataVersion,
           status: autoSaveStatusValue
         }));
         setDraftSave({ phase: 'saved', updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined });
@@ -3011,6 +3221,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         id: record.id,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
+        dataVersion: (record as any).dataVersion,
         status: record.status || null
       });
       setSelectedRecordSnapshot(record);
@@ -3078,10 +3289,75 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       logEvent('submit.blocked.closed');
       return;
     }
+    // If we already know the record is stale, block immediately (no validations).
+    if (recordStaleRef.current) {
+      logEvent('submit.blocked.recordStale', { recordId: recordStaleRef.current.recordId });
+      return;
+    }
     clearStatus();
     setValidationAttempted(true);
     setValidationNoticeHidden(false);
     logEvent('submit.validate.begin', { language, lineItemGroups: Object.keys(lineItems).length });
+
+    // Kick off a server version precheck in parallel (best-effort), even if local validations fail.
+    // This avoids wasting time fixing validation errors on a record that must be refreshed anyway.
+    if (!submitConfirmedRef.current) {
+      const precheckRecordId =
+        resolveExistingRecordId({
+          selectedRecordId,
+          selectedRecordSnapshot,
+          lastSubmissionMetaId: lastSubmissionMeta?.id || null
+        }) || '';
+      const baseVersion = recordDataVersionRef.current;
+      const rowNumberHint = recordRowNumberRef.current;
+      const canCheck = precheckRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0;
+      if (canCheck && !submitPrecheckInFlightRef.current) {
+        submitPrecheckInFlightRef.current = true;
+        const startedAt = Date.now();
+        logEvent('submit.versionPrecheck.start', {
+          recordId: precheckRecordId,
+          cachedVersion: Number(baseVersion),
+          rowNumberHint: rowNumberHint || null
+        });
+        void getRecordVersionApi(formKey, precheckRecordId, rowNumberHint)
+          .then(v => {
+            try {
+              if (!v?.success) {
+                logEvent('submit.versionPrecheck.error', { recordId: precheckRecordId, message: v?.message || 'failed' });
+                return;
+              }
+              const serverVersion = Number(v.dataVersion);
+              const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : null;
+              if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
+              if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== Number(baseVersion)) {
+                markRecordStale({
+                  reason: 'submit.precheck.stale',
+                  recordId: precheckRecordId,
+                  cachedVersion: Number(baseVersion),
+                  serverVersion,
+                  serverRow
+                });
+                return;
+              }
+              logEvent('submit.versionPrecheck.ok', {
+                recordId: precheckRecordId,
+                serverVersion: Number.isFinite(serverVersion) ? serverVersion : null
+              });
+            } catch (err: any) {
+              logEvent('submit.versionPrecheck.handlerException', { recordId: precheckRecordId, message: err?.message || err });
+            }
+          })
+          .catch(err => {
+            const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'failed';
+            logEvent('submit.versionPrecheck.exception', { recordId: precheckRecordId, message: msg });
+          })
+          .finally(() => {
+            submitPrecheckInFlightRef.current = false;
+            logEvent('submit.versionPrecheck.end', { recordId: precheckRecordId, durationMs: Date.now() - startedAt });
+          });
+      }
+    }
+
     try {
       setValidationWarnings(
         collectValidationWarnings({
@@ -3116,8 +3392,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     // Dedup precheck: block submit early once all dedup keys are populated.
     if (dedupSignature) {
       if (dedupChecking) {
-        setStatus('Checking duplicates…');
-        setStatusLevel('info');
         submitConfirmedRef.current = false;
         logEvent('submit.blocked.dedup.checking');
         return;
@@ -3176,6 +3450,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         collapsedRows: submitUi?.collapsedRows,
         collapsedSubgroups: submitUi?.collapsedSubgroups
       });
+      const submitBaseVersion = recordDataVersionRef.current;
+      if (existingRecordId && Number.isFinite(Number(submitBaseVersion)) && Number(submitBaseVersion) > 0) {
+        (payload as any).__ckClientDataVersion = Number(submitBaseVersion);
+      }
       const payloadValues = (payload as any).values as Record<string, any> | undefined;
       if (payloadValues) {
         const fileUpdates = computeUrlOnlyUploadUpdates(definition, payloadValues);
@@ -3195,6 +3473,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       setStatus(message);
       setStatusLevel(ok ? 'success' : 'error');
       if (!ok) {
+        const lower = message.toLowerCase();
+        const isStale = lower.includes('modified by another user') || lower.includes('please refresh');
+        if (isStale) {
+          const serverVersionRaw = Number((res as any)?.meta?.dataVersion);
+          markRecordStale({
+            reason: 'submit.rejected.stale',
+            recordId: existingRecordId || selectedRecordId || '',
+            cachedVersion: Number.isFinite(Number(submitBaseVersion)) ? Number(submitBaseVersion) : null,
+            serverVersion: Number.isFinite(serverVersionRaw) ? serverVersionRaw : null,
+            serverRow: null
+          });
+        }
         logEvent('submit.error', { message, meta: (res as any)?.meta || null });
         return;
       }
@@ -3207,8 +3497,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         id: recordId || prev?.id || selectedRecordId,
         createdAt: (res as any)?.meta?.createdAt || prev?.createdAt,
         updatedAt: (res as any)?.meta?.updatedAt || prev?.updatedAt,
+        dataVersion: Number.isFinite(Number(((res as any)?.meta as any)?.dataVersion)) ? Number(((res as any).meta as any).dataVersion) : prev?.dataVersion,
         status: ((res as any)?.meta as any)?.status || prev?.status || null
       }));
+      recordStaleRef.current = null;
+      setRecordStale(null);
+      const dv = Number(((res as any)?.meta as any)?.dataVersion);
+      if (Number.isFinite(dv) && dv > 0) {
+        recordDataVersionRef.current = dv;
+      }
+      const rn = Number(((res as any)?.meta as any)?.rowNumber);
+      if (Number.isFinite(rn) && rn >= 2) {
+        recordRowNumberRef.current = rn;
+      }
 
       // Run follow-up actions automatically (and close the record) now that the Follow-up view is removed.
       const followupCfg = (definition as any)?.followup || null;
@@ -3308,6 +3609,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setStatusLevel(null);
     setRecordLoadError(null);
     setSelectedRecordId(row.id);
+    selectedRecordIdRef.current = row.id;
+    // Clear any previous snapshot immediately; we will re-apply a fresh snapshot below.
+    setSelectedRecordSnapshot(null);
 
     const requested = (opts?.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
     const openButtonId = (opts?.openButtonId || '').toString().trim();
@@ -3326,27 +3630,85 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       return action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate';
     };
 
+    const rowNumberHint = Number((row as any).__rowNumber);
+    const hintedRow = Number.isFinite(rowNumberHint) ? rowNumberHint : undefined;
+    recordRowNumberRef.current = hintedRow || null;
+
+    const triggerOpenButtonIfNeeded = () => {
+      if (!shouldTriggerButton) return;
+      if (!isAllowedListTriggeredAction(openButtonId)) {
+        logEvent('list.openButton.ignored', { openButtonId, reason: 'unsupportedAction' });
+        return;
+      }
+      logEvent('list.openButton.trigger', { openButtonId });
+      handleCustomButton(openButtonId);
+    };
+
+    const cachedVersion =
+      sourceRecord && Number.isFinite(Number((sourceRecord as any).dataVersion)) ? Number((sourceRecord as any).dataVersion) : null;
+
+    // Fast path: show cached record immediately when available.
+    // Re-check the server version in the background when we have a cached version; refetch if stale.
     if (sourceRecord) {
       applyRecordSnapshot(sourceRecord);
+      // If the list requested a button action, don't wait on version checks; render immediately from the cached snapshot.
+      // (If the cached snapshot is stale, the user can always refresh; we avoid blocking the UX on a second roundtrip.)
+      if (shouldTriggerButton) {
+        triggerOpenButtonIfNeeded();
+      }
+      // Version check is async; do not block navigation.
+      if (cachedVersion !== null) {
+        void (async () => {
+        const recordId = row.id;
+        logEvent('record.versionCheck.start', { recordId, cachedVersion, rowNumberHint: hintedRow || null });
+        try {
+          const v = await getRecordVersionApi(formKey, recordId, hintedRow || null);
+          if (selectedRecordIdRef.current !== recordId) return;
+          if (!v?.success) {
+            logEvent('record.versionCheck.error', { recordId, message: v?.message || 'failed' });
+            return;
+          }
+          const serverVersion = Number(v.dataVersion);
+          const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : undefined;
+          if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
+          if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion === cachedVersion) {
+            logEvent('record.versionCheck.match', { recordId, serverVersion });
+            return;
+          }
+          logEvent('record.versionCheck.stale', {
+            recordId,
+            cachedVersion,
+            serverVersion: Number.isFinite(serverVersion) ? serverVersion : null,
+            serverRow: serverRow || null
+          });
+          // Do NOT auto-refresh: show a banner so the user can explicitly refresh (avoids losing local changes).
+          if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== cachedVersion) {
+            markRecordStale({
+              reason: 'versionCheck.stale',
+              recordId,
+              cachedVersion,
+              serverVersion,
+              serverRow: serverRow || hintedRow || null
+            });
+          }
+        } catch (err: any) {
+          const msg = (err?.message || err?.toString?.() || 'failed').toString();
+          logEvent('record.versionCheck.exception', { recordId: row.id, message: msg });
+        }
+      })();
+      }
     } else {
-      setSelectedRecordSnapshot(null);
+      // No cached record (or no cached version): fetch the full snapshot.
       setLastSubmissionMeta({
         id: row.id,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         status: row.status ? row.status.toString() : null
       });
-      const rowNumberHint = Number((row as any).__rowNumber);
-      loadRecordSnapshot(row.id, Number.isFinite(rowNumberHint) ? rowNumberHint : undefined).then(ok => {
+      loadRecordSnapshot(row.id, hintedRow).then(ok => {
         if (!ok) return;
-        if (shouldTriggerButton) {
-          if (!isAllowedListTriggeredAction(openButtonId)) {
-            logEvent('list.openButton.ignored', { openButtonId, reason: 'unsupportedAction' });
-            return;
-          }
-          logEvent('list.openButton.trigger', { openButtonId });
-          handleCustomButton(openButtonId);
-        }
+        if (selectedRecordIdRef.current !== row.id) return;
+        triggerOpenButtonIfNeeded();
       });
     }
 
@@ -3355,14 +3717,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     // When Summary view is disabled, always open the Form view (closed records are read-only).
     if (shouldTriggerButton) {
       // Stay on the list view; the button action will open a preview overlay when the record snapshot is ready.
-      if (sourceRecord) {
-        if (!isAllowedListTriggeredAction(openButtonId)) {
-          logEvent('list.openButton.ignored', { openButtonId, reason: 'unsupportedAction' });
-          return;
-        }
-        logEvent('list.openButton.trigger', { openButtonId });
-        handleCustomButton(openButtonId);
-      }
       return;
     }
 
@@ -3429,15 +3783,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   })();
 
   const dedupTopNotice =
-    view === 'form' && (dedupChecking || !!dedupConflict || !!dedupNotice) ? (
+    view === 'form' && (!!dedupConflict || !!dedupNotice) ? (
       <div
         role="status"
         aria-live="polite"
         style={{
           padding: '12px 14px',
           borderRadius: 14,
-          border: (dedupConflict || dedupNotice) && !dedupChecking ? '1px solid #fca5a5' : '1px solid rgba(148,163,184,0.55)',
-          background: (dedupConflict || dedupNotice) && !dedupChecking ? '#fee2e2' : 'rgba(148,163,184,0.10)',
+          border: '1px solid #fca5a5',
+          background: '#fee2e2',
           color: '#0f172a',
           fontWeight: 800,
           display: 'flex',
@@ -3446,9 +3800,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }}
       >
         <div>
-          {dedupChecking
-            ? tSystem('dedup.checking', language, 'Checking duplicates…')
-            : ((dedupConflict || dedupNotice)?.message || tSystem('dedup.duplicate', language, 'Duplicate record.'))}
+          {(dedupConflict || dedupNotice)?.message || tSystem('dedup.duplicate', language, 'Duplicate record.')}
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {(dedupConflict || dedupNotice)?.existingRecordId ? (
@@ -3510,6 +3862,56 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       </div>
     ) : null;
 
+  const recordStaleTopNotice =
+    (view === 'form' || view === 'summary') && recordStale ? (
+      <div
+        role="status"
+        aria-live="polite"
+        style={{
+          padding: '12px 14px',
+          borderRadius: 14,
+          border: '1px solid rgba(251, 146, 60, 0.55)',
+          background: 'rgba(251, 146, 60, 0.14)',
+          color: '#0f172a',
+          fontWeight: 900,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10
+        }}
+      >
+        <div>{recordStale.message}</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              const id = (recordStale.recordId || selectedRecordIdRef.current || '').toString().trim();
+              if (!id) return;
+              const row = recordStale.serverRow;
+              // Cancel any pending autosave while we refresh.
+              autoSaveDirtyRef.current = false;
+              if (autoSaveTimerRef.current) {
+                globalThis.clearTimeout(autoSaveTimerRef.current);
+                autoSaveTimerRef.current = null;
+              }
+              setDraftSave({ phase: 'idle' });
+              logEvent('record.stale.refresh.click', { recordId: id, rowNumberHint: row || null });
+              void loadRecordSnapshot(id, row);
+            }}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 12,
+              border: '1px solid rgba(15,23,42,0.18)',
+              background: '#ffffff',
+              color: '#0f172a',
+              fontWeight: 900
+            }}
+          >
+            {tSystem('record.refresh', language, 'Refresh record')}
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   const validationTopNotice =
     view === 'form' &&
     validationAttempted &&
@@ -3525,8 +3927,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     ) : null;
 
   const topBarNotice =
-    dedupTopNotice || validationTopNotice ? (
+    recordStaleTopNotice || dedupTopNotice || validationTopNotice ? (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {recordStaleTopNotice}
         {dedupTopNotice}
         {validationTopNotice}
       </div>
@@ -3670,7 +4073,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             onSubmit={handleSubmit}
             submitActionRef={formSubmitActionRef}
             navigateToFieldRef={formNavigateToFieldRef}
-            submitting={submitting || isClosedRecord || Boolean(recordLoadingId)}
+            submitting={submitting || isClosedRecord || Boolean(recordLoadingId) || Boolean(recordStale)}
             dedupLockActive={dedupLockActive}
             dedupKeyFieldIds={dedupKeyFieldIds}
             errors={errors}

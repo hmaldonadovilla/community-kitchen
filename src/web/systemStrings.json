@@ -34,6 +34,19 @@
     },
     "unknownError": { "en": "Unknown error", "fr": "Erreur inconnue", "nl": "Onbekende fout" }
   },
+  "record": {
+    "checking": {
+      "en": "Checking for updates…",
+      "fr": "Vérification des mises à jour…",
+      "nl": "Controleren op updates…"
+    },
+    "stale": {
+      "en": "This record was modified by another user. Please refresh.",
+      "fr": "Cet enregistrement a été modifié par un autre utilisateur. Veuillez actualiser.",
+      "nl": "Dit record werd door een andere gebruiker gewijzigd. Vernieuw het."
+    },
+    "refresh": { "en": "Refresh record", "fr": "Actualiser l'enregistrement", "nl": "Record vernieuwen" }
+  },
   "actions": {
     "home": { "en": "Home", "fr": "Accueil", "nl": "Start" },
     "create": { "en": "Create", "fr": "Créer", "nl": "Aanmaken" },

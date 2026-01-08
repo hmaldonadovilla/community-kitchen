@@ -15,7 +15,7 @@ export interface SubmissionPayload {
 export interface SubmissionResult {
   success: boolean;
   message?: string;
-  meta?: { id?: string; createdAt?: string; updatedAt?: string };
+  meta?: { id?: string; createdAt?: string; updatedAt?: string; dataVersion?: number; rowNumber?: number };
 }
 
 export interface DedupConflictCheckResult {
@@ -245,6 +245,15 @@ export interface TrashPreviewResult {
   message?: string;
 }
 
+export interface RecordVersionResult {
+  success: boolean;
+  id?: string;
+  rowNumber?: number;
+  dataVersion?: number;
+  updatedAt?: string;
+  message?: string;
+}
+
 type Runner = typeof google.script.run;
 
 const getRunner = (): Runner | null => {
@@ -310,6 +319,9 @@ export const fetchRecordById = (formKey: string, id: string): Promise<WebFormSub
 
 export const fetchRecordByRowNumber = (formKey: string, rowNumber: number): Promise<WebFormSubmission | null> =>
   runAppsScript<WebFormSubmission | null>('fetchSubmissionByRowNumber', formKey, rowNumber);
+
+export const getRecordVersionApi = (formKey: string, recordId: string, rowNumberHint?: number | null): Promise<RecordVersionResult> =>
+  runAppsScript<RecordVersionResult>('getRecordVersion', formKey, recordId, rowNumberHint ?? null);
 
 export const fetchDataSourceApi = (req: DataSourceRequest): Promise<DataSourceResponse> =>
   runAppsScript<DataSourceResponse>('fetchDataSource', req.source, req.locale, req.projection, req.limit, req.pageToken);

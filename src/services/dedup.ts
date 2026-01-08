@@ -176,3 +176,22 @@ export function findDedupConflict(
   }
   return undefined;
 }
+
+/**
+ * Compute the normalized dedup signature string for a given rule + values.
+ *
+ * This is used by indexed dedup implementations so they match the same semantics as `findDedupConflict`:
+ * - caseInsensitive uses lowercased tokens
+ * - DATE cells normalize to yyyy-MM-dd in script timezone when possible
+ * - arrays join with '|'
+ * - returns null when any required key is empty (dedup not enforced yet)
+ */
+export function computeDedupSignature(rule: DedupRule, values: Record<string, any>): string | null {
+  if (!rule) return null;
+  const mode = rule.matchMode || 'exact';
+  const keys = rule.keys || [];
+  if (!keys.length) return null;
+  const parts = keys.map(k => normalize((values || {})[k], mode as any));
+  if (parts.some(p => !p || !p.toString().trim())) return null;
+  return parts.join('||');
+}

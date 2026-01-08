@@ -95,7 +95,7 @@ export class FormGenerator {
       sheet = this.ss.insertSheet(destinationTab);
     }
 
-    const metaHeaders = ['Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'];
+    const metaHeaders = ['Record ID', 'Data Version', 'Created At', 'Updated At', 'Status', 'PDF URL'];
     const lastColumn = Math.max(sheet.getLastColumn(), 1);
     const existingRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0] || [];
     const rawExistingHeaders = existingRow.map(h => (h || '').toString().trim());

@@ -1400,6 +1400,11 @@ export interface WebFormSubmission {
   id?: string;
   createdAt?: string;
   updatedAt?: string;
+  /**
+   * Monotonic server-owned record version used for cache validation and optimistic locking.
+   * Stored in the destination sheet as "Data Version".
+   */
+  dataVersion?: number;
   status?: string;
   pdfUrl?: string;
 }
@@ -1582,6 +1587,8 @@ export interface RecordMetadata {
   id?: string;
   createdAt?: string;
   updatedAt?: string;
+  dataVersion?: number;
+  rowNumber?: number;
 }
 
 export interface PaginatedResult<T> {

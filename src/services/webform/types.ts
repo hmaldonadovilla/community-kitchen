@@ -4,6 +4,7 @@ export interface HeaderColumns {
   timestamp?: number;
   language?: number;
   recordId?: number;
+  dataVersion?: number;
   createdAt?: number;
   updatedAt?: number;
   status?: number;

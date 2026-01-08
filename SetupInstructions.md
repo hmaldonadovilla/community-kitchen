@@ -943,7 +943,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - `emailCc` / `emailBcc`: same structure as `emailRecipients`, useful for copying chefs/managers automatically.
    - `statusFieldId` (optional): question ID to overwrite when actions run. If omitted we use the auto-generated `Status` column in the response tab.
    - `statusTransitions`: strings written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
-   - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes the configured `status` (default `In progress`). If the record’s status is `Closed`, the edit view becomes read-only and autosave stops.
+  - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes the configured `status` (default `In progress`). If the record’s status is `Closed`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI shows a “Refresh record” banner to avoid overwriting remote changes.
 
 2. **Provide templates**:
    - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).
@@ -1061,6 +1061,28 @@ To force an immediate refresh:
 
 - Run **Community Kitchen → Create/Update All Forms** from the Google Sheet menu.
 - This bumps a template-cache “epoch”, so the next render/prefetch reads the latest template from Drive.
+
+### Record indexing + Data Version (performance + consistency)
+
+For large datasets (10k–100k+ rows), the app relies on **indexed lookups** instead of scanning sheets.
+
+What is added/maintained:
+
+- **Destination tab meta column**: `Data Version`
+  - Server-owned, monotonic integer (starts at 1 and increments on each update).
+  - Used by the web app to validate cached records (`getRecordVersion` + banner prompting the user to refresh if stale).
+  - Used for **optimistic locking**: draft autosave and submit are rejected when the client’s version is behind the sheet’s current version (prevents last-write-wins overwrites).
+- **Hidden index sheet per destination tab**: `__CK_INDEX__...`
+  - Aligns by row number with the destination tab.
+  - Stores: record id, row number, data version, timestamps, and per-rule dedup signatures.
+  - Used for **fast record id → row** resolution and **indexed dedup checks**.
+
+Recommended steps after deploying a new bundle:
+
+- Run **Community Kitchen → Create/Update All Forms** (ensures columns exist).
+- Run **Community Kitchen → Rebuild Indexes (Data Version + Dedup)** (backfills existing rows).
+- Run **Community Kitchen → Install Triggers (Options + Response indexing)**:
+  - Installs an `onEdit` trigger to keep `Data Version` + indexes consistent when users manually edit the destination sheet.
 
 ### UI tips (React edit + Summary)
 
