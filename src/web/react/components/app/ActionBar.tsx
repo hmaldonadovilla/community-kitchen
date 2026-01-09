@@ -442,7 +442,11 @@ export const ActionBar: React.FC<{
 
   const showSubmit = resolved.wantsSubmit && viewKey === 'form' && !readOnly;
 
-  if (!resolved.capsule.length && !showSubmit && !notice) return null;
+  const hasCapsuleRow = resolved.capsule.length > 0 || showSubmit;
+  const hasNoticeRow = !!notice;
+  const noticeOnly = hasNoticeRow && !hasCapsuleRow;
+
+  if (!hasCapsuleRow && !hasNoticeRow) return null;
 
   const navClass = position === 'bottom' ? 'ck-bottom-bar' : 'ck-top-action-bar';
   const navLabel =
@@ -625,140 +629,151 @@ export const ActionBar: React.FC<{
 
       {menu && menu.startsWith('menu:') ? renderCustomMenuOverlay(openMenuDef) : null}
 
-      <nav className={navClass} aria-label={navLabel} data-sticky={topSticky ? '1' : '0'}>
+      <nav
+        className={navClass}
+        aria-label={navLabel}
+        data-sticky={topSticky ? '1' : '0'}
+        data-notice-only={noticeOnly ? '1' : '0'}
+      >
         {position === 'bottom' && notice ? (
           <div className="ck-bottom-bar-inner ck-actionbar-notice-inner ck-actionbar-notice-inner--bottom">{notice}</div>
         ) : null}
-        <div className="ck-bottom-bar-inner">
-          <div className="ck-bottom-capsule" aria-label={tSystem('app.navigation', language, 'Navigation')}>
-            {resolved.capsule.map((it, idx) => {
-              if (it.kind === 'home') {
-                return (
-                  <button
-                    // eslint-disable-next-line react/no-array-index-key
-                    key={`home-${idx}`}
-                    type="button"
-                    className={`ck-bottom-item ck-bottom-item--icon${homeActive ? ' active' : ''}`}
-                    onClick={onHome}
-                    disabled={disabled}
-                    aria-label={tSystem('actions.home', language, 'Home')}
-                    title={tSystem('actions.home', language, 'Home')}
-                  >
-                    <IconWrap>
-                      <HomeIcon />
-                    </IconWrap>
-                  </button>
-                );
-              }
-              if (it.kind === 'create') {
-                const createLabel = tSystem('actions.create', language, 'Create');
-                return (
-                  <button
-                    // eslint-disable-next-line react/no-array-index-key
-                    key={`create-${idx}`}
-                    type="button"
-                    className={`ck-bottom-item${createOpen ? ' active' : ''}`}
-                    onClick={() => handleCreatePress({ showMenu: it.showMenu })}
-                    disabled={disabled}
-                    aria-haspopup={it.showMenu ? 'dialog' : undefined}
-                    aria-expanded={it.showMenu ? createOpen : undefined}
-                  >
-                    <IconWrap>
-                      <PlusIcon />
-                    </IconWrap>
-                    <span className="ck-bottom-label">{createLabel}</span>
-                  </button>
-                );
-              }
-              if (it.kind === 'edit') {
-                return (
-                  <button
-                    // eslint-disable-next-line react/no-array-index-key
-                    key={`edit-${idx}`}
-                    type="button"
-                    className="ck-bottom-item"
-                    onClick={onEdit}
-                    disabled={disabled}
-                  >
-                    <IconWrap>
-                      <EditIcon />
-                    </IconWrap>
-                    <span className="ck-bottom-label">{tSystem('actions.edit', language, 'Edit')}</span>
-                  </button>
-                );
-              }
-              if (it.kind === 'summary') {
-                return (
-                  <button
-                    // eslint-disable-next-line react/no-array-index-key
-                    key={`summary-${idx}`}
-                    type="button"
-                    className={`ck-bottom-item${summaryOpen ? ' active' : ''}`}
-                    onClick={() => handleSummaryPress({ showMenu: it.showMenu })}
-                    disabled={disabled}
-                    aria-haspopup={it.showMenu ? 'dialog' : undefined}
-                    aria-expanded={it.showMenu ? summaryOpen : undefined}
-                  >
-                    <IconWrap>
-                      <SummarySystemIcon />
-                    </IconWrap>
-                    <span className="ck-bottom-label">{it.label}</span>
-                  </button>
-                );
-              }
-              if (it.kind === 'actionsMenu') {
-                const open = menu === it.menuId;
-                return (
-                  <button
-                    // eslint-disable-next-line react/no-array-index-key
-                    key={`actions-${idx}`}
-                    type="button"
-                    className={`ck-bottom-item${open ? ' active' : ''}`}
-                    onClick={() => setMenu(current => (current === it.menuId ? null : it.menuId))}
-                    disabled={disabled || !onCustomButton}
-                    aria-haspopup="dialog"
-                    aria-expanded={open}
-                  >
-                    <IconWrap>
-                      <SummaryIcon />
-                    </IconWrap>
-                    <span className="ck-bottom-label">{it.label}</span>
-                  </button>
-                );
-              }
-              if (it.kind === 'custom') {
-                const btn = it.button;
-                return (
-                  <button
-                    // eslint-disable-next-line react/no-array-index-key
-                    key={`custom-${btn.id}-${idx}`}
-                    type="button"
-                    className="ck-bottom-item"
-                    onClick={() => onCustomButton?.(btn.id)}
-                    disabled={disabled || !onCustomButton}
-                  >
-                    <IconWrap>{btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}</IconWrap>
-                    <span className="ck-bottom-label">{btn.label}</span>
-                  </button>
-                );
-              }
-              return null;
-            })}
-          </div>
+        {hasCapsuleRow ? (
+          <div className="ck-bottom-bar-inner">
+            {resolved.capsule.length ? (
+              <div className="ck-bottom-capsule" aria-label={tSystem('app.navigation', language, 'Navigation')}>
+                {resolved.capsule.map((it, idx) => {
+                  if (it.kind === 'home') {
+                    return (
+                      <button
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={`home-${idx}`}
+                        type="button"
+                        className={`ck-bottom-item ck-bottom-item--icon${homeActive ? ' active' : ''}`}
+                        onClick={onHome}
+                        disabled={disabled}
+                        aria-label={tSystem('actions.home', language, 'Home')}
+                        title={tSystem('actions.home', language, 'Home')}
+                      >
+                        <IconWrap>
+                          <HomeIcon />
+                        </IconWrap>
+                      </button>
+                    );
+                  }
+                  if (it.kind === 'create') {
+                    const createLabel = tSystem('actions.create', language, 'Create');
+                    return (
+                      <button
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={`create-${idx}`}
+                        type="button"
+                        className={`ck-bottom-item${createOpen ? ' active' : ''}`}
+                        onClick={() => handleCreatePress({ showMenu: it.showMenu })}
+                        disabled={disabled}
+                        aria-haspopup={it.showMenu ? 'dialog' : undefined}
+                        aria-expanded={it.showMenu ? createOpen : undefined}
+                      >
+                        <IconWrap>
+                          <PlusIcon />
+                        </IconWrap>
+                        <span className="ck-bottom-label">{createLabel}</span>
+                      </button>
+                    );
+                  }
+                  if (it.kind === 'edit') {
+                    return (
+                      <button
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={`edit-${idx}`}
+                        type="button"
+                        className="ck-bottom-item"
+                        onClick={onEdit}
+                        disabled={disabled}
+                      >
+                        <IconWrap>
+                          <EditIcon />
+                        </IconWrap>
+                        <span className="ck-bottom-label">{tSystem('actions.edit', language, 'Edit')}</span>
+                      </button>
+                    );
+                  }
+                  if (it.kind === 'summary') {
+                    return (
+                      <button
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={`summary-${idx}`}
+                        type="button"
+                        className={`ck-bottom-item${summaryOpen ? ' active' : ''}`}
+                        onClick={() => handleSummaryPress({ showMenu: it.showMenu })}
+                        disabled={disabled}
+                        aria-haspopup={it.showMenu ? 'dialog' : undefined}
+                        aria-expanded={it.showMenu ? summaryOpen : undefined}
+                      >
+                        <IconWrap>
+                          <SummarySystemIcon />
+                        </IconWrap>
+                        <span className="ck-bottom-label">{it.label}</span>
+                      </button>
+                    );
+                  }
+                  if (it.kind === 'actionsMenu') {
+                    const open = menu === it.menuId;
+                    return (
+                      <button
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={`actions-${idx}`}
+                        type="button"
+                        className={`ck-bottom-item${open ? ' active' : ''}`}
+                        onClick={() => setMenu(current => (current === it.menuId ? null : it.menuId))}
+                        disabled={disabled || !onCustomButton}
+                        aria-haspopup="dialog"
+                        aria-expanded={open}
+                      >
+                        <IconWrap>
+                          <SummaryIcon />
+                        </IconWrap>
+                        <span className="ck-bottom-label">{it.label}</span>
+                      </button>
+                    );
+                  }
+                  if (it.kind === 'custom') {
+                    const btn = it.button;
+                    return (
+                      <button
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={`custom-${btn.id}-${idx}`}
+                        type="button"
+                        className="ck-bottom-item"
+                        onClick={() => onCustomButton?.(btn.id)}
+                        disabled={disabled || !onCustomButton}
+                      >
+                        <IconWrap>{btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}</IconWrap>
+                        <span className="ck-bottom-label">{btn.label}</span>
+                      </button>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            ) : (
+              <div aria-hidden="true" style={{ flex: '1 1 auto' }} />
+            )}
 
-          {showSubmit && (
-            <button type="button" className="ck-bottom-submit" onClick={onSubmit} disabled={disabled || submitDisabled}>
-              <IconWrap>
-                <CheckIcon />
-              </IconWrap>
-              <span className="ck-bottom-label">
-                {submitting
-                  ? tSystem('actions.submitting', language, 'Submitting…')
-                  : resolveLocalizedString(submitLabel, language, tSystem('actions.submit', language, 'Submit'))}
-              </span>
-            </button>
-          )}
-        </div>
+            {showSubmit && (
+              <button type="button" className="ck-bottom-submit" onClick={onSubmit} disabled={disabled || submitDisabled}>
+                <IconWrap>
+                  <CheckIcon />
+                </IconWrap>
+                <span className="ck-bottom-label">
+                  {submitting
+                    ? tSystem('actions.submitting', language, 'Submitting…')
+                    : resolveLocalizedString(submitLabel, language, tSystem('actions.submit', language, 'Submit'))}
+                </span>
+              </button>
+            )}
+          </div>
+        ) : null}
 
         {position === 'top' && notice ? (
           <div className="ck-bottom-bar-inner ck-actionbar-notice-inner">{notice}</div>

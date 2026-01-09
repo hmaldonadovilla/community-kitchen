@@ -4334,19 +4334,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   };
 
   const currentRecord = selectedRecordSnapshot || (selectedRecordId ? listCache.records[selectedRecordId] : null);
-  const draftBanner = (() => {
+  const headerSaveIndicator = useMemo(() => {
+    // Show in the Form view, and also while a background save is in-flight after navigation.
+    const showForView = view === 'form' || (autoSaveEnabled && draftSave.phase === 'saving');
+    if (!showForView) return null;
+
     if (isClosedRecord) {
       return (
-        <output
-          style={{
-            padding: '12px 14px',
-            borderRadius: 14,
-            border: '1px solid rgba(15, 23, 42, 0.14)',
-            background: 'rgba(118,118,128,0.08)',
-            fontWeight: 700
-          }}
-          aria-live="polite"
-        >
+        <output aria-live="polite" data-tone="paused">
           {tSystem('app.closedReadOnly', language, 'Closed (read-only)')}
         </output>
       );
@@ -4355,35 +4350,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     if (!autoSaveEnabled) return null;
     if (draftSave.phase === 'idle') return null;
 
-    let text: string | null = null;
-    if (draftSave.phase === 'saving') text = tSystem('draft.saving', language, 'Saving draft…');
-    else if (draftSave.phase === 'saved') text = tSystem('draft.saved', language, 'Draft saved.');
-    else if (draftSave.phase === 'dirty') text = tSystem('draft.dirty', language, 'Draft has unsaved changes.');
-    else if (draftSave.phase === 'paused') text = draftSave.message || tSystem('draft.paused', language, 'Draft autosave paused.');
-    else if (draftSave.phase === 'error') {
-      const message = draftSave.message || tSystem('draft.unknownError', language, 'Unknown error');
-      text = tSystem('draft.saveFailed', language, 'Draft save failed: {message}', { message });
-    }
+    const byPhase: Partial<Record<DraftSavePhase, { key: string; fallback: string; tone: string }>> = {
+      saving: { key: 'draft.savingShort', fallback: 'Saving…', tone: 'saving' },
+      saved: { key: 'draft.savedShort', fallback: 'Saved', tone: 'saved' },
+      dirty: { key: 'draft.dirtyShort', fallback: 'Unsaved changes', tone: 'muted' },
+      paused: { key: 'draft.pausedShort', fallback: 'Autosave paused', tone: 'paused' },
+      error: { key: 'draft.saveFailedShort', fallback: 'Save failed', tone: 'error' }
+    };
+    const def = byPhase[draftSave.phase];
+    if (!def) return null;
 
-    if (!text) return null;
-    const isError = draftSave.phase === 'error';
-
+    const text =
+      draftSave.phase === 'paused' ? (draftSave.message || tSystem(def.key, language, def.fallback)) : tSystem(def.key, language, def.fallback);
     return (
-      <output
-        style={{
-          padding: '10px 14px',
-          borderRadius: 14,
-          border: isError ? '1px solid #fca5a5' : '1px solid rgba(15, 23, 42, 0.12)',
-          background: isError ? '#fee2e2' : 'rgba(118,118,128,0.06)',
-          color: '#0f172a',
-          fontWeight: 700
-        }}
-        aria-live="polite"
-      >
+      <output aria-live="polite" data-tone={def.tone}>
         {text}
       </output>
     );
-  })();
+  }, [autoSaveEnabled, draftSave.message, draftSave.phase, isClosedRecord, language, view]);
 
   const dedupTopNotice =
     view === 'form' && (!!dedupConflict || !!dedupNotice) ? (
@@ -4607,6 +4591,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       <style>{HTML_PREVIEW_STYLES}</style>
       <AppHeader
         title={definition.title || 'Form'}
+        titleRight={headerSaveIndicator}
         logoUrl={definition.appHeader?.logoUrl}
         buildMarker={BUILD_MARKER}
         isMobile={isMobile}
@@ -4676,53 +4661,50 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onDiagnostic={logEvent}
       />
 
-      {view === 'form' && (
-        <>
-          {dedupChecking || dedupConflict ? null : draftBanner}
-          <FormView
-            definition={definition}
-            language={language}
-            values={values}
-            setValues={setValues}
-            lineItems={lineItems}
-            setLineItems={setLineItems}
-            onSubmit={handleSubmit}
-            submitActionRef={formSubmitActionRef}
-            navigateToFieldRef={formNavigateToFieldRef}
-            submitting={submitting || isClosedRecord || Boolean(recordLoadingId) || Boolean(recordStale)}
-            dedupLockActive={dedupLockActive}
-            dedupKeyFieldIds={dedupKeyFieldIds}
-            errors={errors}
-            setErrors={setErrors}
-            status={status}
-            statusTone={statusLevel}
-            recordMeta={{
-              id: (currentRecord?.id || lastSubmissionMeta?.id || selectedRecordId || undefined) as any,
-              createdAt: (currentRecord?.createdAt || lastSubmissionMeta?.createdAt || undefined) as any,
-              updatedAt: (currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt || undefined) as any,
-              status: (currentRecord?.status || lastSubmissionMeta?.status || null) as any,
-              pdfUrl: (currentRecord?.pdfUrl || undefined) as any
-            }}
-            warningTop={validationWarnings.top}
-            warningByField={validationWarnings.byField}
-            showWarningsBanner={false}
-            onStatusClear={clearStatus}
-            optionState={optionState}
-            setOptionState={setOptionState}
-            ensureOptions={ensureOptions}
-            ensureLineOptions={ensureLineOptions}
-            externalScrollAnchor={externalScrollAnchor}
-            onExternalScrollConsumed={() => setExternalScrollAnchor(null)}
-            onSelectionEffect={runSelectionEffects}
-            onUploadFiles={uploadFieldUrls}
-            onReportButton={handleCustomButton}
-            reportBusy={reportOverlay.pdfPhase === 'rendering'}
-            reportBusyId={reportOverlay.buttonId || null}
-            onUserEdit={handleUserEdit}
-            onDiagnostic={logEvent}
-          />
-        </>
-      )}
+      {view === 'form' ? (
+        <FormView
+          definition={definition}
+          language={language}
+          values={values}
+          setValues={setValues}
+          lineItems={lineItems}
+          setLineItems={setLineItems}
+          onSubmit={handleSubmit}
+          submitActionRef={formSubmitActionRef}
+          navigateToFieldRef={formNavigateToFieldRef}
+          submitting={submitting || isClosedRecord || Boolean(recordLoadingId) || Boolean(recordStale)}
+          dedupLockActive={dedupLockActive}
+          dedupKeyFieldIds={dedupKeyFieldIds}
+          errors={errors}
+          setErrors={setErrors}
+          status={status}
+          statusTone={statusLevel}
+          recordMeta={{
+            id: (currentRecord?.id || lastSubmissionMeta?.id || selectedRecordId || undefined) as any,
+            createdAt: (currentRecord?.createdAt || lastSubmissionMeta?.createdAt || undefined) as any,
+            updatedAt: (currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt || undefined) as any,
+            status: (currentRecord?.status || lastSubmissionMeta?.status || null) as any,
+            pdfUrl: (currentRecord?.pdfUrl || undefined) as any
+          }}
+          warningTop={validationWarnings.top}
+          warningByField={validationWarnings.byField}
+          showWarningsBanner={false}
+          onStatusClear={clearStatus}
+          optionState={optionState}
+          setOptionState={setOptionState}
+          ensureOptions={ensureOptions}
+          ensureLineOptions={ensureLineOptions}
+          externalScrollAnchor={externalScrollAnchor}
+          onExternalScrollConsumed={() => setExternalScrollAnchor(null)}
+          onSelectionEffect={runSelectionEffects}
+          onUploadFiles={uploadFieldUrls}
+          onReportButton={handleCustomButton}
+          reportBusy={reportOverlay.pdfPhase === 'rendering'}
+          reportBusyId={reportOverlay.buttonId || null}
+          onUserEdit={handleUserEdit}
+          onDiagnostic={logEvent}
+        />
+      ) : null}
 
       {view === 'summary' && (
         <SummaryView

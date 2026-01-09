@@ -1036,8 +1036,8 @@ const ListView: React.FC<ListViewProps> = ({
           </tbody>
         </table>
       </div>
-      <div className="actions" style={{ justifyContent: paginationEnabled ? 'space-between' : 'center' }}>
-        {paginationEnabled ? (
+      {paginationEnabled ? (
+        <div className="actions" style={{ justifyContent: 'space-between' }}>
           <button
             type="button"
             className="secondary"
@@ -1046,29 +1046,26 @@ const ListView: React.FC<ListViewProps> = ({
           >
             {tSystem('list.previous', language, 'Previous')}
           </button>
-        ) : null}
-        <div className="muted" style={{ alignSelf: 'center' }}>
-          {paginationEnabled ? (
-            <>
-              {tSystem('list.pageOf', language, 'Page {page} of {total}', { page: totalPages ? pageIndex + 1 : 0, total: totalPages })}{' '}
-              •{' '}
-            </>
-          ) : null}
-          {showLoadedOfTotal
-            ? tSystem('list.recordsLoadedOfTotal', language, '{loaded} / {total} records', { loaded: loadedCount, total: totalCount })
-            : tSystem(
-                (visibleItems.length || totalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
-                language,
-                (visibleItems.length || totalCount) === 1 ? '{count} record' : '{count} records',
-                { count: visibleItems.length || totalCount }
-              )}
-        </div>
-        {paginationEnabled ? (
+          <div className="muted" style={{ alignSelf: 'center' }}>
+            {tSystem('list.pageOf', language, 'Page {page} of {total}', {
+              page: totalPages ? pageIndex + 1 : 0,
+              total: totalPages
+            })}{' '}
+            •{' '}
+            {showLoadedOfTotal
+              ? tSystem('list.recordsLoadedOfTotal', language, '{loaded} / {total} records', { loaded: loadedCount, total: totalCount })
+              : tSystem(
+                  (visibleItems.length || totalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
+                  language,
+                  (visibleItems.length || totalCount) === 1 ? '{count} record' : '{count} records',
+                  { count: visibleItems.length || totalCount }
+                )}
+          </div>
           <button type="button" onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))} disabled={!showNext}>
             {tSystem('list.next', language, 'Next')}
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 };

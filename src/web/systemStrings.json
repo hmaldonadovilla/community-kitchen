@@ -20,18 +20,23 @@
   },
   "draft": {
     "saving": { "en": "Saving draft…", "fr": "Enregistrement du brouillon…", "nl": "Concept opslaan…" },
+    "savingShort": { "en": "Saving…", "fr": "Enregistrement…", "nl": "Opslaan…" },
     "saved": { "en": "Draft saved.", "fr": "Brouillon enregistré.", "nl": "Concept opgeslagen." },
+    "savedShort": { "en": "Saved", "fr": "Enregistré", "nl": "Opgeslagen" },
     "dirty": {
       "en": "Draft has unsaved changes.",
       "fr": "Le brouillon contient des modifications non enregistrées.",
       "nl": "Concept bevat niet-opgeslagen wijzigingen."
     },
+    "dirtyShort": { "en": "Unsaved changes", "fr": "Modifications non enregistrées", "nl": "Niet-opgeslagen wijzigingen" },
     "paused": { "en": "Draft autosave paused.", "fr": "Sauvegarde automatique en pause.", "nl": "Automatisch opslaan gepauzeerd." },
+    "pausedShort": { "en": "Autosave paused", "fr": "Sauvegarde en pause", "nl": "Automatisch opslaan gepauzeerd" },
     "saveFailed": {
       "en": "Draft save failed: {message}",
       "fr": "Échec de l'enregistrement du brouillon : {message}",
       "nl": "Concept opslaan mislukt: {message}"
     },
+    "saveFailedShort": { "en": "Save failed", "fr": "Échec de l’enregistrement", "nl": "Opslaan mislukt" },
     "unknownError": { "en": "Unknown error", "fr": "Erreur inconnue", "nl": "Onbekende fout" }
   },
   "record": {

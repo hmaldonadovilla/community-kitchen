@@ -4,6 +4,10 @@ import { tSystem } from '../../../systemStrings';
 
 export const AppHeader: React.FC<{
   title: string;
+  /**
+   * Optional content rendered on the right side of the title row (e.g. autosave status).
+   */
+  titleRight?: React.ReactNode;
   logoUrl?: string;
   buildMarker: string;
   isMobile: boolean;
@@ -12,7 +16,7 @@ export const AppHeader: React.FC<{
   onLanguageChange: (nextLanguage: string) => void;
   onRefresh: () => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
-}> = ({ title, logoUrl, buildMarker, isMobile, languages, language, onLanguageChange, onRefresh, onDiagnostic }) => {
+}> = ({ title, titleRight, logoUrl, buildMarker, isMobile, languages, language, onLanguageChange, onRefresh, onDiagnostic }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -177,7 +181,10 @@ export const AppHeader: React.FC<{
         >
           {renderAvatar('header')}
         </button>
-        <div className="ck-app-title">{title || 'Form'}</div>
+        <div className="ck-app-title-row">
+          <div className="ck-app-title">{title || 'Form'}</div>
+          {titleRight ? <div className="ck-app-title-right">{titleRight}</div> : null}
+        </div>
       </header>
 
       <div

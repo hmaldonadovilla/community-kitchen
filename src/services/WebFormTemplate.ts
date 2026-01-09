@@ -227,6 +227,39 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .ck-app-title-row {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .ck-app-title-right {
+        flex: 0 0 auto;
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        font-weight: 800;
+        font-size: calc(var(--ck-font-label) * 0.78);
+        letter-spacing: -0.2px;
+        color: rgba(15, 23, 42, 0.62);
+        white-space: nowrap;
+      }
+      .ck-app-title-right [data-tone="error"] {
+        color: #b91c1c;
+      }
+      .ck-app-title-right [data-tone="saved"] {
+        color: rgba(15, 23, 42, 0.62);
+      }
+      .ck-app-title-right [data-tone="saving"] {
+        color: rgba(15, 23, 42, 0.62);
+      }
+      .ck-app-title-right [data-tone="paused"] {
+        color: rgba(15, 23, 42, 0.62);
+      }
       /* Left slide-in drawer */
       .ck-app-drawer-overlay {
         position: fixed;
@@ -680,6 +713,9 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
       .ck-bottom-bar .ck-actionbar-notice-inner {
         display: block;
         margin-bottom: 10px;
+      }
+      .ck-bottom-bar[data-notice-only="1"] .ck-actionbar-notice-inner {
+        margin-bottom: 0;
       }
       .ck-bottom-bar-inner {
         max-width: 1100px;

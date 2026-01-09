@@ -45,6 +45,9 @@ export const FORM_VIEW_STYLES = `
           display: block;
           margin-top: 10px;
         }
+        .ck-top-action-bar[data-notice-only="1"] .ck-actionbar-notice-inner {
+          margin-top: 0;
+        }
 
         /* Portrait-only mode: block landscape with a friendly rotate prompt. */
         .ck-orientation-blocker {
