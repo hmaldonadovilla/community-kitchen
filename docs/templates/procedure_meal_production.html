@@ -1,0 +1,362 @@
+<!--
+  Community Kitchen – Meal Production Procedure (HTML Template)
+
+  Notes:
+  - This template is designed to be injected into the CK web app HTML preview overlay (not a standalone web page).
+  - Keep CSS scoped under `.ck-procedure-template` to avoid leaking styles into the host app.
+-->
+
+<style>
+  .ck-procedure-template {
+    /* Inherit app typography; keep styles scoped to avoid affecting the host app */
+    color: #0f172a;
+    font-size: 0.98em;
+    margin: -8px;
+    --ck-proc-muted: rgba(15, 23, 42, 0.62);
+    --ck-proc-border: rgba(148, 163, 184, 0.55);
+  }
+
+  .ck-procedure-template * {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  .ck-procedure-page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 18px 14px 32px;
+  }
+
+  .ck-procedure-template h1 {
+    font-size: 1.75em;
+    margin: 0 0 0.25em;
+    font-weight: 950;
+    letter-spacing: -0.02em;
+  }
+
+  .ck-procedure-template h2 {
+    font-size: 1.12em;
+    margin: 1.35em 0 0.6em;
+    font-weight: 900;
+  }
+
+  .ck-procedure-template h3 {
+    font-size: 0.86em;
+    margin: 1.05em 0 0.55em;
+    color: var(--ck-proc-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 900;
+  }
+
+  .ck-procedure-template p {
+    margin: 0.55em 0;
+    line-height: 1.45;
+  }
+
+  .ck-procedure-template ul {
+    margin: 0.55em 0 0 1.1em;
+  }
+
+  .ck-procedure-template li {
+    margin: 0.35em 0;
+    line-height: 1.35;
+  }
+
+  .ck-procedure-meta {
+    color: var(--ck-proc-muted);
+    margin-bottom: 14px;
+    font-weight: 750;
+  }
+
+  .ck-procedure-card {
+    border: 1px solid var(--ck-proc-border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+
+  .ck-procedure-grid2 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  @media (min-width: 900px) {
+    .ck-procedure-grid2 {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .ck-procedure-template table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+
+  .ck-procedure-template th,
+  .ck-procedure-template td {
+    border: 1px solid var(--ck-proc-border);
+    padding: 10px 12px;
+    vertical-align: top;
+  }
+
+  .ck-procedure-template th {
+    background: rgba(148, 163, 184, 0.12);
+    text-align: left;
+  }
+
+  .ck-procedure-small {
+    font-size: 0.88em;
+    color: var(--ck-proc-muted);
+    font-weight: 700;
+  }
+
+  .ck-procedure-template code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.95em;
+  }
+</style>
+
+<div class="ck-procedure-template">
+  <main class="ck-procedure-page">
+    <section>
+      <h2>Purpose and scope</h2>
+      <p>This procedure defines how meals are planned, produced, portioned, handed over and recorded. It must be read by all employees of the Community Kitchen and is available to volunteers for information.</p>
+    </section>
+
+    <section>
+      <h2>Responsibilities</h2>
+      <p>Cooks are responsible for executing meal production and for the accuracy of production data. Volunteers may assist with cutting vegetables, cooking, portioning, replenishing and cleaning, only under supervision and strictly following written recipes and instructions. Responsibility always remains with cooks. The Kitchen Manager provides operational oversight and validation. The Operations Manager holds overall accountability.</p>
+    </section>
+
+    <section>
+      <h2>Important to know</h2>
+      <ul>
+        <li>Only written and approved recipes recorded in the system may be used.</li>
+        <li>New recipes or recipe updates must be created or updated using the Recipe Form App by the Kitchen Manager or Operations Manager before they can be used in production.</li>
+        <li>Each production for a given customer, date and dietary category must be fully traceable to:
+          <ul>
+            <li>a cook responsible for the production,</li>
+            <li>a specific recipe with the actual list of ingredients and quantities used,</li>
+            <li>declared allergens,</li>
+            <li>recorded core temperature prior to portioning,</li>
+            <li>a system-generated batch number.</li>
+          </ul>
+        </li>
+        <li>All the above information must appear on the production report.</li>
+        <li>If the Meal Production App is not available, the production report must be created manually and the customer must be notified.</li>
+        <li>Selected recipes, ingredients and quantities must be followed unless ingredients are unavailable and substitutions are recorded.</li>
+        <li>Production must deliver exactly the number of portions requested per dietary category.</li>
+        <li>Avoid food waste and unnecessary leftovers; use leftovers first when suitable.</li>
+        <li>Apply the First In, First Out (FIFO) principle for ingredients and leftovers.</li>
+        <li>Volunteers are never autonomous; tasks must be demonstrated and supervised.</li>
+        <li>Separate utensils must be used for each dietary pot to prevent cross-contamination.</li>
+        <li>Production is complete only when all requested portions are delivered and the production report is sent.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Meal production – process flow</h2>
+      <table aria-label="Meal production process flow">
+        <thead>
+          <tr>
+            <th style="width:48px;">Step</th>
+            <th>Kitchen Manager / Operations Manager</th>
+            <th>Cook</th>
+            <th>Volunteer (assist)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1</strong><br/><span class="ck-procedure-small">Before production</span></td>
+            <td>
+              <ul>
+                <li>Record requested portions per customer, date and dietary category.</li>
+                <li>Validate availability of approved recipes.</li>
+                <li>Create or update recipes using the Recipe Form App when needed.</li>
+              </ul>
+              <p class="ck-procedure-small">App used: Meal Production App (planning) / Recipe Form App (recipes)</p>
+            </td>
+            <td>
+              <ul>
+                <li>Assess ingredient availability.</li>
+                <li>Propose substitutions if needed and record them.</li>
+              </ul>
+              <p class="ck-procedure-small">App used: Meal Production App</p>
+            </td>
+            <td>
+              <ul>
+                <li>Cut fresh vegetables following instructions.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>2</strong><br/><span class="ck-procedure-small">Cooking</span></td>
+            <td>
+              <ul>
+                <li>Provide operational support if needed.</li>
+                <li>Ensure only approved recipes are used.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+            <td>
+              <ul>
+                <li>Cook according to written recipes.</li>
+                <li>Supervise volunteers.</li>
+                <li>Record core temperature (photo) before portioning.</li>
+              </ul>
+              <p class="ck-procedure-small">App used: Meal Production App</p>
+            </td>
+            <td>
+              <ul>
+                <li>Assist with cooking under supervision and following written recipes.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>3</strong><br/><span class="ck-procedure-small">Portioning</span></td>
+            <td>
+              <ul>
+                <li>Be available for escalation or support.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+            <td>
+              <ul>
+                <li>Prepare containers, labels and utensils.</li>
+                <li>Portion per customer and dietary category.</li>
+                <li>Record exact number of portions.</li>
+              </ul>
+              <p class="ck-procedure-small">App used: Meal Production App</p>
+            </td>
+            <td>
+              <ul>
+                <li>Assist with portioning after demonstration.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>4</strong><br/><span class="ck-procedure-small">Handling leftovers</span></td>
+            <td>
+              <ul>
+                <li>Validate reuse or discard decisions if needed.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+            <td>
+              <ul>
+                <li>Label and date leftovers.</li>
+                <li>Store according to Storage Procedure.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+            <td>
+              <ul>
+                <li>Assist with leftovers handling under supervision.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>5</strong><br/><span class="ck-procedure-small">Handover to customer</span></td>
+            <td>
+              <ul>
+                <li>Be available for issue resolution.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+            <td>
+              <ul>
+                <li>Deliver meals to drivers.</li>
+                <li>Verify completeness.</li>
+                <li>Send production report with batch number.</li>
+              </ul>
+              <p class="ck-procedure-small">App used: Meal Production App</p>
+            </td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><strong>6</strong><br/><span class="ck-procedure-small">Replenish for next shift</span></td>
+            <td>
+              <ul>
+                <li>Be notified if ingredients are missing or about to run out.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+            <td>
+              <ul>
+                <li>Replenish cut vegetables, spices and oil.</li>
+                <li>Notify Kitchen Manager or Operations Manager if ingredients are missing or about to run out.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+            <td>
+              <ul>
+                <li>Assist with replenishing under instructions.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>7</strong><br/><span class="ck-procedure-small">Cleaning</span></td>
+            <td>
+              <ul>
+                <li>Ensure cleaning is completed and recorded.</li>
+              </ul>
+              <p class="ck-procedure-small">No app used</p>
+            </td>
+            <td>
+              <ul>
+                <li>Clean kitchen, utensils and equipment.</li>
+                <li>Record cleaning checks.</li>
+              </ul>
+              <p class="ck-procedure-small">App used: Storage &amp; Cleaning Checks App</p>
+            </td>
+            <td>
+              <ul>
+                <li>Assist with cleaning under supervision.</li>
+              </ul>
+              <p class="ck-procedure-small">App used: Storage &amp; Cleaning Checks App</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>DO / DO NOT</h2>
+      <div class="ck-procedure-grid2">
+        <div class="ck-procedure-card">
+          <h3>Do</h3>
+          <ul>
+            <li>Wash hands regularly with soap and before/after using phones or tablets.</li>
+            <li>Use designated handwash sinks for handwashing only.</li>
+            <li>Wear clean apron, head covering and clean shoes.</li>
+            <li>Minimise time food stays at room temperature.</li>
+            <li>Report illness immediately before handling food.</li>
+            <li>Report any signs of pests immediately.</li>
+            <li>Ensure production data is complete and traceable, including batch number.</li>
+            <li>Create a manual production report if the Meal Production App is unavailable and notify the customer.</li>
+          </ul>
+        </div>
+        <div class="ck-procedure-card">
+          <h3>Do not</h3>
+          <ul>
+            <li>Use recipes that are not recorded and approved in the system.</li>
+            <li>Allow volunteers to work without supervision.</li>
+            <li>Use same utensils for different dietary pots.</li>
+            <li>Eat in kitchen or portioning area.</li>
+            <li>Handle food when sick or with uncovered wounds.</li>
+            <li>Wear jewellery while handling food.</li>
+            <li>Leave food at room temperature unnecessarily.</li>
+            <li>Leave production incomplete or unreported.</li>
+            <li>Leave kitchen dirty for next shift.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>

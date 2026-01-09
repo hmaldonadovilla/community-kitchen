@@ -1,0 +1,322 @@
+<!--
+  Community Kitchen – Storage Procedure (HTML Template)
+
+  Notes:
+  - This template is designed to be injected into the CK web app HTML preview overlay (not a standalone web page).
+  - Keep CSS scoped under `.ck-procedure-template` to avoid leaking styles into the host app.
+-->
+
+<style>
+  .ck-procedure-template {
+    /* Inherit app typography; keep styles scoped to avoid affecting the host app */
+    color: #0f172a;
+    font-size: 0.98em;
+    margin: -8px;
+    --ck-proc-muted: rgba(15, 23, 42, 0.62);
+    --ck-proc-border: rgba(148, 163, 184, 0.55);
+    --ck-proc-note: #fff7cc;
+  }
+
+  .ck-procedure-template * {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  .ck-procedure-page {
+    max-width: 1050px;
+    margin: 0 auto;
+    padding: 18px 14px 32px;
+  }
+
+  .ck-procedure-template h1 {
+    font-size: 1.75em;
+    margin: 0 0 0.25em;
+    font-weight: 950;
+    letter-spacing: -0.02em;
+  }
+
+  .ck-procedure-template h2 {
+    font-size: 1.12em;
+    margin: 1.35em 0 0.6em;
+    font-weight: 900;
+  }
+
+  .ck-procedure-template h3 {
+    font-size: 0.86em;
+    margin: 1.05em 0 0.55em;
+    color: var(--ck-proc-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 900;
+  }
+
+  .ck-procedure-template p {
+    margin: 0.55em 0;
+    line-height: 1.45;
+  }
+
+  .ck-procedure-template ul {
+    margin: 0.55em 0 0 1.1em;
+  }
+
+  .ck-procedure-template li {
+    margin: 0.35em 0;
+    line-height: 1.35;
+  }
+
+  .ck-procedure-meta {
+    color: var(--ck-proc-muted);
+    margin-bottom: 14px;
+    font-weight: 750;
+  }
+
+  .ck-procedure-callout {
+    background: var(--ck-proc-note);
+    border: 1px solid var(--ck-proc-border);
+    padding: 12px 14px;
+    border-radius: 12px;
+  }
+
+  .ck-procedure-card {
+    border: 1px solid var(--ck-proc-border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+
+  .ck-procedure-grid2 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  @media (min-width: 860px) {
+    .ck-procedure-grid2 {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .ck-procedure-template table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+
+  .ck-procedure-template th,
+  .ck-procedure-template td {
+    border: 1px solid var(--ck-proc-border);
+    padding: 10px 12px;
+    vertical-align: top;
+  }
+
+  .ck-procedure-template th {
+    background: rgba(148, 163, 184, 0.12);
+    text-align: left;
+  }
+
+  .ck-procedure-small {
+    font-size: 0.88em;
+    color: var(--ck-proc-muted);
+    font-weight: 700;
+  }
+
+  .ck-procedure-tag {
+    display: inline-block;
+    border: 1px solid var(--ck-proc-border);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.78em;
+    color: var(--ck-proc-muted);
+    background: rgba(148, 163, 184, 0.10);
+    font-weight: 800;
+  }
+</style>
+
+<div class="ck-procedure-template">
+  <main class="ck-procedure-page">
+    <section>
+      <h2>Document scope</h2>
+      <p>This procedure must be read by all employees of the Community Kitchen. It is available to volunteers for information and guidance. All storage activities and checks must be recorded in the <strong>Storage &amp; Cleaning Checks</strong> app.</p>
+    </section>
+
+    <section class="ck-procedure-callout">
+      <h2 style="margin-top:0">Responsibility &amp; escalation</h2>
+      <p>Cooks are responsible for all storage activities and checks, with support from volunteers. Any issue must be recorded in the app and the <strong>Kitchen Manager</strong> or <strong>Operations Manager</strong> must be notified immediately.</p>
+    </section>
+
+    <section class="ck-procedure-callout">
+      <h2 style="margin-top:0">Discard rule (applies to ALL areas)</h2>
+      <p><strong>Expired, undated (when required), mouldy, spoiled, pest-damaged, leaking or swollen items</strong> → discard immediately.</p>
+    </section>
+
+    <section>
+      <h2>Fridges <span class="ck-procedure-small">(0–7 °C)</span></h2>
+      <table aria-label="Fridges allowed and not allowed">
+        <thead>
+          <tr>
+            <th>Allowed fridges</th>
+            <th>Not allowed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <ul>
+                <li>Dairy products</li>
+                <li>Leftovers (sealed)</li>
+                <li>Cut vegetables (sealed)</li>
+                <li>Opened jars, sauces, pastes</li>
+                <li><strong>Eggs:</strong> staff fridge only, original carton</li>
+              </ul>
+            </td>
+            <td>
+              <ul>
+                <li>Raw meat or raw fish</li>
+                <li>Hot or warm food</li>
+                <li>Undated items</li>
+              </ul>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="ck-procedure-card" style="margin-top:12px;">
+        <h3>Fridge stickers</h3>
+        <p>Required for <strong>leftovers</strong>, <strong>cut vegetables</strong>, <strong>opened dairy</strong> and <strong>jars</strong>. Sticker shows product name and date:</p>
+        <ul>
+          <li>Leftovers / cut veg: <strong>produced date</strong> (max <strong>48h</strong>).</li>
+          <li>Dairy / jars: <strong>opened date</strong>.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>Freezers <span class="ck-procedure-small">(≤ –12 °C)</span></h2>
+      <table aria-label="Freezers allowed and not allowed">
+        <thead>
+          <tr>
+            <th>Allowed freezers</th>
+            <th>Not allowed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <ul>
+                <li>Purchased frozen vegetables</li>
+                <li>Purchased frozen animal protein</li>
+                <li>Food cooked on site and frozen</li>
+                <li>Cut vegetables frozen by staff</li>
+              </ul>
+            </td>
+            <td>
+              <ul>
+                <li>Warm or partially thawed food</li>
+                <li>Damaged or leaking packaging</li>
+              </ul>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="ck-procedure-card" style="margin-top:12px;">
+        <h3>Freezer stickers (only when required)</h3>
+        <ul>
+          <li>Required only for <strong>leftovers</strong> or <strong>cut vegetables frozen by staff</strong> (product name + freezing date).</li>
+          <li>Not required for purchased frozen products.</li>
+          <li><strong>FIFO</strong> respected.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>Fresh vegetables (not cut)</h2>
+      <table aria-label="Fresh vegetables allowed and not allowed">
+        <thead>
+          <tr>
+            <th>Allowed</th>
+            <th>Not allowed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <ul>
+                <li>Stored in clean crates or containers</li>
+                <li>Off the floor</li>
+                <li>Kept dry</li>
+                <li>FIFO respected</li>
+              </ul>
+            </td>
+            <td>
+              <ul>
+                <li>Stored directly on the floor</li>
+                <li>Stored under sinks</li>
+                <li>Mouldy or spoiled vegetables</li>
+              </ul>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Dry food / pantry</h2>
+      <table aria-label="Dry food pantry allowed and not allowed">
+        <thead>
+          <tr>
+            <th>Allowed</th>
+            <th>Not allowed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <ul>
+                <li>Unopened dry goods (rice, pasta, lentils, flour, cereal)</li>
+                <li>Unopened cans and jars</li>
+                <li>Unopened spices and condiments</li>
+              </ul>
+              <p class="ck-procedure-small"><strong>Rules:</strong> keep dry; store off the floor; FIFO; packaging intact</p>
+            </td>
+            <td>
+              <ul>
+                <li>Open bags without closing / sealing</li>
+                <li>Wet / damp packaging</li>
+                <li>Food stored on the floor</li>
+                <li>Food stored under sinks or near cleaning products</li>
+                <li>Pest signs (droppings, gnaw marks, insects)</li>
+              </ul>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Storage hygiene — all areas</h2>
+      <ul>
+        <li>Shelves and seals clean.</li>
+        <li>Containers clean before use.</li>
+        <li>Crates clean and dry.</li>
+        <li>No food under sinks, near cleaning products, or on the floor.</li>
+        <li>No damaged or leaking packaging.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Pest check — visual <span class="ck-procedure-small">(AM &amp; PM)</span></h2>
+      <p>Check for insects, droppings, gnaw marks, pest-damaged packaging. Any sign → record in app and notify Kitchen Manager or Operations Manager immediately.</p>
+    </section>
+
+    <section>
+      <h2>Temperature deviation</h2>
+      <ul>
+        <li>Notify Kitchen Manager or Operations Manager immediately.</li>
+        <li>Keep door closed.</li>
+        <li>Move food if needed.</li>
+        <li>If food safety is uncertain → discard.</li>
+        <li>Record incident in app.</li>
+      </ul>
+    </section>
+  </main>
+</div>
