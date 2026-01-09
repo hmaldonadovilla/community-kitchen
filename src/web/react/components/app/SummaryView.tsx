@@ -56,7 +56,12 @@ export const SummaryView: React.FC<{
   );
 
   const useSummaryHtml = Boolean(definition.summaryHtmlTemplateId);
-  const [summaryHtml, setSummaryHtml] = useState<{ phase: 'idle' | 'rendering' | 'ready' | 'error'; html?: string; message?: string }>(
+  const [summaryHtml, setSummaryHtml] = useState<{
+    phase: 'idle' | 'rendering' | 'ready' | 'error';
+    html?: string;
+    message?: string;
+    allowScripts?: boolean;
+  }>(
     () => ({ phase: 'idle' })
   );
   const seqRef = useRef(0);
@@ -76,7 +81,7 @@ export const SummaryView: React.FC<{
     const resolvedTemplateId = resolveTemplateIdForRecord(definition.summaryHtmlTemplateId as any, draft.values || {}, draft.language);
     const isBundled = isBundledHtmlTemplateId(resolvedTemplateId || '');
     if (isBundled) {
-      setSummaryHtml({ phase: 'rendering' });
+      setSummaryHtml({ phase: 'rendering', allowScripts: true });
       onDiagnostic?.('summary.htmlTemplate.bundle.render.start', { recordId: existingRecordId || null });
       renderBundledHtmlTemplateClient({
         definition,
@@ -87,48 +92,48 @@ export const SummaryView: React.FC<{
           if (seq !== seqRef.current) return;
           if (!res?.success || !res?.html) {
             const msg = (res?.message || 'Failed to render summary.').toString();
-            setSummaryHtml({ phase: 'error', message: msg });
+            setSummaryHtml({ phase: 'error', message: msg, allowScripts: true });
             onDiagnostic?.('summary.htmlTemplate.bundle.render.error', { message: msg });
             return;
           }
-          setSummaryHtml({ phase: 'ready', html: res.html });
+          setSummaryHtml({ phase: 'ready', html: res.html, allowScripts: true });
           onDiagnostic?.('summary.htmlTemplate.bundle.render.ok', { htmlLength: (res.html || '').toString().length });
         })
         .catch(err => {
           if (seq !== seqRef.current) return;
           const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to render summary.';
-          setSummaryHtml({ phase: 'error', message: msg });
+          setSummaryHtml({ phase: 'error', message: msg, allowScripts: true });
           onDiagnostic?.('summary.htmlTemplate.bundle.render.exception', { message: msg });
         });
       return;
     }
     const cached = peekSummaryHtmlTemplateCache(draft);
     if (cached?.success && cached?.html) {
-      setSummaryHtml({ phase: 'ready', html: cached.html });
+      setSummaryHtml({ phase: 'ready', html: cached.html, allowScripts: false });
       onDiagnostic?.('summary.htmlTemplate.cacheHit', {
         recordId: existingRecordId || null,
         htmlLength: (cached.html || '').toString().length
       });
       return;
     }
-    setSummaryHtml({ phase: 'rendering' });
+    setSummaryHtml({ phase: 'rendering', allowScripts: false });
     onDiagnostic?.('summary.htmlTemplate.render.start', { recordId: existingRecordId || null });
     renderSummaryHtmlTemplateApi(draft)
       .then(res => {
         if (seq !== seqRef.current) return;
         if (!res?.success || !res?.html) {
           const msg = (res?.message || 'Failed to render summary.').toString();
-          setSummaryHtml({ phase: 'error', message: msg });
+          setSummaryHtml({ phase: 'error', message: msg, allowScripts: false });
           onDiagnostic?.('summary.htmlTemplate.render.error', { message: msg });
           return;
         }
-        setSummaryHtml({ phase: 'ready', html: res.html });
+        setSummaryHtml({ phase: 'ready', html: res.html, allowScripts: false });
         onDiagnostic?.('summary.htmlTemplate.render.ok', { htmlLength: (res.html || '').toString().length });
       })
       .catch(err => {
         if (seq !== seqRef.current) return;
         const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to render summary.';
-        setSummaryHtml({ phase: 'error', message: msg });
+        setSummaryHtml({ phase: 'error', message: msg, allowScripts: false });
         onDiagnostic?.('summary.htmlTemplate.render.exception', { message: msg });
       });
   }, [definition, existingRecordId, formKey, language, lineItems, onDiagnostic, recordLoadingId, useSummaryHtml, values]);
@@ -165,7 +170,12 @@ export const SummaryView: React.FC<{
               </div>
             ) : null}
             {summaryHtml.phase === 'ready' && summaryHtml.html ? (
-              <HtmlPreview html={summaryHtml.html} onOpenFiles={onOpenFiles} onDiagnostic={onDiagnostic} />
+              <HtmlPreview
+                html={summaryHtml.html}
+                allowScripts={summaryHtml.allowScripts}
+                onOpenFiles={onOpenFiles}
+                onDiagnostic={onDiagnostic}
+              />
             ) : summaryHtml.phase === 'error' ? (
               // Fallback: show default Summary view if template rendering fails.
               <ReportLivePreview

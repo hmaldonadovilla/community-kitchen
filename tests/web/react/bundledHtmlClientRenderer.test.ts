@@ -139,6 +139,61 @@ describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
     expect(r2.success).toBe(true);
     expect(fetchDataSource).toHaveBeenCalledTimes(1);
   });
+
+  it('preserves template-authored <script> blocks for bundled templates', async () => {
+    const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
+
+    const definition: any = {
+      title: 'F',
+      destinationTab: 'T',
+      languages: ['EN'],
+      questions: [{ id: 'FIELD', type: 'TEXT', label: { en: 'Field', fr: 'Field', nl: 'Field' }, required: false }]
+    };
+    const payload: any = { formKey: 'F', language: 'EN', id: 'R1', values: { FIELD: 'hello' } };
+
+    const res = await renderBundledHtmlTemplateClient({
+      definition,
+      payload,
+      templateIdMap: 'bundle:test.html',
+      parseBundledTemplateId: () => 'test.html',
+      getBundledTemplateRaw: () => '<div>{{FIELD}}</div><script>window.__ck_trusted = 1;</script>'
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('hello');
+    expect(res.html).toContain('<script');
+    expect(res.html).toContain('__ck_trusted');
+  });
+
+  it('strips <script> injected via user-entered values even for bundled templates', async () => {
+    const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
+
+    const definition: any = {
+      title: 'F',
+      destinationTab: 'T',
+      languages: ['EN'],
+      questions: [{ id: 'FIELD', type: 'TEXT', label: { en: 'Field', fr: 'Field', nl: 'Field' }, required: false }]
+    };
+    const payload: any = {
+      formKey: 'F',
+      language: 'EN',
+      id: 'R1',
+      values: { FIELD: '<script>window.__ck_injected = 1;</script>hello' }
+    };
+
+    const res = await renderBundledHtmlTemplateClient({
+      definition,
+      payload,
+      templateIdMap: 'bundle:test.html',
+      parseBundledTemplateId: () => 'test.html',
+      getBundledTemplateRaw: () => '<div>{{FIELD}}</div><script>window.__ck_trusted = 1;</script>'
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('hello');
+    expect(res.html).toContain('__ck_trusted');
+    expect(res.html).not.toContain('__ck_injected');
+  });
 });
 
 

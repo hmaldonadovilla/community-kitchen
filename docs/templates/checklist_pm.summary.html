@@ -215,6 +215,101 @@
       grid-template-columns: 1fr;
     }
   }
+
+  /* Consolidated "Issues" callout (Previous + Current shift in one card) */
+  .ck-issues-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ck-issues-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ck-issues-title {
+    font-weight: 950;
+    font-size: 1.02em;
+    letter-spacing: 0.01em;
+  }
+
+  .ck-issues-status-icon {
+    margin-left: auto;
+    font-size: 1.25em;
+    line-height: 1;
+  }
+
+  .ck-issues-empty {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    font-weight: 900;
+  }
+
+  .ck-issues-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ck-issues-subtitle {
+    font-weight: 900;
+    font-size: 0.9em;
+    letter-spacing: 0.01em;
+  }
+
+  .ck-issues-body {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+    font-weight: 750;
+    line-height: 1.15;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    padding-left: 12px;
+    border-left: 3px solid rgba(15, 23, 42, 0.12);
+  }
+
+  .ck-issues-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .ck-issues-sep {
+    flex: 0 0 auto;
+    color: rgba(15, 23, 42, 0.38);
+    font-weight: 900;
+  }
+
+  .ck-issues-icon {
+    flex: 0 0 auto;
+  }
+
+  .ck-issues-icon:empty {
+    display: none;
+  }
+
+  .ck-issues-divider {
+    border: 0;
+    height: 1px;
+    background: rgba(15, 23, 42, 0.12);
+    margin: 0;
+  }
+
+  .ck-callout.ck-issues--ok {
+    border-color: rgba(34, 197, 94, 0.55);
+    background: rgba(34, 197, 94, 0.12);
+  }
+
+  .ck-callout.ck-issues--warn {
+    border-color: rgba(245, 158, 11, 0.7);
+    background: rgba(245, 158, 11, 0.14);
+  }
 </style>
 
 <div class="ck-summary-template">
@@ -234,21 +329,98 @@
   </div>
 
   <div class="ck-callouts">
-    <div class="ck-callout">
-      <div class="ck-callout-title">Issues previous shift</div>
-      <div class="ck-callout-body">
-        <span class="ck-callout-text">{{DEFAULT(ISSUES_PREV, "No issues")}}</span>
-        <span class="ck-callout-icon">{{FILES_ICON(ISSUES_PREV_EVD)}}</span>
+    <div class="ck-callout ck-issues-card ck-issues--warn" data-ck-issues-card>
+      <div class="ck-issues-header">
+        <div class="ck-issues-title">Issues</div>
+        <div class="ck-issues-status-icon" data-ck-issues-icon aria-hidden="true">⚠️</div>
       </div>
-    </div>
-    <div class="ck-callout">
-      <div class="ck-callout-title">Issues current shift</div>
-      <div class="ck-callout-body">
-        <span class="ck-callout-text">{{DEFAULT(ISSUES, "No issues")}}</span>
-        <span class="ck-callout-icon">{{FILES_ICON(ISSUES_EVD)}}</span>
+
+      <div class="ck-issues-empty" data-ck-issues-empty>
+        <span aria-hidden="true">✅</span>
+        <span>No issues</span>
+      </div>
+
+      <div class="ck-issues-row" data-ck-issues-prev-row>
+        <div class="ck-issues-subtitle"><strong>Previous shift:</strong></div>
+        <div class="ck-issues-body">
+          <span class="ck-issues-text" data-ck-issues-prev-text>{{DEFAULT(ISSUES_PREV, "No issues")}}</span>
+          <span class="ck-issues-sep" data-ck-issues-prev-sep aria-hidden="true">|</span>
+          <span class="ck-issues-icon" data-ck-issues-prev-icon>{{FILES_ICON(ISSUES_PREV_EVD)}}</span>
+        </div>
+      </div>
+
+      <hr class="ck-issues-divider" data-ck-issues-divider />
+
+      <div class="ck-issues-row" data-ck-issues-current-row>
+        <div class="ck-issues-subtitle"><strong>Current shift:</strong></div>
+        <div class="ck-issues-body">
+          <span class="ck-issues-text" data-ck-issues-current-text>{{DEFAULT(ISSUES, "No issues")}}</span>
+          <span class="ck-issues-sep" data-ck-issues-current-sep aria-hidden="true">|</span>
+          <span class="ck-issues-icon" data-ck-issues-current-icon>{{FILES_ICON(ISSUES_EVD)}}</span>
+        </div>
       </div>
     </div>
   </div>
+
+  <script>
+    (function () {
+      try {
+        var card = document.querySelector('[data-ck-issues-card]');
+        if (!card) return;
+        if (card.getAttribute('data-ck-issues-init') === '1') return;
+        card.setAttribute('data-ck-issues-init', '1');
+
+        var normalize = function (s) {
+          return (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+        };
+        var isNoIssues = function (s) {
+          var t = normalize(s);
+          return t === '' || t === 'no issues' || t === 'no issue';
+        };
+
+        var prevTextEl = card.querySelector('[data-ck-issues-prev-text]');
+        var currentTextEl = card.querySelector('[data-ck-issues-current-text]');
+        var prevEmpty = isNoIssues(prevTextEl ? prevTextEl.textContent : '');
+        var currentEmpty = isNoIssues(currentTextEl ? currentTextEl.textContent : '');
+
+        var prevRow = card.querySelector('[data-ck-issues-prev-row]');
+        var currentRow = card.querySelector('[data-ck-issues-current-row]');
+        if (prevRow && prevEmpty) prevRow.style.display = 'none';
+        if (currentRow && currentEmpty) currentRow.style.display = 'none';
+
+        var divider = card.querySelector('[data-ck-issues-divider]');
+        if (divider) divider.style.display = prevEmpty || currentEmpty ? 'none' : 'block';
+
+        var hasIcon = function (el) {
+          if (!el) return false;
+          if (el.children && el.children.length) return true;
+          return normalize(el.textContent) !== '';
+        };
+        var prevIcon = card.querySelector('[data-ck-issues-prev-icon]');
+        var prevSep = card.querySelector('[data-ck-issues-prev-sep]');
+        if (prevSep) prevSep.style.display = hasIcon(prevIcon) ? 'inline' : 'none';
+        var currentIcon = card.querySelector('[data-ck-issues-current-icon]');
+        var currentSep = card.querySelector('[data-ck-issues-current-sep]');
+        if (currentSep) currentSep.style.display = hasIcon(currentIcon) ? 'inline' : 'none';
+
+        var emptyBlock = card.querySelector('[data-ck-issues-empty]');
+        var icon = card.querySelector('[data-ck-issues-icon]');
+        if (prevEmpty && currentEmpty) {
+          if (emptyBlock) emptyBlock.style.display = 'flex';
+          if (icon) icon.textContent = '✅';
+          card.classList.add('ck-issues--ok');
+          card.classList.remove('ck-issues--warn');
+        } else {
+          if (emptyBlock) emptyBlock.style.display = 'none';
+          if (icon) icon.textContent = '⚠️';
+          card.classList.add('ck-issues--warn');
+          card.classList.remove('ck-issues--ok');
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  </script>
 
   <hr class="ck-divider" />
 

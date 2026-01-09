@@ -1582,6 +1582,7 @@ components:
             - Default: a Google Drive file id (for Doc/Markdown/HTML templates)
             - HTML-only shortcut: use `bundle:<filename>` to load an HTML template embedded from `/docs/templates/<filename>` at build time.
               This is faster and avoids Drive/cache dependencies (rendered client-side; may call `fetchDataSource` if projection placeholders are present), but requires a redeploy to update.
+              Bundled templates may include small inline `<script>` blocks for dynamic UI behavior. Drive-sourced templates must not include `<script>` tags (rejected).
         - type: object
           additionalProperties:
             type: string

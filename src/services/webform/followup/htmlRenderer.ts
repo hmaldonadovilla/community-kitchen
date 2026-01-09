@@ -12,12 +12,8 @@ import {
 } from './htmlTemplateCache';
 import { applyHtmlLineItemBlocks } from './htmlLineItemBlocks';
 import { linkifyUploadedFileUrlsInHtml } from './fileLinks';
-
-const stripScripts = (html: string): string => {
-  // Basic mitigation: drop <script> tags from user-provided templates.
-  // Note: event-handler attributes (onclick, etc.) are not removed.
-  return (html || '').toString().replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
-};
+import { parseBundledHtmlTemplateId } from './bundledHtmlTemplates';
+import { containsScriptTag, extractScriptTags, restoreScriptTags, stripScriptTags } from './scriptTags';
 
 const escapeAttr = (value: string): string => {
   return (value || '')
@@ -106,6 +102,7 @@ export const renderHtmlFromHtmlTemplate = (args: {
   if (!templateId) {
     return { success: false, message: 'No template matched the record values/language.' };
   }
+  const isBundled = Boolean(parseBundledHtmlTemplateId(templateId));
 
   try {
     const cached = getCachedHtmlTemplate(templateId);
@@ -130,6 +127,16 @@ export const renderHtmlFromHtmlTemplate = (args: {
       debugLog('followup.htmlTemplate.cacheMiss', { templateId, mimeType, cached: false });
     }
 
+    // Security: Drive-sourced templates must not contain <script> tags.
+    // For dynamic behavior, scripts are only permitted in bundled (bundle:...) templates.
+    if (!isBundled && containsScriptTag(raw)) {
+      debugLog('followup.htmlTemplate.scriptsRejected', { templateId, mimeType });
+      return {
+        success: false,
+        message: 'Scripts are not allowed in Drive-sourced HTML templates. Use a bundled template (bundle:<filename>) from /docs/templates.'
+      };
+    }
+
     const lineItemRows = collectLineItemRows(record, questions);
     const placeholders = buildPlaceholderMap({
       record,
@@ -145,10 +152,15 @@ export const renderHtmlFromHtmlTemplate = (args: {
 
     // Apply Doc-like line-item directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE) for HTML blocks,
     // then apply normal placeholder replacement across the full document.
-    const withLineItems = applyHtmlLineItemBlocks({ html: raw, questions, lineItemRows });
-    const withPlaceholders = stripScripts(applyPlaceholders(withLineItems, placeholders));
+    // Bundled templates may include <script> tags, but we must still prevent script injection via user-entered values.
+    // Extract template-authored scripts, strip any scripts introduced after placeholder replacement, then restore.
+    const { html: rawNoScripts, extracted } = isBundled ? extractScriptTags(raw) : { html: raw, extracted: [] };
+    const withLineItems = applyHtmlLineItemBlocks({ html: rawNoScripts, questions, lineItemRows });
+    const withPlaceholders = applyPlaceholders(withLineItems, placeholders);
+    const stripped = stripScriptTags(withPlaceholders);
     // For FILE_UPLOAD fields, render readable link labels instead of dumping raw Drive URLs.
-    const html = linkifyUploadedFileUrlsInHtml(withPlaceholders, questions, record);
+    const linkified = linkifyUploadedFileUrlsInHtml(stripped, questions, record);
+    const html = extracted.length ? restoreScriptTags(linkified, extracted) : linkified;
     const fileName = `${namePrefix || form.title || 'Form'} - ${record.id || 'Preview'}.html`;
     debugLog('followup.htmlTemplate.ok', { templateId, mimeType, fileName });
     return { success: true, html, fileName };

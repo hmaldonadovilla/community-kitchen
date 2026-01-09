@@ -6,6 +6,7 @@ import { addConsolidatedPlaceholders, collectLineItemRows } from '../../../servi
 import { linkifyUploadedFileUrlsInHtml } from '../../../services/webform/followup/fileLinks';
 import { addPlaceholderVariants, applyPlaceholders, formatTemplateValueForHtml, slugifyPlaceholder } from '../../../services/webform/followup/utils';
 import { getBundledHtmlTemplateRaw, parseBundledHtmlTemplateId } from '../../../services/webform/followup/bundledHtmlTemplates';
+import { extractScriptTags, restoreScriptTags, stripScriptTags } from '../../../services/webform/followup/scriptTags';
 
 type HtmlRenderCacheEntry = { result: RenderHtmlTemplateResult; cachedAtMs: number };
 
@@ -85,10 +86,6 @@ const buildValuesSignature = (values: Record<string, any> | undefined | null): s
     compact[k] = (values as any)[k];
   });
   return fnv1a32(stableStringifyForKey(compact));
-};
-
-const stripScripts = (html: string): string => {
-  return (html || '').toString().replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
 };
 
 const escapeAttr = (value: string): string => {
@@ -536,9 +533,14 @@ export const renderBundledHtmlTemplateClient = async (args: {
       addConsolidatedPlaceholders(placeholders, definition.questions as any, lineItemRows);
       addFileIconPlaceholders(placeholders, definition.questions || [], record);
 
-      const withLineItems = applyHtmlLineItemBlocks({ html: raw, questions: definition.questions as any, lineItemRows });
-      const withPlaceholders = stripScripts(applyPlaceholders(withLineItems, placeholders));
-      const html = linkifyUploadedFileUrlsInHtml(withPlaceholders, definition.questions as any, record as any);
+      // Bundled templates may include <script> tags, but we must still prevent script injection via user-entered values.
+      // Extract template-authored scripts, strip any scripts introduced after placeholder replacement, then restore.
+      const { html: rawNoScripts, extracted } = extractScriptTags(raw);
+      const withLineItems = applyHtmlLineItemBlocks({ html: rawNoScripts, questions: definition.questions as any, lineItemRows });
+      const withPlaceholders = applyPlaceholders(withLineItems, placeholders);
+      const stripped = stripScriptTags(withPlaceholders);
+      const linkified = linkifyUploadedFileUrlsInHtml(stripped, definition.questions as any, record as any);
+      const html = extracted.length ? restoreScriptTags(linkified, extracted) : linkified;
 
       const result: RenderHtmlTemplateResult = { success: true, html };
       renderedBundleHtmlCache.set(cacheKey, { result, cachedAtMs: Date.now() });

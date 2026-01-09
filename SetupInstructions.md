@@ -1050,6 +1050,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
     - Rendered **client-side** (no `renderHtmlTemplate` Apps Script call).
     - If the template references data-source projections like `{{FIELD_ID.PROJECTION_KEY}}` for a `dataSource`-backed field, the client will call `fetchDataSource` to resolve those values.
     - Requires redeploy to update.
+    - **Scripts**: bundled templates may include small inline `<script>` blocks for dynamic UI (for example: the consolidated “Issues” card in the checklist templates).
+  - **Security**: Drive-sourced HTML templates must **not** include `<script>` tags (they are rejected).
   
   HTML templates also support an icon placeholder for photo/attachment fields:
   - `{{FILES_ICON(FIELD_ID)}}` → a clickable camera/clip icon button that opens the field’s items in a **read-only Photos overlay** (works from List/Summary/Form).

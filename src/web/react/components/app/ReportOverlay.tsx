@@ -18,6 +18,11 @@ export type ReportOverlayState = {
   pdfMessage?: string;
   markdown?: string;
   html?: string;
+  /**
+   * Only enable when the HTML content came from a bundled (bundle:...) template.
+   * Drive templates must never execute scripts.
+   */
+  htmlAllowScripts?: boolean;
 };
 
 export const ReportOverlay: React.FC<{
@@ -101,7 +106,12 @@ export const ReportOverlay: React.FC<{
         ) : null}
 
         {kind === 'html' && pdfPhase === 'ready' && state.html ? (
-          <HtmlPreview html={state.html} onOpenFiles={onOpenFiles} onDiagnostic={onDiagnostic} />
+          <HtmlPreview
+            html={state.html}
+            allowScripts={Boolean(state.htmlAllowScripts)}
+            onOpenFiles={onOpenFiles}
+            onDiagnostic={onDiagnostic}
+          />
         ) : null}
       </div>
     </FullPageOverlay>

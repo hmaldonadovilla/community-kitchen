@@ -2181,7 +2181,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         pdfFileName: undefined,
         pdfMessage: undefined,
         markdown: undefined,
-        html: undefined
+        html: undefined,
+        htmlAllowScripts: false
       }));
 
       const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
@@ -2233,7 +2234,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
         setReportOverlay(prev => {
           if (prev?.buttonId !== buttonId) return prev;
-          return { ...prev, open: true, kind: 'html', pdfPhase: 'ready', html: res.html, markdown: undefined, pdfMessage: undefined };
+          return {
+            ...prev,
+            open: true,
+            kind: 'html',
+            pdfPhase: 'ready',
+            html: res.html,
+            markdown: undefined,
+            pdfMessage: undefined,
+            htmlAllowScripts: useBundled
+          };
         });
         logEvent(useBundled ? 'report.htmlPreview.bundle.ok' : 'report.htmlPreview.ok', {
           buttonId,

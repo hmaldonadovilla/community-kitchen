@@ -1,13 +1,60 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 export const HtmlPreview: React.FC<{
   html: string;
+  /**
+   * Only enable for trusted, bundled (bundle:...) templates.
+   * Drive-sourced templates must never execute scripts.
+   */
+  allowScripts?: boolean;
   /**
    * Called when the user clicks a FILE_UPLOAD icon placeholder rendered in the HTML.
    */
   onOpenFiles?: (fieldId: string) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
-}> = ({ html, onOpenFiles, onDiagnostic }) => {
+}> = ({ html, allowScripts, onOpenFiles, onDiagnostic }) => {
+  const htmlText = useMemo(() => (html || '').toString(), [html]);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  // React's innerHTML does not execute <script> tags.
+  // For trusted bundled templates we intentionally support small inline scripts, so we manually execute them.
+  useEffect(() => {
+    if (!allowScripts) return;
+    const root = contentRef.current;
+    if (!root) return;
+    const nodes = Array.from(root.querySelectorAll('script')) as HTMLScriptElement[];
+    if (!nodes.length) return;
+
+    onDiagnostic?.('htmlPreview.scripts.execute.start', { count: nodes.length });
+    nodes.forEach((node, idx) => {
+      try {
+        const src = (node.getAttribute('src') || '').toString().trim();
+        // Keep this strictly inline-only; bundled templates should not pull remote JS.
+        if (src) {
+          onDiagnostic?.('htmlPreview.scripts.execute.blockedExternal', { index: idx, src });
+          node.parentNode?.removeChild(node);
+          return;
+        }
+        const code = (node.textContent || '').toString();
+        node.parentNode?.removeChild(node);
+        if (!code.trim()) return;
+        const s = globalThis.document?.createElement?.('script');
+        if (!s) return;
+        // Preserve explicit type if present.
+        const type = (node.getAttribute('type') || '').toString().trim();
+        if (type) s.setAttribute('type', type);
+        (s as any).text = code;
+        root.appendChild(s);
+        // Remove immediately to keep the DOM tidy; code has already executed.
+        root.removeChild(s);
+      } catch (err: any) {
+        const msg = (err?.message || err?.toString?.() || 'Failed to execute template script.').toString();
+        onDiagnostic?.('htmlPreview.scripts.execute.error', { index: idx, message: msg });
+      }
+    });
+    onDiagnostic?.('htmlPreview.scripts.execute.done', { count: nodes.length });
+  }, [allowScripts, htmlText, onDiagnostic]);
+
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       try {
@@ -55,8 +102,11 @@ export const HtmlPreview: React.FC<{
     >
       <div
         className="ck-html-preview__content"
-        // HTML templates are form-owner controlled; scripts are stripped server-side as a basic mitigation.
-        dangerouslySetInnerHTML={{ __html: (html || '').toString() }}
+        ref={contentRef}
+        // Security note:
+        // - Drive templates: scripts are rejected server-side.
+        // - Bundled templates: scripts may be present and can be executed (allowScripts=true).
+        dangerouslySetInnerHTML={{ __html: htmlText }}
       />
     </div>
   );
