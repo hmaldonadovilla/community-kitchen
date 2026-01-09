@@ -35,7 +35,7 @@ export const resolveUploadRemainingHelperText = (args: {
   return tSystem(
     count === 1 ? 'files.remainingOne' : 'files.remainingMany',
     args.language,
-    count === 1 ? 'You can add 1 more file.' : 'You can add {count} more files.',
+    count === 1 ? 'You can add 1 more photo.' : 'You can add {count} more photos.',
     { count }
   );
 };
@@ -89,19 +89,19 @@ export const isHttpUrl = (url: string): boolean => /^https?:\/\//i.test((url || 
 
 export const fileNameFromUrl = (url: string): string => {
   const trimmed = (url || '').trim();
-  if (!trimmed) return 'File';
+  if (!trimmed) return 'Photo';
   const noQuery = trimmed.split('?')[0] || trimmed;
   const last = noQuery.split('/').pop() || noQuery;
   try {
-    return decodeURIComponent(last) || 'File';
+    return decodeURIComponent(last) || 'Photo';
   } catch (_) {
-    return last || 'File';
+    return last || 'Photo';
   }
 };
 
 export const describeUploadItem = (item: string | File): string => {
   if (typeof item === 'string') return fileNameFromUrl(item);
-  return item?.name || 'File';
+  return item?.name || 'Photo';
 };
 
 export const toUploadItems = (value: FieldValue): Array<string | File> => {
@@ -252,7 +252,7 @@ export const applyUploadConstraints = (
         resolveUploadError({
           custom: uploadConfig?.errorMessages?.fileType,
           systemKey: 'files.error.fileType',
-          fallback: '{name} is not an allowed file type.',
+          fallback: '{name} is not an allowed photo type.',
           vars: {
             name: file.name,
             ext: ext || '',
@@ -280,7 +280,7 @@ export const applyUploadConstraints = (
         resolveUploadError({
           custom: uploadConfig?.errorMessages?.maxFiles,
           systemKey: 'files.error.maxFiles',
-          fallback: 'Maximum of {max} file{plural} reached.',
+          fallback: 'Maximum of {max} photo{plural} reached.',
           vars: { max: maxFiles, plural: maxFiles > 1 ? 's' : '' }
         })
       );

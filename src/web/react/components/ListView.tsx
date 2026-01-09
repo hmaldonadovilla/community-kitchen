@@ -7,6 +7,7 @@ import { fetchBatch, fetchList, ListItem, ListResponse } from '../api';
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
 import { normalizeToIsoDateLocal } from '../app/listViewSearch';
+import { paginateItemsForListViewUi } from '../app/listViewPagination';
 import { ListViewIcon } from './ListViewIcon';
 import { DateInput } from './form/DateInput';
 
@@ -50,6 +51,7 @@ const ListView: React.FC<ListViewProps> = ({
   error: errorProp
 }) => {
   const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
+  const paginationEnabled = definition.listView?.paginationControlsEnabled !== false;
   const [loading, setLoading] = useState(false);
   const [prefetching, setPrefetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -655,14 +657,12 @@ const ListView: React.FC<ListViewProps> = ({
   }, [allItems, dateSearchEnabled, dateSearchFieldId, language, ruleColumns, searchValue, searchableFieldIds, sortField, sortDirection]);
 
   const pagedItems = useMemo(() => {
-    const start = pageIndex * pageSize;
-    const end = start + pageSize;
-    return visibleItems.slice(start, end);
-  }, [visibleItems, pageIndex, pageSize]);
+    return paginateItemsForListViewUi({ items: visibleItems, pageIndex, pageSize, paginationControlsEnabled: paginationEnabled });
+  }, [paginationEnabled, pageIndex, pageSize, visibleItems]);
 
-  const totalPages = Math.max(1, Math.ceil(visibleItems.length / pageSize));
-  const showPrev = pageIndex > 0;
-  const showNext = pageIndex < totalPages - 1;
+  const totalPages = paginationEnabled ? Math.max(1, Math.ceil(visibleItems.length / pageSize)) : 1;
+  const showPrev = paginationEnabled && pageIndex > 0;
+  const showNext = paginationEnabled && pageIndex < totalPages - 1;
   const loadedCount = (allItems || []).length;
   const trimmedSearch = searchValue.trim();
   const showLoadedOfTotal = !trimmedSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
@@ -1036,18 +1036,24 @@ const ListView: React.FC<ListViewProps> = ({
           </tbody>
         </table>
       </div>
-      <div className="actions" style={{ justifyContent: 'space-between' }}>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => setPageIndex(prev => Math.max(0, prev - 1))}
-          disabled={!showPrev}
-        >
-          {tSystem('list.previous', language, 'Previous')}
-        </button>
+      <div className="actions" style={{ justifyContent: paginationEnabled ? 'space-between' : 'center' }}>
+        {paginationEnabled ? (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setPageIndex(prev => Math.max(0, prev - 1))}
+            disabled={!showPrev}
+          >
+            {tSystem('list.previous', language, 'Previous')}
+          </button>
+        ) : null}
         <div className="muted" style={{ alignSelf: 'center' }}>
-          {tSystem('list.pageOf', language, 'Page {page} of {total}', { page: totalPages ? pageIndex + 1 : 0, total: totalPages })}{' '}
-          •{' '}
+          {paginationEnabled ? (
+            <>
+              {tSystem('list.pageOf', language, 'Page {page} of {total}', { page: totalPages ? pageIndex + 1 : 0, total: totalPages })}{' '}
+              •{' '}
+            </>
+          ) : null}
           {showLoadedOfTotal
             ? tSystem('list.recordsLoadedOfTotal', language, '{loaded} / {total} records', { loaded: loadedCount, total: totalCount })
             : tSystem(
@@ -1057,9 +1063,11 @@ const ListView: React.FC<ListViewProps> = ({
                 { count: visibleItems.length || totalCount }
               )}
         </div>
-        <button type="button" onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))} disabled={!showNext}>
-          {tSystem('list.next', language, 'Next')}
-        </button>
+        {paginationEnabled ? (
+          <button type="button" onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))} disabled={!showNext}>
+            {tSystem('list.next', language, 'Next')}
+          </button>
+        ) : null}
       </div>
     </div>
   );

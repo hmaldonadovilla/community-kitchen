@@ -1123,6 +1123,7 @@ export class ConfigSheet {
 
       const folderId =
         cfgRaw.folderId !== undefined && cfgRaw.folderId !== null ? cfgRaw.folderId.toString().trim() : undefined;
+      const loadingLabel = cfgRaw.loadingLabel !== undefined ? cfgRaw.loadingLabel : undefined;
 
       const config: ButtonConfig = {
         action: 'renderDocTemplate',
@@ -1132,6 +1133,7 @@ export class ConfigSheet {
       } as any;
       if (placements.length) (config as any).placements = placements as any;
       if (folderId) (config as any).folderId = folderId;
+      if (loadingLabel) (config as any).loadingLabel = loadingLabel as any;
       return config;
     }
 
@@ -1186,6 +1188,20 @@ export class ConfigSheet {
       if (!Object.keys(presetValues).length) return undefined;
 
       const config: ButtonConfig = { action: 'createRecordPreset', presetValues } as any;
+      if (placements.length) (config as any).placements = placements as any;
+      return config;
+    }
+
+    if (action === 'openUrlField') {
+      const fieldId =
+        cfgRaw.fieldId ??
+        cfgRaw.urlFieldId ??
+        cfgRaw.urlField ??
+        cfgRaw.hrefFieldId ??
+        cfgRaw.hrefField;
+      const resolved = fieldId !== undefined && fieldId !== null ? fieldId.toString().trim() : '';
+      if (!resolved) return undefined;
+      const config: ButtonConfig = { action: 'openUrlField', fieldId: resolved } as any;
       if (placements.length) (config as any).placements = placements as any;
       return config;
     }

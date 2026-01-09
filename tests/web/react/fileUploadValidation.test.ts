@@ -24,7 +24,7 @@ describe('validateForm FILE_UPLOAD uploadConfig constraints', () => {
       lineItems: {} as any
     });
 
-    expect(errors.PHOTOS).toBe('Photos requires at least 2 files.');
+    expect(errors.PHOTOS).toBe('Photos requires at least 2 photos.');
   });
 
   it('uses requiredMessage when FILE_UPLOAD minFiles is 1', () => {
@@ -90,7 +90,7 @@ describe('validateForm FILE_UPLOAD uploadConfig constraints', () => {
       lineItems
     });
 
-    expect(errors['LINES__PHOTO__r1']).toBe('Proof photos requires at least 2 files.');
+    expect(errors['LINES__PHOTO__r1']).toBe('Proof photos requires at least 2 photos.');
   });
 });
 

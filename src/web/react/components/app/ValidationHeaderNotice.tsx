@@ -31,8 +31,11 @@ export const ValidationHeaderNotice: React.FC<{
               onNavigateToField(firstErrorKey);
             }}
           >
-            {tSystem('validation.fixErrors', language, 'Please fix validation errors.')}
-            {errorCount ? ` (${errorCount})` : ''}
+            {tSystem(
+              'validation.fixErrors',
+              language,
+              'You are almost done. Some required checks are missing. Review the highlighted sections.'
+            )}
           </button>
           <button type="button" className="ck-validation-banner__hide" onClick={onDismiss}>
             {hideLabel}

@@ -71,6 +71,8 @@ import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { toUploadItems } from './components/form/utils';
 import { clearFetchDataSourceCache } from '../data/dataSources';
+import { shouldHideField } from '../rules/visibility';
+import { getSystemFieldValue } from '../rules/systemFields';
 
 type SubmissionMeta = {
   id?: string;
@@ -255,6 +257,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [dedupChecking, setDedupChecking] = useState<boolean>(false);
   const [dedupConflict, setDedupConflict] = useState<DedupConflictInfo | null>(null);
   const [dedupNotice, setDedupNotice] = useState<DedupConflictInfo | null>(null);
+  const [precreateDedupChecking, setPrecreateDedupChecking] = useState<boolean>(false);
   const dedupCheckingRef = useRef<boolean>(false);
   const dedupConflictRef = useRef<DedupConflictInfo | null>(null);
   const dedupSignatureRef = useRef<string>('');
@@ -323,6 +326,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           createFlowUserEditedRef.current = true;
           logEvent('autosave.armed.userEdit', { fieldPath: fieldPath || fieldId || null });
         }
+
+        // Mark dirty immediately on user edits so navigation handlers can flush autosave
+        // even if the debounced autosave effect hasn't run yet.
+        autoSaveDirtyRef.current = true;
 
         // For top-level dedup keys (reject rules): hold autosave until dedup check completes.
         const isDedupKey =
@@ -457,6 +464,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const autoSaveInFlightRef = useRef<boolean>(false);
   const autoSaveQueuedRef = useRef<boolean>(false);
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
+  /**
+   * Monotonic session counter used to ignore late async results (autosave, uploads, etc)
+   * after the user switches to a different record/create flow.
+   */
+  const recordSessionRef = useRef<number>(0);
+  const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
 
   // Keep latest values in refs so autosave can run without stale closures.
   const viewRef = useRef<View>(view);
@@ -514,6 +527,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   useEffect(() => {
     lastSubmissionMetaRef.current = lastSubmissionMeta;
   }, [lastSubmissionMeta]);
+
+  const bumpRecordSession = useCallback(
+    (args: { reason: string; nextRecordId?: string | null }) => {
+      recordSessionRef.current += 1;
+      // Cancel any pending autosave timers/queues from the previous record session.
+      autoSaveQueuedRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      try {
+        uploadQueueRef.current.clear();
+      } catch (_) {
+        // ignore
+      }
+      logEvent('record.session.bump', {
+        reason: (args?.reason || '').toString() || null,
+        nextRecordId: args?.nextRecordId ? args.nextRecordId.toString() : null,
+        session: recordSessionRef.current
+      });
+    },
+    [logEvent]
+  );
 
   // Arm autosave for create-flow ONLY after the user actually changes a field value.
   // (We intentionally do NOT arm autosave when values are populated by defaultValue/derivedValue/createRecordPreset.)
@@ -760,12 +796,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       updatedAt?: string;
       status?: string | null;
       pdfUrl?: string;
+      dataVersion?: number | null;
+      rowNumber?: number | null;
     }) => {
       const recordId = (args.recordId || '').toString();
       if (!recordId) return;
       setListCache(prev => {
         const nextRecords = { ...(prev.records || {}) };
         const existing = nextRecords[recordId];
+        const dv = Number(args.dataVersion);
+        const dataVersion = Number.isFinite(dv) && dv > 0 ? dv : undefined;
+        const rn = Number(args.rowNumber);
+        const rowNumber = Number.isFinite(rn) && rn >= 2 ? rn : undefined;
         if (existing) {
           nextRecords[recordId] = {
             ...existing,
@@ -773,7 +815,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             updatedAt: args.updatedAt || existing.updatedAt,
             status: args.status !== undefined ? (args.status as any) : existing.status,
             pdfUrl: args.pdfUrl !== undefined ? (args.pdfUrl as any) : (existing as any).pdfUrl,
-            values: args.values ? { ...(existing.values as any), ...(args.values as any) } : existing.values
+            values: args.values ? { ...(existing.values as any), ...(args.values as any) } : existing.values,
+            ...(dataVersion ? { dataVersion } : null),
+            ...(rowNumber ? { __rowNumber: rowNumber } : null)
           } as any;
         } else {
           nextRecords[recordId] = {
@@ -786,7 +830,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             pdfUrl: args.pdfUrl,
             values: args.values || {},
             lineItems: {},
-            submittedAt: undefined
+            submittedAt: undefined,
+            ...(dataVersion ? { dataVersion } : null),
+            ...(rowNumber ? { __rowNumber: rowNumber } : null)
           } as any;
         }
 
@@ -802,6 +848,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           if (!row || row.id !== recordId) return row;
           found = true;
           const patched: any = { ...row };
+          if (rowNumber) patched.__rowNumber = rowNumber;
           if (args.createdAt) patched.createdAt = args.createdAt;
           if (args.updatedAt) patched.updatedAt = args.updatedAt;
           if (args.status !== undefined) patched.status = args.status || undefined;
@@ -831,6 +878,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           });
           if (dateSearchFieldId) fieldIds.add(dateSearchFieldId);
           const row: any = { id: recordId };
+          if (rowNumber) row.__rowNumber = rowNumber;
           if (args.createdAt) row.createdAt = args.createdAt;
           if (args.updatedAt) row.updatedAt = args.updatedAt;
           if (args.status !== undefined) row.status = args.status || undefined;
@@ -949,7 +997,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           createdAt: snapshot.createdAt,
           updatedAt: snapshot.updatedAt,
           status: (snapshot.status as any) || null,
-          pdfUrl: (snapshot as any).pdfUrl
+          pdfUrl: (snapshot as any).pdfUrl,
+          dataVersion: Number.isFinite(Number((snapshot as any).dataVersion)) ? Number((snapshot as any).dataVersion) : undefined,
+          rowNumber: Number.isFinite(Number((snapshot as any).__rowNumber)) ? Number((snapshot as any).__rowNumber) : undefined
         });
       } catch (_) {
         // ignore
@@ -1623,52 +1673,152 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     };
   }, [debugEnabled]);
 
-  const handleSubmitAnother = useCallback(() => {
-    createFlowRef.current = true;
-    createFlowUserEditedRef.current = false;
-    dedupHoldRef.current = false;
-    autoSaveDirtyRef.current = false;
-    if (autoSaveTimerRef.current) {
-      globalThis.clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    setDraftSave({ phase: 'idle' });
-    setDedupChecking(false);
-    setDedupConflict(null);
-    setDedupNotice(null);
-    dedupCheckingRef.current = false;
-    dedupConflictRef.current = null;
-    lastDedupCheckedSignatureRef.current = '';
-    recordStaleRef.current = null;
-    setRecordStale(null);
-    recordDataVersionRef.current = null;
-    recordRowNumberRef.current = null;
-    const normalized = normalizeRecordValues(definition);
-    const initialLineItems = buildInitialLineItems(definition);
-    const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
-    lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
-    setValues(mapped.values);
-    setLineItems(mapped.lineItems);
-    setErrors({});
-    setValidationWarnings({ top: [], byField: {} });
-    setValidationAttempted(false);
-    setValidationNoticeHidden(false);
-    setStatus(null);
-    setStatusLevel(null);
-    setSelectedRecordId('');
-    setSelectedRecordSnapshot(null);
-    setLastSubmissionMeta(null);
-    setView('form');
-    logEvent('form.reset', { reason: 'submitAnother' });
-  }, [definition, logEvent]);
+  const openExistingRecordFromDedup = useCallback(
+    async (args: { recordId: string; rowNumber?: number | null; source: string }): Promise<boolean> => {
+      const id = (args.recordId || '').toString().trim();
+      if (!id) return false;
+      bumpRecordSession({ reason: 'dedup.openExisting', nextRecordId: id });
+      const rowNumberRaw = args.rowNumber;
+      const rowNumber =
+        rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
+          ? undefined
+          : Number(rowNumberRaw);
 
-  const handleGoHome = useCallback(() => {
-    setView('list');
-    setStatus(null);
-    setStatusLevel(null);
-  }, []);
+      // Clear transient status before navigation.
+      setStatus(null);
+      setStatusLevel(null);
+      setRecordLoadError(null);
+
+      // Prefer cached record (instant).
+      const cached = listCache.records[id];
+      if (cached) {
+        applyRecordSnapshot(cached);
+        const statusRaw = ((cached.status || '') as any)?.toString?.() || '';
+        const isClosed = statusRaw.trim().toLowerCase() === 'closed';
+        const allowSummary = definition.summaryViewEnabled !== false;
+        setView(allowSummary && isClosed ? 'summary' : 'form');
+        logEvent('dedup.precreate.openExisting.cached', { source: args.source, recordId: id });
+        return true;
+      }
+
+      const ok = await loadRecordSnapshot(id, rowNumber);
+      if (!ok) {
+        logEvent('dedup.precreate.openExisting.notFound', { source: args.source, recordId: id, rowNumber: rowNumber ?? null });
+        return false;
+      }
+      const statusRaw = ((selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
+      const isClosed = statusRaw.trim().toLowerCase() === 'closed';
+      const allowSummary = definition.summaryViewEnabled !== false;
+      setView(allowSummary && isClosed ? 'summary' : 'form');
+      logEvent('dedup.precreate.openExisting.ok', { source: args.source, recordId: id, rowNumber: rowNumber ?? null });
+      return true;
+    },
+    [applyRecordSnapshot, bumpRecordSession, definition.summaryViewEnabled, listCache.records, loadRecordSnapshot, logEvent]
+  );
+
+  const precheckCreateDedupAndMaybeNavigate = useCallback(
+    async (args: { values: Record<string, FieldValue>; lineItems: LineItemState; source: string }): Promise<boolean> => {
+      const signature = computeDedupSignatureFromValues((definition as any)?.dedupRules, args.values as any);
+      if (!signature) return false;
+      const startedAt = Date.now();
+      setPrecreateDedupChecking(true);
+      logEvent('dedup.precreate.check.start', { source: args.source, signatureLen: signature.length });
+      try {
+        const payload = buildDraftPayload({
+          definition,
+          formKey,
+          language: languageRef.current,
+          values: args.values,
+          lineItems: args.lineItems
+        }) as any;
+        const res = await checkDedupConflictApi(payload);
+        if (!res?.success) {
+          const msg = (res?.message || 'Failed').toString();
+          logEvent('dedup.precreate.check.failed', { source: args.source, message: msg });
+          return false;
+        }
+        const conflict: any = (res as any)?.conflict || null;
+        const existingRecordId = (conflict?.existingRecordId || '').toString().trim();
+        const existingRowNumber = Number.isFinite(Number(conflict?.existingRowNumber)) ? Number(conflict?.existingRowNumber) : undefined;
+        if (!existingRecordId) {
+          logEvent('dedup.precreate.check.ok', { source: args.source });
+          return false;
+        }
+        logEvent('dedup.precreate.conflict', {
+          source: args.source,
+          existingRecordId,
+          existingRowNumber: existingRowNumber ?? null
+        });
+        await openExistingRecordFromDedup({
+          recordId: existingRecordId,
+          rowNumber: existingRowNumber,
+          source: args.source
+        });
+        return true;
+      } catch (err: any) {
+        const msg = (err?.message || err?.toString?.() || 'Failed').toString();
+        logEvent('dedup.precreate.check.exception', { source: args.source, message: msg });
+        return false;
+      } finally {
+        setPrecreateDedupChecking(false);
+        logEvent('dedup.precreate.check.end', { source: args.source, durationMs: Date.now() - startedAt });
+      }
+    },
+    [definition, formKey, logEvent, openExistingRecordFromDedup]
+  );
+
+  const handleSubmitAnother = useCallback(() => {
+    void (async () => {
+      // Compute candidate defaults first; if they match a dedup rule, open the existing record instead of creating a duplicate.
+      const normalized = normalizeRecordValues(definition);
+      const initialLineItems = buildInitialLineItems(definition);
+      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
+      const handled = await precheckCreateDedupAndMaybeNavigate({
+        values: mapped.values,
+        lineItems: mapped.lineItems,
+        source: 'createNew'
+      });
+      if (handled) return;
+
+      bumpRecordSession({ reason: 'createNew', nextRecordId: null });
+      createFlowRef.current = true;
+      createFlowUserEditedRef.current = false;
+      dedupHoldRef.current = false;
+      autoSaveDirtyRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+      setDedupChecking(false);
+      setDedupConflict(null);
+      setDedupNotice(null);
+      dedupCheckingRef.current = false;
+      dedupConflictRef.current = null;
+      lastDedupCheckedSignatureRef.current = '';
+      recordStaleRef.current = null;
+      setRecordStale(null);
+      recordDataVersionRef.current = null;
+      recordRowNumberRef.current = null;
+      lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
+      setValues(mapped.values);
+      setLineItems(mapped.lineItems);
+      setErrors({});
+      setValidationWarnings({ top: [], byField: {} });
+      setValidationAttempted(false);
+      setValidationNoticeHidden(false);
+      setStatus(null);
+      setStatusLevel(null);
+      setSelectedRecordId('');
+      setSelectedRecordSnapshot(null);
+      setLastSubmissionMeta(null);
+      setView('form');
+      logEvent('form.reset', { reason: 'submitAnother' });
+    })();
+  }, [bumpRecordSession, definition, logEvent, precheckCreateDedupAndMaybeNavigate]);
 
   const handleDuplicateCurrent = useCallback(() => {
+    bumpRecordSession({ reason: 'duplicateCurrent', nextRecordId: null });
     createFlowRef.current = true;
     createFlowUserEditedRef.current = false;
     dedupHoldRef.current = false;
@@ -1703,7 +1853,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setStatus(null);
     setStatusLevel(null);
     setView('form');
-  }, [definition, values, lineItems]);
+  }, [bumpRecordSession, definition, values, lineItems]);
 
   const CK_BUTTON_IDX_TOKEN = '__ckQIdx=';
   const parseButtonRef = useCallback((ref: string): { id: string; qIdx?: number } => {
@@ -1748,10 +1898,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   const customButtons = useMemo(() => {
     const createPresetEnabled = definition.createRecordPresetButtonsEnabled !== false;
+    const applyVisibility = view !== 'list';
+    const resolveButtonVisibilityValue = (fieldId: string): FieldValue | undefined => {
+      const direct = values[fieldId];
+      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+      // System/meta fields (not part of `values`): allow referencing STATUS/status/pdfUrl/etc in visibility rules.
+      const meta: any = {
+        id: selectedRecordId || selectedRecordSnapshot?.id || lastSubmissionMeta?.id,
+        createdAt: selectedRecordSnapshot?.createdAt || lastSubmissionMeta?.createdAt,
+        updatedAt: selectedRecordSnapshot?.updatedAt || lastSubmissionMeta?.updatedAt,
+        status: selectedRecordSnapshot?.status || lastSubmissionMeta?.status || null,
+        pdfUrl: selectedRecordSnapshot?.pdfUrl || undefined
+      };
+      const sys = getSystemFieldValue(fieldId, meta);
+      if (sys !== undefined) return sys as FieldValue;
+      // Best-effort: scan current line item rows for the first non-empty occurrence.
+      for (const rows of Object.values(lineItems)) {
+        if (!Array.isArray(rows)) continue;
+        for (const row of rows as any[]) {
+          const v = (row as any)?.values?.[fieldId];
+          if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+        }
+      }
+      return undefined;
+    };
+    const visibilityCtx = {
+      getValue: (fieldId: string) => resolveButtonVisibilityValue(fieldId)
+    } as any;
     return definition.questions
       .map((q, idx) => ({ q, idx }))
       .filter(({ q }) => q.type === 'BUTTON')
       .map(({ q, idx }) => {
+        if (applyVisibility && shouldHideField((q as any)?.visibility, visibilityCtx)) {
+          return null;
+        }
         const cfg: any = (q as any)?.button;
         if (!cfg || typeof cfg !== 'object') return null;
         const action = (cfg.action || '').toString().trim();
@@ -1760,6 +1940,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         } else if (action === 'createRecordPreset') {
           if (!createPresetEnabled) return null;
           if (!cfg.presetValues || typeof cfg.presetValues !== 'object') return null;
+        } else if (action === 'openUrlField') {
+          if (!cfg.fieldId) return null;
         } else {
           return null;
         }
@@ -1772,7 +1954,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return { id, label: resolveLabel(q, language), placements: placements as any, action: action as any };
       })
       .filter((b): b is { id: string; label: string; placements: any[]; action: any } => !!b);
-  }, [definition.questions, encodeButtonRef, language]);
+  }, [
+    definition.createRecordPresetButtonsEnabled,
+    definition.questions,
+    encodeButtonRef,
+    language,
+    lastSubmissionMeta,
+    lineItems,
+    selectedRecordId,
+    selectedRecordSnapshot,
+    values,
+    view
+  ]);
 
   const base64ToPdfObjectUrl = useCallback((pdfBase64: string, mimeType: string) => {
     const raw = (pdfBase64 || '').toString();
@@ -1787,14 +1980,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, []);
 
   const openPdfPreviewWindow = useCallback(
-    (args: { title: string; subtitle?: string; language: LangCode }) => {
+    (args: { title: string; subtitle?: string; language: LangCode; loadingLabel?: string }) => {
       try {
         const w = globalThis.window?.open('', '_blank');
         if (!w) return null;
         try {
           const title = (args.title || '').toString();
           const subtitle = (args.subtitle || '').toString();
-          const loading = tSystem('report.generatingPdf', args.language, 'Generating PDF…');
+          const loading = (args.loadingLabel || tSystem('report.generatingPdf', args.language, 'Generating PDF…')).toString();
           const html = `<!doctype html>
 <html>
   <head>
@@ -2147,29 +2340,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   );
 
   const createRecordFromPreset = useCallback(
-    (args: { buttonId: string; presetValues: Record<string, any> }) => {
+    async (args: { buttonId: string; presetValues: Record<string, any> }) => {
       const { buttonId, presetValues } = args;
-
-      createFlowRef.current = true;
-      createFlowUserEditedRef.current = false;
-      dedupHoldRef.current = false;
-      // Creating a preset record is a "new record" flow: clear draft autosave and record context.
-      autoSaveDirtyRef.current = false;
-      if (autoSaveTimerRef.current) {
-        globalThis.clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      setDraftSave({ phase: 'idle' });
-      setDedupChecking(false);
-      setDedupConflict(null);
-      setDedupNotice(null);
-      dedupCheckingRef.current = false;
-      dedupConflictRef.current = null;
-      lastDedupCheckedSignatureRef.current = '';
-      recordStaleRef.current = null;
-      setRecordStale(null);
-      recordDataVersionRef.current = null;
-      recordRowNumberRef.current = null;
 
       const parsedRef = parseButtonRef(buttonId || '');
       const baseId = parsedRef.id;
@@ -2204,6 +2376,36 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
       const initialLineItems = buildInitialLineItems(definition);
       const mapped = applyValueMapsToForm(definition, valuesWithPreset, initialLineItems, { mode: 'init' });
+
+      // Precheck dedup BEFORE navigating to the new record (avoid duplicate creation when presets/defaults populate dedup keys).
+      const handled = await precheckCreateDedupAndMaybeNavigate({
+        values: mapped.values,
+        lineItems: mapped.lineItems,
+        source: 'createRecordPreset'
+      });
+      if (handled) return;
+
+      createFlowRef.current = true;
+      createFlowUserEditedRef.current = false;
+      dedupHoldRef.current = false;
+      // Creating a preset record is a "new record" flow: clear draft autosave and record context.
+      autoSaveDirtyRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+      setDedupChecking(false);
+      setDedupConflict(null);
+      setDedupNotice(null);
+      dedupCheckingRef.current = false;
+      dedupConflictRef.current = null;
+      lastDedupCheckedSignatureRef.current = '';
+      recordStaleRef.current = null;
+      setRecordStale(null);
+      recordDataVersionRef.current = null;
+      recordRowNumberRef.current = null;
+
       lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
       setValues(mapped.values);
       setLineItems(mapped.lineItems);
@@ -2223,7 +2425,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         unknownFields: unknownFields.length ? unknownFields.slice(0, 20) : []
       });
     },
-    [definition, logEvent, parseButtonRef]
+    [definition, logEvent, parseButtonRef, precheckCreateDedupAndMaybeNavigate]
   );
 
   const handleCustomButton = useCallback(
@@ -2242,13 +2444,90 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
       if (action === 'renderDocTemplate') {
         const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Report');
-        const popup = openPdfPreviewWindow({ title, subtitle: definition.title, language: languageRef.current });
+        const loadingLabelResolved = resolveLocalizedString((cfg as any)?.loadingLabel, languageRef.current, '').toString().trim();
+        const popup = openPdfPreviewWindow({
+          title,
+          subtitle: definition.title,
+          language: languageRef.current,
+          loadingLabel: loadingLabelResolved || undefined
+        });
         if (!popup) {
           logEvent('report.pdfPreview.popupBlocked', { buttonId: baseId, qIdx: qIdx ?? null });
         } else {
           logEvent('report.pdfPreview.popupOpened', { buttonId: baseId, qIdx: qIdx ?? null });
         }
         openReport({ buttonId, popup });
+        return;
+      }
+      if (action === 'openUrlField') {
+        const fieldId = (cfg?.fieldId || '').toString().trim();
+        if (!fieldId) return;
+
+        const splitUrlList = (raw: string): string[] => {
+          const trimmed = (raw || '').toString().trim();
+          if (!trimmed) return [];
+          const commaParts = trimmed
+            .split(',')
+            .map(p => p.trim())
+            .filter(Boolean);
+          if (commaParts.length > 1) return commaParts;
+          const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
+          if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
+          return [trimmed];
+        };
+
+        const recordId =
+          resolveExistingRecordId({
+            selectedRecordId: selectedRecordIdRef.current,
+            selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+            lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+          }) || '';
+        const current = selectedRecordSnapshotRef.current || null;
+        const raw = (() => {
+          // Support meta url fields like pdfUrl.
+          if (fieldId === 'pdfUrl') return (current as any)?.pdfUrl || '';
+          if (fieldId === 'id') return recordId;
+          const v = (valuesRef.current as any)?.[fieldId];
+          if (v === undefined || v === null) return '';
+          if (typeof v === 'string') return v;
+          if (Array.isArray(v)) return v.join(' ');
+          if (typeof v === 'object' && typeof (v as any).url === 'string') return (v as any).url;
+          try {
+            return v.toString();
+          } catch (_) {
+            return '';
+          }
+        })();
+
+        const href = (() => {
+          const urls = splitUrlList(raw).filter(u => /^https?:\/\//i.test(u));
+          return urls[0] || '';
+        })();
+        if (!href) {
+          setStatus(tSystem('actions.missingLink', languageRef.current, 'No link found.'));
+          setStatusLevel('error');
+          logEvent('button.openUrl.missing', { buttonId: baseId, qIdx: qIdx ?? null, fieldId, recordId: recordId || null });
+          return;
+        }
+
+        // Prefer opening in a new tab (user gesture: should be allowed).
+        let opened = false;
+        try {
+          const w = globalThis.window?.open?.(href, '_blank');
+          opened = Boolean(w);
+        } catch (_) {
+          opened = false;
+        }
+        if (!opened) {
+          // Fallback: navigate this tab.
+          try {
+            globalThis.location?.assign?.(href);
+            opened = true;
+          } catch (_) {
+            opened = false;
+          }
+        }
+        logEvent('button.openUrl.open', { buttonId: baseId, qIdx: qIdx ?? null, fieldId, opened });
         return;
       }
       if (action === 'renderMarkdownTemplate') {
@@ -2260,7 +2539,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return;
       }
       if (action === 'createRecordPreset') {
-        createRecordFromPreset({ buttonId, presetValues: (cfg?.presetValues || {}) as any });
+        void createRecordFromPreset({ buttonId, presetValues: (cfg?.presetValues || {}) as any });
         return;
       }
 
@@ -2311,7 +2590,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return;
       }
       const items = toUploadItems(valuesRef.current[fieldId] as any);
-      const title = resolveLabel(q, languageRef.current) || tSystem('files.title', languageRef.current, 'Files');
+      const title = resolveLabel(q, languageRef.current) || tSystem('files.title', languageRef.current, 'Photos');
       const uploadConfig = (q as any)?.uploadConfig || undefined;
       setReadOnlyFilesOverlay({ open: true, fieldId, title, items, uploadConfig });
       logEvent('filesOverlay.readOnly.open', { fieldId, count: items.length });
@@ -2608,8 +2887,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const performAutoSave = useCallback(
     async (reason: string) => {
       if (!autoSaveEnabled) return;
-      if (viewRef.current !== 'form') return;
       if (submittingRef.current) return;
+      // Avoid racing uploads: file upload flow already persists changes (and uses optimistic locking).
+      // Running autosave concurrently can create spurious "stale" banners and duplicate saves.
+      if (uploadQueueRef.current.size > 0) {
+        autoSaveQueuedRef.current = true;
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.uploadInFlight', { reason, inFlight: uploadQueueRef.current.size });
+        return;
+      }
 
       const statusRaw =
         ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
@@ -2646,9 +2932,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       });
 
       const isCreateFlow = createFlowRef.current || !existingRecordId;
+      const sessionAtStart = recordSessionRef.current;
+      const valuesSnapshot = valuesRef.current;
+      const lineItemsSnapshot = lineItemsRef.current;
+      const languageSnapshot = languageRef.current;
 
       // If this is a CREATE flow and dedup keys are populated, avoid saving drafts until the precheck completes.
-      const currentDedupSignature = computeDedupSignatureFromValues((definition as any)?.dedupRules, valuesRef.current as any);
+      const currentDedupSignature = computeDedupSignatureFromValues((definition as any)?.dedupRules, valuesSnapshot as any);
       if (isCreateFlow && currentDedupSignature) {
         if (dedupCheckingRef.current) {
           // Keep dirty so we retry once the check completes.
@@ -2696,9 +2986,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         const payload = buildDraftPayload({
           definition,
           formKey,
-          language: languageRef.current,
-          values: valuesRef.current,
-          lineItems: lineItemsRef.current,
+          language: languageSnapshot,
+          values: valuesSnapshot,
+          lineItems: lineItemsSnapshot,
           existingRecordId
         }) as any;
         payload.__ckSaveMode = 'draft';
@@ -2714,6 +3004,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         const msg = (res?.message || '').toString();
         if (!ok) {
           const errText = msg || 'Autosave failed.';
+          const sessionNow = recordSessionRef.current;
+          if (sessionNow !== sessionAtStart) {
+            logEvent('autosave.ignored.sessionChanged', {
+              reason,
+              recordId: (existingRecordId || '').toString() || null,
+              sessionAtStart,
+              sessionNow,
+              message: errText
+            });
+            return;
+          }
           const lower = errText.toLowerCase();
           const isStale = lower.includes('modified by another user') || lower.includes('please refresh');
           if (isStale) {
@@ -2781,16 +3082,34 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
         const newId = (res?.meta?.id || existingRecordId || '').toString();
         const updatedAt = (res?.meta?.updatedAt || '').toString();
+        const dv = Number((res as any)?.meta?.dataVersion);
+        const nextDataVersion = Number.isFinite(dv) && dv > 0 ? dv : undefined;
+        const rn = Number((res as any)?.meta?.rowNumber);
+        const nextRowNumber = Number.isFinite(rn) && rn >= 2 ? rn : undefined;
+        // Keep list view up-to-date without triggering a refetch (even if the user navigated away mid-save).
+        upsertListCacheRow({
+          recordId: newId,
+          // Only patch keys that already exist in list rows (upsertListCacheRow does this safely).
+          values: valuesSnapshot as any,
+          createdAt: (res?.meta?.createdAt || '').toString() || undefined,
+          updatedAt: updatedAt || undefined,
+          status: autoSaveStatusValue,
+          dataVersion: nextDataVersion,
+          rowNumber: nextRowNumber
+        });
+        const sessionNow = recordSessionRef.current;
+        if (sessionNow !== sessionAtStart) {
+          logEvent('autosave.success.ignored.sessionChanged', { reason, recordId: newId || null, sessionAtStart, sessionNow });
+          return;
+        }
         if (newId) setSelectedRecordId(newId);
         // Successful save => record is now at least as fresh as the server; clear stale banner + bump local version.
         recordStaleRef.current = null;
         setRecordStale(null);
-        const nextDataVersion = Number((res as any)?.meta?.dataVersion);
-        if (Number.isFinite(nextDataVersion) && nextDataVersion > 0) {
+        if (nextDataVersion) {
           recordDataVersionRef.current = nextDataVersion;
         }
-        const nextRowNumber = Number((res as any)?.meta?.rowNumber);
-        if (Number.isFinite(nextRowNumber) && nextRowNumber >= 2) {
+        if (nextRowNumber) {
           recordRowNumberRef.current = nextRowNumber;
         }
         setLastSubmissionMeta(prev => ({
@@ -2802,24 +3121,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           status: autoSaveStatusValue
         }));
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
-        // Keep list view up-to-date without triggering a refetch.
-        upsertListCacheRow({
-          recordId: newId,
-          // Only patch keys that already exist in list rows (upsertListCacheRow does this safely).
-          values: valuesRef.current as any,
-          createdAt: (res?.meta?.createdAt || '').toString() || undefined,
-          updatedAt: updatedAt || undefined,
-          status: autoSaveStatusValue
+        logEvent('autosave.success', {
+          reason,
+          recordId: newId || null,
+          updatedAt: updatedAt || null,
+          dataVersion: nextDataVersion || null
         });
-        logEvent('autosave.success', { reason, recordId: newId || null, updatedAt: updatedAt || null });
       } catch (err: any) {
+        const sessionNow = recordSessionRef.current;
+        if (sessionNow !== sessionAtStart) {
+          logEvent('autosave.exception.ignored.sessionChanged', {
+            reason,
+            sessionAtStart,
+            sessionNow,
+            message: (err?.message || err?.toString?.() || 'failed').toString()
+          });
+          return;
+        }
         const errText = (err?.message || err?.toString?.() || 'Autosave failed.').toString();
         autoSaveDirtyRef.current = true;
         setDraftSave({ phase: 'error', message: errText });
         logEvent('autosave.exception', { reason, message: errText });
       } finally {
         autoSaveInFlightRef.current = false;
-        if (autoSaveQueuedRef.current && viewRef.current === 'form' && !submittingRef.current) {
+        if (autoSaveQueuedRef.current && !submittingRef.current) {
           autoSaveQueuedRef.current = false;
           if (autoSaveTimerRef.current) {
             globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -2833,6 +3158,72 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     },
     [autoSaveDebounceMs, autoSaveEnabled, autoSaveStatusValue, definition, formKey, loadRecordSnapshot, logEvent, upsertListCacheRow]
   );
+
+  const flushAutoSaveBeforeNavigate = useCallback(
+    async (reason: string): Promise<boolean> => {
+      try {
+        if (!autoSaveEnabled) return false;
+        if (viewRef.current !== 'form') return false;
+        if (submittingRef.current) return false;
+        if (isClosedRecord) return false;
+        if (recordStaleRef.current) return false;
+        if (dedupHoldRef.current || dedupCheckingRef.current) return false;
+        if (!autoSaveDirtyRef.current) return false;
+
+        // Cancel any pending debounce; we want to flush now.
+        if (autoSaveTimerRef.current) {
+          globalThis.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+        logEvent('autosave.flush.request', { reason });
+
+        const sleep = (ms: number) => new Promise<void>(r => globalThis.setTimeout(r, ms));
+
+        // If an autosave is already running, wait briefly for it to finish so we don't lose queued changes.
+        if (autoSaveInFlightRef.current) {
+          autoSaveQueuedRef.current = true;
+          const startedAt = Date.now();
+          while (autoSaveInFlightRef.current) {
+            if (Date.now() - startedAt > 10_000) break;
+            await sleep(80);
+          }
+        }
+
+        if (!autoSaveDirtyRef.current) return true;
+        if (autoSaveInFlightRef.current) return true;
+        await performAutoSave(reason);
+        return true;
+      } catch (err: any) {
+        logEvent('autosave.flush.exception', { reason, message: err?.message || err?.toString?.() || 'failed' });
+        return false;
+      }
+    },
+    [autoSaveEnabled, isClosedRecord, logEvent, performAutoSave]
+  );
+
+  const handleGoHome = useCallback(() => {
+    // Kick autosave in the background (do not block navigation).
+    void flushAutoSaveBeforeNavigate('navigate.home');
+    setView('list');
+    setStatus(null);
+    setStatusLevel(null);
+  }, [flushAutoSaveBeforeNavigate]);
+
+  const handleGoSummary = useCallback(() => {
+    if (!summaryViewEnabled) return;
+    // Kick autosave in the background (do not block navigation).
+    void flushAutoSaveBeforeNavigate('navigate.summary');
+    try {
+      globalThis.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+    } catch (_) {
+      try {
+        globalThis.scrollTo?.(0, 0);
+      } catch (_) {
+        // ignore
+      }
+    }
+    setView('summary');
+  }, [flushAutoSaveBeforeNavigate, summaryViewEnabled]);
 
   // Release autosave hold after dedup evaluation completes (or keys become incomplete),
   // and persist any pending changes once it's safe.
@@ -2909,6 +3300,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
 
     autoSaveDirtyRef.current = true;
+    if (uploadQueueRef.current.size > 0) {
+      // Don't schedule autosave while uploads are persisting (avoid stale self-races).
+      autoSaveQueuedRef.current = true;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      logEvent('autosave.blocked.uploadInFlight', { reason: 'debouncedTrigger', inFlight: uploadQueueRef.current.size });
+      return;
+    }
     if (dedupHoldRef.current || dedupCheckingRef.current) {
       dedupHoldRef.current = true;
       if (autoSaveTimerRef.current) {
@@ -2962,10 +3363,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         };
       }
 
+      const queueKey = `${(args.scope || 'top').toString()}:${(args.fieldPath || '').toString()}`;
+      const sessionAtStart = recordSessionRef.current;
+      const run = async (): Promise<{ success: boolean; message?: string }> => {
       // Ensure we don't have a pending debounced draft save that might race with this sequence.
       if (autoSaveTimerRef.current) {
         globalThis.clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
+      }
+
+      const ensureSession = (phase: string): boolean => {
+        const sessionNow = recordSessionRef.current;
+        if (sessionNow === sessionAtStart) return true;
+        logEvent('upload.aborted.sessionChanged', {
+          fieldPath: args.fieldPath,
+          phase,
+          sessionAtStart,
+          sessionNow
+        });
+        return false;
+      };
+      if (!ensureSession('start')) {
+        return { success: false, message: 'Upload cancelled (record changed).' };
       }
 
       const isFile = (v: any): v is File => {
@@ -3062,7 +3481,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             values: valuesRef.current as any,
             createdAt: (res?.meta?.createdAt || '').toString() || undefined,
             updatedAt: (res?.meta?.updatedAt || '').toString() || undefined,
-            status: autoSaveStatusValue
+            status: autoSaveStatusValue,
+            dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion)) ? Number((res as any).meta.dataVersion) : undefined,
+            rowNumber: Number.isFinite(Number((res as any)?.meta?.rowNumber)) ? Number((res as any).meta.rowNumber) : undefined
           });
           logEvent('upload.ensureRecord.saved', { recordId, fieldPath: args.fieldPath });
         } catch (err: any) {
@@ -3072,9 +3493,55 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
       }
 
+      if (!ensureSession('afterEnsureRecord')) {
+        return { success: false, message: 'Upload cancelled (record changed).' };
+      }
+
       // Step 2: upload file payloads to Drive and get final URL list.
-      const existingUrls = (args.items || []).filter((it): it is string => typeof it === 'string').filter(Boolean);
-      const fileItems = (args.items || []).filter(isFile);
+      const readStateItems = (): Array<string | File> => {
+        try {
+          if (args.scope === 'top' && args.questionId) {
+            const raw = (valuesRef.current as any)?.[args.questionId];
+            if (Array.isArray(raw)) return raw.filter((it: any) => typeof it === 'string' || isFile(it));
+            if (typeof raw === 'string' || isFile(raw)) return [raw];
+            return [];
+          }
+          if (args.scope === 'line' && args.groupId && args.rowId && args.fieldId) {
+            const rows = (lineItemsRef.current as any)?.[args.groupId] || [];
+            const row = Array.isArray(rows) ? rows.find((r: any) => (r?.id || '').toString() === args.rowId) : null;
+            const raw = row?.values ? (row.values as any)[args.fieldId] : undefined;
+            if (Array.isArray(raw)) return raw.filter((it: any) => typeof it === 'string' || isFile(it));
+            if (typeof raw === 'string' || isFile(raw)) return [raw];
+            return [];
+          }
+        } catch (_) {
+          // ignore
+        }
+        return [];
+      };
+
+      const normalizeExistingUrls = (items: Array<string | File>): string[] => {
+        const urls: string[] = [];
+        (items || []).forEach(it => {
+          if (typeof it !== 'string') return;
+          splitUrlList(it).forEach(u => urls.push(u));
+        });
+        const seen = new Set<string>();
+        return urls
+          .map(u => (u || '').toString().trim())
+          .filter(u => {
+            if (!u) return false;
+            if (seen.has(u)) return false;
+            seen.add(u);
+            return true;
+          });
+      };
+
+      const stateItems = readStateItems();
+      const fileItemsFromState = stateItems.filter(isFile);
+      const fileItemsFromArgs = (args.items || []).filter(isFile);
+      const fileItems = fileItemsFromState.length ? fileItemsFromState : fileItemsFromArgs;
+      const existingUrls = normalizeExistingUrls(stateItems.length ? stateItems : (args.items || []));
       if (!fileItems.length) {
         // Nothing new to upload (e.g., only URLs).
         return { success: true };
@@ -3084,7 +3551,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         const payloads = await buildFilePayload(fileItems, undefined, args.uploadConfig);
         const uploadRes = await uploadFilesApi([...existingUrls, ...payloads], args.uploadConfig);
         if (!uploadRes?.success) {
-          const msg = (uploadRes?.message || 'Failed to upload files.').toString();
+          const msg = (uploadRes?.message || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')).toString();
           logEvent('upload.files.error', { fieldPath: args.fieldPath, message: msg });
           return { success: false, message: msg };
         }
@@ -3095,10 +3562,38 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           return { success: false, message: msg };
         }
 
-        // Step 3: update local state with URL(s) (remove File objects), then save draft again to persist URL(s) to the sheet.
+        if (!ensureSession('afterUpload')) {
+          return { success: false, message: 'Upload cancelled (record changed).' };
+        }
+
+        const uploadedUrls = urls.slice(existingUrls.length);
+        if (uploadedUrls.length < fileItems.length) {
+          logEvent('upload.files.partial', {
+            fieldPath: args.fieldPath,
+            expected: fileItems.length,
+            received: uploadedUrls.length,
+            existingUrls: existingUrls.length
+          });
+        }
+        const fileSig = (f: File): string => `${f.name}|${f.size}|${f.lastModified}`;
+        const urlBySig = new Map<string, string>();
+        fileItems.forEach((f, idx) => {
+          const u = uploadedUrls[idx];
+          if (u) urlBySig.set(fileSig(f), u);
+        });
+
+        const completionItems = readStateItems();
+        const mergeBase: Array<string | File> = completionItems.length ? completionItems : args.items;
+        const mergedItems: Array<string | File> = (mergeBase || []).map(it => {
+          if (!isFile(it)) return it;
+          const sig = fileSig(it);
+          return urlBySig.get(sig) || it;
+        });
+
+        // Step 3: update local state with URL(s) (replace uploaded File objects), then save draft again to persist URL(s) to the sheet.
         const nextValues =
           args.scope === 'top' && args.questionId
-            ? { ...valuesRef.current, [args.questionId]: urls }
+            ? { ...valuesRef.current, [args.questionId]: mergedItems }
             : valuesRef.current;
 
         const nextLineItems =
@@ -3106,9 +3601,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             ? (() => {
                 const current = lineItemsRef.current;
                 const rows = current[args.groupId!] || [];
-                const nextRows = rows.map(r =>
-                  r.id === args.rowId ? { ...r, values: { ...(r.values || {}), [args.fieldId!]: urls } } : r
-                );
+                const nextRows = rows.map(r => {
+                  if (r.id !== args.rowId) return r;
+                  return { ...r, values: { ...(r.values || {}), [args.fieldId!]: mergedItems } };
+                });
                 return { ...current, [args.groupId!]: nextRows };
               })()
             : lineItemsRef.current;
@@ -3118,6 +3614,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
         if (args.scope === 'line' && args.groupId) {
           setLineItems(nextLineItems);
+        }
+
+        if (!ensureSession('beforeSaveUrls')) {
+          return { success: false, message: 'Upload cancelled (record changed).' };
         }
 
         const draft2 = buildDraftPayload({
@@ -3157,6 +3657,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           return { success: false, message: msg };
         }
 
+        if (!ensureSession('afterSaveUrls')) {
+          return { success: true };
+        }
+
         recordStaleRef.current = null;
         setRecordStale(null);
         const dv2 = Number((res2 as any)?.meta?.dataVersion);
@@ -3180,17 +3684,46 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           recordId,
           values: nextValues as any,
           updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined,
-          status: autoSaveStatusValue
+          status: autoSaveStatusValue,
+          dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : undefined,
+          rowNumber: Number.isFinite(Number((res2 as any)?.meta?.rowNumber)) ? Number((res2 as any).meta.rowNumber) : undefined
         });
-        logEvent('upload.saveUrls.success', { fieldPath: args.fieldPath, recordId, urls: urls.length });
+        logEvent('upload.saveUrls.success', { fieldPath: args.fieldPath, recordId, urls: mergedItems.length });
         return { success: true };
       } catch (err: any) {
-        const msg = (err?.message || err?.toString?.() || 'Failed to upload files.').toString();
+        const msg = (err?.message || err?.toString?.() || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')).toString();
         logEvent('upload.files.exception', { fieldPath: args.fieldPath, message: msg });
         return { success: false, message: msg };
       }
+      };
+
+      const prev = uploadQueueRef.current.get(queueKey) || Promise.resolve({ success: true } as any);
+      const next = prev
+        .catch(() => ({ success: false } as any))
+        .then(() => run());
+      uploadQueueRef.current.set(queueKey, next);
+      void next.finally(() => {
+        try {
+          if (uploadQueueRef.current.get(queueKey) === next) uploadQueueRef.current.delete(queueKey);
+          // If uploads drained and autosave was queued during the upload, schedule a background autosave now.
+          if (uploadQueueRef.current.size === 0 && autoSaveQueuedRef.current && autoSaveDirtyRef.current && !submittingRef.current) {
+            autoSaveQueuedRef.current = false;
+            if (autoSaveTimerRef.current) {
+              globalThis.clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            autoSaveTimerRef.current = globalThis.setTimeout(() => {
+              void performAutoSave('upload.queue.drained');
+            }, autoSaveDebounceMs) as any;
+            logEvent('autosave.queued.uploadDrained', { debounceMs: autoSaveDebounceMs });
+          }
+        } catch (_) {
+          // ignore
+        }
+      });
+      return next;
     },
-    [autoSaveStatusValue, definition, formKey, isClosedRecord, logEvent, upsertListCacheRow]
+    [autoSaveDebounceMs, autoSaveStatusValue, definition, formKey, isClosedRecord, logEvent, performAutoSave, upsertListCacheRow]
   );
 
   useEffect(() => {
@@ -3312,6 +3845,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const rowNumberHint = recordRowNumberRef.current;
       const canCheck = precheckRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0;
       if (canCheck && !submitPrecheckInFlightRef.current) {
+        if (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
+          logEvent('submit.versionPrecheck.skipped', {
+            recordId: precheckRecordId,
+            reason: autoSaveInFlightRef.current ? 'autosaveInFlight' : 'uploadInFlight'
+          });
+          return;
+        }
         submitPrecheckInFlightRef.current = true;
         const startedAt = Date.now();
         logEvent('submit.versionPrecheck.start', {
@@ -3322,6 +3862,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         void getRecordVersionApi(formKey, precheckRecordId, rowNumberHint)
           .then(v => {
             try {
+              if (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
+                logEvent('submit.versionPrecheck.ignored', {
+                  recordId: precheckRecordId,
+                  reason: autoSaveInFlightRef.current ? 'autosaveInFlight.afterFetch' : 'uploadInFlight.afterFetch'
+                });
+                return;
+              }
               if (!v?.success) {
                 logEvent('submit.versionPrecheck.error', { recordId: precheckRecordId, message: v?.message || 'failed' });
                 return;
@@ -3329,11 +3876,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               const serverVersion = Number(v.dataVersion);
               const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : null;
               if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
-              if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== Number(baseVersion)) {
+              const localVersionNow = Number(recordDataVersionRef.current);
+              const baselineVersion =
+                Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : Number(baseVersion);
+              if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== baselineVersion) {
                 markRecordStale({
                   reason: 'submit.precheck.stale',
                   recordId: precheckRecordId,
-                  cachedVersion: Number(baseVersion),
+                  cachedVersion: baselineVersion,
                   serverVersion,
                   serverRow
                 });
@@ -3604,6 +4154,45 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     fullRecord?: WebFormSubmission,
     opts?: { openView?: 'auto' | 'form' | 'summary' | 'button'; openButtonId?: string }
   ) => {
+    const requested = (opts?.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
+    const openButtonId = (opts?.openButtonId || '').toString().trim();
+    const shouldTriggerButton = requested === 'button' && !!openButtonId;
+
+    // If the user is resuming the SAME record they were just editing, keep the in-memory working copy.
+    // (Don't overwrite with a cached snapshot that may not include the latest local edits yet.)
+    const currentId = (selectedRecordIdRef.current || '').toString().trim();
+    const hasLocalEdits = Boolean(autoSaveDirtyRef.current || autoSaveInFlightRef.current || autoSaveQueuedRef.current);
+    if (currentId && row.id === currentId && hasLocalEdits) {
+      logEvent('list.recordSelect.resumeLocalEdits', {
+        recordId: row.id,
+        dirty: !!autoSaveDirtyRef.current,
+        inFlight: !!autoSaveInFlightRef.current,
+        queued: !!autoSaveQueuedRef.current,
+        requested,
+        openButtonId: shouldTriggerButton ? openButtonId : null
+      });
+      // For list-triggered button actions, keep the list view and run the action immediately from the in-memory values.
+      if (shouldTriggerButton) {
+        handleCustomButton(openButtonId);
+        return;
+      }
+
+      const statusRaw =
+        ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || row.status || '') as any)?.toString?.() ||
+        '';
+      const isClosed = statusRaw.trim().toLowerCase() === 'closed';
+      if (requested === 'form') {
+        setView('form');
+      } else if (requested === 'summary') {
+        setView(summaryViewEnabled ? 'summary' : 'form');
+      } else {
+        const nextView = summaryViewEnabled && isClosed ? 'summary' : 'form';
+        setView(nextView);
+      }
+      return;
+    }
+
+    bumpRecordSession({ reason: 'list.recordSelect', nextRecordId: row.id });
     const sourceRecord = fullRecord || listCache.records[row.id] || null;
     setStatus(null);
     setStatusLevel(null);
@@ -3612,10 +4201,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     selectedRecordIdRef.current = row.id;
     // Clear any previous snapshot immediately; we will re-apply a fresh snapshot below.
     setSelectedRecordSnapshot(null);
-
-    const requested = (opts?.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
-    const openButtonId = (opts?.openButtonId || '').toString().trim();
-    const shouldTriggerButton = requested === 'button' && !!openButtonId;
     const isAllowedListTriggeredAction = (buttonRef: string): boolean => {
       const parsed = parseButtonRef(buttonRef || '');
       const baseId = parsed.id;
@@ -3627,7 +4212,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
       const cfg: any = btn ? (btn as any).button : null;
       const action = (cfg?.action || '').toString().trim();
-      return action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate';
+      return action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate' || action === 'openUrlField';
     };
 
     const rowNumberHint = Number((row as any).__rowNumber);
@@ -3658,44 +4243,62 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       }
       // Version check is async; do not block navigation.
       if (cachedVersion !== null) {
-        void (async () => {
-        const recordId = row.id;
-        logEvent('record.versionCheck.start', { recordId, cachedVersion, rowNumberHint: hintedRow || null });
-        try {
-          const v = await getRecordVersionApi(formKey, recordId, hintedRow || null);
-          if (selectedRecordIdRef.current !== recordId) return;
-          if (!v?.success) {
-            logEvent('record.versionCheck.error', { recordId, message: v?.message || 'failed' });
-            return;
-          }
-          const serverVersion = Number(v.dataVersion);
-          const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : undefined;
-          if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
-          if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion === cachedVersion) {
-            logEvent('record.versionCheck.match', { recordId, serverVersion });
-            return;
-          }
-          logEvent('record.versionCheck.stale', {
-            recordId,
-            cachedVersion,
-            serverVersion: Number.isFinite(serverVersion) ? serverVersion : null,
-            serverRow: serverRow || null
+        if (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
+          logEvent('record.versionCheck.skipped', {
+            recordId: row.id,
+            reason: autoSaveInFlightRef.current ? 'autosaveInFlight' : 'uploadInFlight'
           });
-          // Do NOT auto-refresh: show a banner so the user can explicitly refresh (avoids losing local changes).
-          if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== cachedVersion) {
-            markRecordStale({
-              reason: 'versionCheck.stale',
-              recordId,
-              cachedVersion,
-              serverVersion,
-              serverRow: serverRow || hintedRow || null
-            });
-          }
-        } catch (err: any) {
-          const msg = (err?.message || err?.toString?.() || 'failed').toString();
-          logEvent('record.versionCheck.exception', { recordId: row.id, message: msg });
+        } else {
+          void (async () => {
+            const recordId = row.id;
+            logEvent('record.versionCheck.start', { recordId, cachedVersion, rowNumberHint: hintedRow || null });
+            try {
+              const v = await getRecordVersionApi(formKey, recordId, hintedRow || null);
+              if (selectedRecordIdRef.current !== recordId) return;
+              if (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
+                // Avoid racing our own autosave writes. We'll rely on the next check (or explicit refresh).
+                logEvent('record.versionCheck.ignored', {
+                  recordId,
+                  reason: autoSaveInFlightRef.current ? 'autosaveInFlight.afterFetch' : 'uploadInFlight.afterFetch'
+                });
+                return;
+              }
+              if (!v?.success) {
+                logEvent('record.versionCheck.error', { recordId, message: v?.message || 'failed' });
+                return;
+              }
+              const serverVersion = Number(v.dataVersion);
+              const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : undefined;
+              if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
+              const localVersionNow = Number(recordDataVersionRef.current);
+              const baselineVersion =
+                Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : cachedVersion;
+              if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion === baselineVersion) {
+                logEvent('record.versionCheck.match', { recordId, serverVersion, baselineVersion });
+                return;
+              }
+              logEvent('record.versionCheck.stale', {
+                recordId,
+                cachedVersion: baselineVersion,
+                serverVersion: Number.isFinite(serverVersion) ? serverVersion : null,
+                serverRow: serverRow || null
+              });
+              // Do NOT auto-refresh: show a banner so the user can explicitly refresh (avoids losing local changes).
+              if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== baselineVersion) {
+                markRecordStale({
+                  reason: 'versionCheck.stale',
+                  recordId,
+                  cachedVersion: baselineVersion,
+                  serverVersion,
+                  serverRow: serverRow || hintedRow || null
+                });
+              }
+            } catch (err: any) {
+              const msg = (err?.message || err?.toString?.() || 'failed').toString();
+              logEvent('record.versionCheck.exception', { recordId: row.id, message: msg });
+            }
+          })();
         }
-      })();
       }
     } else {
       // No cached record (or no cached version): fetch the full snapshot.
@@ -3862,6 +4465,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       </div>
     ) : null;
 
+  const dedupCheckingNotice =
+    precreateDedupChecking || dedupChecking ? (
+      <div
+        role="status"
+        aria-live="polite"
+        style={{
+          padding: '12px 14px',
+          borderRadius: 14,
+          border: '1px solid rgba(59,130,246,0.35)',
+          background: 'rgba(59,130,246,0.12)',
+          color: '#0f172a',
+          fontWeight: 900
+        }}
+      >
+        {tSystem('dedup.checking', language, 'Checking duplicates…')}
+      </div>
+    ) : null;
+
   const recordStaleTopNotice =
     (view === 'form' || view === 'summary') && recordStale ? (
       <div
@@ -3927,9 +4548,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     ) : null;
 
   const topBarNotice =
-    recordStaleTopNotice || dedupTopNotice || validationTopNotice ? (
+    recordStaleTopNotice || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {recordStaleTopNotice}
+        {dedupCheckingNotice}
         {dedupTopNotice}
         {validationTopNotice}
       </div>
@@ -3950,15 +4572,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, [logEvent, listLegendItems, view]);
 
   const bottomBarNotice =
-    view === 'list' && listLegendItems.length ? (
-      <div className="ck-list-legend ck-list-legend--bottomBar" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
-        <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
-        {listLegendItems.map((item, idx) => (
-          <span key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
-            {item.icon ? <ListViewIcon name={item.icon} /> : null}
-            <span>{item.text}</span>
-          </span>
-        ))}
+    view === 'list' && (listLegendItems.length || precreateDedupChecking) ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {precreateDedupChecking ? dedupCheckingNotice : null}
+        {listLegendItems.length ? (
+          <div className="ck-list-legend ck-list-legend--bottomBar" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
+            <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
+            {listLegendItems.map((item, idx) => (
+              <span key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
+                {item.icon ? <ListViewIcon name={item.icon} /> : null}
+                <span>{item.text}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
     ) : null;
 
@@ -4025,13 +4652,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         position="top"
         language={language}
         view={view}
-        disabled={submitting || Boolean(recordLoadingId)}
+        disabled={submitting || Boolean(recordLoadingId) || precreateDedupChecking}
         submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
         createNewEnabled={definition.createNewRecordEnabled !== false}
         submitLabel={definition.submitButtonLabel}
+        summaryLabel={definition.summaryButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
         canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
@@ -4042,19 +4670,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}
         onEdit={() => setView('form')}
-        onSummary={() => {
-          if (!summaryViewEnabled) return;
-          try {
-            globalThis.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
-          } catch (_) {
-            try {
-              globalThis.scrollTo?.(0, 0);
-            } catch (_) {
-              // ignore
-            }
-          }
-          setView('summary');
-        }}
+        onSummary={handleGoSummary}
         onSubmit={requestSubmit}
         onCustomButton={handleCustomButton}
         onDiagnostic={logEvent}
@@ -4080,6 +4696,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             setErrors={setErrors}
             status={status}
             statusTone={statusLevel}
+            recordMeta={{
+              id: (currentRecord?.id || lastSubmissionMeta?.id || selectedRecordId || undefined) as any,
+              createdAt: (currentRecord?.createdAt || lastSubmissionMeta?.createdAt || undefined) as any,
+              updatedAt: (currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt || undefined) as any,
+              status: (currentRecord?.status || lastSubmissionMeta?.status || null) as any,
+              pdfUrl: (currentRecord?.pdfUrl || undefined) as any
+            }}
             warningTop={validationWarnings.top}
             warningByField={validationWarnings.byField}
             showWarningsBanner={false}
@@ -4215,7 +4838,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       <FileOverlay
         open={readOnlyFilesOverlay.open}
         language={language}
-        title={readOnlyFilesOverlay.title || tSystem('files.title', language, 'Files')}
+        title={readOnlyFilesOverlay.title || tSystem('files.title', language, 'Photos')}
         zIndex={10040}
         submitting={submitting}
         readOnly={true}
@@ -4231,13 +4854,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         position="bottom"
         language={language}
         view={view}
-        disabled={submitting || Boolean(recordLoadingId)}
+        disabled={submitting || Boolean(recordLoadingId) || precreateDedupChecking}
         submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
         createNewEnabled={definition.createNewRecordEnabled !== false}
         submitLabel={definition.submitButtonLabel}
+        summaryLabel={definition.summaryButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
         canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
@@ -4248,19 +4872,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}
         onEdit={() => setView('form')}
-        onSummary={() => {
-          if (!summaryViewEnabled) return;
-          try {
-            globalThis.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
-          } catch (_) {
-            try {
-              globalThis.scrollTo?.(0, 0);
-            } catch (_) {
-              // ignore
-            }
-          }
-          setView('summary');
-        }}
+        onSummary={handleGoSummary}
         onSubmit={requestSubmit}
         onCustomButton={handleCustomButton}
         onDiagnostic={logEvent}

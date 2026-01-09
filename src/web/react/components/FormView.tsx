@@ -64,6 +64,7 @@ import {
   resolveSubgroupKey,
   seedSubgroupDefaults
 } from '../app/lineItems';
+import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 
 interface SubgroupOverlayState {
   open: boolean;
@@ -160,6 +161,11 @@ interface FormViewProps {
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
   status?: string | null;
   statusTone?: StatusTone | null;
+  /**
+   * Optional system/meta values for the current record (not stored in `values`).
+   * Used so `visibility.showWhen/hideWhen` can reference system fields like STATUS / pdfUrl.
+   */
+  recordMeta?: SystemRecordMeta;
   warningTop?: Array<{ message: string; fieldPath: string }>;
   warningByField?: Record<string, string[]>;
   /**
@@ -232,6 +238,7 @@ const FormView: React.FC<FormViewProps> = ({
   setErrors,
   status,
   statusTone,
+  recordMeta,
   warningTop,
   warningByField,
   showWarningsBanner = true,
@@ -1561,10 +1568,12 @@ const FormView: React.FC<FormViewProps> = ({
     } else if (accepted > 0) {
       announceUpload(
         question.id,
-        `Added ${accepted} file${accepted > 1 ? 's' : ''}. ${items.length} total selected.`
+        accepted === 1
+          ? tSystem('files.selectedOne', language, '1 photo added')
+          : tSystem('files.selectedMany', language, '{count} photos added', { count: accepted })
       );
     } else {
-      announceUpload(question.id, 'Files unchanged.');
+      announceUpload(question.id, tSystem('common.noChange', language, 'No change.'));
     }
     onDiagnostic?.('upload.add', {
       questionId: question.id,
@@ -1576,7 +1585,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     // Immediate upload: upload accepted files now, then persist URLs via draft save (handled by App).
     if (onUploadFiles && accepted > 0) {
-      announceUpload(question.id, `Uploading ${accepted} file${accepted > 1 ? 's' : ''}…`);
+      announceUpload(question.id, tSystem('common.loading', language, 'Loading…'));
       void onUploadFiles({
         scope: 'top',
         fieldPath: question.id,
@@ -1585,10 +1594,10 @@ const FormView: React.FC<FormViewProps> = ({
         uploadConfig: (question as any)?.uploadConfig
       }).then(res => {
         if (!res?.success) {
-          announceUpload(question.id, res?.message || 'Upload failed.');
+          announceUpload(question.id, (res?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString());
           return;
         }
-        announceUpload(question.id, 'Uploaded.');
+        announceUpload(question.id, tSystem('files.uploaded', language, 'Added'));
       });
     }
   };
@@ -1628,7 +1637,9 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('upload.remove', { questionId: question.id, removed: describeUploadItem(removed as any), remaining: next.length });
     announceUpload(
       question.id,
-      removed ? `Removed ${describeUploadItem(removed as any)}. ${next.length} remaining.` : `Removed file. ${next.length} remaining.`
+      removed
+        ? `${tSystem('lineItems.remove', language, 'Remove')} ${describeUploadItem(removed as any)}.`
+        : tSystem('lineItems.remove', language, 'Remove')
     );
   };
 
@@ -1638,7 +1649,7 @@ const FormView: React.FC<FormViewProps> = ({
     handleFileFieldChange(question, []);
     resetDrag(question.id);
     resetNativeFileInput(question.id);
-    announceUpload(question.id, 'Cleared all files.');
+    announceUpload(question.id, tSystem('files.clearAll', language, 'Remove all'));
     onDiagnostic?.('upload.clear', { questionId: question.id });
   };
 
@@ -1897,9 +1908,14 @@ const FormView: React.FC<FormViewProps> = ({
       announceUpload(fieldPath, errorMessage);
       onDiagnostic?.('upload.error', { fieldPath, error: errorMessage, scope: 'line' });
     } else if (accepted > 0) {
-      announceUpload(fieldPath, `Added ${accepted} file${accepted > 1 ? 's' : ''}. ${files.length} total selected.`);
+      announceUpload(
+        fieldPath,
+        accepted === 1
+          ? tSystem('files.selectedOne', language, '1 photo added')
+          : tSystem('files.selectedMany', language, '{count} photos added', { count: accepted })
+      );
     } else {
-      announceUpload(fieldPath, 'Files unchanged.');
+      announceUpload(fieldPath, tSystem('common.noChange', language, 'No change.'));
     }
     onDiagnostic?.('upload.add', {
       fieldPath,
@@ -1912,7 +1928,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     // Immediate upload: upload accepted files now, then persist URLs via draft save (handled by App).
     if (onUploadFiles && accepted > 0) {
-      announceUpload(fieldPath, `Uploading ${accepted} file${accepted > 1 ? 's' : ''}…`);
+      announceUpload(fieldPath, tSystem('common.loading', language, 'Loading…'));
       void onUploadFiles({
         scope: 'line',
         fieldPath,
@@ -1923,10 +1939,10 @@ const FormView: React.FC<FormViewProps> = ({
         uploadConfig: field.uploadConfig
       }).then(res => {
         if (!res?.success) {
-          announceUpload(fieldPath, res?.message || 'Upload failed.');
+          announceUpload(fieldPath, (res?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString());
           return;
         }
-        announceUpload(fieldPath, 'Uploaded.');
+        announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
       });
     }
   };
@@ -1994,7 +2010,9 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('upload.remove', { fieldPath, removed: describeUploadItem(removed as any), remaining: next.length, scope: 'line' });
     announceUpload(
       fieldPath,
-      removed ? `Removed ${describeUploadItem(removed as any)}. ${next.length} remaining.` : `Removed file. ${next.length} remaining.`
+      removed
+        ? `${tSystem('lineItems.remove', language, 'Remove')} ${describeUploadItem(removed as any)}.`
+        : tSystem('lineItems.remove', language, 'Remove')
     );
   };
 
@@ -2010,7 +2028,7 @@ const FormView: React.FC<FormViewProps> = ({
     });
     resetDrag(fieldPath);
     resetNativeFileInput(fieldPath);
-    announceUpload(fieldPath, 'Cleared all files.');
+    announceUpload(fieldPath, tSystem('files.clearAll', language, 'Remove all'));
     onDiagnostic?.('upload.clear', { fieldPath, scope: 'line' });
   };
 
@@ -2023,6 +2041,8 @@ const FormView: React.FC<FormViewProps> = ({
     (fieldId: string): FieldValue | undefined => {
     const direct = values[fieldId];
     if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+    const sys = getSystemFieldValue(fieldId, recordMeta);
+    if (sys !== undefined) return sys as FieldValue;
     // scan all line item groups for the first non-empty occurrence
     for (const rows of Object.values(lineItems)) {
       if (!Array.isArray(rows)) continue;
@@ -2033,7 +2053,7 @@ const FormView: React.FC<FormViewProps> = ({
     }
     return undefined;
     },
-    [lineItems, values]
+    [lineItems, recordMeta, values]
   );
 
   const topLevelGroupProgress = useMemo(() => {
@@ -2179,8 +2199,15 @@ const FormView: React.FC<FormViewProps> = ({
         const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : ['form'];
         const showInForm = placements.includes('form');
         // Inline BUTTON fields are currently only used for report rendering.
-        if (!showInForm || (action !== 'renderDocTemplate' && action !== 'renderMarkdownTemplate' && action !== 'renderHtmlTemplate'))
+        if (
+          !showInForm ||
+          (action !== 'renderDocTemplate' &&
+            action !== 'renderMarkdownTemplate' &&
+            action !== 'renderHtmlTemplate' &&
+            action !== 'openUrlField')
+        )
           return null;
+        if (action === 'openUrlField' && !(q as any)?.button?.fieldId) return null;
 
         const label = resolveLabel(q, language);
         const busyThis = !!reportBusy && reportBusyId === q.id;
@@ -2198,7 +2225,7 @@ const FormView: React.FC<FormViewProps> = ({
               disabled={disabled}
               style={withDisabled(buttonStyles.secondary, disabled)}
             >
-              {busyThis ? 'Rendering…' : label}
+              {busyThis ? tSystem('common.loading', language, 'Loading…') : label}
             </button>
           </div>
         );
@@ -2436,8 +2463,8 @@ const FormView: React.FC<FormViewProps> = ({
         const viewMode = readOnly || maxed || locked;
         const LeftIcon = viewMode ? EyeIcon : SlotIcon;
         const leftLabel = viewMode
-          ? tSystem('files.view', language, 'View files')
-          : tSystem('files.add', language, 'Add files');
+          ? tSystem('files.view', language, 'View photos')
+          : tSystem('files.add', language, 'Add photo');
         const cameraStyleBase = viewMode ? buttonStyles.secondary : isEmpty ? buttonStyles.primary : buttonStyles.secondary;
         return (
           <div
@@ -2485,7 +2512,7 @@ const FormView: React.FC<FormViewProps> = ({
                 aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                   'files.title',
                   language,
-                  'Files'
+                  'Photos'
                 )} ${pillText}`}
                 onClick={() => {
                   if (submitting) return;
@@ -2503,7 +2530,7 @@ const FormView: React.FC<FormViewProps> = ({
                 <span className="ck-progress-caret">▸</span>
               </button>
               {maxed ? (
-                <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Max reached.')}</div>
+                <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
               ) : showMissingHelper ? (
                 <div className="ck-upload-helper muted" aria-live="polite">
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -2541,6 +2568,7 @@ const FormView: React.FC<FormViewProps> = ({
               definition,
               language,
               values,
+              resolveVisibilityValue,
               setValues,
               lineItems,
               setLineItems,
@@ -3362,8 +3390,8 @@ const FormView: React.FC<FormViewProps> = ({
                           const viewMode = readOnly || maxed;
                           const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                           const leftLabel = viewMode
-                            ? tSystem('files.view', language, 'View files')
-                            : tSystem('files.add', language, 'Add files');
+                          ? tSystem('files.view', language, 'View photos')
+                          : tSystem('files.add', language, 'Add photo');
                           const cameraStyleBase = viewMode
                             ? buttonStyles.secondary
                             : isEmpty
@@ -3424,7 +3452,7 @@ const FormView: React.FC<FormViewProps> = ({
                                   aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                                     'files.title',
                                     language,
-                                    'Files'
+                                    'Photos'
                                   )} ${pillText}`}
                                   onClick={() => {
                                     if (submitting) return;
@@ -3446,7 +3474,7 @@ const FormView: React.FC<FormViewProps> = ({
                                   <span className="ck-progress-caret">▸</span>
                                 </button>
                                 {maxed ? (
-                                  <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Max reached.')}</div>
+                                    <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
                                 ) : showMissingHelper ? (
                                   <div className="ck-upload-helper muted" aria-live="polite">
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -3600,7 +3628,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (!fileOverlay.open) return null;
     if (typeof document === 'undefined') return null;
 
-    const title = fileOverlay.title || tSystem('files.title', language, 'Files');
+    const title = fileOverlay.title || tSystem('files.title', language, 'Photos');
     const isTop = fileOverlay.scope === 'top' && !!fileOverlay.question;
     const isLine =
       fileOverlay.scope === 'line' &&

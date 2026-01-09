@@ -186,6 +186,11 @@ export const ActionBar: React.FC<{
    */
   createNewEnabled?: boolean;
   submitLabel?: LocalizedString;
+  /**
+   * Optional localized label override for the system Summary button.
+   * Example: { en: "Checklist" }.
+   */
+  summaryLabel?: LocalizedString;
   summaryEnabled: boolean;
   copyEnabled: boolean;
   canCopy: boolean;
@@ -215,6 +220,7 @@ export const ActionBar: React.FC<{
   hideEdit,
   createNewEnabled,
   submitLabel,
+  summaryLabel,
   summaryEnabled,
   copyEnabled,
   canCopy,
@@ -334,10 +340,11 @@ export const ActionBar: React.FC<{
         const shouldMenu =
           viewKey === 'form' &&
           (behavior === 'menu' || (behavior === 'auto' && menuButtons.length > 0) || (!summaryEnabled && menuButtons.length > 0));
+        const overrideLabel = resolveLocalizedString(summaryLabel as any, language, '').toString().trim();
         const label =
           !summaryEnabled && shouldMenu
             ? tSystem('actions.actions', language, 'Actions')
-            : tSystem('actions.summary', language, 'Summary');
+            : (overrideLabel && summaryEnabled ? overrideLabel : tSystem('actions.summary', language, 'Summary'));
         capsule.push({
           kind: 'summary',
           showMenu: shouldMenu,
@@ -408,6 +415,7 @@ export const ActionBar: React.FC<{
     hideEdit,
     globalHideHomeWhenActive,
     language,
+    summaryLabel,
     summaryEnabled,
     viewConfig.items,
     viewConfig.primary,
@@ -586,7 +594,10 @@ export const ActionBar: React.FC<{
                 <IconWrap>
                   <SummarySystemIcon />
                 </IconWrap>
-                {tSystem('actions.viewSummary', language, 'View summary')}
+                {(() => {
+                  const overrideLabel = resolveLocalizedString(summaryLabel as any, language, '').toString().trim();
+                  return overrideLabel && summaryEnabled ? overrideLabel : tSystem('actions.viewSummary', language, 'View summary');
+                })()}
               </button>
             )}
 

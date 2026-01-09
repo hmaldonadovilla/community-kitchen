@@ -371,6 +371,88 @@ describe('ConfigSheet', () => {
     });
   });
 
+  test('getQuestions parses BUTTON openUrlField config JSON', () => {
+    const configSheet = mockSS.insertSheet('Config: OpenUrlButtons');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'BTN_URL',
+        'BUTTON',
+        'Open saved PDF',
+        'Ouvrir le PDF',
+        'PDF openen',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "button": {
+            "action": "openUrlField",
+            "fieldId": "pdfUrl",
+            "placements": ["summaryBar", "unknownPlacement"]
+          }
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: OpenUrlButtons');
+    expect(questions.length).toBe(1);
+    expect(questions[0].type).toBe('BUTTON');
+    expect((questions[0] as any).button).toEqual({
+      action: 'openUrlField',
+      fieldId: 'pdfUrl',
+      placements: ['summaryBar']
+    });
+  });
+
+  test('getQuestions parses BUTTON renderDocTemplate loadingLabel config JSON', () => {
+    const configSheet = mockSS.insertSheet('Config: PdfButtons');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'BTN_PDF',
+        'BUTTON',
+        'Create PDF',
+        'Créer PDF',
+        'PDF maken',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "button": {
+            "action": "renderDocTemplate",
+            "templateId": { "EN": "doc-id-en" },
+            "loadingLabel": { "en": "Creating PDF…" },
+            "placements": ["form", "topBar", "unknownPlacement"]
+          }
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: PdfButtons');
+    expect(questions.length).toBe(1);
+    expect(questions[0].type).toBe('BUTTON');
+    expect((questions[0] as any).button).toEqual({
+      action: 'renderDocTemplate',
+      templateId: { EN: 'doc-id-en' },
+      output: 'pdf',
+      previewMode: 'pdf',
+      placements: ['form', 'topBar'],
+      loadingLabel: { en: 'Creating PDF…' }
+    });
+  });
+
   test('getQuestions parses dataSource config JSON for choice fields', () => {
     const configSheet = mockSS.insertSheet('Config: DataSource');
     const exampleRows = [

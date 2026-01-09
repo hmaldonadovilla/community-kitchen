@@ -85,6 +85,7 @@ export class DefinitionBuilder {
       form.listViewTitle,
       form.listViewDefaultSort,
       form.listViewPageSize,
+      form.listViewPaginationControlsEnabled,
       form.listViewSearch
     );
 
@@ -113,7 +114,8 @@ export class DefinitionBuilder {
       portraitOnly: form.portraitOnly,
       submissionConfirmationMessage: form.submissionConfirmationMessage,
       submissionConfirmationTitle: form.submissionConfirmationTitle,
-      submitButtonLabel: form.submitButtonLabel
+      submitButtonLabel: form.submitButtonLabel,
+      summaryButtonLabel: form.summaryButtonLabel
     };
   }
 
@@ -169,6 +171,7 @@ export class DefinitionBuilder {
     title?: ListViewConfig['title'],
     defaultSortOverride?: ListViewConfig['defaultSort'],
     pageSizeOverride?: ListViewConfig['pageSize'],
+    paginationControlsEnabledOverride?: ListViewConfig['paginationControlsEnabled'],
     searchOverride?: ListViewConfig['search']
   ): ListViewConfig | undefined {
     const listQuestions = questions.filter(q => q.listView);
@@ -212,6 +215,7 @@ export class DefinitionBuilder {
     if (title) out.title = title;
     if (legend && Array.isArray(legend) && legend.length) out.legend = legend;
     if (pageSizeOverride && Number.isFinite(pageSizeOverride)) out.pageSize = pageSizeOverride;
+    if (paginationControlsEnabledOverride !== undefined) out.paginationControlsEnabled = Boolean(paginationControlsEnabledOverride);
     if (searchOverride) out.search = searchOverride;
     return out;
   }

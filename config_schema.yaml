@@ -192,6 +192,12 @@ components:
 
                 NOTE: The current UI always shows an **in-app PDF preview** (generated in-memory; no PDF file is written to Drive).
                 `live` is deprecated/ignored and kept only for backward compatibility with older configs.
+            loadingLabel:
+              $ref: '#/components/schemas/LocalizedString'
+              description: |
+                Optional localized loading label shown while generating the PDF.
+
+                When omitted, the UI falls back to the default system string (e.g. "Generating PDF…").
             placements:
               type: array
               items:
@@ -307,6 +313,37 @@ components:
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
           required: [action, presetValues]
+
+        - type: object
+          properties:
+            action:
+              type: string
+              enum: [openUrlField]
+              description: |
+                Open (redirect to) the URL stored in a field of the current record.
+
+                Use this for quick access to saved PDFs, Drive links, or external resources.
+            fieldId:
+              type: string
+              description: |
+                Field id containing the URL.
+                Can be a question id or a meta field like `pdfUrl`.
+            placements:
+              type: array
+              items:
+                type: string
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+              description: |
+                Where the button should surface in the web UI.
+                - `form`: render inline as a normal field in the form view.
+                - `formSummaryMenu`: appear inside the Summary button menu while editing.
+                - `summaryBar`: appear in the bottom action bar on the Summary view (menu if multiple).
+                - `topBar`: appear in the action bar directly under the header (all views).
+                - `topBarList`: appear in the top action bar on the List view.
+                - `topBarForm`: appear in the top action bar on the Form (edit) view.
+                - `topBarSummary`: appear in the top action bar on the Summary view.
+                - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+          required: [action, fieldId]
 
     FileUploadConfig:
       type: object
@@ -1187,6 +1224,12 @@ components:
             Optional localized label override for the **Submit** button in the React web app.
 
             When omitted, the UI uses the default localized system label.
+        summaryButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized label override for the **Summary** button in the React web app.
+
+            Example: { "en": "Checklist", "fr": "Liste", "nl": "Checklist" }
         languages:
           type: array
           description: |
@@ -1485,7 +1528,7 @@ components:
             - Actions menu PDFs only: `"id": "actions", "actions": ["renderDocTemplate"]`
           items:
             type: string
-            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset]
+            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset, openUrlField]
         summaryBehavior:
           type: string
           enum: [auto, navigate, menu]
@@ -1527,7 +1570,7 @@ components:
           description: Optional filter by action type (e.g. only show createRecordPreset buttons).
           items:
             type: string
-            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset]
+            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset, openUrlField]
       additionalProperties: true
 
     TemplateIdBase:
@@ -1671,7 +1714,7 @@ components:
           description: |
             When `openView: "button"`, the BUTTON id (or encoded id via `__ckQIdx=`) to trigger.
 
-            Note: only preview-style buttons are allowed (renderDocTemplate / renderMarkdownTemplate / renderHtmlTemplate).
+            Note: only non-mutating button actions are allowed (renderDocTemplate / renderMarkdownTemplate / renderHtmlTemplate / openUrlField).
         sortable:
           type: boolean
           description: When true, allow sorting by the computed text value (default false).
@@ -1877,6 +1920,14 @@ components:
         pageSize:
           type: integer
           description: Max rows per page (default 10, capped at 50).
+        paginationControlsEnabled:
+          type: boolean
+          description: |
+            Optional UI setting: hide pagination controls and render all matching rows.
+
+            Notes:
+            - Server list endpoints remain paginated for performance; this setting only controls the **UI** paging controls.
+            - Default is true.
       description: Configuration for list views showing saved submissions.
       example:
         columns:

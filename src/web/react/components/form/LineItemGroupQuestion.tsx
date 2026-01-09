@@ -87,6 +87,11 @@ export interface LineItemGroupQuestionCtx {
   definition: WebFormDefinition;
   language: LangCode;
   values: Record<string, FieldValue>;
+  /**
+   * Optional shared visibility resolver from the parent FormView.
+   * When provided, `visibility.showWhen/hideWhen` can reference system/meta fields (e.g. STATUS) reliably.
+   */
+  resolveVisibilityValue?: (fieldId: string) => FieldValue | undefined;
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
   lineItems: LineItemState;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
@@ -162,6 +167,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     definition,
     language,
     values,
+    resolveVisibilityValue,
     setValues,
     lineItems,
     setLineItems,
@@ -722,7 +728,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
             ) : null}
             {parentRows.map((row, rowIdx) => {
               const groupCtx: VisibilityContext = {
-                getValue: fid => values[fid],
+                getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
                 getLineValue: (_rowId, fid) => row.values[fid]
               };
               const ui = q.lineItemConfig?.ui;
@@ -1490,8 +1496,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           const viewMode = readOnly || maxed;
                           const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                           const leftLabel = viewMode
-                            ? tSystem('files.view', language, 'View files')
-                            : tSystem('files.add', language, 'Add files');
+                            ? tSystem('files.view', language, 'View photos')
+                            : tSystem('files.add', language, 'Add photo');
                           const cameraStyleBase = viewMode
                             ? buttonStyles.secondary
                             : isEmpty
@@ -1552,7 +1558,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                                     'files.title',
                                     language,
-                                    'Files'
+                                    'Photos'
                                   )} ${pillText}`}
                                   onClick={() => {
                                     if (submitting) return;
@@ -1577,7 +1583,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   <div className="ck-field-actions">{subgroupTriggerNodes}</div>
                                 ) : null}
                                 {maxed ? (
-                                  <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Max reached.')}</div>
+                                  <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
                                 ) : showMissingHelper ? (
                                   <div className="ck-upload-helper muted" aria-live="polite">
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -2194,8 +2200,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       const viewMode = readOnly || maxed;
                                       const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                                       const leftLabel = viewMode
-                                        ? tSystem('files.view', language, 'View files')
-                                        : tSystem('files.add', language, 'Add files');
+                                        ? tSystem('files.view', language, 'View photos')
+                                        : tSystem('files.add', language, 'Add photo');
                                       const cameraStyleBase = viewMode
                                         ? buttonStyles.secondary
                                         : isEmpty
@@ -2257,7 +2263,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                                 'files.open',
                                                 language,
                                                 tSystem('common.open', language, 'Open')
-                                              )} ${tSystem('files.title', language, 'Files')} ${pillText}`}
+                                              )} ${tSystem('files.title', language, 'Photos')} ${pillText}`}
                                               onClick={() => {
                                                 if (submitting) return;
                                                 openFileOverlay({
@@ -2278,7 +2284,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                               <span className="ck-progress-caret">▸</span>
                                             </button>
                                             {maxed ? (
-                                              <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Max reached.')}</div>
+                                              <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
                                             ) : showMissingHelper ? (
                                               <div className="ck-upload-helper muted" aria-live="polite">
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>

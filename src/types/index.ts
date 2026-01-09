@@ -157,7 +157,12 @@ export type ButtonPreviewMode = 'pdf' | 'live';
  * Primary use case: render a Google Doc template (with placeholders / consolidated directives)
  * into a PDF preview from the web app.
  */
-export type ButtonAction = 'renderDocTemplate' | 'renderMarkdownTemplate' | 'renderHtmlTemplate' | 'createRecordPreset';
+export type ButtonAction =
+  | 'renderDocTemplate'
+  | 'renderMarkdownTemplate'
+  | 'renderHtmlTemplate'
+  | 'createRecordPreset'
+  | 'openUrlField';
 
 export interface RenderDocTemplateButtonConfig {
   action: 'renderDocTemplate';
@@ -176,6 +181,11 @@ export interface RenderDocTemplateButtonConfig {
    *   and the user can optionally generate a PDF on demand.
    */
   previewMode?: ButtonPreviewMode;
+  /**
+   * Optional localized loading label shown to the user while the PDF is being generated.
+   * Defaults to the built-in system string (e.g. "Generating PDF…").
+   */
+  loadingLabel?: LocalizedString;
   /**
    * Where this button should surface in the web UI.
    * - form: rendered inline as a normal field in the form view
@@ -234,11 +244,26 @@ export interface CreateRecordPresetButtonConfig {
   placements?: ButtonPlacement[];
 }
 
+export interface OpenUrlFieldButtonConfig {
+  /**
+   * Open (redirect to) the URL stored in a field of the current record.
+   * Intended for quick access to saved PDFs, Drive links, or external resources.
+   */
+  action: 'openUrlField';
+  /**
+   * Field id containing the URL.
+   * Can be a question id or a meta field like `pdfUrl`.
+   */
+  fieldId: string;
+  placements?: ButtonPlacement[];
+}
+
 export type ButtonConfig =
   | RenderDocTemplateButtonConfig
   | RenderMarkdownTemplateButtonConfig
   | RenderHtmlTemplateButtonConfig
-  | CreateRecordPresetButtonConfig;
+  | CreateRecordPresetButtonConfig
+  | OpenUrlFieldButtonConfig;
 
 export interface QuestionUiConfig {
   /**
@@ -1080,6 +1105,10 @@ export interface FormConfig {
    * Optional override for list view page size (recommended: `listView.pageSize`).
    */
   listViewPageSize?: number;
+  /**
+   * Optional UI override to hide list view pagination controls (recommended: `listView.paginationControlsEnabled`).
+   */
+  listViewPaginationControlsEnabled?: boolean;
   listViewMetaColumns?: string[];
   /**
    * Optional list view columns defined at the dashboard level (in the “Follow-up Config (JSON)” column).
@@ -1195,6 +1224,13 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   submitButtonLabel?: LocalizedString;
+
+  /**
+   * Optional localized label override for the Summary button in the React web app.
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  summaryButtonLabel?: LocalizedString;
 }
 
 export interface AppHeaderConfig {
@@ -1390,6 +1426,12 @@ export interface WebFormDefinition {
    * Optional localized label override for the Submit button in the React web app.
    */
   submitButtonLabel?: LocalizedString;
+
+  /**
+   * Optional localized label override for the Summary button in the React web app.
+   * Example: "Checklist".
+   */
+  summaryButtonLabel?: LocalizedString;
 }
 
 export interface WebFormSubmission {
@@ -1562,6 +1604,12 @@ export interface ListViewConfig {
     direction?: 'asc' | 'desc';
   };
   pageSize?: number;
+  /**
+   * Optional UI setting: hide pagination controls and render all matching rows (no client-side paging).
+   *
+   * Default: true.
+   */
+  paginationControlsEnabled?: boolean;
 }
 
 export interface ListViewQueryOptions {

@@ -12,6 +12,7 @@ import { GroupCard } from '../form/GroupCard';
 import { resolveGroupSectionKey } from '../form/grouping';
 import { CameraIcon, CheckIcon, PaperclipIcon, XIcon, srOnly } from '../form/ui';
 import { shouldHideField } from '../../../rules/visibility';
+import { getSystemFieldValue } from '../../../rules/systemFields';
 import { collectValidationWarnings } from '../../app/submission';
 import { FileOverlay } from '../form/overlays/FileOverlay';
 import { toUploadItems } from '../form/utils';
@@ -88,7 +89,7 @@ const renderValueForPreview = (
     const count = items.length;
     const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
     const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{ size?: number }>;
-    const title = (opts?.fileTitle || tSystem('files.title', language, 'Files')).toString();
+    const title = (opts?.fileTitle || tSystem('files.title', language, 'Photos')).toString();
 
     return (
       <button
@@ -99,7 +100,7 @@ const renderValueForPreview = (
           e.stopPropagation();
           opts?.onOpenFiles?.({ title, value: value as any, uploadConfig });
         }}
-        aria-label={tSystem('files.open', language, 'Open files')}
+        aria-label={tSystem('files.open', language, 'Open photos')}
       >
         <SlotIcon size={32} />
         <span className="ck-file-icon__badge">{count}</span>
@@ -552,6 +553,8 @@ export const ReportLivePreview: React.FC<{
   const resolveVisibilityValue = (fieldId: string): FieldValue | undefined => {
     const direct = values[fieldId];
     if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+    const sys = getSystemFieldValue(fieldId, recordMeta as any);
+    if (sys !== undefined) return sys as FieldValue;
     // Mirror FormView behavior: allow visibility rules to "see" the first non-empty line-item occurrence.
     for (const rows of Object.values(lineItems || {})) {
       if (!Array.isArray(rows)) continue;
@@ -568,7 +571,7 @@ export const ReportLivePreview: React.FC<{
       getValue: (fid: string) => resolveVisibilityValue(fid)
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [values, lineItems]
+    [values, lineItems, recordMeta]
   );
 
   const summaryQuestions = useMemo(() => {
@@ -687,7 +690,7 @@ export const ReportLivePreview: React.FC<{
       if (!items.length) return;
       setFilesOverlay({
         open: true,
-        title: title || tSystem('files.title', language, 'Files'),
+        title: title || tSystem('files.title', language, 'Photos'),
         items,
         uploadConfig
       });
@@ -1029,7 +1032,7 @@ export const ReportLivePreview: React.FC<{
         <FileOverlay
           open={filesOverlay.open}
           language={language}
-          title={filesOverlay.title || tSystem('files.title', language, 'Files')}
+          title={filesOverlay.title || tSystem('files.title', language, 'Photos')}
           submitting={false}
           readOnly={true}
           items={filesOverlay.items}

@@ -59,6 +59,7 @@
     "newRecord": { "en": "New record", "fr": "Nouvel enregistrement", "nl": "Nieuw record" },
     "copyCurrentRecord": { "en": "Copy current record", "fr": "Copier l'enregistrement actuel", "nl": "Huidig record kopiëren" },
     "viewSummary": { "en": "View summary", "fr": "Voir le résumé", "nl": "Samenvatting bekijken" },
+    "missingLink": { "en": "No link found.", "fr": "Aucun lien trouvé.", "nl": "Geen link gevonden." },
     "closeCreateMenu": { "en": "Close create menu", "fr": "Fermer le menu de création", "nl": "Maakmenu sluiten" },
     "createMenu": { "en": "Create menu", "fr": "Menu de création", "nl": "Maakmenu" },
     "closeSummaryMenu": { "en": "Close summary menu", "fr": "Fermer le menu du résumé", "nl": "Samenvattingsmenu sluiten" },
@@ -111,6 +112,7 @@
     "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
     "add": { "en": "Add", "fr": "Ajouter", "nl": "Toevoegen" },
     "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
+    "noChange": { "en": "No change.", "fr": "Aucun changement.", "nl": "Geen wijziging." },
     "more": { "en": "+{count} more", "fr": "+{count} de plus", "nl": "+{count} meer" }
   },
   "values": {
@@ -165,37 +167,42 @@
     "itemsMany": { "en": "{count} items", "fr": "{count} éléments", "nl": "{count} items" }
   },
   "files": {
-    "title": { "en": "Files", "fr": "Fichiers", "nl": "Bestanden" },
-    "fileN": { "en": "File {n}", "fr": "Fichier {n}", "nl": "Bestand {n}" },
-    "add": { "en": "Add files", "fr": "Ajouter des fichiers", "nl": "Bestanden toevoegen" },
-    "view": { "en": "View files", "fr": "Voir les fichiers", "nl": "Bestanden bekijken" },
+    "title": { "en": "Photos", "fr": "Photos", "nl": "Foto's" },
+    "fileN": { "en": "Photo {n}", "fr": "Photo {n}", "nl": "Foto {n}" },
+    "add": { "en": "Add photo", "fr": "Ajouter une photo", "nl": "Foto toevoegen" },
+    "view": { "en": "View photos", "fr": "Voir les photos", "nl": "Foto's bekijken" },
     "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
-    "clearAll": { "en": "Clear all", "fr": "Tout effacer", "nl": "Alles wissen" },
-    "clearAllConfirm": { "en": "Clear all files?", "fr": "Supprimer tous les fichiers ?", "nl": "Alle bestanden verwijderen?" },
-    "noneSelected": { "en": "No files selected.", "fr": "Aucun fichier sélectionné.", "nl": "Geen bestanden geselecteerd." },
-    "selectedOne": { "en": "1 file selected", "fr": "1 fichier sélectionné", "nl": "1 bestand geselecteerd" },
-    "selectedMany": { "en": "{count} files selected", "fr": "{count} fichiers sélectionnés", "nl": "{count} bestanden geselecteerd" },
-    "maxSelected": { "en": "Maximum files selected.", "fr": "Nombre maximal de fichiers atteint.", "nl": "Maximum aantal bestanden geselecteerd." },
-    "maxReached": { "en": "Max reached.", "fr": "Maximum atteint.", "nl": "Maximum bereikt." },
-    "uploaded": { "en": "Uploaded", "fr": "Téléversé", "nl": "Geüpload" },
-    "maxFilesOne": { "en": "1 file max", "fr": "1 fichier max", "nl": "1 bestand max" },
-    "maxFilesMany": { "en": "{count} files max", "fr": "{count} fichiers max", "nl": "{count} bestanden max" },
-    "minFilesOne": { "en": "1 file required", "fr": "1 fichier requis", "nl": "1 bestand vereist" },
-    "minFilesMany": { "en": "{count} files required", "fr": "{count} fichiers requis", "nl": "{count} bestanden vereist" },
+    "clearAll": { "en": "Remove all", "fr": "Tout supprimer", "nl": "Alles verwijderen" },
+    "clearAllConfirm": { "en": "Remove all photos?", "fr": "Supprimer toutes les photos ?", "nl": "Alle foto's verwijderen?" },
+    "noneSelected": { "en": "No photo added.", "fr": "Aucune photo ajoutée.", "nl": "Geen foto toegevoegd." },
+    "selectedOne": { "en": "1 photo added", "fr": "1 photo ajoutée", "nl": "1 foto toegevoegd" },
+    "selectedMany": { "en": "{count} photos added", "fr": "{count} photos ajoutées", "nl": "{count} foto's toegevoegd" },
+    "maxSelected": { "en": "Required photos added.", "fr": "Photos requises ajoutées.", "nl": "Vereiste foto's toegevoegd." },
+    "maxReached": { "en": "Required photos added.", "fr": "Photos requises ajoutées.", "nl": "Vereiste foto's toegevoegd." },
+    "uploaded": { "en": "Added", "fr": "Ajouté", "nl": "Toegevoegd" },
+    "maxFilesOne": { "en": "1 photo max", "fr": "1 photo max", "nl": "max 1 foto" },
+    "maxFilesMany": { "en": "{count} photos max", "fr": "{count} photos max", "nl": "max {count} foto's" },
+    "minFilesOne": { "en": "1 photo required", "fr": "1 photo requise", "nl": "1 foto vereist" },
+    "minFilesMany": { "en": "{count} photos required", "fr": "{count} photos requises", "nl": "{count} foto's vereist" },
     "maxSizeEach": { "en": "≤ {mb} MB each", "fr": "≤ {mb} MB chacun", "nl": "≤ {mb} MB elk" },
     "allowed": { "en": "Allowed: {exts}", "fr": "Autorisés : {exts}", "nl": "Toegestaan: {exts}" },
-    "remainingOne": { "en": "You can add 1 more file.", "fr": "Vous pouvez ajouter 1 fichier de plus.", "nl": "Je kunt nog 1 bestand toevoegen." },
-    "remainingMany": { "en": "You can add {count} more files.", "fr": "Vous pouvez ajouter encore {count} fichiers.", "nl": "Je kunt nog {count} bestanden toevoegen." },
+    "remainingOne": { "en": "You can add 1 more photo.", "fr": "Vous pouvez ajouter 1 photo de plus.", "nl": "Je kunt nog 1 foto toevoegen." },
+    "remainingMany": { "en": "You can add {count} more photos.", "fr": "Vous pouvez ajouter encore {count} photos.", "nl": "Je kunt nog {count} foto's toevoegen." },
     "error": {
+      "uploadFailed": {
+        "en": "Could not add photos.",
+        "fr": "Impossible d'ajouter des photos.",
+        "nl": "Kan geen foto's toevoegen."
+      },
       "minFiles": {
-        "en": "{field} requires at least {min} file{plural}.",
-        "fr": "{field} nécessite au moins {min} fichier{plural}.",
-        "nl": "{field} vereist minimaal {min} bestand{plural}."
+        "en": "{field} requires at least {min} photo{plural}.",
+        "fr": "{field} nécessite au moins {min} photo{plural}.",
+        "nl": "{field} vereist minimaal {min} foto{plural}."
       },
       "maxFiles": {
-        "en": "Maximum of {max} file{plural} allowed.",
-        "fr": "Maximum de {max} fichier{plural} autorisé.",
-        "nl": "Maximum {max} bestand{plural} toegestaan."
+        "en": "Maximum of {max} photo{plural} allowed.",
+        "fr": "Maximum de {max} photo{plural} autorisé.",
+        "nl": "Maximum {max} foto{plural} toegestaan."
       },
       "maxFileSizeMb": {
         "en": "{name} exceeds {mb} MB.",
@@ -203,20 +210,20 @@
         "nl": "{name} is groter dan {mb} MB."
       },
       "fileType": {
-        "en": "{name} is not an allowed file type.",
-        "fr": "{name} n'est pas un type de fichier autorisé.",
-        "nl": "{name} is geen toegestaan bestandstype."
+        "en": "{name} is not an allowed photo type.",
+        "fr": "{name} n'est pas un type de photo autorisé.",
+        "nl": "{name} is geen toegestaan fototype."
       },
       "compressFailed": {
-        "en": "Could not compress {name}. Uploading original.",
-        "fr": "Impossible de compresser {name}. Téléversement de l'original.",
-        "nl": "Kan {name} niet comprimeren. Origineel wordt geüpload."
+        "en": "Could not resize {name}. Adding original.",
+        "fr": "Impossible de redimensionner {name}. Ajout de l'original.",
+        "nl": "Kan {name} niet verkleinen. Origineel wordt toegevoegd."
       }
     },
     "emptyHint": {
-      "en": "No files selected yet. Use “Add files” (or tap the upload icon in the form) to attach.",
-      "fr": "Aucun fichier sélectionné. Utilisez « Ajouter des fichiers » (ou touchez l'icône d'envoi dans le formulaire) pour joindre.",
-      "nl": "Nog geen bestanden geselecteerd. Gebruik “Bestanden toevoegen” (of tik op het upload-icoon in het formulier) om toe te voegen."
+      "en": "No photo added.",
+      "fr": "Aucune photo ajoutée.",
+      "nl": "Geen foto toegevoegd."
     }
   },
   "report": {
@@ -239,7 +246,11 @@
   },
   "validation": {
     "thisFieldRequired": { "en": "This field is required.", "fr": "Ce champ est requis.", "nl": "Dit veld is verplicht." },
-    "fixErrors": { "en": "You are almost done. Please complete the missing sections.", "fr": "Vous avez presque terminé. Veuillez compléter les sections manquantes.", "nl": "Je bent bijna klaar. Vul de ontbrekende secties in." },
+    "fixErrors": {
+      "en": "You are almost done. Some required checks are missing. Review the highlighted sections.",
+      "fr": "Vous avez presque terminé. Certaines vérifications obligatoires manquent. Revoyez les sections en surbrillance.",
+      "nl": "Je bent bijna klaar. Sommige verplichte controles ontbreken. Bekijk de gemarkeerde secties."
+    },
     "warningsTitle": { "en": "Warnings", "fr": "Avertissements", "nl": "Waarschuwingen" },
     "fieldRequired": { "en": "{field} is required.", "fr": "{field} est requis.", "nl": "{field} is verplicht." },
     "completeAtLeastOneRowFillCollapsed": {

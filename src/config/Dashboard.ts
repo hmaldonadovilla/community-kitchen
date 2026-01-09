@@ -121,6 +121,7 @@ export class Dashboard {
       const listViewTitle = dashboardConfig?.listViewTitle;
       const listViewDefaultSort = dashboardConfig?.listViewDefaultSort;
       const listViewPageSize = dashboardConfig?.listViewPageSize;
+      const listViewPaginationControlsEnabled = dashboardConfig?.listViewPaginationControlsEnabled;
       const listViewMetaColumns = dashboardConfig?.listViewMetaColumns;
       const listViewColumns = dashboardConfig?.listViewColumns;
       const listViewLegend = dashboardConfig?.listViewLegend;
@@ -138,6 +139,7 @@ export class Dashboard {
       const submissionConfirmationMessage = dashboardConfig?.submissionConfirmationMessage;
       const submissionConfirmationTitle = dashboardConfig?.submissionConfirmationTitle;
       const submitButtonLabel = dashboardConfig?.submitButtonLabel;
+      const summaryButtonLabel = dashboardConfig?.summaryButtonLabel;
       const languages = dashboardConfig?.languages;
       const defaultLanguage = dashboardConfig?.defaultLanguage;
       const languageSelectorEnabled = dashboardConfig?.languageSelectorEnabled;
@@ -155,6 +157,7 @@ export class Dashboard {
           listViewTitle,
           listViewDefaultSort,
           listViewPageSize,
+          listViewPaginationControlsEnabled,
           listViewMetaColumns,
           listViewColumns,
           listViewLegend,
@@ -172,6 +175,7 @@ export class Dashboard {
           submissionConfirmationMessage,
           submissionConfirmationTitle,
           submitButtonLabel,
+          summaryButtonLabel,
           languages,
           defaultLanguage,
           languageSelectorEnabled
@@ -207,6 +211,7 @@ export class Dashboard {
     listViewTitle?: LocalizedString;
     listViewDefaultSort?: { fieldId: string; direction?: 'asc' | 'desc' };
     listViewPageSize?: number;
+    listViewPaginationControlsEnabled?: boolean;
     listViewMetaColumns?: string[];
     listViewColumns?: ListViewColumnConfig[];
     listViewLegend?: ListViewLegendItem[];
@@ -224,6 +229,7 @@ export class Dashboard {
     submissionConfirmationMessage?: LocalizedString;
     submissionConfirmationTitle?: LocalizedString;
     submitButtonLabel?: LocalizedString;
+    summaryButtonLabel?: LocalizedString;
     languages?: Array<'EN' | 'FR' | 'NL'>;
     defaultLanguage?: 'EN' | 'FR' | 'NL';
     languageSelectorEnabled?: boolean;
@@ -364,6 +370,17 @@ export class Dashboard {
       return Object.keys(out).length ? out : undefined;
     };
 
+    const normalizeBoolean = (input: any): boolean | undefined => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'boolean') return input;
+      if (typeof input === 'number') return input !== 0;
+      const s = input.toString().trim().toLowerCase();
+      if (!s) return undefined;
+      if (s === 'true' || s === '1' || s === 'yes' || s === 'y') return true;
+      if (s === 'false' || s === '0' || s === 'no' || s === 'n') return false;
+      return Boolean(input);
+    };
+
     const listViewObj =
       parsed.listView !== undefined && parsed.listView !== null && typeof parsed.listView === 'object' ? parsed.listView : undefined;
     const listViewTitleRaw =
@@ -392,6 +409,16 @@ export class Dashboard {
       if (!Number.isFinite(n)) return undefined;
       return Math.max(1, Math.min(50, Math.round(n)));
     })();
+
+    const listViewPaginationControlsEnabledRaw =
+      parsed.listViewPaginationControlsEnabled !== undefined
+        ? parsed.listViewPaginationControlsEnabled
+        : parsed.paginationControlsEnabled !== undefined
+          ? parsed.paginationControlsEnabled
+          : listViewObj && (listViewObj.paginationControlsEnabled !== undefined || (listViewObj as any).paginationEnabled !== undefined)
+            ? (listViewObj.paginationControlsEnabled ?? (listViewObj as any).paginationEnabled)
+            : undefined;
+    const listViewPaginationControlsEnabled = normalizeBoolean(listViewPaginationControlsEnabledRaw);
 
     const listViewDefaultSortRaw =
       parsed.listViewDefaultSort !== undefined
@@ -669,16 +696,13 @@ export class Dashboard {
             : undefined;
     const submitButtonLabel = normalizeLocalized(submitButtonLabelRaw);
 
-    const normalizeBoolean = (input: any): boolean | undefined => {
-      if (input === undefined || input === null) return undefined;
-      if (typeof input === 'boolean') return input;
-      if (typeof input === 'number') return input !== 0;
-      const s = input.toString().trim().toLowerCase();
-      if (!s) return undefined;
-      if (s === 'true' || s === '1' || s === 'yes' || s === 'y') return true;
-      if (s === 'false' || s === '0' || s === 'no' || s === 'n') return false;
-      return Boolean(input);
-    };
+    const summaryButtonLabelRaw =
+      parsed.summaryButtonLabel !== undefined
+        ? parsed.summaryButtonLabel
+        : parsed.summaryLabel !== undefined
+          ? parsed.summaryLabel
+          : undefined;
+    const summaryButtonLabel = normalizeLocalized(summaryButtonLabelRaw);
 
     const uiObj = parsed.ui !== undefined && parsed.ui !== null && typeof parsed.ui === 'object' ? parsed.ui : undefined;
 
@@ -706,6 +730,7 @@ export class Dashboard {
       !listViewTitle &&
       !listViewDefaultSort &&
       listViewPageSize === undefined &&
+      listViewPaginationControlsEnabled === undefined &&
       !hasMetaSetting &&
       !listViewColumns?.length &&
       !listViewLegend?.length &&
@@ -723,6 +748,7 @@ export class Dashboard {
       !submissionConfirmationMessage &&
       !submissionConfirmationTitle &&
       !submitButtonLabel &&
+      !summaryButtonLabel &&
       !languages &&
       defaultLanguage === undefined &&
       languageSelectorEnabled === undefined
@@ -735,6 +761,7 @@ export class Dashboard {
       listViewTitle,
       listViewDefaultSort,
       listViewPageSize,
+      listViewPaginationControlsEnabled,
       listViewMetaColumns,
       listViewColumns,
       listViewLegend,
@@ -752,6 +779,7 @@ export class Dashboard {
       submissionConfirmationMessage,
       submissionConfirmationTitle,
       submitButtonLabel,
+      summaryButtonLabel,
       languages,
       defaultLanguage,
       languageSelectorEnabled
@@ -780,7 +808,13 @@ export class Dashboard {
       'topBarSummary',
       'listBar'
     ]);
-    const allowedActions = new Set<ButtonAction>(['renderDocTemplate', 'renderMarkdownTemplate', 'renderHtmlTemplate', 'createRecordPreset']);
+    const allowedActions = new Set<ButtonAction>([
+      'renderDocTemplate',
+      'renderMarkdownTemplate',
+      'renderHtmlTemplate',
+      'createRecordPreset',
+      'openUrlField'
+    ]);
 
     const normalizePlacements = (raw: any): ButtonPlacement[] => {
       if (raw === undefined || raw === null) return [];

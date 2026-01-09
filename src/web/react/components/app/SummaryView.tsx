@@ -156,7 +156,7 @@ export const SummaryView: React.FC<{
           <>
             {summaryHtml.phase === 'rendering' ? (
               <div className="status" style={{ marginBottom: 12 }}>
-                {tSystem('report.renderingHtml', language, 'Rendering…')}
+                {tSystem('common.loading', language, 'Loading…')}
               </div>
             ) : null}
             {summaryHtml.phase === 'error' ? (

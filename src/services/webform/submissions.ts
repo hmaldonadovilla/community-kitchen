@@ -498,40 +498,42 @@ export class SubmissionService {
 
       if (!dedupRules || !dedupRules.length) return { success: true };
 
-      const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
-      const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
+      const effectiveDedupRules = (dedupRules || []).filter(
+        r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form'
+      );
+      if (!effectiveDedupRules.length) return { success: true };
+
+      const destinationName = (form.destinationTab || `${form.title} Responses`).toString();
+      const sheet = this.ss.getSheetByName(destinationName);
+      // No destination sheet yet => nothing to dedup against.
+      if (!sheet) return { success: true };
 
       const incomingId = ((formObject as any).id && (formObject as any).id.trim)
         ? ((formObject as any).id as any).trim()
         : (formObject as any).id;
       const recordId = incomingId ? incomingId.toString() : '';
 
-      // Build candidate values (best-effort) without mutating the sheet (no uploads / no auto-increment).
+      // Build candidate values for dedup keys only (best-effort) without mutating the sheet (no uploads / no auto-increment).
       const candidateValues: Record<string, any> = {};
-      questions
-        .filter(q => q && q.type !== 'BUTTON')
-        .forEach(q => {
-          let value: any = '';
-          if (q.type === 'LINE_ITEM_GROUP') {
-            const rawLineItems = (formObject as any)[`${q.id}_json`] || (formObject as any)[q.id];
-            value = rawLineItems ?? '';
-          } else if (q.type === 'FILE_UPLOAD') {
-            // Dedup rules should not rely on FILE_UPLOAD; treat as raw value.
-            value = (formObject as any)[q.id];
-          } else {
-            value = (formObject as any)[q.id];
-            if (Array.isArray(value)) value = value.join(', ');
-          }
-          // Match `saveSubmissionWithId` behavior: normalize DATE fields to date-only so dedup comparisons
-          // are consistent whether the client sends "YYYY-MM-DD", a Date instance, or a serialized date string.
-          if (q.type === 'DATE') {
-            value = this.normalizeDateOnlyCell(value);
-          }
-          candidateValues[q.id] = value ?? '';
-        });
-
-      const effectiveDedupRules = (dedupRules || []).filter(r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form');
-      if (!effectiveDedupRules.length) return { success: true };
+      const dedupKeyIds = Array.from(
+        new Set(
+          effectiveDedupRules
+            .flatMap(r => (Array.isArray(r.keys) ? r.keys : []))
+            .map(k => (k || '').toString().trim())
+            .filter(Boolean)
+        )
+      );
+      dedupKeyIds.forEach(keyId => {
+        let value: any = (formObject as any)[keyId];
+        if ((value === undefined || value === null) && (formObject as any)?.values && typeof (formObject as any).values === 'object') {
+          value = ((formObject as any).values || {})[keyId];
+        }
+        // Match `saveSubmissionWithId` behavior: arrays are stored as comma-separated strings.
+        if (Array.isArray(value)) value = value.join(', ');
+        // Best-effort: normalize date-like values so signatures match index semantics.
+        value = this.normalizeDateOnlyCell(value);
+        candidateValues[keyId] = value ?? '';
+      });
 
       // Indexed lookup via record index sheet (preferred).
       try {
@@ -544,9 +546,25 @@ export class SubmissionService {
         const destLastRow = sheet.getLastRow();
         if (destLastRow >= 2) {
           try {
-            const destTopId = (sheet.getRange(2, columns.recordId || 1, 1, 1).getValues()[0][0] || '').toString().trim();
+            // Find the Record ID column without walking all questions/headers.
+            const recordIdCol = (() => {
+              try {
+                const lastCol = Math.max(sheet.getLastColumn(), 1);
+                const rawHeaderRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
+                for (let i = 0; i < rawHeaderRow.length; i += 1) {
+                  const raw = rawHeaderRow[i] ? rawHeaderRow[i].toString().trim() : '';
+                  const header = sanitizeHeaderCellText(raw);
+                  const norm = normalizeHeaderToken(header);
+                  if (norm === 'record id' || norm === 'id') return i + 1;
+                }
+              } catch (_) {
+                // ignore
+              }
+              return 1;
+            })();
+            const destTopId = (sheet.getRange(2, recordIdCol || 1, 1, 1).getValues()[0][0] || '').toString().trim();
             const idxTopId = (idx.sheet.getRange(2, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
-            const destLastId = (sheet.getRange(destLastRow, columns.recordId || 1, 1, 1).getValues()[0][0] || '').toString().trim();
+            const destLastId = (sheet.getRange(destLastRow, recordIdCol || 1, 1, 1).getValues()[0][0] || '').toString().trim();
             const idxLastId = (idx.sheet.getRange(destLastRow, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
             const looksUnbuilt = (destTopId && !idxTopId) || (destLastId && !idxLastId);
             if (looksUnbuilt && destLastRow > 2) {
@@ -616,14 +634,15 @@ export class SubmissionService {
         return { success: true };
       } catch (_) {
         // Fall back to legacy scan-based approach (small sheets / tests).
-        const existingRows = Math.max(0, sheet.getLastRow() - 1);
+        const { sheet: fullSheet, headers, columns } = this.ensureDestination(destinationName, questions);
+        const existingRows = Math.max(0, fullSheet.getLastRow() - 1);
         if (existingRows <= 0) return { success: true };
 
-        const data = sheet.getRange(2, 1, existingRows, headers.length).getValues();
+        const data = fullSheet.getRange(2, 1, existingRows, headers.length).getValues();
         const existing: ExistingRecord[] = data.map((row, idx) => {
           const vals: Record<string, any> = {};
-          Object.entries(columns.fields).forEach(([fid, idx]) => {
-            vals[fid] = row[(idx as number) - 1];
+          Object.entries(columns.fields).forEach(([fid, colIdx]) => {
+            vals[fid] = row[(colIdx as number) - 1];
           });
           return {
             id: columns.recordId ? row[columns.recordId - 1] : '',

@@ -295,6 +295,18 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+    - Want to **override the Summary button label**? Set `summaryButtonLabel` (localized). Useful when “Summary” should read like “Checklist”.
+
+      ```json
+      {
+        "summaryButtonLabel": {
+          "en": "Checklist",
+          "fr": "Liste",
+          "nl": "Checklist"
+        }
+      }
+      ```
+
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved.
     - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
     - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
@@ -685,7 +697,7 @@ This project uses TypeScript. You need to build the script before using it in Go
        The same operators (`equals`, `greaterThan`, `lessThan`) and actions (`required`, `min`, `max`, `allowed`, `disallowed`) work inside line items.
     - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
       - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
-      - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; search runs client-side (keyword search by default, or date search via `listView.search`), and sorting is done by clicking a column header (totalCount is capped at 200).
+      - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; you can optionally hide the UI paging controls via `listView.paginationControlsEnabled: false`. Search runs client-side (keyword search by default, or date search via `listView.search`), and sorting is done by clicking a column header (totalCount is capped at 200).
     - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
     - **Quick recipe for the new features**:
       - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
@@ -720,7 +732,7 @@ This project uses TypeScript. You need to build the script before using it in Go
 
         Supports `showWhen`/`hideWhen` with `equals`, `greaterThan`, `lessThan`. Line-item fields can reference top-level or sibling fields (including `sectionSelector`).
       - *Clear-on-change reset*: On a controlling question add `clearOnChange: true` in Config JSON. When that field changes, all other fields and line items clear, then filters/visibility reapply. Handy for “mode” or “category” selectors.
-      - *List view (start on list)*: Add a `List View?` column to the config sheet and mark `TRUE` on the fields you want to display in the list. If at least one is `TRUE`, the form definition includes `listView` and `startRoute: "list"` so the app opens in list mode showing those fields plus `createdAt`/`updatedAt` with pagination.
+      - *List view (start on list)*: Add a `List View?` column to the config sheet and mark `TRUE` on the fields you want to display in the list. If at least one is `TRUE`, the form definition includes `listView` and `startRoute: "list"` so the app opens in list mode showing those fields plus `createdAt`/`updatedAt` with pagination (optional: hide paging controls via `listView.paginationControlsEnabled: false`).
       - *Data sources (options/prefill from sheets/tabs)*: For CHOICE/CHECKBOX questions (or line-item fields via field JSON), set `dataSource`:
 
         ```json
@@ -1027,9 +1039,10 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 ### BUTTON fields (custom actions)
 
-`BUTTON` questions render as **custom actions** in the web UI. Four actions are supported:
+`BUTTON` questions render as **custom actions** in the web UI. Five actions are supported:
 
-- **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into an in-app **PDF preview**. The PDF is generated **in-memory** and discarded when you close the overlay (no Drive PDF file is written). The PDF is shown immediately once ready (no extra “Open” click).
+- **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into a PDF preview. The app opens a new tab immediately (shows a Loading page) and then navigates that tab to the generated PDF blob (single click, no extra “Open” step).
+  - Optional: set `button.loadingLabel` to customize the loading text while the PDF is being generated.
 - **Markdown template preview** (`action: "renderMarkdownTemplate"`): read a Markdown template from Google Drive (plain text / `.md`), replace placeholders, and show the rendered content immediately in-app (fast preview, no Drive/Docs preview pages).
 - **HTML template preview** (`action: "renderHtmlTemplate"`): render an HTML template and show it immediately in-app (fast preview). You can source the template from:
   - **Google Drive**: use a Drive file id (same as before)
@@ -1038,9 +1051,13 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
     - If the template references data-source projections like `{{FIELD_ID.PROJECTION_KEY}}` for a `dataSource`-backed field, the client will call `fetchDataSource` to resolve those values.
     - Requires redeploy to update.
   
-  HTML templates also support a file-icon placeholder:
-  - `{{FILES_ICON(FIELD_ID)}}` → a clickable file icon button that opens the field’s files in a **read-only Files overlay** (works from List/Summary/Form).
+  HTML templates also support an icon placeholder for photo/attachment fields:
+  - `{{FILES_ICON(FIELD_ID)}}` → a clickable camera/clip icon button that opens the field’s items in a **read-only Photos overlay** (works from List/Summary/Form).
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
+- **Open a saved link** (`action: "openUrlField"`): open (redirect to) the URL stored in a field of the current record (for example: a saved `pdfUrl`).
+
+Visibility:
+- You can use normal `visibility` config on a `BUTTON` question to show/hide it based on field values. This applies to inline buttons and to action-bar/menu buttons on Form/Summary views.
 
 #### Refreshing templates when keeping the same Drive file ID
 
@@ -1096,6 +1113,7 @@ Recommended steps after deploying a new bundle:
   "button": {
     "action": "renderDocTemplate",
     "templateId": { "EN": "DOC_ID_EN", "FR": "DOC_ID_FR", "NL": "DOC_ID_NL" },
+    "loadingLabel": { "en": "Creating PDF…", "fr": "Création du PDF…", "nl": "PDF maken…" },
     "placements": ["form", "formSummaryMenu", "summaryBar", "topBarSummary"],
     "folderId": "OPTIONAL_DRIVE_FOLDER_ID"
   }
@@ -1128,6 +1146,18 @@ Recommended steps after deploying a new bundle:
 }
 ```
 
+#### Example: open a saved URL from a field
+
+```json
+{
+  "button": {
+    "action": "openUrlField",
+    "fieldId": "pdfUrl",
+    "placements": ["summaryBar", "formSummaryMenu"]
+  }
+}
+```
+
 #### Example: create record with preset values
 
 ```json
@@ -1148,7 +1178,7 @@ Recommended steps after deploying a new bundle:
 
 - **Preview mode**:
   - `previewMode` is **deprecated/ignored** and kept only for backward compatibility.
-  - The current UI always opens an **in-app PDF preview** (generated in-memory; no Drive PDF file).
+  - The current UI opens a new tab and navigates it directly to the generated PDF blob (no Drive PDF file is written).
 
 - **Placements**:
   - `form`: render inline as a normal field in the edit form (**PDF/Markdown preview**).

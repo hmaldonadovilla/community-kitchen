@@ -154,7 +154,7 @@ const addFileIconPlaceholders = (placeholders: Record<string, string>, questions
         return;
       }
       const badge = `<span class="ck-file-icon__badge">${count}</span>`;
-      const snippet = `<button data-ck-file-field="${escapeAttr(fieldId)}" data-ck-file-count="${count}" type="button" class="ck-file-icon" aria-label="Open files">${icon}${badge}</button>`;
+      const snippet = `<button data-ck-file-field="${escapeAttr(fieldId)}" data-ck-file-count="${count}" type="button" class="ck-file-icon" aria-label="Open photos">${icon}${badge}</button>`;
       placeholders[`{{FILES_ICON(${fieldId})}}`] = snippet;
     });
 };

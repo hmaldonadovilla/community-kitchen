@@ -58,8 +58,8 @@ export const ReportOverlay: React.FC<{
             {kind === 'pdf'
               ? tSystem('report.generatingPdf', language, 'Generating PDF…')
               : kind === 'markdown'
-                ? tSystem('report.renderingMarkdown', language, 'Rendering…')
-                : tSystem('report.renderingHtml', language, 'Rendering…')}
+                ? tSystem('common.loading', language, 'Loading…')
+                : tSystem('common.loading', language, 'Loading…')}
           </div>
         ) : null}
         {pdfPhase === 'error' ? (
