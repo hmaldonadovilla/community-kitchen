@@ -54,6 +54,44 @@ describe('ConfigSheet', () => {
     expect(questions[0].ui).toEqual({ hideLabel: true });
   });
 
+  test('getQuestions parses group.pageSection (visual page sections in edit view)', () => {
+    const sheet = mockSS.insertSheet('Config: PageSections');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q1',
+        'TEXT',
+        'Temp',
+        'Temp',
+        'Temp',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"group":{"id":"freezers","title":"Freezers","pageSection":{"id":"storage","title":"Storage","infoText":"These checks are done at the beginning of the shift."}}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: PageSections');
+    expect(questions.length).toBe(1);
+    expect(questions[0].group).toEqual(
+      expect.objectContaining({
+        id: 'freezers',
+        title: 'Freezers',
+        pageSection: {
+          id: 'storage',
+          title: 'Storage',
+          infoText: 'These checks are done at the beginning of the shift.'
+        }
+      })
+    );
+  });
+
   test('getQuestions parses line item ui controls (showItemPill, addButtonPlacement)', () => {
     const sheet = mockSS.insertSheet('Config: LineItemUiControls');
     const exampleRows = [

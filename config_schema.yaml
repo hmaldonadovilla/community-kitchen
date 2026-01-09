@@ -781,6 +781,31 @@ components:
         defaultCollapsed:
           type: boolean
           description: Initial collapsed state (only applies when collapsible is true). Defaults to false.
+        pageSection:
+          $ref: '#/components/schemas/PageSectionConfig'
+          description: |
+            Optional higher-level page section wrapper for **visual guidance** in the Edit (form) view.
+
+            When set, consecutive group cards that share the same pageSection (by `id`, or by `title` if no `id` is provided)
+            are rendered under a shared section header (title + optional right-side info text).
+
+            Notes:
+            - This does not affect validation or submission payloads.
+            - Header groups (`group.header: true`) are not wrapped in page sections.
+
+    PageSectionConfig:
+      type: object
+      required: [title]
+      properties:
+        id:
+          type: string
+          description: Optional stable page section id. Recommended when multiple groups share the same section.
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Section title shown above a set of group cards in the Edit (form) view.
+        infoText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional informational text shown on the right side of the section header (Edit view only).
 
     LineItemGroupUiConfig:
       type: object

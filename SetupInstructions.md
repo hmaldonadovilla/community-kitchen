@@ -58,6 +58,29 @@ This project uses TypeScript. You need to build the script before using it in Go
       >- Legacy `"header": true` is deprecated but still supported; it is mapped to `group: { header: true, title: "Header", collapsible: true }`.
       >- When `group.collapsible` is enabled, the section header shows a **progress pill** `completed/required` (required fields only). Clicking the pill expands/collapses the section.
 
+    - **Page sections (visual grouping)**: You can optionally wrap multiple group cards inside a higher-level **page section** (Edit view only) by adding `group.pageSection`.
+      This is purely for visual guidance: it renders a section title and an optional **info text on the right** (no impact on validation or submission payloads).
+
+      Example: put the `Freezers` and `Fridges` groups under a `Storage` section with a reminder:
+
+      ```json
+      {
+        "group": {
+          "id": "freezers",
+          "title": "Freezers",
+          "pageSection": {
+            "id": "storage",
+            "title": "Storage",
+            "infoText": "These checks are done at the beginning of the shift."
+          }
+        }
+      }
+      ```
+
+      > **Notes:**
+      >- To group multiple cards under the same section, set the same `pageSection.id` (recommended) or `pageSection.title` on each group.
+      >- Page sections are created from **consecutive** group cards (the app preserves your overall question order).
+
     - **Field pairing (2‑up layout)**: Use `pair` to control which fields appear next to each other on the same row. If `pair` is not set (or no matching pair is found), the field takes the full row.
 
         ```json

@@ -974,6 +974,24 @@ export interface DataSourceConfig {
   tooltipLabel?: LocalizedString | string; // optional localized label for tooltip trigger/header
 }
 
+export interface PageSectionConfig {
+  /**
+   * Optional stable identifier for the page section.
+   * Recommended when multiple groups share the same page section.
+   */
+  id?: string;
+  /**
+   * Section title rendered above a set of group cards in the edit (form) view.
+   * Can be localized (en/fr/nl) or a plain string.
+   */
+  title: LocalizedString | string;
+  /**
+   * Optional informational text shown on the right side of the section header (edit view only).
+   * Can be localized (en/fr/nl) or a plain string.
+   */
+  infoText?: LocalizedString | string;
+}
+
 export interface QuestionGroupConfig {
   /**
    * Optional stable identifier for this group (recommended if you have multiple groups).
@@ -999,6 +1017,13 @@ export interface QuestionGroupConfig {
    * Initial collapsed state for collapsible groups.
    */
   defaultCollapsed?: boolean;
+  /**
+   * Optional higher-level page section wrapper for visual grouping in the edit (form) view.
+   *
+   * This does not affect grouping behavior (fields are still grouped by this group's `id`/`title`),
+   * and it does not change validation or submission payloads.
+   */
+  pageSection?: PageSectionConfig;
 }
 
 export interface QuestionConfig {

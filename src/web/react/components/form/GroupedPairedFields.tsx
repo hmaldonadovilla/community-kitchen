@@ -3,7 +3,8 @@ import { resolveLocalizedString } from '../../../i18n';
 import { LangCode, QuestionGroupConfig } from '../../../types';
 import { GroupCard } from './GroupCard';
 import { PairedRowGrid } from './PairedRowGrid';
-import { resolveGroupSectionKey } from './grouping';
+import { PageSection } from './PageSection';
+import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './grouping';
 
 export type GroupedPairedFieldsProps = {
   contextPrefix: string;
@@ -33,6 +34,9 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
     title?: string;
     collapsible: boolean;
     defaultCollapsed: boolean;
+    pageSectionKey?: string;
+    pageSectionTitle?: string;
+    pageSectionInfoText?: string;
     fields: any[];
     order: number;
   };
@@ -46,6 +50,10 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
     const title = group?.title ? resolveLocalizedString(group.title as any, language, '') : undefined;
     const collapsible = group?.collapsible !== undefined ? !!group.collapsible : !!title;
     const defaultCollapsed = group?.defaultCollapsed !== undefined ? !!group.defaultCollapsed : false;
+    const pageSectionKey = resolvePageSectionKey(group);
+    const pageSectionTitle = group?.pageSection?.title ? resolveLocalizedString(group.pageSection.title as any, language, '') : undefined;
+    const pageSectionInfoText =
+      group?.pageSection?.infoText ? resolveLocalizedString(group.pageSection.infoText as any, language, '') : undefined;
 
     const existing = map.get(sectionKey);
     if (!existing) {
@@ -54,6 +62,9 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
         title,
         collapsible,
         defaultCollapsed,
+        pageSectionKey,
+        pageSectionTitle,
+        pageSectionInfoText,
         fields: [field],
         order: order++
       });
@@ -62,10 +73,14 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
       if (!existing.title && title) existing.title = title;
       existing.collapsible = existing.collapsible || collapsible;
       existing.defaultCollapsed = existing.defaultCollapsed || defaultCollapsed;
+      if (!existing.pageSectionKey && pageSectionKey) existing.pageSectionKey = pageSectionKey;
+      if (!existing.pageSectionTitle && pageSectionTitle) existing.pageSectionTitle = pageSectionTitle;
+      if (!existing.pageSectionInfoText && pageSectionInfoText) existing.pageSectionInfoText = pageSectionInfoText;
     }
   });
 
   const sections = Array.from(map.values()).sort((a, b) => a.order - b.order);
+  const blocks = buildPageSectionBlocks(sections);
 
   const isPairable = (field: any): boolean => {
     if (!(field as any)?.pair) return false;
@@ -110,54 +125,63 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
 
   return (
     <div className="ck-form-sections">
-      {sections.map(section => {
-        const instanceKey = `${contextPrefix}:${section.key}`;
-        const collapsed = section.collapsible ? !!collapsedGroups[instanceKey] : false;
-        const sectionHasError = section.fields.some(f => hasError(f));
-        // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
-        const requiredFields = section.fields.filter(f => !!(f as any)?.required);
-        const totalRequired = requiredFields.length;
-        const requiredComplete =
-          typeof isComplete === 'function'
-            ? requiredFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
-            : 0;
-        const optionalFields = section.fields.filter(f => !(f as any)?.required);
-        const optionalComplete =
-          typeof isComplete === 'function' && totalRequired > 0 && requiredComplete >= totalRequired
-            ? optionalFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
-            : 0;
-        const numerator = requiredComplete + optionalComplete;
-        const rows = buildRows(section.fields);
+      {blocks.map((block, idx) => {
+        const renderSection = (section: Section) => {
+          const instanceKey = `${contextPrefix}:${section.key}`;
+          const collapsed = section.collapsible ? !!collapsedGroups[instanceKey] : false;
+          const sectionHasError = section.fields.some(f => hasError(f));
+          // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
+          const requiredFields = section.fields.filter(f => !!(f as any)?.required);
+          const totalRequired = requiredFields.length;
+          const requiredComplete =
+            typeof isComplete === 'function'
+              ? requiredFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
+              : 0;
+          const optionalFields = section.fields.filter(f => !(f as any)?.required);
+          const optionalComplete =
+            typeof isComplete === 'function' && totalRequired > 0 && requiredComplete >= totalRequired
+              ? optionalFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
+              : 0;
+          const numerator = requiredComplete + optionalComplete;
+          const rows = buildRows(section.fields);
 
-        const body = (
-          <div className="ck-form-grid">
-            {rows.map(row => {
-              if (row.length === 2) {
-                return (
-                  <PairedRowGrid key={`${row[0].id}__${row[1].id}`}>
-                    {renderField(row[0])}
-                    {renderField(row[1])}
-                  </PairedRowGrid>
-                );
-              }
-              return renderField(row[0]);
-            })}
-          </div>
-        );
+          const body = (
+            <div className="ck-form-grid">
+              {rows.map(row => {
+                if (row.length === 2) {
+                  return (
+                    <PairedRowGrid key={`${row[0].id}__${row[1].id}`}>
+                      {renderField(row[0])}
+                      {renderField(row[1])}
+                    </PairedRowGrid>
+                  );
+                }
+                return renderField(row[0]);
+              })}
+            </div>
+          );
 
+          return (
+            <GroupCard
+              key={instanceKey}
+              groupKey={instanceKey}
+              title={section.title}
+              collapsible={section.collapsible}
+              collapsed={collapsed}
+              hasError={sectionHasError}
+              onToggleCollapsed={section.collapsible ? () => toggleGroupCollapsed(instanceKey) : undefined}
+              progress={typeof isComplete === 'function' ? { complete: numerator, total: totalRequired } : null}
+            >
+              {body}
+            </GroupCard>
+          );
+        };
+
+        if (block.kind === 'group') return renderSection(block.group as any);
         return (
-          <GroupCard
-            key={instanceKey}
-            groupKey={instanceKey}
-            title={section.title}
-            collapsible={section.collapsible}
-            collapsed={collapsed}
-            hasError={sectionHasError}
-            onToggleCollapsed={section.collapsible ? () => toggleGroupCollapsed(instanceKey) : undefined}
-            progress={typeof isComplete === 'function' ? { complete: numerator, total: totalRequired } : null}
-          >
-            {body}
-          </GroupCard>
+          <PageSection key={`page-section-${block.key}-${idx}`} title={block.title} infoText={block.infoText}>
+            <div className="ck-group-stack ck-group-stack--compact">{block.groups.map(g => renderSection(g as any))}</div>
+          </PageSection>
         );
       })}
     </div>

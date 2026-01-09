@@ -789,6 +789,46 @@ export const FORM_VIEW_STYLES = `
           flex-direction: column;
           gap: 28px; /* separation between group cards */
         }
+        .ck-group-stack--compact {
+          gap: 24px;
+        }
+
+        /* Visual-only page sections (wrapper around multiple group cards). */
+        .ck-page-section {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .ck-page-section__header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 0 4px; /* subtle alignment with card edges */
+        }
+        .ck-page-section__title {
+          margin: 0;
+          font-weight: 900;
+          font-size: 1.00em;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: rgba(15, 23, 42, 0.72);
+        }
+        .ck-page-section__info {
+          flex: 0 0 auto;
+          max-width: 52%;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid rgba(148, 163, 184, 0.55);
+          background: rgba(148, 163, 184, 0.12);
+          color: rgba(15, 23, 42, 0.78);
+          font-weight: 800;
+          font-size: 1.00em;
+          line-height: 1.25;
+        }
+        .ck-page-section__body {
+          min-width: 0;
+        }
         .ck-group-card[data-has-error="true"] {
           box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08), 0 0 0 4px rgba(239, 68, 68, 0.22);
         }
@@ -951,6 +991,16 @@ export const FORM_VIEW_STYLES = `
           }
           .ck-field-actions {
             flex-wrap: wrap;
+          }
+
+          /* Page sections: stack title + info text on mobile. */
+          .ck-page-section__header {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .ck-page-section__info {
+            max-width: none;
+            width: 100%;
           }
 
           /* iOS date inputs are very wide; if a paired row contains a DATE field, stack it on mobile to prevent overflow. */

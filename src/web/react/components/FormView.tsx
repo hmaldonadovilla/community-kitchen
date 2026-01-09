@@ -53,7 +53,8 @@ import { DateInput } from './form/DateInput';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { PairedRowGrid } from './form/PairedRowGrid';
-import { resolveGroupSectionKey } from './form/grouping';
+import { PageSection } from './form/PageSection';
+import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './form/grouping';
 import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
@@ -490,6 +491,9 @@ const FormView: React.FC<FormViewProps> = ({
       collapsible: boolean;
       defaultCollapsed: boolean;
       isHeader: boolean;
+      pageSectionKey?: string;
+      pageSectionTitle?: string;
+      pageSectionInfoText?: string;
       questions: WebQuestionDefinition[];
       order: number;
     };
@@ -530,6 +534,11 @@ const FormView: React.FC<FormViewProps> = ({
       const title = group?.title ? resolveLocalizedString(group.title as any, language, isHeader ? 'Header' : '') : undefined;
       const collapsible = group?.collapsible !== undefined ? !!group.collapsible : !!title;
       const defaultCollapsed = group?.defaultCollapsed !== undefined ? !!group.defaultCollapsed : false;
+      const pageSectionKey = !isHeader ? resolvePageSectionKey(group) : '__none__';
+      const pageSectionTitle =
+        !isHeader && group?.pageSection?.title ? resolveLocalizedString(group.pageSection.title as any, language, '') : undefined;
+      const pageSectionInfoText =
+        !isHeader && group?.pageSection?.infoText ? resolveLocalizedString(group.pageSection.infoText as any, language, '') : undefined;
 
       const existing = map.get(key);
       if (!existing) {
@@ -539,6 +548,9 @@ const FormView: React.FC<FormViewProps> = ({
           collapsible,
           defaultCollapsed,
           isHeader,
+          pageSectionKey,
+          pageSectionTitle,
+          pageSectionInfoText,
           questions: [q],
           order: order++
         });
@@ -550,6 +562,9 @@ const FormView: React.FC<FormViewProps> = ({
       existing.isHeader = existing.isHeader || isHeader;
       existing.collapsible = existing.collapsible || collapsible;
       existing.defaultCollapsed = existing.defaultCollapsed || defaultCollapsed;
+      if (!existing.pageSectionKey && pageSectionKey) existing.pageSectionKey = pageSectionKey;
+      if (!existing.pageSectionTitle && pageSectionTitle) existing.pageSectionTitle = pageSectionTitle;
+      if (!existing.pageSectionInfoText && pageSectionInfoText) existing.pageSectionInfoText = pageSectionInfoText;
     });
 
     return Array.from(map.values()).sort((a, b) => {
@@ -557,6 +572,22 @@ const FormView: React.FC<FormViewProps> = ({
       return a.order - b.order;
     });
   }, [definition.questions, language]);
+
+  const groupSectionBlocks = useMemo(() => buildPageSectionBlocks(groupSections), [groupSections]);
+
+  useEffect(() => {
+    const pageSectionBlocks = groupSectionBlocks.filter(b => b.kind === 'pageSection');
+    if (!pageSectionBlocks.length) {
+      onDiagnostic?.('ui.pageSections.disabled', { reason: 'noPageSectionConfig' });
+      return;
+    }
+    const groupedCount = pageSectionBlocks.reduce((acc, b) => acc + (b.kind === 'pageSection' ? b.groups.length : 0), 0);
+    onDiagnostic?.('ui.pageSections.enabled', {
+      blockCount: groupSectionBlocks.length,
+      pageSectionBlockCount: pageSectionBlocks.length,
+      groupedGroupCount: groupedCount
+    });
+  }, [groupSectionBlocks, onDiagnostic]);
 
   const questionIdToGroupKey = useMemo(() => {
     const map: Record<string, string> = {};
@@ -3797,171 +3828,192 @@ const FormView: React.FC<FormViewProps> = ({
 
         <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
           <div className="ck-group-stack">
-            {groupSections.map(section => {
-            const visible = (section.questions || []).filter(
-              q =>
-                !shouldHideField(q.visibility, {
-                  getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
-                })
-            );
-            if (!visible.length) return null;
+            {(() => {
+              type GroupSection = (typeof groupSections)[number];
 
-            const isCollapsed = section.collapsible ? !!collapsedGroups[section.key] : false;
-
-            const requiredProgress = (() => {
-              const isComplete = (q: WebQuestionDefinition): boolean => {
-                if (q.type === 'LINE_ITEM_GROUP') {
-                  const rows = (lineItems[q.id] || []) as any[];
-                  return rows.length > 0;
-                }
-                const mappedValue = (q as any).valueMap
-                  ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId], {
-                      language,
-                      targetOptions: toOptionSet(q as any)
+              const renderGroupSection = (section: GroupSection): React.ReactNode => {
+                const visible = (section.questions || []).filter(
+                  q =>
+                    !shouldHideField(q.visibility, {
+                      getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
                     })
-                  : undefined;
-                const raw = (q as any).valueMap ? mappedValue : (values[q.id] as any);
-                if (q.type === 'FILE_UPLOAD') {
-                  return isUploadValueComplete({ value: raw as any, uploadConfig: (q as any).uploadConfig, required: !!q.required });
+                );
+                if (!visible.length) return null;
+
+                const isCollapsed = section.collapsible ? !!collapsedGroups[section.key] : false;
+
+                const requiredProgress = (() => {
+                  const isComplete = (q: WebQuestionDefinition): boolean => {
+                    if (q.type === 'LINE_ITEM_GROUP') {
+                      const rows = (lineItems[q.id] || []) as any[];
+                      return rows.length > 0;
+                    }
+                    const mappedValue = (q as any).valueMap
+                      ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId], {
+                          language,
+                          targetOptions: toOptionSet(q as any)
+                        })
+                      : undefined;
+                    const raw = (q as any).valueMap ? mappedValue : (values[q.id] as any);
+                    if (q.type === 'FILE_UPLOAD') {
+                      return isUploadValueComplete({
+                        value: raw as any,
+                        uploadConfig: (q as any).uploadConfig,
+                        required: !!q.required
+                      });
+                    }
+                    return !isEmptyValue(raw as any);
+                  };
+
+                  // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
+                  const requiredQs = visible.filter(q => !!q.required);
+                  const optionalQs = visible.filter(q => !q.required);
+
+                  const totalRequired = requiredQs.length;
+                  const requiredComplete = requiredQs.reduce((acc, q) => (isComplete(q) ? acc + 1 : acc), 0);
+
+                  const optionalComplete =
+                    totalRequired > 0 && requiredComplete >= totalRequired
+                      ? optionalQs.reduce((acc, q) => (isComplete(q) ? acc + 1 : acc), 0)
+                      : 0;
+
+                  const numerator = requiredComplete + optionalComplete;
+                  return { numerator, requiredComplete, totalRequired };
+                })();
+
+                const requiredProgressClass =
+                  requiredProgress.totalRequired > 0
+                    ? requiredProgress.requiredComplete >= requiredProgress.totalRequired
+                      ? 'ck-progress-good'
+                      : 'ck-progress-bad'
+                    : 'ck-progress-neutral';
+                const expandLabel = tSystem('lineItems.expand', language, 'Expand');
+                const collapseLabel = tSystem('lineItems.collapse', language, 'Collapse');
+
+                const sectionHasError = (() => {
+                  const keys = Object.keys(errors || {});
+                  if (!keys.length) return false;
+                  for (const q of section.questions) {
+                    if (keys.includes(q.id)) return true;
+                    const prefix1 = `${q.id}__`;
+                    const prefix2 = `${q.id}::`;
+                    if (keys.some(k => k.startsWith(prefix1) || k.startsWith(prefix2))) return true;
+                  }
+                  return false;
+                })();
+
+                const isPairable = (q: WebQuestionDefinition): boolean => {
+                  if (!q.pair) return false;
+                  if (q.type === 'LINE_ITEM_GROUP') return false;
+                  if (q.type === 'PARAGRAPH') return false;
+                  if (q.type === 'BUTTON') return false;
+                  return true;
+                };
+
+                const used = new Set<string>();
+                const rows: WebQuestionDefinition[][] = [];
+                for (let i = 0; i < visible.length; i++) {
+                  const q = visible[i];
+                  if (used.has(q.id)) continue;
+                  const pairKey = q.pair ? q.pair.toString() : '';
+                  if (!pairKey || !isPairable(q)) {
+                    used.add(q.id);
+                    rows.push([q]);
+                    continue;
+                  }
+                  let match: WebQuestionDefinition | null = null;
+                  for (let j = i + 1; j < visible.length; j++) {
+                    const cand = visible[j];
+                    if (used.has(cand.id)) continue;
+                    if ((cand.pair ? cand.pair.toString() : '') === pairKey && isPairable(cand)) {
+                      match = cand;
+                      break;
+                    }
+                  }
+                  if (match) {
+                    used.add(q.id);
+                    used.add(match.id);
+                    rows.push([q, match]);
+                  } else {
+                    used.add(q.id);
+                    rows.push([q]);
+                  }
                 }
-                return !isEmptyValue(raw as any);
+
+                return (
+                  <div
+                    key={section.key}
+                    className="card form-card ck-group-card"
+                    data-group-key={section.key}
+                    data-has-error={sectionHasError ? 'true' : undefined}
+                  >
+                    {section.title ? (
+                      section.collapsible ? (
+                        <button
+                          type="button"
+                          className="ck-group-header ck-group-header--clickable"
+                          onClick={() => toggleGroupCollapsed(section.key)}
+                          aria-expanded={!isCollapsed}
+                          aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} section ${section.title} (${requiredProgress.numerator}/${requiredProgress.totalRequired})`}
+                        >
+                          <div className="ck-group-title">{section.title}</div>
+                          <span
+                            className={`ck-progress-pill ${requiredProgressClass}`}
+                            title={`${requiredProgress.numerator}/${requiredProgress.totalRequired}`}
+                            aria-hidden="true"
+                          >
+                            <span>
+                              {requiredProgress.numerator}/{requiredProgress.totalRequired}
+                            </span>
+                            <span className="ck-progress-label">{isCollapsed ? expandLabel : collapseLabel}</span>
+                            <span className="ck-progress-caret">{isCollapsed ? '▸' : '▾'}</span>
+                          </span>
+                        </button>
+                      ) : (
+                        <div className="ck-group-header">
+                          <div className="ck-group-title">{section.title}</div>
+                        </div>
+                      )
+                    ) : null}
+
+                    {!isCollapsed && (
+                      <div className="ck-group-body">
+                        <div className="ck-form-grid">
+                          {rows.map(row => {
+                            if (row.length === 2) {
+                              const hasDate = row[0].type === 'DATE' || row[1].type === 'DATE';
+                              return (
+                                <PairedRowGrid
+                                  key={`${row[0].id}__${row[1].id}`}
+                                  className={`ck-pair-grid${hasDate ? ' ck-pair-has-date' : ''}`}
+                                >
+                                  {renderQuestion(row[0])}
+                                  {renderQuestion(row[1])}
+                                </PairedRowGrid>
+                              );
+                            }
+                            return renderQuestion(row[0]);
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
               };
 
-              // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
-              const requiredQs = visible.filter(q => !!q.required);
-              const optionalQs = visible.filter(q => !q.required);
+              return groupSectionBlocks.map((block, idx) => {
+                if (block.kind === 'group') return renderGroupSection(block.group as any);
 
-              const totalRequired = requiredQs.length;
-              const requiredComplete = requiredQs.reduce((acc, q) => (isComplete(q) ? acc + 1 : acc), 0);
+                const rendered = (block.groups || []).map(g => renderGroupSection(g as any)).filter(Boolean) as React.ReactNode[];
+                if (!rendered.length) return null;
 
-              const optionalComplete =
-                totalRequired > 0 && requiredComplete >= totalRequired
-                  ? optionalQs.reduce((acc, q) => (isComplete(q) ? acc + 1 : acc), 0)
-                  : 0;
-
-              const numerator = requiredComplete + optionalComplete;
-              return { numerator, requiredComplete, totalRequired };
-            })();
-
-            const requiredProgressClass =
-              requiredProgress.totalRequired > 0
-                ? requiredProgress.requiredComplete >= requiredProgress.totalRequired
-                  ? 'ck-progress-good'
-                  : 'ck-progress-bad'
-                : 'ck-progress-neutral';
-            const expandLabel = tSystem('lineItems.expand', language, 'Expand');
-            const collapseLabel = tSystem('lineItems.collapse', language, 'Collapse');
-
-            const sectionHasError = (() => {
-              const keys = Object.keys(errors || {});
-              if (!keys.length) return false;
-              for (const q of section.questions) {
-                if (keys.includes(q.id)) return true;
-                const prefix1 = `${q.id}__`;
-                const prefix2 = `${q.id}::`;
-                if (keys.some(k => k.startsWith(prefix1) || k.startsWith(prefix2))) return true;
-              }
-              return false;
-            })();
-
-            const isPairable = (q: WebQuestionDefinition): boolean => {
-              if (!q.pair) return false;
-              if (q.type === 'LINE_ITEM_GROUP') return false;
-              if (q.type === 'PARAGRAPH') return false;
-              if (q.type === 'BUTTON') return false;
-              return true;
-            };
-
-            const used = new Set<string>();
-            const rows: WebQuestionDefinition[][] = [];
-            for (let i = 0; i < visible.length; i++) {
-              const q = visible[i];
-              if (used.has(q.id)) continue;
-              const pairKey = q.pair ? q.pair.toString() : '';
-              if (!pairKey || !isPairable(q)) {
-                used.add(q.id);
-                rows.push([q]);
-                continue;
-              }
-              let match: WebQuestionDefinition | null = null;
-              for (let j = i + 1; j < visible.length; j++) {
-                const cand = visible[j];
-                if (used.has(cand.id)) continue;
-                if ((cand.pair ? cand.pair.toString() : '') === pairKey && isPairable(cand)) {
-                  match = cand;
-                  break;
-                }
-              }
-              if (match) {
-                used.add(q.id);
-                used.add(match.id);
-                rows.push([q, match]);
-              } else {
-                used.add(q.id);
-                rows.push([q]);
-              }
-            }
-
-            return (
-              <div
-                key={section.key}
-                className="card form-card ck-group-card"
-                data-group-key={section.key}
-                data-has-error={sectionHasError ? 'true' : undefined}
-              >
-                {section.title ? (
-                  section.collapsible ? (
-                    <button
-                      type="button"
-                      className="ck-group-header ck-group-header--clickable"
-                      onClick={() => toggleGroupCollapsed(section.key)}
-                      aria-expanded={!isCollapsed}
-                      aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} section ${section.title} (${requiredProgress.numerator}/${requiredProgress.totalRequired})`}
-                    >
-                      <div className="ck-group-title">{section.title}</div>
-                      <span
-                        className={`ck-progress-pill ${requiredProgressClass}`}
-                        title={`${requiredProgress.numerator}/${requiredProgress.totalRequired}`}
-                        aria-hidden="true"
-                      >
-                        <span>
-                          {requiredProgress.numerator}/{requiredProgress.totalRequired}
-                        </span>
-                        <span className="ck-progress-label">{isCollapsed ? expandLabel : collapseLabel}</span>
-                        <span className="ck-progress-caret">{isCollapsed ? '▸' : '▾'}</span>
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="ck-group-header">
-                      <div className="ck-group-title">{section.title}</div>
-                    </div>
-                  )
-                ) : null}
-
-                {!isCollapsed && (
-                  <div className="ck-group-body">
-                    <div className="ck-form-grid">
-                      {rows.map(row => {
-                        if (row.length === 2) {
-                          const hasDate = row[0].type === 'DATE' || row[1].type === 'DATE';
-                          return (
-                            <PairedRowGrid
-                              key={`${row[0].id}__${row[1].id}`}
-                              className={`ck-pair-grid${hasDate ? ' ck-pair-has-date' : ''}`}
-                            >
-                              {renderQuestion(row[0])}
-                              {renderQuestion(row[1])}
-                            </PairedRowGrid>
-                          );
-                        }
-                        return renderQuestion(row[0]);
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-            })}
+                return (
+                  <PageSection key={`page-section-${block.key}-${idx}`} title={block.title} infoText={block.infoText}>
+                    <div className="ck-group-stack">{rendered}</div>
+                  </PageSection>
+                );
+              });
+            })()}
           </div>
         </fieldset>
       </div>

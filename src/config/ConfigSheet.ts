@@ -18,6 +18,7 @@ import {
   OptionSortMode,
   OptionMapRefConfig,
   OptionFilter,
+  PageSectionConfig,
   QuestionGroupConfig,
   QuestionUiConfig,
   QuestionConfig,
@@ -1532,7 +1533,60 @@ export class ConfigSheet {
     if (raw.collapsible !== undefined) cfg.collapsible = !!raw.collapsible;
     if (raw.defaultCollapsed !== undefined) cfg.defaultCollapsed = !!raw.defaultCollapsed;
 
+    const pageSectionRaw =
+      raw.pageSection !== undefined
+        ? raw.pageSection
+        : raw.page_section !== undefined
+          ? raw.page_section
+          : raw.pageSectionConfig !== undefined
+            ? raw.pageSectionConfig
+            : raw.page_section_config !== undefined
+              ? raw.page_section_config
+              : undefined;
+    const pageSection = this.normalizePageSection(pageSectionRaw);
+    if (pageSection) cfg.pageSection = pageSection;
+
     return Object.keys(cfg).length ? cfg : undefined;
+  }
+
+  private static normalizePageSection(raw: any): PageSectionConfig | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw === 'string' || typeof raw === 'number') {
+      const title = raw.toString().trim();
+      return title ? { title } : undefined;
+    }
+    if (typeof raw !== 'object') return undefined;
+
+    const cfg: Partial<PageSectionConfig> = {};
+    if (raw.id !== undefined && raw.id !== null) {
+      const id = raw.id.toString().trim();
+      if (id) cfg.id = id;
+    }
+
+    const titleRaw = raw.title !== undefined ? raw.title : raw.label !== undefined ? raw.label : raw.name;
+    if (titleRaw !== undefined && titleRaw !== null) cfg.title = titleRaw as any;
+
+    const infoRaw =
+      raw.infoText !== undefined
+        ? raw.infoText
+        : raw.info_text !== undefined
+          ? raw.info_text
+          : raw.info !== undefined
+            ? raw.info
+            : raw.note !== undefined
+              ? raw.note
+              : raw.text !== undefined
+                ? raw.text
+                : raw.help !== undefined
+                  ? raw.help
+                  : undefined;
+    if (infoRaw !== undefined && infoRaw !== null) cfg.infoText = infoRaw as any;
+
+    // Require a title for page sections; otherwise skip (avoid emitting invalid config).
+    if (cfg.title === undefined || cfg.title === null) return undefined;
+    if (typeof cfg.title === 'string' && !cfg.title.toString().trim()) return undefined;
+
+    return cfg as PageSectionConfig;
   }
 
   private static parseQuestionGroup(rawConfigs: Array<string | undefined>): QuestionGroupConfig | undefined {
