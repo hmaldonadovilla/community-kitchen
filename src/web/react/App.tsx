@@ -63,6 +63,7 @@ import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
+import { upsertListCacheRowPure } from './app/listCache';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveLabel } from './utils/labels';
@@ -470,6 +471,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
    */
   const recordSessionRef = useRef<number>(0);
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
+  const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
+  const pendingNavigationRef = useRef<{ target: 'list'; trigger: string } | null>(null);
+  const [uploadNavigationNoticeOpen, setUploadNavigationNoticeOpen] = useState(false);
+  const [autoSaveDrainTick, setAutoSaveDrainTick] = useState(0);
+  const syncUploadQueueSize = useCallback(() => {
+    setUploadQueueSize(uploadQueueRef.current.size);
+  }, []);
 
   // Keep latest values in refs so autosave can run without stale closures.
   const viewRef = useRef<View>(view);
@@ -537,18 +545,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         globalThis.clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
       }
-      try {
-        uploadQueueRef.current.clear();
-      } catch (_) {
-        // ignore
-      }
       logEvent('record.session.bump', {
         reason: (args?.reason || '').toString() || null,
         nextRecordId: args?.nextRecordId ? args.nextRecordId.toString() : null,
         session: recordSessionRef.current
       });
     },
-    [logEvent]
+    [logEvent, syncUploadQueueSize]
   );
 
   // Arm autosave for create-flow ONLY after the user actually changes a field value.
@@ -801,98 +804,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }) => {
       const recordId = (args.recordId || '').toString();
       if (!recordId) return;
-      setListCache(prev => {
-        const nextRecords = { ...(prev.records || {}) };
-        const existing = nextRecords[recordId];
-        const dv = Number(args.dataVersion);
-        const dataVersion = Number.isFinite(dv) && dv > 0 ? dv : undefined;
-        const rn = Number(args.rowNumber);
-        const rowNumber = Number.isFinite(rn) && rn >= 2 ? rn : undefined;
-        if (existing) {
-          nextRecords[recordId] = {
-            ...existing,
-            createdAt: args.createdAt || existing.createdAt,
-            updatedAt: args.updatedAt || existing.updatedAt,
-            status: args.status !== undefined ? (args.status as any) : existing.status,
-            pdfUrl: args.pdfUrl !== undefined ? (args.pdfUrl as any) : (existing as any).pdfUrl,
-            values: args.values ? { ...(existing.values as any), ...(args.values as any) } : existing.values,
-            ...(dataVersion ? { dataVersion } : null),
-            ...(rowNumber ? { __rowNumber: rowNumber } : null)
-          } as any;
-        } else {
-          nextRecords[recordId] = {
-            id: recordId,
-            formKey,
-            language,
-            createdAt: args.createdAt,
-            updatedAt: args.updatedAt,
-            status: args.status || undefined,
-            pdfUrl: args.pdfUrl,
-            values: args.values || {},
-            lineItems: {},
-            submittedAt: undefined,
-            ...(dataVersion ? { dataVersion } : null),
-            ...(rowNumber ? { __rowNumber: rowNumber } : null)
-          } as any;
-        }
-
-        const response = prev.response;
-        if (!response || !Array.isArray((response as any).items)) {
-          return { response: prev.response, records: nextRecords };
-        }
-
-        const metaKeys = new Set(['id', '__rowNumber', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
-        const values = (args.values || {}) as any;
-        let found = false;
-        const nextItems = (response.items || []).map((row: any) => {
-          if (!row || row.id !== recordId) return row;
-          found = true;
-          const patched: any = { ...row };
-          if (rowNumber) patched.__rowNumber = rowNumber;
-          if (args.createdAt) patched.createdAt = args.createdAt;
-          if (args.updatedAt) patched.updatedAt = args.updatedAt;
-          if (args.status !== undefined) patched.status = args.status || undefined;
-          if (args.pdfUrl !== undefined) patched.pdfUrl = args.pdfUrl;
-          Object.keys(patched).forEach(k => {
-            if (metaKeys.has(k)) return;
-            if (values[k] !== undefined) patched[k] = values[k];
-          });
-          return patched;
-        });
-
-        // If the record isn't present in the cached list yet (new record created during this session),
-        // insert a best-effort row so it appears without a refetch.
-        if (!found) {
-          const cols: any[] = Array.isArray((definition as any)?.listView?.columns) ? ((definition as any).listView.columns as any[]) : [];
-          const dateSearchFieldId = (((definition as any)?.listView?.search as any)?.dateFieldId || '').toString().trim();
-          const fieldIds = new Set<string>();
-          cols.forEach(c => {
-            const fid = (c?.fieldId || '').toString().trim();
-            if (fid) fieldIds.add(fid);
-            if ((c as any)?.type === 'rule') {
-              collectListViewRuleColumnDependencies(c as any).forEach(dep => {
-                const d = (dep || '').toString().trim();
-                if (d) fieldIds.add(d);
-              });
-            }
-          });
-          if (dateSearchFieldId) fieldIds.add(dateSearchFieldId);
-          const row: any = { id: recordId };
-          if (rowNumber) row.__rowNumber = rowNumber;
-          if (args.createdAt) row.createdAt = args.createdAt;
-          if (args.updatedAt) row.updatedAt = args.updatedAt;
-          if (args.status !== undefined) row.status = args.status || undefined;
-          if (args.pdfUrl !== undefined) row.pdfUrl = args.pdfUrl;
-          Array.from(fieldIds).forEach(fid => {
-            if (metaKeys.has(fid)) return;
-            if (values[fid] !== undefined) row[fid] = values[fid];
-          });
-          nextItems.unshift(row);
-        }
-
-        const nextTotal = Math.max(Number((response as any).totalCount || 0) || 0, nextItems.length);
-        return { response: { ...(response as any), items: nextItems, totalCount: nextTotal }, records: nextRecords };
-      });
+      setListCache(prev =>
+        upsertListCacheRowPure({
+          prev,
+          update: args,
+          definition,
+          formKey,
+          language
+        })
+      );
     },
     [definition, formKey, language]
   );
@@ -2884,8 +2804,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     view
   ]);
 
-  const performAutoSave = useCallback(
-    async (reason: string) => {
+  const performAutoSave: (reason: string) => Promise<void> = useCallback(
+    async (reason: string): Promise<void> => {
       if (!autoSaveEnabled) return;
       if (submittingRef.current) return;
       // Avoid racing uploads: file upload flow already persists changes (and uses optimistic locking).
@@ -3144,6 +3064,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         logEvent('autosave.exception', { reason, message: errText });
       } finally {
         autoSaveInFlightRef.current = false;
+        setAutoSaveDrainTick(tick => tick + 1);
         if (autoSaveQueuedRef.current && !submittingRef.current) {
           autoSaveQueuedRef.current = false;
           if (autoSaveTimerRef.current) {
@@ -3159,7 +3080,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     [autoSaveDebounceMs, autoSaveEnabled, autoSaveStatusValue, definition, formKey, loadRecordSnapshot, logEvent, upsertListCacheRow]
   );
 
-  const flushAutoSaveBeforeNavigate = useCallback(
+  const flushAutoSaveBeforeNavigate: (reason: string) => Promise<boolean> = useCallback(
     async (reason: string): Promise<boolean> => {
       try {
         if (!autoSaveEnabled) return false;
@@ -3201,13 +3122,86 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     [autoSaveEnabled, isClosedRecord, logEvent, performAutoSave]
   );
 
+  const requestNavigateToList = useCallback(
+    (trigger: string) => {
+      const uploadsInFlight = uploadQueueRef.current.size > 0;
+      const autosaveInFlight = autoSaveInFlightRef.current;
+      if (uploadsInFlight || autosaveInFlight) {
+        pendingNavigationRef.current = { target: 'list', trigger };
+        setUploadNavigationNoticeOpen(true);
+        logEvent('navigate.list.blocked.uploads', {
+          trigger,
+          uploadsInFlight,
+          autoSaveInFlight: autosaveInFlight
+        });
+        return;
+      }
+      pendingNavigationRef.current = null;
+      setUploadNavigationNoticeOpen(false);
+      // Kick autosave in the background (do not block navigation).
+      void flushAutoSaveBeforeNavigate(trigger);
+      setView('list');
+      setStatus(null);
+      setStatusLevel(null);
+    },
+    [flushAutoSaveBeforeNavigate, logEvent]
+  );
+
+  const resumePendingNavigation: (reason: string) => boolean = useCallback(
+    (reason: string): boolean => {
+      if (uploadQueueRef.current.size > 0) return false;
+      if (autoSaveInFlightRef.current) return false;
+      const pending = pendingNavigationRef.current;
+      if (!pending || pending.target !== 'list') return false;
+      logEvent('navigate.list.resumeAfterUploads', { trigger: pending.trigger, reason });
+      pendingNavigationRef.current = null;
+      setUploadNavigationNoticeOpen(false);
+      // Kick autosave in the background (do not block navigation).
+      void flushAutoSaveBeforeNavigate(reason);
+      setView('list');
+      setStatus(null);
+      setStatusLevel(null);
+      return true;
+    },
+    [flushAutoSaveBeforeNavigate, logEvent]
+  );
+
   const handleGoHome = useCallback(() => {
-    // Kick autosave in the background (do not block navigation).
-    void flushAutoSaveBeforeNavigate('navigate.home');
+    requestNavigateToList('navigate.home');
+  }, [requestNavigateToList]);
+
+  const cancelUploadsAndLeave = useCallback(() => {
+    const trigger = pendingNavigationRef.current?.trigger || 'navigate.home';
+    logEvent('navigate.list.cancelUploads', {
+      trigger,
+      uploadsInFlight: uploadQueueRef.current.size,
+      autoSaveInFlight: autoSaveInFlightRef.current
+    });
+    bumpRecordSession({ reason: 'navigate.cancelUploads', nextRecordId: selectedRecordIdRef.current || null });
+    autoSaveDirtyRef.current = false;
+    autoSaveQueuedRef.current = false;
+    autoSaveInFlightRef.current = false;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    pendingNavigationRef.current = null;
+    setUploadNavigationNoticeOpen(false);
+    try {
+      uploadQueueRef.current.clear();
+    } catch (_) {
+      // ignore
+    }
+    syncUploadQueueSize();
+    setDraftSave({ phase: 'idle' });
+    const snapshot = selectedRecordSnapshotRef.current;
+    if (snapshot) {
+      applyRecordSnapshot(snapshot);
+    }
     setView('list');
     setStatus(null);
     setStatusLevel(null);
-  }, [flushAutoSaveBeforeNavigate]);
+  }, [applyRecordSnapshot, bumpRecordSession, logEvent, syncUploadQueueSize]);
 
   const handleGoSummary = useCallback(() => {
     if (!summaryViewEnabled) return;
@@ -3224,6 +3218,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
     setView('summary');
   }, [flushAutoSaveBeforeNavigate, summaryViewEnabled]);
+
+  useEffect(() => {
+    if (uploadQueueSize !== 0) return;
+    void resumePendingNavigation('navigate.list.afterUploads');
+  }, [autoSaveDrainTick, resumePendingNavigation, uploadQueueSize]);
 
   // Release autosave hold after dedup evaluation completes (or keys become incomplete),
   // and persist any pending changes once it's safe.
@@ -3375,7 +3374,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         const ensureSession = (phase: string): boolean => {
           const sessionNow = recordSessionRef.current;
           if (sessionNow === sessionAtStart) return true;
-          logEvent('upload.aborted.sessionChanged', {
+          logEvent('upload.detached.sessionChanged', {
             fieldPath: args.fieldPath,
             phase,
             sessionAtStart,
@@ -3383,9 +3382,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           });
           return false;
         };
-        if (!ensureSession('start')) {
-          return { success: false, message: 'Upload cancelled (record changed).' };
-        }
+        const allowUiUpdates = ensureSession('start');
 
         const isFile = (v: any): v is File => {
           try {
@@ -3499,9 +3496,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           }
         }
 
-        if (!ensureSession('afterEnsureRecord')) {
-          return { success: false, message: 'Upload cancelled (record changed).' };
-        }
+          ensureSession('afterEnsureRecord');
 
         // Step 2: upload file payloads to Drive and get final URL list.
         const readStateItems = (): Array<string | File> => {
@@ -3568,9 +3563,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             return { success: false, message: msg };
           }
 
-          if (!ensureSession('afterUpload')) {
-            return { success: false, message: 'Upload cancelled (record changed).' };
-          }
+          const allowUiAfterUpload = ensureSession('afterUpload') && allowUiUpdates;
 
           const uploadedUrls = urls.slice(existingUrls.length);
           if (uploadedUrls.length < fileItems.length) {
@@ -3615,16 +3608,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
                 })()
               : lineItemsRef.current;
 
-          if (args.scope === 'top' && args.questionId) {
-            setValues(nextValues);
-          }
-          if (args.scope === 'line' && args.groupId) {
-            setLineItems(nextLineItems);
+          if (allowUiAfterUpload) {
+            if (args.scope === 'top' && args.questionId) {
+              setValues(nextValues);
+            }
+            if (args.scope === 'line' && args.groupId) {
+              setLineItems(nextLineItems);
+            }
+          } else {
+            // Keep refs in sync for background save even if UI is detached.
+            valuesRef.current = nextValues;
+            lineItemsRef.current = nextLineItems;
           }
 
-          if (!ensureSession('beforeSaveUrls')) {
-            return { success: false, message: 'Upload cancelled (record changed).' };
-          }
+          ensureSession('beforeSaveUrls');
 
           const draft2 = buildDraftPayload({
             definition,
@@ -3663,9 +3660,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             return { success: false, message: msg };
           }
 
-          if (!ensureSession('afterSaveUrls')) {
-            return { success: true };
-          }
+          const allowUiAfterSave = ensureSession('afterSaveUrls') && allowUiUpdates;
 
           recordStaleRef.current = null;
           setRecordStale(null);
@@ -3677,14 +3672,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           if (Number.isFinite(rn2) && rn2 >= 2) {
             recordRowNumberRef.current = rn2;
           }
-          setLastSubmissionMeta(prev => ({
-            ...(prev || {}),
-            id: recordId,
-            updatedAt: (res2?.meta?.updatedAt || prev?.updatedAt) as any,
-            dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : prev?.dataVersion,
-            status: autoSaveStatusValue
-          }));
-          setDraftSave({ phase: 'saved', updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined });
+          if (allowUiAfterSave) {
+            setLastSubmissionMeta(prev => ({
+              ...(prev || {}),
+              id: recordId,
+              updatedAt: (res2?.meta?.updatedAt || prev?.updatedAt) as any,
+              dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : prev?.dataVersion,
+              status: autoSaveStatusValue
+            }));
+            setDraftSave({ phase: 'saved', updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined });
+          }
           // Keep list view up-to-date without triggering a refetch.
           upsertListCacheRow({
             recordId,
@@ -3708,9 +3705,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         .catch(() => ({ success: false } as any))
         .then(() => run());
       uploadQueueRef.current.set(queueKey, next);
+      syncUploadQueueSize();
       void next.finally(() => {
         try {
           if (uploadQueueRef.current.get(queueKey) === next) uploadQueueRef.current.delete(queueKey);
+          syncUploadQueueSize();
           // If uploads drained and autosave was queued during the upload, schedule a background autosave now.
           if (uploadQueueRef.current.size === 0 && autoSaveQueuedRef.current && autoSaveDirtyRef.current && !submittingRef.current) {
             autoSaveQueuedRef.current = false;
@@ -3729,7 +3728,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       });
       return next;
     },
-    [autoSaveDebounceMs, autoSaveStatusValue, definition, formKey, isClosedRecord, logEvent, performAutoSave, upsertListCacheRow]
+    [autoSaveDebounceMs, autoSaveStatusValue, definition, formKey, isClosedRecord, logEvent, performAutoSave, syncUploadQueueSize, upsertListCacheRow]
   );
 
   useEffect(() => {
@@ -4167,7 +4166,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     // If the user is resuming the SAME record they were just editing, keep the in-memory working copy.
     // (Don't overwrite with a cached snapshot that may not include the latest local edits yet.)
     const currentId = (selectedRecordIdRef.current || '').toString().trim();
-    const hasLocalEdits = Boolean(autoSaveDirtyRef.current || autoSaveInFlightRef.current || autoSaveQueuedRef.current);
+    const hasLocalEdits = Boolean(
+      autoSaveDirtyRef.current || autoSaveInFlightRef.current || autoSaveQueuedRef.current || uploadQueueRef.current.size > 0
+    );
     if (currentId && row.id === currentId && hasLocalEdits) {
       logEvent('list.recordSelect.resumeLocalEdits', {
         recordId: row.id,
@@ -4473,6 +4474,68 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       </div>
     ) : null;
 
+  const uploadNavigationNotice =
+    uploadNavigationNoticeOpen && (view === 'form' || view === 'summary') ? (
+      <div
+        role="status"
+        aria-live="polite"
+        style={{
+          padding: '12px 14px',
+          borderRadius: 14,
+          border: '1px solid rgba(59,130,246,0.35)',
+          background: 'rgba(59,130,246,0.12)',
+          color: '#0f172a',
+          fontWeight: 900,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10
+        }}
+      >
+        <div>{tSystem('uploads.pendingNavigation.title', language, 'Finishing your uploads')}</div>
+        <div className="muted" style={{ fontWeight: 700 }}>
+          {tSystem(
+            'uploads.pendingNavigation.body',
+            language,
+            'We are still adding your files. We will take you back to the list when they finish. You can leave now, but uploads may fail and not appear.'
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              const trigger = pendingNavigationRef.current?.trigger || 'navigate.home';
+              logEvent('navigate.list.uploads.stay', { trigger });
+              setUploadNavigationNoticeOpen(false);
+            }}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 12,
+              border: '1px solid rgba(15,23,42,0.18)',
+              background: '#ffffff',
+              color: '#0f172a',
+              fontWeight: 900
+            }}
+          >
+            {tSystem('uploads.pendingNavigation.stay', language, 'Stay and finish')}
+          </button>
+          <button
+            type="button"
+            onClick={cancelUploadsAndLeave}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 12,
+              border: '1px solid rgba(239,68,68,0.35)',
+              background: 'rgba(239,68,68,0.14)',
+              color: '#991b1b',
+              fontWeight: 900
+            }}
+          >
+            {tSystem('uploads.pendingNavigation.leave', language, 'Leave without saving uploads')}
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   const recordStaleTopNotice =
     (view === 'form' || view === 'summary') && recordStale ? (
       <div
@@ -4538,8 +4601,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     ) : null;
 
   const topBarNotice =
-    recordStaleTopNotice || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
+    uploadNavigationNotice || recordStaleTopNotice || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {uploadNavigationNotice}
         {recordStaleTopNotice}
         {dedupCheckingNotice}
         {dedupTopNotice}
