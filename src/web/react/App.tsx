@@ -3032,7 +3032,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           logEvent('autosave.success.ignored.sessionChanged', { reason, recordId: newId || null, sessionAtStart, sessionNow });
           return;
         }
-        if (newId) setSelectedRecordId(newId);
+        if (newId) {
+          setSelectedRecordId(newId);
+          // Keep ref in sync immediately so other async flows (submit/upload) can safely resolve the current record id.
+          selectedRecordIdRef.current = newId;
+        }
         // Successful save => record is now at least as fresh as the server; clear stale banner + bump local version.
         recordStaleRef.current = null;
         setRecordStale(null);
@@ -3463,6 +3467,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               return { success: false, message: msg };
             }
             setSelectedRecordId(recordId);
+            // Keep ref in sync immediately so subsequent async flows (submit/upload queues) can resolve the current record id safely.
+            selectedRecordIdRef.current = recordId;
             setLastSubmissionMeta(prev => ({
               ...(prev || {}),
               id: recordId,
@@ -3865,61 +3871,61 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             recordId: precheckRecordId,
             reason: autoSaveInFlightRef.current ? 'autosaveInFlight' : 'uploadInFlight'
           });
-          return;
-        }
-        submitPrecheckInFlightRef.current = true;
-        const startedAt = Date.now();
-        logEvent('submit.versionPrecheck.start', {
-          recordId: precheckRecordId,
-          cachedVersion: Number(baseVersion),
-          rowNumberHint: rowNumberHint || null
-        });
-        void getRecordVersionApi(formKey, precheckRecordId, rowNumberHint)
-          .then(v => {
-            try {
-              if (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
-                logEvent('submit.versionPrecheck.ignored', {
-                  recordId: precheckRecordId,
-                  reason: autoSaveInFlightRef.current ? 'autosaveInFlight.afterFetch' : 'uploadInFlight.afterFetch'
-                });
-                return;
-              }
-              if (!v?.success) {
-                logEvent('submit.versionPrecheck.error', { recordId: precheckRecordId, message: v?.message || 'failed' });
-                return;
-              }
-              const serverVersion = Number(v.dataVersion);
-              const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : null;
-              if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
-              const localVersionNow = Number(recordDataVersionRef.current);
-              const baselineVersion =
-                Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : Number(baseVersion);
-              if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== baselineVersion) {
-                markRecordStale({
-                  reason: 'submit.precheck.stale',
-                  recordId: precheckRecordId,
-                  cachedVersion: baselineVersion,
-                  serverVersion,
-                  serverRow
-                });
-                return;
-              }
-              logEvent('submit.versionPrecheck.ok', {
-                recordId: precheckRecordId,
-                serverVersion: Number.isFinite(serverVersion) ? serverVersion : null
-              });
-            } catch (err: any) {
-              logEvent('submit.versionPrecheck.handlerException', { recordId: precheckRecordId, message: err?.message || err });
-            }
-          })
-          .catch(err => {
-            const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'failed';
-            logEvent('submit.versionPrecheck.exception', { recordId: precheckRecordId, message: msg });
-          })
-          .finally(() => {
-            submitPrecheckInFlightRef.current = false;
-            logEvent('submit.versionPrecheck.end', { recordId: precheckRecordId, durationMs: Date.now() - startedAt });
+        } else {
+          submitPrecheckInFlightRef.current = true;
+          const startedAt = Date.now();
+          logEvent('submit.versionPrecheck.start', {
+            recordId: precheckRecordId,
+            cachedVersion: Number(baseVersion),
+            rowNumberHint: rowNumberHint || null
           });
+          void getRecordVersionApi(formKey, precheckRecordId, rowNumberHint)
+            .then(v => {
+              try {
+                if (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
+                  logEvent('submit.versionPrecheck.ignored', {
+                    recordId: precheckRecordId,
+                    reason: autoSaveInFlightRef.current ? 'autosaveInFlight.afterFetch' : 'uploadInFlight.afterFetch'
+                  });
+                  return;
+                }
+                if (!v?.success) {
+                  logEvent('submit.versionPrecheck.error', { recordId: precheckRecordId, message: v?.message || 'failed' });
+                  return;
+                }
+                const serverVersion = Number(v.dataVersion);
+                const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : null;
+                if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
+                const localVersionNow = Number(recordDataVersionRef.current);
+                const baselineVersion =
+                  Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : Number(baseVersion);
+                if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== baselineVersion) {
+                  markRecordStale({
+                    reason: 'submit.precheck.stale',
+                    recordId: precheckRecordId,
+                    cachedVersion: baselineVersion,
+                    serverVersion,
+                    serverRow
+                  });
+                  return;
+                }
+                logEvent('submit.versionPrecheck.ok', {
+                  recordId: precheckRecordId,
+                  serverVersion: Number.isFinite(serverVersion) ? serverVersion : null
+                });
+              } catch (err: any) {
+                logEvent('submit.versionPrecheck.handlerException', { recordId: precheckRecordId, message: err?.message || err });
+              }
+            })
+            .catch(err => {
+              const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'failed';
+              logEvent('submit.versionPrecheck.exception', { recordId: precheckRecordId, message: msg });
+            })
+            .finally(() => {
+              submitPrecheckInFlightRef.current = false;
+              logEvent('submit.versionPrecheck.end', { recordId: precheckRecordId, durationMs: Date.now() - startedAt });
+            });
+        }
       }
     }
 
@@ -3987,6 +3993,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     submitConfirmedRef.current = false;
 
     setSubmitting(true);
+    // Keep ref in sync immediately so background work (autosave/uploads) can't start in the same tick.
+    submittingRef.current = true;
     setStatus(tSystem('actions.submitting', language, 'Submitting…'));
     setStatusLevel('info');
     logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length });
@@ -4000,17 +4008,84 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       // ignore
     }
     try {
+      const waitForBackgroundSaves = async (reason: string): Promise<{ ok: boolean; message?: string }> => {
+        const sessionAtStart = recordSessionRef.current;
+        const startedAt = Date.now();
+        const startAutosave = !!autoSaveInFlightRef.current;
+        const startUploads = uploadQueueRef.current.size;
+        if (startAutosave || startUploads > 0) {
+          logEvent('submit.queue.wait.start', {
+            reason,
+            autosaveInFlight: startAutosave,
+            uploadsInFlight: startUploads
+          });
+        }
+
+        // 1) Wait for in-flight uploads (they also persist URL updates via draft saves).
+        if (uploadQueueRef.current.size > 0) {
+          const snapshots = Array.from(uploadQueueRef.current.values());
+          const settled = await Promise.allSettled(snapshots);
+          const failures: string[] = [];
+          settled.forEach(s => {
+            if (s.status !== 'fulfilled') {
+              failures.push('Upload failed.');
+              return;
+            }
+            const ok = !!(s.value as any)?.success;
+            const msg = ((s.value as any)?.message || '').toString();
+            if (!ok) failures.push(msg || 'Upload failed.');
+          });
+          if (failures.length) {
+            const msg = failures[0] || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.');
+            logEvent('submit.queue.wait.uploads.failed', { reason, message: msg });
+            return { ok: false, message: msg };
+          }
+        }
+
+        // 2) Wait for in-flight autosave (avoid optimistic-lock and "create-flow id" races).
+        if (autoSaveInFlightRef.current) {
+          const sleep = (ms: number) => new Promise<void>(r => globalThis.setTimeout(r, ms));
+          while (autoSaveInFlightRef.current) {
+            if (recordSessionRef.current !== sessionAtStart) {
+              logEvent('submit.queue.wait.detached.sessionChanged', { reason, sessionAtStart, sessionNow: recordSessionRef.current });
+              return { ok: false, message: 'Record session changed.' };
+            }
+            await sleep(60);
+          }
+        }
+
+        // If autosave/upload detected a stale record, block submit now.
+        if (recordStaleRef.current) {
+          logEvent('submit.queue.wait.blocked.recordStale', { reason, recordId: recordStaleRef.current.recordId });
+          return { ok: false, message: recordStaleRef.current.message || 'Record is stale. Please refresh.' };
+        }
+
+        if (startAutosave || startUploads > 0) {
+          logEvent('submit.queue.wait.done', { reason, durationMs: Date.now() - startedAt });
+        }
+        return { ok: true };
+      };
+
+      const waitRes = await waitForBackgroundSaves('submit');
+      if (!waitRes.ok) {
+        const msg = (waitRes.message || tSystem('actions.submitFailed', language, 'Submit failed')).toString();
+        setStatus(msg);
+        setStatusLevel('error');
+        logEvent('submit.blocked.backgroundQueue', { message: msg });
+        return;
+      }
+
       const existingRecordId = resolveExistingRecordId({
-        selectedRecordId,
-        selectedRecordSnapshot,
-        lastSubmissionMetaId: lastSubmissionMeta?.id || null
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
       });
       const payload = await buildSubmissionPayload({
         definition,
         formKey,
-        language,
-        values,
-        lineItems,
+        language: languageRef.current,
+        values: valuesRef.current,
+        lineItems: lineItemsRef.current,
         existingRecordId,
         collapsedRows: submitUi?.collapsedRows,
         collapsedSubgroups: submitUi?.collapsedSubgroups
