@@ -621,6 +621,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         padding: 2px 0;
+        padding-left: 40px;
       }
       .ck-list-legend-title {
         font-weight: 800;
