@@ -361,6 +361,14 @@ export interface QuestionUiConfig {
    * Default when omitted: 4.
    */
   paragraphRows?: number;
+  /**
+   * For CHOICE fields rendered as a select, enable a type-to-search input for long option lists.
+   *
+   * - true: always use the searchable control (even for smaller lists)
+   * - false: always use the native select (no search)
+   * - undefined: auto (enabled only when option count is "large")
+   */
+  choiceSearchEnabled?: boolean;
 }
 
 export interface FileUploadConfig {
@@ -734,6 +742,22 @@ export interface LineItemGroupUiConfig {
    * - progressive: collapsed-by-default rows with gated expand
    */
   mode?: 'progressive' | 'default';
+  /**
+   * When true, the line item group editor is opened in a full-page overlay (similar to subgroup overlays),
+   * and the main form shows a compact "Open" card instead of rendering the full table inline.
+   *
+   * Default: false (render inline).
+   */
+  openInOverlay?: boolean;
+  /**
+   * Default CHOICE search behavior for all CHOICE fields in this group (and its subgroups when configured there),
+   * unless a specific field overrides it via `field.ui.choiceSearchEnabled`.
+   *
+   * - true: always use the searchable control for CHOICE selects
+   * - false: always use the native select (no search)
+   * - undefined: auto (enabled only when option count is "large")
+   */
+  choiceSearchEnabled?: boolean;
   /**
    * Fields to show (and allow editing) while the row is collapsed.
    * Expand is gated by these fields when expandGate = 'collapsedFieldsValid'.

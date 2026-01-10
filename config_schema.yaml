@@ -851,6 +851,14 @@ components:
           description: |
             For `PARAGRAPH` fields, controls the textarea height (visible rows).
             Default when omitted: 4.
+        choiceSearchEnabled:
+          type: boolean
+          description: |
+            For `CHOICE` fields rendered as a select, enable a type-to-search input for long option lists.
+
+            - When `true`, always use the searchable control (even for smaller lists)
+            - When `false`, always use the native select (no search)
+            - When omitted, the UI enables it automatically only for large option sets
 
     QuestionGroupConfig:
       type: object
@@ -908,6 +916,22 @@ components:
             UI mode for this line item group.
             - default: existing editor behavior
             - progressive: rows are collapsed by default and can be expanded once collapsed fields are valid
+        openInOverlay:
+          type: boolean
+          description: |
+            When true, the **entire line item group** editor is opened in a full-page overlay (similar to subgroup overlays),
+            and the main form shows a compact "Open" card instead of rendering the full table inline.
+
+            Default: false (render inline).
+        choiceSearchEnabled:
+          type: boolean
+          description: |
+            Default CHOICE search behavior for all CHOICE fields in this group (and its subgroups when configured there),
+            unless a specific field overrides it via `field.ui.choiceSearchEnabled`.
+
+            - When `true`, always use the searchable control for CHOICE selects
+            - When `false`, always use the native select (no search)
+            - When omitted, the UI enables search automatically only for large option sets
         showItemPill:
           type: boolean
           description: |

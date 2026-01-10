@@ -111,8 +111,12 @@
   "common": {
     "info": { "en": "Info", "fr": "Info", "nl": "Info" },
     "selectPlaceholder": { "en": "Select…", "fr": "Sélectionner…", "nl": "Selecteer…" },
+    "noMatches": { "en": "No matches.", "fr": "Aucun résultat.", "nl": "Geen resultaten." },
     "close": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" },
     "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
+    "tapToOpen": { "en": "Tap to open", "fr": "Appuyez pour ouvrir", "nl": "Tik om te openen" },
+    "tapToExpand": { "en": "Tap to expand", "fr": "Appuyez pour ouvrir", "nl": "Tik om te openen" },
+    "tapToCollapse": { "en": "Tap to collapse", "fr": "Appuyez pour réduire", "nl": "Tik om te sluiten" },
     "download": { "en": "Download", "fr": "Télécharger", "nl": "Downloaden" },
     "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
     "add": { "en": "Add", "fr": "Ajouter", "nl": "Toevoegen" },

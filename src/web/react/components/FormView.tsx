@@ -50,6 +50,7 @@ import { InfoOverlay } from './form/overlays/InfoOverlay';
 import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectOverlay';
 import { InfoTooltip } from './form/InfoTooltip';
 import { DateInput } from './form/DateInput';
+import { SearchableSelect } from './form/SearchableSelect';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { PairedRowGrid } from './form/PairedRowGrid';
@@ -59,17 +60,25 @@ import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from '
 import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, resolveValueMapValue } from './form/valueMaps';
+import { isLineItemGroupQuestionComplete } from './form/completeness';
 import {
   buildLineContextId,
+  buildSubgroupKey,
   parseSubgroupKey,
   resolveSubgroupKey,
   seedSubgroupDefaults
 } from '../app/lineItems';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
+import { validateRules } from '../../rules/validation';
 
 interface SubgroupOverlayState {
   open: boolean;
   subKey?: string;
+}
+
+interface LineItemGroupOverlayState {
+  open: boolean;
+  groupId?: string;
 }
 
 interface InfoOverlayState {
@@ -294,6 +303,7 @@ const FormView: React.FC<FormViewProps> = ({
     ));
   };
   const [overlay, setOverlay] = useState<LineOverlayState>({ open: false, options: [], selected: [] });
+  const [lineItemGroupOverlay, setLineItemGroupOverlay] = useState<LineItemGroupOverlayState>({ open: false });
   const [subgroupOverlay, setSubgroupOverlay] = useState<SubgroupOverlayState>({ open: false });
   const [infoOverlay, setInfoOverlay] = useState<InfoOverlayState>({ open: false });
   const [fileOverlay, setFileOverlay] = useState<FileOverlayState>({ open: false });
@@ -312,6 +322,7 @@ const FormView: React.FC<FormViewProps> = ({
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
   const choiceVariantLogRef = useRef<Record<string, string>>({});
+  const choiceSearchLoggedRef = useRef<Set<string>>(new Set());
   const hideLabelLoggedRef = useRef<Set<string>>(new Set());
   const groupScrollAnimRafRef = useRef(0);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -1033,11 +1044,12 @@ const FormView: React.FC<FormViewProps> = ({
       value: string;
       options: OptionLike[];
       required: boolean;
+      searchEnabled?: boolean;
       override?: string | null;
       disabled?: boolean;
       onChange: (next: string) => void;
     }) => {
-      const { fieldPath, value, options, required, override, disabled, onChange } = args;
+      const { fieldPath, value, options, required, searchEnabled, override, disabled, onChange } = args;
       const decision = computeChoiceControlVariant(options, required, override);
 
       const prev = choiceVariantLogRef.current[fieldPath];
@@ -1052,6 +1064,60 @@ const FormView: React.FC<FormViewProps> = ({
           booleanDetected: decision.booleanDetected
         });
       }
+
+      const placeholder = tSystem('common.selectPlaceholder', language, 'Select…');
+      const shouldUseSearchableSelect = (() => {
+        if (decision.variant !== 'select') return false;
+        if (searchEnabled === true) return true;
+        if (searchEnabled === false) return false;
+        // Auto: only for "large" option sets.
+        return options.length >= 20;
+      })();
+
+      const renderSelectControl = () => {
+        if (shouldUseSearchableSelect) {
+          if (!choiceSearchLoggedRef.current.has(fieldPath)) {
+            choiceSearchLoggedRef.current.add(fieldPath);
+            onDiagnostic?.('ui.choiceControl.search.enabled', {
+              fieldPath,
+              optionCount: options.length,
+              enabled: searchEnabled === true ? 'forced' : 'auto'
+            });
+          }
+          return (
+            <SearchableSelect
+              value={value || ''}
+              options={options.map(o => ({ value: o.value, label: o.label, tooltip: (o as any).tooltip }))}
+              disabled={!!disabled}
+              placeholder={placeholder}
+              emptyText={tSystem('common.noMatches', language, 'No matches.')}
+              onDiagnostic={(event, payload) => onDiagnostic?.(event, { fieldPath, ...(payload || {}) })}
+              onChange={next => {
+                if (disabled) return;
+                onDiagnostic?.('ui.choiceControl.search.select', { fieldPath, value: next });
+                onChange(next);
+              }}
+            />
+          );
+        }
+        return (
+          <select
+            value={value || ''}
+            disabled={!!disabled}
+            onChange={e => {
+              if (disabled) return;
+              onChange(e.target.value);
+            }}
+          >
+            <option value="">{placeholder}</option>
+            {options.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        );
+      };
 
       switch (decision.variant) {
         case 'segmented': {
@@ -1113,23 +1179,7 @@ const FormView: React.FC<FormViewProps> = ({
           const map = decision.booleanMap;
           if (!map) {
             // fallback
-            return (
-              <select
-                value={value || ''}
-                disabled={!!disabled}
-                onChange={e => {
-                  if (disabled) return;
-                  onChange(e.target.value);
-                }}
-              >
-                <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                {options.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            );
+            return renderSelectControl();
           }
           const checked = value === map.trueValue;
           return (
@@ -1151,23 +1201,7 @@ const FormView: React.FC<FormViewProps> = ({
         }
         case 'select':
         default:
-          return (
-            <select
-              value={value || ''}
-              disabled={!!disabled}
-              onChange={e => {
-                if (disabled) return;
-                onChange(e.target.value);
-              }}
-            >
-              <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-              {options.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          );
+          return renderSelectControl();
       }
     },
     [language, onDiagnostic]
@@ -1176,6 +1210,11 @@ const FormView: React.FC<FormViewProps> = ({
   const closeSubgroupOverlay = useCallback(() => {
     setSubgroupOverlay({ open: false });
     onDiagnostic?.('subgroup.overlay.close');
+  }, [onDiagnostic]);
+
+  const closeLineItemGroupOverlay = useCallback(() => {
+    setLineItemGroupOverlay({ open: false });
+    onDiagnostic?.('lineItemGroup.overlay.close');
   }, [onDiagnostic]);
 
   const openSubgroupOverlay = useCallback(
@@ -1189,6 +1228,24 @@ const FormView: React.FC<FormViewProps> = ({
       onDiagnostic?.('subgroup.overlay.open', { subKey });
     },
     [onDiagnostic, overlay.open]
+  );
+
+  const openLineItemGroupOverlay = useCallback(
+    (groupId: string) => {
+      const id = (groupId || '').toString();
+      if (!id) return;
+      // Close multi-add overlay if open to avoid stacking confusion.
+      if (overlay.open) {
+        setOverlay({ open: false, options: [], selected: [] });
+      }
+      // Avoid stacking full-page overlays.
+      if (subgroupOverlay.open) {
+        setSubgroupOverlay({ open: false });
+      }
+      setLineItemGroupOverlay({ open: true, groupId: id });
+      onDiagnostic?.('lineItemGroup.overlay.open', { groupId: id });
+    },
+    [onDiagnostic, overlay.open, subgroupOverlay.open]
   );
 
   // NOTE: Must be declared AFTER `questionIdToGroupKey`, `nestedGroupMeta`, and `openSubgroupOverlay` are initialized.
@@ -1232,6 +1289,16 @@ const FormView: React.FC<FormViewProps> = ({
           return true;
         }
 
+        // If this is a line-item group configured to open in a full-page overlay, open it so the row/fields can mount.
+        const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
+        const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
+        if (groupOverlayEnabled) {
+          if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
+            openLineItemGroupOverlay(prefix);
+            onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key, groupId: prefix, source: 'click' });
+          }
+        }
+
         expandGroupForQuestionId(prefix);
         const collapseKey = `${prefix}::${rowId}`;
         setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
@@ -1268,9 +1335,13 @@ const FormView: React.FC<FormViewProps> = ({
     [
       nestedGroupMeta.lineFieldToGroupKey,
       nestedGroupMeta.subgroupFieldToGroupKey,
+      definition.questions,
       onDiagnostic,
+      openLineItemGroupOverlay,
       openSubgroupOverlay,
       questionIdToGroupKey,
+      lineItemGroupOverlay.groupId,
+      lineItemGroupOverlay.open,
       subgroupOverlay.open,
       subgroupOverlay.subKey
     ]
@@ -1405,6 +1476,16 @@ const FormView: React.FC<FormViewProps> = ({
         openSubgroupOverlay(targetGroupKey);
         onDiagnostic?.('ui.autoscroll.openSubgroupOverlay', { anchor, subKey: targetGroupKey });
       }
+      // If we're trying to scroll to a line-item group row that is rendered only in an overlay,
+      // open the full-page group overlay after a short delay so the row can mount.
+      if (!targetSubgroupInfo && tries === 4) {
+        const groupCfg = definition.questions.find(q => q.id === targetGroupKey && q.type === 'LINE_ITEM_GROUP');
+        const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
+        if (groupOverlayEnabled && (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== targetGroupKey)) {
+          openLineItemGroupOverlay(targetGroupKey);
+          onDiagnostic?.('ui.autoscroll.openLineItemGroupOverlay', { anchor, groupId: targetGroupKey });
+        }
+      }
       if (attempt()) {
         setPendingScrollAnchor(null);
         onDiagnostic?.('ui.autoscroll.success', { anchor, tries });
@@ -1423,12 +1504,22 @@ const FormView: React.FC<FormViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [onDiagnostic, pendingScrollAnchor]);
+  }, [
+    definition.questions,
+    lineItemGroupOverlay.groupId,
+    lineItemGroupOverlay.open,
+    onDiagnostic,
+    openLineItemGroupOverlay,
+    openSubgroupOverlay,
+    pendingScrollAnchor,
+    subgroupOverlay.open,
+    subgroupOverlay.subKey
+  ]);
 
   // visualViewport bottom inset is handled globally in App.tsx so the bottom action bar works across views.
 
   useEffect(() => {
-    const anyOpen = subgroupOverlay.open || infoOverlay.open || fileOverlay.open;
+    const anyOpen = lineItemGroupOverlay.open || subgroupOverlay.open || infoOverlay.open || fileOverlay.open;
     if (!anyOpen) return;
     if (typeof document === 'undefined') return;
     const prevOverflow = document.body.style.overflow;
@@ -1443,7 +1534,11 @@ const FormView: React.FC<FormViewProps> = ({
           closeInfoOverlay();
           return;
         }
-        closeSubgroupOverlay();
+        if (subgroupOverlay.open) {
+          closeSubgroupOverlay();
+          return;
+        }
+        closeLineItemGroupOverlay();
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -1454,9 +1549,11 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     closeFileOverlay,
     closeInfoOverlay,
+    closeLineItemGroupOverlay,
     closeSubgroupOverlay,
     fileOverlay.open,
     infoOverlay.open,
+    lineItemGroupOverlay.open,
     subgroupOverlay.open
   ]);
   useEffect(() => {
@@ -2091,8 +2188,23 @@ const FormView: React.FC<FormViewProps> = ({
     // Mirror the progress logic used in the group header UI.
     const isQuestionComplete = (q: WebQuestionDefinition): boolean => {
       if (q.type === 'LINE_ITEM_GROUP') {
-        const rows = (lineItems[q.id] || []) as any[];
-        return rows.length > 0;
+        if (!q.lineItemConfig) return false;
+        const getTopValueNoScan = (fieldId: string): FieldValue | undefined => {
+          const direct = (values as any)[fieldId];
+          if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+          const sys = getSystemFieldValue(fieldId, recordMeta);
+          if (sys !== undefined) return sys as FieldValue;
+          return undefined;
+        };
+        return isLineItemGroupQuestionComplete({
+          groupId: q.id,
+          lineItemConfig: q.lineItemConfig,
+          values,
+          lineItems,
+          collapsedRows,
+          language,
+          getTopValue: getTopValueNoScan
+        });
       }
       const mappedValue = (q as any).valueMap
         ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId], {
@@ -2125,9 +2237,108 @@ const FormView: React.FC<FormViewProps> = ({
         return { key: section.key, complete, totalRequired, requiredComplete };
       })
       .filter(Boolean) as Array<{ key: string; complete: boolean; totalRequired: number; requiredComplete: number }>;
-  }, [groupSections, language, lineItems, resolveVisibilityValue, values]);
+  }, [collapsedRows, groupSections, language, lineItems, recordMeta, resolveVisibilityValue, values]);
 
   const prevGroupCompleteRef = useRef<Record<string, boolean>>({});
+  const pendingAutoCollapseRef = useRef<string[]>([]);
+  const autoCollapseFlushTimerRef = useRef<number | null>(null);
+
+  const flushPendingAutoCollapse = useCallback(
+    (reason?: string) => {
+      if (!autoCollapseGroups) return;
+      const pending = Array.from(new Set(pendingAutoCollapseRef.current || [])).filter(Boolean);
+      if (!pending.length) return;
+
+      const completeSet = new Set(topLevelGroupProgress.filter(g => g.complete).map(g => g.key));
+      const stillComplete = pending.filter(k => completeSet.has(k));
+      pendingAutoCollapseRef.current = [];
+      if (!stillComplete.length) return;
+
+      const order = topLevelGroupProgress.map(g => g.key);
+      const anchorIdx = stillComplete.reduce((acc, key) => Math.max(acc, order.indexOf(key)), -1);
+      const anchorKey = anchorIdx >= 0 ? order[anchorIdx] : stillComplete[stillComplete.length - 1];
+
+      const findNextIncomplete = (): string | undefined => {
+        if (!autoOpenNextIncomplete) return undefined;
+        const baseIdx = anchorKey ? order.indexOf(anchorKey) : -1;
+        if (baseIdx < 0) return undefined;
+        const n = topLevelGroupProgress.length;
+        for (let step = 1; step <= n; step += 1) {
+          const idx = (baseIdx + step) % n;
+          const cand = topLevelGroupProgress[idx];
+          if (!cand) continue;
+          if (cand.totalRequired <= 0) continue;
+          if (!cand.complete) return cand.key;
+        }
+        return undefined;
+      };
+
+      const nextOpenKey = findNextIncomplete();
+
+      setCollapsedGroups(prev => {
+        let changed = false;
+        const next = { ...prev };
+        stillComplete.forEach(key => {
+          if (next[key] !== true) {
+            next[key] = true;
+            changed = true;
+          }
+        });
+        if (nextOpenKey) {
+          if (next[nextOpenKey] !== false) {
+            next[nextOpenKey] = false;
+            changed = true;
+          }
+        }
+        if (changed) {
+          onDiagnostic?.('ui.group.autoCollapse', {
+            completed: stillComplete,
+            opened: nextOpenKey || null,
+            deferred: true,
+            reason: reason || 'flush'
+          });
+        }
+        return changed ? next : prev;
+      });
+
+      if (nextOpenKey) {
+        scheduleScrollGroupToTop(nextOpenKey, { reason: 'autoOpenNext' });
+      }
+    },
+    [autoCollapseGroups, autoOpenNextIncomplete, onDiagnostic, scheduleScrollGroupToTop, topLevelGroupProgress]
+  );
+
+  useEffect(() => {
+    if (!autoCollapseGroups) return;
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
+    const handler = () => {
+      if (!pendingAutoCollapseRef.current.length) return;
+      if (autoCollapseFlushTimerRef.current !== null) {
+        window.clearTimeout(autoCollapseFlushTimerRef.current);
+      }
+      autoCollapseFlushTimerRef.current = window.setTimeout(() => {
+        autoCollapseFlushTimerRef.current = null;
+        const active = document.activeElement as HTMLElement | null;
+        const activeGroupKey = (active?.closest('[data-group-key]') as HTMLElement | null)?.dataset?.groupKey || '';
+        if (activeGroupKey && pendingAutoCollapseRef.current.includes(activeGroupKey)) {
+          return;
+        }
+        flushPendingAutoCollapse('focus');
+      }, 0);
+    };
+
+    document.addEventListener('focusin', handler, true);
+    document.addEventListener('focusout', handler, true);
+    return () => {
+      document.removeEventListener('focusin', handler, true);
+      document.removeEventListener('focusout', handler, true);
+      if (autoCollapseFlushTimerRef.current !== null) {
+        window.clearTimeout(autoCollapseFlushTimerRef.current);
+        autoCollapseFlushTimerRef.current = null;
+      }
+    };
+  }, [autoCollapseGroups, flushPendingAutoCollapse]);
 
   useEffect(() => {
     if (!autoCollapseGroups) return;
@@ -2144,6 +2355,19 @@ const FormView: React.FC<FormViewProps> = ({
       .filter(g => g.complete && !prevComplete[g.key])
       .map(g => g.key);
     if (!completedNow.length) return;
+
+    const active = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+    const tag = active?.tagName ? active.tagName.toLowerCase() : '';
+    const isEditable =
+      tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean((active as any)?.isContentEditable);
+    const activeGroupKey = (active?.closest('[data-group-key]') as HTMLElement | null)?.dataset?.groupKey || '';
+    if (isEditable && activeGroupKey && completedNow.includes(activeGroupKey)) {
+      // Avoid collapsing the group while the user is mid-edit (e.g., first keystroke of the last required field).
+      // We'll flush after focus leaves the group.
+      pendingAutoCollapseRef.current = Array.from(new Set([...(pendingAutoCollapseRef.current || []), ...completedNow]));
+      onDiagnostic?.('ui.group.autoCollapse.defer', { activeGroupKey, completed: completedNow });
+      return;
+    }
 
     // Choose the last group (in visual order) that just completed as the anchor for "open next".
     const anchorKey = completedNow[completedNow.length - 1];
@@ -2362,6 +2586,7 @@ const FormView: React.FC<FormViewProps> = ({
               value: choiceValue || '',
               options: opts,
               required: !!q.required,
+              searchEnabled: q.ui?.choiceSearchEnabled,
               override: q.ui?.control,
               disabled: submitting || q.readOnly === true || isFieldLockedByDedup(q.id),
               onChange: next => handleFieldChange(q, next)
@@ -2592,7 +2817,275 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       case 'LINE_ITEM_GROUP': {
-            return (
+        const groupOverlayEnabled = !!q.lineItemConfig?.ui?.openInOverlay;
+        const groupCount = (lineItems[q.id] || []).length;
+        const locked = submitting || isFieldLockedByDedup(q.id);
+
+        if (groupOverlayEnabled) {
+          const hideGroupLabel = q.ui?.hideLabel === true;
+          const tapToOpenLabel = tSystem('common.tapToOpen', language, 'Tap to open');
+          const groupHasAnyError = (() => {
+            if (errors[q.id]) return true;
+            const prefix = `${q.id}__`;
+            const subPrefix = `${q.id}::`;
+            return Object.keys(errors || {}).some(k => k === q.id || k.startsWith(prefix) || k.startsWith(subPrefix));
+          })();
+          const groupIsComplete = (() => {
+            const rows = (lineItems[q.id] || []) as any[];
+            if (!rows.length) return false;
+            const lineFields = (q.lineItemConfig?.fields || []) as any[];
+            const subGroups = (q.lineItemConfig?.subGroups || []) as any[];
+            const ui = (q.lineItemConfig as any)?.ui as any;
+            const isProgressive =
+              ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
+            const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
+            const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
+            const collapsedFieldConfigs = isProgressive ? (ui?.collapsedFields || []) : [];
+
+            const isRowDisabledByExpandGate = (args: {
+              ui: any;
+              fields: any[];
+              row: { id: string; values: Record<string, FieldValue> };
+              topValues: Record<string, FieldValue>;
+              language: LangCode;
+              linePrefix: string;
+              rowCollapsed: boolean;
+            }): boolean => {
+              const { ui, fields, row, topValues, language, linePrefix, rowCollapsed } = args;
+              const isProg =
+                ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
+              const gate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
+              const cfgs = isProg ? (ui?.collapsedFields || []) : [];
+              if (!isProg) return false;
+              if (gate === 'always') return false;
+              if (!cfgs.length) return false;
+              if (!rowCollapsed) return false;
+
+              const groupCtx: VisibilityContext = {
+                getValue: fid => (topValues as any)[fid],
+                getLineValue: (_rowId, fid) => (row?.values || {})[fid]
+              };
+              const isHidden = (fieldId: string) => {
+                const target = (fields || []).find((f: any) => f?.id === fieldId) as any;
+                if (!target) return false;
+                return shouldHideField(target.visibility, groupCtx, { rowId: row?.id, linePrefix });
+              };
+
+              const blocked: string[] = [];
+              cfgs.forEach((cfg: any) => {
+                const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
+                if (!fid) return;
+                const field = (fields || []).find((f: any) => f?.id === fid) as any;
+                if (!field) return;
+                const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row?.id, linePrefix });
+                if (hideField) return;
+                const val = (row?.values || {})[field.id];
+                if (field.required && isEmptyValue(val as any)) {
+                  blocked.push(field.id);
+                  return;
+                }
+                const rules = Array.isArray(field.validationRules)
+                  ? field.validationRules.filter((r: any) => r?.then?.fieldId === field.id)
+                  : [];
+                if (!rules.length) return;
+                const rulesCtx: any = {
+                  ...groupCtx,
+                  getValue: (fieldId: string) =>
+                    Object.prototype.hasOwnProperty.call(row?.values || {}, fieldId)
+                      ? (row?.values || {})[fieldId]
+                      : (topValues as any)[fieldId],
+                  language,
+                  phase: 'submit',
+                  isHidden
+                };
+                const errs = validateRules(rules, rulesCtx);
+                if (errs.length) blocked.push(field.id);
+              });
+              return Array.from(new Set(blocked)).length > 0;
+            };
+
+            const getTopValueNoScan = (fieldId: string): FieldValue | undefined => {
+              const direct = (values as any)[fieldId];
+              if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+              const sys = getSystemFieldValue(fieldId, recordMeta);
+              if (sys !== undefined) return sys as FieldValue;
+              return undefined;
+            };
+
+            let hasAnyEnabledRow = false;
+
+            for (const row of rows) {
+              const rowValues = (row as any)?.values || {};
+              const collapseKey = `${q.id}::${row.id}`;
+              const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
+              if (
+                isProgressive &&
+                expandGate !== 'always' &&
+                collapsedFieldConfigs.length > 0 &&
+                isRowDisabledByExpandGate({
+                  ui,
+                  fields: lineFields,
+                  row: row as any,
+                  topValues: values,
+                  language,
+                  linePrefix: q.id,
+                  rowCollapsed
+                })
+              ) {
+                continue;
+              }
+              hasAnyEnabledRow = true;
+
+              const groupCtx: VisibilityContext = {
+                getValue: fid => getTopValueNoScan(fid),
+                getLineValue: (_rowId, fid) => rowValues[fid]
+              };
+              for (const field of lineFields) {
+                if (!field?.required) continue;
+                const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+                if (hideField) continue;
+                const mapped = field.valueMap
+                  ? resolveValueMapValue(
+                      field.valueMap,
+                      (fid: string) => {
+                        if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
+                        return getTopValueNoScan(fid);
+                      },
+                      { language, targetOptions: toOptionSet(field as any) }
+                    )
+                  : undefined;
+                const raw = field.valueMap ? mapped : (rowValues as any)[field.id];
+                if ((field as any).type === 'FILE_UPLOAD') {
+                  const ok = isUploadValueComplete({
+                    value: raw as any,
+                    uploadConfig: (field as any).uploadConfig,
+                    required: true
+                  });
+                  if (!ok) return false;
+                  continue;
+                }
+                if (isEmptyValue(raw as any)) return false;
+              }
+
+              for (const sub of subGroups) {
+                const subId = resolveSubgroupKey(sub as any);
+                if (!subId) continue;
+                const subKey = buildSubgroupKey(q.id, row.id, subId);
+                const subRows = (lineItems[subKey] || []) as any[];
+                if (!subRows.length) continue;
+                const subFields = ((sub as any).fields || []) as any[];
+                const subUi = (sub as any)?.ui as any;
+                const isSubProgressive =
+                  subUi?.mode === 'progressive' && Array.isArray(subUi?.collapsedFields) && (subUi?.collapsedFields || []).length > 0;
+                const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
+                for (const subRow of subRows) {
+                  const subRowValues = (subRow as any)?.values || {};
+                  const subCollapseKey = `${subKey}::${subRow.id}`;
+                  const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
+                  if (
+                    isRowDisabledByExpandGate({
+                      ui: subUi,
+                      fields: subFields,
+                      row: subRow as any,
+                      topValues: { ...(values as any), ...(rowValues as any) },
+                      language,
+                      linePrefix: subKey,
+                      rowCollapsed: subRowCollapsed
+                    })
+                  ) {
+                    continue;
+                  }
+                  const subCtx: VisibilityContext = {
+                    getValue: (fid: string) => {
+                      if (Object.prototype.hasOwnProperty.call(subRowValues || {}, fid)) return (subRowValues as any)[fid];
+                      if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
+                      return getTopValueNoScan(fid);
+                    },
+                    getLineValue: (_rowId, fid) => subRowValues[fid]
+                  };
+                  for (const field of subFields) {
+                    if (!field?.required) continue;
+                    const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                    if (hide) continue;
+                    const mapped = field.valueMap
+                      ? resolveValueMapValue(
+                          field.valueMap,
+                          (fid: string) => {
+                            if (Object.prototype.hasOwnProperty.call(subRowValues || {}, fid)) return (subRowValues as any)[fid];
+                            if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
+                            return getTopValueNoScan(fid);
+                          },
+                          { language, targetOptions: toOptionSet(field as any) }
+                        )
+                      : undefined;
+                    const raw = field.valueMap ? mapped : (subRowValues as any)[field.id];
+                    if ((field as any).type === 'FILE_UPLOAD') {
+                      const ok = isUploadValueComplete({
+                        value: raw as any,
+                        uploadConfig: (field as any).uploadConfig,
+                        required: true
+                      });
+                      if (!ok) return false;
+                      continue;
+                    }
+                    if (isEmptyValue(raw as any)) return false;
+                  }
+                }
+              }
+            }
+            return hasAnyEnabledRow;
+          })();
+          const pillText = tSystem(
+            groupCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
+            language,
+            groupCount === 1 ? '{count} item' : '{count} items',
+            { count: groupCount }
+          );
+          const pillClass = groupHasAnyError
+            ? 'ck-progress-bad'
+            : groupIsComplete
+              ? 'ck-progress-good'
+              : groupCount > 0
+                ? 'ck-progress-info'
+                : 'ck-progress-neutral';
+          return (
+            <div
+              key={q.id}
+              className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+              data-field-path={q.id}
+              data-has-error={groupHasAnyError ? 'true' : undefined}
+              data-has-warning={hasWarning(q.id) ? 'true' : undefined}
+            >
+              <label style={hideGroupLabel ? srOnly : labelStyle}>
+                {resolveLabel(q, language)}
+                {q.required && <RequiredStar />}
+              </label>
+              <button
+                type="button"
+                className={`ck-progress-pill ck-upload-pill-btn ck-open-overlay-pill ${pillClass}`}
+                aria-disabled={locked ? 'true' : undefined}
+                aria-label={`${tapToOpenLabel} ${resolveLabel(q, language)} ${pillText}`}
+                onClick={() => {
+                  if (locked) return;
+                  openLineItemGroupOverlay(q.id);
+                }}
+              >
+                {pillClass === 'ck-progress-good' ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
+                <span>{pillText}</span>
+                <span className="ck-progress-label">{tapToOpenLabel}</span>
+                <span className="ck-progress-caret">▸</span>
+              </button>
+              {renderWarnings(q.id)}
+              {errors[q.id] ? (
+                <div className="error">{errors[q.id]}</div>
+              ) : groupHasAnyError ? (
+                <div className="error">{tSystem('validation.needsAttention', language, 'Needs attention')}</div>
+              ) : null}
+            </div>
+          );
+        }
+
+        return (
           <LineItemGroupQuestion
             key={q.id}
             q={q}
@@ -2604,7 +3097,7 @@ const FormView: React.FC<FormViewProps> = ({
               setValues,
               lineItems,
               setLineItems,
-              submitting: submitting || isFieldLockedByDedup(q.id),
+              submitting: locked,
               errors,
               setErrors,
               warningByField,
@@ -2852,6 +3345,16 @@ const FormView: React.FC<FormViewProps> = ({
         return true;
       }
 
+      // If this is a line-item group configured to open in a full-page overlay, open it so the row/fields can mount.
+      const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
+      const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
+      if (groupOverlayEnabled) {
+        if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
+          openLineItemGroupOverlay(prefix);
+          onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key: firstKey, groupId: prefix, source: 'submit' });
+        }
+      }
+
       expandGroupForQuestionId(prefix);
       const collapseKey = `${prefix}::${rowId}`;
       setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
@@ -2892,9 +3395,13 @@ const FormView: React.FC<FormViewProps> = ({
     errors,
     nestedGroupMeta.lineFieldToGroupKey,
     nestedGroupMeta.subgroupFieldToGroupKey,
+    definition.questions,
     onDiagnostic,
+    openLineItemGroupOverlay,
     openSubgroupOverlay,
     questionIdToGroupKey,
+    lineItemGroupOverlay.groupId,
+    lineItemGroupOverlay.open,
     subgroupOverlay.open,
     subgroupOverlay.subKey
   ]);
@@ -3088,23 +3595,39 @@ const FormView: React.FC<FormViewProps> = ({
                     style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}
                                 >
                     <label style={{ fontWeight: 700 }}>{resolveSelectorLabel(subSelectorCfg, language)}</label>
-                                  <select
-                                    value={subSelectorValue}
-                                    onChange={e => {
-                                      const nextValue = e.target.value;
-                                      setSubgroupSelectors(prev => {
-                                        if (prev[subKey] === nextValue) return prev;
-                                        return { ...prev, [subKey]: nextValue };
-                                      });
-                                    }}
-                                  >
-                                    <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                                    {subSelectorOptions.map(opt => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  {subSelectorOptions.length >= 20 ? (
+                                    <SearchableSelect
+                                      value={subSelectorValue || ''}
+                                      disabled={submitting}
+                                      placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
+                                      emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                                      options={subSelectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                                      onChange={nextValue => {
+                                        setSubgroupSelectors(prev => {
+                                          if (prev[subKey] === nextValue) return prev;
+                                          return { ...prev, [subKey]: nextValue };
+                                        });
+                                      }}
+                                    />
+                                  ) : (
+                                    <select
+                                      value={subSelectorValue}
+                                      onChange={e => {
+                                        const nextValue = e.target.value;
+                                        setSubgroupSelectors(prev => {
+                                          if (prev[subKey] === nextValue) return prev;
+                                          return { ...prev, [subKey]: nextValue };
+                                        });
+                                      }}
+                                    >
+                                      <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
+                                      {subSelectorOptions.map(opt => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
                                 </div>
                 ) : null}
                 {renderAddButton()}
@@ -3291,6 +3814,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 value: choiceVal || '',
                                 options: optsField,
                                 required: !!field.required,
+                                searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? (subConfig?.ui as any)?.choiceSearchEnabled,
                                 override: (field as any)?.ui?.control,
                                 disabled: submitting || (field as any)?.readOnly === true,
                                 onChange: next => handleLineFieldChange(subGroupDef, subRow.id, field, next)
@@ -3656,6 +4180,338 @@ const FormView: React.FC<FormViewProps> = ({
     );
   })();
 
+  const lineItemGroupOverlayPortal = (() => {
+    if (!lineItemGroupOverlay.open || !lineItemGroupOverlay.groupId) return null;
+    if (typeof document === 'undefined') return null;
+
+    const groupId = lineItemGroupOverlay.groupId;
+    const group = definition.questions.find(q => q.id === groupId && q.type === 'LINE_ITEM_GROUP');
+    if (!group) {
+      return createPortal(
+        <div
+          className="webform-overlay"
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: '#ffffff',
+            zIndex: 10000,
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          <div style={{ padding: 16, borderBottom: '1px solid #e5e7eb', background: '#ffffff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontWeight: 900, fontSize: 22 }}>{tSystem('common.error', language, 'Error')}</div>
+              <button type="button" onClick={closeLineItemGroupOverlay} style={buttonStyles.secondary}>
+                {tSystem('common.close', language, 'Close')}
+              </button>
+            </div>
+          </div>
+          <div style={{ padding: 16 }}>
+            <div className="error">
+              Unable to load line item group editor (missing group configuration for <code>{groupId}</code>).
+            </div>
+          </div>
+        </div>,
+        document.body
+      );
+    }
+
+    const rows = lineItems[groupId] || [];
+    const count = rows.length;
+    const title = resolveLabel(group, language);
+
+    const groupCfg = (group as any).lineItemConfig as any;
+    const locked = submitting || isFieldLockedByDedup(groupId);
+
+    const selectorCfg = groupCfg?.sectionSelector;
+    const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
+    const selectorOptions = selectorOptionSet
+      ? buildLocalizedOptions(selectorOptionSet, selectorOptionSet.en || [], language)
+      : [];
+    const selectorValue = selectorCfg ? ((values as any)[selectorCfg.id] || '') : '';
+
+    const totals = groupCfg ? computeTotals({ config: groupCfg as any, rows }, language) : [];
+
+    const renderAddButton = () => {
+      if (!groupCfg) {
+        return (
+          <button type="button" onClick={() => addLineItemRowManual(groupId)} style={buttonStyles.secondary} disabled={locked}>
+            <PlusIcon />
+            {tSystem('lineItems.addLine', language, 'Add line')}
+          </button>
+        );
+      }
+      if (groupCfg.addMode === 'overlay' && groupCfg.anchorFieldId) {
+        return (
+          <button
+            type="button"
+            disabled={locked}
+            style={withDisabled(buttonStyles.secondary, locked)}
+            onClick={async () => {
+              if (locked) return;
+              const anchorField = (groupCfg.fields || []).find((f: any) => f.id === groupCfg.anchorFieldId);
+              if (!anchorField || anchorField.type !== 'CHOICE') {
+                addLineItemRowManual(groupId);
+                return;
+              }
+              const key = optionKey(anchorField.id, groupId);
+              let opts = optionState[key];
+              if (!opts && anchorField.dataSource) {
+                const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                if (loaded) {
+                  opts = loaded;
+                  setOptionState(prev => ({ ...prev, [key]: loaded }));
+                }
+              }
+              if (!opts) {
+                opts = {
+                  en: anchorField.options || [],
+                  fr: (anchorField as any).optionsFr || [],
+                  nl: (anchorField as any).optionsNl || []
+                };
+              }
+              const dependencyIds = (
+                Array.isArray(anchorField.optionFilter?.dependsOn)
+                  ? anchorField.optionFilter?.dependsOn
+                  : [anchorField.optionFilter?.dependsOn || '']
+              ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+              const depVals = dependencyIds.map((dep: string) => toDependencyValue((values as any)[dep]));
+              const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
+              const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
+              const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
+              setOverlay({
+                open: true,
+                options: localized
+                  .filter(opt => deduped.includes(opt.value))
+                  .map(opt => ({ value: opt.value, label: opt.label })),
+                groupId,
+                anchorFieldId: anchorField.id,
+                selected: []
+              });
+            }}
+          >
+            <PlusIcon />
+            {resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLines', language, 'Add lines'))}
+          </button>
+        );
+      }
+      return (
+        <button
+          type="button"
+          disabled={locked}
+          onClick={() => addLineItemRowManual(groupId)}
+          style={withDisabled(buttonStyles.secondary, locked)}
+        >
+          <PlusIcon />
+          {resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLine', language, 'Add line'))}
+        </button>
+      );
+    };
+
+    // Avoid duplicate titles inside the editor by hiding the group label + item pill in overlay context.
+    const overlayGroup: WebQuestionDefinition = {
+      ...(group as any),
+      ui: { ...((group as any).ui || {}), hideLabel: true },
+      lineItemConfig: {
+        ...((group as any).lineItemConfig || {}),
+        // Hide internal toolbars (selector + add + totals) so the overlay header owns those controls.
+        totals: [],
+        ui: {
+          ...(((group as any).lineItemConfig || {})?.ui || {}),
+          showItemPill: false,
+          addButtonPlacement: 'hidden'
+        }
+      }
+    } as any;
+
+    return createPortal(
+      <div
+        className="webform-overlay"
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: '#ffffff',
+          zIndex: 10000,
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        <div
+          style={{
+            padding: 16,
+            borderBottom: '1px solid #e5e7eb',
+            background: '#ffffff',
+            boxShadow: '0 10px 30px rgba(15,23,42,0.08)'
+          }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+              alignItems: 'center',
+              gap: 12
+            }}
+          >
+            <div />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontWeight: 900, fontSize: 40, color: '#0f172a', letterSpacing: -0.4 }}>{title}</div>
+              <div className="muted" style={{ fontWeight: 700, marginTop: 8, fontSize: 24 }}>
+                {tSystem(
+                  count === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
+                  language,
+                  count === 1 ? '{count} item' : '{count} items',
+                  { count }
+                )}
+              </div>
+            </div>
+            <div style={{ justifySelf: 'end' }}>
+              <button type="button" onClick={closeLineItemGroupOverlay} style={buttonStyles.secondary}>
+                {tSystem('common.close', language, 'Close')}
+              </button>
+            </div>
+          </div>
+          <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
+            <div
+              style={{
+                marginTop: 12,
+                display: 'flex',
+                gap: 12,
+                flexWrap: 'wrap',
+                alignItems: 'flex-end',
+                justifyContent: 'space-between'
+              }}
+            >
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                {selectorCfg && selectorOptions.length ? (
+                  <div className="section-selector" data-field-path={selectorCfg.id} style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={{ fontWeight: 700 }}>
+                      {resolveSelectorLabel(selectorCfg, language)}
+                      {selectorCfg.required && <RequiredStar />}
+                    </label>
+                    {selectorOptions.length >= 20 ? (
+                      <SearchableSelect
+                        value={selectorValue || ''}
+                        disabled={locked}
+                        placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
+                        emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                        options={selectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                        onChange={nextValue => {
+                          setValues(prev => {
+                            if ((prev as any)[selectorCfg.id] === nextValue) return prev;
+                            return { ...(prev as any), [selectorCfg.id]: nextValue };
+                          });
+                        }}
+                      />
+                    ) : (
+                      <select
+                        value={selectorValue}
+                        onChange={e => {
+                          const nextValue = e.target.value;
+                          setValues(prev => {
+                            if ((prev as any)[selectorCfg.id] === nextValue) return prev;
+                            return { ...(prev as any), [selectorCfg.id]: nextValue };
+                          });
+                        }}
+                      >
+                        <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
+                        {selectorOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                ) : null}
+                {renderAddButton()}
+              </div>
+              {totals.length ? (
+                <div className="line-item-totals" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {totals.map(t => (
+                    <span key={t.key} className="pill">
+                      {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </fieldset>
+        </div>
+        <fieldset
+          disabled={submitting}
+          style={{
+            border: 0,
+            padding: 0,
+            margin: 0,
+            minInlineSize: 0,
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          <div data-overlay-scroll-container="true" style={{ padding: 16, overflowY: 'auto', flex: 1, minHeight: 0 }}>
+            <LineItemGroupQuestion
+              key={overlayGroup.id}
+              q={overlayGroup as any}
+              ctx={{
+                definition,
+                language,
+                values,
+                resolveVisibilityValue,
+                setValues,
+                lineItems,
+                setLineItems,
+                submitting: submitting || isFieldLockedByDedup(groupId),
+                errors,
+                setErrors,
+                warningByField,
+                optionState,
+                setOptionState,
+                ensureLineOptions,
+                renderChoiceControl,
+                openInfoOverlay,
+                openFileOverlay,
+                openSubgroupOverlay,
+                addLineItemRowManual,
+                removeLineRow,
+                handleLineFieldChange,
+                collapsedGroups,
+                toggleGroupCollapsed,
+                collapsedRows,
+                setCollapsedRows,
+                collapsedSubgroups,
+                setCollapsedSubgroups,
+                subgroupSelectors,
+                setSubgroupSelectors,
+                subgroupBottomRefs,
+                fileInputsRef,
+                dragState,
+                incrementDrag,
+                decrementDrag,
+                resetDrag,
+                uploadAnnouncements,
+                handleLineFileInputChange,
+                handleLineFileDrop,
+                removeLineFile,
+                clearLineFiles,
+                errorIndex,
+                setOverlay,
+                onDiagnostic
+              }}
+            />
+          </div>
+        </fieldset>
+      </div>,
+      document.body
+    );
+  })();
+
   const fileOverlayPortal = (() => {
     if (!fileOverlay.open) return null;
     if (typeof document === 'undefined') return null;
@@ -3843,54 +4699,6 @@ const FormView: React.FC<FormViewProps> = ({
 
                 const isCollapsed = section.collapsible ? !!collapsedGroups[section.key] : false;
 
-                const requiredProgress = (() => {
-                  const isComplete = (q: WebQuestionDefinition): boolean => {
-                    if (q.type === 'LINE_ITEM_GROUP') {
-                      const rows = (lineItems[q.id] || []) as any[];
-                      return rows.length > 0;
-                    }
-                    const mappedValue = (q as any).valueMap
-                      ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId], {
-                          language,
-                          targetOptions: toOptionSet(q as any)
-                        })
-                      : undefined;
-                    const raw = (q as any).valueMap ? mappedValue : (values[q.id] as any);
-                    if (q.type === 'FILE_UPLOAD') {
-                      return isUploadValueComplete({
-                        value: raw as any,
-                        uploadConfig: (q as any).uploadConfig,
-                        required: !!q.required
-                      });
-                    }
-                    return !isEmptyValue(raw as any);
-                  };
-
-                  // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
-                  const requiredQs = visible.filter(q => !!q.required);
-                  const optionalQs = visible.filter(q => !q.required);
-
-                  const totalRequired = requiredQs.length;
-                  const requiredComplete = requiredQs.reduce((acc, q) => (isComplete(q) ? acc + 1 : acc), 0);
-
-                  const optionalComplete =
-                    totalRequired > 0 && requiredComplete >= totalRequired
-                      ? optionalQs.reduce((acc, q) => (isComplete(q) ? acc + 1 : acc), 0)
-                      : 0;
-
-                  const numerator = requiredComplete + optionalComplete;
-                  return { numerator, requiredComplete, totalRequired };
-                })();
-
-                const requiredProgressClass =
-                  requiredProgress.totalRequired > 0
-                    ? requiredProgress.requiredComplete >= requiredProgress.totalRequired
-                      ? 'ck-progress-good'
-                      : 'ck-progress-bad'
-                    : 'ck-progress-neutral';
-                const expandLabel = tSystem('lineItems.expand', language, 'Expand');
-                const collapseLabel = tSystem('lineItems.collapse', language, 'Collapse');
-
                 const sectionHasError = (() => {
                   const keys = Object.keys(errors || {});
                   if (!keys.length) return false;
@@ -3902,6 +4710,21 @@ const FormView: React.FC<FormViewProps> = ({
                   }
                   return false;
                 })();
+
+                // Use the same "deep" completion logic as autoCollapseOnComplete (incl. line item groups + subgroups).
+                const groupProgress = topLevelGroupProgress.find(g => g.key === section.key);
+                const totalRequired = groupProgress?.totalRequired ?? 0;
+                const requiredComplete = groupProgress?.requiredComplete ?? 0;
+                let requiredProgressClass =
+                  totalRequired > 0
+                    ? requiredComplete >= totalRequired
+                      ? 'ck-progress-good'
+                      : 'ck-progress-bad'
+                    : 'ck-progress-neutral';
+                if (sectionHasError) requiredProgressClass = 'ck-progress-bad';
+                const tapExpandLabel = tSystem('common.tapToExpand', language, 'Tap to expand');
+                const tapCollapseLabel = tSystem('common.tapToCollapse', language, 'Tap to collapse');
+                const pillActionLabel = isCollapsed ? tapExpandLabel : tapCollapseLabel;
 
                 const isPairable = (q: WebQuestionDefinition): boolean => {
                   if (!q.pair) return false;
@@ -3955,18 +4778,18 @@ const FormView: React.FC<FormViewProps> = ({
                           className="ck-group-header ck-group-header--clickable"
                           onClick={() => toggleGroupCollapsed(section.key)}
                           aria-expanded={!isCollapsed}
-                          aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} section ${section.title} (${requiredProgress.numerator}/${requiredProgress.totalRequired})`}
+                          aria-label={`${pillActionLabel} section ${section.title}`}
                         >
                           <div className="ck-group-title">{section.title}</div>
                           <span
                             className={`ck-progress-pill ${requiredProgressClass}`}
-                            title={`${requiredProgress.numerator}/${requiredProgress.totalRequired}`}
+                            title={pillActionLabel}
                             aria-hidden="true"
                           >
-                            <span>
-                              {requiredProgress.numerator}/{requiredProgress.totalRequired}
-                            </span>
-                            <span className="ck-progress-label">{isCollapsed ? expandLabel : collapseLabel}</span>
+                            {requiredProgressClass === 'ck-progress-good' ? (
+                              <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
+                            ) : null}
+                            <span className="ck-progress-label">{pillActionLabel}</span>
                             <span className="ck-progress-caret">{isCollapsed ? '▸' : '▾'}</span>
                           </span>
                         </button>
@@ -4025,6 +4848,7 @@ const FormView: React.FC<FormViewProps> = ({
         submitting={submitting}
         addLineItemRowManual={addLineItemRowManual}
       />
+      {lineItemGroupOverlayPortal}
       {subgroupOverlayPortal}
       {fileOverlayPortal}
       {infoOverlayPortal}

@@ -45,6 +45,7 @@ import { DateInput } from './DateInput';
 import { GroupedPairedFields } from './GroupedPairedFields';
 import { InfoTooltip } from './InfoTooltip';
 import { LineOverlayState } from './overlays/LineSelectOverlay';
+import { SearchableSelect } from './SearchableSelect';
 import { NumberStepper } from './NumberStepper';
 import { resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorLabel } from './lineItemSelectors';
@@ -78,6 +79,7 @@ export interface ChoiceControlArgs {
   value: string;
   options: Array<{ value: string; label: string; tooltip?: string }>;
   required: boolean;
+  searchEnabled?: boolean;
   override?: string | null;
   disabled?: boolean;
   onChange: (next: string) => void;
@@ -204,6 +206,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     setOverlay,
     onDiagnostic
   } = ctx;
+
+  const groupChoiceSearchDefault = (q.lineItemConfig?.ui as any)?.choiceSearchEnabled;
 
   const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
@@ -657,23 +661,40 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                 {resolveSelectorLabel(selectorCfg, language)}
                 {selectorCfg.required && <RequiredStar />}
               </label>
-              <select
-                value={selectorValue}
-                onChange={e => {
-                  const nextVal = e.target.value;
-                  setValues(prev => {
-                    if (prev[selectorCfg.id] === nextVal) return prev;
-                    return { ...prev, [selectorCfg.id]: nextVal };
-                  });
-                }}
-              >
-                <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                {selectorOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              {selectorOptions.length >= 20 ? (
+                <SearchableSelect
+                  value={selectorValue || ''}
+                  disabled={submitting}
+                  placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
+                  emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                  options={selectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                  onDiagnostic={(event, payload) => onDiagnostic?.(event, { scope: 'lineItems.selector', fieldId: selectorCfg.id, ...(payload || {}) })}
+                  onChange={nextVal => {
+                    setValues(prev => {
+                      if (prev[selectorCfg.id] === nextVal) return prev;
+                      return { ...prev, [selectorCfg.id]: nextVal };
+                    });
+                  }}
+                />
+              ) : (
+                <select
+                  value={selectorValue}
+                  onChange={e => {
+                    const nextVal = e.target.value;
+                    setValues(prev => {
+                      if (prev[selectorCfg.id] === nextVal) return prev;
+                      return { ...prev, [selectorCfg.id]: nextVal };
+                    });
+                  }}
+                >
+                  <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
+                  {selectorOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           ) : null;
         const liUi = q.lineItemConfig?.ui;
@@ -778,6 +799,167 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               const hasFieldTriggeredSubgroup = fieldTriggeredSubgroupIdSet.size > 0;
               const fallbackSubIds =
                 !rowCollapsed && subIds.length ? subIds.filter(id => !fieldTriggeredSubgroupIdSet.has(id)) : [];
+
+              const tapToOpenLabel = tSystem('common.tapToOpen', language, 'Tap to open');
+              const renderSubgroupOpenStack = (
+                subIdsToRender: string[],
+                opts?: { sourceFieldId?: string; variant?: 'stack' | 'inline' }
+              ) => {
+                const variant = (opts?.variant || 'stack').toString().toLowerCase() === 'inline' ? 'inline' : 'stack';
+                const list = Array.isArray(subIdsToRender) ? Array.from(new Set(subIdsToRender.filter(Boolean))) : [];
+                if (!list.length) return null;
+                const containerClass = variant === 'inline' ? 'ck-label-actions' : 'ck-subgroup-open-stack';
+                return (
+                  <div className={containerClass}>
+                    {list.map(subId => {
+                      const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
+                      const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
+                      const subRows = (lineItems[fullSubKey] || []) as any[];
+                      const subCfg = (subGroups || []).find(s => resolveSubgroupKey(s) === subId) as any;
+                      const subFields = ((subCfg as any)?.fields || []) as any[];
+                      const label = subIdToLabel[subId] || subId;
+                      const subUi = (subCfg as any)?.ui as any;
+                      const isSubProgressive =
+                        subUi?.mode === 'progressive' &&
+                        Array.isArray(subUi?.collapsedFields) &&
+                        (subUi?.collapsedFields || []).length > 0;
+                      const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
+                      const subCollapsedFieldConfigs = isSubProgressive ? (subUi?.collapsedFields || []) : [];
+                      const subExpandGate = (subUi?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
+
+                      const isSubRowDisabledByExpandGate = (subRow: any): boolean => {
+                        if (!isSubProgressive) return false;
+                        if (subExpandGate === 'always') return false;
+                        if (!subCollapsedFieldConfigs.length) return false;
+                        const subCollapseKey = `${fullSubKey}::${subRow.id}`;
+                        const subRowCollapsed = collapsedRows[subCollapseKey] ?? subDefaultCollapsed;
+                        if (!subRowCollapsed) return false;
+
+                        const groupCtx2: VisibilityContext = {
+                          getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
+                          getLineValue: (_rowId, fid) => (subRow?.values || {})[fid]
+                        };
+                        const isHidden2 = (fieldId: string) => {
+                          const target = (subFields || []).find((f: any) => f?.id === fieldId) as any;
+                          if (!target) return false;
+                          return shouldHideField(target.visibility, groupCtx2, { rowId: subRow?.id, linePrefix: fullSubKey });
+                        };
+                        const blocked: string[] = [];
+                        (subCollapsedFieldConfigs || []).forEach((cfg: any) => {
+                          const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
+                          if (!fid) return;
+                          const field = (subFields || []).find((f: any) => f?.id === fid) as any;
+                          if (!field) return;
+                          const hideField = shouldHideField(field.visibility, groupCtx2, { rowId: subRow?.id, linePrefix: fullSubKey });
+                          if (hideField) return;
+                          const val = (subRow?.values || {})[field.id];
+                          if (field.required && isEmptyValue(val as any)) {
+                            blocked.push(field.id);
+                            return;
+                          }
+                          const rules = Array.isArray(field.validationRules)
+                            ? field.validationRules.filter((r: any) => r?.then?.fieldId === field.id)
+                            : [];
+                          if (!rules.length) return;
+                          const rulesCtx: any = {
+                            ...groupCtx2,
+                            getValue: (fieldId: string) =>
+                              Object.prototype.hasOwnProperty.call(subRow?.values || {}, fieldId)
+                                ? (subRow?.values || {})[fieldId]
+                                : (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId) ? (row.values || {})[fieldId] : values[fieldId]),
+                            language,
+                            phase: 'submit',
+                            isHidden: isHidden2
+                          };
+                          const errs = validateRules(rules, rulesCtx);
+                          if (errs.length) blocked.push(field.id);
+                        });
+                        return Array.from(new Set(blocked)).length > 0;
+                      };
+
+                      const subgroupIsComplete = (() => {
+                        if (!subRows.length) return false;
+                        if (!subFields.length) return true;
+                        let hasAnyEnabledRow = false;
+                        for (const subRow of subRows) {
+                          if (isSubRowDisabledByExpandGate(subRow)) continue;
+                          hasAnyEnabledRow = true;
+                          const subCtx: VisibilityContext = {
+                            getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
+                            getLineValue: (_rowId, fid) => (subRow?.values || {})[fid]
+                          };
+                          for (const field of subFields) {
+                            if (!field?.required) continue;
+                            const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: fullSubKey });
+                            if (hide) continue;
+                            const mapped = field.valueMap
+                              ? resolveValueMapValue(
+                                  field.valueMap,
+                                  (fid: string) => {
+                                    if ((subRow?.values || {}).hasOwnProperty(fid)) return (subRow?.values || {})[fid];
+                                    if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
+                                    return resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid];
+                                  },
+                                  { language, targetOptions: toOptionSet(field) }
+                                )
+                              : undefined;
+                            const raw = field.valueMap ? mapped : (subRow?.values || {})[field.id];
+                            const filled =
+                              field.type === 'FILE_UPLOAD'
+                                ? isUploadValueComplete({
+                                    value: raw as any,
+                                    uploadConfig: (field as any).uploadConfig,
+                                    required: true
+                                  })
+                                : !isEmptyValue(raw as any);
+                            if (!filled) return false;
+                          }
+                        }
+                        if (!hasAnyEnabledRow) return false;
+                        return true;
+                      })();
+
+                      const pillClass = subHasError
+                        ? 'ck-progress-bad'
+                        : subgroupIsComplete
+                          ? 'ck-progress-good'
+                          : subRows.length
+                            ? 'ck-progress-info'
+                            : 'ck-progress-neutral';
+
+                      const pillBaseClass =
+                        variant === 'inline'
+                          ? 'ck-progress-pill ck-subgroup-open-pill-inline'
+                          : 'ck-progress-pill ck-upload-pill-btn ck-subgroup-open-pill';
+
+                      return (
+                        <button
+                          key={`${fullSubKey}-open`}
+                          type="button"
+                          className={`${pillBaseClass} ${pillClass}`}
+                          aria-label={`${tapToOpenLabel} ${label}`}
+                          onClick={() => {
+                            onDiagnostic?.('subgroup.open.tap', {
+                              groupId: q.id,
+                              rowId: row.id,
+                              subId,
+                              sourceFieldId: opts?.sourceFieldId || null
+                            });
+                            openSubgroupOverlay(fullSubKey);
+                          }}
+                        >
+                          {pillClass === 'ck-progress-good' ? (
+                            <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
+                          ) : null}
+                          <span>{label}</span>
+                          <span className="ck-progress-label">{tapToOpenLabel}</span>
+                          <span className="ck-progress-caret">▸</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              };
               const collapsedFieldsOrdered = collapsedFieldOrder
                 .map(fid => allFields.find(f => f.id === fid))
                 .filter(Boolean) as any[];
@@ -899,53 +1081,90 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
               const rowLocked = isProgressive && rowCollapsed && !canExpand;
               const rowHasError = errorIndex.rowErrors.has(collapseKey);
               const requiredRowProgress = (() => {
-                let totalRequired = 0;
-                let requiredComplete = 0;
-                let optionalComplete = 0;
+                let hasAnyRequired = false;
+                let allRequiredComplete = true;
 
+                const isFilled = (field: any, raw: any): boolean => {
+                  if (field?.type === 'FILE_UPLOAD') {
+                    return isUploadValueComplete({
+                      value: raw as any,
+                      uploadConfig: (field as any).uploadConfig,
+                      required: !!field.required
+                    });
+                  }
+                  return !isEmptyValue(raw as any);
+                };
+
+                // 1) Required fields on the row itself
                 (allFields || []).forEach((field: any) => {
                   const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
                   if (hideField) return;
+                  if (!field?.required) return;
+                  hasAnyRequired = true;
 
                   const mapped = field.valueMap
-                    ? resolveValueMapValue(field.valueMap, (fid: string) => {
-                        if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
-                        return values[fid];
-                      }, { language, targetOptions: toOptionSet(field) })
+                    ? resolveValueMapValue(
+                        field.valueMap,
+                        (fid: string) => {
+                          if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
+                          return resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid];
+                        },
+                        { language, targetOptions: toOptionSet(field) }
+                      )
                     : undefined;
                   const raw = field.valueMap ? mapped : (row.values || {})[field.id];
-                  const filled =
-                    field.type === 'FILE_UPLOAD'
-                      ? isUploadValueComplete({
-                          value: raw as any,
-                          uploadConfig: (field as any).uploadConfig,
-                          required: !!field.required
-                        })
-                      : !isEmptyValue(raw as any);
-
-                  if (!!field.required) {
-                    totalRequired += 1;
-                    if (filled) requiredComplete += 1;
-                  } else {
-                    if (filled) optionalComplete += 1;
-                  }
+                  if (!isFilled(field, raw)) allRequiredComplete = false;
                 });
 
-                const includeOptional = totalRequired > 0 && requiredComplete >= totalRequired;
-                const numerator = requiredComplete + (includeOptional ? optionalComplete : 0);
-                return { numerator, requiredComplete, totalRequired };
-              })();
-              const requiredRowProgressClass =
-                requiredRowProgress.totalRequired > 0
-                  ? requiredRowProgress.requiredComplete >= requiredRowProgress.totalRequired
-                    ? 'ck-progress-good'
-                    : 'ck-progress-bad'
-                  : 'ck-progress-neutral';
+                // 2) Required fields in any EXISTING subgroup rows under this parent row
+                (subGroups || []).forEach(sub => {
+                  const subId = resolveSubgroupKey(sub);
+                  if (!subId) return;
+                  const subKey = buildSubgroupKey(q.id, row.id, subId);
+                  const subRows = (lineItems[subKey] || []) as any[];
+                  if (!subRows.length) return;
+                  const subFields = ((sub as any)?.fields || []) as any[];
+                  subRows.forEach(subRow => {
+                    const subCtx: VisibilityContext = {
+                      getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
+                      getLineValue: (_rowId, fid) => (subRow?.values || {})[fid]
+                    };
+                    subFields.forEach((field: any) => {
+                      const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                      if (hide) return;
+                      if (!field?.required) return;
+                      hasAnyRequired = true;
 
-              const expandLabel = tSystem('lineItems.expand', language, 'Expand');
-              const collapseLabel = tSystem('lineItems.collapse', language, 'Collapse');
+                      const mapped = field.valueMap
+                        ? resolveValueMapValue(
+                            field.valueMap,
+                            (fid: string) => {
+                              if ((subRow?.values || {}).hasOwnProperty(fid)) return (subRow?.values || {})[fid];
+                              if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
+                              return resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid];
+                            },
+                            { language, targetOptions: toOptionSet(field) }
+                          )
+                        : undefined;
+                      const raw = field.valueMap ? mapped : (subRow?.values || {})[field.id];
+                      if (!isFilled(field, raw)) allRequiredComplete = false;
+                    });
+                  });
+                });
+
+                return { hasAnyRequired, allRequiredComplete };
+              })();
+              let requiredRowProgressClass = requiredRowProgress.hasAnyRequired
+                ? requiredRowProgress.allRequiredComplete
+                  ? 'ck-progress-good'
+                  : 'ck-progress-bad'
+                : 'ck-progress-neutral';
+              if (rowHasError) requiredRowProgressClass = 'ck-progress-bad';
+
+              const tapExpandLabel = tSystem('common.tapToExpand', language, 'Tap to expand');
+              const tapCollapseLabel = tSystem('common.tapToCollapse', language, 'Tap to collapse');
               const lockedLabel = tSystem('lineItems.locked', language, 'Locked');
-              const pillActionLabel = rowLocked ? lockedLabel : rowCollapsed ? expandLabel : collapseLabel;
+              const pillActionLabel = rowLocked ? lockedLabel : rowCollapsed ? tapExpandLabel : tapCollapseLabel;
               return (
                 <div
                   key={row.id}
@@ -989,27 +1208,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
                                 return Array.from(new Set(hits));
                               })();
-                              const subgroupTriggerNodes =
-                                triggeredSubgroupIds.length && !rowCollapsed
-                                  ? triggeredSubgroupIds.map(subId => {
-                                      const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
-                                      const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
-                                      return (
-                                        <button
-                                          key={subId}
-                                          type="button"
-                                          style={{
-                                            ...buttonStyles.secondary,
-                                            borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
-                                            background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
-                                          }}
-                                          onClick={() => openSubgroupOverlay(fullSubKey)}
-                                        >
-                                          {subIdToLabel[subId] || subId}
-                                        </button>
-                                      );
-                                    })
-                                  : [];
+                              const subgroupOpenStack = triggeredSubgroupIds.length
+                                ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: titleField.id })
+                                : null;
 
                               if (titleField.type === 'CHOICE') {
                                 const optionSetField: OptionSet =
@@ -1054,17 +1255,16 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       {titleLocked ? (
                                         <div className="ck-row-title">{displayLabel || '—'}</div>
                                       ) : (
-                                        <select
-                                          value={choiceVal || ''}
-                                          onChange={e => handleLineFieldChange(q, row.id, titleField, e.target.value)}
-                                        >
-                                          <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                                          {optsField.map(opt => (
-                                            <option key={opt.value} value={opt.value}>
-                                              {opt.label}
-                                            </option>
-                                          ))}
-                                        </select>
+                                        renderChoiceControl({
+                                          fieldPath: errorKey,
+                                          value: choiceVal || '',
+                                          options: optsField,
+                                          required: !!titleField.required,
+                                          searchEnabled: titleField.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
+                                          override: titleField.ui?.control,
+                                          disabled: submitting || (titleField as any)?.readOnly === true,
+                                          onChange: next => handleLineFieldChange(q, row.id, titleField, next)
+                                        })
                                       )}
                                       {(() => {
                                         const tooltipNode = selectedOpt?.tooltip ? (
@@ -1078,11 +1278,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             onOpen={openInfoOverlay}
                                           />
                                         ) : null;
-                                        const actionNodes = tooltipNode ? [...subgroupTriggerNodes, tooltipNode] : subgroupTriggerNodes;
-                                        if (!actionNodes.length) return null;
-                                        return <div className="ck-field-actions">{actionNodes}</div>;
+                                        if (!tooltipNode) return null;
+                                        return <div className="ck-field-actions">{tooltipNode}</div>;
                                       })()}
                                     </div>
+                                    {subgroupOpenStack}
                                     {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                     {renderWarnings(errorKey)}
                                   </div>
@@ -1143,9 +1343,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                         </label>
                                       ))}
                                     </div>
-                                    {subgroupTriggerNodes.length ? (
-                                      <div className="ck-field-actions">{subgroupTriggerNodes}</div>
-                                    ) : null}
+                                    {subgroupOpenStack}
                                     {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                     {renderWarnings(errorKey)}
                                   </div>
@@ -1185,9 +1383,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                     readOnly={!!titleField.valueMap || titleLocked}
                                     disabled={titleLocked}
                                   />
-                                  {subgroupTriggerNodes.length ? (
-                                    <div className="ck-field-actions">{subgroupTriggerNodes}</div>
-                                  ) : null}
+                                  {subgroupOpenStack}
                                   {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                   {renderWarnings(errorKey)}
                                 </div>
@@ -1213,13 +1409,13 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                       <button
                         type="button"
                         className="ck-row-toggle"
-                        aria-label={`${rowCollapsed ? expandLabel : collapseLabel} ${tSystem('lineItems.row', language, 'Row')} ${rowIdx + 1} (${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired})`}
+                        aria-label={`${pillActionLabel} ${tSystem('lineItems.row', language, 'Row')} ${rowIdx + 1}`}
                         aria-expanded={!rowCollapsed}
                         aria-disabled={rowCollapsed && !canExpand}
                         title={
                           rowCollapsed && !canExpand
                             ? gateResult.reason
-                            : `${requiredRowProgress.numerator}/${requiredRowProgress.totalRequired}`
+                            : pillActionLabel
                         }
                         onClick={() => {
                           if (rowCollapsed && !canExpand) {
@@ -1247,9 +1443,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           data-has-error={rowHasError ? 'true' : undefined}
                           aria-disabled={rowCollapsed && !canExpand ? 'true' : undefined}
                         >
-                          <span>
-                            {requiredRowProgress.numerator}/{requiredRowProgress.totalRequired}
-                          </span>
+                          {requiredRowProgressClass === 'ck-progress-good' ? (
+                            <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
+                          ) : null}
                           <span className="ck-progress-label">{pillActionLabel}</span>
                           <span className="ck-progress-caret">{rowCollapsed ? '▸' : '▾'}</span>
                         </span>
@@ -1306,27 +1502,13 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
                         return Array.from(new Set(hits));
                       })();
-                      const subgroupTriggerNodes =
-                        triggeredSubgroupIds.length && !rowCollapsed
-                          ? triggeredSubgroupIds.map(subId => {
-                              const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
-                              const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
-                              return (
-                                <button
-                                  key={subId}
-                                  type="button"
-                                  style={{
-                                    ...buttonStyles.secondary,
-                                    borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
-                                    background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
-                                  }}
-                                  onClick={() => openSubgroupOverlay(fullSubKey)}
-                                >
-                                  {subIdToLabel[subId] || subId}
-                                </button>
-                              );
-                            })
-                          : [];
+                      const fieldIsStacked = (field as any)?.ui?.labelLayout === 'stacked' && labelStyle !== srOnly;
+                      const subgroupOpenStack = triggeredSubgroupIds.length && !fieldIsStacked
+                        ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: field.id, variant: 'stack' })
+                        : null;
+                      const subgroupOpenInline = triggeredSubgroupIds.length && fieldIsStacked
+                        ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: field.id, variant: 'inline' })
+                        : null;
 
                     switch (field.type) {
                       case 'CHOICE': {
@@ -1341,16 +1523,27 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                               data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
                             >
-                              <label style={labelStyle}>
-                              {resolveFieldLabel(field, language, field.id)}
-                              {field.required && <RequiredStar />}
-                            </label>
+                              {fieldIsStacked ? (
+                                <div className="ck-label-row">
+                                  <label style={labelStyle}>
+                                    {resolveFieldLabel(field, language, field.id)}
+                                    {field.required && <RequiredStar />}
+                                  </label>
+                                  {subgroupOpenInline}
+                                </div>
+                              ) : (
+                                <label style={labelStyle}>
+                                  {resolveFieldLabel(field, language, field.id)}
+                                  {field.required && <RequiredStar />}
+                                </label>
+                              )}
                               <div className="ck-control-row">
                                 {renderChoiceControl({
                                   fieldPath,
                                   value: choiceVal || '',
                                   options: optsField,
                                   required: !!field.required,
+                                  searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
                                   override: (field as any)?.ui?.control,
                                   disabled: submitting || (field as any)?.readOnly === true,
                                   onChange: next => handleLineFieldChange(q, row.id, field, next)
@@ -1368,11 +1561,11 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       onOpen={openInfoOverlay}
                                     />
                                   ) : null;
-                                  const actionNodes = tooltipNode ? [...subgroupTriggerNodes, tooltipNode] : subgroupTriggerNodes;
-                                  if (!actionNodes.length) return null;
-                                  return <div className="ck-field-actions">{actionNodes}</div>;
+                                  if (!tooltipNode) return null;
+                                  return <div className="ck-field-actions">{tooltipNode}</div>;
                                 })()}
                               </div>
+                              {subgroupOpenStack}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                               {renderWarnings(fieldPath)}
                           </div>
@@ -1414,9 +1607,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   {field.required && <RequiredStar />}
                                 </span>
                               </label>
-                              {subgroupTriggerNodes.length ? (
-                                <div className="ck-field-actions">{subgroupTriggerNodes}</div>
-                              ) : null}
+                              {subgroupOpenStack}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                               {renderWarnings(fieldPath)}
                             </div>
@@ -1453,9 +1644,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 </label>
                               ))}
                             </div>
-                              {subgroupTriggerNodes.length ? (
-                                <div className="ck-field-actions">{subgroupTriggerNodes}</div>
-                              ) : null}
+                              {subgroupOpenStack}
                             {(() => {
                               const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
                               if (!withTooltips.length) return null;
@@ -1583,9 +1772,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                   </span>
                                   <span className="ck-progress-caret">▸</span>
                                 </button>
-                                {subgroupTriggerNodes.length ? (
-                                  <div className="ck-field-actions">{subgroupTriggerNodes}</div>
-                                ) : null}
+                                {subgroupOpenStack}
                                 {maxed ? (
                                   <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
                                 ) : showMissingHelper ? (
@@ -1677,9 +1864,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                               />
                             )}
-                              {subgroupTriggerNodes.length ? (
-                                <div className="ck-field-actions">{subgroupTriggerNodes}</div>
-                              ) : null}
+                              {subgroupOpenStack}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                               {renderWarnings(fieldPath)}
                           </div>
@@ -1741,26 +1926,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                     );
                   })()}
                   {!rowCollapsed && fallbackSubIds.length ? (
-                    <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {fallbackSubIds.map(subId => {
-                        const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
-                        const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
-                        return (
-                          <button
-                            key={subId}
-                            type="button"
-                            style={{
-                              ...buttonStyles.secondary,
-                              borderColor: subHasError ? '#ef4444' : buttonStyles.secondary.borderColor,
-                              background: subHasError ? '#fff7f7' : buttonStyles.secondary.background
-                            }}
-                            onClick={() => openSubgroupOverlay(fullSubKey)}
-                          >
-                            {subIdToLabel[subId] || subId}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <div style={{ marginTop: 10 }}>{renderSubgroupOpenStack(fallbackSubIds)}</div>
                   ) : null}
                   <div
                     className="line-actions"
@@ -1923,23 +2089,44 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                           {resolveSelectorLabel(subSelectorCfg, language)}
                                           {subSelectorCfg.required && <RequiredStar />}
                                         </label>
-                                        <select
-                                          value={subSelectorValue}
-                                          onChange={e => {
-                                            const nextValue = e.target.value;
-                                            setSubgroupSelectors(prev => {
-                                              if (prev[subKey] === nextValue) return prev;
-                                              return { ...prev, [subKey]: nextValue };
-                                            });
-                                          }}
-                                        >
-                                          <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                                          {subSelectorOptions.map(opt => (
-                                            <option key={opt.value} value={opt.value}>
-                                              {opt.label}
+                                        {subSelectorOptions.length >= 20 ? (
+                                          <SearchableSelect
+                                            value={subSelectorValue || ''}
+                                            disabled={submitting}
+                                            placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
+                                            emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                                            options={subSelectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                                            onDiagnostic={(event, payload) =>
+                                              onDiagnostic?.(event, { scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey, ...(payload || {}) })
+                                            }
+                                            onChange={nextValue => {
+                                              setSubgroupSelectors(prev => {
+                                                if (prev[subKey] === nextValue) return prev;
+                                                return { ...prev, [subKey]: nextValue };
+                                              });
+                                            }}
+                                          />
+                                        ) : (
+                                          <select
+                                            value={subSelectorValue}
+                                            onChange={e => {
+                                              const nextValue = e.target.value;
+                                              setSubgroupSelectors(prev => {
+                                                if (prev[subKey] === nextValue) return prev;
+                                                return { ...prev, [subKey]: nextValue };
+                                              });
+                                            }}
+                                          >
+                                            <option value="">
+                                              {tSystem('common.selectPlaceholder', language, 'Select…')}
                                             </option>
-                                          ))}
-                                        </select>
+                                            {subSelectorOptions.map(opt => (
+                                              <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        )}
                                       </div>
                                     ) : null}
                                     {showTop ? renderSubAddButton() : null}
@@ -2078,6 +2265,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                             value: choiceVal || '',
                                             options: optsField,
                                             required: !!field.required,
+                                            searchEnabled:
+                                              (field as any)?.ui?.choiceSearchEnabled ??
+                                              (((targetGroup as any)?.lineItemConfig?.ui as any)?.choiceSearchEnabled),
                                             override: (field as any)?.ui?.control,
                                             disabled: submitting || (field as any)?.readOnly === true,
                                             onChange: next => handleLineFieldChange(targetGroup, subRow.id, field, next)
@@ -2478,23 +2668,42 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       {resolveSelectorLabel(subSelectorCfg, language)}
                                       {subSelectorCfg.required && <RequiredStar />}
                                     </label>
-                                    <select
-                                      value={subSelectorValue}
-                                      onChange={e => {
-                                        const nextValue = e.target.value;
-                                        setSubgroupSelectors(prev => {
-                                          if (prev[subKey] === nextValue) return prev;
-                                          return { ...prev, [subKey]: nextValue };
-                                        });
-                                      }}
-                                    >
-                                      <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                                      {subSelectorOptions.map(opt => (
-                                        <option key={opt.value} value={opt.value}>
-                                          {opt.label}
-                                        </option>
-                                      ))}
-                                    </select>
+                                    {subSelectorOptions.length >= 20 ? (
+                                      <SearchableSelect
+                                        value={subSelectorValue || ''}
+                                        disabled={submitting}
+                                        placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
+                                        emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                                        options={subSelectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                                        onDiagnostic={(event, payload) =>
+                                          onDiagnostic?.(event, { scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey, ...(payload || {}) })
+                                        }
+                                        onChange={nextValue => {
+                                          setSubgroupSelectors(prev => {
+                                            if (prev[subKey] === nextValue) return prev;
+                                            return { ...prev, [subKey]: nextValue };
+                                          });
+                                        }}
+                                      />
+                                    ) : (
+                                      <select
+                                        value={subSelectorValue}
+                                        onChange={e => {
+                                          const nextValue = e.target.value;
+                                          setSubgroupSelectors(prev => {
+                                            if (prev[subKey] === nextValue) return prev;
+                                            return { ...prev, [subKey]: nextValue };
+                                          });
+                                        }}
+                                      >
+                                        <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
+                                        {subSelectorOptions.map(opt => (
+                                          <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
                                   </div>
                                 ) : null}
                                 {showBottom ? renderSubAddButton() : null}
@@ -2551,23 +2760,40 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                       {resolveSelectorLabel(selectorCfg, language)}
                       {selectorCfg.required && <RequiredStar />}
                     </label>
-                    <select
-                      value={selectorValue}
-                      onChange={e => {
-                        const nextValue = e.target.value;
-                        setValues(prev => {
-                          if (prev[selectorCfg.id] === nextValue) return prev;
-                          return { ...prev, [selectorCfg.id]: nextValue };
-                        });
-                      }}
-                    >
-                      <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                      {selectorOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                    {selectorOptions.length >= 20 ? (
+                      <SearchableSelect
+                        value={selectorValue || ''}
+                        disabled={submitting}
+                        placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
+                        emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                        options={selectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                        onDiagnostic={(event, payload) => onDiagnostic?.(event, { scope: 'lineItems.selector', fieldId: selectorCfg.id, ...(payload || {}) })}
+                        onChange={nextValue => {
+                          setValues(prev => {
+                            if (prev[selectorCfg.id] === nextValue) return prev;
+                            return { ...prev, [selectorCfg.id]: nextValue };
+                          });
+                        }}
+                      />
+                    ) : (
+                      <select
+                        value={selectorValue}
+                        onChange={e => {
+                          const nextValue = e.target.value;
+                          setValues(prev => {
+                            if (prev[selectorCfg.id] === nextValue) return prev;
+                            return { ...prev, [selectorCfg.id]: nextValue };
+                          });
+                        }}
+                      >
+                        <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
+                        {selectorOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 ) : null}
                 <div className="line-item-toolbar-actions">

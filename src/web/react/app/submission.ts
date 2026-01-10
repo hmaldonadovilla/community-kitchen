@@ -222,6 +222,12 @@ export const validateForm = (args: {
         ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
       const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
       const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
+      const lineFieldIdSet = new Set((q.lineItemConfig?.fields || []).map((f: any) => (f?.id !== undefined ? f.id.toString() : '')).filter(Boolean));
+      const normalizeLineFieldId = (rawId: string): string => {
+        const s = rawId !== undefined && rawId !== null ? rawId.toString() : '';
+        const prefix = `${q.id}__`;
+        return s.startsWith(prefix) ? s.slice(prefix.length) : s;
+      };
 
       let hasAtLeastOneValidEnabledRow = false;
       let hasAnyRow = false;
@@ -252,8 +258,12 @@ export const validateForm = (args: {
           getLineValue: (_rowId, fid) => row.values[fid]
         };
         const getRowValue = (fieldId: string): FieldValue => {
+          const localId = normalizeLineFieldId(fieldId);
+          if (Object.prototype.hasOwnProperty.call(row.values || {}, localId)) return (row.values || {})[localId];
           if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
-          return values[fieldId];
+          if (Object.prototype.hasOwnProperty.call(values || {}, fieldId)) return (values as any)[fieldId];
+          if (Object.prototype.hasOwnProperty.call(values || {}, localId)) return (values as any)[localId];
+          return (values as any)[fieldId];
         };
 
         q.lineItemConfig?.fields.forEach(field => {
@@ -263,10 +273,18 @@ export const validateForm = (args: {
               getValue: getRowValue,
               language,
               phase: 'submit',
-              isHidden: () => shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
+              isHidden: (fieldId: string) => {
+                const localId = normalizeLineFieldId(fieldId);
+                const target = (q.lineItemConfig?.fields || []).find((f: any) => f?.id?.toString?.() === localId) as any;
+                if (!target) return false;
+                return shouldHideField(target.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+              }
             } as any);
             errs.forEach(err => {
-              allErrors[`${q.id}__${field.id}__${row.id}`] = err.message;
+              const targetIdRaw = err?.fieldId !== undefined && err?.fieldId !== null ? err.fieldId.toString() : field.id;
+              const targetId = normalizeLineFieldId(targetIdRaw);
+              const key = lineFieldIdSet.has(targetId) ? `${q.id}__${targetId}__${row.id}` : targetId;
+              if (key) allErrors[key] = err.message;
             });
             if (errs.length) rowValid = false;
           }
@@ -314,6 +332,16 @@ export const validateForm = (args: {
               Array.isArray(subUi?.collapsedFields) &&
               (subUi?.collapsedFields || []).length > 0;
             const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
+            const subFields = ((sub as any).fields || []) as any[];
+            const subFieldIdSet = new Set(subFields.map((f: any) => (f?.id !== undefined ? f.id.toString() : '')).filter(Boolean));
+            const normalizeSubFieldId = (rawId: string): string => {
+              const s = rawId !== undefined && rawId !== null ? rawId.toString() : '';
+              const subPrefix = `${subKey}__`;
+              const linePrefix = `${q.id}__`;
+              if (s.startsWith(subPrefix)) return s.slice(subPrefix.length);
+              if (s.startsWith(linePrefix)) return s.slice(linePrefix.length);
+              return s;
+            };
             subRows.forEach(subRow => {
               const subCollapseKey = `${subKey}::${subRow.id}`;
               const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
@@ -321,7 +349,7 @@ export const validateForm = (args: {
               if (
                 isRowDisabledByExpandGate({
                   ui: subUi,
-                  fields: (sub as any).fields || [],
+                  fields: subFields,
                   row: subRow as any,
                   topValues: { ...values, ...(row.values || {}) },
                   language,
@@ -336,21 +364,38 @@ export const validateForm = (args: {
                 getLineValue: (_rowId, fid) => subRow.values[fid]
               };
               const getSubValue = (fieldId: string): FieldValue => {
+                const localId = normalizeSubFieldId(fieldId);
+                if (Object.prototype.hasOwnProperty.call(subRow.values || {}, localId)) return (subRow.values || {})[localId];
                 if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fieldId)) return (subRow.values || {})[fieldId];
+                if (Object.prototype.hasOwnProperty.call(row.values || {}, localId)) return (row.values || {})[localId];
                 if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
-                return values[fieldId];
+                if (Object.prototype.hasOwnProperty.call(values || {}, fieldId)) return (values as any)[fieldId];
+                if (Object.prototype.hasOwnProperty.call(values || {}, localId)) return (values as any)[localId];
+                return (values as any)[fieldId];
               };
-              (sub as any).fields?.forEach((field: any) => {
+              subFields.forEach((field: any) => {
                 if (field.validationRules && field.validationRules.length) {
                   const errs = validateRules(field.validationRules, {
                     ...subCtx,
                     getValue: getSubValue,
                     language,
                     phase: 'submit',
-                    isHidden: () => shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey })
+                    isHidden: (fieldId: string) => {
+                      const localId = normalizeSubFieldId(fieldId);
+                      const target = subFields.find((f: any) => f?.id?.toString?.() === localId) as any;
+                      if (!target) return false;
+                      return shouldHideField(target.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                    }
                   } as any);
                   errs.forEach(err => {
-                    allErrors[`${subKey}__${field.id}__${subRow.id}`] = err.message;
+                    const targetIdRaw = err?.fieldId !== undefined && err?.fieldId !== null ? err.fieldId.toString() : field.id;
+                    const targetId = normalizeSubFieldId(targetIdRaw);
+                    const key = subFieldIdSet.has(targetId)
+                      ? `${subKey}__${targetId}__${subRow.id}`
+                      : lineFieldIdSet.has(targetId)
+                        ? `${q.id}__${targetId}__${row.id}`
+                        : targetId;
+                    if (key) allErrors[key] = err.message;
                   });
                   if (errs.length) rowValid = false;
                 }

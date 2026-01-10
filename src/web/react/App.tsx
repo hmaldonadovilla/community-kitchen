@@ -2572,6 +2572,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               setStatusLevel,
               setLastSubmissionMeta,
               setSelectedRecordSnapshot,
+              setValues,
               setView,
               upsertListCacheRow,
               busy: updateRecordBusy

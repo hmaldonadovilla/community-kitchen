@@ -1938,6 +1938,22 @@ export class ConfigSheet {
         rawUi.include_disabled_rows_on_submit
     );
 
+    const openInOverlay = normalizeBool(
+      rawUi.openInOverlay ??
+        rawUi.openInFullPageOverlay ??
+        rawUi.fullPageOverlay ??
+        rawUi.fullPage ??
+        rawUi.overlay
+    );
+
+    const choiceSearchEnabled = normalizeBool(
+      rawUi.choiceSearchEnabled ??
+        rawUi.choiceSearch ??
+        rawUi.selectSearchEnabled ??
+        rawUi.searchEnabled ??
+        rawUi.searchable
+    );
+
     const cfg: LineItemGroupUiConfig = {};
     if (mode) cfg.mode = mode;
     if (collapsedFields && collapsedFields.length) cfg.collapsedFields = collapsedFields;
@@ -1948,6 +1964,8 @@ export class ConfigSheet {
     if (addButtonPlacement) (cfg as any).addButtonPlacement = addButtonPlacement;
     if (allowRemoveAutoRows !== undefined) (cfg as any).allowRemoveAutoRows = allowRemoveAutoRows;
     if (saveDisabledRows !== undefined) (cfg as any).saveDisabledRows = saveDisabledRows;
+    if (openInOverlay !== undefined) (cfg as any).openInOverlay = openInOverlay;
+    if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 

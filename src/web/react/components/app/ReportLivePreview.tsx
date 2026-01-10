@@ -1014,6 +1014,7 @@ export const ReportLivePreview: React.FC<{
             key={sectionKey}
             groupKey={sectionKey}
             title={section.title}
+            language={language}
             collapsible={canCollapse}
             collapsed={collapsed}
             onToggleCollapsed={

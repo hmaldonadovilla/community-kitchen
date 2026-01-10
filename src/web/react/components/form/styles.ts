@@ -290,6 +290,65 @@ export const FORM_VIEW_STYLES = `
         .ck-field-actions > .info-button {
           min-height: var(--control-height);
         }
+
+        /* Subgroup "Tap to open" pills: full-width stack under a field */
+        .ck-subgroup-open-stack {
+          flex-basis: 100%;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .ck-progress-pill.ck-subgroup-open-pill {
+          width: 100%;
+          justify-content: flex-start;
+        }
+        .ck-progress-pill.ck-subgroup-open-pill .ck-progress-label {
+          margin-left: auto;
+        }
+
+        /* "Open overlay" pills (line item group openInOverlay): behave like a full-width control in the right column */
+        .form-card .field.inline-field > .ck-open-overlay-pill,
+        .webform-overlay .field.inline-field > .ck-open-overlay-pill {
+          flex: 1 1 calc(50% - 6px);
+          min-width: 0;
+          width: 100%;
+          justify-content: flex-start;
+        }
+        .ck-open-overlay-pill .ck-progress-label {
+          margin-left: auto;
+        }
+
+        /* Stacked-label fields: allow placing action pills to the right of the label */
+        .ck-label-row {
+          flex: 1 1 100%;
+          min-width: 0;
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .ck-label-row > label {
+          flex: 1 1 auto;
+          min-width: 0;
+          max-width: none;
+          margin: 0;
+        }
+        .ck-label-actions {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: stretch;
+          gap: 10px;
+          min-width: 0;
+        }
+        .ck-progress-pill.ck-subgroup-open-pill-inline {
+          /* Keep sizing consistent with standard pills; only adjust alignment for inline placement. */
+          justify-content: flex-start;
+        }
+        .ck-progress-pill.ck-subgroup-open-pill-inline .ck-progress-label {
+          margin-left: auto;
+        }
         .form-card .field.inline-field > .error,
         .webform-overlay .field.inline-field > .error {
           flex-basis: 100%;
@@ -694,6 +753,94 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay select {
           min-height: var(--control-height);
           height: var(--control-height);
+        }
+
+        /* Searchable select (type-to-filter) for large option lists. */
+        .ck-searchable-select {
+          position: relative;
+          width: 100%;
+          min-width: 0;
+        }
+        .ck-searchable-select > input {
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          /* Leave room for the clear "×" button. */
+          padding-right: 52px;
+        }
+        /* Hide native iOS/WebKit search clear so we can show our own red "×". */
+        .ck-searchable-select > input::-webkit-search-cancel-button {
+          -webkit-appearance: none;
+          appearance: none;
+          display: none;
+        }
+        .ck-searchable-select__clear-icon {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 36px;
+          height: 36px;
+          border-radius: 999px;
+          border: none;
+          background: transparent;
+          color: var(--danger);
+          font-weight: 900;
+          font-size: 1.2em;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          box-shadow: none;
+          padding: 0;
+        }
+        .ck-searchable-select__clear-icon:focus-visible {
+          outline: 4px solid rgba(255, 59, 48, 0.28);
+          outline-offset: 3px;
+        }
+        .ck-searchable-select__menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          right: 0;
+          z-index: 200;
+          max-height: 320px;
+          overflow: auto;
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.14);
+          border-radius: 14px;
+          box-shadow: 0 22px 70px rgba(15, 23, 42, 0.18);
+          padding: 6px;
+        }
+        .ck-searchable-select__option {
+          width: 100%;
+          text-align: left;
+          padding: 10px 12px;
+          border: 0;
+          background: transparent;
+          border-radius: 12px;
+          font-size: var(--ck-font-control);
+          font-weight: 800;
+          color: var(--text);
+          -webkit-text-fill-color: var(--text);
+          cursor: pointer;
+        }
+        .ck-searchable-select__option:hover,
+        .ck-searchable-select__option.is-active {
+          background: rgba(59, 130, 246, 0.16);
+          color: var(--text);
+          -webkit-text-fill-color: var(--text);
+        }
+        .ck-searchable-select__option:active {
+          background: rgba(59, 130, 246, 0.22);
+          color: var(--text);
+          -webkit-text-fill-color: var(--text);
+        }
+        .ck-searchable-select__empty {
+          padding: 10px 12px;
+          color: rgba(15, 23, 42, 0.62);
+          font-weight: 700;
         }
 
         /* Date inputs can be surprisingly wide on iOS; ensure they always shrink within 2-up grids. */

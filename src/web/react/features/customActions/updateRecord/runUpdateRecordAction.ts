@@ -53,6 +53,7 @@ export type UpdateRecordActionDeps = {
   setStatusLevel: (tone: StatusTone) => void;
   setLastSubmissionMeta: Dispatch<SetStateAction<SubmissionMeta | null>>;
   setSelectedRecordSnapshot: Dispatch<SetStateAction<WebFormSubmission | null>>;
+  setValues: Dispatch<SetStateAction<Record<string, FieldValue>>>;
   setView: (v: View) => void;
   upsertListCacheRow: (args: {
     recordId: string;
@@ -250,6 +251,32 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
         dataVersion: nextDataVersion ?? prev?.dataVersion,
         status: (nextStatus || null) as any
       }));
+
+      if (appliedValueFields.length) {
+        const patch: Record<string, FieldValue> = {};
+        appliedValueFields.forEach(fid => {
+          (patch as any)[fid] = (draft as any).values?.[fid] as any;
+        });
+        deps.refs.valuesRef.current = { ...(deps.refs.valuesRef.current || {}), ...(patch as any) };
+        deps.setValues(prev => {
+          let changed = false;
+          const next = { ...(prev || {}) } as any;
+          Object.keys(patch).forEach(fid => {
+            if ((next as any)[fid] !== (patch as any)[fid]) {
+              (next as any)[fid] = (patch as any)[fid];
+              changed = true;
+            }
+          });
+          return changed ? (next as any) : prev;
+        });
+        deps.logEvent('button.updateRecord.localValues.patch', {
+          buttonId: req.buttonId,
+          qIdx: req.qIdx ?? null,
+          recordId,
+          fields: appliedValueFields.slice(0, 25),
+          fieldCount: appliedValueFields.length
+        });
+      }
 
       // Keep record snapshot + list cache consistent (avoid refetch on navigation).
       deps.setSelectedRecordSnapshot(prev => {

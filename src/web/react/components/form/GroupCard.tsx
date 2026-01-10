@@ -1,4 +1,6 @@
 import React from 'react';
+import { LangCode } from '../../../types';
+import { tSystem } from '../../../systemStrings';
 
 export type GroupCardProps = {
   className?: string;
@@ -8,6 +10,7 @@ export type GroupCardProps = {
   collapsed?: boolean;
   hasError?: boolean;
   progress?: { complete: number; total: number } | null;
+  language?: LangCode;
   onToggleCollapsed?: () => void;
   children: React.ReactNode;
 };
@@ -20,6 +23,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({
   collapsed = false,
   hasError = false,
   progress = null,
+  language = 'EN',
   onToggleCollapsed,
   children
 }) => {
@@ -28,8 +32,10 @@ export const GroupCard: React.FC<GroupCardProps> = ({
   const showProgress = !!progress && typeof progress.complete === 'number' && typeof progress.total === 'number';
   const complete = showProgress ? progress.complete : 0;
   const total = showProgress ? progress.total : 0;
-  const progressClass =
-    showProgress && total > 0 ? (complete >= total ? 'ck-progress-good' : 'ck-progress-bad') : 'ck-progress-neutral';
+  let progressClass = showProgress && total > 0 ? (complete >= total ? 'ck-progress-good' : 'ck-progress-bad') : 'ck-progress-neutral';
+  if (hasError) progressClass = 'ck-progress-bad';
+  const tapExpandLabel = tSystem('common.tapToExpand', language, 'Tap to expand');
+  const tapCollapseLabel = tSystem('common.tapToCollapse', language, 'Tap to collapse');
 
   if (!showHeader) {
     return (
@@ -47,20 +53,15 @@ export const GroupCard: React.FC<GroupCardProps> = ({
           className="ck-group-header ck-group-header--clickable"
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} section ${resolvedTitle}${showProgress && total > 0 ? ` (${complete}/${total} required complete)` : ''}`}
+          aria-label={`${collapsed ? tapExpandLabel : tapCollapseLabel} section ${resolvedTitle}`}
         >
           <div className="ck-group-title">{resolvedTitle}</div>
           <span
             className={`ck-progress-pill ${progressClass}`}
-            title={showProgress && total > 0 ? `${complete}/${total} required complete` : `${collapsed ? 'Expand' : 'Collapse'} ${resolvedTitle}`}
+            title={collapsed ? tapExpandLabel : tapCollapseLabel}
             aria-hidden="true"
           >
-            {showProgress && total > 0 ? (
-              <span>
-                {complete}/{total}
-              </span>
-            ) : null}
-            <span className="ck-progress-label">{collapsed ? 'Expand' : 'Collapse'}</span>
+            <span className="ck-progress-label">{collapsed ? tapExpandLabel : tapCollapseLabel}</span>
             <span className="ck-progress-caret">{collapsed ? '▸' : '▾'}</span>
           </span>
         </button>

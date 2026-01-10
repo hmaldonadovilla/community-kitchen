@@ -166,6 +166,7 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
               key={instanceKey}
               groupKey={instanceKey}
               title={section.title}
+              language={language}
               collapsible={section.collapsible}
               collapsed={collapsed}
               hasError={sectionHasError}
