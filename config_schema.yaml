@@ -318,6 +318,97 @@ components:
           properties:
             action:
               type: string
+              enum: [updateRecord]
+              description: |
+                Update an existing record (draft save) and optionally navigate to another view.
+
+                Primary use case: **Re-open** a Closed record from the Summary view:
+                - set `set.status` to a value different from `"Closed"`
+                - set `navigateTo: "form"` so the user can resume editing.
+            set:
+              type: object
+              properties:
+                status:
+                  oneOf:
+                    - type: string
+                    - type: 'null'
+                  description: |
+                    New Status value to write.
+
+                    Notes:
+                    - Writes to the configured follow-up `statusFieldId` when present; otherwise writes to the system Status column.
+                    - When re-opening a Closed record, this must be different from `"Closed"`.
+                values:
+                  type: object
+                  additionalProperties:
+                    oneOf:
+                      - $ref: '#/components/schemas/DefaultValue'
+                      - type: 'null'
+                  description: |
+                    Optional field updates by question id.
+
+                    Notes:
+                    - Intended for top-level scalar fields only (TEXT/NUMBER/DATE/CHOICE/CHECKBOX).
+                    - Does not support updating LINE_ITEM_GROUP/FILE_UPLOAD/BUTTON fields.
+              required: []
+              description: Fields to update.
+            confirm:
+              type: object
+              properties:
+                title:
+                  oneOf:
+                    - type: string
+                    - type: object
+                      additionalProperties:
+                        type: string
+                  description: Optional confirmation dialog title.
+                message:
+                  oneOf:
+                    - type: string
+                    - type: object
+                      additionalProperties:
+                        type: string
+                  description: Confirmation dialog message.
+                confirmLabel:
+                  oneOf:
+                    - type: string
+                    - type: object
+                      additionalProperties:
+                        type: string
+                  description: Optional confirm button label.
+                cancelLabel:
+                  oneOf:
+                    - type: string
+                    - type: object
+                      additionalProperties:
+                        type: string
+                  description: Optional cancel button label.
+              required: [message]
+            navigateTo:
+              type: string
+              enum: [auto, form, summary, list]
+              description: After a successful update, navigate to this view.
+            placements:
+              type: array
+              items:
+                type: string
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+              description: |
+                Where the button should surface in the web UI.
+                - `form`: render inline as a normal field in the form view.
+                - `formSummaryMenu`: appear inside the Summary button menu while editing.
+                - `summaryBar`: appear in the bottom action bar on the Summary view (menu if multiple).
+                - `topBar`: appear in the action bar directly under the header (all views).
+                - `topBarList`: appear in the top action bar on the List view.
+                - `topBarForm`: appear in the top action bar on the Form (edit) view.
+                - `topBarSummary`: appear in the top action bar on the Summary view.
+                - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+          required: [action, set]
+
+        - type: object
+          properties:
+            action:
+              type: string
               enum: [openUrlField]
               description: |
                 Open (redirect to) the URL stored in a field of the current record.
@@ -1379,6 +1470,27 @@ components:
 
             - When `true` (default), Create opens a menu: New record / Copy current record.
             - When `false`, Create always starts a New record (no copy option).
+        copyCurrentRecordDropFields:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of **field ids** to clear when the user copies the current record.
+
+            This forces users to re-enter specific fields on the new record (useful for fields like DATE, SHIFT, etc.).
+
+            Notes:
+            - These are **question ids** (top-level fields).
+            - When omitted or empty, copying preserves all fields (except system/meta fields like id/createdAt/updatedAt).
+        createButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized label override for the **Create** button in the web app.
+            Also used as the label for the "New record" action in the Create menu.
+        copyCurrentRecordLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized label override for the **Copy current record** action in the web app.
         createNewRecordEnabled:
           type: boolean
           description: |
@@ -1528,7 +1640,7 @@ components:
           type: string
           enum: [auto, menu, inline]
           description: |
-            Menu behavior for `actions`:
+            Menu behavior for `actions` (and `create`):
             - auto: 1 button -> render inline; 2+ -> actions menu
             - menu: always render a menu trigger
             - inline: always render all matched custom buttons inline
@@ -1553,7 +1665,7 @@ components:
             - Actions menu PDFs only: `"id": "actions", "actions": ["renderDocTemplate"]`
           items:
             type: string
-            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset, openUrlField]
+            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset, updateRecord, openUrlField]
         summaryBehavior:
           type: string
           enum: [auto, navigate, menu]
@@ -1595,7 +1707,7 @@ components:
           description: Optional filter by action type (e.g. only show createRecordPreset buttons).
           items:
             type: string
-            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset, openUrlField]
+            enum: [renderDocTemplate, renderMarkdownTemplate, renderHtmlTemplate, createRecordPreset, updateRecord, openUrlField]
       additionalProperties: true
 
     TemplateIdBase:
@@ -1980,6 +2092,13 @@ components:
             direction:
               type: string
               enum: [asc, desc]
+        headerSortEnabled:
+          type: boolean
+          description: |
+            Optional UI setting: enable/disable interactive sorting by clicking table column headers.
+
+            - When `true` or omitted (default), sortable columns render as clickable headers that update the sort field/direction.
+            - When `false`, headers are non-interactive (the list still uses `defaultSort`).
         pageSize:
           type: integer
           description: Max rows per page (default 10, capped at 50).

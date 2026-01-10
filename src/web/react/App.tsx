@@ -41,6 +41,11 @@ import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
 import { FileOverlay } from './components/form/overlays/FileOverlay';
 import { FormErrors, LineItemState, OptionState, View } from './types';
+import { BlockingOverlay } from './features/overlays/BlockingOverlay';
+import { ConfirmDialogOverlay } from './features/overlays/ConfirmDialogOverlay';
+import { useBlockingOverlay } from './features/overlays/useBlockingOverlay';
+import { useConfirmDialog } from './features/overlays/useConfirmDialog';
+import { runUpdateRecordAction } from './features/customActions/updateRecord/runUpdateRecordAction';
 import {
   buildDraftPayload,
   buildSubmissionPayload,
@@ -313,6 +318,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     },
     [debugEnabled]
   );
+
+  // Feature overlays (kept out of App.tsx as much as possible; App only wires them).
+  const customConfirm = useConfirmDialog({ closeOnKey: view, eventPrefix: 'ui.customConfirm', onDiagnostic: logEvent });
+  const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
+  const updateRecordBusyOpen = updateRecordBusy.state.open;
 
   const handleUserEdit = useCallback(
     (args: { scope: 'top' | 'line'; fieldPath: string; fieldId?: string }) => {
@@ -1760,9 +1770,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     recordDataVersionRef.current = null;
     recordRowNumberRef.current = null;
     const cleared = clearAutoIncrementFields(definition, values, lineItems);
-    lastAutoSaveSeenRef.current = { values: cleared.values, lineItems: cleared.lineItems };
-    setValues(cleared.values);
-    setLineItems(cleared.lineItems);
+    const dropFieldsRaw = Array.isArray(definition.copyCurrentRecordDropFields) ? definition.copyCurrentRecordDropFields : [];
+    const dropFields = dropFieldsRaw
+      .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
+      .filter(Boolean);
+    if (dropFields.length) {
+      const nextValues: Record<string, any> = { ...(cleared.values as any) };
+      let nextLineItems: any = cleared.lineItems;
+      let lineItemsChanged = false;
+      const droppedValues: string[] = [];
+      dropFields.forEach(fieldId => {
+        if (!fieldId) return;
+        if (Object.prototype.hasOwnProperty.call(nextValues, fieldId)) droppedValues.push(fieldId);
+        delete (nextValues as any)[fieldId];
+
+        // Best-effort: allow dropping entire line item groups (and their subgroups) by id.
+        if (nextLineItems && typeof nextLineItems === 'object') {
+          Object.keys(nextLineItems).forEach(k => {
+            if (k === fieldId || k.startsWith(`${fieldId}__`)) {
+              if (!lineItemsChanged) {
+                nextLineItems = { ...(nextLineItems as any) };
+                lineItemsChanged = true;
+              }
+              (nextLineItems as any)[k] = [];
+            }
+          });
+        }
+      });
+      logEvent('ui.copyCurrent.dropFields', {
+        count: dropFields.length,
+        droppedValuesCount: droppedValues.length,
+        droppedValues,
+        lineItemsCleared: lineItemsChanged
+      });
+      lastAutoSaveSeenRef.current = { values: nextValues as any, lineItems: nextLineItems };
+      setValues(nextValues as any);
+      setLineItems(nextLineItems);
+    } else {
+      lastAutoSaveSeenRef.current = { values: cleared.values, lineItems: cleared.lineItems };
+      setValues(cleared.values);
+      setLineItems(cleared.lineItems);
+    }
     setSelectedRecordId('');
     setSelectedRecordSnapshot(null);
     setLastSubmissionMeta(null);
@@ -1773,7 +1821,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setStatus(null);
     setStatusLevel(null);
     setView('form');
-  }, [bumpRecordSession, definition, values, lineItems]);
+  }, [bumpRecordSession, definition, lineItems, logEvent, values]);
 
   const CK_BUTTON_IDX_TOKEN = '__ckQIdx=';
   const parseButtonRef = useCallback((ref: string): { id: string; qIdx?: number } => {
@@ -1860,6 +1908,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         } else if (action === 'createRecordPreset') {
           if (!createPresetEnabled) return null;
           if (!cfg.presetValues || typeof cfg.presetValues !== 'object') return null;
+        } else if (action === 'updateRecord') {
+          const setObj = cfg.set || cfg.patch || cfg.update || null;
+          if (!setObj || typeof setObj !== 'object') return null;
+          const hasStatus = (setObj as any).status !== undefined;
+          const valuesObj = (setObj as any).values;
+          const hasValues = valuesObj && typeof valuesObj === 'object';
+          if (!hasStatus && !hasValues) return null;
         } else if (action === 'openUrlField') {
           if (!cfg.fieldId) return null;
         } else {
@@ -2472,11 +2527,93 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         void createRecordFromPreset({ buttonId, presetValues: (cfg?.presetValues || {}) as any });
         return;
       }
+      if (action === 'updateRecord') {
+        const setObj = (cfg?.set || cfg?.patch || cfg?.update || {}) as any;
+        const navigateToRaw = (cfg?.navigateTo || cfg?.targetView || cfg?.openView || 'auto').toString().trim().toLowerCase();
+        const navigateTo =
+          navigateToRaw === 'form' || navigateToRaw === 'summary' || navigateToRaw === 'list' || navigateToRaw === 'auto'
+            ? (navigateToRaw as 'auto' | 'form' | 'summary' | 'list')
+            : 'auto';
+        const confirmCfg = (cfg?.confirm || cfg?.confirmation || null) as any;
+        const confirmMessage = confirmCfg ? resolveLocalizedString(confirmCfg?.message, languageRef.current, '').toString().trim() : '';
+        const confirmTitle = confirmCfg ? resolveLocalizedString(confirmCfg?.title, languageRef.current, '').toString().trim() : '';
+        const confirmLabel = confirmCfg
+          ? resolveLocalizedString(confirmCfg?.confirmLabel, languageRef.current, '').toString().trim()
+          : '';
+        const cancelLabel = confirmCfg
+          ? resolveLocalizedString(confirmCfg?.cancelLabel, languageRef.current, '').toString().trim()
+          : '';
+
+        const run = () => {
+          const busyTitle = btn ? resolveLabel(btn, languageRef.current) : (baseId || '');
+          void runUpdateRecordAction(
+            {
+              definition,
+              formKey,
+              submit,
+              tSystem,
+              logEvent,
+              refs: {
+                languageRef,
+                valuesRef,
+                lineItemsRef,
+                selectedRecordIdRef,
+                selectedRecordSnapshotRef,
+                lastSubmissionMetaRef,
+                recordDataVersionRef,
+                recordRowNumberRef,
+                recordSessionRef,
+                uploadQueueRef,
+                autoSaveInFlightRef,
+                recordStaleRef
+              },
+              setDraftSave,
+              setStatus,
+              setStatusLevel,
+              setLastSubmissionMeta,
+              setSelectedRecordSnapshot,
+              setView,
+              upsertListCacheRow,
+              busy: updateRecordBusy
+            } as any,
+            {
+              buttonId: baseId,
+              buttonRef: buttonId,
+              qIdx: qIdx,
+              navigateTo,
+              set: setObj as any,
+              busyTitle
+            }
+          );
+        };
+
+        if (confirmMessage) {
+          const title = confirmTitle || tSystem('common.confirm', languageRef.current, 'Confirm');
+          const okLabel = confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm');
+          const cancel = cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel');
+          customConfirm.openConfirm({
+            title,
+            message: confirmMessage,
+            confirmLabel: okLabel,
+            cancelLabel: cancel,
+            kind: 'updateRecord',
+            refId: buttonId,
+            onConfirm: run
+          });
+          logEvent('button.updateRecord.confirm.open', { buttonId: baseId, qIdx: qIdx ?? null, navigateTo });
+          return;
+        }
+
+        run();
+        return;
+      }
 
       logEvent('ui.customButton.unsupported', { buttonId: baseId, qIdx: qIdx ?? null, action: action || null });
     },
     [
       createRecordFromPreset,
+      definition,
+      formKey,
       definition.title,
       definition.questions,
       logEvent,
@@ -2484,7 +2621,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       openMarkdown,
       openPdfPreviewWindow,
       openReport,
-      parseButtonRef
+      parseButtonRef,
+      resolveLabel,
+      upsertListCacheRow
     ]
   );
 
@@ -2611,11 +2750,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const requestSubmit = useCallback(() => {
     if (submitting) return;
     if (recordLoadingId) return;
+    if (updateRecordBusyOpen) return;
     if (view !== 'form') return;
     submitConfirmedRef.current = false;
     logEvent('ui.submit.tap', { submitLabelOverridden: Boolean(definition.submitButtonLabel) });
     formSubmitActionRef.current?.();
-  }, [definition.submitButtonLabel, logEvent, recordLoadingId, submitting, view]);
+  }, [definition.submitButtonLabel, logEvent, recordLoadingId, submitting, updateRecordBusyOpen, view]);
 
   const cancelSubmitConfirm = useCallback(() => {
     setSubmitConfirmOpen(false);
@@ -2629,6 +2769,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     logEvent('ui.submitConfirm.confirm');
     formSubmitActionRef.current?.();
   }, [logEvent]);
+
   const autoSaveDebounceMs = (() => {
     const raw = definition.autoSave?.debounceMs;
     const n = raw === undefined || raw === null ? NaN : Number(raw);
@@ -4797,12 +4938,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         position="top"
         language={language}
         view={view}
-        disabled={submitting || Boolean(recordLoadingId) || precreateDedupChecking}
+        disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
         submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
         createNewEnabled={definition.createNewRecordEnabled !== false}
+        createButtonLabel={definition.createButtonLabel}
+        copyCurrentRecordLabel={definition.copyCurrentRecordLabel}
         submitLabel={definition.submitButtonLabel}
         summaryLabel={definition.summaryButtonLabel}
         summaryEnabled={summaryViewEnabled}
@@ -4832,7 +4975,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           onSubmit={handleSubmit}
           submitActionRef={formSubmitActionRef}
           navigateToFieldRef={formNavigateToFieldRef}
-          submitting={submitting || isClosedRecord || Boolean(recordLoadingId) || Boolean(recordStale)}
+          submitting={submitting || updateRecordBusyOpen || isClosedRecord || Boolean(recordLoadingId) || Boolean(recordStale)}
           dedupLockActive={dedupLockActive}
           dedupKeyFieldIds={dedupKeyFieldIds}
           errors={errors}
@@ -4899,75 +5042,39 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         />
       )}
 
-      {submitConfirmOpen && view === 'form' ? (
-        <div
-          role="presentation"
-          onClick={cancelSubmitConfirm}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 12000,
-            background: 'rgba(15,23,42,0.46)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={submitConfirmTitle}
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: 'min(560px, 100%)',
-              background: '#ffffff',
-              borderRadius: 18,
-              border: '1px solid rgba(15,23,42,0.14)',
-              boxShadow: '0 30px 90px rgba(15,23,42,0.22)',
-              padding: 18
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 48, letterSpacing: -0.2, color: '#0f172a' }}>
-              {submitConfirmTitle}
-            </div>
-            <div className="muted" style={{ marginTop: 10, fontSize: 32, fontWeight: 700, lineHeight: 1.35 }}>
-              {submitConfirmMessage}
-            </div>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 18, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={cancelSubmitConfirm}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid rgba(15, 23, 42, 0.18)',
-                  background: 'rgba(15,23,42,0.06)',
-                  color: '#0f172a',
-                  fontWeight: 900,
-                  minWidth: 110
-                }}
-              >
-                {tSystem('submit.cancel', language, tSystem('common.cancel', language, 'Cancel'))}
-              </button>
-              <button
-                type="button"
-                onClick={confirmSubmit}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid rgba(59,130,246,0.35)',
-                  background: '#2563eb',
-                  color: '#ffffff',
-                  fontWeight: 900
-                }}
-              >
-                {submitButtonLabelResolved}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmDialogOverlay
+        open={submitConfirmOpen && view === 'form'}
+        title={submitConfirmTitle}
+        message={submitConfirmMessage}
+        confirmLabel={submitButtonLabelResolved}
+        cancelLabel={tSystem('submit.cancel', language, tSystem('common.cancel', language, 'Cancel'))}
+        zIndex={12000}
+        onCancel={cancelSubmitConfirm}
+        onConfirm={confirmSubmit}
+      />
+
+      <BlockingOverlay
+        open={submitting}
+        title={tSystem('actions.submitting', language, 'Submitting…')}
+        message={(status || '').toString() || tSystem('actions.submitting', language, 'Submitting…')}
+        zIndex={12040}
+      />
+
+      <ConfirmDialogOverlay
+        open={customConfirm.state.open}
+        title={customConfirm.state.title || tSystem('common.confirm', language, 'Confirm')}
+        message={customConfirm.state.message || ''}
+        confirmLabel={customConfirm.state.confirmLabel || tSystem('common.confirm', language, 'Confirm')}
+        cancelLabel={customConfirm.state.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
+        onCancel={customConfirm.cancel}
+        onConfirm={customConfirm.confirm}
+      />
+
+      <BlockingOverlay
+        open={updateRecordBusy.state.open}
+        title={updateRecordBusy.state.title || tSystem('common.loading', language, 'Loading…')}
+        message={updateRecordBusy.state.message || tSystem('draft.savingShort', language, 'Saving…')}
+      />
 
       <ReportOverlay
         language={language}
@@ -4996,12 +5103,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         position="bottom"
         language={language}
         view={view}
-        disabled={submitting || Boolean(recordLoadingId) || precreateDedupChecking}
+        disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
         submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
         createNewEnabled={definition.createNewRecordEnabled !== false}
+        createButtonLabel={definition.createButtonLabel}
+        copyCurrentRecordLabel={definition.copyCurrentRecordLabel}
         submitLabel={definition.submitButtonLabel}
         summaryLabel={definition.summaryButtonLabel}
         summaryEnabled={summaryViewEnabled}

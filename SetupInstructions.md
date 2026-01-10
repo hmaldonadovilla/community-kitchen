@@ -147,11 +147,17 @@ This project uses TypeScript. You need to build the script before using it in Go
       - Lower `priority` numbers are evaluated first.
       - If multiple fields have `listViewSort`, they are applied as **tie-breakers in priority order** (priority 1 = primary, priority 2 = secondary, etc).
       - When nothing is specified we fall back to `updatedAt desc`.
-    - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending.
+    - Want the list view to show system fields like Created/Updated/Status/PDF URL? Add `"listViewMetaColumns": ["updatedAt", "status", "pdfUrl"]` to the **Follow-up Config (JSON)** column on the dashboard. Supported values are `createdAt`, `updatedAt`, `status`, and `pdfUrl`; the columns appear in the order you list them, and users can click any column header to sort ascending/descending (optional: disable header sorting via `listView.headerSortEnabled: false`).
       - Recommended (consolidated): use `listView.metaColumns` instead:
 
       ```json
       { "listView": { "metaColumns": ["updatedAt", "status", "pdfUrl"] } }
+      ```
+
+      Optional: disable header-click sorting (headers become non-interactive table headers; list still uses `defaultSort`):
+
+      ```json
+      { "listView": { "headerSortEnabled": false } }
       ```
 
     - Want to change the **list view title**? Set `listView.title`:
@@ -283,6 +289,30 @@ This project uses TypeScript. You need to build the script before using it in Go
 
       Supported icons: `warning`, `check`, `error`, `info`, `external`, `lock`, `edit`, `view`.
 
+    - Want a **Re-open** button on the Summary view for Closed records? Use a `BUTTON` question with `button.action: "updateRecord"` and a visibility rule on `status`.
+
+      Example: show a "Re-open" button only when the record status is Closed; on click, confirm, set status back to In progress, then navigate to Form:
+
+      ```json
+      {
+        "button": {
+          "action": "updateRecord",
+          "placements": ["summaryBar"],
+          "set": { "status": "In progress" },
+          "navigateTo": "form",
+          "confirm": {
+            "title": { "en": "Re-open record" },
+            "message": { "en": "Re-open this record so it can be edited again?" },
+            "confirmLabel": { "en": "Re-open" },
+            "cancelLabel": { "en": "Cancel" }
+          }
+        },
+        "visibility": { "when": { "fieldId": "status", "equals": "Closed" } }
+      }
+      ```
+
+      **UX note**: After the user confirms, the UI shows a **full-screen blocking overlay** (spinner + message) and locks interaction until the update completes.
+
     - Want a **logo** in the app header? Set `appHeader.logo` in the dashboard “Follow-up Config (JSON)” column. You can provide a Google Drive file id, a Drive share URL, or a direct `https://...` image URL:
 
       ```json
@@ -331,6 +361,8 @@ This project uses TypeScript. You need to build the script before using it in Go
         }
       }
       ```
+
+      **UX note**: After the user confirms, the UI shows a **full-screen blocking overlay** (spinner + message) and locks interaction until submission (and post-submit follow-up actions) finish.
 
     - Want to **override the Submit button label**? Set `submitButtonLabel` (localized). When omitted, the UI uses system string defaults:
 
@@ -746,7 +778,7 @@ This project uses TypeScript. You need to build the script before using it in Go
        The same operators (`equals`, `greaterThan`, `lessThan`) and actions (`required`, `min`, `max`, `allowed`, `disallowed`) work inside line items.
     - **Visibility & reset helpers**: Add `visibility` to show or hide a question/line-item field based on another field (`showWhen`/`hideWhen`). Add `clearOnChange: true` to a question to clear all other fields and line items when it changes (useful when a top selector drives all inputs).
       - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
-      - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; you can optionally hide the UI paging controls via `listView.paginationControlsEnabled: false`. Search runs client-side (keyword search by default, or date search via `listView.search`), and sorting is done by clicking a column header (totalCount is capped at 200).
+      - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; you can optionally hide the UI paging controls via `listView.paginationControlsEnabled: false`. Search runs client-side (keyword search by default, or date search via `listView.search`). Header sorting is enabled by default (click a column header to sort), and can be disabled with `listView.headerSortEnabled: false` (totalCount is capped at 200).
     - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
     - **Quick recipe for the new features**:
       - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
@@ -1298,6 +1330,24 @@ Example (show `createRecordPreset` buttons inside the **Create** menu on the bot
 }
 ```
 
+Example (render **Create + Copy** as **inline buttons** instead of a menu on Form/Summary views):
+
+```json
+{
+  "actionBars": {
+    "bottom": {
+      "form": {
+        "items": ["home", { "type": "system", "id": "create", "menuBehavior": "inline" }, { "type": "system", "id": "summary" }],
+        "primary": ["submit"]
+      },
+      "summary": {
+        "items": ["home", { "type": "system", "id": "create", "menuBehavior": "inline" }, "edit"]
+      }
+    }
+  }
+}
+```
+
 - **Optional: configure languages (max 3)**:
   - In the dashboard “Follow-up Config (JSON)” column, set:
     - `"languages": ["EN","FR","NL"]` (or `"EN,FR,NL"`)
@@ -1346,6 +1396,19 @@ Example (show `createRecordPreset` buttons inside the **Create** menu on the bot
   - In the dashboard “Follow-up Config (JSON)” column, set `"copyCurrentRecordEnabled": false`.
   - Behavior when disabled:
     - The Create button always starts a **New record** (no copy option).
+
+- **Optional: customize Create/Copy labels**:
+  - In the dashboard “Follow-up Config (JSON)” column, set:
+    - `"createButtonLabel": { "en": "New" }` (label for Create / New record)
+    - `"copyCurrentRecordLabel": { "en": "Duplicate" }` (label for Copy current record)
+
+- **Optional: drop fields when copying a record**:
+  - In the dashboard “Follow-up Config (JSON)” column, set `"copyCurrentRecordDropFields"` to a list of **field ids** to clear on copy.
+  - Example (force DATE + SHIFT to be re-entered on the copied record):
+
+```json
+{ "copyCurrentRecordDropFields": ["DATE", "SHIFT"] }
+```
 
 - **Optional: disable “New record” (blank record creation)**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"createNewRecordEnabled": false`.

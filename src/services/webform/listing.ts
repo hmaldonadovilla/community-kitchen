@@ -136,6 +136,27 @@ export class ListingService {
       effectiveSorts.push({ fieldId: s.fieldId, direction: s.direction as any });
     });
 
+    // Always include stable system tie-breakers when sorting is enabled.
+    //
+    // Why:
+    // - Many listViewSort keys can collide (e.g., same DATE), and using sheet order as the final tie-breaker
+    //   makes list ordering feel "random" to users and can shift when rows are appended.
+    // - System fields exist even when not shown as visible columns; they are ideal tie-breakers.
+    //
+    // Notes:
+    // - `updatedAt` is preferred so the most recently modified records appear first among ties.
+    // - `id` ensures deterministic ordering when timestamps also collide.
+    if (effectiveSorts.length) {
+      const ensure = (fieldId: string, direction: 'asc' | 'desc') => {
+        const id = (fieldId || '').toString().trim();
+        if (!id) return;
+        if (effectiveSorts.some(s => (s.fieldId || '').toString() === id)) return;
+        effectiveSorts.push({ fieldId: id, direction });
+      };
+      ensure('updatedAt', 'desc');
+      ensure('id', 'asc');
+    }
+
     const sortKey = effectiveSorts.length
       ? effectiveSorts.map(s => `${s.fieldId}:${s.direction}`).join('|')
       : '';

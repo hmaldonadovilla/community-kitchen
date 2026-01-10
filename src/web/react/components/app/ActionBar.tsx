@@ -98,6 +98,12 @@ const CheckIcon: React.FC = () => (
   </svg>
 );
 
+const iconForCustomAction = (action: ButtonAction): JSX.Element => {
+  if (action === 'createRecordPreset') return <PlusIcon />;
+  if (action === 'updateRecord') return <EditIcon />;
+  return <SummaryIcon />;
+};
+
 type MenuDef = { id: string; label: string; buttons: CustomButton[] };
 
 const DEFAULT_TOP: Record<ActionBarView, ActionBarViewConfig> = {
@@ -185,6 +191,14 @@ export const ActionBar: React.FC<{
    * When false, the Create menu only shows preset buttons (and/or Copy current record if enabled).
    */
   createNewEnabled?: boolean;
+  /**
+   * Optional localized label override for the Create button / New record action.
+   */
+  createButtonLabel?: LocalizedString;
+  /**
+   * Optional localized label override for the Copy current record action.
+   */
+  copyCurrentRecordLabel?: LocalizedString;
   submitLabel?: LocalizedString;
   /**
    * Optional localized label override for the system Summary button.
@@ -219,6 +233,8 @@ export const ActionBar: React.FC<{
   readOnly,
   hideEdit,
   createNewEnabled,
+  createButtonLabel,
+  copyCurrentRecordLabel,
   submitLabel,
   summaryLabel,
   summaryEnabled,
@@ -267,6 +283,7 @@ export const ActionBar: React.FC<{
     const capsule: Array<
       | { kind: 'home'; hideWhenActive: boolean }
       | { kind: 'create'; showMenu: boolean; showCopy: boolean; presetButtons: CustomButton[] }
+      | { kind: 'copy' }
       | { kind: 'edit' }
       | { kind: 'summary'; showMenu: boolean; showViewSummary: boolean; menuButtons: CustomButton[]; label: string }
       | { kind: 'actionsMenu'; menuId: string; label: string; buttons: CustomButton[] }
@@ -314,12 +331,19 @@ export const ActionBar: React.FC<{
         const hasAnyCreateAction = allowNewRecord || presetButtons.length > 0 || hasCopy;
         if (!hasAnyCreateAction) return;
 
-        const forceMenu = cfg.menuBehavior === 'menu';
-        const showMenu =
-          forceMenu ||
-          presetButtons.length > 0 ||
-          // Preserve existing behavior: Copy menu is only shown on form/summary by default.
-          hasCopy;
+        const behavior = cfg.menuBehavior || 'auto';
+        if (behavior === 'inline') {
+          // Inline mode: show each create-related action as its own button (no menu).
+          if (allowNewRecord) {
+            capsule.push({ kind: 'create', showMenu: false, showCopy, presetButtons: [] });
+          }
+          if (presetButtons.length) addCustomButtonsInline(presetButtons);
+          if (hasCopy) capsule.push({ kind: 'copy' });
+          return;
+        }
+
+        const forceMenu = behavior === 'menu';
+        const showMenu = forceMenu || presetButtons.length > 0 || hasCopy;
         capsule.push({ kind: 'create', showMenu, showCopy, presetButtons });
         return;
       }
@@ -499,7 +523,7 @@ export const ActionBar: React.FC<{
                 onCustomButton?.(btn.id);
               }}
             >
-              <IconWrap>{btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}</IconWrap>
+              <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
               {btn.label}
             </button>
           ))}
@@ -532,7 +556,7 @@ export const ActionBar: React.FC<{
                 <IconWrap>
                   <PlusIcon />
                 </IconWrap>
-                {tSystem('actions.newRecord', language, 'New record')}
+                {resolveLocalizedString(createButtonLabel, language, tSystem('actions.newRecord', language, 'New record'))}
               </button>
             ) : null}
             {resolved.capsule
@@ -569,7 +593,11 @@ export const ActionBar: React.FC<{
                 <IconWrap>
                   <SummaryIcon />
                 </IconWrap>
-                {tSystem('actions.copyCurrentRecord', language, 'Copy current record')}
+                {resolveLocalizedString(
+                  copyCurrentRecordLabel,
+                  language,
+                  tSystem('actions.copyCurrentRecord', language, 'Copy current record')
+                )}
               </button>
             )}
           </div>
@@ -619,7 +647,7 @@ export const ActionBar: React.FC<{
                     onCustomButton?.(btn.id);
                   }}
                 >
-                  <IconWrap>{btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}</IconWrap>
+                  <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
                   {btn.label}
                 </button>
               ))}
@@ -662,7 +690,7 @@ export const ActionBar: React.FC<{
                     );
                   }
                   if (it.kind === 'create') {
-                    const createLabel = tSystem('actions.create', language, 'Create');
+                    const createLabel = resolveLocalizedString(createButtonLabel, language, tSystem('actions.create', language, 'Create'));
                     return (
                       <button
                         // eslint-disable-next-line react/no-array-index-key
@@ -678,6 +706,28 @@ export const ActionBar: React.FC<{
                           <PlusIcon />
                         </IconWrap>
                         <span className="ck-bottom-label">{createLabel}</span>
+                      </button>
+                    );
+                  }
+                  if (it.kind === 'copy') {
+                    const copyLabel = resolveLocalizedString(
+                      copyCurrentRecordLabel,
+                      language,
+                      tSystem('actions.copyCurrentRecord', language, 'Copy current record')
+                    );
+                    return (
+                      <button
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={`copy-${idx}`}
+                        type="button"
+                        className="ck-bottom-item"
+                        onClick={onCreateCopy}
+                        disabled={disabled || !canCopy}
+                      >
+                        <IconWrap>
+                          <SummaryIcon />
+                        </IconWrap>
+                        <span className="ck-bottom-label">{copyLabel}</span>
                       </button>
                     );
                   }
@@ -748,7 +798,7 @@ export const ActionBar: React.FC<{
                         onClick={() => onCustomButton?.(btn.id)}
                         disabled={disabled || !onCustomButton}
                       >
-                        <IconWrap>{btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}</IconWrap>
+                        <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
                         <span className="ck-bottom-label">{btn.label}</span>
                       </button>
                     );

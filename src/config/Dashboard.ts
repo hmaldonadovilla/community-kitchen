@@ -122,6 +122,7 @@ export class Dashboard {
       const listViewDefaultSort = dashboardConfig?.listViewDefaultSort;
       const listViewPageSize = dashboardConfig?.listViewPageSize;
       const listViewPaginationControlsEnabled = dashboardConfig?.listViewPaginationControlsEnabled;
+      const listViewHeaderSortEnabled = dashboardConfig?.listViewHeaderSortEnabled;
       const listViewMetaColumns = dashboardConfig?.listViewMetaColumns;
       const listViewColumns = dashboardConfig?.listViewColumns;
       const listViewLegend = dashboardConfig?.listViewLegend;
@@ -130,6 +131,9 @@ export class Dashboard {
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const summaryHtmlTemplateId = dashboardConfig?.summaryHtmlTemplateId;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
+      const copyCurrentRecordDropFields = dashboardConfig?.copyCurrentRecordDropFields;
+      const createButtonLabel = dashboardConfig?.createButtonLabel;
+      const copyCurrentRecordLabel = dashboardConfig?.copyCurrentRecordLabel;
       const createNewRecordEnabled = dashboardConfig?.createNewRecordEnabled;
       const createRecordPresetButtonsEnabled = dashboardConfig?.createRecordPresetButtonsEnabled;
       const actionBars = dashboardConfig?.actionBars;
@@ -158,6 +162,7 @@ export class Dashboard {
           listViewDefaultSort,
           listViewPageSize,
           listViewPaginationControlsEnabled,
+          listViewHeaderSortEnabled,
           listViewMetaColumns,
           listViewColumns,
           listViewLegend,
@@ -166,6 +171,9 @@ export class Dashboard {
           summaryViewEnabled,
           summaryHtmlTemplateId,
           copyCurrentRecordEnabled,
+          copyCurrentRecordDropFields,
+          createButtonLabel,
+          copyCurrentRecordLabel,
           createNewRecordEnabled,
           createRecordPresetButtonsEnabled,
           actionBars,
@@ -212,6 +220,7 @@ export class Dashboard {
     listViewDefaultSort?: { fieldId: string; direction?: 'asc' | 'desc' };
     listViewPageSize?: number;
     listViewPaginationControlsEnabled?: boolean;
+    listViewHeaderSortEnabled?: boolean;
     listViewMetaColumns?: string[];
     listViewColumns?: ListViewColumnConfig[];
     listViewLegend?: ListViewLegendItem[];
@@ -220,6 +229,9 @@ export class Dashboard {
     summaryViewEnabled?: boolean;
     summaryHtmlTemplateId?: FollowupConfig['pdfTemplateId'];
     copyCurrentRecordEnabled?: boolean;
+    copyCurrentRecordDropFields?: string[];
+    createButtonLabel?: LocalizedString;
+    copyCurrentRecordLabel?: LocalizedString;
     createNewRecordEnabled?: boolean;
     createRecordPresetButtonsEnabled?: boolean;
     actionBars?: ActionBarsConfig;
@@ -420,6 +432,18 @@ export class Dashboard {
             : undefined;
     const listViewPaginationControlsEnabled = normalizeBoolean(listViewPaginationControlsEnabledRaw);
 
+    const listViewHeaderSortEnabledRaw =
+      parsed.listViewHeaderSortEnabled !== undefined
+        ? parsed.listViewHeaderSortEnabled
+        : parsed.disableListViewHeaderSort !== undefined
+          ? !Boolean(parsed.disableListViewHeaderSort)
+          : listViewObj && (listViewObj.headerSortEnabled !== undefined || (listViewObj as any).headerSortingEnabled !== undefined)
+            ? (listViewObj.headerSortEnabled ?? (listViewObj as any).headerSortingEnabled)
+            : listViewObj && (listViewObj as any).disableHeaderSort !== undefined
+              ? !Boolean((listViewObj as any).disableHeaderSort)
+              : undefined;
+    const listViewHeaderSortEnabled = normalizeBoolean(listViewHeaderSortEnabledRaw);
+
     const listViewDefaultSortRaw =
       parsed.listViewDefaultSort !== undefined
         ? parsed.listViewDefaultSort
@@ -519,6 +543,49 @@ export class Dashboard {
       if (parsed.disableCopy !== undefined) return !Boolean(parsed.disableCopy);
       return undefined;
     })();
+
+    const copyCurrentRecordDropFieldsRaw =
+      parsed.copyCurrentRecordDropFields !== undefined
+        ? parsed.copyCurrentRecordDropFields
+        : parsed.copyDropFields !== undefined
+          ? parsed.copyDropFields
+          : parsed.copyDrop !== undefined
+            ? parsed.copyDrop
+            : undefined;
+    const copyCurrentRecordDropFields = (() => {
+      const raw = copyCurrentRecordDropFieldsRaw as any;
+      if (raw === undefined || raw === null || raw === '') return undefined;
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed) return undefined;
+        const parts = trimmed
+          .split(',')
+          .map(p => p.trim())
+          .filter(Boolean);
+        return parts.length ? parts : undefined;
+      }
+      const items = Array.isArray(raw) ? raw : [raw];
+      const out = items
+        .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
+        .filter(Boolean);
+      return out.length ? out : undefined;
+    })();
+
+    const createButtonLabelRaw =
+      parsed.createButtonLabel !== undefined
+        ? parsed.createButtonLabel
+        : parsed.createLabel !== undefined
+          ? parsed.createLabel
+          : undefined;
+    const createButtonLabel = normalizeLocalized(createButtonLabelRaw);
+
+    const copyCurrentRecordLabelRaw =
+      parsed.copyCurrentRecordLabel !== undefined
+        ? parsed.copyCurrentRecordLabel
+        : parsed.copyLabel !== undefined
+          ? parsed.copyLabel
+          : undefined;
+    const copyCurrentRecordLabel = normalizeLocalized(copyCurrentRecordLabelRaw);
 
     const createNewRecordEnabled = (() => {
       if (parsed.createNewRecordEnabled !== undefined) return Boolean(parsed.createNewRecordEnabled);
@@ -731,6 +798,7 @@ export class Dashboard {
       !listViewDefaultSort &&
       listViewPageSize === undefined &&
       listViewPaginationControlsEnabled === undefined &&
+      listViewHeaderSortEnabled === undefined &&
       !hasMetaSetting &&
       !listViewColumns?.length &&
       !listViewLegend?.length &&
@@ -739,6 +807,9 @@ export class Dashboard {
       summaryViewEnabled === undefined &&
       !summaryHtmlTemplateId &&
       copyCurrentRecordEnabled === undefined &&
+      !copyCurrentRecordDropFields?.length &&
+      !createButtonLabel &&
+      !copyCurrentRecordLabel &&
       createNewRecordEnabled === undefined &&
       createRecordPresetButtonsEnabled === undefined &&
       !actionBars &&
@@ -762,6 +833,7 @@ export class Dashboard {
       listViewDefaultSort,
       listViewPageSize,
       listViewPaginationControlsEnabled,
+      listViewHeaderSortEnabled,
       listViewMetaColumns,
       listViewColumns,
       listViewLegend,
@@ -770,6 +842,9 @@ export class Dashboard {
       summaryViewEnabled,
       summaryHtmlTemplateId,
       copyCurrentRecordEnabled,
+      copyCurrentRecordDropFields,
+      createButtonLabel,
+      copyCurrentRecordLabel,
       createNewRecordEnabled,
       createRecordPresetButtonsEnabled,
       actionBars,
@@ -813,6 +888,7 @@ export class Dashboard {
       'renderMarkdownTemplate',
       'renderHtmlTemplate',
       'createRecordPreset',
+      'updateRecord',
       'openUrlField'
     ]);
 

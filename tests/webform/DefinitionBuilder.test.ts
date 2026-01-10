@@ -14,9 +14,12 @@ describe('DefinitionBuilder', () => {
       pdfTemplateId: { EN: 'pdf-en' },
       emailTemplateId: { EN: 'email-en' },
       statusTransitions: { onEmail: 'Sent' },
-      listView: { title: { en: 'Pantry Records' } },
+      listView: { title: { en: 'Pantry Records' }, headerSortEnabled: false },
       listViewMetaColumns: ['createdAt', 'status'],
       listViewLegend: [{ icon: 'warning', text: { en: 'Needs attention' } }],
+      createButtonLabel: { EN: 'New' },
+      copyCurrentRecordLabel: { EN: 'Duplicate' },
+      copyCurrentRecordDropFields: ['Q1'],
       languages: ['EN', 'FR', 'NL'],
       defaultLanguage: 'FR',
       languageSelectorEnabled: false,
@@ -52,6 +55,10 @@ describe('DefinitionBuilder', () => {
     expect(def.listView?.columns.map(col => col.fieldId)).toContain('Q1');
     expect(def.listView?.legend).toEqual([{ icon: 'warning', text: { en: 'Needs attention' } }]);
     expect(def.listView?.title).toEqual({ en: 'Pantry Records' });
+    expect(def.listView?.headerSortEnabled).toBe(false);
+    expect(def.createButtonLabel).toEqual({ en: 'New' });
+    expect(def.copyCurrentRecordLabel).toEqual({ en: 'Duplicate' });
+    expect(def.copyCurrentRecordDropFields).toEqual(['Q1']);
     const metaColumns = (def.listView?.columns || [])
       .filter((col): col is { fieldId: string; kind: 'meta' } => (col as any).kind === 'meta')
       .map(col => col.fieldId);

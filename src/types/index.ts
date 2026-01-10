@@ -61,7 +61,7 @@ export interface ActionBarSystemItemConfig {
    */
   hideWhenActive?: boolean;
   /**
-   * Menu behavior for `actions`:
+   * Menu behavior for `actions` (and `create`):
    * - auto: 1 button -> render inline; 2+ -> actions menu (default)
    * - menu: always render a menu trigger (even if only 1)
    * - inline: always render all matched custom buttons inline
@@ -162,7 +162,29 @@ export type ButtonAction =
   | 'renderMarkdownTemplate'
   | 'renderHtmlTemplate'
   | 'createRecordPreset'
+  | 'updateRecord'
   | 'openUrlField';
+
+export type ButtonNavigateTo = 'auto' | 'form' | 'summary' | 'list';
+
+export interface ButtonConfirmConfig {
+  /**
+   * Optional dialog title.
+   */
+  title?: LocalizedString | string;
+  /**
+   * Confirmation message shown before the action runs.
+   */
+  message: LocalizedString | string;
+  /**
+   * Optional confirm button label.
+   */
+  confirmLabel?: LocalizedString | string;
+  /**
+   * Optional cancel button label.
+   */
+  cancelLabel?: LocalizedString | string;
+}
 
 export interface RenderDocTemplateButtonConfig {
   action: 'renderDocTemplate';
@@ -244,6 +266,36 @@ export interface CreateRecordPresetButtonConfig {
   placements?: ButtonPlacement[];
 }
 
+export interface UpdateRecordButtonConfig {
+  /**
+   * Update an existing record (draft save), then optionally navigate to another view.
+   *
+   * Primary use case: "Re-open" a Closed record from the Summary view (set status != Closed, then navigate to Form).
+   */
+  action: 'updateRecord';
+  /**
+   * Fields to update.
+   *
+   * Notes:
+   * - `status` updates the system Status column (or the configured followup `statusFieldId`).
+   * - `values` updates question fields (top-level only; does not support updating line-item groups/files).
+   */
+  set: {
+    status?: string | null;
+    values?: Record<string, DefaultValue | null>;
+  };
+  /**
+   * Optional confirmation dialog shown before applying the update.
+   */
+  confirm?: ButtonConfirmConfig;
+  /**
+   * After a successful update, navigate to the specified view.
+   * - auto: preserve current behavior (no forced navigation)
+   */
+  navigateTo?: ButtonNavigateTo;
+  placements?: ButtonPlacement[];
+}
+
 export interface OpenUrlFieldButtonConfig {
   /**
    * Open (redirect to) the URL stored in a field of the current record.
@@ -263,6 +315,7 @@ export type ButtonConfig =
   | RenderMarkdownTemplateButtonConfig
   | RenderHtmlTemplateButtonConfig
   | CreateRecordPresetButtonConfig
+  | UpdateRecordButtonConfig
   | OpenUrlFieldButtonConfig;
 
 export interface QuestionUiConfig {
@@ -1134,6 +1187,10 @@ export interface FormConfig {
    * Optional UI override to hide list view pagination controls (recommended: `listView.paginationControlsEnabled`).
    */
   listViewPaginationControlsEnabled?: boolean;
+  /**
+   * Optional UI override to enable/disable interactive header sorting in the list view (recommended: `listView.headerSortEnabled`).
+   */
+  listViewHeaderSortEnabled?: boolean;
   listViewMetaColumns?: string[];
   /**
    * Optional list view columns defined at the dashboard level (in the “Follow-up Config (JSON)” column).
@@ -1196,6 +1253,21 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   copyCurrentRecordEnabled?: boolean;
+  /**
+   * Optional list of field ids to clear when copying the current record (forces re-entry on the new record).
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  copyCurrentRecordDropFields?: string[];
+  /**
+   * Optional localized label override for the Create button in the React web app.
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  createButtonLabel?: LocalizedString;
+  /**
+   * Optional localized label override for the "Copy current record" action in the React web app.
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  copyCurrentRecordLabel?: LocalizedString;
   /**
    * Enable/disable the standard "New record" create action in the React web app.
    *
@@ -1407,6 +1479,18 @@ export interface WebFormDefinition {
    * When false, the Create button always creates a new record (no copy option).
    */
   copyCurrentRecordEnabled?: boolean;
+  /**
+   * Optional list of field ids to clear when copying the current record (forces re-entry on the new record).
+   */
+  copyCurrentRecordDropFields?: string[];
+  /**
+   * Optional localized label override for the Create button in the React web app.
+   */
+  createButtonLabel?: LocalizedString;
+  /**
+   * Optional localized label override for the "Copy current record" action in the React web app.
+   */
+  copyCurrentRecordLabel?: LocalizedString;
   /**
    * Enable/disable the standard "New record" create action in the React web app.
    *
@@ -1646,6 +1730,13 @@ export interface ListViewConfig {
   title?: LocalizedString;
   columns: ListViewColumnConfig[];
   metaColumns?: string[];
+  /**
+   * Optional UI setting: enable/disable interactive sorting by clicking table column headers.
+   *
+   * - When true/omitted (default), sortable columns render as clickable buttons that update the sort field/direction.
+   * - When false, headers are rendered as plain table headers (non-interactive). The list still uses `defaultSort`.
+   */
+  headerSortEnabled?: boolean;
   /**
    * Optional list search configuration (defaults to text search).
    */

@@ -88,6 +88,9 @@ export class DefinitionBuilder {
       form.listViewPaginationControlsEnabled,
       form.listViewSearch
     );
+    if (listView && form.listViewHeaderSortEnabled !== undefined) {
+      listView.headerSortEnabled = Boolean(form.listViewHeaderSortEnabled);
+    }
 
     return {
       title: form.title,
@@ -106,6 +109,9 @@ export class DefinitionBuilder {
       summaryViewEnabled: form.summaryViewEnabled,
       summaryHtmlTemplateId: form.summaryHtmlTemplateId,
       copyCurrentRecordEnabled: form.copyCurrentRecordEnabled,
+      copyCurrentRecordDropFields: form.copyCurrentRecordDropFields,
+      createButtonLabel: form.createButtonLabel,
+      copyCurrentRecordLabel: form.copyCurrentRecordLabel,
       createNewRecordEnabled: form.createNewRecordEnabled,
       createRecordPresetButtonsEnabled: form.createRecordPresetButtonsEnabled,
       actionBars: form.actionBars,

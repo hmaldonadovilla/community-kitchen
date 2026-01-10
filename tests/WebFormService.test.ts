@@ -250,4 +250,44 @@ describe('WebFormService', () => {
     expect(values[1][mealCol]).toBe('MP-AA000001');
     expect(values[2][mealCol]).toBe('MP-AA000002');
   });
+
+  test('updateRecord (draft) can re-open a Closed record when __ckAllowClosedUpdate is set', () => {
+    // 1) Create a record and mark it Closed via draft save.
+    const closeRes = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Closed'
+    } as any);
+    expect(closeRes.success).toBe(true);
+
+    // 2) Re-open via explicit flag (simulates button.action=updateRecord).
+    const reopenRes = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress',
+      __ckAllowClosedUpdate: '1'
+    } as any);
+    expect(reopenRes.success).toBe(true);
+
+    const sheet = ss.getSheetByName('Deliveries');
+    expect(sheet).toBeDefined();
+    const values = sheet!.getRange(1, 1, sheet!.getLastRow(), sheet!.getLastColumn()).getValues();
+    const header = values[0].map((h: any) => (h || '').toString().trim().toLowerCase());
+    const statusCol = header.findIndex((h: string) => h === 'status');
+    expect(statusCol).toBeGreaterThanOrEqual(0);
+    // Row 2 is the first record.
+    expect((values[1][statusCol] || '').toString()).toBe('In progress');
+  });
 });

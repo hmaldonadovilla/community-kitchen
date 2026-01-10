@@ -683,6 +683,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
           addButtonPlacement !== 'hidden' && (addButtonPlacement === 'both' || addButtonPlacement === 'top');
         const showAddBottom =
           addButtonPlacement !== 'hidden' && (addButtonPlacement === 'both' || addButtonPlacement === 'bottom');
+        // Keep the selector control aligned with addButtonPlacement so it doesn't appear at the "wrong" end of the group.
+        const showSelectorTop = Boolean(selectorControl) && showAddTop;
+        const showSelectorBottom = Boolean(selectorControl) && showAddBottom;
         const hideGroupLabel = q.ui?.hideLabel === true;
 
         React.useEffect(() => {
@@ -693,8 +696,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
           }
         }, [onDiagnostic, liUi?.addButtonPlacement, liUi?.showItemPill, q.id]);
 
-        const shouldRenderTopToolbar = !!selectorControl || showAddTop;
-        const shouldRenderBottomToolbar = (parentRows.length > 0 || showAddBottom) && (showAddBottom || !!selectorCfg || groupTotals.length > 0);
+        const shouldRenderTopToolbar = showSelectorTop || showAddTop;
+        const shouldRenderBottomToolbar =
+          (parentRows.length > 0 || showAddBottom) && (showAddBottom || showSelectorBottom || groupTotals.length > 0);
         return (
             <div
               key={q.id}
@@ -721,7 +725,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
             {shouldRenderTopToolbar ? (
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
-                  {selectorControl}
+                  {showSelectorTop ? selectorControl : null}
                   {showAddTop ? renderAddButton() : null}
                 </div>
               </div>
@@ -1903,40 +1907,44 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           </div>
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
-                              {subSelectorCfg && (
-                                <div
-                                  className="section-selector"
-                                  data-field-path={subSelectorCfg.id}
-                                  style={{ minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4 }}
-                                >
-                                  <label style={{ fontWeight: 600 }}>
-                                    {resolveSelectorLabel(subSelectorCfg, language)}
-                                    {subSelectorCfg.required && <RequiredStar />}
-                                  </label>
-                                  <select
-                                    value={subSelectorValue}
-                                    onChange={e => {
-                                      const nextValue = e.target.value;
-                                      setSubgroupSelectors(prev => {
-                                        if (prev[subKey] === nextValue) return prev;
-                                        return { ...prev, [subKey]: nextValue };
-                                      });
-                                    }}
-                                  >
-                                    <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                                    {subSelectorOptions.map(opt => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              )}
                               {(() => {
                                 const subUi = (sub as any).ui as any;
                                 const placement = (subUi?.addButtonPlacement || 'both').toString().toLowerCase();
                                 const showTop = placement !== 'hidden' && (placement === 'both' || placement === 'top');
-                                return showTop ? renderSubAddButton() : null;
+                                return (
+                                  <>
+                                    {subSelectorCfg && showTop ? (
+                                      <div
+                                        className="section-selector"
+                                        data-field-path={subSelectorCfg.id}
+                                        style={{ minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4 }}
+                                      >
+                                        <label style={{ fontWeight: 600 }}>
+                                          {resolveSelectorLabel(subSelectorCfg, language)}
+                                          {subSelectorCfg.required && <RequiredStar />}
+                                        </label>
+                                        <select
+                                          value={subSelectorValue}
+                                          onChange={e => {
+                                            const nextValue = e.target.value;
+                                            setSubgroupSelectors(prev => {
+                                              if (prev[subKey] === nextValue) return prev;
+                                              return { ...prev, [subKey]: nextValue };
+                                            });
+                                          }}
+                                        >
+                                          <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
+                                          {subSelectorOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>
+                                              {opt.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    ) : null}
+                                    {showTop ? renderSubAddButton() : null}
+                                  </>
+                                );
                               })()}
                             </div>
                             <div style={{ marginLeft: 'auto' }}>
@@ -2464,7 +2472,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               }}
                             >
                               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                                {subSelectorCfg && (
+                                {subSelectorCfg && showBottom ? (
                                   <div className="section-selector" data-field-path={subSelectorCfg.id}>
                                     <label>
                                       {resolveSelectorLabel(subSelectorCfg, language)}
@@ -2488,7 +2496,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                       ))}
                                     </select>
                                   </div>
-                                )}
+                                ) : null}
                                 {showBottom ? renderSubAddButton() : null}
                                 {subTotals.length ? (
                                   <div className="line-item-totals">
@@ -2533,7 +2541,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
             })}
             {shouldRenderBottomToolbar ? (
               <div className="line-item-toolbar">
-                {selectorCfg && (
+                {showSelectorBottom && selectorCfg ? (
                   <div
                     className="section-selector"
                     data-field-path={selectorCfg.id}
@@ -2561,7 +2569,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                       ))}
                     </select>
                   </div>
-                )}
+                ) : null}
                 <div className="line-item-toolbar-actions">
                   {showAddBottom ? renderAddButton() : null}
                   {groupTotals.length ? (

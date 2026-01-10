@@ -29,6 +29,24 @@ const SummaryIcon: React.FC = () => (
   </svg>
 );
 
+const EditIcon: React.FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" style={{ width: '1.25em', height: '1.25em' }}>
+    <path
+      d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0 0-3L16.5 4.5a2.1 2.1 0 0 0-3 0L3 15v5Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+    <path d="M12.5 5.5l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const iconForCustomAction = (action?: string): JSX.Element => {
+  if (action === 'createRecordPreset') return <PlusIcon />;
+  if (action === 'updateRecord') return <EditIcon />;
+  return <SummaryIcon />;
+};
+
 export const TopActionBar: React.FC<{
   language: LangCode;
   buttons: TopActionBarButton[];
@@ -42,7 +60,7 @@ export const TopActionBar: React.FC<{
       <div className="ck-bottom-bar-inner">
         <div className="ck-bottom-capsule" aria-label={tSystem('app.topActions', language, 'Actions')}>
           {buttons.map(btn => {
-            const icon = btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />;
+            const icon = iconForCustomAction(btn.action);
             return (
               <button
                 key={btn.id}

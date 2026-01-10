@@ -1193,6 +1193,51 @@ export class ConfigSheet {
       return config;
     }
 
+    if (action === 'updateRecord') {
+      const setRaw = cfgRaw.set ?? cfgRaw.patch ?? cfgRaw.update ?? cfgRaw.changes;
+      if (!setRaw || typeof setRaw !== 'object') return undefined;
+      const outSet: any = {};
+      if (Object.prototype.hasOwnProperty.call(setRaw, 'status')) {
+        const s = (setRaw as any).status;
+        outSet.status = s === undefined ? undefined : s === null ? null : s.toString();
+      }
+      const valuesRaw = (setRaw as any).values;
+      if (valuesRaw && typeof valuesRaw === 'object') {
+        const values: Record<string, any> = {};
+        Object.keys(valuesRaw).forEach(key => {
+          const id = (key || '').toString().trim();
+          if (!id) return;
+          const val = (valuesRaw as any)[key];
+          if (val === undefined) return;
+          if (val === null) {
+            values[id] = null;
+            return;
+          }
+          const normalized = this.normalizeDefaultValue(val);
+          if (normalized === undefined) return;
+          values[id] = normalized;
+        });
+        if (Object.keys(values).length) outSet.values = values;
+      }
+      const hasStatus = Object.prototype.hasOwnProperty.call(outSet, 'status') && outSet.status !== undefined;
+      const hasValues = !!outSet.values && Object.keys(outSet.values || {}).length > 0;
+      if (!hasStatus && !hasValues) return undefined;
+
+      const navigateToRaw = (cfgRaw.navigateTo ?? cfgRaw.targetView ?? cfgRaw.openView ?? 'auto').toString().trim().toLowerCase();
+      const navigateTo =
+        navigateToRaw === 'form' || navigateToRaw === 'summary' || navigateToRaw === 'list' || navigateToRaw === 'auto'
+          ? navigateToRaw
+          : undefined;
+      const confirmRaw = cfgRaw.confirm ?? cfgRaw.confirmation;
+      const confirm = confirmRaw && typeof confirmRaw === 'object' ? confirmRaw : undefined;
+
+      const config: ButtonConfig = { action: 'updateRecord', set: outSet } as any;
+      if (navigateTo) (config as any).navigateTo = navigateTo;
+      if (confirm) (config as any).confirm = confirm;
+      if (placements.length) (config as any).placements = placements as any;
+      return config;
+    }
+
     if (action === 'openUrlField') {
       const fieldId =
         cfgRaw.fieldId ??

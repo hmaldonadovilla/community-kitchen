@@ -65,6 +65,8 @@ const ListView: React.FC<ListViewProps> = ({
   const [sortField, setSortField] = useState<string>(defaultSortField);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
 
+  const headerSortEnabled = definition.listView?.headerSortEnabled !== false;
+
   const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date';
   const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
   const dateSearchEnabled = listSearchMode === 'date' && !!dateSearchFieldId;
@@ -93,7 +95,8 @@ const ListView: React.FC<ListViewProps> = ({
   );
 
   const isRuleColumn = (col: ListViewColumnConfig): col is ListViewRuleColumnConfig => (col as any)?.type === 'rule';
-  const isSortableColumn = (col: ListViewColumnConfig): boolean => (!isRuleColumn(col) ? true : Boolean((col as any).sortable));
+  const isSortableColumn = (col: ListViewColumnConfig): boolean =>
+    headerSortEnabled && (!isRuleColumn(col) ? true : Boolean((col as any).sortable));
 
   const questionTypeById = useMemo(() => {
     const map: Record<string, string> = {};

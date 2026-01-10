@@ -241,7 +241,19 @@ export class SubmissionService {
         return (fromField || fromMeta || '').toString();
       })();
       const isClosed = existingStatusText.trim().toLowerCase() === 'closed';
-      if (existingRowIdx >= 0 && isClosed) {
+      // Allow an explicit user-initiated "re-open" (or other status change) for Closed records.
+      // This must NOT enable background autosave to mutate closed records by accident, so it is gated behind
+      // a dedicated flag (set by the web app only for explicit actions).
+      const allowClosedUpdateRaw = (formObject as any).__ckAllowClosedUpdate;
+      const allowClosedUpdate =
+        allowClosedUpdateRaw === true ||
+        allowClosedUpdateRaw === 'true' ||
+        allowClosedUpdateRaw === '1' ||
+        allowClosedUpdateRaw === 1;
+      const nextStatusIsClosed = statusValue.trim().toLowerCase() === 'closed';
+      const allowReopen = allowClosedUpdate && !nextStatusIsClosed;
+
+      if (existingRowIdx >= 0 && isClosed && !allowReopen) {
         return {
           success: false,
           message: 'Record is Closed and read-only.',

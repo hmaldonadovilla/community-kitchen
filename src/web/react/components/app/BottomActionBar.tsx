@@ -63,6 +63,12 @@ const CheckIcon: React.FC = () => (
   </svg>
 );
 
+const iconForCustomAction = (action?: string): JSX.Element => {
+  if (action === 'createRecordPreset') return <PlusIcon />;
+  if (action === 'updateRecord') return <EditIcon />;
+  return <SummaryIcon />;
+};
+
 export const BottomActionBar: React.FC<{
   language: LangCode;
   view: View;
@@ -232,7 +238,7 @@ export const BottomActionBar: React.FC<{
                 }}
               >
                 <IconWrap>
-                  {btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}
+                  {iconForCustomAction(btn.action)}
                 </IconWrap>
                 {btn.label}
               </button>
@@ -262,7 +268,7 @@ export const BottomActionBar: React.FC<{
                 }}
               >
                 <IconWrap>
-                  {btn.action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}
+                  {iconForCustomAction(btn.action)}
                 </IconWrap>
                 {btn.label}
               </button>
@@ -347,7 +353,7 @@ export const BottomActionBar: React.FC<{
                 disabled={submitting || !onButton}
               >
                 <IconWrap>
-                  {(customButtonsSummaryBar || [])[0].action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}
+                  {iconForCustomAction((customButtonsSummaryBar || [])[0].action)}
                 </IconWrap>
                 {(customButtonsSummaryBar || [])[0].label}
               </button>
@@ -377,7 +383,7 @@ export const BottomActionBar: React.FC<{
                 disabled={submitting || !onButton}
               >
                 <IconWrap>
-                  {(customButtonsListBar || [])[0].action === 'createRecordPreset' ? <PlusIcon /> : <SummaryIcon />}
+                  {iconForCustomAction((customButtonsListBar || [])[0].action)}
                 </IconWrap>
                 {(customButtonsListBar || [])[0].label}
               </button>

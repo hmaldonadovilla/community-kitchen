@@ -2235,6 +2235,7 @@ const FormView: React.FC<FormViewProps> = ({
           (action !== 'renderDocTemplate' &&
             action !== 'renderMarkdownTemplate' &&
             action !== 'renderHtmlTemplate' &&
+            action !== 'updateRecord' &&
             action !== 'openUrlField')
         )
           return null;
