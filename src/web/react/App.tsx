@@ -3020,7 +3020,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         upsertListCacheRow({
           recordId: newId,
           // Only patch keys that already exist in list rows (upsertListCacheRow does this safely).
-          values: valuesSnapshot as any,
+          // IMPORTANT: use the fully serialized draft payload values so list cache retains line item groups/subgroups.
+          // (Top-level `values` state does NOT include line item JSON; it's derived from `lineItems`.)
+          values: (payload as any).values as any,
           createdAt: (res?.meta?.createdAt || '').toString() || undefined,
           updatedAt: updatedAt || undefined,
           status: autoSaveStatusValue,
@@ -3493,7 +3495,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             // Keep list view up-to-date without triggering a refetch.
             upsertListCacheRow({
               recordId,
-              values: valuesRef.current as any,
+              // IMPORTANT: use the fully serialized draft payload values so list cache retains line item groups/subgroups
+              // and does not keep File objects in memory (draft payload is URL-only for uploads).
+              values: (draft as any).values as any,
               createdAt: (res?.meta?.createdAt || '').toString() || undefined,
               updatedAt: (res?.meta?.updatedAt || '').toString() || undefined,
               status: autoSaveStatusValue,
@@ -3701,7 +3705,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           // Keep list view up-to-date without triggering a refetch.
           upsertListCacheRow({
             recordId,
-            values: nextValues as any,
+            // IMPORTANT: use the fully serialized draft payload values so list cache retains line item groups/subgroups.
+            values: (draft2 as any).values as any,
             updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined,
             status: autoSaveStatusValue,
             dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : undefined,
