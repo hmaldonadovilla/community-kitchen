@@ -584,7 +584,12 @@ const ListView: React.FC<ListViewProps> = ({
     if (!ruleColumns.length) return;
     const deps = ruleColumns.map(c => ({
       columnId: c.fieldId,
-      openView: (c as any).openView || 'auto',
+      openView:
+        typeof (c as any).openView === 'object' && (c as any).openView
+          ? (((c as any).openView as any).target || 'auto')
+          : ((c as any).openView || 'auto'),
+      rowClick:
+        typeof (c as any).openView === 'object' && (c as any).openView ? Boolean(((c as any).openView as any).rowClick) : false,
       dependencies: collectListViewRuleColumnDependencies(c)
     }));
     onDiagnostic('list.ruleColumns.enabled', { columns: deps });
@@ -741,8 +746,8 @@ const ListView: React.FC<ListViewProps> = ({
     const text = resolveLocalizedString(cell.text, language, EMPTY_DISPLAY);
     const style = (cell?.style || 'link').toString();
     const icon = cell?.icon ? <ListViewIcon name={cell.icon} /> : null;
-    const openButtonId = ((col as any).openButtonId || '').toString().trim();
-    const openViewRaw = (col.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
+    const openButtonId = ((cell as any).openButtonId || '').toString().trim();
+    const openViewRaw = ((cell as any).openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
     const openView = openViewRaw === 'button' && !openButtonId ? 'auto' : openViewRaw;
     const className =
       style === 'warning'
@@ -1013,7 +1018,35 @@ const ListView: React.FC<ListViewProps> = ({
               pagedItems.map(row => (
                 <tr
                   key={row.id}
-                  onClick={() => onSelect(row, row?.id ? records[row.id] : undefined)}
+                  onClick={() => {
+                    const record = row?.id ? records[row.id] : undefined;
+                    const rowOpen = (() => {
+                      for (const col of ruleColumns) {
+                        const cell = evaluateListViewRuleColumnCell(col, row);
+                        if (!cell || !cell.rowClick) continue;
+                        const openButtonId = (cell.openButtonId || '').toString().trim();
+                        const openViewRaw = (cell.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
+                        const openView = openViewRaw === 'button' && !openButtonId ? 'auto' : openViewRaw;
+                        return {
+                          columnId: col.fieldId,
+                          openView,
+                          openButtonId: openView === 'button' ? openButtonId : undefined
+                        };
+                      }
+                      return null;
+                    })();
+                    onDiagnostic?.('list.row.click', {
+                      recordId: row.id,
+                      columnId: rowOpen?.columnId || null,
+                      openView: rowOpen?.openView || 'auto',
+                      openButtonId: rowOpen?.openView === 'button' ? rowOpen?.openButtonId || null : null
+                    });
+                    if (rowOpen) {
+                      onSelect(row, record, { openView: rowOpen.openView, openButtonId: rowOpen.openButtonId });
+                    } else {
+                      onSelect(row, record);
+                    }
+                  }}
                   style={{ cursor: 'pointer' }}
                 >
                   {columns.map(col => (

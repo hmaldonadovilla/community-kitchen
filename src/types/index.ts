@@ -1534,6 +1534,26 @@ export type ListViewRuleWhen =
       any: ListViewRuleWhen[];
     };
 
+export type ListViewOpenViewTarget = 'auto' | 'form' | 'summary' | 'button';
+
+export type ListViewOpenViewConfig =
+  | ListViewOpenViewTarget
+  | {
+      /**
+       * Which view opens when clicking the computed cell:
+       * - auto: preserve default list click behavior
+       * - form: force edit view (Closed records are read-only)
+       * - summary: force Summary view (falls back to form if Summary is disabled)
+       * - button: run a configured custom BUTTON action for the record (opens a preview overlay)
+       */
+      target: ListViewOpenViewTarget;
+      /**
+       * When true, clicking anywhere on the row (not just the computed cell) uses this same open target.
+       * Useful to make list rows open Summary for closed records, or run a BUTTON preview overlay.
+       */
+      rowClick?: boolean;
+    };
+
 export interface ListViewRuleCase {
   when?: ListViewRuleWhen;
   text: LocalizedString;
@@ -1546,6 +1566,16 @@ export interface ListViewRuleCase {
    * When set, the list view renders the cell as a link and opens the URL in a new tab.
    */
   hrefFieldId?: string;
+  /**
+   * Optional override for which view opens when clicking this case's computed cell.
+   * When omitted, falls back to the column-level `openView`, then to `auto`.
+   */
+  openView?: ListViewOpenViewConfig;
+  /**
+   * When `openView` resolves to `button`, the BUTTON field id (or encoded id via `__ckQIdx=`) to trigger.
+   * When omitted, falls back to the column-level `openButtonId`.
+   */
+  openButtonId?: string;
 }
 
 export interface ListViewRuleColumnConfig {
@@ -1571,9 +1601,9 @@ export interface ListViewRuleColumnConfig {
    * - summary: force Summary view (if enabled; otherwise falls back to form)
    * - button: run a configured custom BUTTON action (e.g. renderDocTemplate/renderMarkdownTemplate/renderHtmlTemplate)
    */
-  openView?: 'auto' | 'form' | 'summary' | 'button';
+  openView?: ListViewOpenViewConfig;
   /**
-   * When `openView = "button"`, the BUTTON field id (or encoded id via `__ckQIdx=`) to trigger.
+   * When `openView` resolves to `button`, the BUTTON field id (or encoded id via `__ckQIdx=`) to trigger.
    */
   openButtonId?: string;
   /**

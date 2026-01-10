@@ -1,4 +1,5 @@
 import type {
+  ListViewOpenViewTarget,
   ListViewRuleCase,
   ListViewRuleColumnConfig,
   ListViewRulePredicate,
@@ -11,6 +12,18 @@ export type EvaluatedListViewRuleCell = {
   style?: ListViewRuleCase['style'];
   icon?: ListViewRuleCase['icon'];
   hrefFieldId?: string;
+  /**
+   * Resolved open target for this matched case (includes column-level fallbacks).
+   */
+  openView?: ListViewOpenViewTarget;
+  /**
+   * Resolved button id when `openView = "button"`.
+   */
+  openButtonId?: string;
+  /**
+   * When true, clicking anywhere on the row should use the same `openView` target.
+   */
+  rowClick?: boolean;
 };
 
 const debugEnabled = (): boolean => Boolean((globalThis as any)?.__WEB_FORM_DEBUG__);
@@ -22,6 +35,60 @@ const debugLog = (event: string, payload?: Record<string, unknown>) => {
   } catch (_) {
     // ignore
   }
+};
+
+const allowedOpenViews = new Set(['auto', 'form', 'summary', 'button']);
+
+type ParsedOpenView = {
+  target: ListViewOpenViewTarget;
+  rowClick?: boolean;
+};
+
+const normalizeOpenViewTarget = (raw: any): ListViewOpenViewTarget | null => {
+  const s = raw !== undefined && raw !== null ? raw.toString().trim().toLowerCase() : '';
+  if (!s || !allowedOpenViews.has(s)) return null;
+  return s as ListViewOpenViewTarget;
+};
+
+const parseOpenViewConfig = (raw: any): ParsedOpenView | null => {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'string') {
+    const target = normalizeOpenViewTarget(raw);
+    return target ? { target } : null;
+  }
+  if (typeof raw !== 'object') return null;
+  const target = normalizeOpenViewTarget((raw as any).target ?? (raw as any).view ?? (raw as any).open ?? (raw as any).openView);
+  if (!target) return null;
+  const rowClickRaw = (raw as any).rowClick ?? (raw as any).row ?? (raw as any).applyToRow ?? (raw as any).applyToRowClick;
+  const rowClick = rowClickRaw !== undefined ? Boolean(rowClickRaw) : undefined;
+  return { target, rowClick };
+};
+
+const normalizeOpenButtonId = (raw: any): string => {
+  if (raw === undefined || raw === null) return '';
+  return raw.toString().trim();
+};
+
+type ResolvedOpenTarget = {
+  openView: ListViewOpenViewTarget;
+  openButtonId?: string;
+  rowClick?: boolean;
+};
+
+const resolveOpenTarget = (col: ListViewRuleColumnConfig, c?: Partial<ListViewRuleCase> | null): ResolvedOpenTarget => {
+  const colOpen = parseOpenViewConfig((col as any).openView);
+  const caseOpen = parseOpenViewConfig((c as any)?.openView);
+
+  const target = (caseOpen?.target ?? colOpen?.target ?? 'auto') as ListViewOpenViewTarget;
+  const rowClick = caseOpen?.rowClick ?? colOpen?.rowClick ?? undefined;
+
+  const openButtonId = normalizeOpenButtonId((c as any)?.openButtonId) || normalizeOpenButtonId((col as any).openButtonId);
+  const openView = target === 'button' && !openButtonId ? ('auto' as const) : target;
+  return {
+    openView,
+    openButtonId: openView === 'button' ? openButtonId : undefined,
+    rowClick: Boolean(rowClick)
+  };
 };
 
 const pad2 = (n: number): string => n.toString().padStart(2, '0');
@@ -223,13 +290,21 @@ export const evaluateListViewRuleColumnCell = (
     const ok = matchesWhen(c.when as any, row, now);
     if (!ok) continue;
     const hrefFieldId = (c.hrefFieldId || (col as any).hrefFieldId || '').toString().trim() || undefined;
-    const cell: EvaluatedListViewRuleCell = { text: c.text, style: c.style, icon: c.icon, hrefFieldId };
-    debugLog('match', { columnId: col.fieldId, style: c.style || null, icon: c.icon || null });
+    const open = resolveOpenTarget(col, c);
+    const cell: EvaluatedListViewRuleCell = { text: c.text, style: c.style, icon: c.icon, hrefFieldId, ...open };
+    debugLog('match', {
+      columnId: col.fieldId,
+      style: c.style || null,
+      icon: c.icon || null,
+      openView: open.openView,
+      rowClick: !!open.rowClick
+    });
     return cell;
   }
   if (col.default && col.default.text) {
     const hrefFieldId = ((col.default as any).hrefFieldId || (col as any).hrefFieldId || '').toString().trim() || undefined;
-    return { text: col.default.text, style: col.default.style, icon: col.default.icon, hrefFieldId };
+    const open = resolveOpenTarget(col, col.default as any);
+    return { text: col.default.text, style: col.default.style, icon: col.default.icon, hrefFieldId, ...open };
   }
   return null;
 };

@@ -1045,6 +1045,74 @@ export class Dashboard {
     const allowedIcons = new Set(['warning', 'check', 'error', 'info', 'external', 'lock', 'edit', 'view']);
     const allowedOpenViews = new Set(['auto', 'form', 'summary', 'button']);
 
+    const normalizeOpenViewTarget = (raw: any): string | undefined => {
+      const s = raw !== undefined && raw !== null ? raw.toString().trim().toLowerCase() : '';
+      return s && allowedOpenViews.has(s) ? s : undefined;
+    };
+
+    const normalizeOpenButtonId = (entry: any, openViewRaw?: any): string => {
+      const openButtonRaw =
+        (entry as any).openButtonId !== undefined
+          ? (entry as any).openButtonId
+          : (entry as any).buttonId !== undefined
+            ? (entry as any).buttonId
+            : (entry as any).openButton !== undefined
+              ? (entry as any).openButton
+              : (entry as any).actionButtonId !== undefined
+                ? (entry as any).actionButtonId
+                : undefined;
+      const openButtonId = openButtonRaw !== undefined && openButtonRaw !== null ? openButtonRaw.toString().trim() : '';
+      if (openButtonId) return openButtonId;
+      if (openViewRaw && typeof openViewRaw === 'object') {
+        const nested =
+          (openViewRaw as any).openButtonId !== undefined
+            ? (openViewRaw as any).openButtonId
+            : (openViewRaw as any).buttonId !== undefined
+              ? (openViewRaw as any).buttonId
+              : (openViewRaw as any).openButton !== undefined
+                ? (openViewRaw as any).openButton
+                : (openViewRaw as any).actionButtonId !== undefined
+                  ? (openViewRaw as any).actionButtonId
+                  : undefined;
+        const nestedId = nested !== undefined && nested !== null ? nested.toString().trim() : '';
+        if (nestedId) return nestedId;
+      }
+      return '';
+    };
+
+    const normalizeOpenViewConfig = (entry: any): { openView?: any; openViewTarget?: string; rowClick?: boolean; openButtonId?: string } => {
+      const raw = (entry as any).openView ?? (entry as any).open ?? (entry as any).view ?? undefined;
+      if (raw === undefined || raw === null) {
+        const openButtonId = normalizeOpenButtonId(entry, undefined);
+        return openButtonId ? { openButtonId } : {};
+      }
+      if (typeof raw === 'string') {
+        const target = normalizeOpenViewTarget(raw);
+        const openButtonId = normalizeOpenButtonId(entry, raw);
+        if (!target) return openButtonId ? { openButtonId } : {};
+        return {
+          openView: target,
+          openViewTarget: target,
+          openButtonId: openButtonId || undefined
+        };
+      }
+      if (typeof raw === 'object') {
+        const target = normalizeOpenViewTarget((raw as any).target ?? (raw as any).view ?? (raw as any).open ?? (raw as any).openView);
+        const rowClickRaw = (raw as any).rowClick ?? (raw as any).row ?? (raw as any).applyToRow ?? (raw as any).applyToRowClick;
+        const rowClick = rowClickRaw !== undefined ? Boolean(rowClickRaw) : undefined;
+        const openButtonId = normalizeOpenButtonId(entry, raw);
+        if (!target) return openButtonId ? { openButtonId } : {};
+        return {
+          openView: rowClick !== undefined ? ({ target, rowClick } as any) : target,
+          openViewTarget: target,
+          rowClick,
+          openButtonId: openButtonId || undefined
+        };
+      }
+      const openButtonId = normalizeOpenButtonId(entry, raw);
+      return openButtonId ? { openButtonId } : {};
+    };
+
     const normalizeLocalized = (input: any): any => {
       if (input === undefined || input === null) return undefined;
       if (typeof input === 'string') return input;
@@ -1111,6 +1179,10 @@ export class Dashboard {
           : undefined;
       const hrefFieldId = hrefRaw !== undefined && hrefRaw !== null ? hrefRaw.toString().trim() : '';
       if (hrefFieldId) out.hrefFieldId = hrefFieldId;
+
+      const open = normalizeOpenViewConfig(entry);
+      if (open.openView !== undefined) out.openView = open.openView;
+      if (open.openButtonId) out.openButtonId = open.openButtonId;
       return out;
     };
 
@@ -1141,7 +1213,16 @@ export class Dashboard {
         if (!cases.length) return;
         const out: any = { type: 'rule', fieldId, label, cases };
         const def = normalizeRuleCase((entry as any).default);
-        if (def) out.default = { text: def.text, style: def.style, icon: def.icon, hrefFieldId: def.hrefFieldId };
+        if (def) {
+          out.default = {
+            text: def.text,
+            style: def.style,
+            icon: def.icon,
+            hrefFieldId: def.hrefFieldId,
+            openView: def.openView,
+            openButtonId: def.openButtonId
+          };
+        }
         const colHrefRaw =
           (entry as any).hrefFieldId !== undefined
             ? (entry as any).hrefFieldId
@@ -1152,28 +1233,9 @@ export class Dashboard {
             : undefined;
         const colHrefFieldId = colHrefRaw !== undefined && colHrefRaw !== null ? colHrefRaw.toString().trim() : '';
         if (colHrefFieldId) out.hrefFieldId = colHrefFieldId;
-        const openViewRaw = ((entry as any).openView ?? (entry as any).open ?? (entry as any).view ?? '').toString().trim().toLowerCase();
-        if (openViewRaw && allowedOpenViews.has(openViewRaw)) {
-          if (openViewRaw === 'button') {
-            const openButtonRaw =
-              (entry as any).openButtonId !== undefined
-                ? (entry as any).openButtonId
-                : (entry as any).buttonId !== undefined
-                  ? (entry as any).buttonId
-                  : (entry as any).openButton !== undefined
-                    ? (entry as any).openButton
-                    : (entry as any).actionButtonId !== undefined
-                      ? (entry as any).actionButtonId
-                      : undefined;
-            const openButtonId = openButtonRaw !== undefined && openButtonRaw !== null ? openButtonRaw.toString().trim() : '';
-            if (openButtonId) {
-              out.openView = openViewRaw;
-              out.openButtonId = openButtonId;
-            }
-          } else {
-            out.openView = openViewRaw;
-          }
-        }
+        const open = normalizeOpenViewConfig(entry);
+        if (open.openView !== undefined) out.openView = open.openView;
+        if (open.openButtonId) out.openButtonId = open.openButtonId;
         if ((entry as any).sortable !== undefined) out.sortable = Boolean((entry as any).sortable);
         columns.push(out as ListViewColumnConfig);
         return;

@@ -49,6 +49,40 @@ describe('listViewRuleColumns', () => {
     expect(cell?.text).toBe('View');
     expect(cell?.style).toBe('link');
   });
+
+  it('supports per-case openView overrides and rowClick inheritance from the column', () => {
+    const col: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      openView: { target: 'form', rowClick: true },
+      cases: [
+        { when: { fieldId: 'status', equals: 'Closed' }, text: 'View', style: 'link', openView: 'summary' },
+        { when: { fieldId: 'status', notEquals: 'Closed' }, text: 'Edit', style: 'link' }
+      ]
+    };
+    const now = new Date(2025, 11, 30);
+
+    const closed = evaluateListViewRuleColumnCell(col, { status: 'Closed' } as any, { now });
+    expect(closed?.openView).toBe('summary');
+    expect(closed?.rowClick).toBe(true);
+
+    const open = evaluateListViewRuleColumnCell(col, { status: 'In progress' } as any, { now });
+    expect(open?.openView).toBe('form');
+    expect(open?.rowClick).toBe(true);
+  });
+
+  it('supports per-case button openView with per-case openButtonId', () => {
+    const col: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      cases: [{ text: 'Preview', openView: 'button', openButtonId: '__ckQIdx=2' }]
+    };
+    const cell = evaluateListViewRuleColumnCell(col, { status: 'Anything' } as any);
+    expect(cell?.openView).toBe('button');
+    expect(cell?.openButtonId).toBe('__ckQIdx=2');
+  });
 });
 
 

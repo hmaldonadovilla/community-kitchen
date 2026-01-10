@@ -1727,10 +1727,11 @@ components:
 
             Cases can override via `cases[].hrefFieldId`.
         openView:
-          type: string
-          enum: [auto, form, summary, button]
+          $ref: '#/components/schemas/ListViewOpenViewConfig'
           description: |
-            Which view opens when clicking the computed cell:
+            Which view opens when clicking the computed cell.
+
+            Supports either a string (legacy) or an object `{ target, rowClick }`:
             - `auto`: preserve default list click behavior
             - `form`: force edit view (Closed records are read-only)
             - `summary`: force Summary view (falls back to form if Summary is disabled)
@@ -1772,6 +1773,13 @@ components:
         hrefFieldId:
           type: string
           description: 'Optional URL field to open when `style: "link"`.'
+        openView:
+          $ref: '#/components/schemas/ListViewOpenViewConfig'
+          description: Optional override for which view opens when clicking the computed cell (falls back to column `openView`).
+        openButtonId:
+          type: string
+          description: |
+            When `openView.target: "button"` (or `openView: "button"`), the BUTTON id (or encoded id via `__ckQIdx=`) to trigger.
       required:
         - text
 
@@ -1795,8 +1803,37 @@ components:
             Optional URL field to open when `style: "link"`.
 
             Example: `pdfUrl` or a question id that stores `https://...`.
+        openView:
+          $ref: '#/components/schemas/ListViewOpenViewConfig'
+          description: |
+            Optional override for which view opens when clicking this case's computed cell.
+
+            If `{ target, rowClick: true }`, then clicking **any cell** on the row uses the same open target (not just the computed cell).
+        openButtonId:
+          type: string
+          description: |
+            When `openView.target: "button"` (or `openView: "button"`), the BUTTON id (or encoded id via `__ckQIdx=`) to trigger.
       required:
         - text
+
+    ListViewOpenViewConfig:
+      description: |
+        Controls what happens when clicking a list view computed (rule) cell.
+
+        Use a string for simple behavior, or an object to also control row click behavior.
+      oneOf:
+        - type: string
+          enum: [auto, form, summary, button]
+        - type: object
+          properties:
+            target:
+              type: string
+              enum: [auto, form, summary, button]
+            rowClick:
+              type: boolean
+              description: When true, clicking any other cell on the row uses the same open target.
+          required:
+            - target
 
     ListViewRuleWhen:
       description: |

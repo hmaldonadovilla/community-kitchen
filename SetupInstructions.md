@@ -195,6 +195,32 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+      Optional: **per-case open targets** + make **row clicks** honor the same target.
+
+      - You can set `openView` (and `openButtonId`) on each `cases[]` entry.
+      - You can also use an object form for `openView` to enable row-wide behavior: `{ "target": "summary", "rowClick": true }`.
+
+      Example: Closed records open **Summary** (and clicking any cell on the row does the same); other records open **Form**:
+
+      ```json
+      {
+        "listView": {
+          "columns": [
+            {
+              "type": "rule",
+              "fieldId": "action",
+              "label": { "en": "Action" },
+              "openView": { "target": "form", "rowClick": true },
+              "cases": [
+                { "when": { "fieldId": "status", "equals": "Closed" }, "text": "View", "style": "link", "openView": { "target": "summary", "rowClick": true } },
+                { "when": { "fieldId": "status", "notEquals": "Closed" }, "text": "Edit", "style": "link" }
+              ]
+            }
+          ]
+        }
+      }
+      ```
+
       Optional: instead of opening Form/Summary, you can make a rule column run a **custom BUTTON action** (preview) by using:
       - `"openView": "button"`
       - `"openButtonId": "<BUTTON_QUESTION_ID>"` (or the encoded id containing `__ckQIdx=` when needed)
