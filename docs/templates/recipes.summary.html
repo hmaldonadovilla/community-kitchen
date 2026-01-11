@@ -10,11 +10,13 @@
     color: #0f172a;
     font-size: 0.94em;
     margin: -8px;
+    font-weight: 400;
   }
 
   .ck-summary-template * {
     box-sizing: border-box;
     max-width: 100%;
+    font-weight: inherit;
   }
 
   .ck-hero {
@@ -24,7 +26,6 @@
 
   .ck-hero-title {
     font-size: 1.2em;
-    font-weight: 950;
     margin: 0 0 6px 0;
     line-height: 1.1;
   }
@@ -39,11 +40,12 @@
   }
 
   .ck-meta-item {
-    display: flex;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr 3fr;
+    column-gap: 8px;
     align-items: baseline;
-    font-weight: 800;
     color: #0f172a;
+    width: 100%;
   }
 
   .ck-meta-label {
@@ -55,7 +57,6 @@
 
   .ck-meta-value {
     font-size: 0.98em;
-    font-weight: 900;
   }
 
   .ck-tabs {
@@ -78,7 +79,6 @@
     background: transparent;
     border-radius: 999px;
     padding: 8px 12px;
-    font-weight: 850;
     letter-spacing: 0.02em;
     text-align: center;
     cursor: pointer;
@@ -109,7 +109,6 @@
   }
 
   .ck-panel-title {
-    font-weight: 950;
     font-size: 1em;
     margin: 0;
     letter-spacing: 0.01em;
@@ -148,17 +147,10 @@
     letter-spacing: 0.03em;
     text-transform: uppercase;
     color: rgba(15, 23, 42, 0.65);
-    font-weight: 850;
-    background: rgba(148, 163, 184, 0.12);
-  }
-
-  .ck-ingredients-table tbody tr:nth-child(odd) {
-    background: rgba(118, 118, 128, 0.04);
   }
 
   .ck-category-title {
     margin: 12px 0 6px;
-    font-weight: 900;
     letter-spacing: 0.01em;
     color: #0f172a;
   }
@@ -171,13 +163,12 @@
   }
 
   .ck-instructions {
-    font-weight: 750;
     line-height: 1.35;
     white-space: pre-wrap;
-    background: rgba(118, 118, 128, 0.06);
-    border: 1px solid rgba(148, 163, 184, 0.55);
-    border-radius: 10px;
-    padding: 12px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 6px 0 0;
   }
 
   @media (max-width: 540px) {
@@ -247,10 +238,7 @@
     </div>
 
     <div class="ck-tab-panel" role="tabpanel" aria-labelledby="ck-tab-btn-instructions" id="ck-tab-instructions" data-tab-panel="instructions" hidden>
-      <div class="ck-panel-card">
-        <div class="ck-panel-title">Instructions</div>
-        <div class="ck-instructions">{{DEFAULT(REC_INST, "No instructions provided.")}}</div>
-      </div>
+      <div class="ck-instructions">{{DEFAULT(REC_INST, "No instructions provided.")}}</div>
     </div>
   </div>
 </div>
