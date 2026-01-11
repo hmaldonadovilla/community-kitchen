@@ -2680,6 +2680,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       ),
     [definition.submitButtonLabel, language]
   );
+  const submitConfirmConfirmLabelResolved = useMemo(
+    () => resolveLocalizedString(definition.submissionConfirmationConfirmLabel, language, submitButtonLabelResolved),
+    [definition.submissionConfirmationConfirmLabel, language, submitButtonLabelResolved]
+  );
+  const submitConfirmCancelLabelResolved = useMemo(
+    () =>
+      resolveLocalizedString(
+        definition.submissionConfirmationCancelLabel,
+        language,
+        tSystem('submit.cancel', language, tSystem('common.cancel', language, 'Cancel'))
+      ),
+    [definition.submissionConfirmationCancelLabel, language]
+  );
   const submitConfirmTitle = useMemo(
     () =>
       resolveLocalizedString(
@@ -4133,7 +4146,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       setSubmitConfirmOpen(true);
       logEvent('ui.submitConfirm.openAfterValidation', {
         configuredMessage: Boolean(definition.submissionConfirmationMessage),
-        submitLabelOverridden: Boolean(definition.submitButtonLabel)
+        submitLabelOverridden: Boolean(definition.submitButtonLabel),
+        confirmLabelOverridden: Boolean(definition.submissionConfirmationConfirmLabel),
+        cancelLabelOverridden: Boolean(definition.submissionConfirmationCancelLabel)
       });
       return;
     }
@@ -5047,8 +5062,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         open={submitConfirmOpen && view === 'form'}
         title={submitConfirmTitle}
         message={submitConfirmMessage}
-        confirmLabel={submitButtonLabelResolved}
-        cancelLabel={tSystem('submit.cancel', language, tSystem('common.cancel', language, 'Cancel'))}
+        confirmLabel={submitConfirmConfirmLabelResolved}
+        cancelLabel={submitConfirmCancelLabelResolved}
         zIndex={12000}
         onCancel={cancelSubmitConfirm}
         onConfirm={confirmSubmit}

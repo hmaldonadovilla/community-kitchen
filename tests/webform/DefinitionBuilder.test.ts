@@ -20,6 +20,10 @@ describe('DefinitionBuilder', () => {
       createButtonLabel: { EN: 'New' },
       copyCurrentRecordLabel: { EN: 'Duplicate' },
       copyCurrentRecordDropFields: ['Q1'],
+      submissionConfirmationTitle: { EN: 'Confirm submission' },
+      submissionConfirmationMessage: { EN: 'Ready to submit?' },
+      submissionConfirmationConfirmLabel: { EN: 'Yes, submit' },
+      submissionConfirmationCancelLabel: { EN: 'Not yet' },
       languages: ['EN', 'FR', 'NL'],
       defaultLanguage: 'FR',
       languageSelectorEnabled: false,
@@ -77,5 +81,11 @@ describe('DefinitionBuilder', () => {
     const def = builder.buildDefinition('Config: Pantry');
     expect(def.createRecordPresetButtonsEnabled).toBe(false);
     expect(def.actionBars?.system?.home?.hideWhenActive).toBe(true);
+  });
+
+  test('buildDefinition includes submission confirmation button label overrides from the dashboard', () => {
+    const def = builder.buildDefinition('Config: Pantry');
+    expect(def.submissionConfirmationConfirmLabel).toEqual({ en: 'Yes, submit' });
+    expect(def.submissionConfirmationCancelLabel).toEqual({ en: 'Not yet' });
   });
 });

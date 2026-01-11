@@ -21,48 +21,112 @@ export const ConfirmDialogOverlay: React.FC<{
 
   return (
     <div
-      role="presentation"
-      onClick={onCancel}
       style={{
         position: 'fixed',
         inset: 0,
         zIndex,
-        background: 'rgba(15,23,42,0.46)',
+        background: 'transparent',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 16
+        padding: 16,
+        boxSizing: 'border-box'
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={e => e.stopPropagation()}
+      <button
+        type="button"
+        aria-label="Close dialog"
+        title="Close"
+        onClick={onCancel}
         style={{
-          width: 'min(560px, 100%)',
+          position: 'absolute',
+          inset: 0,
+          border: 0,
+          padding: 0,
+          margin: 0,
+          background: 'rgba(15,23,42,0.46)',
+          cursor: 'pointer'
+        }}
+      />
+      <dialog
+        open
+        aria-label={title}
+        aria-modal="true"
+        style={{
+          width: 'min(760px, 100%)',
+          minHeight: 'min(360px, 92vh)',
+          maxHeight: 'min(92vh, 980px)',
+          margin: 0,
           background: '#ffffff',
           borderRadius: 18,
           border: '1px solid rgba(15,23,42,0.14)',
           boxShadow: '0 30px 90px rgba(15,23,42,0.22)',
-          padding: 18
+          padding: 26,
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column'
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: 48, letterSpacing: -0.2, color: '#0f172a' }}>{title}</div>
-        <div className="muted" style={{ marginTop: 10, fontSize: 32, fontWeight: 700, lineHeight: 1.35 }}>
+        <button
+          type="button"
+          aria-label="Close dialog"
+          title="Close"
+          onClick={e => {
+            e.stopPropagation();
+            onCancel();
+          }}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 999,
+            border: '1px solid rgba(220,38,38,0.40)',
+            background: 'rgba(220,38,38,0.10)',
+            color: '#dc2626',
+            fontWeight: 900,
+            fontSize: 26,
+            lineHeight: '1',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ fontWeight: 900, fontSize: 48, letterSpacing: -0.2, color: '#0f172a', paddingRight: 56 }}>
+          {title}
+        </div>
+        <div
+          className="muted"
+          style={{
+            marginTop: 18,
+            fontSize: 32,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            flex: '1 1 auto',
+            minHeight: 0,
+            overflowY: 'auto',
+            paddingRight: 6
+          }}
+        >
           {message}
         </div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 18, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 26, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={onCancel}
             style={{
+              marginRight: 'auto',
               padding: '10px 14px',
               borderRadius: 12,
               border: '1px solid rgba(15, 23, 42, 0.18)',
               background: 'rgba(15,23,42,0.06)',
               color: '#0f172a',
-              fontWeight: 900,
+              fontWeight: 600,
               minWidth: 110
             }}
           >
@@ -83,7 +147,7 @@ export const ConfirmDialogOverlay: React.FC<{
             {confirmLabel}
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 };

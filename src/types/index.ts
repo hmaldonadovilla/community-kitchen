@@ -1340,6 +1340,24 @@ export interface FormConfig {
   submissionConfirmationTitle?: LocalizedString;
 
   /**
+   * Optional localized label override for the positive (confirm) button shown in the submission confirmation dialog.
+   *
+   * When omitted, the UI falls back to the resolved Submit button label.
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  submissionConfirmationConfirmLabel?: LocalizedString;
+
+  /**
+   * Optional localized label override for the negative (cancel) button shown in the submission confirmation dialog.
+   *
+   * When omitted, the UI falls back to localized system strings (e.g. "Cancel").
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  submissionConfirmationCancelLabel?: LocalizedString;
+
+  /**
    * Optional localized label override for the Submit button in the React web app.
    *
    * Configured via the dashboard “Follow-up Config (JSON)” column.
@@ -1554,6 +1572,20 @@ export interface WebFormDefinition {
    * Optional confirmation title shown to the user before submitting (Confirm/Cancel overlay).
    */
   submissionConfirmationTitle?: LocalizedString;
+
+  /**
+   * Optional localized label override for the positive (confirm) button shown in the submission confirmation dialog.
+   *
+   * When omitted, the UI falls back to the resolved Submit button label.
+   */
+  submissionConfirmationConfirmLabel?: LocalizedString;
+
+  /**
+   * Optional localized label override for the negative (cancel) button shown in the submission confirmation dialog.
+   *
+   * When omitted, the UI falls back to localized system strings (e.g. "Cancel").
+   */
+  submissionConfirmationCancelLabel?: LocalizedString;
 
   /**
    * Optional localized label override for the Submit button in the React web app.

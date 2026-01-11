@@ -364,6 +364,17 @@ This project uses TypeScript. You need to build the script before using it in Go
 
       **UX note**: After the user confirms, the UI shows a **full-screen blocking overlay** (spinner + message) and locks interaction until submission (and post-submit follow-up actions) finish.
 
+    - Want to **override the submit confirmation dialog button labels**? Set `submissionConfirmationConfirmLabel` and/or `submissionConfirmationCancelLabel` (localized). When omitted, the UI falls back to:
+      - confirm: the resolved Submit button label
+      - cancel: system strings (e.g. “Cancel”)
+
+      ```json
+      {
+        "submissionConfirmationConfirmLabel": { "en": "Yes, submit" },
+        "submissionConfirmationCancelLabel": { "en": "Not yet" }
+      }
+      ```
+
     - Want to **override the Submit button label**? Set `submitButtonLabel` (localized). When omitted, the UI uses system string defaults:
 
       ```json

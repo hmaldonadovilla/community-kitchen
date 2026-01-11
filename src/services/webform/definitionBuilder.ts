@@ -120,6 +120,8 @@ export class DefinitionBuilder {
       portraitOnly: form.portraitOnly,
       submissionConfirmationMessage: form.submissionConfirmationMessage,
       submissionConfirmationTitle: form.submissionConfirmationTitle,
+      submissionConfirmationConfirmLabel: form.submissionConfirmationConfirmLabel,
+      submissionConfirmationCancelLabel: form.submissionConfirmationCancelLabel,
       submitButtonLabel: form.submitButtonLabel,
       summaryButtonLabel: form.summaryButtonLabel
     };

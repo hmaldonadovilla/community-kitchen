@@ -142,6 +142,8 @@ export class Dashboard {
       const portraitOnly = dashboardConfig?.portraitOnly;
       const submissionConfirmationMessage = dashboardConfig?.submissionConfirmationMessage;
       const submissionConfirmationTitle = dashboardConfig?.submissionConfirmationTitle;
+      const submissionConfirmationConfirmLabel = dashboardConfig?.submissionConfirmationConfirmLabel;
+      const submissionConfirmationCancelLabel = dashboardConfig?.submissionConfirmationCancelLabel;
       const submitButtonLabel = dashboardConfig?.submitButtonLabel;
       const summaryButtonLabel = dashboardConfig?.summaryButtonLabel;
       const languages = dashboardConfig?.languages;
@@ -182,6 +184,8 @@ export class Dashboard {
           portraitOnly,
           submissionConfirmationMessage,
           submissionConfirmationTitle,
+          submissionConfirmationConfirmLabel,
+          submissionConfirmationCancelLabel,
           submitButtonLabel,
           summaryButtonLabel,
           languages,
@@ -240,6 +244,8 @@ export class Dashboard {
     portraitOnly?: boolean;
     submissionConfirmationMessage?: LocalizedString;
     submissionConfirmationTitle?: LocalizedString;
+    submissionConfirmationConfirmLabel?: LocalizedString;
+    submissionConfirmationCancelLabel?: LocalizedString;
     submitButtonLabel?: LocalizedString;
     summaryButtonLabel?: LocalizedString;
     languages?: Array<'EN' | 'FR' | 'NL'>;
@@ -753,6 +759,30 @@ export class Dashboard {
               : undefined;
     const submissionConfirmationTitle = normalizeLocalized(submissionTitleRaw);
 
+    const submissionConfirmLabelRaw =
+      parsed.submissionConfirmationConfirmLabel !== undefined
+        ? parsed.submissionConfirmationConfirmLabel
+        : parsed.submitConfirmationConfirmLabel !== undefined
+          ? parsed.submitConfirmationConfirmLabel
+          : parsed.confirmationConfirmLabel !== undefined
+            ? parsed.confirmationConfirmLabel
+            : submissionObj && (submissionObj.confirmLabel !== undefined || submissionObj.confirmButtonLabel !== undefined)
+              ? (submissionObj.confirmLabel ?? submissionObj.confirmButtonLabel)
+              : undefined;
+    const submissionConfirmationConfirmLabel = normalizeLocalized(submissionConfirmLabelRaw);
+
+    const submissionCancelLabelRaw =
+      parsed.submissionConfirmationCancelLabel !== undefined
+        ? parsed.submissionConfirmationCancelLabel
+        : parsed.submitConfirmationCancelLabel !== undefined
+          ? parsed.submitConfirmationCancelLabel
+          : parsed.confirmationCancelLabel !== undefined
+            ? parsed.confirmationCancelLabel
+            : submissionObj && (submissionObj.cancelLabel !== undefined || submissionObj.cancelButtonLabel !== undefined)
+              ? (submissionObj.cancelLabel ?? submissionObj.cancelButtonLabel)
+              : undefined;
+    const submissionConfirmationCancelLabel = normalizeLocalized(submissionCancelLabelRaw);
+
     const submitButtonLabelRaw =
       parsed.submitButtonLabel !== undefined
         ? parsed.submitButtonLabel
@@ -818,6 +848,8 @@ export class Dashboard {
       portraitOnly === undefined &&
       !submissionConfirmationMessage &&
       !submissionConfirmationTitle &&
+      !submissionConfirmationConfirmLabel &&
+      !submissionConfirmationCancelLabel &&
       !submitButtonLabel &&
       !summaryButtonLabel &&
       !languages &&
@@ -853,6 +885,8 @@ export class Dashboard {
       portraitOnly,
       submissionConfirmationMessage,
       submissionConfirmationTitle,
+      submissionConfirmationConfirmLabel,
+      submissionConfirmationCancelLabel,
       submitButtonLabel,
       summaryButtonLabel,
       languages,

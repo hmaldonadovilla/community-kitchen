@@ -1358,6 +1358,18 @@ components:
             Placeholders:
             - You can include `{FIELD_ID}` (or `{{FIELD_ID}}`) and the UI will substitute the current record’s values.
             - `{field}` is reserved for required-field messages; prefer `{FIELD_ID}` for record values.
+        submissionConfirmationConfirmLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized label for the **positive (confirm)** button in the submission confirmation dialog.
+
+            When omitted, the UI falls back to the resolved Submit button label.
+        submissionConfirmationCancelLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized label for the **negative (cancel)** button in the submission confirmation dialog.
+
+            When omitted, the UI falls back to localized system strings (e.g. "Cancel").
         submitButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
           description: |

@@ -147,6 +147,24 @@ describe('Dashboard', () => {
     expect(forms[0].submissionConfirmationTitle).toEqual({ en: 'Confirm send' });
   });
 
+  test('getForms parses submission confirmation button labels from dashboard config', () => {
+    const configJson = JSON.stringify({
+      submissionConfirmationConfirmLabel: { EN: 'Yes, submit' },
+      submissionConfirmationCancelLabel: { EN: 'Not yet' }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].submissionConfirmationConfirmLabel).toEqual({ en: 'Yes, submit' });
+    expect(forms[0].submissionConfirmationCancelLabel).toEqual({ en: 'Not yet' });
+  });
+
   test('getForms parses submit button label from dashboard config', () => {
     const configJson = JSON.stringify({
       submitButtonLabel: { EN: 'Send' }
