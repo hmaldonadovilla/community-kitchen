@@ -2639,6 +2639,8 @@ const FormView: React.FC<FormViewProps> = ({
             </div>
           );
         }
+        const controlOverride = (q.ui?.control || '').toString().trim().toLowerCase();
+        const renderAsMultiSelect = controlOverride === 'select';
         return (
           <div
             key={q.id}
@@ -2651,23 +2653,46 @@ const FormView: React.FC<FormViewProps> = ({
               {resolveLabel(q, language)}
               {q.required && <RequiredStar />}
             </label>
-            <div className="inline-options">
-              {opts.map(opt => (
-                <label key={opt.value} className="inline">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(opt.value)}
-                    disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
-                    onChange={e => {
-                      if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
+            {renderAsMultiSelect ? (
+              <select
+                multiple
+                value={selected}
+                disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
+                aria-label={resolveLabel(q, language)}
+                onChange={e => {
+                  if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
+                  const next = Array.from(e.currentTarget.selectedOptions)
+                    .map(opt => opt.value)
+                    .filter(Boolean);
+                  onDiagnostic?.('ui.checkbox.select.change', { fieldPath: q.id, selectedCount: next.length });
+                  handleFieldChange(q, next);
+                }}
+              >
+                {opts.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="inline-options">
+                {opts.map(opt => (
+                  <label key={opt.value} className="inline">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(opt.value)}
+                      disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
+                      onChange={e => {
+                        if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
                         const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
-                      handleFieldChange(q, next);
-                    }}
-                  />
-                  <span>{opt.label}</span>
-                </label>
-              ))}
-            </div>
+                        handleFieldChange(q, next);
+                      }}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
             {(() => {
               const withTooltips = opts.filter(opt => opt.tooltip && selected.includes(opt.value));
               if (!withTooltips.length) return null;

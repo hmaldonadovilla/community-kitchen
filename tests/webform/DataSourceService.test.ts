@@ -76,4 +76,23 @@ describe('DataSourceService', () => {
     // Alias key is also populated for compatibility
     expect((res.items[0] as any).value).toBe('Croix-Rouge Belliard');
   });
+
+  test('filters by statusAllowList when a status column exists', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Source');
+    sheet.setMockData([
+      ['Name', 'Status', 'Value'],
+      ['Alpha', 'Active', '1'],
+      ['Beta', 'Closed', '2'],
+      ['Gamma', '', '3']
+    ]);
+
+    const service = new DataSourceService(ss);
+    const res = service.fetchDataSource(
+      { id: 'Source', projection: ['Name', 'Value'], statusAllowList: ['active'] } as any,
+      'EN'
+    );
+    expect(res.items.length).toBe(1);
+    expect((res.items[0] as any).Name).toBe('Alpha');
+  });
 });

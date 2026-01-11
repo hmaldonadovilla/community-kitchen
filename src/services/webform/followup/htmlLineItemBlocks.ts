@@ -2,12 +2,13 @@ import { QuestionConfig } from '../../../types';
 import { replaceLineItemPlaceholders } from './lineItemPlaceholders';
 import { applyOrderBy, consolidateConsolidatedTableRows } from './tableConsolidation';
 import { extractLineItemPlaceholders, parseExcludeWhenClauses, parseOrderByKeys } from './tableDirectives';
-import { normalizeText, resolveSubgroupKey, slugifyPlaceholder } from './utils';
+import { formatTemplateValue, normalizeText, resolveSubgroupKey, slugifyPlaceholder } from './utils';
 
 type SubGroupConfig = any;
 
 const ORDER_BY_RE = /{{\s*ORDER_BY\s*\(([^)]*)\)\s*}}/gi;
 const EXCLUDE_WHEN_RE = /{{\s*EXCLUDE_WHEN\s*\(([^)]*)\)\s*}}/gi;
+const REPEAT_TABLE_RE = /{{\s*(GROUP_TABLE|ROW_TABLE)\s*\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\)\s*}}/gi;
 // Support both:
 // - CONSOLIDATED_TABLE(GROUP.SUBGROUP)   (Doc directive)
 // - CONSOLIDATED_TABLE(GROUP.SUBGROUP.FIELD) (common user mistake; we ignore FIELD)
@@ -19,7 +20,46 @@ const stripDirectiveTokens = (text: string): string => {
   out = out.replace(ORDER_BY_RE, '');
   out = out.replace(EXCLUDE_WHEN_RE, '');
   out = out.replace(CONSOLIDATED_TABLE_RE, '');
+  out = out.replace(REPEAT_TABLE_RE, '');
   return out;
+};
+
+const extractRepeatDirective = (
+  text: string
+): { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string } | null => {
+  const m = (text || '').match(/{{\s*(GROUP_TABLE|ROW_TABLE)\s*\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\)\s*}}/i);
+  if (!m) return null;
+  return {
+    kind: (m[1] || '').toString().toUpperCase() as 'GROUP_TABLE' | 'ROW_TABLE',
+    groupId: (m[2] || '').toString().toUpperCase(),
+    fieldId: (m[3] || '').toString().toUpperCase()
+  };
+};
+
+const replaceRepeatDirectiveToken = (
+  text: string,
+  directive: { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string },
+  replacement: string
+): string => {
+  const pattern = new RegExp(
+    `{{\\s*${directive.kind}\\s*\\(\\s*${directive.groupId}\\s*\\.\\s*${directive.fieldId}\\s*\\)\\s*}}`,
+    'gi'
+  );
+  return text.replace(pattern, replacement);
+};
+
+const collectGroupFieldValues = (rows: any[], fieldId: string): string[] => {
+  if (!rows || !rows.length) return [];
+  const seen = new Set<string>();
+  const order: string[] = [];
+  rows.forEach(row => {
+    const raw = row?.[fieldId];
+    const normalized = normalizeText(raw);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    order.push(raw ?? '');
+  });
+  return order;
 };
 
 const extractOrderByFromText = (text: string): { keys: Array<{ key: string; direction: 'asc' | 'desc' }> } | null => {
@@ -44,12 +84,23 @@ const extractConsolidatedTableFromText = (text: string): { groupId: string; subG
   return { groupId: (m[1] || '').toString().toUpperCase(), subGroupId: (m[2] || '').toString().toUpperCase() };
 };
 
+const replaceGroupFieldTokens = (
+  html: string,
+  directive: { groupId: string; fieldId: string },
+  value: any
+): string => {
+  const text = formatTemplateValue(value);
+  const pattern = new RegExp(`{{\\s*${directive.groupId}\\s*\\.\\s*${directive.fieldId}\\s*}}`, 'gi');
+  return html.replace(pattern, text);
+};
+
 const expandBlock = (args: {
   blockText: string;
   groupLookup: Record<string, QuestionConfig>;
   lineItemRows: Record<string, any[]>;
+  forceExpandRows?: boolean;
 }): string => {
-  const { blockText, groupLookup, lineItemRows } = args;
+  const { blockText, groupLookup, lineItemRows, forceExpandRows } = args;
   const allPlaceholders = extractLineItemPlaceholders(blockText).filter(p => Boolean(groupLookup[p.groupId]));
   if (!allPlaceholders.length) return stripDirectiveTokens(blockText);
 
@@ -62,16 +113,6 @@ const expandBlock = (args: {
   const subTokens = Array.from(new Set(allPlaceholders.map(p => p.subGroupId).filter(Boolean))) as string[];
   const targetSubToken = subTokens.length === 1 ? (subTokens[0] || '').toString().toUpperCase() : '';
   if (subTokens.length > 1) return stripDirectiveTokens(blockText);
-
-  // Only expand blocks that look like they intend row expansion:
-  // - subgroup placeholders (GROUP.SUBGROUP.FIELD), or
-  // - explicit directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE)
-  const hasDirective = /{{\s*(ORDER_BY|EXCLUDE_WHEN|CONSOLIDATED_TABLE)\s*\(/i.test(blockText);
-  const hasSubPlaceholder = allPlaceholders.some(p => Boolean(p.subGroupId));
-  if (!hasDirective && !hasSubPlaceholder) {
-    // Treat GROUP.FIELD placeholders as "aggregated" (handled by applyPlaceholders later).
-    return stripDirectiveTokens(blockText);
-  }
 
   const sourceRows = (lineItemRows || {})[group.id] || [];
   let rows: any[] = Array.isArray(sourceRows) ? sourceRows.slice() : [];
@@ -97,6 +138,61 @@ const expandBlock = (args: {
     } else {
       rows = [];
     }
+  }
+
+  const repeatDirective = extractRepeatDirective(blockText);
+  if (repeatDirective) {
+    // GROUP_TABLE/ROW_TABLE in HTML: duplicate the entire block per group value and scope rows accordingly.
+    if (!rows.length) return '';
+    if (repeatDirective.kind === 'GROUP_TABLE') {
+      const groupedValues = collectGroupFieldValues(rows, repeatDirective.fieldId);
+      if (!groupedValues.length) return '';
+      const out: string[] = [];
+      groupedValues.forEach((groupValue, idx) => {
+        const scopedRows = rows.filter(r => normalizeText(r?.[repeatDirective.fieldId]) === normalizeText(groupValue));
+        if (!scopedRows.length) return;
+        const template = stripDirectiveTokens(
+          replaceRepeatDirectiveToken(blockText, repeatDirective, formatTemplateValue(groupValue))
+        );
+        scopedRows.forEach((row, rowIdx) => {
+          const rendered = replaceLineItemPlaceholders(template, group, row, {
+            subGroup: subConfig as any,
+            subGroupToken: targetSubToken
+          });
+          out.push(rendered);
+        });
+        // Preserve table separation when multiple groups render.
+        if (idx < groupedValues.length - 1) {
+          out.push('');
+        }
+      });
+      return out.join('\n');
+    }
+
+    // ROW_TABLE: duplicate per row, replacing the directive with the row's field value.
+    const orderedRows = rows.slice();
+    const template = stripDirectiveTokens(blockText);
+    const out: string[] = [];
+    orderedRows.forEach((row, rowIdx) => {
+      const title = formatTemplateValue(row?.[repeatDirective.fieldId] ?? '');
+      const withTitle = replaceRepeatDirectiveToken(template, repeatDirective, title);
+      const rendered = replaceLineItemPlaceholders(withTitle, group, row, {
+        subGroup: subConfig as any,
+        subGroupToken: targetSubToken
+      });
+      out.push(rendered);
+    });
+    return out.join('\n');
+  }
+
+  // Only expand blocks that look like they intend row expansion:
+  // - subgroup placeholders (GROUP.SUBGROUP.FIELD), or
+  // - explicit directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE)
+  const hasDirective = /{{\s*(ORDER_BY|EXCLUDE_WHEN|CONSOLIDATED_TABLE)\s*\(/i.test(blockText);
+  const hasSubPlaceholder = allPlaceholders.some(p => Boolean(p.subGroupId));
+  if (!forceExpandRows && !hasDirective && !hasSubPlaceholder) {
+    // Treat GROUP.FIELD placeholders as "aggregated" (handled by applyPlaceholders later).
+    return stripDirectiveTokens(blockText);
   }
 
   const excludeWhen = extractExcludeWhenFromText(blockText);
@@ -160,8 +256,23 @@ const expandBlock = (args: {
   const template = stripDirectiveTokens(blockText);
   const out: string[] = [];
   rows.forEach(dataRow => {
+    const applyRowDefault = (text: string): string => {
+      return (text || '').toString().replace(
+        /{{\s*DEFAULT\s*\(\s*([^)]+?)\s*,\s*"([^"]*)"\s*\)\s*}}/gi,
+        (_m: string, keyRaw: string, fallback: string) => {
+          const key = (keyRaw || '').toString().replace(/^{{|}}$/g, '').trim();
+          if (!key) return fallback;
+          const value = replaceLineItemPlaceholders(`{{${key}}}`, group, dataRow, {
+            subGroup: subConfig as any,
+            subGroupToken: targetSubToken
+          });
+          return normalizeText(value) ? value : fallback;
+        }
+      );
+    };
+
     out.push(
-      replaceLineItemPlaceholders(template, group, dataRow, {
+      replaceLineItemPlaceholders(applyRowDefault(template), group, dataRow, {
         subGroup: subConfig as any,
         subGroupToken: targetSubToken
       })
@@ -174,7 +285,7 @@ const expandBlock = (args: {
  * Apply line-item row expansion directives to HTML templates.
  *
  * Strategy:
- * - Expand repeating blocks inside <tr>...</tr> and <li>...</li> segments (common HTML template structures).
+ * - Expand repeating blocks inside <table>...</table>, <tr>...</tr>, and <li>...</li> segments (common HTML template structures).
  * - Use the same placeholder + directive semantics as Markdown/Doc templates.
  */
 export const applyHtmlLineItemBlocks = (args: {
@@ -194,31 +305,67 @@ export const applyHtmlLineItemBlocks = (args: {
   });
   if (!Object.keys(groupLookup).length) return raw;
 
-  // Fast path:
-  // Most HTML templates don't use line-item row expansion. Avoid scanning/replacing every <tr>/<li>
-  // unless we detect subgroup placeholders or explicit directives.
-  const hasDirective = /{{\s*(ORDER_BY|EXCLUDE_WHEN|CONSOLIDATED_TABLE)\s*\(/i.test(raw);
-  const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const groupUnion = Object.keys(groupLookup)
-    .map(id => escapeRegExp((id || '').toString()))
-    .filter(Boolean)
-    .join('|');
-  const hasSubgroupPlaceholders = groupUnion
-    ? new RegExp(`{{\\s*(?:${groupUnion})\\s*\\.\\s*[A-Z0-9_]+\\s*\\.`, 'i').test(raw)
-    : false;
-  if (!hasDirective && !hasSubgroupPlaceholders) return raw;
+  const expandTable = (tableHtml: string): string => {
+    const repeatDirective = extractRepeatDirective(tableHtml);
+    const renderRows = (htmlText: string, scopedRows: Record<string, any[]>): string => {
+      let out = htmlText.replace(/<tr\b[\s\S]*?<\/tr>/gi, match =>
+        expandBlock({ blockText: match, groupLookup, lineItemRows: scopedRows, forceExpandRows: !!repeatDirective })
+      );
+      // Expand <li> inside the table (less common, but supported).
+      out = out.replace(/<li\b[\s\S]*?<\/li>/gi, match =>
+        expandBlock({ blockText: match, groupLookup, lineItemRows: scopedRows, forceExpandRows: !!repeatDirective })
+      );
+      return out;
+    };
 
-  // Expand <tr> blocks first (most common for line items).
-  let out = raw.replace(/<tr\b[\s\S]*?<\/tr>/gi, match =>
-    expandBlock({ blockText: match, groupLookup, lineItemRows })
-  );
-  // Expand <li> blocks as a secondary option (lists used as "tables").
+    if (!repeatDirective) {
+      return renderRows(tableHtml, lineItemRows);
+    }
+
+    const group = groupLookup[repeatDirective.groupId];
+    if (!group) {
+      return stripDirectiveTokens(tableHtml);
+    }
+    const rows = lineItemRows[group.id] || [];
+    if (!rows.length) return '';
+
+    if (repeatDirective.kind === 'GROUP_TABLE') {
+      const groupedValues = collectGroupFieldValues(rows, repeatDirective.fieldId);
+      if (!groupedValues.length) return '';
+      const out: string[] = [];
+      groupedValues.forEach((groupValue, idx) => {
+        const scopedRows = rows.filter(r => normalizeText(r?.[repeatDirective.fieldId]) === normalizeText(groupValue));
+        if (!scopedRows.length) return;
+        const scopedMap = { ...lineItemRows, [group.id]: scopedRows };
+        let clone = replaceRepeatDirectiveToken(tableHtml, repeatDirective, formatTemplateValue(groupValue));
+        clone = replaceGroupFieldTokens(clone, repeatDirective, groupValue);
+        out.push(renderRows(clone, scopedMap));
+        if (idx < groupedValues.length - 1) out.push('');
+      });
+      return out.join('\n');
+    }
+
+    // ROW_TABLE: duplicate the table per row (order preserved).
+    const out: string[] = [];
+    rows.forEach(row => {
+      const scopedMap = { ...lineItemRows, [group.id]: [row] };
+      let clone = replaceRepeatDirectiveToken(
+        tableHtml,
+        repeatDirective,
+        formatTemplateValue(row?.[repeatDirective.fieldId] ?? '')
+      );
+      clone = replaceGroupFieldTokens(clone, repeatDirective, row?.[repeatDirective.fieldId] ?? '');
+      out.push(renderRows(clone, scopedMap));
+    });
+    return out.join('\n');
+  };
+
+  // Expand tables (handles repeat directives + nested rows), then run a final <li> pass for non-table lists.
+  let out = raw.replace(/<table\b[\s\S]*?<\/table>/gi, match => expandTable(match));
   out = out.replace(/<li\b[\s\S]*?<\/li>/gi, match =>
     expandBlock({ blockText: match, groupLookup, lineItemRows })
   );
 
   // Final safety: strip any remaining directives so they don't leak into output.
-  return out.replace(ORDER_BY_RE, '').replace(EXCLUDE_WHEN_RE, '').replace(CONSOLIDATED_TABLE_RE, '');
+  return out.replace(ORDER_BY_RE, '').replace(EXCLUDE_WHEN_RE, '').replace(CONSOLIDATED_TABLE_RE, '').replace(REPEAT_TABLE_RE, '');
 };
-
-

@@ -83,6 +83,26 @@ describe('listViewRuleColumns', () => {
     expect(cell?.openView).toBe('button');
     expect(cell?.openButtonId).toBe('__ckQIdx=2');
   });
+
+  it('supports copy/submit openView targets', () => {
+    const colCopy: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      cases: [{ text: 'Copy', openView: 'copy' }]
+    };
+    const copy = evaluateListViewRuleColumnCell(colCopy, { status: 'Anything' } as any);
+    expect(copy?.openView).toBe('copy');
+
+    const colSubmit: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      cases: [{ text: 'Submit', openView: 'submit' }]
+    };
+    const submit = evaluateListViewRuleColumnCell(colSubmit, { status: 'Anything' } as any);
+    expect(submit?.openView).toBe('submit');
+  });
 });
 
 

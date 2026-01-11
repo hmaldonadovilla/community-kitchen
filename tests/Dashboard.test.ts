@@ -115,6 +115,116 @@ describe('Dashboard', () => {
     expect(forms[0].listViewTitle).toEqual({ en: 'My Records' });
   });
 
+  test('getForms allows hiding the list view title via empty string (listView.title="")', () => {
+    const configJson = JSON.stringify({
+      listView: { title: '' }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].listViewTitle).toEqual('');
+  });
+
+  test('getForms parses list view view config from dashboard config (listView.view)', () => {
+    const configJson = JSON.stringify({
+      listView: { view: { mode: 'cards', toggleEnabled: true, defaultMode: 'cards' } }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].listViewView).toEqual({ mode: 'cards', toggleEnabled: true, defaultMode: 'cards' });
+  });
+
+  test('getForms parses list view column showIn config from dashboard config (listView.columns)', () => {
+    const configJson = JSON.stringify({
+      listView: {
+        columns: [
+          { fieldId: 'Q1', showIn: 'cards' },
+          { type: 'rule', fieldId: 'action', label: { EN: 'Action' }, showIn: ['table'], cases: [{ text: 'Edit' }] }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    const cols = forms[0].listViewColumns || [];
+    expect((cols.find(c => (c as any).fieldId === 'Q1') as any)?.showIn).toEqual(['cards']);
+    expect((cols.find(c => (c as any).fieldId === 'action') as any)?.showIn).toEqual(['table']);
+  });
+
+  test('getForms accepts showIn: "card" as an alias for cards (rule + field columns)', () => {
+    const configJson = JSON.stringify({
+      listView: {
+        columns: [
+          { fieldId: 'Q1', showIn: 'card' },
+          { type: 'rule', fieldId: 'action', label: { EN: 'Action' }, showIn: 'card', cases: [{ text: 'Edit' }] }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    const cols = forms[0].listViewColumns || [];
+    expect((cols.find(c => (c as any).fieldId === 'Q1') as any)?.showIn).toEqual(['cards']);
+    expect((cols.find(c => (c as any).fieldId === 'action') as any)?.showIn).toEqual(['cards']);
+  });
+
+  test('getForms parses list view advanced search config from dashboard config (listView.search)', () => {
+    const configJson = JSON.stringify({
+      listView: { search: { mode: 'advanced', fields: ['Q1', 'status'] } }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].listViewSearch).toEqual({ mode: 'advanced', fields: ['Q1', 'status'] });
+  });
+
+  test('getForms parses list view search placeholder from dashboard config (listView.search.placeholder)', () => {
+    const configJson = JSON.stringify({
+      listView: { search: { mode: 'text', placeholder: { EN: 'Find recipes…' } } }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0].listViewSearch as any)?.placeholder).toEqual({ en: 'Find recipes…' });
+  });
+
   test('getForms parses submission confirmation message from dashboard config', () => {
     const configJson = JSON.stringify({
       submissionConfirmationMessage: { EN: 'Submitted — thank you.' }

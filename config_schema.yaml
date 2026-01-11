@@ -806,12 +806,16 @@ components:
           type: string
           enum: [auto, select, radio, segmented, switch]
           description: |
-            Control variant for CHOICE fields.
+            Control variant for CHOICE fields (and optional select override for CHECKBOX fields).
             - auto: choose iOS-friendly defaults (segmented for <=3, radio for <=6, else select; boolean-like non-required choices may render as switch)
             - select: native dropdown (best for long option lists)
             - radio: radio list
             - segmented: iOS segmented control
             - switch: iOS switch (recommended only for boolean/non-required CHOICE fields)
+
+            CHECKBOX notes:
+            - For CHECKBOX fields with options (multi-select), `control: "select"` renders a native multi-select dropdown (`<select multiple>`).
+            - For consent CHECKBOX fields (no options), the UI always renders a tick box.
         labelLayout:
           type: string
           enum: [auto, stacked]
@@ -1260,6 +1264,17 @@ components:
         localeKey:
           type: string
           description: Optional column used to scope localized rows.
+        statusAllowList:
+          oneOf:
+            - type: string
+              description: Comma-separated list of allowed status values (e.g., "Active, In progress").
+            - type: array
+              items:
+                type: string
+          description: |
+            Optional allow-list for **record-like** data sources that include a `status` column.
+
+            When set, only rows whose `status` value matches one of these strings (case-insensitive) are returned.
         limit:
           type: integer
           description: Optional max rows to read (default 50; hard cap 200).
@@ -1852,6 +1867,21 @@ components:
           type: string
           enum: [question, meta]
           description: Distinguishes user-defined question columns from system meta columns (Created/Updated/Status/PDF).
+        showIn:
+          oneOf:
+            - type: string
+              enum: [table, cards, both]
+            - type: array
+              items:
+                type: string
+                enum: [table, cards]
+          description: |
+            Optional visibility for list view modes.
+
+            - Omit to show in both views.
+            - `"table"` or `["table"]` to show only in the table view.
+            - `"cards"` or `["cards"]` to show only in the cards/list view.
+            - `"both"` or `["table","cards"]` to explicitly show in both.
       required:
         - fieldId
 
@@ -1867,6 +1897,21 @@ components:
         label:
           $ref: '#/components/schemas/LocalizedString'
           description: Column header label.
+        showIn:
+          oneOf:
+            - type: string
+              enum: [table, cards, both]
+            - type: array
+              items:
+                type: string
+                enum: [table, cards]
+          description: |
+            Optional visibility for list view modes.
+
+            - Omit to show in both views.
+            - `"table"` or `["table"]` to show only in the table view.
+            - `"cards"` or `["cards"]` to show only in the cards/list view.
+            - `"both"` or `["table","cards"]` to explicitly show in both.
         hrefFieldId:
           type: string
           description: |
@@ -1917,7 +1962,7 @@ components:
           enum: [link, warning, muted, default]
         icon:
           type: string
-          enum: [warning, check, error, info, external, lock, edit, view]
+          enum: [warning, check, error, info, external, lock, edit, copy, view]
         hrefFieldId:
           type: string
           description: 'Optional URL field to open when `style: "link"`.'
@@ -1971,12 +2016,12 @@ components:
         Use a string for simple behavior, or an object to also control row click behavior.
       oneOf:
         - type: string
-          enum: [auto, form, summary, button]
+          enum: [auto, form, summary, button, copy, submit]
         - type: object
           properties:
             target:
               type: string
-              enum: [auto, form, summary, button]
+              enum: [auto, form, summary, button, copy, submit]
             rowClick:
               type: boolean
               description: When true, clicking any other cell on the row uses the same open target.
@@ -2054,7 +2099,7 @@ components:
       properties:
         icon:
           type: string
-          enum: [warning, check, error, info, external, lock, edit, view]
+          enum: [warning, check, error, info, external, lock, edit, copy, view]
           description: Optional icon name shown next to the text.
         text:
           $ref: '#/components/schemas/LocalizedString'
@@ -2071,7 +2116,10 @@ components:
             - type: object
               additionalProperties:
                 type: string
-          description: Optional localized heading displayed above the list view.
+          description: |
+            Optional localized heading displayed above the list view.
+
+            Set to an empty string (`""`) to hide the heading entirely.
         columns:
           type: array
           description: |
@@ -2093,6 +2141,27 @@ components:
           items:
             type: string
             enum: [createdAt, updatedAt, status, pdfUrl]
+        view:
+          type: object
+          description: |
+            Controls how the List screen is rendered.
+
+            - `mode: table` (default): the existing table view.
+            - `mode: cards`: a record-list UI that only shows results **after searching** (to avoid overwhelming the user).
+            - When `toggleEnabled: true`, users can switch between `table` and `cards` in the UI.
+          properties:
+            mode:
+              type: string
+              enum: [table, cards]
+              description: Which view to show when the toggle is disabled (default `table`).
+            toggleEnabled:
+              type: boolean
+              description: When true, show a toggle to switch between `table` and `cards`.
+            defaultMode:
+              type: string
+              enum: [table, cards]
+              description: |
+                When `toggleEnabled: true`, which mode is selected initially (default `table`).
         search:
           type: object
           description: |
@@ -2100,16 +2169,36 @@ components:
 
             - Default is `mode: text` (free-text search across visible list columns + system columns).
             - When `mode: date`, the List view shows a date picker and filters records by a specific date field.
+            - When `mode: advanced`, the List view shows a Gmail-like multi-field filter panel.
           properties:
             mode:
               type: string
-              enum: [text, date]
+              enum: [text, date, advanced]
               description: Search mode (defaults to `text`).
+            placeholder:
+              oneOf:
+                - type: string
+                - $ref: '#/components/schemas/LocalizedString'
+              description: |
+                Optional placeholder text for the list search input.
+
+                When omitted, the UI falls back to system strings (e.g., "Search records").
+                Set to an empty string (`""`) to remove the placeholder text.
             dateFieldId:
               type: string
               description: |
                 When `mode: date`, filter on this field id (typically a `DATE` question id).
                 The list fetch projection is automatically expanded to include this field so filtering works even if the field is not visible as a column.
+            fields:
+              type: array
+              items:
+                type: string
+              description: |
+                When `mode: advanced`, the list of field ids that appear as filter rows in the advanced search panel.
+
+                Notes:
+                - Field ids can reference questions **or** meta columns like `createdAt`, `updatedAt`, `status`, `pdfUrl`.
+                - The list fetch projection is automatically expanded to include these fields so filtering works even if the field is not visible as a column.
         legend:
           type: array
           description: |

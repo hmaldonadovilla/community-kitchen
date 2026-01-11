@@ -141,8 +141,27 @@
     "searchPlaceholder": { "en": "Search records", "fr": "Rechercher", "nl": "Zoeken" },
     "searchByText": { "en": "🔍", "fr": "🔍", "nl": "🔍" },
     "searchByDate": { "en": "🔍 by date", "fr": "🔍 par date", "nl": "🔍 op datum" },
+    "search": { "en": "Search", "fr": "Rechercher", "nl": "Zoeken" },
+    "any": { "en": "Any", "fr": "Tous", "nl": "Alle" },
     "clearSearch": { "en": "Clear", "fr": "Effacer", "nl": "Wissen" },
+    "advancedSearch": { "en": "Advanced search", "fr": "Recherche avancée", "nl": "Geavanceerd zoeken" },
+    "searchToSeeResults": {
+      "en": "Search to see records.",
+      "fr": "Recherchez pour voir les enregistrements.",
+      "nl": "Zoek om records te zien."
+    },
     "searchDateLabel": { "en": "Filter by date", "fr": "Filtrer par date", "nl": "Filteren op datum" },
+    "viewToggle": { "en": "View", "fr": "Vue", "nl": "Weergave" },
+    "view": {
+      "table": { "en": "Table", "fr": "Table", "nl": "Tabel" },
+      "cards": { "en": "List", "fr": "Liste", "nl": "Lijst" }
+    },
+    "meta": {
+      "createdAt": { "en": "Created", "fr": "Créé", "nl": "Aangemaakt" },
+      "updatedAt": { "en": "Updated", "fr": "Mis à jour", "nl": "Bijgewerkt" },
+      "status": { "en": "Status", "fr": "Statut", "nl": "Status" },
+      "pdfUrl": { "en": "PDF URL", "fr": "Lien PDF", "nl": "PDF-link" }
+    },
     "sortBy": { "en": "Sort by", "fr": "Trier par", "nl": "Sorteer op" },
     "asc": { "en": "Asc", "fr": "Croissant", "nl": "Oplopend" },
     "desc": { "en": "Desc", "fr": "Décroissant", "nl": "Aflopend" },

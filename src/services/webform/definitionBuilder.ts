@@ -91,6 +91,9 @@ export class DefinitionBuilder {
     if (listView && form.listViewHeaderSortEnabled !== undefined) {
       listView.headerSortEnabled = Boolean(form.listViewHeaderSortEnabled);
     }
+    if (listView && form.listViewView) {
+      listView.view = form.listViewView;
+    }
 
     return {
       title: form.title,
@@ -220,7 +223,8 @@ export class DefinitionBuilder {
         };
     const defaultSort = defaultSortOverride?.fieldId ? defaultSortOverride : computedDefaultSort;
     const out: ListViewConfig = { columns, metaColumns: resolvedMetaColumns, defaultSort };
-    if (title) out.title = title;
+    // Allow explicit empty title ("") to hide the list view title in the UI.
+    if (title !== undefined) out.title = title;
     if (legend && Array.isArray(legend) && legend.length) out.legend = legend;
     if (pageSizeOverride && Number.isFinite(pageSizeOverride)) out.pageSize = pageSizeOverride;
     if (paginationControlsEnabledOverride !== undefined) out.paginationControlsEnabled = Boolean(paginationControlsEnabledOverride);

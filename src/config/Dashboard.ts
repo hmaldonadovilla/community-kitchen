@@ -16,6 +16,7 @@ import {
   ListViewColumnConfig,
   ListViewLegendItem,
   ListViewSearchConfig,
+  ListViewViewConfig,
   LocalizedString
 } from '../types';
 
@@ -127,6 +128,7 @@ export class Dashboard {
       const listViewColumns = dashboardConfig?.listViewColumns;
       const listViewLegend = dashboardConfig?.listViewLegend;
       const listViewSearch = dashboardConfig?.listViewSearch;
+      const listViewView = dashboardConfig?.listViewView;
       const autoSave = dashboardConfig?.autoSave;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const summaryHtmlTemplateId = dashboardConfig?.summaryHtmlTemplateId;
@@ -169,6 +171,7 @@ export class Dashboard {
           listViewColumns,
           listViewLegend,
           listViewSearch,
+          listViewView,
           autoSave,
           summaryViewEnabled,
           summaryHtmlTemplateId,
@@ -229,6 +232,7 @@ export class Dashboard {
     listViewColumns?: ListViewColumnConfig[];
     listViewLegend?: ListViewLegendItem[];
     listViewSearch?: ListViewSearchConfig;
+    listViewView?: ListViewViewConfig;
     autoSave?: AutoSaveConfig;
     summaryViewEnabled?: boolean;
     summaryHtmlTemplateId?: FollowupConfig['pdfTemplateId'];
@@ -411,7 +415,13 @@ export class Dashboard {
         : listViewObj && listViewObj.heading !== undefined
         ? listViewObj.heading
         : undefined;
-    const listViewTitle = normalizeLocalized(listViewTitleRaw);
+    // Title: allow explicit empty string to mean "hide title" (instead of falling back to default "Records").
+    const listViewTitle = (() => {
+      if (listViewTitleRaw === undefined) return undefined;
+      if (listViewTitleRaw === null) return '';
+      const normalized = normalizeLocalized(listViewTitleRaw);
+      return normalized !== undefined ? normalized : '';
+    })();
 
     const listViewPageSizeRaw =
       parsed.listViewPageSize !== undefined
@@ -515,6 +525,20 @@ export class Dashboard {
         ? listViewObj.searchMode
         : undefined;
     const listViewSearch = this.normalizeListViewSearch(listViewSearchRaw);
+
+    const listViewViewRaw =
+      (parsed as any).listViewView !== undefined
+        ? (parsed as any).listViewView
+        : (parsed as any).listViewViewMode !== undefined
+          ? { mode: (parsed as any).listViewViewMode }
+          : (parsed as any).listViewMode !== undefined
+            ? { mode: (parsed as any).listViewMode }
+            : listViewObj && (listViewObj as any).view !== undefined
+              ? (listViewObj as any).view
+              : listViewObj && (listViewObj as any).ui !== undefined
+                ? (listViewObj as any).ui
+                : undefined;
+    const listViewView = this.normalizeListViewView(listViewViewRaw);
     const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
     const summaryViewEnabled = (() => {
       if (parsed.summaryViewEnabled !== undefined) return Boolean(parsed.summaryViewEnabled);
@@ -833,6 +857,7 @@ export class Dashboard {
       !listViewColumns?.length &&
       !listViewLegend?.length &&
       !listViewSearch &&
+      !listViewView &&
       !autoSave &&
       summaryViewEnabled === undefined &&
       !summaryHtmlTemplateId &&
@@ -870,6 +895,7 @@ export class Dashboard {
       listViewColumns,
       listViewLegend,
       listViewSearch,
+      listViewView,
       autoSave,
       summaryViewEnabled,
       summaryHtmlTemplateId,
@@ -1151,9 +1177,10 @@ export class Dashboard {
     const columns: ListViewColumnConfig[] = [];
 
     const metaSet = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
+    const allowedShowIn = new Set(['table', 'cards']);
     const allowedRuleStyles = new Set(['link', 'warning', 'muted', 'default']);
-    const allowedIcons = new Set(['warning', 'check', 'error', 'info', 'external', 'lock', 'edit', 'view']);
-    const allowedOpenViews = new Set(['auto', 'form', 'summary', 'button']);
+    const allowedIcons = new Set(['warning', 'check', 'error', 'info', 'external', 'lock', 'edit', 'copy', 'view']);
+    const allowedOpenViews = new Set(['auto', 'form', 'summary', 'button', 'copy', 'submit']);
 
     const normalizeOpenViewTarget = (raw: any): string | undefined => {
       const s = raw !== undefined && raw !== null ? raw.toString().trim().toLowerCase() : '';
@@ -1235,6 +1262,50 @@ export class Dashboard {
         if (trimmed) out[k] = trimmed;
       });
       return Object.keys(out).length ? out : undefined;
+    };
+
+    const normalizeShowIn = (entry: any): Array<'table' | 'cards'> | undefined => {
+      const raw =
+        (entry as any)?.showIn !== undefined
+          ? (entry as any).showIn
+          : (entry as any)?.showInModes !== undefined
+            ? (entry as any).showInModes
+            : (entry as any)?.modes !== undefined
+              ? (entry as any).modes
+              : (entry as any)?.views !== undefined
+                ? (entry as any).views
+                : (entry as any)?.view !== undefined
+                  ? (entry as any).view
+                  : (entry as any)?.onlyIn !== undefined
+                    ? (entry as any).onlyIn
+                    : undefined;
+      if (raw === undefined || raw === null || raw === '') return undefined;
+
+      const normalizeToken = (v: any): 'table' | 'cards' | null => {
+        const s = v !== undefined && v !== null ? v.toString().trim().toLowerCase() : '';
+        if (!s) return null;
+        if (s === 'both' || s === 'all') return null;
+        if (s === 'list' || s === 'card') return 'cards';
+        return allowedShowIn.has(s) ? (s as any) : null;
+      };
+
+      if (typeof raw === 'string') {
+        const s = raw.trim().toLowerCase();
+        if (!s) return undefined;
+        if (s === 'both' || s === 'all') return ['table', 'cards'];
+        const single = normalizeToken(s);
+        return single ? [single] : undefined;
+      }
+
+      const items = Array.isArray(raw) ? raw : [raw];
+      const out: Array<'table' | 'cards'> = [];
+      items.forEach(v => {
+        const token = normalizeToken(v);
+        if (!token) return;
+        if (out.includes(token)) return;
+        out.push(token);
+      });
+      return out.length ? out : undefined;
     };
 
     const normalizeWhen = (when: any): any => {
@@ -1322,6 +1393,8 @@ export class Dashboard {
         const cases = casesRaw.map(normalizeRuleCase).filter(Boolean);
         if (!cases.length) return;
         const out: any = { type: 'rule', fieldId, label, cases };
+        const showIn = normalizeShowIn(entry);
+        if (showIn) out.showIn = showIn;
         const def = normalizeRuleCase((entry as any).default);
         if (def) {
           out.default = {
@@ -1356,6 +1429,8 @@ export class Dashboard {
       const kind = kindRaw === 'meta' || metaSet.has(fieldId) ? 'meta' : 'question';
       const out: any = { fieldId, kind };
       if (label) out.label = label;
+      const showIn = normalizeShowIn(entry);
+      if (showIn) out.showIn = showIn;
       columns.push(out as ListViewColumnConfig);
     });
 
@@ -1364,7 +1439,7 @@ export class Dashboard {
 
   private normalizeListViewLegend(value: any): ListViewLegendItem[] | undefined {
     if (value === undefined || value === null) return undefined;
-    const allowedIcons = new Set(['warning', 'check', 'error', 'info', 'external', 'lock', 'edit', 'view']);
+    const allowedIcons = new Set(['warning', 'check', 'error', 'info', 'external', 'lock', 'edit', 'copy', 'view']);
 
     const normalizeLocalized = (input: any): any => {
       if (input === undefined || input === null) return undefined;
@@ -1417,18 +1492,35 @@ export class Dashboard {
   private normalizeListViewSearch(value: any): ListViewSearchConfig | undefined {
     if (value === undefined || value === null) return undefined;
 
-    const normalizeMode = (raw: any): 'text' | 'date' | undefined => {
+    const normalizeLocalizedMaybeEmpty = (input: any): any => {
+      if (input === undefined) return undefined;
+      if (input === null) return '';
+      if (typeof input === 'string') return input.trim();
+      if (typeof input !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (v === undefined || v === null) return;
+        const s = v.toString().trim();
+        if (!s) return;
+        out[k.toLowerCase()] = s;
+      });
+      return Object.keys(out).length ? out : '';
+    };
+
+    const normalizeMode = (raw: any): 'text' | 'date' | 'advanced' | undefined => {
       if (!raw) return undefined;
       const mode = raw.toString().trim().toLowerCase();
       if (!mode) return undefined;
       if (mode === 'text' || mode === 'default' || mode === 'keyword') return 'text';
       if (mode === 'date' || mode === 'bydate' || mode === 'dateonly') return 'date';
+      if (mode === 'advanced' || mode === 'filters' || mode === 'filter' || mode === 'gmail') return 'advanced';
       return undefined;
     };
 
     // Support compact string forms:
     // - "text"
     // - "date"
+    // - "advanced"
     // - "date:FIELD_ID"
     if (typeof value === 'string') {
       const raw = value.trim();
@@ -1451,7 +1543,50 @@ export class Dashboard {
     if (typeof value !== 'object') return undefined;
     const mode = normalizeMode((value as any).mode ?? (value as any).type ?? (value as any).kind ?? (value as any).searchMode);
     if (!mode) return undefined;
-    if (mode !== 'date') return { mode };
+    const placeholderRaw =
+      (value as any).placeholder !== undefined
+        ? (value as any).placeholder
+        : (value as any).placeholderText !== undefined
+          ? (value as any).placeholderText
+          : (value as any).searchPlaceholder !== undefined
+            ? (value as any).searchPlaceholder
+            : (value as any).hint !== undefined
+              ? (value as any).hint
+              : undefined;
+    const placeholder = normalizeLocalizedMaybeEmpty(placeholderRaw);
+    if (mode === 'advanced') {
+      const fieldsRaw =
+        (value as any).fields !== undefined
+          ? (value as any).fields
+          : (value as any).fieldIds !== undefined
+            ? (value as any).fieldIds
+            : (value as any).filters !== undefined
+              ? (value as any).filters
+              : undefined;
+      const fields = (() => {
+        if (fieldsRaw === undefined || fieldsRaw === null || fieldsRaw === '') return undefined;
+        if (typeof fieldsRaw === 'string') {
+          const parts = fieldsRaw
+            .split(',')
+            .map(p => p.trim())
+            .filter(Boolean);
+          return parts.length ? parts : undefined;
+        }
+        const items = Array.isArray(fieldsRaw) ? fieldsRaw : [fieldsRaw];
+        const out = items
+          .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
+          .filter(Boolean);
+        return out.length ? out : undefined;
+      })();
+      const out: any = fields ? { mode: 'advanced', fields } : { mode: 'advanced' };
+      if (placeholder !== undefined) out.placeholder = placeholder;
+      return out as ListViewSearchConfig;
+    }
+    if (mode !== 'date') {
+      const out: any = { mode };
+      if (placeholder !== undefined) out.placeholder = placeholder;
+      return out as ListViewSearchConfig;
+    }
 
     const fidRaw =
       (value as any).dateFieldId !== undefined
@@ -1464,7 +1599,46 @@ export class Dashboard {
         ? (value as any).field
         : undefined;
     const dateFieldId = fidRaw !== undefined && fidRaw !== null ? fidRaw.toString().trim() : '';
-    return dateFieldId ? { mode: 'date', dateFieldId } : { mode: 'date' };
+    const out: any = dateFieldId ? { mode: 'date', dateFieldId } : { mode: 'date' };
+    if (placeholder !== undefined) out.placeholder = placeholder;
+    return out as ListViewSearchConfig;
+  }
+
+  private normalizeListViewView(value: any): ListViewViewConfig | undefined {
+    if (value === undefined || value === null) return undefined;
+
+    const normalizeMode = (raw: any): 'table' | 'cards' | undefined => {
+      if (raw === undefined || raw === null || raw === '') return undefined;
+      const mode = raw.toString().trim().toLowerCase();
+      if (!mode) return undefined;
+      if (mode === 'table' || mode === 'grid') return 'table';
+      if (mode === 'cards' || mode === 'card' || mode === 'list') return 'cards';
+      return undefined;
+    };
+
+    if (typeof value === 'string') {
+      const mode = normalizeMode(value);
+      return mode ? { mode } : undefined;
+    }
+    if (typeof value !== 'object') return undefined;
+
+    const mode = normalizeMode((value as any).mode ?? (value as any).viewMode ?? (value as any).type ?? (value as any).kind);
+    const toggleEnabledRaw =
+      (value as any).toggleEnabled !== undefined
+        ? (value as any).toggleEnabled
+        : (value as any).showToggle !== undefined
+          ? (value as any).showToggle
+          : (value as any).toggle !== undefined
+            ? (value as any).toggle
+            : undefined;
+    const toggleEnabled = toggleEnabledRaw !== undefined ? Boolean(toggleEnabledRaw) : undefined;
+    const defaultMode = normalizeMode((value as any).defaultMode ?? (value as any).default ?? (value as any).initialMode);
+
+    const out: ListViewViewConfig = {};
+    if (mode) out.mode = mode;
+    if (toggleEnabled !== undefined) out.toggleEnabled = toggleEnabled;
+    if (defaultMode) out.defaultMode = defaultMode;
+    return Object.keys(out).length ? out : undefined;
   }
 
   private normalizeTemplateId(value: any): FollowupConfig['pdfTemplateId'] {

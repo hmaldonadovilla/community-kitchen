@@ -478,14 +478,49 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         appearance: none;
         display: none;
       }
-      /* Leave room for the clear icon on the right side. */
-      .list-toolbar .ck-list-search-control input[type="search"],
-      .list-toolbar .ck-list-search-control input[type="date"] {
-        padding-right: 0px;
+      /* Leave room for right-side icons (gear / clear) only when they are present. */
+      .list-toolbar .ck-list-search-control.ck-has-icons input[type="search"],
+      .list-toolbar .ck-list-search-control.ck-has-icons input[type="date"] {
+        padding-right: 56px;
+      }
+      .list-toolbar .ck-list-search-control.ck-has-clear.ck-has-advanced input[type="search"],
+      .list-toolbar .ck-list-search-control.ck-has-clear.ck-has-advanced input[type="date"] {
+        padding-right: 104px;
       }
       /* When DateInput overlay is active, leave room for the clear icon too. */
-      .list-toolbar .ck-list-search-control .ck-date-overlay {
-        padding-right: 84px;
+      .list-toolbar .ck-list-search-control.ck-has-clear .ck-date-overlay {
+        padding-right: 56px;
+      }
+      .list-toolbar .ck-list-search-advanced-icon {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-weight: 900;
+        font-size: 1.05em;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: none;
+      }
+      /* When the clear "×" is present, move the gear left so the buttons are not cramped. */
+      .list-toolbar .ck-list-search-control.ck-has-clear .ck-list-search-advanced-icon {
+        right: 56px;
+      }
+      .list-toolbar .ck-list-search-advanced-icon:hover {
+        background: rgba(118,118,128,0.12);
+      }
+      .list-toolbar .ck-list-search-advanced-icon:focus-visible {
+        outline: 4px solid rgba(0, 122, 255, 0.28);
+        outline-offset: 3px;
       }
       .list-toolbar .ck-list-search-clear-icon {
         position: absolute;
@@ -597,6 +632,119 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         height: 1.05em;
         flex: 0 0 auto;
         color: currentColor;
+      }
+
+      .ck-list-view-toggle {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        flex: 0 0 auto;
+      }
+      .ck-list-view-toggle > button {
+        background: #e2e8f0;
+        color: #0f172a;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 8px 12px;
+      }
+      .ck-list-view-toggle > button.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      .ck-list-advanced-panel {
+        margin-top: 10px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: rgba(118,118,128,0.06);
+      }
+      .ck-list-advanced-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .ck-list-advanced-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+      }
+      .ck-list-advanced-label {
+        font-weight: 800;
+        color: var(--muted);
+        font-size: var(--ck-font-control);
+        min-width: 0;
+        white-space: normal;
+        line-height: 1.15;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .ck-list-advanced-control {
+        min-width: 0;
+      }
+      .ck-list-advanced-control input,
+      .ck-list-advanced-control select,
+      .ck-list-advanced-control .ck-date-input-wrap,
+      .ck-list-advanced-control .ck-date-input-wrap > input.ck-date-input {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+      .ck-list-advanced-control input[type="search"] {
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      .ck-list-advanced-actions {
+        justify-content: flex-end;
+      }
+      @media (max-width: 540px) {
+        .ck-list-advanced-row {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
+        .ck-list-advanced-label {
+          white-space: normal;
+        }
+      }
+
+      .ck-list-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .ck-list-cards-placeholder {
+        padding: 12px 0;
+      }
+      .ck-list-card {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        cursor: pointer;
+      }
+      .ck-list-card:hover {
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+      }
+      .ck-list-card:focus-visible {
+        outline: 4px solid rgba(0, 122, 255, 0.28);
+        outline-offset: 3px;
+      }
+      .ck-list-card-title {
+        font-weight: 900;
+        font-size: 1.05em;
+        margin-bottom: 10px;
+      }
+      .ck-list-card-footer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        padding-top: 10px;
+        border-top: 1px dashed #e2e8f0;
       }
       .ck-list-icon--warning { color: #b45309; }
       .ck-list-icon--check { color: #16a34a; }

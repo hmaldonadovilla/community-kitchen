@@ -37,7 +37,7 @@ const debugLog = (event: string, payload?: Record<string, unknown>) => {
   }
 };
 
-const allowedOpenViews = new Set(['auto', 'form', 'summary', 'button']);
+const allowedOpenViews = new Set(['auto', 'form', 'summary', 'button', 'copy', 'submit']);
 
 type ParsedOpenView = {
   target: ListViewOpenViewTarget;

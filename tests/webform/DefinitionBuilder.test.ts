@@ -14,7 +14,13 @@ describe('DefinitionBuilder', () => {
       pdfTemplateId: { EN: 'pdf-en' },
       emailTemplateId: { EN: 'email-en' },
       statusTransitions: { onEmail: 'Sent' },
-      listView: { title: { en: 'Pantry Records' }, headerSortEnabled: false },
+      listView: {
+        title: { en: 'Pantry Records' },
+        headerSortEnabled: false,
+        view: { mode: 'cards', toggleEnabled: true, defaultMode: 'cards' },
+        search: { mode: 'advanced', fields: ['Q1', 'status'] },
+        columns: [{ type: 'rule', fieldId: 'action', label: { en: 'Action' }, showIn: 'cards', cases: [{ text: 'Edit' }] }]
+      },
       listViewMetaColumns: ['createdAt', 'status'],
       listViewLegend: [{ icon: 'warning', text: { en: 'Needs attention' } }],
       createButtonLabel: { EN: 'New' },
@@ -60,6 +66,10 @@ describe('DefinitionBuilder', () => {
     expect(def.listView?.legend).toEqual([{ icon: 'warning', text: { en: 'Needs attention' } }]);
     expect(def.listView?.title).toEqual({ en: 'Pantry Records' });
     expect(def.listView?.headerSortEnabled).toBe(false);
+    expect(def.listView?.view).toEqual({ mode: 'cards', toggleEnabled: true, defaultMode: 'cards' });
+    expect(def.listView?.search).toEqual({ mode: 'advanced', fields: ['Q1', 'status'] });
+    const action = (def.listView?.columns || []).find(c => (c as any).type === 'rule' && (c as any).fieldId === 'action') as any;
+    expect(action?.showIn).toEqual(['cards']);
     expect(def.createButtonLabel).toEqual({ en: 'New' });
     expect(def.copyCurrentRecordLabel).toEqual({ en: 'Duplicate' });
     expect(def.copyCurrentRecordDropFields).toEqual(['Q1']);

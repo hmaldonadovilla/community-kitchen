@@ -979,6 +979,29 @@ export class ConfigSheet {
     if (candidate.sheetId) config.sheetId = candidate.sheetId.toString();
     if (candidate.tabName) config.tabName = candidate.tabName.toString();
     if (candidate.localeKey) config.localeKey = candidate.localeKey.toString();
+    const statusAllowRaw =
+      candidate.statusAllowList !== undefined
+        ? candidate.statusAllowList
+        : candidate.allowedStatuses !== undefined
+          ? candidate.allowedStatuses
+          : candidate.allowedStatus !== undefined
+            ? candidate.allowedStatus
+            : candidate.statusAllowed !== undefined
+              ? candidate.statusAllowed
+              : undefined;
+    if (statusAllowRaw !== undefined && statusAllowRaw !== null && statusAllowRaw !== '') {
+      const rawList: any[] = Array.isArray(statusAllowRaw)
+        ? statusAllowRaw
+        : typeof statusAllowRaw === 'string'
+          ? statusAllowRaw.split(',').map(s => s.trim())
+          : [statusAllowRaw];
+      const normalized = rawList
+        .map(v => (v === undefined || v === null ? '' : v.toString().trim()))
+        .filter(Boolean);
+      if (normalized.length) {
+        config.statusAllowList = Array.from(new Set(normalized));
+      }
+    }
     if (Array.isArray(candidate.projection)) {
       const projection = candidate.projection
         .map((p: any) => (p !== undefined && p !== null ? p.toString() : ''))

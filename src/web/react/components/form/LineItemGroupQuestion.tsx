@@ -1613,6 +1613,8 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                             </div>
                           );
                         }
+                        const controlOverride = ((field as any)?.ui?.control || '').toString().trim().toLowerCase();
+                        const renderAsMultiSelect = controlOverride === 'select';
                         return (
                             <div
                               key={field.id}
@@ -1625,25 +1627,48 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                               {resolveFieldLabel(field, language, field.id)}
                               {field.required && <RequiredStar />}
                             </label>
-                            <div className="inline-options">
-                              {optsField.map(opt => (
-                                <label key={opt.value} className="inline">
-                                  <input
-                                    type="checkbox"
-                                    checked={selected.includes(opt.value)}
-                                    disabled={submitting || (field as any)?.readOnly === true}
-                                    onChange={e => {
-                                      if (submitting || (field as any)?.readOnly === true) return;
-                                      const next = e.target.checked
-                                        ? [...selected, opt.value]
-                                        : selected.filter(v => v !== opt.value);
-                                      handleLineFieldChange(q, row.id, field, next);
-                                    }}
-                                  />
-                                  <span>{opt.label}</span>
-                                </label>
-                              ))}
-                            </div>
+                            {renderAsMultiSelect ? (
+                              <select
+                                multiple
+                                value={selected}
+                                disabled={submitting || (field as any)?.readOnly === true}
+                                aria-label={resolveFieldLabel(field, language, field.id)}
+                                onChange={e => {
+                                  if (submitting || (field as any)?.readOnly === true) return;
+                                  const next = Array.from(e.currentTarget.selectedOptions)
+                                    .map(opt => opt.value)
+                                    .filter(Boolean);
+                                  onDiagnostic?.('ui.checkbox.select.change', { scope: 'line', fieldPath, selectedCount: next.length });
+                                  handleLineFieldChange(q, row.id, field, next);
+                                }}
+                              >
+                                {optsField.map(opt => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="inline-options">
+                                {optsField.map(opt => (
+                                  <label key={opt.value} className="inline">
+                                    <input
+                                      type="checkbox"
+                                      checked={selected.includes(opt.value)}
+                                      disabled={submitting || (field as any)?.readOnly === true}
+                                      onChange={e => {
+                                        if (submitting || (field as any)?.readOnly === true) return;
+                                        const next = e.target.checked
+                                          ? [...selected, opt.value]
+                                          : selected.filter(v => v !== opt.value);
+                                        handleLineFieldChange(q, row.id, field, next);
+                                      }}
+                                    />
+                                    <span>{opt.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
                               {subgroupOpenStack}
                             {(() => {
                               const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));

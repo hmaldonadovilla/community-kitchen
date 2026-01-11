@@ -176,6 +176,28 @@ This project uses TypeScript. You need to build the script before using it in Go
       - `dateFieldId` should usually be a `DATE` question id.
       - The list view automatically fetches this field for filtering even if it is not shown as a visible column.
 
+    - Want a Gmail-like **multi-field advanced search**? Set `listView.search.mode: "advanced"` and provide `fields` (the filterable field ids):
+
+      ```json
+      { "listView": { "search": { "mode": "advanced", "fields": ["Q1", "status", "createdAt"] } } }
+      ```
+
+      Notes:
+      - `fields` can include **question ids** and meta columns like `createdAt`, `updatedAt`, `status`, `pdfUrl`.
+      - In advanced mode, the list only filters **after the user performs a search** (press Enter or tap Search).
+
+    - Want an alternative **non-table list UI** that only shows results after searching? Set `listView.view`:
+
+      ```json
+      { "listView": { "view": { "mode": "cards" } } }
+      ```
+
+      Optional: show a toggle to switch between **Table** and **List** (and set the default):
+
+      ```json
+      { "listView": { "view": { "toggleEnabled": true, "defaultMode": "cards" } } }
+      ```
+
     - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
       - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.
 
@@ -230,6 +252,10 @@ This project uses TypeScript. You need to build the script before using it in Go
       Optional: instead of opening Form/Summary, you can make a rule column run a **custom BUTTON action** (preview) by using:
       - `"openView": "button"`
       - `"openButtonId": "<BUTTON_QUESTION_ID>"` (or the encoded id containing `__ckQIdx=` when needed)
+
+      Additional open targets:
+      - `"openView": "copy"`: triggers the app's **Copy record** action for that row (opens a new draft in the form view).
+      - `"openView": "submit"`: triggers the app's **Submit** action for that row (navigates to form on validation errors; to summary on success).
 
       Example: clicking the cell opens a configured HTML template preview button:
 
@@ -288,6 +314,37 @@ This project uses TypeScript. You need to build the script before using it in Go
       ```
 
       Supported icons: `warning`, `check`, `error`, `info`, `external`, `lock`, `edit`, `view`.
+
+      Optional: show a column only in **table** or only in **cards** view via `showIn`:
+
+      ```json
+      {
+        "listView": {
+          "columns": [
+            { "type": "rule", "fieldId": "action", "label": { "en": "Actions" }, "showIn": "cards", "cases": [ { "text": "Edit", "style": "link" } ] },
+            { "fieldId": "createdAt", "showIn": "table" }
+          ]
+        }
+      }
+      ```
+
+      Optional: customize (or remove) the search placeholder text:
+
+      ```json
+      { "listView": { "search": { "placeholder": { "en": "Find recipes…" } } } }
+      ```
+
+      Set an empty string to remove the placeholder:
+
+      ```json
+      { "listView": { "search": { "placeholder": "" } } }
+      ```
+
+      Optional: hide the list heading entirely by setting `listView.title` to `""`:
+
+      ```json
+      { "listView": { "title": "" } }
+      ```
 
     - Want a **Re-open** button on the Summary view for Closed records? Use a `BUTTON` question with `button.action: "updateRecord"` and a visibility rule on `status`.
 
@@ -553,6 +610,11 @@ This project uses TypeScript. You need to build the script before using it in Go
       - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
     - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, locale, projection, limit, pageToken)` Apps Script function is included in `dist/Code.js` and used by the web UI. Use this when options need to stay in sync with another form or sheet.
       - **Header convention (recommended)**: Use `Label [KEY]` headers in the source tab (e.g., `Supplier [SUPPLIER]`, `Email [EMAIL]`) so config can reference stable keys. `projection` / `mapping` can use either raw header text or the bracket key.
+      - **Record status filter (optional)**: If your source table includes a `status` column and you only want certain rows (e.g., only “Active” recipes), set `dataSource.statusAllowList`:
+
+        ```json
+        { "dataSource": { "id": "RECIPES", "mode": "options", "statusAllowList": ["Active"] } }
+        ```
     - **Choice UI controls (iOS-style)**: For `CHOICE` questions (and line-item `CHOICE` fields), you can optionally set `ui.control` in the Config JSON to influence which control is rendered:
       - `auto` (default): `<= 3` options → segmented, `<= 6` → radio list, else → native dropdown. Boolean-like non-required choices (e.g., YES/NO) may render as an iOS switch.
       - `select`, `radio`, `segmented`, `switch`: force a specific variant.
@@ -566,6 +628,9 @@ This project uses TypeScript. You need to build the script before using it in Go
       For long option lists, the web UI also supports **type-to-search** for `CHOICE` selects:
       - `ui.choiceSearchEnabled: true` forces the searchable input
       - when omitted, the UI enables search automatically for large option sets
+
+      For `CHECKBOX` fields with options (multi-select), you can also set:
+      - `ui.control: "select"` to render a native multi-select dropdown (`<select multiple>`).
 
     - **Label/control layout override**: For any field (top-level, line-item, subgroup), you can force the label to be stacked above the control:
 

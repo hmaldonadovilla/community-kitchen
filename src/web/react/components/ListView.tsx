@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveLocalizedString } from '../../i18n';
 import { LangCode, ListViewColumnConfig, ListViewRuleColumnConfig, WebFormDefinition, WebFormSubmission } from '../../types';
 import { toOptionSet } from '../../core';
@@ -6,6 +6,7 @@ import { tSystem } from '../../systemStrings';
 import { fetchBatch, fetchList, ListItem, ListResponse } from '../api';
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
+import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/listViewAdvancedSearch';
 import { normalizeToIsoDateLocal } from '../app/listViewSearch';
 import { paginateItemsForListViewUi } from '../app/listViewPagination';
 import { ListViewIcon } from './ListViewIcon';
@@ -18,7 +19,7 @@ interface ListViewProps {
   onSelect: (
     row: ListItem,
     record?: WebFormSubmission,
-    opts?: { openView?: 'auto' | 'form' | 'summary' | 'button'; openButtonId?: string }
+    opts?: { openView?: 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit'; openButtonId?: string }
   ) => void;
   cachedResponse?: ListResponse | null;
   cachedRecords?: Record<string, WebFormSubmission>;
@@ -67,10 +68,27 @@ const ListView: React.FC<ListViewProps> = ({
 
   const headerSortEnabled = definition.listView?.headerSortEnabled !== false;
 
-  const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date';
+  const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date' | 'advanced';
   const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
   const dateSearchEnabled = listSearchMode === 'date' && !!dateSearchFieldId;
+  const advancedSearchEnabled = listSearchMode === 'advanced';
   const searchInputId = 'ck-list-search';
+
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedFieldFilters, setAdvancedFieldFilters] = useState<Record<string, string | string[]>>({});
+  const [advancedHasSearched, setAdvancedHasSearched] = useState(false);
+
+  const viewToggleEnabled = Boolean(definition.listView?.view?.toggleEnabled);
+  const viewModeConfigured: 'table' | 'cards' = definition.listView?.view?.mode === 'cards' ? 'cards' : 'table';
+  const viewDefaultModeConfigured: 'table' | 'cards' =
+    definition.listView?.view?.defaultMode === 'cards'
+      ? 'cards'
+      : definition.listView?.view?.defaultMode === 'table'
+        ? 'table'
+        : viewModeConfigured;
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>(() =>
+    viewToggleEnabled ? viewDefaultModeConfigured : viewModeConfigured
+  );
 
   const uiLoading = loadingProp !== undefined ? Boolean(loadingProp) : loading;
   const uiPrefetching = prefetchingProp !== undefined ? Boolean(prefetchingProp) : prefetching;
@@ -89,7 +107,7 @@ const ListView: React.FC<ListViewProps> = ({
     }
   }, [cachedRecords]);
 
-  const columns = useMemo<ListViewColumnConfig[]>(
+  const columnsAll = useMemo<ListViewColumnConfig[]>(
     () => (definition.listView?.columns as ListViewColumnConfig[]) || definition.questions.map(q => ({ fieldId: q.id, label: q.label })),
     [definition]
   );
@@ -97,6 +115,19 @@ const ListView: React.FC<ListViewProps> = ({
   const isRuleColumn = (col: ListViewColumnConfig): col is ListViewRuleColumnConfig => (col as any)?.type === 'rule';
   const isSortableColumn = (col: ListViewColumnConfig): boolean =>
     headerSortEnabled && (!isRuleColumn(col) ? true : Boolean((col as any).sortable));
+
+  const isColumnVisibleInMode = useCallback((col: ListViewColumnConfig, mode: 'table' | 'cards'): boolean => {
+    const raw = (col as any)?.showIn;
+    if (raw === undefined || raw === null) return true;
+    if (Array.isArray(raw)) return raw.includes(mode);
+    const s = raw.toString ? raw.toString().trim().toLowerCase() : `${raw}`.trim().toLowerCase();
+    if (!s || s === 'both' || s === 'all') return true;
+    if (s === 'list') return mode === 'cards';
+    if (s === 'card') return mode === 'cards';
+    if (s === 'cards') return mode === 'cards';
+    if (s === 'table') return mode === 'table';
+    return true;
+  }, []);
 
   const questionTypeById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -107,6 +138,21 @@ const ListView: React.FC<ListViewProps> = ({
     });
     return map;
   }, [definition.questions]);
+
+  const questionLabelById = useMemo(() => {
+    const map: Record<string, any> = {};
+    (definition.questions || []).forEach(q => {
+      const id = (q?.id || '').toString();
+      if (!id) return;
+      map[id] = q.label;
+    });
+    return map;
+  }, [definition.questions]);
+
+  const fieldTypeById = useMemo(() => {
+    // Meta columns
+    return { ...questionTypeById, createdAt: 'DATETIME', updatedAt: 'DATETIME', status: 'TEXT', pdfUrl: 'TEXT', id: 'TEXT' };
+  }, [questionTypeById]);
 
   const optionSetById = useMemo(() => {
     const map: Record<string, any> = {};
@@ -126,7 +172,7 @@ const ListView: React.FC<ListViewProps> = ({
       if (!id || meta.has(id)) return;
       ids.add(id);
     };
-    columns.forEach(col => {
+    columnsAll.forEach(col => {
       const fid = (col as any)?.fieldId;
       if (!fid) return;
       if (isRuleColumn(col)) {
@@ -139,7 +185,7 @@ const ListView: React.FC<ListViewProps> = ({
       add(dateSearchFieldId);
     }
     return Array.from(ids);
-  }, [columns, dateSearchEnabled, dateSearchFieldId]);
+  }, [columnsAll, dateSearchEnabled, dateSearchFieldId]);
 
   const activeFetchRef = useRef(0);
 
@@ -331,7 +377,7 @@ const ListView: React.FC<ListViewProps> = ({
     try {
       // Use listViewSort (defaultSort) to prioritize fetching the most relevant rows for the initial page.
       // Since the server list endpoint is paginated by sheet row order, we "tail-fetch" for desc date/datetime/meta sorts.
-      const defaultSortIsRuleColumn = columns.some(c => c.fieldId === defaultSortField && isRuleColumn(c));
+      const defaultSortIsRuleColumn = columnsAll.some(c => c.fieldId === defaultSortField && isRuleColumn(c));
       const sortType =
         defaultSortField === 'createdAt' || defaultSortField === 'updatedAt' ? 'DATETIME' : (questionTypeById[defaultSortField] || '');
       const shouldTailFetchFirst =
@@ -552,14 +598,41 @@ const ListView: React.FC<ListViewProps> = ({
   useEffect(() => {
     setPageIndex(0);
     setSearchValue('');
+    setAdvancedOpen(false);
+    setAdvancedFieldFilters({});
+    setAdvancedHasSearched(false);
     setSortField(defaultSortField);
     setSortDirection(defaultSortDirection);
   }, [formKey, refreshToken, defaultSortField, defaultSortDirection]);
 
   useEffect(() => {
+    setViewMode(viewToggleEnabled ? viewDefaultModeConfigured : viewModeConfigured);
+  }, [formKey, refreshToken, viewDefaultModeConfigured, viewModeConfigured, viewToggleEnabled]);
+
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    onDiagnostic('list.view.config', {
+      mode: viewModeConfigured,
+      toggleEnabled: viewToggleEnabled,
+      defaultMode: viewDefaultModeConfigured
+    });
+  }, [onDiagnostic, viewDefaultModeConfigured, viewModeConfigured, viewToggleEnabled]);
+
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    onDiagnostic('list.view.mode', { mode: viewMode });
+  }, [onDiagnostic, viewMode]);
+
+  useEffect(() => {
     // Reset paging when filtering changes to avoid landing on an empty page after narrowing results.
     setPageIndex(0);
   }, [searchValue]);
+
+  useEffect(() => {
+    if (!advancedSearchEnabled) return;
+    if (!advancedHasSearched) return;
+    setPageIndex(0);
+  }, [advancedFieldFilters, advancedHasSearched, advancedSearchEnabled]);
 
   useEffect(() => {
     if (!onDiagnostic) return;
@@ -570,17 +643,58 @@ const ListView: React.FC<ListViewProps> = ({
       }
       return;
     }
+    if (listSearchMode === 'advanced') {
+      const fields = Array.isArray((definition.listView?.search as any)?.fields) ? ((definition.listView?.search as any)?.fields || []) : [];
+      onDiagnostic('list.search.mode', { mode: 'advanced', fields });
+      return;
+    }
     onDiagnostic('list.search.mode', { mode: 'text' });
   }, [dateSearchFieldId, listSearchMode, onDiagnostic]);
 
   const searchableFieldIds = useMemo(() => {
     const ids = new Set<string>();
-    columns.forEach(col => ids.add(col.fieldId));
+    columnsAll.forEach(col => ids.add(col.fieldId));
     ['status', 'pdfUrl', 'updatedAt', 'createdAt', 'id'].forEach(id => ids.add(id));
     return Array.from(ids);
-  }, [columns]);
+  }, [columnsAll]);
 
-  const ruleColumns = useMemo(() => columns.filter(isRuleColumn) as ListViewRuleColumnConfig[], [columns]);
+  const ruleColumns = useMemo(() => columnsAll.filter(isRuleColumn) as ListViewRuleColumnConfig[], [columnsAll]);
+
+  const columnsForTable = useMemo(
+    () => columnsAll.filter(col => isColumnVisibleInMode(col, 'table')),
+    [columnsAll, isColumnVisibleInMode]
+  );
+  const columnsForCards = useMemo(
+    () => columnsAll.filter(col => isColumnVisibleInMode(col, 'cards')),
+    [columnsAll, isColumnVisibleInMode]
+  );
+  const ruleColumnsForCards = useMemo(
+    () => columnsForCards.filter(isRuleColumn) as ListViewRuleColumnConfig[],
+    [columnsForCards]
+  );
+
+  const advancedSearchFieldIds = useMemo(() => {
+    const raw = (definition.listView?.search as any)?.fields;
+    const normalized: string[] = (() => {
+      if (raw === undefined || raw === null || raw === '') return [];
+      if (Array.isArray(raw)) return raw.map(v => (v === undefined || v === null ? '' : `${v}`.trim())).filter(Boolean);
+      const str = `${raw}`.trim();
+      if (!str) return [];
+      return str
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+    })();
+    if (normalized.length) return normalized;
+    // Safe fallback: expose all non-rule columns as filter inputs.
+    return columnsAll.filter(col => !isRuleColumn(col)).map(col => col.fieldId);
+  }, [columnsAll, definition.listView?.search]);
+
+  const keywordSearchFieldIds = useMemo(() => {
+    const ids = new Set<string>(searchableFieldIds);
+    advancedSearchFieldIds.forEach(id => ids.add(id));
+    return Array.from(ids);
+  }, [advancedSearchFieldIds, searchableFieldIds]);
 
   useEffect(() => {
     if (!onDiagnostic) return;
@@ -638,31 +752,50 @@ const ListView: React.FC<ListViewProps> = ({
           })
         : baseItems;
     const trimmed = searchValue.trim();
+    const advancedQuery = { keyword: searchValue, fieldFilters: advancedFieldFilters };
+    const applyAdvanced = advancedSearchEnabled && advancedHasSearched && hasActiveAdvancedSearch(advancedQuery);
     const filtered =
       dateSearchEnabled && trimmed
         ? items.filter(row => normalizeToIsoDateLocal((row as any)[dateSearchFieldId]) === trimmed)
         : dateSearchEnabled
           ? items
-          : trimmed
-            ? (() => {
-                const keyword = trimmed.toLowerCase();
-                return items.filter(row =>
-                  searchableFieldIds.some(fieldId => {
-                    const raw = (row as any)[fieldId];
-                    if (raw === undefined || raw === null) return false;
-                    const value = Array.isArray(raw) ? raw.join(' ') : `${raw}`;
-                    return value.toLowerCase().includes(keyword);
-                  })
-                );
-              })()
-            : items;
+          : applyAdvanced
+            ? filterItemsByAdvancedSearch(items, advancedQuery, { keywordFieldIds: keywordSearchFieldIds, fieldTypeById })
+            : !advancedSearchEnabled && trimmed
+              ? (() => {
+                  const keyword = trimmed.toLowerCase();
+                  return items.filter(row =>
+                    searchableFieldIds.some(fieldId => {
+                      const raw = (row as any)[fieldId];
+                      if (raw === undefined || raw === null) return false;
+                      const value = Array.isArray(raw) ? raw.join(' ') : `${raw}`;
+                      return value.toLowerCase().includes(keyword);
+                    })
+                  );
+                })()
+              : items;
     const field = sortField || 'updatedAt';
     const sorted = [...filtered].sort((rowA, rowB) => {
       const result = compareValues((rowA as any)[field], (rowB as any)[field]);
       return sortDirection === 'asc' ? result : -result;
     });
     return sorted;
-  }, [allItems, dateSearchEnabled, dateSearchFieldId, language, ruleColumns, searchValue, searchableFieldIds, sortField, sortDirection]);
+  }, [
+    advancedFieldFilters,
+    advancedHasSearched,
+    advancedSearchEnabled,
+    allItems,
+    dateSearchEnabled,
+    dateSearchFieldId,
+    fieldTypeById,
+    keywordSearchFieldIds,
+    language,
+    ruleColumns,
+    searchValue,
+    searchableFieldIds,
+    sortField,
+    sortDirection
+  ]);
 
   const pagedItems = useMemo(() => {
     return paginateItemsForListViewUi({ items: visibleItems, pageIndex, pageSize, paginationControlsEnabled: paginationEnabled });
@@ -672,8 +805,13 @@ const ListView: React.FC<ListViewProps> = ({
   const showPrev = paginationEnabled && pageIndex > 0;
   const showNext = paginationEnabled && pageIndex < totalPages - 1;
   const loadedCount = (allItems || []).length;
-  const trimmedSearch = searchValue.trim();
-  const showLoadedOfTotal = !trimmedSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
+  const activeSearch =
+    listSearchMode === 'date'
+      ? Boolean(searchValue.trim())
+      : listSearchMode === 'advanced'
+        ? advancedHasSearched && hasActiveAdvancedSearch({ keyword: searchValue, fieldFilters: advancedFieldFilters })
+        : Boolean(searchValue.trim());
+  const showLoadedOfTotal = !activeSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
 
   const formatDateOnly = (value: any): string | null => {
     if (value === undefined || value === null || value === '') return null;
@@ -745,12 +883,12 @@ const ListView: React.FC<ListViewProps> = ({
 
   const renderRuleCell = (row: ListItem, col: ListViewRuleColumnConfig) => {
     const cell = evaluateListViewRuleColumnCell(col, row);
-    if (!cell) return EMPTY_DISPLAY;
+    if (!cell) return null;
     const text = resolveLocalizedString(cell.text, language, EMPTY_DISPLAY);
     const style = (cell?.style || 'link').toString();
     const icon = cell?.icon ? <ListViewIcon name={cell.icon} /> : null;
     const openButtonId = ((cell as any).openButtonId || '').toString().trim();
-    const openViewRaw = ((cell as any).openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
+    const openViewRaw = ((cell as any).openView || 'auto') as 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit';
     const openView = openViewRaw === 'button' && !openButtonId ? 'auto' : openViewRaw;
     const className =
       style === 'warning'
@@ -918,16 +1056,202 @@ const ListView: React.FC<ListViewProps> = ({
     );
   };
 
+  const handleRowClick = useCallback(
+    (row: ListItem) => {
+      const record = row?.id ? records[row.id] : undefined;
+      const rowOpen = (() => {
+        for (const col of ruleColumns) {
+          const cell = evaluateListViewRuleColumnCell(col, row);
+          if (!cell || !cell.rowClick) continue;
+          const openButtonId = (cell.openButtonId || '').toString().trim();
+          const openViewRaw = (cell.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit';
+          const openView = openViewRaw === 'button' && !openButtonId ? 'auto' : openViewRaw;
+          return {
+            columnId: col.fieldId,
+            openView,
+            openButtonId: openView === 'button' ? openButtonId : undefined
+          };
+        }
+        return null;
+      })();
+      onDiagnostic?.('list.row.click', {
+        recordId: row.id,
+        columnId: rowOpen?.columnId || null,
+        openView: rowOpen?.openView || 'auto',
+        openButtonId: rowOpen?.openView === 'button' ? rowOpen?.openButtonId || null : null
+      });
+      if (rowOpen) {
+        onSelect(row, record, { openView: rowOpen.openView, openButtonId: rowOpen.openButtonId });
+      } else {
+        onSelect(row, record);
+      }
+    },
+    [onDiagnostic, onSelect, records, ruleColumns]
+  );
+
+  const clearSearch = useCallback(() => {
+    if (advancedSearchEnabled) {
+      setSearchValue('');
+      setAdvancedFieldFilters({});
+      setAdvancedHasSearched(false);
+      setAdvancedOpen(false);
+      onDiagnostic?.('list.search.clear', { mode: 'advanced' });
+      return;
+    }
+    setSearchValue('');
+    onDiagnostic?.('list.search.clear', { mode: dateSearchEnabled ? 'date' : 'text' });
+  }, [advancedSearchEnabled, dateSearchEnabled, onDiagnostic]);
+
+  const applyAdvancedSearchNow = useCallback(() => {
+    if (!advancedSearchEnabled) return;
+    const query = { keyword: searchValue, fieldFilters: advancedFieldFilters };
+    if (!hasActiveAdvancedSearch(query)) {
+      onDiagnostic?.('list.search.advanced.empty', {});
+      return;
+    }
+    setAdvancedHasSearched(true);
+    setAdvancedOpen(false);
+    setPageIndex(0);
+    const activeFilters = Object.entries(advancedFieldFilters)
+      .map(([fieldId, value]) => ({
+        fieldId,
+        value: Array.isArray(value) ? value.map(v => (v || '').trim()).filter(Boolean).join(',') : (value || '').trim()
+      }))
+      .filter(v => Boolean(v.value));
+    onDiagnostic?.('list.search.advanced.apply', {
+      keyword: (searchValue || '').trim() || null,
+      filters: activeFilters.map(f => f.fieldId),
+      filterCount: activeFilters.length
+    });
+  }, [advancedFieldFilters, advancedSearchEnabled, onDiagnostic, searchValue]);
+
+  const showClearSearch = useMemo(() => {
+    if (advancedSearchEnabled) {
+      return (
+        Boolean(searchValue.trim()) ||
+        Object.values(advancedFieldFilters).some(v => (Array.isArray(v) ? v.some(item => (item || '').trim().length > 0) : (v || '').trim().length > 0)) ||
+        advancedHasSearched
+      );
+    }
+    return Boolean(searchValue.trim());
+  }, [advancedFieldFilters, advancedHasSearched, advancedSearchEnabled, searchValue]);
+
+  const cardTitleFieldId = useMemo(() => {
+    const firstNonRule = columnsForCards.find(col => !isRuleColumn(col));
+    return (firstNonRule?.fieldId || 'id').toString();
+  }, [columnsForCards]);
+
+  const getFieldLabel = (fieldId: string): string => {
+    const fromColumns = columnsAll.find(c => c.fieldId === fieldId)?.label;
+    if (fromColumns) return resolveLocalizedString(fromColumns, language, fieldId);
+    const fromQuestions = questionLabelById[fieldId];
+    if (fromQuestions) return resolveLocalizedString(fromQuestions, language, fieldId);
+    if (fieldId === 'createdAt') return tSystem('list.meta.createdAt', language, 'Created');
+    if (fieldId === 'updatedAt') return tSystem('list.meta.updatedAt', language, 'Updated');
+    if (fieldId === 'status') return tSystem('list.meta.status', language, 'Status');
+    if (fieldId === 'pdfUrl') return tSystem('list.meta.pdfUrl', language, 'PDF URL');
+    return fieldId;
+  };
+
+  const statusFilterOptions = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const add = (value: any) => {
+      const s = value !== undefined && value !== null ? value.toString().trim() : '';
+      if (!s) return;
+      if (seen.has(s)) return;
+      seen.add(s);
+      out.push(s);
+    };
+
+    const transitions = definition.followup?.statusTransitions || {};
+    add((transitions as any).onPdf);
+    add((transitions as any).onEmail);
+    add((transitions as any).onClose);
+
+    add(definition.autoSave?.status);
+
+    (definition.questions || []).forEach(q => {
+      if ((q as any).type !== 'BUTTON') return;
+      const btn = (q as any).button;
+      if (!btn || typeof btn !== 'object') return;
+      if ((btn as any).action !== 'updateRecord') return;
+      add((btn as any)?.set?.status);
+    });
+
+    // Include any statuses already present in the fetched list results (covers legacy/hand-edited statuses).
+    (allItems || []).forEach(row => add((row as any)?.status));
+
+    return out;
+  }, [allItems, definition.autoSave?.status, definition.followup?.statusTransitions, definition.questions]);
+
+  const buildSelectOptionsForField = useCallback(
+    (fieldId: string): Array<{ value: string; label: string }> => {
+      const lower = (fieldId || '').toString().trim().toLowerCase();
+      if (lower === 'status') {
+        return statusFilterOptions.map(v => ({ value: v, label: v }));
+      }
+
+      const optionSet = optionSetById[fieldId];
+      const base = optionSet?.en;
+      if (!Array.isArray(base) || !base.length) return [];
+
+      const lang = (language || 'EN').toString().toUpperCase();
+      const labels = (lang === 'FR' ? optionSet.fr : lang === 'NL' ? optionSet.nl : optionSet.en) || optionSet.en || base;
+      const labelList = Array.isArray(labels) ? labels : base;
+
+      return base
+        .map((raw, idx) => {
+          const value = raw !== undefined && raw !== null ? raw.toString() : '';
+          const labelRaw = labelList[idx] !== undefined && labelList[idx] !== null ? labelList[idx].toString() : value;
+          const label = labelRaw || value;
+          return value ? { value, label } : null;
+        })
+        .filter(Boolean) as Array<{ value: string; label: string }>;
+    },
+    [language, optionSetById, statusFilterOptions]
+  );
+
+  const showResults = viewMode === 'table' || activeSearch;
+
+  const titleNode = (() => {
+    const configured = definition.listView?.title;
+    // When `title` is explicitly provided as empty string, hide the title entirely.
+    if (typeof configured === 'string' && configured.trim() === '') {
+      onDiagnostic?.('list.title.hidden', { reason: 'explicitEmpty' });
+      return null;
+    }
+    const titleText =
+      configured === undefined
+        ? tSystem('list.title', language, 'Records')
+        : resolveLocalizedString(configured, language, tSystem('list.title', language, 'Records'));
+    if (!titleText || !titleText.toString().trim()) {
+      onDiagnostic?.('list.title.hidden', { reason: 'resolvedEmpty' });
+      return null;
+    }
+    return <h3>{titleText}</h3>;
+  })();
+
+  const configuredPlaceholder = (definition.listView?.search as any)?.placeholder;
+  const placeholderIsExplicitlyEmpty = typeof configuredPlaceholder === 'string' && configuredPlaceholder.trim() === '';
+  const searchPlaceholder = placeholderIsExplicitlyEmpty
+    ? ''
+    : resolveLocalizedString(configuredPlaceholder, language, tSystem('list.searchPlaceholder', language, 'Search records'));
+
+  const searchControlClass = `ck-list-search-control${
+    (advancedSearchEnabled ? ' ck-has-advanced' : '') + (showClearSearch ? ' ck-has-clear' : '') + ((advancedSearchEnabled || showClearSearch) ? ' ck-has-icons' : '')
+  }`;
+
   return (
     <div className="card">
-      <h3>{resolveLocalizedString(definition.listView?.title, language, tSystem('list.title', language, 'Records'))}</h3>
+      {titleNode}
+
       <div className="list-toolbar">
         <label className="ck-list-search-label" htmlFor={searchInputId}>
-          {dateSearchEnabled
-            ? tSystem('list.searchByDate', language, '🔍 Search by date')
-            : tSystem('list.searchByText', language, '🔍 Search')}
+          {dateSearchEnabled ? tSystem('list.searchByDate', language, '🔍 by date') : tSystem('list.searchByText', language, '🔍')}
         </label>
-        <div className="ck-list-search-control">
+
+        <div className={searchControlClass}>
           {dateSearchEnabled ? (
             <DateInput
               id={searchInputId}
@@ -940,27 +1264,196 @@ const ListView: React.FC<ListViewProps> = ({
             <input
               id={searchInputId}
               type="search"
-              placeholder={tSystem('list.searchPlaceholder', language, 'Search records')}
-              aria-label={tSystem('list.searchPlaceholder', language, 'Search records')}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder || tSystem('list.searchPlaceholder', language, 'Search records')}
               value={searchValue}
               onChange={e => setSearchValue(e.target.value)}
+              onKeyDown={e => {
+                if (!advancedSearchEnabled) return;
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                applyAdvancedSearchNow();
+              }}
             />
           )}
-          {searchValue.trim() ? (
+
+          {advancedSearchEnabled ? (
+            <button
+              type="button"
+              className="ck-list-search-advanced-icon"
+              aria-label={tSystem('list.advancedSearch', language, 'Advanced search')}
+              onClick={() => {
+                setAdvancedOpen(prev => {
+                  const next = !prev;
+                  onDiagnostic?.('list.search.advanced.toggle', { open: next });
+                  return next;
+                });
+              }}
+            >
+              <span aria-hidden="true">⚙︎</span>
+            </button>
+          ) : null}
+
+          {showClearSearch ? (
             <button
               type="button"
               className="ck-list-search-clear-icon"
               aria-label={tSystem('list.clearSearch', language, 'Clear')}
-              onClick={() => {
-                setSearchValue('');
-                onDiagnostic?.('list.search.clear', { mode: dateSearchEnabled ? 'date' : 'text' });
-              }}
+              onClick={clearSearch}
             >
               <span aria-hidden="true">×</span>
             </button>
           ) : null}
         </div>
+
+        {viewToggleEnabled ? (
+          <div className="ck-list-view-toggle" role="group" aria-label={tSystem('list.viewToggle', language, 'View')}>
+            <button
+              type="button"
+              className={viewMode === 'table' ? 'active' : ''}
+              onClick={() => {
+                setViewMode('table');
+                onDiagnostic?.('list.view.toggle', { mode: 'table' });
+              }}
+            >
+              {tSystem('list.view.table', language, 'Table')}
+            </button>
+            <button
+              type="button"
+              className={viewMode === 'cards' ? 'active' : ''}
+              onClick={() => {
+                setViewMode('cards');
+                onDiagnostic?.('list.view.toggle', { mode: 'cards' });
+              }}
+            >
+              {tSystem('list.view.cards', language, 'List')}
+            </button>
+          </div>
+        ) : null}
       </div>
+
+      {advancedSearchEnabled && advancedOpen ? (
+        <div className="ck-list-advanced-panel" role="dialog" aria-label={tSystem('list.advancedSearch', language, 'Advanced search')}>
+          <div className="ck-list-advanced-grid">
+            {advancedSearchFieldIds.map(fieldId => {
+              const id = `ck-list-adv-${fieldId}`;
+              const filterRaw = advancedFieldFilters[fieldId];
+              const value = Array.isArray(filterRaw) ? '' : (filterRaw || '').toString();
+              const fieldType = (fieldTypeById[fieldId] || '').toString().toUpperCase();
+              const isDate = fieldType === 'DATE' || fieldType === 'DATETIME';
+              const isChoice = fieldType === 'CHOICE';
+              const isCheckbox = fieldType === 'CHECKBOX';
+              const isStatus = (fieldId || '').toString().trim().toLowerCase() === 'status';
+              const selectOptions = (isStatus || isChoice || isCheckbox) ? buildSelectOptionsForField(fieldId) : [];
+              const hasSelectOptions = Boolean(selectOptions.length);
+              const useSelect = isStatus || isChoice || (isCheckbox && hasSelectOptions);
+              const checkboxIsConsent = isCheckbox && !hasSelectOptions;
+              const checkboxSelected = Array.isArray(filterRaw)
+                ? (filterRaw as string[])
+                : filterRaw
+                  ? [`${filterRaw}`]
+                  : [];
+              return (
+                <div className="ck-list-advanced-row" key={fieldId}>
+                  <label className="ck-list-advanced-label" htmlFor={id}>
+                    {getFieldLabel(fieldId)}
+                  </label>
+                  <div className="ck-list-advanced-control">
+                    {useSelect ? (
+                      isCheckbox ? (
+                        <select
+                          id={id}
+                          multiple
+                          aria-label={getFieldLabel(fieldId)}
+                          value={checkboxSelected}
+                          onChange={e => {
+                            const next = Array.from(e.currentTarget.selectedOptions)
+                              .map(opt => opt.value)
+                              .filter(Boolean);
+                            setAdvancedFieldFilters(prev => ({ ...prev, [fieldId]: next }));
+                          }}
+                        >
+                          {selectOptions.map(opt => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <select
+                          id={id}
+                          aria-label={getFieldLabel(fieldId)}
+                          value={value}
+                          onChange={e => setAdvancedFieldFilters(prev => ({ ...prev, [fieldId]: e.target.value }))}
+                        >
+                          <option value="">{tSystem('list.any', language, 'Any')}</option>
+                          {selectOptions.map(opt => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      )
+                    ) : checkboxIsConsent ? (
+                      <input
+                        id={id}
+                        type="checkbox"
+                        aria-label={getFieldLabel(fieldId)}
+                        checked={Boolean(filterRaw) && `${filterRaw}`.toLowerCase() === 'true'}
+                        onChange={e =>
+                          setAdvancedFieldFilters(prev => ({ ...prev, [fieldId]: e.target.checked ? 'true' : '' }))
+                        }
+                      />
+                    ) : isDate ? (
+                      <DateInput
+                        id={id}
+                        value={value}
+                        language={language}
+                        ariaLabel={getFieldLabel(fieldId)}
+                        onChange={next => setAdvancedFieldFilters(prev => ({ ...prev, [fieldId]: next }))}
+                      />
+                    ) : (
+                      <input
+                        id={id}
+                        type="search"
+                        placeholder={getFieldLabel(fieldId)}
+                        aria-label={getFieldLabel(fieldId)}
+                        value={value}
+                        onChange={e => setAdvancedFieldFilters(prev => ({ ...prev, [fieldId]: e.target.value }))}
+                        onKeyDown={e => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          applyAdvancedSearchNow();
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="actions ck-list-advanced-actions">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setAdvancedOpen(false);
+                onDiagnostic?.('list.search.advanced.toggle', { open: false });
+              }}
+            >
+              {tSystem('common.close', language, 'Close')}
+            </button>
+            <button type="button" className="secondary" onClick={clearSearch}>
+              {tSystem('list.clearSearch', language, 'Clear')}
+            </button>
+            <button type="button" onClick={applyAdvancedSearchNow}>
+              {tSystem('list.search', language, 'Search')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {uiLoading ? (
         <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
       ) : uiPrefetching ? (
@@ -968,119 +1461,130 @@ const ListView: React.FC<ListViewProps> = ({
           {tSystem('list.loadingMore', language, 'Loading more…')}
         </div>
       ) : null}
+
       {uiError && <div className="error">{uiError}</div>}
-      <div className="list-table-wrapper">
-        <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
-          <thead>
-            <tr>
-              {columns.map(col => (
-                <th
-                  key={col.fieldId}
-                  scope="col"
-                  aria-sort={
-                    sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
-                  }
-                  style={{
-                    maxWidth: 180,
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-word',
-                    cursor: isSortableColumn(col) ? 'pointer' : 'default'
-                  }}
-                >
-                  {isSortableColumn(col) ? (
-                    <button
-                      type="button"
-                      className="ck-list-sort-header"
-                      onClick={() => {
-                        const nextField = col.fieldId;
-                        if (sortField === nextField) {
-                          setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-                        } else {
-                          setSortField(nextField);
-                          setSortDirection(defaultDirectionForField(nextField));
-                        }
-                        setPageIndex(0);
-                      }}
-                    >
-                      <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
-                      {sortField === col.fieldId ? (
-                        <span className="ck-list-sort-indicator" aria-hidden="true">
-                          {sortDirection === 'asc' ? '▲' : '▼'}
-                        </span>
-                      ) : null}
-                    </button>
-                  ) : (
-                    resolveLocalizedString(col.label, language, col.fieldId)
-                  )}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pagedItems.length ? (
-              pagedItems.map(row => (
-                <tr
-                  key={row.id}
-                  onClick={() => {
-                    const record = row?.id ? records[row.id] : undefined;
-                    const rowOpen = (() => {
-                      for (const col of ruleColumns) {
-                        const cell = evaluateListViewRuleColumnCell(col, row);
-                        if (!cell || !cell.rowClick) continue;
-                        const openButtonId = (cell.openButtonId || '').toString().trim();
-                        const openViewRaw = (cell.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
-                        const openView = openViewRaw === 'button' && !openButtonId ? 'auto' : openViewRaw;
-                        return {
-                          columnId: col.fieldId,
-                          openView,
-                          openButtonId: openView === 'button' ? openButtonId : undefined
-                        };
-                      }
-                      return null;
-                    })();
-                    onDiagnostic?.('list.row.click', {
-                      recordId: row.id,
-                      columnId: rowOpen?.columnId || null,
-                      openView: rowOpen?.openView || 'auto',
-                      openButtonId: rowOpen?.openView === 'button' ? rowOpen?.openButtonId || null : null
-                    });
-                    if (rowOpen) {
-                      onSelect(row, record, { openView: rowOpen.openView, openButtonId: rowOpen.openButtonId });
-                    } else {
-                      onSelect(row, record);
-                    }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {columns.map(col => (
-                    <td
-                      key={col.fieldId}
-                      style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
-                    >
-                      {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : (
+
+      {viewMode === 'table' ? (
+        <div className="list-table-wrapper">
+          <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+            <thead>
               <tr>
-                <td colSpan={columns.length} className="muted">
-                  {tSystem('list.noRecords', language, 'No records found.')}
-                </td>
+                {columnsForTable.map(col => (
+                  <th
+                    key={col.fieldId}
+                    scope="col"
+                    aria-sort={
+                      sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+                    }
+                    style={{
+                      maxWidth: 180,
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      cursor: isSortableColumn(col) ? 'pointer' : 'default'
+                    }}
+                  >
+                    {isSortableColumn(col) ? (
+                      <button
+                        type="button"
+                        className="ck-list-sort-header"
+                        onClick={() => {
+                          const nextField = col.fieldId;
+                          if (sortField === nextField) {
+                            setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+                          } else {
+                            setSortField(nextField);
+                            setSortDirection(defaultDirectionForField(nextField));
+                          }
+                          setPageIndex(0);
+                        }}
+                      >
+                        <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
+                        {sortField === col.fieldId ? (
+                          <span className="ck-list-sort-indicator" aria-hidden="true">
+                            {sortDirection === 'asc' ? '▲' : '▼'}
+                          </span>
+                        ) : null}
+                      </button>
+                    ) : (
+                      resolveLocalizedString(col.label, language, col.fieldId)
+                    )}
+                  </th>
+                ))}
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      {paginationEnabled ? (
+            </thead>
+            <tbody>
+              {pagedItems.length ? (
+                pagedItems.map(row => (
+                  <tr key={row.id} onClick={() => handleRowClick(row)} style={{ cursor: 'pointer' }}>
+                    {columnsForTable.map(col => (
+                      <td
+                        key={col.fieldId}
+                        style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
+                      >
+                        {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={columnsForTable.length} className="muted">
+                    {tSystem('list.noRecords', language, 'No records found.')}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : !showResults ? null : (
+        <div className="ck-list-cards">
+          {pagedItems.length ? (
+            pagedItems.map(row => (
+              <div
+                key={row.id}
+                className="ck-list-card"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleRowClick(row)}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  handleRowClick(row);
+                }}
+              >
+                <div className="ck-list-card-title">{renderCellValue(row, cardTitleFieldId)}</div>
+                {ruleColumnsForCards.length ? (
+                  <div className="ck-list-card-footer">
+                    {ruleColumnsForCards.map(col => {
+                      const node = renderRuleCell(row, col);
+                      if (node === null || node === undefined) return null;
+                      return (
+                        <div key={col.fieldId} className="ck-list-card-action">
+                          {node}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <div className="muted">{tSystem('list.noRecords', language, 'No records found.')}</div>
+          )}
+        </div>
+      )}
+
+      {paginationEnabled && showResults ? (
         <div className="actions" style={{ justifyContent: 'space-between' }}>
           <button
             type="button"
             className="secondary"
             onClick={() => setPageIndex(prev => Math.max(0, prev - 1))}
             disabled={!showPrev}
+            aria-label={tSystem('list.previous', language, 'Previous')}
+            title={tSystem('list.previous', language, 'Previous')}
           >
-            {tSystem('list.previous', language, 'Previous')}
+            {'<'}
           </button>
           <div className="muted" style={{ alignSelf: 'center' }}>
             {tSystem('list.pageOf', language, 'Page {page} of {total}', {
@@ -1097,8 +1601,15 @@ const ListView: React.FC<ListViewProps> = ({
                   { count: visibleItems.length || totalCount }
                 )}
           </div>
-          <button type="button" onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))} disabled={!showNext}>
-            {tSystem('list.next', language, 'Next')}
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))}
+            disabled={!showNext}
+            aria-label={tSystem('list.next', language, 'Next')}
+            title={tSystem('list.next', language, 'Next')}
+          >
+            {'>'}
           </button>
         </div>
       ) : null}

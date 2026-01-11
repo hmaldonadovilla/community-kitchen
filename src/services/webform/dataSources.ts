@@ -131,7 +131,33 @@ export class DataSourceService {
           return cell === locale.toLowerCase();
         });
 
-    const items = filtered.map(row => {
+    const statusAllowSet = (() => {
+      const raw = (config as any)?.statusAllowList;
+      const list = Array.isArray(raw) ? raw : raw !== undefined && raw !== null && raw !== '' ? [raw] : [];
+      const normalized = list
+        .map(v => (v === undefined || v === null ? '' : v.toString().trim().toLowerCase()))
+        .filter(Boolean);
+      return new Set(normalized);
+    })();
+    const statusIdx = columns.status;
+    const filteredByStatus =
+      statusAllowSet.size > 0 && statusIdx === undefined
+        ? ((): any[] => {
+            debugLog('dataSources.statusFilter.missingColumn', {
+              id: dataSourceId,
+              tabName: sheet.getName(),
+              statusAllowList: Array.from(statusAllowSet)
+            });
+            return filtered;
+          })()
+        : statusAllowSet.size > 0
+          ? filtered.filter(row => {
+              const cell = row[statusIdx] !== undefined && row[statusIdx] !== null ? row[statusIdx].toString().trim().toLowerCase() : '';
+              return cell && statusAllowSet.has(cell);
+            })
+          : filtered;
+
+    const items = filteredByStatus.map(row => {
       const hasMapping = !!(config.mapping && typeof config.mapping === 'object');
       if (effectiveProjection.length === 1 && hasMapping === false) {
         const fid = effectiveProjection[0];

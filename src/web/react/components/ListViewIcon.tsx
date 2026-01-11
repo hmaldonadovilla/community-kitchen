@@ -135,6 +135,24 @@ export const ListViewIcon: React.FC<{ name: ListViewRuleIcon }> = ({ name }) => 
           />
         </svg>
       );
+    case 'copy':
+      return (
+        <svg {...common}>
+          <path
+            d="M9 9h10a2 2 0 0 1 2 2v10"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M5 15V5a2 2 0 0 1 2-2h10v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
     default:
       return null;
   }

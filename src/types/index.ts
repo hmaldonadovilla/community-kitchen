@@ -1044,6 +1044,11 @@ export interface DataSourceConfig {
   sheetId?: string; // optional sheet id when sourcing from another file
   tabName?: string; // tab name for the source table
   localeKey?: string; // optional column used to scope localized rows
+  /**
+   * Optional allow-list filter for record-like sources that include a `status` column.
+   * When set, only rows whose status value matches one of these strings (case-insensitive) are returned.
+   */
+  statusAllowList?: string[];
   projection?: string[]; // limit columns returned
   limit?: number; // optional max rows
   mapping?: Record<string, string>; // optional map from source column -> target field id
@@ -1234,6 +1239,10 @@ export interface FormConfig {
    * Optional override for the list view search UI/behavior (recommended: `listView.search`).
    */
   listViewSearch?: ListViewConfig['search'];
+  /**
+   * Optional override for the list view UI mode (table vs cards) and toggle behavior (recommended: `listView.view`).
+   */
+  listViewView?: ListViewConfig['view'];
   /**
    * Enabled languages for the web app UI (max 3).
    *
@@ -1625,6 +1634,15 @@ export interface ListViewFieldColumnConfig {
   fieldId: string;
   label?: LocalizedString;
   kind?: 'question' | 'meta';
+  /**
+   * Optional UI visibility for list view modes.
+   *
+   * - Omitted: show in both table + cards views.
+   * - ['table']: show only in table view.
+   * - ['cards']: show only in cards view.
+   * - ['table','cards']: explicitly show in both.
+   */
+  showIn?: Array<'table' | 'cards'>;
 }
 
 export type ListViewRuleCellStyle = 'link' | 'warning' | 'muted' | 'default';
@@ -1637,6 +1655,7 @@ export type ListViewRuleIcon =
   | 'external'
   | 'lock'
   | 'edit'
+  | 'copy'
   | 'view';
 
 export interface ListViewRulePredicate {
@@ -1674,7 +1693,7 @@ export type ListViewRuleWhen =
       any: ListViewRuleWhen[];
     };
 
-export type ListViewOpenViewTarget = 'auto' | 'form' | 'summary' | 'button';
+export type ListViewOpenViewTarget = 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit';
 
 export type ListViewOpenViewConfig =
   | ListViewOpenViewTarget
@@ -1685,6 +1704,8 @@ export type ListViewOpenViewConfig =
        * - form: force edit view (Closed records are read-only)
        * - summary: force Summary view (falls back to form if Summary is disabled)
        * - button: run a configured custom BUTTON action for the record (opens a preview overlay)
+       * - copy: trigger the app's "Copy record" action for the record (opens a new draft in the form view)
+       * - submit: trigger the app's "Submit" action for the record (navigates to form on validation errors; to summary on success)
        */
       target: ListViewOpenViewTarget;
       /**
@@ -1722,6 +1743,15 @@ export interface ListViewRuleColumnConfig {
   type: 'rule';
   fieldId: string;
   label: LocalizedString;
+  /**
+   * Optional UI visibility for list view modes.
+   *
+   * - Omitted: show in both table + cards views.
+   * - ['table']: show only in table view.
+   * - ['cards']: show only in cards view.
+   * - ['table','cards']: explicitly show in both.
+   */
+  showIn?: Array<'table' | 'cards'>;
   /**
    * First match wins.
    */
@@ -1773,19 +1803,59 @@ export interface ListViewSearchConfig {
    * Default: `text`.
    * - `text`: free-text search across the fields rendered in the list view (and system columns like status/pdfUrl).
    * - `date`: date picker filtering against a specific date field.
+   * - `advanced`: Gmail-like multi-field filtering (keyword + per-field inputs).
    */
-  mode?: 'text' | 'date';
+  mode?: 'text' | 'date' | 'advanced';
   /**
    * When `mode = "date"`, the field id to filter on (usually a `DATE` question id).
    * Can also be a meta column (`createdAt` / `updatedAt`) if those are included in the list view projection.
    */
   dateFieldId?: string;
+  /**
+   * When `mode = "advanced"`, the list of field ids that should appear as filter inputs in the search panel.
+   *
+   * Notes:
+   * - Field ids can reference normal question ids OR meta columns like `createdAt`, `updatedAt`, `status`, `pdfUrl`.
+   * - The list fetch projection is automatically expanded to include these fields so filtering works even if the field is not visible as a column.
+   */
+  fields?: string[];
+  /**
+   * Optional placeholder text for the list search input.
+   * When omitted, the UI falls back to system strings (e.g., "Search records").
+   * Set to an empty string to remove the placeholder text.
+   */
+  placeholder?: LocalizedString | string;
+}
+
+export interface ListViewViewConfig {
+  /**
+   * Which list view UI to show when the toggle is disabled.
+   *
+   * Default: `table`.
+   */
+  mode?: 'table' | 'cards';
+  /**
+   * When true, show a toggle that lets the user switch between `table` and `cards` views.
+   *
+   * Default: false.
+   */
+  toggleEnabled?: boolean;
+  /**
+   * When `toggleEnabled = true`, which mode should be selected initially.
+   *
+   * Default: `mode` (or `table` when `mode` is not set).
+   */
+  defaultMode?: 'table' | 'cards';
 }
 
 export interface ListViewConfig {
   title?: LocalizedString;
   columns: ListViewColumnConfig[];
   metaColumns?: string[];
+  /**
+   * Optional UI configuration for the list view (table vs record list/cards).
+   */
+  view?: ListViewViewConfig;
   /**
    * Optional UI setting: enable/disable interactive sorting by clicking table column headers.
    *

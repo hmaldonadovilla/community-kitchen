@@ -483,6 +483,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
   const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const pendingNavigationRef = useRef<{ target: 'list'; trigger: string } | null>(null);
+  const listOpenViewSubmitTimerRef = useRef<number | null>(null);
   const [uploadNavigationNoticeOpen, setUploadNavigationNoticeOpen] = useState(false);
   const [autoSaveDrainTick, setAutoSaveDrainTick] = useState(0);
   const syncUploadQueueSize = useCallback(() => {
@@ -655,10 +656,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       }
       add(fid);
     });
-    const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date';
+    const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date' | 'advanced';
     const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
     if (listSearchMode === 'date' && dateSearchFieldId) {
       add(dateSearchFieldId);
+    }
+    if (listSearchMode === 'advanced') {
+      const fieldsRaw = (definition.listView?.search as any)?.fields;
+      const fields: string[] = (() => {
+        if (fieldsRaw === undefined || fieldsRaw === null) return [];
+        if (Array.isArray(fieldsRaw)) return fieldsRaw.map(v => (v === undefined || v === null ? '' : `${v}`.trim())).filter(Boolean);
+        const str = `${fieldsRaw}`.trim();
+        if (!str) return [];
+        return str
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+      })();
+      fields.forEach(add);
     }
     return Array.from(ids);
   }, [definition.listView]);
@@ -1769,7 +1784,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setRecordStale(null);
     recordDataVersionRef.current = null;
     recordRowNumberRef.current = null;
-    const cleared = clearAutoIncrementFields(definition, values, lineItems);
+    const cleared = clearAutoIncrementFields(definition, valuesRef.current, lineItemsRef.current);
     const dropFieldsRaw = Array.isArray(definition.copyCurrentRecordDropFields) ? definition.copyCurrentRecordDropFields : [];
     const dropFields = dropFieldsRaw
       .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
@@ -1803,10 +1818,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         droppedValues,
         lineItemsCleared: lineItemsChanged
       });
+      // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
+      valuesRef.current = nextValues as any;
+      lineItemsRef.current = nextLineItems;
       lastAutoSaveSeenRef.current = { values: nextValues as any, lineItems: nextLineItems };
       setValues(nextValues as any);
       setLineItems(nextLineItems);
     } else {
+      // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
+      valuesRef.current = cleared.values as any;
+      lineItemsRef.current = cleared.lineItems;
       lastAutoSaveSeenRef.current = { values: cleared.values, lineItems: cleared.lineItems };
       setValues(cleared.values);
       setLineItems(cleared.lineItems);
@@ -1821,7 +1842,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     setStatus(null);
     setStatusLevel(null);
     setView('form');
-  }, [bumpRecordSession, definition, lineItems, logEvent, values]);
+  }, [bumpRecordSession, definition, logEvent]);
 
   const CK_BUTTON_IDX_TOKEN = '__ckQIdx=';
   const parseButtonRef = useCallback((ref: string): { id: string; qIdx?: number } => {
@@ -4404,11 +4425,70 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const handleRecordSelect = (
     row: ListItem,
     fullRecord?: WebFormSubmission,
-    opts?: { openView?: 'auto' | 'form' | 'summary' | 'button'; openButtonId?: string }
+    opts?: { openView?: 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit'; openButtonId?: string }
   ) => {
-    const requested = (opts?.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button';
+    const requested = (opts?.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit';
     const openButtonId = (opts?.openButtonId || '').toString().trim();
     const shouldTriggerButton = requested === 'button' && !!openButtonId;
+    const shouldCopy = requested === 'copy';
+    const shouldSubmit = requested === 'submit';
+
+    const scheduleListOpenSubmit = (args: { recordId: string; source: string }) => {
+      const recordId = (args.recordId || '').toString().trim();
+      if (!recordId) return;
+      // Cancel any previous scheduled submit.
+      if (listOpenViewSubmitTimerRef.current) {
+        globalThis.clearTimeout(listOpenViewSubmitTimerRef.current);
+        listOpenViewSubmitTimerRef.current = null;
+      }
+      const startedAt = Date.now();
+      let attempt = 0;
+      const maxAttempts = 40;
+      const delayMs = 80;
+      const tick = () => {
+        attempt += 1;
+        const currentSelectedId = (selectedRecordIdRef.current || '').toString().trim();
+        const snapshotId = (selectedRecordSnapshotRef.current?.id || '').toString().trim();
+        const inForm = viewRef.current === 'form';
+        const submitAction = formSubmitActionRef.current;
+        const hasAction = typeof submitAction === 'function';
+        if (currentSelectedId !== recordId || (snapshotId && snapshotId !== recordId)) {
+          logEvent('list.openView.submit.cancelled', {
+            recordId,
+            source: args.source,
+            reason: 'recordChanged',
+            currentSelectedId: currentSelectedId || null,
+            snapshotId: snapshotId || null
+          });
+          return;
+        }
+        if (!inForm || !hasAction || snapshotId !== recordId) {
+          if (attempt >= maxAttempts) {
+            logEvent('list.openView.submit.timeout', {
+              recordId,
+              source: args.source,
+              attempt,
+              inForm,
+              hasAction,
+              snapshotId: snapshotId || null
+            });
+            return;
+          }
+          listOpenViewSubmitTimerRef.current = globalThis.setTimeout(tick, delayMs);
+          return;
+        }
+        listOpenViewSubmitTimerRef.current = null;
+        submitConfirmedRef.current = false;
+        logEvent('list.openView.submit.fire', {
+          recordId,
+          source: args.source,
+          attempt,
+          waitMs: Date.now() - startedAt
+        });
+        submitAction?.();
+      };
+      tick();
+    };
 
     // If the user is resuming the SAME record they were just editing, keep the in-memory working copy.
     // (Don't overwrite with a cached snapshot that may not include the latest local edits yet.)
@@ -4428,6 +4508,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       // For list-triggered button actions, keep the list view and run the action immediately from the in-memory values.
       if (shouldTriggerButton) {
         handleCustomButton(openButtonId);
+        return;
+      }
+      if (shouldCopy) {
+        logEvent('list.openView.copy', { recordId: row.id, source: 'resumeLocalEdits' });
+        handleDuplicateCurrent();
+        return;
+      }
+      if (shouldSubmit) {
+        logEvent('list.openView.submit', { recordId: row.id, source: 'resumeLocalEdits' });
+        setView('form');
+        scheduleListOpenSubmit({ recordId: row.id, source: 'resumeLocalEdits' });
         return;
       }
 
@@ -4494,6 +4585,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       // (If the cached snapshot is stale, the user can always refresh; we avoid blocking the UX on a second roundtrip.)
       if (shouldTriggerButton) {
         triggerOpenButtonIfNeeded();
+      }
+      if (shouldCopy) {
+        logEvent('list.openView.copy', { recordId: row.id, source: 'cached' });
+        handleDuplicateCurrent();
+        return;
+      }
+      if (shouldSubmit) {
+        logEvent('list.openView.submit', { recordId: row.id, source: 'cached' });
+        setView('form');
+        scheduleListOpenSubmit({ recordId: row.id, source: 'cached' });
+        return;
       }
       // Version check is async; do not block navigation.
       if (cachedVersion !== null) {
@@ -4565,6 +4667,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       loadRecordSnapshot(row.id, hintedRow).then(ok => {
         if (!ok) return;
         if (selectedRecordIdRef.current !== row.id) return;
+        if (shouldCopy) {
+          logEvent('list.openView.copy', { recordId: row.id, source: 'fetched' });
+          handleDuplicateCurrent();
+          return;
+        }
+        if (shouldSubmit) {
+          logEvent('list.openView.submit', { recordId: row.id, source: 'fetched' });
+          setView('form');
+          scheduleListOpenSubmit({ recordId: row.id, source: 'fetched' });
+          return;
+        }
         triggerOpenButtonIfNeeded();
       });
     }
@@ -4574,6 +4687,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     // When Summary view is disabled, always open the Form view (closed records are read-only).
     if (shouldTriggerButton) {
       // Stay on the list view; the button action will open a preview overlay when the record snapshot is ready.
+      return;
+    }
+    if (shouldCopy || shouldSubmit) {
+      // Navigation is handled by the copy/submit flows above.
       return;
     }
 
