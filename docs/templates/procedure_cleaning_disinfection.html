@@ -4,17 +4,15 @@
   Notes:
   - This template is designed to be injected into the CK web app HTML preview overlay (not a standalone web page).
   - Keep CSS scoped under `.ck-procedure-template` to avoid leaking styles into the host app.
+  - Keep formatting sober and mobile-friendly (no tables, colors, or cards).
 -->
 
 <style>
   .ck-procedure-template {
     /* Inherit app typography; keep styles scoped to avoid affecting the host app */
-    color: #0f172a;
     font-size: 0.98em;
+    line-height: 1.5;
     margin: -8px;
-    --ck-proc-muted: rgba(15, 23, 42, 0.62);
-    --ck-proc-border: rgba(148, 163, 184, 0.55);
-    --ck-proc-note: #fff7cc;
   }
 
   .ck-procedure-template * {
@@ -25,247 +23,191 @@
   .ck-procedure-page {
     max-width: 980px;
     margin: 0 auto;
-    padding: 18px 14px 32px;
+    padding: 16px 12px 28px;
   }
 
   .ck-procedure-template h1 {
-    font-size: 1.75em;
-    margin: 0 0 0.25em;
-    font-weight: 950;
-    letter-spacing: -0.02em;
+    font-size: 1.55em;
+    margin: 0 0 0.5em;
+    font-weight: 850;
+    line-height: 1.2;
   }
 
   .ck-procedure-template h2 {
-    font-size: 1.12em;
-    margin: 1.35em 0 0.6em;
-    font-weight: 900;
+    font-size: 1.15em;
+    margin: 1.25em 0 0.5em;
+    font-weight: 850;
+    line-height: 1.25;
   }
 
   .ck-procedure-template h3 {
-    font-size: 0.86em;
-    margin: 1.05em 0 0.55em;
-    color: var(--ck-proc-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: 900;
+    font-size: 1em;
+    margin: 0.9em 0 0.35em;
+    font-weight: 750;
+    line-height: 1.3;
   }
 
   .ck-procedure-template p {
-    margin: 0.55em 0;
-    line-height: 1.45;
+    margin: 0.5em 0;
+  }
+
+  .ck-procedure-template section {
+    margin: 0 0 1em;
+  }
+
+  .ck-procedure-template blockquote.ck-procedure-important {
+    margin: 0 0 1em;
+    padding: 0.25em 0 0.25em 1em;
+    border-left: 3px solid currentColor;
+    font-style: normal;
+  }
+
+  .ck-procedure-template blockquote.ck-procedure-important h2 {
+    margin-top: 0;
+    text-transform: uppercase;
   }
 
   .ck-procedure-template ul {
-    margin: 0.55em 0 0 1.1em;
+    margin: 0.5em 0 0.5em 1.2em;
+    padding: 0;
+  }
+
+  .ck-procedure-template ol {
+    margin: 0.5em 0 0.5em 1.2em;
+    padding: 0;
   }
 
   .ck-procedure-template li {
     margin: 0.35em 0;
-    line-height: 1.35;
-  }
-
-  .ck-procedure-meta {
-    color: var(--ck-proc-muted);
-    margin-bottom: 14px;
-    font-weight: 750;
-  }
-
-  .ck-procedure-callout {
-    background: var(--ck-proc-note);
-    border: 1px solid var(--ck-proc-border);
-    padding: 12px 14px;
-    border-radius: 12px;
-  }
-
-  .ck-procedure-card {
-    border: 1px solid var(--ck-proc-border);
-    border-radius: 12px;
-    padding: 14px;
-  }
-
-  .ck-procedure-grid2 {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  @media (min-width: 780px) {
-    .ck-procedure-grid2 {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-
-  .ck-procedure-template table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .ck-procedure-template th,
-  .ck-procedure-template td {
-    border: 1px solid var(--ck-proc-border);
-    padding: 10px 12px;
-    vertical-align: top;
-  }
-
-  .ck-procedure-template th {
-    background: rgba(148, 163, 184, 0.12);
-    text-align: left;
-  }
-
-  .ck-procedure-small {
-    font-size: 0.88em;
-    color: var(--ck-proc-muted);
-    font-weight: 700;
   }
 </style>
 
 <div class="ck-procedure-template">
   <main class="ck-procedure-page">
-    <section>
-      <h2>Document awareness</h2>
-      <p>This procedure must be read by all employees of the Community Kitchen. It is made available to volunteers for information.</p>
-    </section>
-
-    <section class="ck-procedure-callout">
-      <h2 style="margin-top:0">IMPORTANT</h2>
-      <p><strong>Issues from previous shift</strong> → AM/PM Check + inform Kitchen Manager. Ensure cleaning products never run out.</p>
-    </section>
+    <header>
+      <p>This procedure must be read by all employees of the Community Kitchen. It must be made available to volunteers involved in cleaning activities.</p>
+    </header>
 
     <section>
       <h2>Responsibility</h2>
-      <p>Cleaning may be carried out by cooks or volunteers. Cooks are responsible for cleaning even when assisted by volunteers. Kitchen Manager provides daily oversight. Operations Manager holds overall accountability.</p>
+      <ul>
+        <li><strong>Cooks</strong> are responsible. Volunteers may help under supervision.</li>
+        <li>Third party service providers may participate in some specific activities.</li>
+        <li><strong>Kitchen Manager</strong> provides daily oversight.</li>
+        <li><strong>Operations Manager</strong> holds overall accountability.</li>
+      </ul>
     </section>
 
-    <section>
-      <h2>Cleaning products — use only</h2>
+    <blockquote class="ck-procedure-important">
+      <h2>IMPORTANT</h2>
       <ul>
-        <li>Detergent / degreaser (daily cleaning).</li>
-        <li>Food-safe disinfectant (respect dosage &amp; contact time).</li>
-        <li>Clean water (rinse if required).</li>
-        <li><strong>NOT allowed:</strong> non food-safe, industrial or personal products.</li>
+        <li>Daily, weekly and monthly cleaning activities must be recorded in the <strong>Storage and Cleaning Checks</strong> app.</li>
+        <li>Daily cleaning is done after each shift, AM and PM.</li>
+        <li>Weekly and monthly cleaning follow the Cleaning Schedule. Any change to the person responsible for weekly or monthly cleaning must be requested and approved by the Kitchen Manager or Operations Manager.</li>
+        <li>If a cleaning activity could not be completed, inform the next shift and the Kitchen Manager or Operations Manager.</li>
+        <li>Immediately inform Kitchen Manager or Operations Manager when cleaning products, bin bags, tissues are running low and/or cleaning cloth or equipment needs to be repaired/replaced.</li>
+        <li>Any issue → record in the app and inform Kitchen Manager or Operations Manager immediately.</li>
+      </ul>
+    </blockquote>
+
+    <section>
+      <h2>General rules</h2>
+
+      <h3>Do</h3>
+      <ul>
+        <li>Wash hands before &amp; after cleaning.</li>
+        <li>Use only food-safe detergent / degreaser / disinfectant products.</li>
+        <li>Use clean water.</li>
+        <li>Respect product dosage and contact time.</li>
+        <li>Clean food areas first, floors &amp; bins last.</li>
+        <li>Clean → disinfect → rinse (if required).</li>
+        <li>Clean spills immediately.</li>
+        <li>Leave surfaces clean &amp; dry.</li>
+        <li>Wash dirty cloths, aprons and hats regularly.</li>
+      </ul>
+
+      <h3>Do not</h3>
+      <ul>
+        <li>Do not clean floors or bins before worktops.</li>
+        <li>Do not use non food-safe, personal, home-made or industrial products.</li>
+        <li>Do not reuse the same cloth for tables and floors.</li>
+        <li>Do not use dirty cloths, aprons or hats.</li>
+        <li>Do not leave cleaning products on worktops, portioning tables, near food/stove/utensils/fresh vegetables/dry goods.</li>
       </ul>
     </section>
 
     <section>
-      <h2>General rules</h2>
-      <div class="ck-procedure-grid2">
-        <div class="ck-procedure-card">
-          <h3>Do</h3>
-          <ul>
-            <li>Clean food areas first, floors &amp; bins last.</li>
-            <li>Clean → disinfect → rinse (if required).</li>
-            <li>Wash hands before &amp; after cleaning.</li>
-            <li>Clean spills immediately.</li>
-            <li>Leave surfaces clean &amp; dry.</li>
-            <li>Cool leftovers → seal → date → fridge/freezer.</li>
-            <li>Wash dirty cloths, aprons and hats regularly.</li>
-          </ul>
-        </div>
-        <div class="ck-procedure-card">
-          <h3>Do not</h3>
-          <ul>
-            <li>Do not clean floors or bins before worktops.</li>
-            <li>Do not reuse the same cloth for tables &amp; floors.</li>
-            <li>Do not use dirty cloths, aprons or hats.</li>
-            <li>Do not leave dirty equipment overnight.</li>
-            <li>Do not leave leftovers in the kitchen.</li>
-            <li>Do not leave cleaning products on worktops, near stove or utensils.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
+      <h2>Daily AM &amp; PM shift</h2>
 
-    <section>
-      <h2>Daily — end of AM &amp; PM shifts</h2>
-      <div class="ck-procedure-grid2">
-        <div class="ck-procedure-card">
-          <h3>Do</h3>
-          <ul>
-            <li>Wash all utensils &amp; containers (pots, pans, lids, boards, dish boxes, buckets, rice cooker bowls, cutting boards, knives &amp; knife box).</li>
-            <li>Clean &amp; disinfect tables, sinks, stove, splashbacks.</li>
-            <li>Clean oven trays if used; rice cooker exterior if splashed.</li>
-            <li>Empty &amp; clean dishwasher.</li>
-            <li>Sweep &amp; mop floors.</li>
-            <li>Empty &amp; clean bins.</li>
-            <li>Remove expired or mouldy products immediately.</li>
-            <li>Wash/dry dirty cloths, aprons and hats used during the shift.</li>
-            <li>Put cleaning products in cleaning cupboard.</li>
-            <li>Put work clothes in designated closet.</li>
-            <li>Check for signs of pests (insects, rodents).</li>
-            <li>Check that all the brooms are clean and that the mop buckets are empty and clean.</li>
-            <li>Check that everything is tidy in the cleaning room.</li>
-          </ul>
-          <p class="ck-procedure-small">Note: Clean ovens with clean cloth.</p>
-        </div>
-        <div class="ck-procedure-card">
-          <h3>Do not</h3>
-          <ul>
-            <li>Do not assume previous shift cleaned enough.</li>
-            <li>Do not leave dirty equipment overnight.</li>
-            <li>Do not skip cleaning or pest checks at end of shift.</li>
-          </ul>
-        </div>
-      </div>
+      <h3>Do</h3>
+      <ul>
+        <li>Wash all used utensils &amp; containers (pots, pans, lids, boards, dish boxes, buckets, oven trays, rice cooker bowls).</li>
+        <li>Clean rice cooker exterior if splashed.</li>
+        <li>Cool leftovers → seal → label → fridge/freezer.</li>
+        <li>Remove expired or moldy products.</li>
+        <li>Check for signs of pests (insects, rodents).</li>
+        <li>Clean &amp; disinfect tables, sinks, stove, splashbacks.</li>
+        <li>Empty &amp; clean dishwasher.</li>
+        <li>Sweep &amp; mop floors.</li>
+        <li>Keep brooms clean.</li>
+        <li>Empty and clean mop buckets.</li>
+        <li>Keep cleaning room tidy.</li>
+        <li>Discard damaged equipment.</li>
+        <li>Empty and clean bins.</li>
+        <li>Replace bin liners.</li>
+        <li>Keep work clothes in designated closet.</li>
+        <li>Wash dirty cloths, aprons and hats used during shift.</li>
+        <li>Keep cleaning products in cleaning cupboard.</li>
+      </ul>
+
+      <h3>Do not</h3>
+      <ul>
+        <li>Do not assume previous shift cleaned enough.</li>
+        <li>Do not leave dirty equipment and cloths overnight.</li>
+        <li>Do not leave leftovers in the oven or anywhere in the kitchen.</li>
+        <li>Do not skip cleaning activities or pest checks at end of shift.</li>
+        <li>Do not leave bin without new bin bags.</li>
+      </ul>
     </section>
 
     <section>
       <h2>Weekly</h2>
-      <div class="ck-procedure-grid2">
-        <div class="ck-procedure-card">
-          <h3>Do</h3>
-          <ul>
-            <li>Deep clean plastic boards.</li>
-            <li>Clean fridge/freezer shelves &amp; handles.</li>
-            <li>Clean cupboards, doors, switches.</li>
-            <li>Deep clean ovens.</li>
-            <li>Sweep &amp; mop pantry, hallway and Walker hall.</li>
-            <li>Clean exhaust hood filters and accessible surfaces.</li>
-            <li>Clean fridges and freezers.</li>
-            <li>Check pest monitoring points or traps if present.</li>
-          </ul>
-        </div>
-        <div class="ck-procedure-card">
-          <h3>Do not</h3>
-          <ul>
-            <li>Do not ignore damaged boards.</li>
-            <li>Do not ignore dirt or grease buildup.</li>
-            <li>Do not ignore pest signs or traps.</li>
-          </ul>
-        </div>
-      </div>
+
+      <h3>Do</h3>
+      <ul>
+        <li>Deep clean plastic boards.</li>
+        <li>Clean fridge/freezer shelves &amp; handles.</li>
+        <li>Clean cupboards, doors, switches.</li>
+        <li>Deep clean ovens.</li>
+        <li>Clean exhaust hood filters and accessible surfaces.</li>
+        <li>Check pest monitoring points or traps if present.</li>
+      </ul>
+
+      <h3>Do not</h3>
+      <ul>
+        <li>Do not ignore damaged boards.</li>
+        <li>Do not ignore dirt or grease buildup.</li>
+        <li>Do not ignore pest signs or traps.</li>
+      </ul>
     </section>
 
     <section>
       <h2>Monthly</h2>
-      <div class="ck-procedure-grid2">
-        <div class="ck-procedure-card">
-          <h3>Do</h3>
-          <ul>
-            <li>Defrost &amp; deep clean freezers.</li>
-            <li>Clean pantry shelves.</li>
-            <li>Discard damaged boards.</li>
-            <li>Descale dishwasher.</li>
-            <li>Deep clean exhaust hood (including hard-to-reach areas).</li>
-          </ul>
-        </div>
-        <div class="ck-procedure-card">
-          <h3>Do not</h3>
-          <ul>
-            <li>Do not wait for heavy ice buildup.</li>
-            <li>Do not allow grease buildup in exhaust hood.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
 
-    <section>
-      <h2>Recording &amp; governance</h2>
-      <p>All cleaning activities and pest checks must be recorded in the Storage and Cleaning Checks app. Daily cleaning is done after each shift (AM &amp; PM). Weekly and monthly cleaning follow the Cleaning Schedule. Any change to the responsible person for weekly or monthly cleaning must be requested and approved by the Kitchen Manager or Operations Manager.</p>
-    </section>
+      <h3>Do</h3>
+      <ul>
+        <li>Defrost &amp; deep clean freezers.</li>
+        <li>Clean pantry shelves.</li>
+        <li>Discard damaged boards.</li>
+        <li>Descale dishwasher.</li>
+        <li>Deep clean exhaust hood (including hard-to-reach areas).</li>
+      </ul>
 
-    <section>
-      <h2>Inspection readiness</h2>
-      <p>This procedure forms part of the AFSCA self-control system and is available at all times.</p>
+      <h3>Do not</h3>
+      <ul>
+        <li>Do not wait for heavy ice buildup.</li>
+        <li>Do not allow grease buildup in exhaust hood.</li>
+      </ul>
     </section>
   </main>
 </div>

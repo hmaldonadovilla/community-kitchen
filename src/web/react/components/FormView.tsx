@@ -65,9 +65,11 @@ import {
   buildLineContextId,
   buildSubgroupKey,
   parseSubgroupKey,
+  ROW_SOURCE_KEY,
   resolveSubgroupKey,
   seedSubgroupDefaults
 } from '../app/lineItems';
+import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 import { validateRules } from '../../rules/validation';
 
@@ -267,7 +269,6 @@ const FormView: React.FC<FormViewProps> = ({
   onUserEdit,
   onDiagnostic
 }) => {
-  const ROW_SOURCE_KEY = '__ckRowSource';
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
     const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
@@ -1951,6 +1952,134 @@ const FormView: React.FC<FormViewProps> = ({
     setPendingScrollAnchor(anchor);
     addLineItemRow(groupId, { ...(preset || {}), [ROW_SOURCE_KEY]: 'manual' }, rowId);
   };
+
+  // Fix: `addMode: "auto"` reconciliation previously lived only inside `LineItemGroupQuestion`.
+  // For groups with `ui.openInOverlay: true`, the question component isn't mounted until the overlay is opened,
+  // so auto rows could look stale in the top-level form / summary view until then.
+  const overlayAutoGroupConfigs = useMemo(() => {
+    const cfgs: Array<{
+      groupId: string;
+      anchorField: any;
+      dependencyIds: string[];
+      selectorId?: string;
+    }> = [];
+    (definition.questions || []).forEach(q => {
+      if (q.type !== 'LINE_ITEM_GROUP') return;
+      const groupCfg = q.lineItemConfig;
+      if (!groupCfg) return;
+      const overlayEnabled = !!(groupCfg as any)?.ui?.openInOverlay;
+      if (!overlayEnabled) return;
+      if ((groupCfg as any)?.addMode !== 'auto') return;
+      if (!groupCfg.anchorFieldId) return;
+
+      const anchorFieldId =
+        groupCfg.anchorFieldId !== undefined && groupCfg.anchorFieldId !== null ? groupCfg.anchorFieldId.toString() : '';
+      const anchorField = anchorFieldId ? (groupCfg.fields || []).find((f: any) => f && f.id === anchorFieldId) : undefined;
+      if (!anchorField || anchorField.type !== 'CHOICE') return;
+      const rawDependsOn = (anchorField as any)?.optionFilter?.dependsOn;
+      const dependencyIds = (Array.isArray(rawDependsOn) ? rawDependsOn : rawDependsOn ? [rawDependsOn] : [])
+        .map((id: any) => (id ?? '').toString().trim())
+        .filter(Boolean);
+      if (!dependencyIds.length) return;
+
+      cfgs.push({
+        groupId: q.id,
+        anchorField,
+        dependencyIds,
+        selectorId: groupCfg.sectionSelector?.id
+      });
+    });
+    return cfgs;
+  }, [definition.questions]);
+
+  const overlayAutoAddSignature = useMemo(() => {
+    if (!overlayAutoGroupConfigs.length) return '';
+    return overlayAutoGroupConfigs
+      .map(cfg => {
+        const depSig = cfg.dependencyIds
+          .map(depId => {
+            const dep = toDependencyValue((values as any)[depId] as any);
+            if (dep === undefined || dep === null) return '';
+            return dep.toString();
+          })
+          .join('||');
+        return `${cfg.groupId}:${depSig}`;
+      })
+      .join('##');
+  }, [overlayAutoGroupConfigs, values]);
+
+  useEffect(() => {
+    if (submitting) return;
+    if (!overlayAutoGroupConfigs.length) return;
+    setLineItems(prev => {
+      const skipGroupId = lineItemGroupOverlay.open ? (lineItemGroupOverlay.groupId || undefined) : undefined;
+      const res = reconcileOverlayAutoAddModeGroups({
+        definition,
+        values,
+        lineItems: prev,
+        optionState,
+        language,
+        ensureLineOptions,
+        skipGroupId
+      });
+      if (!res.changed) return prev;
+      setValues(res.values);
+      onDiagnostic?.('ui.lineItems.autoAdd.overlay.applyBatch', {
+        specCount: res.specCount,
+        changedCount: res.changedCount
+      });
+      return res.lineItems;
+    });
+  }, [
+    submitting,
+    overlayAutoGroupConfigs,
+    overlayAutoAddSignature,
+    optionState,
+    language,
+    ensureLineOptions,
+    lineItemGroupOverlay.open,
+    lineItemGroupOverlay.groupId,
+    setLineItems,
+    setValues
+  ]);
+
+  useEffect(() => {
+    if (submitting) return;
+
+    setLineItems(prev => {
+      const skipParentGroupId = lineItemGroupOverlay.open ? (lineItemGroupOverlay.groupId || undefined) : undefined;
+      const res = reconcileOverlayAutoAddModeSubgroups({
+        definition,
+        values,
+        lineItems: prev,
+        optionState,
+        language,
+        subgroupSelectors,
+        ensureLineOptions,
+        skipParentGroupId
+      });
+      if (!res.changed) return prev;
+      setValues(res.values);
+      onDiagnostic?.('ui.lineItems.autoAdd.overlaySubgroups.applyBatch', {
+        specCount: res.specCount,
+        changedCount: res.changedCount
+      });
+      return res.lineItems;
+    });
+  }, [
+    submitting,
+    definition.questions,
+    values,
+    language,
+    optionState,
+    lineItems,
+    subgroupSelectors,
+    ensureLineOptions,
+    lineItemGroupOverlay.open,
+    lineItemGroupOverlay.groupId,
+    setLineItems,
+    setValues
+  ]);
 
   const removeLineRow = (groupId: string, rowId: string) => {
     if (onSelectionEffect) {
@@ -4384,7 +4513,7 @@ const FormView: React.FC<FormViewProps> = ({
     const selectorCfg = groupCfg?.sectionSelector;
     const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
     const selectorValue = selectorCfg ? ((values as any)[selectorCfg.id] || '') : '';
-    const selectorDepIds = Array.isArray(selectorCfg?.optionFilter?.dependsOn)
+    const selectorDepIds: string[] = Array.isArray(selectorCfg?.optionFilter?.dependsOn)
       ? selectorCfg?.optionFilter?.dependsOn
       : selectorCfg?.optionFilter?.dependsOn
         ? [selectorCfg.optionFilter.dependsOn]
