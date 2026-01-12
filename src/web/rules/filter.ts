@@ -21,6 +21,33 @@ export function computeAllowedOptions(
   if (!filter) return options.en || [];
 
   const depValues = dependencyValues.map(v => normalize(v));
+
+  // Multi-select CHECKBOX values are normalized by `toDependencyValue` as a single string joined by '|'.
+  // When used as a dependency, treat selections as cumulative constraints by intersecting allowed sets.
+  // Explicit full-key mappings (e.g. "A|B") still take precedence when present.
+  if (depValues.length === 1) {
+    const raw = depValues[0] || '';
+    if (raw.includes('|') && filter.optionMap[raw] === undefined) {
+      const parts = raw
+        .split('|')
+        .map(s => s.trim())
+        .filter(Boolean);
+      if (parts.length > 1) {
+        const fallback = filter.optionMap['*'] || [];
+        let acc: string[] | null = null;
+        for (const part of parts) {
+          const next = filter.optionMap[part] || fallback;
+          if (acc === null) {
+            acc = next;
+          } else {
+            const set = new Set(next);
+            acc = acc.filter(v => set.has(v));
+          }
+        }
+        return acc || [];
+      }
+    }
+  }
   const candidateKeys: string[] = [];
   if (depValues.length > 1) candidateKeys.push(depValues.join('||'));
   depValues.filter(Boolean).forEach(v => candidateKeys.push(v));

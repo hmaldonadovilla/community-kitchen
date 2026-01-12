@@ -1037,6 +1037,16 @@ components:
               description: 1-based column index (e.g., 1 for column A).
             - type: string
               description: Column letter (e.g., "A") or header label (e.g., "Supplier").
+            - type: array
+              items:
+                oneOf:
+                  - type: integer
+                    description: 1-based column index (e.g., 1 for column A).
+                  - type: string
+                    description: Column letter (e.g., "A") or header label (e.g., "Supplier").
+              description: |
+                Multiple columns used to form a composite key. Values are joined with `||` in the order provided
+                (must match `OptionFilter.dependsOn` array order).
           description: Column holding the lookup key (dependency value or composite key).
         lookupColumn:
           oneOf:
@@ -1048,6 +1058,15 @@ components:
         delimiter:
           type: string
           description: Optional delimiter to split multiple values stored in one cell (defaults to comma/semicolon/newline splitting).
+        splitKey:
+          type: boolean
+          description: |
+            When true, split the key cell into multiple keys (useful when the key column stores a comma-separated list like "Vegan, Vegetarian, No-salt").
+            Keys are split using `keyDelimiter` when provided; otherwise the default splitting (comma/semicolon/newline) is used.
+            Only applies when `keyColumn` is a single column (not an array).
+        keyDelimiter:
+          type: string
+          description: Optional delimiter to split keys when `splitKey` is true (defaults to comma/semicolon/newline splitting). Use `"none"` to disable splitting.
       required: [ref, keyColumn, lookupColumn]
       example:
         ref: "REF:Supplier_Map"
@@ -2475,6 +2494,11 @@ components:
         required:
           type: boolean
           description: Whether the selector is required before adding lines.
+        optionFilter:
+          $ref: '#/components/schemas/OptionFilter'
+          description: |
+            Optional filter for the selector options themselves. Supports `optionMap` or `optionMapRef` (including multi-column keys).
+            Useful for cascading selectors where available sections depend on other fields.
 
     LineItemTotalConfig:
       type: object

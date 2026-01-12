@@ -615,6 +615,7 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```json
         { "dataSource": { "id": "RECIPES", "mode": "options", "statusAllowList": ["Active"] } }
         ```
+
     - **Choice UI controls (iOS-style)**: For `CHOICE` questions (and line-item `CHOICE` fields), you can optionally set `ui.control` in the Config JSON to influence which control is rendered:
       - `auto` (default): `<= 3` options → segmented, `<= 6` → radio list, else → native dropdown. Boolean-like non-required choices (e.g., YES/NO) may render as an iOS switch.
       - `select`, `radio`, `segmented`, `switch`: force a specific variant.
@@ -711,12 +712,37 @@ This project uses TypeScript. You need to build the script before using it in Go
           - `Supplier` (key)
           - `Allowed options` (lookup value)
         - Add one row per mapping entry. Repeated keys are merged. Add a `*` key for fallback.
+        - **Composite dependencies**: `keyColumn` can also be an array of columns; values are joined with `||` in order to match `dependsOn: [...]`.
+        - **Splitting keys**: when the key column itself contains a comma-separated list (e.g. `dietaryApplicability = "Vegan, Vegetarian, No-salt"`), set `splitKey: true` so each key is treated as a separate mapping entry (no need to duplicate rows).
 
         ```json
         {
           "optionFilter": {
             "dependsOn": "Supplier",
             "optionMapRef": { "ref": "REF:Supplier_Map", "keyColumn": "Supplier", "lookupColumn": "Allowed options" }
+          }
+        }
+        ```
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": ["Product", "Supplier"],
+            "optionMapRef": { "ref": "REF:Composite_Map", "keyColumn": ["Product", "Supplier"], "lookupColumn": "Allowed options" }
+          }
+        }
+        ```
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": "DISH_TYPE",
+            "optionMapRef": {
+              "ref": "REF:IngredientsOptions",
+              "keyColumn": "dietaryApplicability",
+              "lookupColumn": "optionEn",
+              "splitKey": true
+            }
           }
         }
         ```
@@ -870,13 +896,32 @@ This project uses TypeScript. You need to build the script before using it in Go
           "sectionSelector": {
             "id": "ITEM_FILTER",
             "labelEn": "Category",
-            "optionsRef": "REF:SelectorOptions" // or inline: "options": ["Veg", "Dairy"], "optionsFr": [...]
+            "optionsRef": "REF:SelectorOptions", // or inline: "options": ["Veg", "Dairy"], "optionsFr": [...]
+            "required": true
           },
           "fields": [ ...your existing line-item fields... ]
         }
         ```
 
        Use `ITEM_FILTER` in line-item `optionFilter.dependsOn` or validation `when.fieldId` so options/rules react to the selector.
+       If `required: true`, the **Add line** button is disabled until the selector has a value (prevents adding empty rows in `addMode: "inline"`).
+
+       You can also filter the selector options themselves with an `optionFilter` (supports `optionMapRef`, including composite key columns):
+
+        ```json
+        {
+          "sectionSelector": {
+            "id": "ITEM_FILTER",
+            "labelEn": "Item",
+            "optionsRef": "REF:IngredientsOptions",
+            "optionFilter": {
+              "dependsOn": ["CATEGORY", "SUPPLIER"],
+              "optionMapRef": { "ref": "REF:IngredientFilter_Map", "keyColumn": ["CATEGORY", "SUPPLIER"], "lookupColumn": "Allowed options" }
+            }
+          }
+        }
+        ```
+
       - *Totals under line items*: In the same LINE_ITEM_GROUP JSON, append:
 
         ```json
@@ -1118,7 +1163,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - `emailCc` / `emailBcc`: same structure as `emailRecipients`, useful for copying chefs/managers automatically.
    - `statusFieldId` (optional): question ID to overwrite when actions run. If omitted we use the auto-generated `Status` column in the response tab.
    - `statusTransitions`: strings written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
-  - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes the configured `status` (default `In progress`). If the record’s status is `Closed`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI shows a “Refresh record” banner to avoid overwriting remote changes.
+   - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes the configured `status` (default `In progress`). If the record’s status is `Closed`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI shows a “Refresh record” banner to avoid overwriting remote changes.
 
 2. **Provide templates**:
    - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).
@@ -1222,6 +1267,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 - **Open a saved link** (`action: "openUrlField"`): open (redirect to) the URL stored in a field of the current record (for example: a saved `pdfUrl`).
 
 Visibility:
+
 - You can use normal `visibility` config on a `BUTTON` question to show/hide it based on field values. This applies to inline buttons and to action-bar/menu buttons on Form/Summary views.
 
 #### Refreshing templates when keeping the same Drive file ID

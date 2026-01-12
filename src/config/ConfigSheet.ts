@@ -733,7 +733,14 @@ export class ConfigSheet {
   private static normalizeOptionMapRef(raw: any): OptionMapRefConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const refRaw = (raw as any).ref ?? (raw as any).tab ?? (raw as any).tabName ?? (raw as any).sheet ?? (raw as any).sheetName;
-    const keyRaw = (raw as any).keyColumn ?? (raw as any).keyCol ?? (raw as any).key ?? (raw as any).keyHeader;
+    const keyRaw =
+      (raw as any).keyColumns ??
+      (raw as any).keyCols ??
+      (raw as any).keys ??
+      (raw as any).keyColumn ??
+      (raw as any).keyCol ??
+      (raw as any).key ??
+      (raw as any).keyHeader;
     const lookupRaw =
       (raw as any).lookupColumn ??
       (raw as any).lookupCol ??
@@ -759,19 +766,34 @@ export class ConfigSheet {
       return s;
     };
 
-    const keyColumn = normalizeCol(keyRaw);
+    const keyColumnList = (() => {
+      if (Array.isArray(keyRaw)) {
+        const cols = keyRaw.map(v => normalizeCol(v)).filter((v): v is string | number => v !== undefined);
+        return cols.length ? cols : undefined;
+      }
+      const single = normalizeCol(keyRaw);
+      return single !== undefined ? [single] : undefined;
+    })();
     const lookupColumn = normalizeCol(lookupRaw);
-    if (keyColumn === undefined || lookupColumn === undefined) return undefined;
+    if (!keyColumnList || lookupColumn === undefined) return undefined;
+    const keyColumn = keyColumnList.length === 1 ? keyColumnList[0] : keyColumnList;
 
     const delimiterRaw = (raw as any).delimiter ?? (raw as any).separator ?? (raw as any).sep ?? (raw as any).split;
     const delimiter =
       delimiterRaw !== undefined && delimiterRaw !== null ? delimiterRaw.toString() : undefined;
 
+    const splitKeyRaw = (raw as any).splitKey ?? (raw as any).splitKeys ?? (raw as any).split_key ?? (raw as any).split_keys;
+    const splitKey = this.normalizeBoolean(splitKeyRaw);
+    const keyDelimRaw = (raw as any).keyDelimiter ?? (raw as any).keyDelim ?? (raw as any).keySeparator ?? (raw as any).keySep;
+    const keyDelimiter = keyDelimRaw !== undefined && keyDelimRaw !== null ? keyDelimRaw.toString() : undefined;
+
     return {
       ref,
       keyColumn,
       lookupColumn,
-      delimiter: delimiter ? delimiter.toString() : undefined
+      delimiter: delimiter ? delimiter.toString() : undefined,
+      splitKey,
+      keyDelimiter: keyDelimiter ? keyDelimiter.toString() : undefined
     };
   }
 
@@ -877,18 +899,47 @@ export class ConfigSheet {
     if (lastRow <= 1) return {};
 
     const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
-    const keyColIdx = this.resolveSheetColumnIndex(refCfg.keyColumn, headers);
+    const keyCols = Array.isArray(refCfg.keyColumn) ? refCfg.keyColumn : [refCfg.keyColumn];
+    const keyColIdxs = keyCols.map(col => this.resolveSheetColumnIndex(col, headers));
+    if (keyColIdxs.some(idx => !idx)) return undefined;
     const lookupColIdx = this.resolveSheetColumnIndex(refCfg.lookupColumn, headers);
-    if (!keyColIdx || !lookupColIdx) return undefined;
+    if (!lookupColIdx) return undefined;
 
     const numRows = lastRow - 1;
-    const keys = sheet.getRange(2, keyColIdx, numRows, 1).getValues();
+    const keyColumns = keyColIdxs.map(idx => sheet.getRange(2, idx as number, numRows, 1).getValues());
     const lookups = sheet.getRange(2, lookupColIdx, numRows, 1).getValues();
     const map: Record<string, string[]> = {};
 
     for (let i = 0; i < numRows; i++) {
-      const keyRaw = keys[i]?.[0];
-      const key = keyRaw !== undefined && keyRaw !== null ? keyRaw.toString().trim() : '';
+      const keyParts = keyColumns.map(col => {
+        const v = col[i]?.[0];
+        return v !== undefined && v !== null ? v.toString().trim() : '';
+      });
+      if (!keyParts.some(Boolean)) continue;
+
+      // When enabled and using a single key column, split key cells into multiple keys (e.g., "Vegan, Vegetarian").
+      // Each key receives the same lookup value(s).
+      if ((refCfg as any)?.splitKey === true && keyParts.length === 1) {
+        const keys = this.splitOptionMapCell(keyParts[0], (refCfg as any)?.keyDelimiter);
+        if (!keys.length) continue;
+        const lookupRaw = lookups[i]?.[0];
+        const values = this.splitOptionMapCell(lookupRaw, refCfg.delimiter);
+        if (!values.length) continue;
+        keys.forEach(key => {
+          if (!map[key]) map[key] = [];
+          map[key].push(...values);
+        });
+        continue;
+      }
+
+      // For composite keys, allow prefix keys (e.g., [A, ""] -> "A") but disallow gaps (e.g., [A, "", B]).
+      const firstEmptyIdx = keyParts.findIndex(p => !p);
+      if (firstEmptyIdx >= 0 && keyParts.slice(firstEmptyIdx).some(Boolean)) continue;
+      const usableParts = firstEmptyIdx >= 0 ? keyParts.slice(0, firstEmptyIdx) : keyParts;
+      if (!usableParts.length) continue;
+      let key = usableParts.length > 1 ? usableParts.join('||') : usableParts[0];
+      // Treat all-wildcard composite keys as the global fallback key.
+      if (usableParts.length > 1 && usableParts.every(p => p === '*')) key = '*';
       if (!key) continue;
       const lookupRaw = lookups[i]?.[0];
       const values = this.splitOptionMapCell(lookupRaw, refCfg.delimiter);
@@ -2114,6 +2165,8 @@ export class ConfigSheet {
       optionsNl = Array.isArray(rawSelector.optionsNl) ? rawSelector.optionsNl : [];
     }
 
+    const optionFilter = this.normalizeOptionMapLike(ss, rawSelector.optionFilter);
+
     return {
       id: id.toString(),
       labelEn: rawSelector.labelEn || '',
@@ -2123,7 +2176,8 @@ export class ConfigSheet {
       options,
       optionsFr,
       optionsNl,
-      optionsRef: rawSelector.optionsRef
+      optionsRef: rawSelector.optionsRef,
+      optionFilter
     };
   }
 

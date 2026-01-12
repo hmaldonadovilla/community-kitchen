@@ -1836,13 +1836,118 @@ const FormView: React.FC<FormViewProps> = ({
   };
 
   const addLineItemRowManual = (groupId: string, preset?: Record<string, any>) => {
-    const rowId = `${groupId}_${Math.random().toString(16).slice(2)}`;
+    const isEmptySelectorValue = (value: FieldValue | undefined): boolean => {
+      if (value === undefined || value === null) return true;
+      if (Array.isArray(value)) return value.length === 0;
+      return value.toString().trim() === '';
+    };
+
     const subgroupInfo = parseSubgroupKey(groupId);
+
+    // Enforce required section selector before allowing manual inline adds.
+    // (The selector control is not a formal question, so we guard here in addition to disabling the UI button.)
+    let addMode: any;
+    let selectorCfg: any;
+    let selectorId: string | undefined;
+    let selectorValue: FieldValue | undefined;
+    let anchorFieldId: string | undefined;
+    if (subgroupInfo) {
+      const parentDef = definition.questions.find(q => q.id === subgroupInfo.parentGroupId);
+      const subDef = parentDef?.lineItemConfig?.subGroups?.find(s => resolveSubgroupKey(s) === subgroupInfo.subGroupId);
+      addMode = (subDef as any)?.addMode;
+      selectorCfg = (subDef as any)?.sectionSelector;
+      selectorId = selectorCfg?.id;
+      selectorValue = selectorId ? ((subgroupSelectors[groupId] as any) as FieldValue) : undefined;
+      anchorFieldId =
+        (subDef as any)?.anchorFieldId !== undefined && (subDef as any)?.anchorFieldId !== null
+          ? (subDef as any).anchorFieldId.toString()
+          : undefined;
+    } else {
+      const groupDef = definition.questions.find(q => q.id === groupId);
+      addMode = groupDef?.lineItemConfig?.addMode;
+      selectorCfg = groupDef?.lineItemConfig?.sectionSelector;
+      selectorId = selectorCfg?.id;
+      selectorValue = selectorId && values.hasOwnProperty(selectorId) ? (values[selectorId] as FieldValue) : undefined;
+      anchorFieldId =
+        groupDef?.lineItemConfig?.anchorFieldId !== undefined && groupDef?.lineItemConfig?.anchorFieldId !== null
+          ? groupDef.lineItemConfig.anchorFieldId.toString()
+          : undefined;
+    }
+    const inlineMode = addMode === undefined || addMode === null || addMode === 'inline';
+    if (inlineMode && selectorCfg?.required && selectorId) {
+      const presetSelector =
+        preset && Object.prototype.hasOwnProperty.call(preset, selectorId) ? ((preset as any)[selectorId] as FieldValue) : undefined;
+      const effectiveSelector = presetSelector !== undefined ? presetSelector : selectorValue;
+      if (isEmptySelectorValue(effectiveSelector)) {
+        onDiagnostic?.('ui.addRow.blocked', { groupId, reason: 'sectionSelector.required', selectorId });
+        return;
+      }
+    }
+
+    // When the inline Add button provides a preset (e.g. set ING from ITEM_FILTER), reuse the first empty
+    // seeded row instead of creating a new blank row. This avoids ending up with an extra empty row
+    // when minRows seeds 1+ rows by default.
+    if (inlineMode && anchorFieldId && preset && Object.prototype.hasOwnProperty.call(preset, anchorFieldId)) {
+      const presetVal = (preset as any)[anchorFieldId] as FieldValue;
+      if (!isEmptyValue(presetVal as any)) {
+        const currentRows = lineItems[groupId] || [];
+        const selectorStr = selectorId ? (selectorValue || '').toString().trim() : '';
+        const emptyRow = currentRows.find(row => {
+          const rowVals = (row as any)?.values || {};
+          const keys = Object.keys(rowVals).filter(k => k !== ROW_SOURCE_KEY);
+          if (!keys.length) return true;
+          if (selectorId && keys.length === 1 && keys[0] === selectorId) {
+            const existing = (rowVals as any)[selectorId];
+            if (existing === undefined || existing === null || existing === '') return true;
+            return existing.toString().trim() === selectorStr;
+          }
+          return false;
+        });
+
+        if (emptyRow) {
+          if (subgroupInfo) {
+            setCollapsedSubgroups(prev => ({ ...prev, [groupId]: false }));
+          }
+          const anchor = `${groupId}__${emptyRow.id}`;
+          onDiagnostic?.('ui.addRow.manual.fillEmpty', { groupId, rowId: emptyRow.id, anchor, anchorFieldId });
+          setPendingScrollAnchor(anchor);
+          setLineItems(prev => {
+            const rows = prev[groupId] || [];
+            const idx = rows.findIndex(r => r.id === emptyRow.id);
+            if (idx < 0) return prev;
+
+            const base = rows[idx];
+            const nextRowValues: Record<string, FieldValue> = {
+              ...(base.values || {}),
+              ...sanitizePreset(preset),
+              [ROW_SOURCE_KEY]: 'manual'
+            };
+            if (selectorId && selectorValue !== undefined && selectorValue !== null && nextRowValues[selectorId] === undefined) {
+              nextRowValues[selectorId] = selectorValue;
+            }
+
+            const nextRow: LineItemRowState = { ...base, values: nextRowValues };
+            const nextRows = [...rows];
+            nextRows[idx] = nextRow;
+            const nextLineItems = { ...prev, [groupId]: nextRows };
+            const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+              mode: 'init'
+            });
+            setValues(nextValues);
+            return recomputed;
+          });
+          return;
+        }
+      }
+    }
+
+    const rowId = `${groupId}_${Math.random().toString(16).slice(2)}`;
+
     if (subgroupInfo) {
       setCollapsedSubgroups(prev => ({ ...prev, [groupId]: false }));
     }
     const anchor = `${groupId}__${rowId}`;
-    onDiagnostic?.('ui.addRow.manual', { groupId, rowId, anchor });
+    onDiagnostic?.('ui.addRow.manual', { groupId, rowId, anchor, presetKeys: preset ? Object.keys(preset).slice(0, 10) : [] });
     setPendingScrollAnchor(anchor);
     addLineItemRow(groupId, { ...(preset || {}), [ROW_SOURCE_KEY]: 'manual' }, rowId);
   };
@@ -3463,11 +3568,36 @@ const FormView: React.FC<FormViewProps> = ({
     const totals = totalsCfg ? computeTotals({ config: totalsCfg as any, rows: orderedRows }, language) : [];
 
     const subSelectorCfg = subConfig?.sectionSelector;
-                    const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
-                    const subSelectorOptions = subSelectorOptionSet
-                      ? buildLocalizedOptions(subSelectorOptionSet, subSelectorOptionSet.en || [], language)
-                      : [];
                     const subSelectorValue = subgroupSelectors[subKey] || '';
+                    const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
+                    const subSelectorDepIds = Array.isArray(subSelectorCfg?.optionFilter?.dependsOn)
+                      ? subSelectorCfg?.optionFilter?.dependsOn
+                      : subSelectorCfg?.optionFilter?.dependsOn
+                        ? [subSelectorCfg.optionFilter.dependsOn]
+                        : [];
+                    const subSelectorDepVals = subSelectorCfg?.optionFilter
+                      ? subSelectorDepIds.map(depId =>
+                          toDependencyValue(depId === subSelectorCfg.id ? subSelectorValue : (parentRowValues as any)[depId] ?? (values as any)[depId])
+                        )
+                      : [];
+                    const subSelectorAllowed = subSelectorCfg?.optionFilter && subSelectorOptionSet
+                      ? computeAllowedOptions(subSelectorCfg.optionFilter, subSelectorOptionSet, subSelectorDepVals)
+                      : null;
+                    const subSelectorAllowedWithCurrent =
+                      subSelectorAllowed !== null &&
+                      subSelectorValue &&
+                      typeof subSelectorValue === 'string' &&
+                      !subSelectorAllowed.includes(subSelectorValue)
+                        ? [...subSelectorAllowed, subSelectorValue]
+                        : subSelectorAllowed;
+                    const subSelectorOptions = subSelectorOptionSet
+                      ? buildLocalizedOptions(
+                          subSelectorOptionSet,
+                          subSelectorAllowedWithCurrent !== null ? subSelectorAllowedWithCurrent : (subSelectorOptionSet.en || []),
+                          language
+                        )
+                      : [];
+                    const subSelectorIsMissing = !!subSelectorCfg?.required && !(subSelectorValue || '').toString().trim();
 
     const renderAddButton = () => {
       if (!subConfig) {
@@ -3531,7 +3661,7 @@ const FormView: React.FC<FormViewProps> = ({
                         );
                       }
                       return (
-        <button type="button" onClick={() => addLineItemRowManual(subKey)} style={buttonStyles.secondary}>
+        <button type="button" disabled={subSelectorIsMissing} onClick={() => addLineItemRowManual(subKey)} style={withDisabled(buttonStyles.secondary, subSelectorIsMissing)}>
           <PlusIcon />
           {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line')}
                         </button>
@@ -4253,10 +4383,35 @@ const FormView: React.FC<FormViewProps> = ({
 
     const selectorCfg = groupCfg?.sectionSelector;
     const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
-    const selectorOptions = selectorOptionSet
-      ? buildLocalizedOptions(selectorOptionSet, selectorOptionSet.en || [], language)
-      : [];
     const selectorValue = selectorCfg ? ((values as any)[selectorCfg.id] || '') : '';
+    const selectorDepIds = Array.isArray(selectorCfg?.optionFilter?.dependsOn)
+      ? selectorCfg?.optionFilter?.dependsOn
+      : selectorCfg?.optionFilter?.dependsOn
+        ? [selectorCfg.optionFilter.dependsOn]
+        : [];
+    const selectorDepVals = selectorCfg?.optionFilter
+      ? selectorDepIds.map(depId =>
+          toDependencyValue(depId === selectorCfg.id ? selectorValue : (values as any)[depId])
+        )
+      : [];
+    const selectorAllowed = selectorCfg?.optionFilter && selectorOptionSet
+      ? computeAllowedOptions(selectorCfg.optionFilter, selectorOptionSet, selectorDepVals)
+      : null;
+    const selectorAllowedWithCurrent =
+      selectorAllowed !== null &&
+      selectorValue &&
+      typeof selectorValue === 'string' &&
+      !selectorAllowed.includes(selectorValue)
+        ? [...selectorAllowed, selectorValue]
+        : selectorAllowed;
+    const selectorOptions = selectorOptionSet
+      ? buildLocalizedOptions(
+          selectorOptionSet,
+          selectorAllowedWithCurrent !== null ? selectorAllowedWithCurrent : (selectorOptionSet.en || []),
+          language
+        )
+      : [];
+    const selectorIsMissing = !!selectorCfg?.required && !(selectorValue || '').toString().trim();
 
     const totals = groupCfg ? computeTotals({ config: groupCfg as any, rows }, language) : [];
 
@@ -4273,10 +4428,10 @@ const FormView: React.FC<FormViewProps> = ({
         return (
           <button
             type="button"
-            disabled={locked}
-            style={withDisabled(buttonStyles.secondary, locked)}
+            disabled={locked || selectorIsMissing}
+            style={withDisabled(buttonStyles.secondary, locked || selectorIsMissing)}
             onClick={async () => {
-              if (locked) return;
+              if (locked || selectorIsMissing) return;
               const anchorField = (groupCfg.fields || []).find((f: any) => f.id === groupCfg.anchorFieldId);
               if (!anchorField || anchorField.type !== 'CHOICE') {
                 addLineItemRowManual(groupId);
@@ -4326,9 +4481,17 @@ const FormView: React.FC<FormViewProps> = ({
       return (
         <button
           type="button"
-          disabled={locked}
-          onClick={() => addLineItemRowManual(groupId)}
-          style={withDisabled(buttonStyles.secondary, locked)}
+          disabled={locked || selectorIsMissing}
+          onClick={() => {
+            const anchorFieldId =
+              groupCfg?.anchorFieldId !== undefined && groupCfg?.anchorFieldId !== null ? groupCfg.anchorFieldId.toString() : '';
+            const selectorPreset =
+              anchorFieldId && (selectorValue || '').toString().trim()
+                ? { [anchorFieldId]: (selectorValue || '').toString().trim() }
+                : undefined;
+            addLineItemRowManual(groupId, selectorPreset);
+          }}
+          style={withDisabled(buttonStyles.secondary, locked || selectorIsMissing)}
         >
           <PlusIcon />
           {resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLine', language, 'Add line'))}

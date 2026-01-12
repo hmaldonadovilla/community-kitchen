@@ -127,54 +127,54 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
     <div className="ck-form-sections">
       {blocks.map((block, idx) => {
         const renderSection = (section: Section) => {
-          const instanceKey = `${contextPrefix}:${section.key}`;
-          const collapsed = section.collapsible ? !!collapsedGroups[instanceKey] : false;
-          const sectionHasError = section.fields.some(f => hasError(f));
-          // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
-          const requiredFields = section.fields.filter(f => !!(f as any)?.required);
-          const totalRequired = requiredFields.length;
-          const requiredComplete =
-            typeof isComplete === 'function'
-              ? requiredFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
-              : 0;
-          const optionalFields = section.fields.filter(f => !(f as any)?.required);
-          const optionalComplete =
-            typeof isComplete === 'function' && totalRequired > 0 && requiredComplete >= totalRequired
-              ? optionalFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
-              : 0;
-          const numerator = requiredComplete + optionalComplete;
-          const rows = buildRows(section.fields);
+        const instanceKey = `${contextPrefix}:${section.key}`;
+        const collapsed = section.collapsible ? !!collapsedGroups[instanceKey] : false;
+        const sectionHasError = section.fields.some(f => hasError(f));
+        // PARAGRAPH is a textarea input in this app, so it should count toward progress like any other field.
+        const requiredFields = section.fields.filter(f => !!(f as any)?.required);
+        const totalRequired = requiredFields.length;
+        const requiredComplete =
+          typeof isComplete === 'function'
+            ? requiredFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
+            : 0;
+        const optionalFields = section.fields.filter(f => !(f as any)?.required);
+        const optionalComplete =
+          typeof isComplete === 'function' && totalRequired > 0 && requiredComplete >= totalRequired
+            ? optionalFields.reduce((acc, f) => (isComplete(f) ? acc + 1 : acc), 0)
+            : 0;
+        const numerator = requiredComplete + optionalComplete;
+        const rows = buildRows(section.fields);
 
-          const body = (
-            <div className="ck-form-grid">
-              {rows.map(row => {
-                if (row.length === 2) {
-                  return (
-                    <PairedRowGrid key={`${row[0].id}__${row[1].id}`}>
-                      {renderField(row[0])}
-                      {renderField(row[1])}
-                    </PairedRowGrid>
-                  );
-                }
-                return renderField(row[0]);
-              })}
-            </div>
-          );
+        const body = (
+          <div className="ck-form-grid">
+            {rows.map(row => {
+              if (row.length === 2) {
+                return (
+                  <PairedRowGrid key={`${row[0].id}__${row[1].id}`}>
+                    {renderField(row[0])}
+                    {renderField(row[1])}
+                  </PairedRowGrid>
+                );
+              }
+              return renderField(row[0]);
+            })}
+          </div>
+        );
 
-          return (
-            <GroupCard
-              key={instanceKey}
-              groupKey={instanceKey}
-              title={section.title}
+        return (
+          <GroupCard
+            key={instanceKey}
+            groupKey={instanceKey}
+            title={section.title}
               language={language}
-              collapsible={section.collapsible}
-              collapsed={collapsed}
-              hasError={sectionHasError}
-              onToggleCollapsed={section.collapsible ? () => toggleGroupCollapsed(instanceKey) : undefined}
-              progress={typeof isComplete === 'function' ? { complete: numerator, total: totalRequired } : null}
-            >
-              {body}
-            </GroupCard>
+            collapsible={section.collapsible}
+            collapsed={collapsed}
+            hasError={sectionHasError}
+            onToggleCollapsed={section.collapsible ? () => toggleGroupCollapsed(instanceKey) : undefined}
+            progress={typeof isComplete === 'function' ? { complete: numerator, total: totalRequired } : null}
+          >
+            {body}
+          </GroupCard>
           );
         };
 

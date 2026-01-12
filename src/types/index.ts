@@ -480,8 +480,11 @@ export interface OptionMapRefConfig {
    * - 1-based index (e.g. 1)
    * - Column letter (e.g. "A")
    * - Header label (e.g. "Supplier")
+   *
+   * You can also provide multiple columns to form a composite key. The system joins
+   * the column values with `||` in the order provided (to match `OptionFilter.dependsOn` arrays).
    */
-  keyColumn: SheetColumnRef;
+  keyColumn: SheetColumnRef | SheetColumnRef[];
   /**
    * Column holding the lookup value(s) (allowed options / derived values).
    * Accepts:
@@ -495,6 +498,19 @@ export interface OptionMapRefConfig {
    * Defaults to splitting on common separators like comma/semicolon/newline.
    */
   delimiter?: string;
+  /**
+   * When true, split a single key cell into multiple keys (useful when the key column stores
+   * a comma-separated list like "Vegan, Vegetarian, No-salt").
+   *
+   * Keys are split using `keyDelimiter` when provided; otherwise the default splitting
+   * (comma/semicolon/newline) is used.
+   */
+  splitKey?: boolean;
+  /**
+   * Optional delimiter to split keys when `splitKey` is true.
+   * Use `"none"` to disable splitting even when `splitKey` is set (not recommended).
+   */
+  keyDelimiter?: string;
 }
 
 export interface OptionFilter {
@@ -913,6 +929,11 @@ export interface LineItemSelectorConfig {
   optionsNl?: string[];
   optionsRef?: string;
   required?: boolean;
+  /**
+   * Optional option filter for the selector itself (supports optionMap or optionMapRef).
+   * Useful for cascading selectors where available sections depend on other fields.
+   */
+  optionFilter?: OptionFilter;
 }
 
 export interface LineItemTotalConfig {

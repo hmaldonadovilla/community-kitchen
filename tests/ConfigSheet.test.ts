@@ -675,4 +675,151 @@ describe('ConfigSheet', () => {
       '*': ['Dry']
     });
   });
+
+  test('getQuestions supports optionMapRef with multiple key columns (composite keys + fallbacks)', () => {
+    const configSheet = mockSS.insertSheet('Config: CompositeOptionMapRef');
+    const rows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q4',
+        'CHOICE',
+        'Unit',
+        'Unité',
+        'Eenheid',
+        true,
+        'Bags,Crates,Boxes',
+        'Bags,Crates,Boxes',
+        'Bags,Crates,Boxes',
+        'Active',
+        '',
+        `{
+          "optionFilter": {
+            "dependsOn": ["Product", "Supplier"],
+            "optionMapRef": { "ref": "REF:Composite_Map", "keyColumn": ["Product", "Supplier"], "lookupColumn": "Allowed" }
+          }
+        }`,
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(rows);
+
+    const mapSheet = mockSS.insertSheet('Composite_Map');
+    (mapSheet as any).setMockData([
+      ['Product', 'Supplier', 'Allowed'],
+      ['Carrots', 'Local', 'Crates'],
+      ['Carrots', 'Local', 'Bags'],
+      // prefix fallback (Product only)
+      ['Carrots', '', 'Boxes'],
+      // global fallback (wildcard key)
+      ['*', '*', 'Bags']
+    ]);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: CompositeOptionMapRef');
+    expect(questions.length).toBe(1);
+    expect(questions[0].optionFilter).toBeDefined();
+    expect(questions[0].optionFilter!.optionMap).toEqual({
+      'Carrots||Local': ['Crates', 'Bags'],
+      Carrots: ['Boxes'],
+      '*': ['Bags']
+    });
+  });
+
+  test('getQuestions resolves optionFilter.optionMapRef inside LINE_ITEM_GROUP sectionSelector config', () => {
+    const configSheet = mockSS.insertSheet('Config: SelectorOptionFilter');
+    const rows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q5',
+        'LINE_ITEM_GROUP',
+        'Items',
+        'Articles',
+        'Artikelen',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "sectionSelector": {
+            "id": "ITEM_FILTER",
+            "labelEn": "Item",
+            "options": ["A","B","C"],
+            "optionFilter": {
+              "dependsOn": "CATEGORY",
+              "optionMapRef": { "ref": "REF:Selector_Map", "keyColumn": "CATEGORY", "lookupColumn": "Allowed" }
+            }
+          },
+          "fields": []
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(rows);
+
+    const mapSheet = mockSS.insertSheet('Selector_Map');
+    (mapSheet as any).setMockData([
+      ['CATEGORY', 'Allowed'],
+      ['Veg', 'A'],
+      ['Veg', 'B'],
+      ['*', 'C']
+    ]);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: SelectorOptionFilter');
+    expect(questions.length).toBe(1);
+    expect(questions[0].lineItemConfig?.sectionSelector).toBeDefined();
+    expect(questions[0].lineItemConfig!.sectionSelector!.optionFilter).toBeDefined();
+    expect(questions[0].lineItemConfig!.sectionSelector!.optionFilter!.optionMap).toEqual({
+      Veg: ['A', 'B'],
+      '*': ['C']
+    });
+  });
+
+  test('getQuestions supports optionMapRef.splitKey (split key cells into multiple keys)', () => {
+    const configSheet = mockSS.insertSheet('Config: SplitKey');
+    const rows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q6',
+        'CHOICE',
+        'Ingredient',
+        'Ingrédient',
+        'Ingrediënt',
+        true,
+        '',
+        '',
+        '',
+        'Active',
+        '',
+        `{
+          "optionFilter": {
+            "dependsOn": "DISH_TYPE",
+            "optionMapRef": { "ref": "REF:IngredientsOptions", "keyColumn": "dietaryApplicability", "lookupColumn": "optionEn", "splitKey": true }
+          }
+        }`,
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(rows);
+
+    const master = mockSS.insertSheet('IngredientsOptions');
+    (master as any).setMockData([
+      ['optionEn', 'optionFr', 'optionNl', 'dietaryApplicability'],
+      ['Rice', 'Riz', 'Rijst', 'Vegan, Vegetarian, No-salt'],
+      ['Chicken', 'Poulet', 'Kip', 'Standard, No-salt']
+    ]);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: SplitKey');
+    expect(questions.length).toBe(1);
+    expect(questions[0].optionFilter).toBeDefined();
+    expect(questions[0].optionFilter!.optionMap).toEqual({
+      Vegan: ['Rice'],
+      Vegetarian: ['Rice'],
+      'No-salt': ['Rice', 'Chicken'],
+      Standard: ['Chicken']
+    });
+  });
 });

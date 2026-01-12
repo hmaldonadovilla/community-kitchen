@@ -564,20 +564,41 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
 
         const selectorCfg = q.lineItemConfig?.sectionSelector;
         const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
-        const selectorOptions = selectorOptionSet
-          ? buildLocalizedOptions(selectorOptionSet, selectorOptionSet.en || [], language)
-          : [];
         const selectorValue = selectorCfg ? ((values[selectorCfg.id] as string) || '') : '';
+        const selectorDepIds = Array.isArray(selectorCfg?.optionFilter?.dependsOn)
+          ? selectorCfg?.optionFilter?.dependsOn
+          : selectorCfg?.optionFilter?.dependsOn
+            ? [selectorCfg.optionFilter.dependsOn]
+            : [];
+        const selectorDepVals = selectorCfg?.optionFilter
+          ? selectorDepIds.map(depId => toDependencyValue(depId === selectorCfg.id ? selectorValue : values[depId]))
+          : [];
+        const selectorAllowed = selectorCfg?.optionFilter && selectorOptionSet
+          ? computeAllowedOptions(selectorCfg.optionFilter, selectorOptionSet, selectorDepVals)
+          : null;
+        const selectorOptions = selectorOptionSet
+          ? buildLocalizedOptions(
+              selectorOptionSet,
+              selectorAllowed !== null ? selectorAllowed : (selectorOptionSet.en || []),
+              language
+            )
+          : [];
+
+        const selectorIsMissing = !!selectorCfg?.required && !selectorValue;
 
         const renderAddButton = () => {
           if (q.lineItemConfig?.addMode === 'overlay' && q.lineItemConfig.anchorFieldId) {
             return (
               <button
                 type="button"
-                disabled={submitting}
-                style={withDisabled(buttonStyles.secondary, submitting)}
+                disabled={submitting || selectorIsMissing}
+                style={withDisabled(buttonStyles.secondary, submitting || selectorIsMissing)}
                 onClick={async () => {
                   if (submitting) return;
+                  if (selectorIsMissing) {
+                    onDiagnostic?.('ui.addRow.blocked', { groupId: q.id, reason: 'sectionSelector.required', selectorId: selectorCfg?.id });
+                    return;
+                  }
                   const anchorField = (q.lineItemConfig?.fields || []).find(f => f.id === q.lineItemConfig?.anchorFieldId);
                   if (!anchorField || anchorField.type !== 'CHOICE') {
                     addLineItemRowManual(q.id);
@@ -633,9 +654,19 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
           return (
             <button
               type="button"
-              disabled={submitting}
-              onClick={() => addLineItemRowManual(q.id)}
-              style={withDisabled(buttonStyles.secondary, submitting)}
+              disabled={submitting || selectorIsMissing}
+              onClick={() => {
+                const anchorFieldId =
+                  q.lineItemConfig?.anchorFieldId !== undefined && q.lineItemConfig?.anchorFieldId !== null
+                    ? q.lineItemConfig.anchorFieldId.toString()
+                    : '';
+                const selectorPreset =
+                  anchorFieldId && (selectorValue || '').toString().trim()
+                    ? { [anchorFieldId]: (selectorValue || '').toString().trim() }
+                    : undefined;
+                addLineItemRowManual(q.id, selectorPreset);
+              }}
+              style={withDisabled(buttonStyles.secondary, submitting || selectorIsMissing)}
             >
               <PlusIcon />
               {resolveLocalizedString(
@@ -1991,10 +2022,33 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                     const subTotals = computeTotals({ config: { ...sub, fields: sub.fields || [] }, rows: orderedSubRows }, language);
                     const subSelectorCfg = sub.sectionSelector;
                     const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
-                    const subSelectorOptions = subSelectorOptionSet
-                      ? buildLocalizedOptions(subSelectorOptionSet, subSelectorOptionSet.en || [], language)
-                      : [];
                     const subSelectorValue = subgroupSelectors[subKey] || '';
+                    const subSelectorDepIds = Array.isArray(subSelectorCfg?.optionFilter?.dependsOn)
+                      ? subSelectorCfg?.optionFilter?.dependsOn
+                      : subSelectorCfg?.optionFilter?.dependsOn
+                        ? [subSelectorCfg.optionFilter.dependsOn]
+                        : [];
+                    const subSelectorDepVals = subSelectorCfg?.optionFilter
+                      ? subSelectorDepIds.map(depId =>
+                          toDependencyValue(
+                            depId === subSelectorCfg.id
+                              ? subSelectorValue
+                              : (row.values[depId] ?? values[depId])
+                          )
+                        )
+                      : [];
+                    const subSelectorAllowed = subSelectorCfg?.optionFilter && subSelectorOptionSet
+                      ? computeAllowedOptions(subSelectorCfg.optionFilter, subSelectorOptionSet, subSelectorDepVals)
+                      : null;
+                    const subSelectorOptions = subSelectorOptionSet
+                      ? buildLocalizedOptions(
+                          subSelectorOptionSet,
+                          subSelectorAllowed !== null ? subSelectorAllowed : (subSelectorOptionSet.en || []),
+                          language
+                        )
+                      : [];
+
+                    const subSelectorIsMissing = !!subSelectorCfg?.required && !subSelectorValue;
 
                     const renderSubAddButton = () => {
                       if (sub.addMode === 'overlay' && sub.anchorFieldId) {
@@ -2002,7 +2056,13 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                           <button
                             type="button"
                             style={buttonStyles.secondary}
+                            disabled={submitting || subSelectorIsMissing}
                             onClick={async () => {
+                              if (submitting) return;
+                              if (subSelectorIsMissing) {
+                                onDiagnostic?.('ui.addRow.blocked', { groupId: subKey, reason: 'sectionSelector.required', selectorId: subSelectorCfg?.id });
+                                return;
+                              }
                               const anchorField = (sub.fields || []).find(f => f.id === sub.anchorFieldId);
                               if (!anchorField || anchorField.type !== 'CHOICE') {
                                 addLineItemRowManual(subKey);
@@ -2056,7 +2116,22 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         );
                       }
                       return (
-                        <button type="button" onClick={() => addLineItemRowManual(subKey)} style={buttonStyles.secondary}>
+                        <button
+                          type="button"
+                          disabled={submitting || subSelectorIsMissing}
+                          onClick={() => {
+                            const anchorFieldId =
+                              (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
+                                ? (sub as any).anchorFieldId.toString()
+                                : '';
+                            const selectorPreset =
+                              anchorFieldId && (subSelectorValue || '').toString().trim()
+                                ? { [anchorFieldId]: (subSelectorValue || '').toString().trim() }
+                                : undefined;
+                            addLineItemRowManual(subKey, selectorPreset);
+                          }}
+                          style={withDisabled(buttonStyles.secondary, submitting || subSelectorIsMissing)}
+                        >
                           <PlusIcon />
                           {resolveLocalizedString(sub.addButtonLabel, language, 'Add line')}
                         </button>

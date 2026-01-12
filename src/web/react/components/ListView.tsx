@@ -149,8 +149,9 @@ const ListView: React.FC<ListViewProps> = ({
     return map;
   }, [definition.questions]);
 
-  const fieldTypeById = useMemo(() => {
+  const fieldTypeById = useMemo<Record<string, string>>(() => {
     // Meta columns
+    // Explicit Record typing ensures `fieldTypeById[fieldId]` is safe for arbitrary string fieldIds.
     return { ...questionTypeById, createdAt: 'DATETIME', updatedAt: 'DATETIME', status: 'TEXT', pdfUrl: 'TEXT', id: 'TEXT' };
   }, [questionTypeById]);
 
@@ -762,18 +763,18 @@ const ListView: React.FC<ListViewProps> = ({
           : applyAdvanced
             ? filterItemsByAdvancedSearch(items, advancedQuery, { keywordFieldIds: keywordSearchFieldIds, fieldTypeById })
             : !advancedSearchEnabled && trimmed
-              ? (() => {
-                  const keyword = trimmed.toLowerCase();
-                  return items.filter(row =>
-                    searchableFieldIds.some(fieldId => {
-                      const raw = (row as any)[fieldId];
-                      if (raw === undefined || raw === null) return false;
-                      const value = Array.isArray(raw) ? raw.join(' ') : `${raw}`;
-                      return value.toLowerCase().includes(keyword);
-                    })
-                  );
-                })()
-              : items;
+            ? (() => {
+                const keyword = trimmed.toLowerCase();
+                return items.filter(row =>
+                  searchableFieldIds.some(fieldId => {
+                    const raw = (row as any)[fieldId];
+                    if (raw === undefined || raw === null) return false;
+                    const value = Array.isArray(raw) ? raw.join(' ') : `${raw}`;
+                    return value.toLowerCase().includes(keyword);
+                  })
+                );
+              })()
+            : items;
     const field = sortField || 'updatedAt';
     const sorted = [...filtered].sort((rowA, rowB) => {
       const result = compareValues((rowA as any)[field], (rowB as any)[field]);
@@ -1329,8 +1330,8 @@ const ListView: React.FC<ListViewProps> = ({
               {tSystem('list.view.cards', language, 'List')}
             </button>
           </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
 
       {advancedSearchEnabled && advancedOpen ? (
         <div className="ck-list-advanced-panel" role="dialog" aria-label={tSystem('list.advancedSearch', language, 'Advanced search')}>
@@ -1427,7 +1428,7 @@ const ListView: React.FC<ListViewProps> = ({
                         }}
                       />
                     )}
-                  </div>
+      </div>
                 </div>
               );
             })}
@@ -1465,77 +1466,77 @@ const ListView: React.FC<ListViewProps> = ({
       {uiError && <div className="error">{uiError}</div>}
 
       {viewMode === 'table' ? (
-        <div className="list-table-wrapper">
-          <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
-            <thead>
-              <tr>
+      <div className="list-table-wrapper">
+        <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+          <thead>
+            <tr>
                 {columnsForTable.map(col => (
-                  <th
-                    key={col.fieldId}
-                    scope="col"
-                    aria-sort={
-                      sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
-                    }
-                    style={{
-                      maxWidth: 180,
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      cursor: isSortableColumn(col) ? 'pointer' : 'default'
-                    }}
-                  >
-                    {isSortableColumn(col) ? (
-                      <button
-                        type="button"
-                        className="ck-list-sort-header"
-                        onClick={() => {
-                          const nextField = col.fieldId;
-                          if (sortField === nextField) {
-                            setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-                          } else {
-                            setSortField(nextField);
-                            setSortDirection(defaultDirectionForField(nextField));
-                          }
-                          setPageIndex(0);
-                        }}
-                      >
-                        <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
-                        {sortField === col.fieldId ? (
-                          <span className="ck-list-sort-indicator" aria-hidden="true">
-                            {sortDirection === 'asc' ? '▲' : '▼'}
-                          </span>
-                        ) : null}
-                      </button>
-                    ) : (
-                      resolveLocalizedString(col.label, language, col.fieldId)
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {pagedItems.length ? (
-                pagedItems.map(row => (
+                <th
+                  key={col.fieldId}
+                  scope="col"
+                  aria-sort={
+                    sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+                  }
+                  style={{
+                    maxWidth: 180,
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    cursor: isSortableColumn(col) ? 'pointer' : 'default'
+                  }}
+                >
+                  {isSortableColumn(col) ? (
+                    <button
+                      type="button"
+                      className="ck-list-sort-header"
+                      onClick={() => {
+                        const nextField = col.fieldId;
+                        if (sortField === nextField) {
+                          setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setSortField(nextField);
+                          setSortDirection(defaultDirectionForField(nextField));
+                        }
+                        setPageIndex(0);
+                      }}
+                    >
+                      <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
+                      {sortField === col.fieldId ? (
+                        <span className="ck-list-sort-indicator" aria-hidden="true">
+                          {sortDirection === 'asc' ? '▲' : '▼'}
+                        </span>
+                      ) : null}
+                    </button>
+                  ) : (
+                    resolveLocalizedString(col.label, language, col.fieldId)
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {pagedItems.length ? (
+              pagedItems.map(row => (
                   <tr key={row.id} onClick={() => handleRowClick(row)} style={{ cursor: 'pointer' }}>
                     {columnsForTable.map(col => (
-                      <td
-                        key={col.fieldId}
-                        style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
-                      >
-                        {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={columnsForTable.length} className="muted">
-                    {tSystem('list.noRecords', language, 'No records found.')}
-                  </td>
+                    <td
+                      key={col.fieldId}
+                      style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
+                    >
+                      {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
+                    </td>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            ) : (
+              <tr>
+                  <td colSpan={columnsForTable.length} className="muted">
+                  {tSystem('list.noRecords', language, 'No records found.')}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
       ) : !showResults ? null : (
         <div className="ck-list-cards">
           {pagedItems.length ? (

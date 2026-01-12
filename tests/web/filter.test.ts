@@ -25,6 +25,33 @@ describe('computeAllowedOptions', () => {
     const allowed = computeAllowedOptions(undefined as any, options as any, []);
     expect(allowed).toEqual(options.en);
   });
+
+  it('supports multi-select dependency values (pipe-joined) by intersecting allowed sets', () => {
+    const multi = {
+      dependsOn: 'x',
+      optionMap: {
+        Vegan: ['Rice', 'Pasta', 'Beans'],
+        'No-salt': ['Rice', 'Beans'],
+        '*': ['Rice', 'Pasta', 'Beans', 'Salt']
+      }
+    };
+    const allowed = computeAllowedOptions(multi as any, { en: ['Rice', 'Pasta', 'Beans', 'Salt'] } as any, ['Vegan|No-salt']);
+    expect(allowed).toEqual(['Rice', 'Beans']);
+  });
+
+  it('multi-select: explicit full-key mapping takes precedence when present', () => {
+    const multi = {
+      dependsOn: 'x',
+      optionMap: {
+        Vegan: ['Rice'],
+        'No-salt': ['Beans'],
+        'Vegan|No-salt': ['Pasta'],
+        '*': ['Rice', 'Beans', 'Pasta']
+      }
+    };
+    const allowed = computeAllowedOptions(multi as any, { en: ['Rice', 'Beans', 'Pasta'] } as any, ['Vegan|No-salt']);
+    expect(allowed).toEqual(['Pasta']);
+  });
 });
 
 describe('buildLocalizedOptions (optionSort)', () => {
