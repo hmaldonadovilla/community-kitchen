@@ -79,6 +79,8 @@ import { toUploadItems } from './components/form/utils';
 import { clearFetchDataSourceCache } from '../data/dataSources';
 import { shouldHideField } from '../rules/visibility';
 import { getSystemFieldValue } from '../rules/systemFields';
+import { computeGuidedStepsStatus } from './features/steps/domain/computeStepStatus';
+import { resolveVirtualStepField } from './features/steps/domain/resolveVirtualStepField';
 
 type SubmissionMeta = {
   id?: string;
@@ -309,7 +311,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [debugEnabled] = useState<boolean>(() => detectDebug());
   const logEvent = useCallback(
     (event: string, payload?: Record<string, unknown>) => {
-      if (!debugEnabled || typeof console === 'undefined' || typeof console.info !== 'function') return;
+      // Default diagnostics are gated behind detectDebug() to avoid noisy consoles.
+      // Guided steps diagnostics are always enabled because they are essential for troubleshooting user flows.
+      const alwaysLog = event.startsWith('steps.') || event.startsWith('validation.navigate.');
+      if ((!debugEnabled && !alwaysLog) || typeof console === 'undefined' || typeof console.info !== 'function') return;
       try {
         console.info('[ReactForm]', event, payload || {});
       } catch (_) {
@@ -483,7 +488,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
   const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const pendingNavigationRef = useRef<{ target: 'list'; trigger: string } | null>(null);
-  const listOpenViewSubmitTimerRef = useRef<number | null>(null);
+  const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const [uploadNavigationNoticeOpen, setUploadNavigationNoticeOpen] = useState(false);
   const [autoSaveDrainTick, setAutoSaveDrainTick] = useState(0);
   const syncUploadQueueSize = useCallback(() => {
@@ -1888,7 +1893,41 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const customButtons = useMemo(() => {
     const createPresetEnabled = definition.createRecordPresetButtonsEnabled !== false;
     const applyVisibility = view !== 'list';
+    const guidedStepsCfg = applyVisibility && (definition as any)?.steps?.mode === 'guided' ? ((definition as any).steps as any) : null;
+    const guidedPrefix = (guidedStepsCfg?.stateFields?.prefix || '__ckStep').toString();
+    const guidedStepIds: string[] = guidedStepsCfg?.items
+      ? (guidedStepsCfg.items as any[])
+          .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
+          .filter(Boolean)
+      : [];
+    const guidedStatus = guidedStepsCfg ? computeGuidedStepsStatus({ definition: definition as any, language: language as any, values: values as any, lineItems: lineItems as any }) : null;
+    const guidedDefaultForwardGate = ((guidedStepsCfg as any)?.defaultForwardGate || 'whenValid') as 'free' | 'whenComplete' | 'whenValid';
+    const guidedMaxReachableIndex = (() => {
+      if (!guidedStepsCfg) return -1;
+      if (!guidedStepIds.length) return -1;
+      if (guidedDefaultForwardGate === 'free') return guidedStepIds.length - 1;
+      if (guidedDefaultForwardGate === 'whenComplete') {
+        return Math.min(guidedStepIds.length - 1, Math.max(0, (guidedStatus?.maxCompleteIndex ?? -1) + 1));
+      }
+      return Math.min(guidedStepIds.length - 1, Math.max(0, (guidedStatus?.maxValidIndex ?? -1) + 1));
+    })();
+    const guidedActiveStepIndex = guidedMaxReachableIndex >= 0 ? guidedMaxReachableIndex : 0;
+    const guidedActiveStepId = guidedStepIds[guidedActiveStepIndex] || guidedStepIds[0] || '';
+    const guidedVirtualState = guidedStepsCfg
+      ? ({
+          prefix: guidedPrefix,
+          activeStepId: guidedActiveStepId,
+          activeStepIndex: guidedActiveStepIndex,
+          maxValidIndex: guidedStatus?.maxValidIndex ?? -1,
+          maxCompleteIndex: guidedStatus?.maxCompleteIndex ?? -1,
+          steps: guidedStatus?.steps || []
+        } as any)
+      : null;
     const resolveButtonVisibilityValue = (fieldId: string): FieldValue | undefined => {
+      if (guidedVirtualState) {
+        const virtual = resolveVirtualStepField(fieldId, guidedVirtualState);
+        if (virtual !== undefined) return virtual as FieldValue;
+      }
       const direct = values[fieldId];
       if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
       // System/meta fields (not part of `values`): allow referencing STATUS/status/pdfUrl/etc in visibility rules.
@@ -3819,6 +3858,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
           ensureSession('beforeSaveUrls');
 
+          // Avoid optimistic-lock races with an autosave that started right before this upload.
+          // (Autosave is blocked while uploads are in-flight, but an autosave already in-flight can still finish and bump the server version.)
+          try {
+            if (autoSaveInFlightRef.current) {
+              const startedAt = Date.now();
+              logEvent('upload.saveUrls.waitAutosave', {
+                fieldPath: args.fieldPath,
+                recordId,
+                cachedVersion: Number.isFinite(Number(recordDataVersionRef.current)) ? Number(recordDataVersionRef.current) : null
+              });
+              const sleep = (ms: number) => new Promise<void>(r => globalThis.setTimeout(r, ms));
+              while (autoSaveInFlightRef.current) {
+                if (Date.now() - startedAt > 10_000) break;
+                await sleep(80);
+              }
+              logEvent('upload.saveUrls.waitAutosave.done', {
+                fieldPath: args.fieldPath,
+                recordId,
+                durationMs: Date.now() - startedAt,
+                stillInFlight: autoSaveInFlightRef.current
+              });
+              ensureSession('afterWaitAutosave');
+            }
+          } catch (_) {
+            // ignore
+          }
+
           const draft2 = buildDraftPayload({
             definition,
             formKey,
@@ -4964,9 +5030,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       />
     ) : null;
 
+  const guidedStepsTopSlot =
+    view === 'form' && (definition as any)?.steps?.mode === 'guided' ? <div id="ck-guided-stepsbar-slot" /> : null;
+
   const topBarNotice =
-    uploadNavigationNotice || recordStaleTopNotice || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
+    guidedStepsTopSlot || uploadNavigationNotice || recordStaleTopNotice || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {guidedStepsTopSlot}
         {uploadNavigationNotice}
         {recordStaleTopNotice}
         {dedupCheckingNotice}

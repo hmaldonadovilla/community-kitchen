@@ -1348,6 +1348,12 @@ export interface FormConfig {
    * Optional behavior settings for collapsible group sections in the edit view (dashboard-level).
    */
   groupBehavior?: GroupBehaviorConfig;
+
+  /**
+   * Optional guided steps configuration for the React edit (form) view.
+   * When set with `mode: "guided"`, the app renders a multi-step guided UI instead of the standard edit mode.
+   */
+  steps?: StepsConfig;
   /**
    * Optional UI setting: when true, block landscape orientation in the web app (shows a "rotate to portrait" message).
    *
@@ -1432,6 +1438,139 @@ export interface GroupBehaviorConfig {
    * - Intended for "report-like" summary pages where users should not have to expand each section.
    */
   summaryExpandAll?: boolean;
+}
+
+export type StepForwardGate = 'free' | 'whenComplete' | 'whenValid';
+export type StepAutoAdvance = 'off' | 'onComplete' | 'onValid';
+export type StepDisplayMode = 'inline' | 'overlay';
+export type StepDisplayModeOverride = StepDisplayMode | 'inherit';
+
+export interface StepsStateFieldsConfig {
+  /**
+   * Prefix for virtual/computed step fields exposed to visibility evaluation.
+   *
+   * Default: "__ckStep"
+   */
+  prefix?: string;
+}
+
+export interface StepsHeaderConfig {
+  /**
+   * Optional list of targets rendered consistently above the step content (e.g., customer/date/service).
+   */
+  include?: StepTargetConfig[];
+}
+
+export interface StepsRenderDefaultsConfig {
+  /**
+   * Default rendering mode for line item groups included in this step.
+   */
+  lineGroups?: { mode?: StepDisplayMode };
+  /**
+   * Default rendering mode for subgroups included in this step.
+   */
+  subGroups?: { mode?: StepDisplayMode };
+}
+
+export interface StepsConfig {
+  /**
+   * Enable guided steps UI mode in the React edit (form) view.
+   */
+  mode: 'guided';
+  stateFields?: StepsStateFieldsConfig;
+  defaultForwardGate?: StepForwardGate;
+  defaultAutoAdvance?: StepAutoAdvance;
+  header?: StepsHeaderConfig;
+  items: StepConfig[];
+}
+
+export interface StepNavigationConfig {
+  forwardGate?: StepForwardGate;
+  autoAdvance?: StepAutoAdvance;
+  allowBack?: boolean;
+}
+
+export interface StepRowFilterConfig {
+  includeWhen?: VisibilityCondition;
+  excludeWhen?: VisibilityCondition;
+}
+
+export interface StepSubGroupTargetConfig {
+  /**
+   * Subgroup id (stable identifier, not a label).
+   */
+  id: string;
+  /**
+   * Allowlist of visible subgroup row fields for this step.
+   */
+  fields?: string[];
+  rows?: StepRowFilterConfig;
+  /**
+   * Optional row filter used ONLY for guided-step validation/status.
+   * This lets a step display rows differently than it validates them (e.g. show all rows, but only validate rows where QTY > 0).
+   *
+   * If omitted, `rows` is used for both rendering and validation.
+   */
+  validationRows?: StepRowFilterConfig;
+  /**
+   * Optional override display mode for this subgroup relative to step defaults.
+   */
+  displayMode?: StepDisplayModeOverride;
+}
+
+export interface StepSubGroupCollectionConfig {
+  displayMode?: StepDisplayModeOverride;
+  include?: StepSubGroupTargetConfig[];
+}
+
+export interface StepLineGroupTargetConfig {
+  kind: 'lineGroup';
+  /**
+   * Line item group question id.
+   */
+  id: string;
+  /**
+   * How to render the group's row fields in the step.
+   * - groupEditor: use the existing group editor UI (table/progressive), scoped to this step.
+   * - liftedRowFields: render selected row fields as top-level step content (repeated per row).
+   */
+  presentation?: 'groupEditor' | 'liftedRowFields';
+  /**
+   * Allowlist of visible parent row fields for this step.
+   */
+  fields?: string[];
+  rows?: StepRowFilterConfig;
+  /**
+   * Optional row filter used ONLY for guided-step validation/status.
+   * This lets a step display rows differently than it validates them (e.g. show all rows, but only validate rows where QTY > 0).
+   *
+   * If omitted, `rows` is used for both rendering and validation.
+   */
+  validationRows?: StepRowFilterConfig;
+  /**
+   * Optional override display mode for this line group relative to step defaults.
+   */
+  displayMode?: StepDisplayModeOverride;
+  /**
+   * Optional subgroup scoping + display configuration for this step.
+   */
+  subGroups?: StepSubGroupCollectionConfig;
+}
+
+export interface StepQuestionTargetConfig {
+  kind: 'question';
+  id: string;
+}
+
+export type StepTargetConfig = StepQuestionTargetConfig | StepLineGroupTargetConfig;
+
+export interface StepConfig {
+  id: string;
+  label?: LocalizedString;
+  helpText?: LocalizedString;
+  render?: StepsRenderDefaultsConfig;
+  include: StepTargetConfig[];
+  navigation?: StepNavigationConfig;
 }
 
 export interface FormResult {
@@ -1586,6 +1725,12 @@ export interface WebFormDefinition {
    * Optional behavior settings for collapsible group sections in the edit view.
    */
   groupBehavior?: GroupBehaviorConfig;
+
+  /**
+   * Optional guided steps configuration for the React edit (form) view.
+   * When set with `mode: "guided"`, the app renders a multi-step guided UI instead of the standard edit mode.
+   */
+  steps?: StepsConfig;
   /**
    * Optional UI setting: when true, block landscape orientation in the web app (shows a "rotate to portrait" message).
    *

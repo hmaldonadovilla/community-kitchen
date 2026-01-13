@@ -1366,6 +1366,19 @@ components:
             - auto-collapse completed sections
             - optionally open the next incomplete section
             - optionally auto-scroll expanded sections into view
+        steps:
+          $ref: '#/components/schemas/StepsConfig'
+          description: |
+            Optional **guided steps** configuration for the React Edit (form) view.
+
+            When set with `mode: "guided"`, the app renders a multi-step guided UI:
+            - a stepper at the top of the edit experience
+            - step-scoped progressive disclosure (only show fields relevant to the active step)
+            - configurable forward gating + automatic advancement (default: `whenValid` + `onValid`)
+
+            Notes:
+            - Steps can mix top-level questions and line item groups.
+            - Step state is exposed via virtual fields like `__ckStepValid_<stepId>` so existing `visibility` rules can gate buttons/fields.
         portraitOnly:
           type: boolean
           description: |
@@ -1617,6 +1630,217 @@ components:
           type: boolean
           description: When true, keep collapsible group sections expanded in the Summary view (native React summary).
       additionalProperties: false
+
+    StepsConfig:
+      type: object
+      description: |
+        Guided multi-step Edit (form) mode configuration.
+
+        When enabled, the React web app renders:
+        - a stepper at the top of the edit view
+        - step-scoped progressive disclosure (only show fields relevant to the active step)
+        - configurable forward gating + auto-advance (defaults: `whenValid` + `onValid`)
+      properties:
+        mode:
+          type: string
+          enum: [guided]
+          description: Enable guided steps mode for this form.
+        stateFields:
+          type: object
+          description: Optional configuration for virtual/computed step fields.
+          properties:
+            prefix:
+              type: string
+              description: Prefix for virtual step fields. Default `__ckStep`.
+          additionalProperties: false
+        defaultForwardGate:
+          type: string
+          enum: [free, whenComplete, whenValid]
+          description: Default forward navigation gate for all steps.
+        defaultAutoAdvance:
+          type: string
+          enum: [off, onComplete, onValid]
+          description: Default auto-advance behavior for all steps.
+        header:
+          $ref: '#/components/schemas/StepsHeaderConfig'
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/StepConfig'
+      required: [mode, items]
+      additionalProperties: true
+
+    StepsHeaderConfig:
+      type: object
+      description: Optional targets rendered above step content (e.g., customer/date/service).
+      properties:
+        include:
+          type: array
+          items:
+            $ref: '#/components/schemas/StepTargetConfig'
+      additionalProperties: false
+
+    StepConfig:
+      type: object
+      description: Single step in guided mode.
+      properties:
+        id:
+          type: string
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+        helpText:
+          $ref: '#/components/schemas/LocalizedString'
+        render:
+          $ref: '#/components/schemas/StepsRenderDefaultsConfig'
+        include:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/StepTargetConfig'
+        navigation:
+          $ref: '#/components/schemas/StepNavigationConfig'
+      required: [id, include]
+      additionalProperties: true
+
+    StepsRenderDefaultsConfig:
+      type: object
+      description: Per-step default rendering for line groups and subgroups.
+      properties:
+        lineGroups:
+          type: object
+          properties:
+            mode:
+              type: string
+              enum: [inline, overlay]
+          additionalProperties: false
+        subGroups:
+          type: object
+          properties:
+            mode:
+              type: string
+              enum: [inline, overlay]
+          additionalProperties: false
+      additionalProperties: false
+
+    StepNavigationConfig:
+      type: object
+      description: Optional gating + auto-advance behavior for a step.
+      properties:
+        forwardGate:
+          type: string
+          enum: [free, whenComplete, whenValid]
+        autoAdvance:
+          type: string
+          enum: [off, onComplete, onValid]
+        allowBack:
+          type: boolean
+          description: When true (default), users can navigate back to previous steps.
+      additionalProperties: false
+
+    StepRowFilterConfig:
+      type: object
+      description: |
+        Row filtering for line item groups/subgroups in a step.
+        Filtering affects rendering and step evaluation scope; it does not delete stored rows.
+      properties:
+        includeWhen:
+          $ref: '#/components/schemas/VisibilityCondition'
+        excludeWhen:
+          $ref: '#/components/schemas/VisibilityCondition'
+      additionalProperties: false
+
+    StepSubGroupTargetConfig:
+      type: object
+      description: Subgroup scoping within a step.
+      properties:
+        id:
+          type: string
+          description: Subgroup id (stable identifier).
+        fields:
+          type: array
+          items:
+            type: string
+          description: Allowlist of visible subgroup row field ids for this step.
+        rows:
+          $ref: '#/components/schemas/StepRowFilterConfig'
+        validationRows:
+          $ref: '#/components/schemas/StepRowFilterConfig'
+          description: |
+            Optional row filter used ONLY for guided-step validation/status (not rendering).
+            This lets a step display rows differently than it validates them (e.g. show all rows, but only validate rows where QTY > 0).
+            If omitted, `rows` is used for both rendering and validation.
+        displayMode:
+          type: string
+          enum: [inline, overlay, inherit]
+      required: [id]
+      additionalProperties: true
+
+    StepSubGroupCollectionConfig:
+      type: object
+      description: Optional subgroup allowlist + default rendering behavior for a line group in a step.
+      properties:
+        displayMode:
+          type: string
+          enum: [inline, overlay, inherit]
+        include:
+          type: array
+          items:
+            $ref: '#/components/schemas/StepSubGroupTargetConfig'
+      additionalProperties: true
+
+    StepQuestionTargetConfig:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [question]
+        id:
+          type: string
+      required: [kind, id]
+      additionalProperties: false
+
+    StepLineGroupTargetConfig:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [lineGroup]
+        id:
+          type: string
+          description: Line item group question id.
+        presentation:
+          type: string
+          enum: [groupEditor, liftedRowFields]
+          description: |
+            How this line group should be rendered inside the step.
+            - groupEditor: use the existing line item group editor UI
+            - liftedRowFields: show selected nested row fields as top-level step content
+        fields:
+          type: array
+          items:
+            type: string
+          description: Allowlist of visible parent row field ids for this step.
+        rows:
+          $ref: '#/components/schemas/StepRowFilterConfig'
+        validationRows:
+          $ref: '#/components/schemas/StepRowFilterConfig'
+          description: |
+            Optional row filter used ONLY for guided-step validation/status (not rendering).
+            This lets a step display rows differently than it validates them (e.g. show all rows, but only validate rows where QTY > 0).
+            If omitted, `rows` is used for both rendering and validation.
+        displayMode:
+          type: string
+          enum: [inline, overlay, inherit]
+        subGroups:
+          $ref: '#/components/schemas/StepSubGroupCollectionConfig'
+      required: [kind, id]
+      additionalProperties: true
+
+    StepTargetConfig:
+      oneOf:
+        - $ref: '#/components/schemas/StepQuestionTargetConfig'
+        - $ref: '#/components/schemas/StepLineGroupTargetConfig'
 
     ActionBarsConfig:
       type: object

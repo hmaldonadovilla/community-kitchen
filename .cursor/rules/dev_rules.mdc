@@ -11,7 +11,7 @@ description: Snyk Security At Inception
 ## Application bundle
 
 - The application bundle that is generated and available at dist/Code.js is a compiled version of the application code.
-- Elemets written in formHtml at /src/WebFormTemplate.ts must not contain typescript references since the final bundle is pure javascript.
+- Elements written in formHtml at /src/WebFormTemplate.ts must not contain typescript references since the final bundle is pure javascript.
 
 ## New features
 

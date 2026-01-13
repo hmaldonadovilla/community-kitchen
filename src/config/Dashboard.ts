@@ -17,7 +17,8 @@ import {
   ListViewLegendItem,
   ListViewSearchConfig,
   ListViewViewConfig,
-  LocalizedString
+  LocalizedString,
+  StepsConfig
 } from '../types';
 
 export const DASHBOARD_SHEET_NAME = 'Forms Dashboard';
@@ -151,6 +152,7 @@ export class Dashboard {
       const languages = dashboardConfig?.languages;
       const defaultLanguage = dashboardConfig?.defaultLanguage;
       const languageSelectorEnabled = dashboardConfig?.languageSelectorEnabled;
+      const steps = dashboardConfig?.steps;
       if (title && configSheetName) {
         forms.push({
           title,
@@ -184,6 +186,7 @@ export class Dashboard {
           actionBars,
           appHeader,
           groupBehavior,
+          steps,
           portraitOnly,
           submissionConfirmationMessage,
           submissionConfirmationTitle,
@@ -255,6 +258,7 @@ export class Dashboard {
     languages?: Array<'EN' | 'FR' | 'NL'>;
     defaultLanguage?: 'EN' | 'FR' | 'NL';
     languageSelectorEnabled?: boolean;
+    steps?: StepsConfig;
   } | undefined {
     if (!raw || (typeof raw === 'string' && raw.trim() === '')) return undefined;
     const value = raw.toString().trim();
@@ -757,6 +761,18 @@ export class Dashboard {
             summaryExpandAll
           };
 
+    const steps = this.normalizeSteps(
+      (parsed as any).steps !== undefined
+        ? (parsed as any).steps
+        : (parsed as any).guidedSteps !== undefined
+          ? (parsed as any).guidedSteps
+          : (parsed as any).stepper !== undefined
+            ? (parsed as any).stepper
+            : (parsed as any).stepsConfig !== undefined
+              ? (parsed as any).stepsConfig
+              : undefined
+    );
+
     const submissionObj =
       parsed.submission !== undefined && parsed.submission !== null && typeof parsed.submission === 'object' ? parsed.submission : undefined;
     const submissionConfirmationRaw =
@@ -879,7 +895,8 @@ export class Dashboard {
       !summaryButtonLabel &&
       !languages &&
       defaultLanguage === undefined &&
-      languageSelectorEnabled === undefined
+      languageSelectorEnabled === undefined &&
+      !steps
     ) {
       return undefined;
     }
@@ -917,7 +934,8 @@ export class Dashboard {
       summaryButtonLabel,
       languages,
       defaultLanguage,
-      languageSelectorEnabled
+      languageSelectorEnabled,
+      steps
     };
   }
 
@@ -1069,6 +1087,225 @@ export class Dashboard {
     }
 
     return Object.keys(cfg).length ? cfg : undefined;
+  }
+
+  private normalizeSteps(value: any): StepsConfig | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+
+    const normalizeString = (input: any): string => {
+      if (input === undefined || input === null) return '';
+      return input.toString().trim();
+    };
+
+    const normalizeLocalized = (input: any): any => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'string') {
+        const trimmed = input.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof input !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        const trimmed = v.trim();
+        if (!trimmed) return;
+        out[k.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
+
+    const normalizeGate = (raw: any): 'free' | 'whenComplete' | 'whenValid' | undefined => {
+      const s = normalizeString(raw).toLowerCase();
+      if (!s) return undefined;
+      if (s === 'free' || s === 'any' || s === 'always') return 'free';
+      if (s === 'whencomplete' || s === 'complete') return 'whenComplete';
+      if (s === 'whenvalid' || s === 'valid') return 'whenValid';
+      return undefined;
+    };
+
+    const normalizeAutoAdvance = (raw: any): 'off' | 'onComplete' | 'onValid' | undefined => {
+      const s = normalizeString(raw).toLowerCase();
+      if (!s) return undefined;
+      if (s === 'off' || s === 'none' || s === 'false' || s === '0') return 'off';
+      if (s === 'oncomplete' || s === 'complete') return 'onComplete';
+      if (s === 'onvalid' || s === 'valid') return 'onValid';
+      return undefined;
+    };
+
+    const normalizeDisplayMode = (raw: any): 'inline' | 'overlay' | 'inherit' | undefined => {
+      const s = normalizeString(raw).toLowerCase();
+      if (!s) return undefined;
+      if (s === 'inline') return 'inline';
+      if (s === 'overlay') return 'overlay';
+      if (s === 'inherit') return 'inherit';
+      return undefined;
+    };
+
+    const normalizeCondition = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const fieldId = normalizeString((raw as any).fieldId ?? (raw as any).field ?? (raw as any).id);
+      if (!fieldId) return undefined;
+      const out: any = { fieldId };
+      if ((raw as any).equals !== undefined) out.equals = (raw as any).equals;
+      if ((raw as any).greaterThan !== undefined) out.greaterThan = (raw as any).greaterThan;
+      if ((raw as any).lessThan !== undefined) out.lessThan = (raw as any).lessThan;
+      if ((raw as any).notEmpty !== undefined) out.notEmpty = Boolean((raw as any).notEmpty);
+      return out;
+    };
+
+    const normalizeRowFilter = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const includeWhen = normalizeCondition((raw as any).includeWhen);
+      const excludeWhen = normalizeCondition((raw as any).excludeWhen);
+      if (!includeWhen && !excludeWhen) return undefined;
+      const out: any = {};
+      if (includeWhen) out.includeWhen = includeWhen;
+      if (excludeWhen) out.excludeWhen = excludeWhen;
+      return out;
+    };
+
+    const normalizeTarget = (raw: any): any => {
+      if (!raw) return null;
+      // Allow compact string as a question id
+      if (typeof raw === 'string') {
+        const id = normalizeString(raw);
+        return id ? { kind: 'question', id } : null;
+      }
+      if (typeof raw !== 'object') return null;
+      const kindRaw = normalizeString((raw as any).kind ?? (raw as any).type).toLowerCase();
+      const kind = kindRaw === 'linegroup' || kindRaw === 'line_item_group' ? 'lineGroup' : 'question';
+      const id = normalizeString((raw as any).id ?? (raw as any).fieldId);
+      if (!id) return null;
+      if (kind === 'question') return { kind: 'question', id };
+
+      const out: any = { kind: 'lineGroup', id };
+      const presRaw = normalizeString((raw as any).presentation).toLowerCase();
+      if (presRaw === 'groupeditor' || presRaw === 'group') out.presentation = 'groupEditor';
+      if (presRaw === 'liftedrowfields' || presRaw === 'lifted') out.presentation = 'liftedRowFields';
+      const fieldsRaw = (raw as any).fields;
+      const fields =
+        Array.isArray(fieldsRaw)
+          ? (fieldsRaw as any[]).map(v => normalizeString(v)).filter(Boolean)
+          : typeof fieldsRaw === 'string'
+            ? fieldsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : [];
+      if (fields.length) out.fields = fields;
+      const rows = normalizeRowFilter((raw as any).rows);
+      if (rows) out.rows = rows;
+      const validationRows = normalizeRowFilter((raw as any).validationRows);
+      if (validationRows) out.validationRows = validationRows;
+      const displayMode = normalizeDisplayMode((raw as any).displayMode);
+      if (displayMode) out.displayMode = displayMode;
+
+      const subGroupsRaw = (raw as any).subGroups;
+      if (subGroupsRaw && typeof subGroupsRaw === 'object') {
+        const sgOut: any = {};
+        const sgDisplayMode = normalizeDisplayMode((subGroupsRaw as any).displayMode);
+        if (sgDisplayMode) sgOut.displayMode = sgDisplayMode;
+        const includeRaw = (subGroupsRaw as any).include;
+        const includeList: any[] = Array.isArray(includeRaw) ? includeRaw : includeRaw ? [includeRaw] : [];
+        const normalizedSubs: any[] = [];
+        includeList.forEach(entry => {
+          if (!entry || typeof entry !== 'object') return;
+          const sgId = normalizeString((entry as any).id);
+          if (!sgId) return;
+          const sg: any = { id: sgId };
+          const sgFieldsRaw = (entry as any).fields;
+          const sgFields =
+            Array.isArray(sgFieldsRaw)
+              ? (sgFieldsRaw as any[]).map(v => normalizeString(v)).filter(Boolean)
+              : typeof sgFieldsRaw === 'string'
+                ? sgFieldsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
+                : [];
+          if (sgFields.length) sg.fields = sgFields;
+          const sgRows = normalizeRowFilter((entry as any).rows);
+          if (sgRows) sg.rows = sgRows;
+          const sgValidationRows = normalizeRowFilter((entry as any).validationRows);
+          if (sgValidationRows) sg.validationRows = sgValidationRows;
+          const sgMode = normalizeDisplayMode((entry as any).displayMode);
+          if (sgMode) sg.displayMode = sgMode;
+          normalizedSubs.push(sg);
+        });
+        if (normalizedSubs.length) sgOut.include = normalizedSubs;
+        if (Object.keys(sgOut).length) out.subGroups = sgOut;
+      }
+
+      return out;
+    };
+
+    const modeRaw = normalizeString((value as any).mode ?? (value as any).uiMode ?? (value as any).editMode).toLowerCase();
+    if (modeRaw && modeRaw !== 'guided') return undefined;
+
+    const stateFieldsRaw = (value as any).stateFields;
+    const prefixRaw =
+      stateFieldsRaw && typeof stateFieldsRaw === 'object'
+        ? normalizeString((stateFieldsRaw as any).prefix)
+        : normalizeString((value as any).stateFieldPrefix ?? (value as any).stateFieldsPrefix);
+    const stateFields = prefixRaw ? ({ prefix: prefixRaw } as any) : undefined;
+
+    const defaultForwardGate = normalizeGate((value as any).defaultForwardGate);
+    const defaultAutoAdvance = normalizeAutoAdvance((value as any).defaultAutoAdvance);
+
+    const headerRaw = (value as any).header;
+    const header = (() => {
+      if (!headerRaw || typeof headerRaw !== 'object') return undefined;
+      const includeRaw = (headerRaw as any).include;
+      const targetsRaw: any[] = Array.isArray(includeRaw) ? includeRaw : includeRaw ? [includeRaw] : [];
+      const include = targetsRaw.map(normalizeTarget).filter(Boolean);
+      return include.length ? ({ include } as any) : undefined;
+    })();
+
+    const itemsRaw = (value as any).items;
+    const itemsList: any[] = Array.isArray(itemsRaw) ? itemsRaw : itemsRaw ? [itemsRaw] : [];
+    const items: any[] = [];
+    itemsList.forEach(stepRaw => {
+      if (!stepRaw || typeof stepRaw !== 'object') return;
+      const id = normalizeString((stepRaw as any).id);
+      if (!id) return;
+      const includeRaw = (stepRaw as any).include;
+      const includeList: any[] = Array.isArray(includeRaw) ? includeRaw : includeRaw ? [includeRaw] : [];
+      const include = includeList.map(normalizeTarget).filter(Boolean);
+      if (!include.length) return;
+      const step: any = { id, include };
+      const label = normalizeLocalized((stepRaw as any).label);
+      if (label) step.label = label;
+      const helpText = normalizeLocalized((stepRaw as any).helpText);
+      if (helpText) step.helpText = helpText;
+      const navRaw = (stepRaw as any).navigation;
+      if (navRaw && typeof navRaw === 'object') {
+        const nav: any = {};
+        const gate = normalizeGate((navRaw as any).forwardGate);
+        const adv = normalizeAutoAdvance((navRaw as any).autoAdvance);
+        if (gate) nav.forwardGate = gate;
+        if (adv) nav.autoAdvance = adv;
+        if ((navRaw as any).allowBack !== undefined) nav.allowBack = Boolean((navRaw as any).allowBack);
+        if (Object.keys(nav).length) step.navigation = nav;
+      }
+      const renderRaw = (stepRaw as any).render;
+      if (renderRaw && typeof renderRaw === 'object') {
+        const render: any = {};
+        const lgRaw = (renderRaw as any).lineGroups;
+        const sgRaw = (renderRaw as any).subGroups;
+        if (lgRaw && typeof lgRaw === 'object') {
+          const m = normalizeDisplayMode((lgRaw as any).mode);
+          if (m && m !== 'inherit') render.lineGroups = { mode: m };
+        }
+        if (sgRaw && typeof sgRaw === 'object') {
+          const m = normalizeDisplayMode((sgRaw as any).mode);
+          if (m && m !== 'inherit') render.subGroups = { mode: m };
+        }
+        if (Object.keys(render).length) step.render = render;
+      }
+      items.push(step);
+    });
+    if (!items.length) return undefined;
+
+    const out: any = { mode: 'guided', items };
+    if (stateFields) out.stateFields = stateFields;
+    if (defaultForwardGate) out.defaultForwardGate = defaultForwardGate;
+    if (defaultAutoAdvance) out.defaultAutoAdvance = defaultAutoAdvance;
+    if (header) out.header = header;
+    return out as StepsConfig;
   }
 
   private normalizeLanguageCode(value: any): 'EN' | 'FR' | 'NL' | undefined {
