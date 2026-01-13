@@ -72,6 +72,11 @@ import {
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 import { validateRules } from '../../rules/validation';
+import { matchesWhen } from '../../rules/visibility';
+import { validateForm } from '../app/submission';
+import { StepsBar } from '../features/steps/components/StepsBar';
+import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
+import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
 
 interface SubgroupOverlayState {
   open: boolean;
@@ -81,6 +86,19 @@ interface SubgroupOverlayState {
 interface LineItemGroupOverlayState {
   open: boolean;
   groupId?: string;
+  /**
+   * Optional override for rendering the group inside the overlay (used by guided steps to
+   * restrict fields/subgroups without mutating the base definition).
+   */
+  group?: WebQuestionDefinition;
+  /**
+   * Optional rendering-only row filter for the parent group. Does not delete stored rows.
+   */
+  rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
+  /**
+   * When true, hide the inline subgroup editor sections and rely on subgroup "open" pills/overlays instead.
+   */
+  hideInlineSubgroups?: boolean;
 }
 
 interface InfoOverlayState {
@@ -335,6 +353,426 @@ const FormView: React.FC<FormViewProps> = ({
     lineItemsRef.current = lineItems;
   }, [values, lineItems]);
 
+  const guidedStepsCfg = definition.steps?.mode === 'guided' ? definition.steps : undefined;
+  const guidedEnabled = Boolean(guidedStepsCfg && Array.isArray(guidedStepsCfg.items) && guidedStepsCfg.items.length > 0);
+  const guidedPrefix = (guidedStepsCfg?.stateFields?.prefix || '__ckStep').toString();
+
+  const guidedStatus = useMemo(() => {
+    if (!guidedEnabled) return { steps: [], maxCompleteIndex: -1, maxValidIndex: -1 };
+    return computeGuidedStepsStatus({ definition, language, values, lineItems });
+  }, [definition, guidedEnabled, language, lineItems, values]);
+
+  const guidedStepIds = useMemo(() => {
+    if (!guidedEnabled) return [] as string[];
+    return (guidedStepsCfg!.items || [])
+      .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
+      .filter(Boolean);
+  }, [guidedEnabled, guidedStepsCfg]);
+
+  const [activeGuidedStepId, setActiveGuidedStepId] = useState<string>(() => {
+    const first = guidedStepIds[0];
+    return first ? first : '';
+  });
+
+  const activeGuidedStepIndex = Math.max(0, guidedStepIds.indexOf(activeGuidedStepId));
+  const normalizeForwardGate = useCallback(
+    (raw: any, fallback: 'free' | 'whenComplete' | 'whenValid'): 'free' | 'whenComplete' | 'whenValid' => {
+      const v = (raw ?? '').toString().trim().toLowerCase();
+      if (v === 'free') return 'free';
+      if (v === 'whencomplete') return 'whenComplete';
+      if (v === 'whenvalid') return 'whenValid';
+      // Accept common mis-typed aliases to reduce config footguns.
+      if (v === 'oncomplete') return 'whenComplete';
+      if (v === 'onvalid') return 'whenValid';
+      return fallback;
+    },
+    []
+  );
+  const normalizeAutoAdvance = useCallback(
+    (raw: any, fallback: 'off' | 'onComplete' | 'onValid'): 'off' | 'onComplete' | 'onValid' => {
+      const v = (raw ?? '').toString().trim().toLowerCase();
+      if (v === 'off') return 'off';
+      if (v === 'oncomplete') return 'onComplete';
+      if (v === 'onvalid') return 'onValid';
+      // Accept common mis-typed aliases to reduce config footguns.
+      if (v === 'whencomplete') return 'onComplete';
+      if (v === 'whenvalid') return 'onValid';
+      return fallback;
+    },
+    []
+  );
+  const guidedDefaultForwardGate = normalizeForwardGate((guidedStepsCfg as any)?.defaultForwardGate, 'whenValid');
+  const guidedDefaultAutoAdvance = normalizeAutoAdvance((guidedStepsCfg as any)?.defaultAutoAdvance, 'onValid');
+  const maxReachableGuidedIndex = (() => {
+    if (!guidedEnabled) return -1;
+    if (!guidedStepIds.length) return -1;
+    if (!guidedStepsCfg) return -1;
+
+    const stepCfgById = new Map<string, any>();
+    (guidedStepsCfg.items || []).forEach((s: any) => {
+      const id = (s?.id ?? '').toString().trim();
+      if (!id) return;
+      if (!stepCfgById.has(id)) stepCfgById.set(id, s);
+    });
+    const statusById = new Map<string, any>();
+    (guidedStatus.steps || []).forEach((s: any) => {
+      const id = (s?.id ?? '').toString().trim();
+      if (!id) return;
+      statusById.set(id, s);
+    });
+
+    let reachable = 0;
+    for (let idx = 0; idx < guidedStepIds.length - 1; idx++) {
+      const stepId = guidedStepIds[idx];
+      const cfg = stepCfgById.get(stepId);
+      const gate = normalizeForwardGate(cfg?.navigation?.forwardGate ?? cfg?.forwardGate, guidedDefaultForwardGate);
+      if (gate === 'free') {
+        reachable = idx + 1;
+        continue;
+      }
+      const st = statusById.get(stepId);
+      const ok = gate === 'whenComplete' ? !!st?.complete : !!st?.valid;
+      if (!ok) break;
+      reachable = idx + 1;
+    }
+    return reachable;
+  })();
+
+  // Emit a one-time diagnostic when guided steps are enabled for this form.
+  useEffect(() => {
+    if (!guidedEnabled) return;
+    onDiagnostic?.('steps.enabled', { mode: 'guided', stepCount: guidedStepIds.length });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guidedEnabled]);
+
+  // Clamp/initialize the active step when step config or validity changes.
+  useEffect(() => {
+    if (!guidedEnabled) return;
+    if (!guidedStepIds.length) return;
+    const currentIdx = guidedStepIds.indexOf(activeGuidedStepId);
+    const maxReach = Math.min(guidedStepIds.length - 1, Math.max(0, maxReachableGuidedIndex));
+    if (currentIdx >= 0 && currentIdx <= maxReach) return;
+    const nextId = guidedStepIds[Math.max(0, Math.min(maxReach, guidedStepIds.length - 1))] || guidedStepIds[0];
+    if (!nextId) return;
+    setActiveGuidedStepId(nextId);
+    onDiagnostic?.('steps.step.change', { from: currentIdx >= 0 ? guidedStepIds[currentIdx] : null, to: nextId, reason: 'load' });
+  }, [activeGuidedStepId, guidedEnabled, guidedStepIds, maxReachableGuidedIndex, onDiagnostic]);
+
+  const guidedVirtualState = useMemo(() => {
+    if (!guidedEnabled) return null;
+    const idx = Math.max(0, guidedStepIds.indexOf(activeGuidedStepId));
+    return {
+      prefix: guidedPrefix,
+      activeStepId: activeGuidedStepId,
+      activeStepIndex: idx,
+      maxValidIndex: guidedStatus.maxValidIndex,
+      maxCompleteIndex: guidedStatus.maxCompleteIndex,
+      steps: guidedStatus.steps
+    };
+  }, [activeGuidedStepId, guidedEnabled, guidedPrefix, guidedStatus.maxCompleteIndex, guidedStatus.maxValidIndex, guidedStatus.steps, guidedStepIds]);
+
+  const guidedInlineLineGroupIds = useMemo(() => {
+    const out = new Set<string>();
+    if (!guidedEnabled || !guidedStepsCfg) return out;
+    const steps = guidedStepsCfg.items || [];
+    if (!steps.length) return out;
+    const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
+    const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
+    const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
+
+    [...headerTargets, ...stepTargets].forEach(target => {
+      if (!target || typeof target !== 'object') return;
+      const kind = (target.kind || '').toString().trim();
+      const id = (target.id || '').toString().trim();
+      if (kind !== 'lineGroup' || !id) return;
+      const groupQ = definition.questions.find(q => q.id === id && q.type === 'LINE_ITEM_GROUP');
+      if (!groupQ) return;
+
+      const presentationRaw = (target.presentation || 'groupEditor').toString().trim().toLowerCase();
+      const presentation: 'groupEditor' | 'liftedRowFields' =
+        presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
+
+      const targetModeRaw = (target.displayMode || 'inherit').toString().trim().toLowerCase();
+      const stepModeRaw = stepLineGroupsDefaultMode ? stepLineGroupsDefaultMode.toString().trim().toLowerCase() : '';
+      const inheritedOverlay = !!(groupQ.lineItemConfig as any)?.ui?.openInOverlay;
+      const resolvedLineMode =
+        targetModeRaw === 'inline' || targetModeRaw === 'overlay'
+          ? (targetModeRaw as 'inline' | 'overlay')
+          : stepModeRaw === 'inline' || stepModeRaw === 'overlay'
+            ? (stepModeRaw as 'inline' | 'overlay')
+            : inheritedOverlay
+              ? 'overlay'
+              : 'inline';
+      const effectiveLineMode: 'inline' | 'overlay' = presentation === 'liftedRowFields' ? 'inline' : resolvedLineMode;
+      if (effectiveLineMode === 'inline') out.add(id);
+    });
+
+    return out;
+  }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepsCfg]);
+
+  const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
+  const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const guidedAutoAdvanceStateRef = useRef<{ stepId: string; lastSatisfied: boolean; armed: boolean } | null>(null);
+  const guidedAutoAdvanceAttemptRef = useRef<(() => void) | null>(null);
+  const guidedLastUserEditAtRef = useRef<number>(0);
+  const [guidedStepAttempted, setGuidedStepAttempted] = useState<Record<string, boolean>>({});
+  const [guidedStepGateNotice, setGuidedStepGateNotice] = useState<{ stepId: string; tone: 'error' | 'warning'; message: string } | null>(
+    null
+  );
+
+  const selectGuidedStep = useCallback(
+    (nextStepId: string, reason: 'user' | 'auto' = 'user') => {
+      if (!guidedEnabled) return;
+      const nextId = (nextStepId || '').toString().trim();
+      if (!nextId) return;
+      const nextIdx = guidedStepIds.indexOf(nextId);
+      const currentIdx = guidedStepIds.indexOf(activeGuidedStepId);
+      if (nextIdx < 0) return;
+      if (nextIdx === currentIdx) return;
+
+      // Back navigation
+      if (nextIdx < currentIdx) {
+        const currentCfg = (guidedStepsCfg as any)?.items?.[Math.max(0, currentIdx)] as any;
+        const allowBack = (currentCfg?.navigation?.allowBack ?? currentCfg?.allowBack) !== false;
+        if (!allowBack) {
+          onDiagnostic?.('steps.step.blocked', { from: activeGuidedStepId, to: nextId, gate: 'allowBack', reason: 'allowBack=false' });
+          return;
+        }
+        setActiveGuidedStepId(nextId);
+        onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason });
+        return;
+      }
+
+      // Forward navigation: use computed reachability (contiguous gating).
+      if (nextIdx > maxReachableGuidedIndex) {
+        // Mark the current step as "attempted" so we can surface step-level guidance.
+        setGuidedStepAttempted(prev => ({ ...(prev || {}), [activeGuidedStepId]: true }));
+        onDiagnostic?.('steps.step.blocked', {
+          from: activeGuidedStepId,
+          to: nextId,
+          gate: guidedDefaultForwardGate,
+          reason: 'notReachable',
+          maxReachableIndex: maxReachableGuidedIndex
+        });
+        return;
+      }
+
+      setActiveGuidedStepId(nextId);
+      onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason });
+    },
+    [
+      activeGuidedStepId,
+      guidedDefaultForwardGate,
+      guidedEnabled,
+      guidedStepIds,
+      guidedStepsCfg,
+      maxReachableGuidedIndex,
+      onDiagnostic
+    ]
+  );
+
+  // Auto-advance (default: onValid) while avoiding jumps mid-typing.
+  useEffect(() => {
+    if (!guidedEnabled) return;
+    if (!guidedStepIds.length) return;
+    if (!guidedStepsCfg) return;
+    if (activeGuidedStepIndex >= guidedStepIds.length - 1) return;
+
+    const stepCfg = guidedStepsCfg.items.find(s => (s?.id || '').toString() === activeGuidedStepId) as any;
+    const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+    const autoAdvance = normalizeAutoAdvance(
+      stepCfg?.navigation?.autoAdvance ?? stepCfg?.autoAdvance ?? (guidedStepsCfg as any)?.defaultAutoAdvance,
+      guidedDefaultAutoAdvance
+    );
+    if (autoAdvance === 'off') {
+      guidedAutoAdvanceAttemptRef.current = null;
+      if (guidedAutoAdvanceTimerRef.current) {
+        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+        guidedAutoAdvanceTimerRef.current = null;
+      }
+      guidedAutoAdvanceStateRef.current = null;
+      return;
+    }
+
+    const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
+    const satisfied = autoAdvance === 'onValid' ? !!stepStatus?.valid : !!stepStatus?.complete;
+
+    const state = guidedAutoAdvanceStateRef.current;
+    // On step change: record current satisfied state but never auto-advance immediately.
+    if (!state || state.stepId !== activeGuidedStepId) {
+      guidedAutoAdvanceAttemptRef.current = null;
+      guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: satisfied, armed: false };
+      if (guidedAutoAdvanceTimerRef.current) {
+        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+        guidedAutoAdvanceTimerRef.current = null;
+      }
+      if (satisfied) {
+        const nextId = guidedStepIds[activeGuidedStepIndex + 1];
+        onDiagnostic?.('steps.step.autoAdvance.skipImmediate', {
+          from: activeGuidedStepId,
+          to: nextId || null,
+          gate: forwardGate,
+          mode: autoAdvance,
+          reason: 'stepChangeAlreadySatisfied'
+        });
+      }
+      return;
+    }
+
+    // Disarm when the step is not satisfied.
+    if (!satisfied) {
+      guidedAutoAdvanceAttemptRef.current = null;
+      guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: false, armed: false };
+      if (guidedAutoAdvanceTimerRef.current) {
+        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+        guidedAutoAdvanceTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Arm when we transition from not-satisfied -> satisfied.
+    const shouldArm = !state.lastSatisfied && satisfied;
+    const nextState = { stepId: activeGuidedStepId, lastSatisfied: satisfied, armed: state.armed || shouldArm };
+    guidedAutoAdvanceStateRef.current = nextState;
+    if (shouldArm) {
+      const nextId = guidedStepIds[activeGuidedStepIndex + 1];
+      onDiagnostic?.('steps.step.autoAdvance.armed', {
+        from: activeGuidedStepId,
+        to: nextId || null,
+        gate: forwardGate,
+        mode: autoAdvance
+      });
+    }
+    if (!nextState.armed) {
+      guidedAutoAdvanceAttemptRef.current = null;
+      return;
+    }
+
+    // Even when auto-advance is armed, never bypass the forward-gate reachability.
+    // NOTE: We still track/arm while not reachable, so we don't lose the transition moment.
+    const nextReachable = maxReachableGuidedIndex >= activeGuidedStepIndex + 1;
+    if (!nextReachable) {
+      guidedAutoAdvanceAttemptRef.current = null;
+      if (guidedAutoAdvanceTimerRef.current) {
+        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+        guidedAutoAdvanceTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (guidedAutoAdvanceTimerRef.current) {
+      globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+      guidedAutoAdvanceTimerRef.current = null;
+    }
+
+    let deferLogged = false;
+    const attemptAdvance = () => {
+      guidedAutoAdvanceTimerRef.current = null;
+      const nextId = guidedStepIds[activeGuidedStepIndex + 1];
+      if (!nextId) return;
+
+      // If the user is actively editing inside the step, keep waiting (do not steal focus).
+      try {
+        const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+        const isTextEntryEl = (el: any): boolean => {
+          if (!el) return false;
+          const tag = (el.tagName || '').toString().toLowerCase();
+          if (tag === 'textarea') return true;
+          if (tag === 'input') {
+            const type = ((el as any).type || 'text').toString().toLowerCase();
+            // These input types are not "typing" contexts where auto-advance would feel like it steals focus.
+            if (['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'color', 'file'].includes(type)) return false;
+            return true;
+          }
+          return Boolean((el as any).isContentEditable);
+        };
+        if (
+          activeEl &&
+          guidedStepBodyRef.current &&
+          guidedStepBodyRef.current.contains(activeEl) &&
+          isTextEntryEl(activeEl)
+        ) {
+          if (!deferLogged) {
+            const tag = (activeEl as any)?.tagName ? (activeEl as any).tagName.toString().toLowerCase() : null;
+            const inputType = tag === 'input' ? (((activeEl as any).type || 'text').toString().toLowerCase() as any) : null;
+            onDiagnostic?.('steps.step.autoAdvance.defer', {
+              from: activeGuidedStepId,
+              to: nextId,
+              mode: autoAdvance,
+              tag,
+              inputType
+            });
+            deferLogged = true;
+          }
+          guidedAutoAdvanceTimerRef.current = globalThis.setTimeout(attemptAdvance, 220);
+          return;
+        }
+      } catch (_) {
+        // ignore focus detection failures
+      }
+
+      // Disarm for this satisfaction cycle and advance.
+      const st = guidedAutoAdvanceStateRef.current;
+      if (st && st.stepId === activeGuidedStepId) {
+        guidedAutoAdvanceStateRef.current = { ...st, armed: false };
+      }
+
+      onDiagnostic?.('steps.step.autoAdvance', { from: activeGuidedStepId, to: nextId, gate: forwardGate, mode: autoAdvance });
+      selectGuidedStep(nextId, 'auto');
+    };
+
+    guidedAutoAdvanceAttemptRef.current = attemptAdvance;
+    guidedAutoAdvanceTimerRef.current = globalThis.setTimeout(attemptAdvance, 220);
+
+    return () => {
+      guidedAutoAdvanceAttemptRef.current = null;
+      if (guidedAutoAdvanceTimerRef.current) {
+        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+        guidedAutoAdvanceTimerRef.current = null;
+      }
+    };
+  }, [
+    activeGuidedStepId,
+    activeGuidedStepIndex,
+    guidedDefaultAutoAdvance,
+    guidedDefaultForwardGate,
+    guidedEnabled,
+    guidedStepIds,
+    guidedStatus.steps,
+    guidedStepsCfg,
+    maxReachableGuidedIndex,
+    normalizeAutoAdvance,
+    normalizeForwardGate,
+    onDiagnostic,
+    selectGuidedStep
+  ]);
+
+  // When auto-advance is armed and we're waiting for focus to leave a text entry element, kick an immediate re-check on blur.
+  // This avoids relying solely on polling timers (especially on mobile browsers).
+  useEffect(() => {
+    if (!guidedEnabled) return;
+    const handler = () => {
+      if (!guidedAutoAdvanceAttemptRef.current) return;
+      try {
+        globalThis.setTimeout(() => {
+          guidedAutoAdvanceAttemptRef.current?.();
+        }, 0);
+      } catch (_) {
+        // ignore
+      }
+    };
+    try {
+      if (typeof document === 'undefined') return;
+      document.addEventListener('focusout', handler, true);
+      return () => {
+        document.removeEventListener('focusout', handler, true);
+      };
+    } catch (_) {
+      return;
+    }
+  }, [guidedEnabled]);
+
   useEffect(() => {
     if (!externalScrollAnchor) return;
     setPendingScrollAnchor(externalScrollAnchor);
@@ -348,6 +786,203 @@ const FormView: React.FC<FormViewProps> = ({
     if (!submitActionRef) return;
     submitActionRef.current = () => {
       if (submitting) return;
+      const isGuidedFinalStep = guidedEnabled && guidedStepIds.length && activeGuidedStepIndex >= guidedStepIds.length - 1;
+
+      // In guided steps, the bottom "Submit" action behaves like "Next" until the final step.
+      // It should validate only the current step's visible targets (not the full form).
+      if (guidedEnabled && guidedStepsCfg && guidedStepIds.length && !isGuidedFinalStep) {
+        // Mark this step as attempted (used to show step-level gate guidance).
+        setGuidedStepAttempted(prev => ({ ...(prev || {}), [activeGuidedStepId]: true }));
+
+        const steps = guidedStepsCfg.items || [];
+        const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+        const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+        const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
+
+        // Step submission should never trigger guided auto-advance; keep the user on the step while we validate.
+        if (guidedAutoAdvanceTimerRef.current) {
+          globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+          guidedAutoAdvanceTimerRef.current = null;
+        }
+        guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: true, armed: false };
+
+        // For `whenComplete` steps: advancing is blocked ONLY by step completion (all step-visible fields set),
+        // even if the step is already valid or still has validation errors.
+        if (forwardGate === 'whenComplete' && !stepStatus?.complete) {
+          setGuidedStepGateNotice({
+            stepId: activeGuidedStepId,
+            tone: 'error',
+            message: tSystem('steps.completeToContinue', language, 'Complete all fields in this step to continue.')
+          });
+          // Try to focus a likely missing field to reduce friction.
+          const firstTarget = (Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [])
+            .concat(Array.isArray(stepCfg?.include) ? stepCfg.include : [])
+            .find((t: any) => t && typeof t === 'object' && (t.kind || '').toString() === 'question' && (t.id || '').toString().trim());
+          if (firstTarget?.id) {
+            try {
+              navigateToFieldKey(firstTarget.id.toString());
+            } catch (_) {
+              // ignore
+            }
+          }
+          return;
+        }
+
+        const buildStepScopedDefinition = (): WebFormDefinition => {
+          const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
+          const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
+
+          const topQuestionIds = new Set<string>();
+          const lineTargetsById = new Map<string, any>();
+          const addTarget = (t: any) => {
+            if (!t || typeof t !== 'object') return;
+            const kind = (t.kind || '').toString().trim();
+            const id = (t.id || '').toString().trim();
+            if (!kind || !id) return;
+            if (kind === 'question') {
+              topQuestionIds.add(id);
+              return;
+            }
+            if (kind === 'lineGroup') {
+              if (!lineTargetsById.has(id)) lineTargetsById.set(id, t);
+            }
+          };
+          [...headerTargets, ...stepTargets].forEach(addTarget);
+
+          const normalizeLineFieldId = (groupId: string, rawId: any): string => {
+            const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
+            if (!s) return '';
+            const underscorePrefix = `${groupId}__`;
+            if (s.startsWith(underscorePrefix)) return s.slice(underscorePrefix.length);
+            const dotPrefix = `${groupId}.`;
+            if (s.startsWith(dotPrefix)) return s.slice(dotPrefix.length);
+            if (s.includes('.')) return s.split('.').pop() || s;
+            return s;
+          };
+
+          const scopedQuestions: WebQuestionDefinition[] = [];
+          (definition.questions || []).forEach(q => {
+            if (!q) return;
+            if (q.type !== 'LINE_ITEM_GROUP') {
+              if (topQuestionIds.has(q.id)) scopedQuestions.push(q);
+              return;
+            }
+
+            const t = lineTargetsById.get(q.id);
+            if (!t) return;
+            const groupId = q.id;
+            const lineCfg = (q as any).lineItemConfig || {};
+
+            const allowedFieldIds = (() => {
+              const raw = (t as any).fields;
+              if (!raw) return null;
+              const ids: string[] = Array.isArray(raw)
+                ? raw.map((v: any) => normalizeLineFieldId(groupId, v)).filter(Boolean)
+                : raw
+                    .toString()
+                    .split(',')
+                    .map((s: string) => normalizeLineFieldId(groupId, s))
+                    .filter(Boolean);
+              return ids.length ? new Set(ids) : null;
+            })();
+            const filteredFields = allowedFieldIds
+              ? ((lineCfg.fields || []) as any[]).filter((f: any) => allowedFieldIds.has((f?.id || '').toString()))
+              : lineCfg.fields || [];
+
+            const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
+            const presentation: 'groupEditor' | 'liftedRowFields' =
+              presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
+
+            const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
+            const subIncludeRaw = subGroupsCfgPresent ? (t as any)?.subGroups?.include : undefined;
+            const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
+            const allowedSubIds = subIncludeList
+              .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
+              .filter(Boolean);
+            const allowedSubSet = allowedSubIds.length ? new Set(allowedSubIds) : null;
+            const filteredSubGroups = (() => {
+              const subs = (lineCfg.subGroups || []) as any[];
+              if (!subs.length) return subs;
+              // In guided steps, `liftedRowFields` should not validate subgroups unless explicitly configured.
+              if (!subGroupsCfgPresent && presentation === 'liftedRowFields') return [];
+              const kept = allowedSubSet
+                ? subs.filter(sub => {
+                    const subId = resolveSubgroupKey(sub as any);
+                    return subId && allowedSubSet.has(subId);
+                  })
+                : subs;
+              return kept.map(sub => {
+                const subId = resolveSubgroupKey(sub as any);
+                const subTarget = subIncludeList.find(
+                  s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId
+                );
+                const allowedSubFieldsRaw = subTarget?.fields;
+                const allowedSubFields = Array.isArray(allowedSubFieldsRaw)
+                  ? new Set(allowedSubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
+                  : null;
+
+                const nextSub: any = { ...(sub as any) };
+                // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
+                nextSub._guidedRowFilter = subTarget?.validationRows ?? subTarget?.rows;
+                nextSub._expandGateFields = (sub as any).fields || [];
+
+                if (allowedSubFields && allowedSubFields.size) {
+                  nextSub.fields = ((sub as any).fields || []).filter((f: any) => allowedSubFields.has((f?.id || '').toString()));
+                }
+                return nextSub;
+              });
+            })();
+
+            const stepLineCfg: any = { ...(lineCfg as any), fields: filteredFields, subGroups: filteredSubGroups };
+            // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
+            stepLineCfg._guidedRowFilter = (t as any).validationRows ?? (t as any).rows;
+            stepLineCfg._expandGateFields = (lineCfg as any).fields || [];
+            scopedQuestions.push({ ...(q as any), lineItemConfig: stepLineCfg } as WebQuestionDefinition);
+          });
+
+          return { ...(definition as any), questions: scopedQuestions } as WebFormDefinition;
+        };
+
+        const stepDefinition = buildStepScopedDefinition();
+        const nextErrors = validateForm({
+          definition: stepDefinition,
+          language,
+          values,
+          lineItems,
+          collapsedRows,
+          collapsedSubgroups
+        });
+        setErrors(nextErrors);
+        // For `whenValid` steps: block advancement until the step has no validation errors.
+        if (forwardGate !== 'whenComplete' && Object.keys(nextErrors).length) {
+          setGuidedStepGateNotice({
+            stepId: activeGuidedStepId,
+            tone: 'error',
+            message: tSystem('steps.fixErrorsToContinue', language, 'Fix the highlighted errors in this step to continue.')
+          });
+          errorNavRequestRef.current += 1;
+          onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, scope: 'guidedStep' });
+          return;
+        }
+
+        const nextId = guidedStepIds[activeGuidedStepIndex + 1];
+        if (nextId) {
+          setErrors({});
+          setGuidedStepGateNotice(null);
+          onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason: 'submitNext' });
+          selectGuidedStep(nextId, 'user');
+        }
+        return;
+      }
+
+      // Submitting should never trigger guided auto-advance; keep the user on the step while we validate.
+      if (guidedEnabled) {
+        if (guidedAutoAdvanceTimerRef.current) {
+          globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+          guidedAutoAdvanceTimerRef.current = null;
+        }
+        guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: true, armed: false };
+      }
       // Ensure status/progress messages are visible immediately when submit starts.
       try {
         if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
@@ -365,7 +1000,24 @@ const FormView: React.FC<FormViewProps> = ({
     return () => {
       submitActionRef.current = null;
     };
-  }, [collapsedRows, collapsedSubgroups, onDiagnostic, onSubmit, submitActionRef, submitting]);
+  }, [
+    activeGuidedStepId,
+    activeGuidedStepIndex,
+    collapsedRows,
+    collapsedSubgroups,
+    definition,
+    guidedEnabled,
+    guidedStepIds,
+    guidedStepsCfg,
+    language,
+    lineItems,
+    onDiagnostic,
+    onSubmit,
+    selectGuidedStep,
+    submitActionRef,
+    submitting,
+    values
+  ]);
 
   const hasCopyDerived = useMemo(() => {
     const hasInFields = (fields: any[]): boolean =>
@@ -475,7 +1127,9 @@ const FormView: React.FC<FormViewProps> = ({
       if (!target) return;
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
       if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
-      const root = target.closest('.form-card') || target.closest('.webform-overlay');
+      // Derived-value blur recompute should run for any field blur within the form content, including guided steps.
+      // Note: guided step content is not always wrapped in `.form-card`, so use `.ck-form-sections` as a stable root.
+      const root = target.closest('.ck-form-sections') || target.closest('.webform-overlay') || target.closest('.form-card');
       if (!root) return;
       const fieldPath = (target.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
       if (blurRecomputeTimerRef.current !== null) {
@@ -1232,8 +1886,11 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const openLineItemGroupOverlay = useCallback(
-    (groupId: string) => {
-      const id = (groupId || '').toString();
+    (
+      groupOrId: string | WebQuestionDefinition,
+      options?: { rowFilter?: { includeWhen?: any; excludeWhen?: any } | null; hideInlineSubgroups?: boolean }
+    ) => {
+      const id = (typeof groupOrId === 'string' ? groupOrId : groupOrId?.id || '').toString();
       if (!id) return;
       // Close multi-add overlay if open to avoid stacking confusion.
       if (overlay.open) {
@@ -1243,8 +1900,11 @@ const FormView: React.FC<FormViewProps> = ({
       if (subgroupOverlay.open) {
         setSubgroupOverlay({ open: false });
       }
-      setLineItemGroupOverlay({ open: true, groupId: id });
-      onDiagnostic?.('lineItemGroup.overlay.open', { groupId: id });
+      const group = typeof groupOrId === 'string' ? undefined : (groupOrId as WebQuestionDefinition);
+      const rowFilter = options?.rowFilter || null;
+      const hideInlineSubgroups = options?.hideInlineSubgroups === true;
+      setLineItemGroupOverlay({ open: true, groupId: id, group, rowFilter, hideInlineSubgroups });
+      onDiagnostic?.('lineItemGroup.overlay.open', { groupId: id, mode: group ? 'override' : 'default', hasRowFilter: !!rowFilter });
     },
     [onDiagnostic, overlay.open, subgroupOverlay.open]
   );
@@ -1293,7 +1953,8 @@ const FormView: React.FC<FormViewProps> = ({
         // If this is a line-item group configured to open in a full-page overlay, open it so the row/fields can mount.
         const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
         const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
-        if (groupOverlayEnabled) {
+        const suppressOverlayForGuidedInline = guidedEnabled && guidedInlineLineGroupIds.has(prefix);
+        if (groupOverlayEnabled && !suppressOverlayForGuidedInline) {
           if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
             openLineItemGroupOverlay(prefix);
             onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key, groupId: prefix, source: 'click' });
@@ -1337,6 +1998,8 @@ const FormView: React.FC<FormViewProps> = ({
       nestedGroupMeta.lineFieldToGroupKey,
       nestedGroupMeta.subgroupFieldToGroupKey,
       definition.questions,
+      guidedEnabled,
+      guidedInlineLineGroupIds,
       onDiagnostic,
       openLineItemGroupOverlay,
       openSubgroupOverlay,
@@ -2139,6 +2802,7 @@ const FormView: React.FC<FormViewProps> = ({
       onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'dedupConflict' });
       return;
     }
+    guidedLastUserEditAtRef.current = Date.now();
     onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id });
     if (onStatusClear) onStatusClear();
     const baseValues = { ...values, [q.id]: value };
@@ -2174,6 +2838,7 @@ const FormView: React.FC<FormViewProps> = ({
       });
       return;
     }
+    guidedLastUserEditAtRef.current = Date.now();
     onUserEdit?.({
       scope: 'line',
       fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
@@ -2401,6 +3066,10 @@ const FormView: React.FC<FormViewProps> = ({
 
   const resolveVisibilityValue = useCallback(
     (fieldId: string): FieldValue | undefined => {
+    if (guidedVirtualState) {
+      const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
+      if (virtual !== undefined) return virtual as FieldValue;
+    }
     const direct = values[fieldId];
     if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
     const sys = getSystemFieldValue(fieldId, recordMeta);
@@ -2415,7 +3084,7 @@ const FormView: React.FC<FormViewProps> = ({
     }
     return undefined;
     },
-    [lineItems, recordMeta, values]
+    [guidedVirtualState, lineItems, recordMeta, values]
   );
 
   const topLevelGroupProgress = useMemo(() => {
@@ -3567,8 +4236,169 @@ const FormView: React.FC<FormViewProps> = ({
     // Only auto-navigate to the next errored field on submit attempt.
     // While the user is typing, errors will change (as fields are fixed) and we should not steal focus.
     if (errorNavConsumedRef.current === errorNavRequestRef.current) return;
-    const firstKey = keys[0];
+    let firstKey = keys[0];
     if (typeof document === 'undefined') return;
+    const chooseGuidedKey = (): { key: string; stepId?: string } => {
+      if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return { key: firstKey };
+
+      const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
+      const steps = guidedStepsCfg.items || [];
+      const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+      const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
+      const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
+      const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
+
+      const normalizeLineFieldId = (groupId: string, rawId: any): string => {
+        const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
+        if (!s) return '';
+        const underscorePrefix = `${groupId}__`;
+        if (s.startsWith(underscorePrefix)) return s.slice(underscorePrefix.length);
+        const dotPrefix = `${groupId}.`;
+        if (s.startsWith(dotPrefix)) return s.slice(dotPrefix.length);
+        // If the config uses dotted paths, take the last segment.
+        if (s.includes('.')) return s.split('.').pop() || s;
+        return s;
+      };
+
+      const normalizeRowFilterForGroup = (groupId: string, filter?: any): any => {
+        if (!filter) return null;
+        const includeWhen = (filter as any)?.includeWhen;
+        const excludeWhen = (filter as any)?.excludeWhen;
+        const next: any = { ...(filter as any) };
+        if (includeWhen && includeWhen.fieldId) next.includeWhen = { ...includeWhen, fieldId: normalizeLineFieldId(groupId, includeWhen.fieldId) };
+        if (excludeWhen && excludeWhen.fieldId) next.excludeWhen = { ...excludeWhen, fieldId: normalizeLineFieldId(groupId, excludeWhen.fieldId) };
+        return next;
+      };
+
+      const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
+        if (!filter) return true;
+        const includeWhen = (filter as any)?.includeWhen;
+        const excludeWhen = (filter as any)?.excludeWhen;
+        const includeOk =
+          includeWhen && includeWhen.fieldId ? matchesWhen((rowValues as any)[includeWhen.fieldId], includeWhen) : true;
+        const excludeMatch =
+          excludeWhen && excludeWhen.fieldId ? matchesWhen((rowValues as any)[excludeWhen.fieldId], excludeWhen) : false;
+        return includeOk && !excludeMatch;
+      };
+
+      const isKeyVisibleInTargets = (targets: any[], stepCfgLocal: any, key: string): boolean => {
+        const raw = (key || '').toString();
+        if (!raw) return false;
+        const parts = raw.split('__');
+        const isLineKey = parts.length === 3;
+
+        for (const t of targets) {
+          if (!t || typeof t !== 'object') continue;
+          const kind = (t.kind || '').toString().trim();
+          const id = (t.id || '').toString().trim();
+          if (!kind || !id) continue;
+
+          if (kind === 'question') {
+            if (!isLineKey && raw === id) return true;
+            continue;
+          }
+
+          if (kind !== 'lineGroup') continue;
+          const groupId = id;
+
+          // Group-level error
+          if (!isLineKey && raw === groupId) return true;
+
+          if (isLineKey) {
+            const [prefix, fieldIdRaw, rowId] = parts;
+            const subgroupInfo = parseSubgroupKey(prefix);
+            if (subgroupInfo) {
+              if (subgroupInfo.parentGroupId !== groupId) continue;
+
+              const subTargetModeRaw = ((t.subGroups as any)?.displayMode || 'inherit').toString().trim().toLowerCase();
+              const subStepModeRaw = stepSubGroupsDefaultMode ? stepSubGroupsDefaultMode.toString().trim().toLowerCase() : '';
+              const resolvedSubMode =
+                subTargetModeRaw === 'inline' || subTargetModeRaw === 'overlay'
+                  ? (subTargetModeRaw as 'inline' | 'overlay')
+                  : subStepModeRaw === 'inline' || subStepModeRaw === 'overlay'
+                    ? (subStepModeRaw as 'inline' | 'overlay')
+                    : 'inline';
+              const hideInlineSubgroups = resolvedSubMode === 'overlay';
+
+              // If subgroups are only shown via overlay, they are still "reachable" (error navigation will open the overlay).
+              // Determine whether this step includes the subgroup at all.
+              const subIncludeRaw = (t.subGroups as any)?.include;
+              const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
+              const allowedSubIds = subIncludeList
+                .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
+                .filter(Boolean);
+              const allowedSubSet = allowedSubIds.length ? new Set(allowedSubIds) : null;
+              if (allowedSubSet && !allowedSubSet.has(subgroupInfo.subGroupId)) continue;
+
+              // Parent row filter applies to subgroups too.
+              const parentRows = (lineItems as any)[groupId] || [];
+              const parentRow = parentRows.find((r: any) => r && r.id === subgroupInfo.parentRowId);
+              const parentRowValues = (parentRow?.values || {}) as any;
+              const normalizedRowFilter = normalizeRowFilterForGroup(groupId, (t as any).validationRows ?? (t as any).rows);
+              if (!isIncludedByRowFilter(parentRowValues, normalizedRowFilter)) continue;
+
+              // Subgroup errors are visible in this step (inline or overlay).
+              void hideInlineSubgroups;
+              void rowId;
+              return true;
+            }
+
+            if (prefix !== groupId) continue;
+
+            const rowValues = ((lineItems as any)[groupId] || []).find((r: any) => r && r.id === rowId)?.values || {};
+            const normalizedRowFilter = normalizeRowFilterForGroup(groupId, (t as any).validationRows ?? (t as any).rows);
+            if (!isIncludedByRowFilter(rowValues as any, normalizedRowFilter)) continue;
+
+            const allowedFieldIds = (() => {
+              const rawFields = (t as any).fields;
+              if (!rawFields) return null;
+              const ids: string[] = Array.isArray(rawFields)
+                ? rawFields.map((v: any) => normalizeLineFieldId(groupId, v)).filter(Boolean)
+                : rawFields
+                    .toString()
+                    .split(',')
+                    .map((s: string) => normalizeLineFieldId(groupId, s))
+                    .filter(Boolean);
+              return ids.length ? new Set(ids) : null;
+            })();
+            if (allowedFieldIds && !allowedFieldIds.has(fieldIdRaw)) continue;
+            return true;
+          }
+        }
+
+        return false;
+      };
+
+      // Prefer navigating to an error already visible in the current step (header + step targets).
+      const combinedCurrentTargets = [...headerTargets, ...stepTargets];
+      const inCurrent = keys.find(k => isKeyVisibleInTargets(combinedCurrentTargets, stepCfg, k));
+      if (inCurrent) return { key: inCurrent, stepId: activeGuidedStepId };
+
+      // Otherwise, navigate to the earliest reachable step that contains an error.
+      const stepIdByIndex = guidedStepIds;
+      for (let idx = 0; idx < stepIdByIndex.length; idx++) {
+        if (idx > maxReachableGuidedIndex) break;
+        const stepId = stepIdByIndex[idx];
+        const cfg = (steps.find((s: any) => (s?.id || '').toString() === stepId) || null) as any;
+        const stepTargetsLocal: any[] = Array.isArray(cfg?.include) ? cfg.include : [];
+        const combined = [...headerTargets, ...stepTargetsLocal];
+        const stepKey = keys.find(k => isKeyVisibleInTargets(combined, cfg, k));
+        if (stepKey) return { key: stepKey, stepId };
+      }
+
+      return { key: firstKey };
+    };
+
+    const guidedPick = chooseGuidedKey();
+    firstKey = guidedPick.key;
+    const desiredStepId = guidedPick.stepId;
+    if (desiredStepId && guidedEnabled && desiredStepId !== activeGuidedStepId) {
+      // Switch steps first, then re-run this navigation effect to scroll once the field is mounted.
+      selectGuidedStep(desiredStepId, 'auto');
+      onDiagnostic?.('validation.navigate.step', { from: activeGuidedStepId, to: desiredStepId, key: firstKey });
+      return;
+    }
+
     const wasSame = firstErrorRef.current === firstKey;
     firstErrorRef.current = firstKey;
 
@@ -3607,7 +4437,8 @@ const FormView: React.FC<FormViewProps> = ({
       // If this is a line-item group configured to open in a full-page overlay, open it so the row/fields can mount.
       const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
       const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
-      if (groupOverlayEnabled) {
+      const suppressOverlayForGuidedInline = guidedEnabled && guidedInlineLineGroupIds.has(prefix);
+      if (groupOverlayEnabled && !suppressOverlayForGuidedInline) {
         if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
           openLineItemGroupOverlay(prefix);
           onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key: firstKey, groupId: prefix, source: 'submit' });
@@ -3655,10 +4486,18 @@ const FormView: React.FC<FormViewProps> = ({
     nestedGroupMeta.lineFieldToGroupKey,
     nestedGroupMeta.subgroupFieldToGroupKey,
     definition.questions,
+    activeGuidedStepId,
+    guidedEnabled,
+    guidedInlineLineGroupIds,
+    guidedStepIds,
+    guidedStepsCfg,
+    lineItems,
+    maxReachableGuidedIndex,
     onDiagnostic,
     openLineItemGroupOverlay,
     openSubgroupOverlay,
     questionIdToGroupKey,
+    selectGuidedStep,
     lineItemGroupOverlay.groupId,
     lineItemGroupOverlay.open,
     subgroupOverlay.open,
@@ -4469,7 +5308,13 @@ const FormView: React.FC<FormViewProps> = ({
     if (typeof document === 'undefined') return null;
 
     const groupId = lineItemGroupOverlay.groupId;
-    const group = definition.questions.find(q => q.id === groupId && q.type === 'LINE_ITEM_GROUP');
+    const overlayRowFilter = lineItemGroupOverlay.rowFilter || null;
+    const overlayHideInlineSubgroups = lineItemGroupOverlay.hideInlineSubgroups === true;
+    const overrideGroup = lineItemGroupOverlay.group;
+    const group =
+      overrideGroup && overrideGroup.type === 'LINE_ITEM_GROUP'
+        ? overrideGroup
+        : definition.questions.find(q => q.id === groupId && q.type === 'LINE_ITEM_GROUP');
     if (!group) {
       return createPortal(
         <div
@@ -4503,7 +5348,18 @@ const FormView: React.FC<FormViewProps> = ({
       );
     }
 
-    const rows = lineItems[groupId] || [];
+    const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>): boolean => {
+      if (!overlayRowFilter) return true;
+      const includeWhen = (overlayRowFilter as any)?.includeWhen;
+      const excludeWhen = (overlayRowFilter as any)?.excludeWhen;
+      const includeOk = includeWhen && includeWhen.fieldId ? matchesWhen((rowValues as any)[includeWhen.fieldId], includeWhen) : true;
+      const excludeMatch = excludeWhen && excludeWhen.fieldId ? matchesWhen((rowValues as any)[excludeWhen.fieldId], excludeWhen) : false;
+      return includeOk && !excludeMatch;
+    };
+
+    const rowsAll = lineItems[groupId] || [];
+    const rows =
+      overlayRowFilter && Array.isArray(rowsAll) ? rowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any)) : rowsAll;
     const count = rows.length;
     const title = resolveLabel(group, language);
 
@@ -4745,7 +5601,7 @@ const FormView: React.FC<FormViewProps> = ({
                     )}
                   </div>
                 ) : null}
-                {renderAddButton()}
+                {!overlayRowFilter ? renderAddButton() : null}
               </div>
               {totals.length ? (
                 <div className="line-item-totals" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -4776,6 +5632,8 @@ const FormView: React.FC<FormViewProps> = ({
             <LineItemGroupQuestion
               key={overlayGroup.id}
               q={overlayGroup as any}
+              rowFilter={overlayRowFilter}
+              hideInlineSubgroups={overlayHideInlineSubgroups}
               ctx={{
                 definition,
                 language,
@@ -4921,6 +5779,355 @@ const FormView: React.FC<FormViewProps> = ({
     />
   );
 
+  const renderGuidedContent = (): React.ReactNode => {
+    if (!guidedEnabled || !guidedStepsCfg) return null;
+    const steps = guidedStepsCfg.items || [];
+    if (!steps.length) return null;
+
+    const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? (guidedStepsCfg.header!.include as any[]) : [];
+    const stepTargets: any[] = Array.isArray(stepCfg?.include) ? (stepCfg.include as any[]) : [];
+
+    const stepHelpText = stepCfg?.helpText ? resolveLocalizedString(stepCfg.helpText, language, '') : '';
+    const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
+    const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
+    const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
+    const stepForwardGate = normalizeForwardGate(
+      stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate,
+      guidedDefaultForwardGate
+    );
+    const attempted = Boolean((guidedStepAttempted || {})[activeGuidedStepId]);
+
+    const renderTarget = (target: any, keyPrefix: string): React.ReactNode => {
+      if (!target || typeof target !== 'object') return null;
+      const kind = (target.kind || '').toString().trim();
+      const id = (target.id || '').toString().trim();
+      if (!kind || !id) return null;
+
+      if (kind === 'question') {
+        const q = definition.questions.find(q2 => q2.id === id);
+        if (!q) return null;
+        return <React.Fragment key={`${keyPrefix}:q:${q.id}`}>{renderQuestion(q)}</React.Fragment>;
+      }
+
+      if (kind !== 'lineGroup') return null;
+      const groupQ = definition.questions.find(q2 => q2.id === id && q2.type === 'LINE_ITEM_GROUP');
+      if (!groupQ) return null;
+
+      const presentationRaw = (target.presentation || 'groupEditor').toString().trim().toLowerCase();
+      const presentation: 'groupEditor' | 'liftedRowFields' =
+        presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
+
+      const targetModeRaw = (target.displayMode || 'inherit').toString().trim().toLowerCase();
+      const stepModeRaw = stepLineGroupsDefaultMode ? stepLineGroupsDefaultMode.toString().trim().toLowerCase() : '';
+      const inheritedOverlay = !!(groupQ.lineItemConfig as any)?.ui?.openInOverlay;
+      const resolvedLineMode =
+        targetModeRaw === 'inline' || targetModeRaw === 'overlay'
+          ? (targetModeRaw as 'inline' | 'overlay')
+          : stepModeRaw === 'inline' || stepModeRaw === 'overlay'
+            ? (stepModeRaw as 'inline' | 'overlay')
+            : inheritedOverlay
+              ? 'overlay'
+              : 'inline';
+      const effectiveLineMode: 'inline' | 'overlay' = presentation === 'liftedRowFields' ? 'inline' : resolvedLineMode;
+
+      const subTargetModeRaw = ((target.subGroups as any)?.displayMode || 'inherit').toString().trim().toLowerCase();
+      const subStepModeRaw = stepSubGroupsDefaultMode ? stepSubGroupsDefaultMode.toString().trim().toLowerCase() : '';
+      const resolvedSubMode =
+        subTargetModeRaw === 'inline' || subTargetModeRaw === 'overlay'
+          ? (subTargetModeRaw as 'inline' | 'overlay')
+          : subStepModeRaw === 'inline' || subStepModeRaw === 'overlay'
+            ? (subStepModeRaw as 'inline' | 'overlay')
+            : 'inline';
+      const hideInlineSubgroups = resolvedSubMode === 'overlay';
+
+      // Filter parent fields and (optionally) subgroup definitions/fields based on the step target allowlists.
+      const lineCfg = (groupQ as any).lineItemConfig || {};
+      const rowFilter = target.rows || null;
+      const allowedFieldIds = (() => {
+        const raw = target.fields;
+        if (!raw) return null;
+        const ids: string[] = Array.isArray(raw)
+          ? raw.map((v: any) => (v === undefined || v === null ? '' : v.toString().trim())).filter(Boolean)
+          : raw
+              .toString()
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean);
+        return ids.length ? new Set(ids) : null;
+      })();
+
+      const filteredFields = allowedFieldIds
+        ? (lineCfg.fields || []).filter((f: any) => allowedFieldIds.has((f?.id || '').toString()))
+        : lineCfg.fields || [];
+
+      const subGroupsCfgPresent = !!target.subGroups && typeof target.subGroups === 'object';
+      const subIncludeRaw = subGroupsCfgPresent ? (target.subGroups as any)?.include : undefined;
+      const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
+      const allowedSubIds = subIncludeList
+        .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
+        .filter(Boolean);
+      const allowedSubSet = allowedSubIds.length ? new Set(allowedSubIds) : null;
+
+      const filteredSubGroups = (() => {
+        const subs = (lineCfg.subGroups || []) as any[];
+        if (!subs.length) return subs;
+        // In guided steps, `liftedRowFields` should not show subgroups unless explicitly configured.
+        if (!subGroupsCfgPresent && presentation === 'liftedRowFields') return [];
+        const kept = allowedSubSet
+          ? subs.filter(sub => {
+              const subId = resolveSubgroupKey(sub as any);
+              return subId && allowedSubSet.has(subId);
+            })
+          : subs;
+        return kept.map(sub => {
+          const subId = resolveSubgroupKey(sub as any);
+          const subTarget = subIncludeList.find(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId);
+          const allowedSubFieldsRaw = subTarget?.fields;
+          const allowedSubFields = Array.isArray(allowedSubFieldsRaw)
+            ? new Set(allowedSubFieldsRaw.map((v: any) => (v === undefined || v === null ? '' : v.toString().trim())).filter(Boolean))
+            : null;
+          if (!allowedSubFields || !allowedSubFields.size) return sub;
+          return { ...(sub as any), fields: ((sub as any).fields || []).filter((f: any) => allowedSubFields.has((f?.id || '').toString())) };
+        });
+      })();
+
+      const stepLineCfg: any = { ...(lineCfg as any), fields: filteredFields, subGroups: filteredSubGroups };
+      // Safety: when a row filter is applied for this step, hide "Add line" controls to avoid creating invisible rows.
+      if (rowFilter) {
+        stepLineCfg.ui = { ...(stepLineCfg.ui || {}), addButtonPlacement: 'hidden' };
+      }
+      if (presentation === 'liftedRowFields') {
+        stepLineCfg.totals = [];
+        stepLineCfg.ui = { ...(stepLineCfg.ui || {}), showItemPill: false };
+      }
+
+      const stepGroup: WebQuestionDefinition = {
+        ...(groupQ as any),
+        ...(presentation === 'liftedRowFields' ? { ui: { ...((groupQ as any).ui || {}), hideLabel: true } } : {}),
+        lineItemConfig: stepLineCfg
+      };
+
+      const groupCountAll = (lineItems[stepGroup.id] || []).length;
+      const filteredCount =
+        rowFilter && Array.isArray(lineItems[stepGroup.id])
+          ? (lineItems[stepGroup.id] || []).filter(r => {
+              const rowValues = (r as any)?.values || {};
+              const includeWhen = (rowFilter as any)?.includeWhen;
+              const excludeWhen = (rowFilter as any)?.excludeWhen;
+              const includeOk =
+                includeWhen && includeWhen.fieldId ? matchesWhen(rowValues[includeWhen.fieldId], includeWhen) : true;
+              const excludeMatch =
+                excludeWhen && excludeWhen.fieldId ? matchesWhen(rowValues[excludeWhen.fieldId], excludeWhen) : false;
+              return includeOk && !excludeMatch;
+            }).length
+          : groupCountAll;
+
+      if (effectiveLineMode === 'overlay') {
+        const label = resolveLabel(stepGroup, language);
+        const openLabel = tSystem('common.open', language, 'Open');
+        const pillText = tSystem(
+          filteredCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
+          language,
+          filteredCount === 1 ? '{count} item' : '{count} items',
+          { count: filteredCount }
+        );
+        return (
+          <div
+            key={`${keyPrefix}:lg:${stepGroup.id}`}
+            className="field inline-field ck-full-width"
+            data-field-path={stepGroup.id}
+            data-has-error={errors[stepGroup.id] ? 'true' : undefined}
+            data-has-warning={hasWarning(stepGroup.id) ? 'true' : undefined}
+          >
+            <label style={stepGroup.ui?.hideLabel === true ? srOnly : undefined}>
+              {label}
+              {(stepGroup as any).required && <RequiredStar />}
+            </label>
+            <button
+              type="button"
+              className="ck-progress-pill ck-upload-pill-btn ck-open-overlay-pill"
+              aria-disabled={submitting ? 'true' : undefined}
+              onClick={() => {
+                if (submitting) return;
+                openLineItemGroupOverlay(stepGroup, { rowFilter, hideInlineSubgroups });
+              }}
+            >
+              <span>{pillText}</span>
+              <span className="ck-progress-label">{openLabel}</span>
+              <span className="ck-progress-caret">▸</span>
+            </button>
+            {renderWarnings(stepGroup.id)}
+            {errors[stepGroup.id] ? <div className="error">{errors[stepGroup.id]}</div> : null}
+          </div>
+        );
+      }
+
+      const locked = submitting || isFieldLockedByDedup(stepGroup.id);
+      return (
+        <LineItemGroupQuestion
+          key={`${keyPrefix}:lg:${stepGroup.id}:${activeGuidedStepId}`}
+          q={stepGroup as any}
+          rowFilter={rowFilter}
+          hideInlineSubgroups={hideInlineSubgroups}
+          ctx={{
+            definition,
+            language,
+            values,
+            resolveVisibilityValue,
+            setValues,
+            lineItems,
+            setLineItems,
+            submitting: locked,
+            errors,
+            setErrors,
+            warningByField,
+            optionState,
+            setOptionState,
+            ensureLineOptions,
+            renderChoiceControl,
+            openInfoOverlay,
+            openFileOverlay,
+            openSubgroupOverlay,
+            addLineItemRowManual,
+            removeLineRow,
+            handleLineFieldChange,
+            collapsedGroups,
+            toggleGroupCollapsed,
+            collapsedRows,
+            setCollapsedRows,
+            collapsedSubgroups,
+            setCollapsedSubgroups,
+            subgroupSelectors,
+            setSubgroupSelectors,
+            subgroupBottomRefs,
+            fileInputsRef,
+            dragState,
+            incrementDrag,
+            decrementDrag,
+            resetDrag,
+            uploadAnnouncements,
+            handleLineFileInputChange,
+            handleLineFileDrop,
+            removeLineFile,
+            clearLineFiles,
+            errorIndex,
+            setOverlay,
+            onDiagnostic
+          }}
+        />
+      );
+    };
+
+    const stepsBarNode = (
+      <StepsBar
+        language={language}
+        steps={steps.map(s => ({ id: (s?.id || '').toString(), label: (s as any).label }))}
+        status={guidedStatus.steps}
+        activeStepId={activeGuidedStepId}
+        maxReachableIndex={maxReachableGuidedIndex}
+        onSelectStep={id => selectGuidedStep(id, 'user')}
+      />
+    );
+    const stepsBarPortalEl =
+      typeof document !== 'undefined' ? (document.getElementById('ck-guided-stepsbar-slot') as HTMLElement | null) : null;
+    const stepsBarPortal = stepsBarPortalEl ? createPortal(stepsBarNode, stepsBarPortalEl) : null;
+    const stepsBarInline = stepsBarPortalEl ? null : stepsBarNode;
+
+    const stepGateNotice = (() => {
+      const explicit = guidedStepGateNotice && guidedStepGateNotice.stepId === activeGuidedStepId ? guidedStepGateNotice : null;
+      if (explicit) return explicit;
+      if (!attempted) return null;
+      const missingComplete = stepStatus?.missingRequiredCount || 0;
+      const missingValid = stepStatus?.missingValidCount || 0;
+      const ruleErrors = stepStatus?.errorCount || 0;
+      const hasValidationIssues = missingValid > 0 || ruleErrors > 0;
+
+      if (stepForwardGate === 'whenComplete' && !stepStatus?.complete) {
+        return {
+          stepId: activeGuidedStepId,
+          tone: 'error' as const,
+          message: tSystem(
+            'steps.completeToContinue',
+            language,
+            'Complete all fields in this step to continue. Missing: {count}',
+            { count: missingComplete }
+          )
+        };
+      }
+
+      if (stepForwardGate === 'whenValid' && !stepStatus?.valid) {
+        return {
+          stepId: activeGuidedStepId,
+          tone: 'error' as const,
+          message: tSystem(
+            'steps.fixErrorsToContinue',
+            language,
+            'Fix the highlighted errors in this step to continue. Issues: {count}',
+            { count: missingValid + ruleErrors }
+          )
+        };
+      }
+
+      // For non-blocking validation (e.g., forwardGate=whenComplete), still surface issues at the step level once attempted.
+      if (hasValidationIssues) {
+        return {
+          stepId: activeGuidedStepId,
+          tone: 'warning' as const,
+          message: tSystem(
+            'steps.validationIssues',
+            language,
+            'This step has validation issues. Issues: {count}',
+            { count: missingValid + ruleErrors }
+          )
+        };
+      }
+      return null;
+    })();
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {stepsBarPortal}
+        {stepsBarInline}
+        <div ref={guidedStepBodyRef} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {stepGateNotice ? (
+            <div
+              role={stepGateNotice.tone === 'error' ? 'alert' : 'status'}
+              style={{
+                padding: '12px 14px',
+                borderRadius: 14,
+                border:
+                  stepGateNotice.tone === 'error' ? '1px solid rgba(239,68,68,0.45)' : '1px solid rgba(245,158,11,0.45)',
+                background: stepGateNotice.tone === 'error' ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.12)',
+                color: '#0f172a',
+                fontWeight: 800
+              }}
+            >
+              {stepGateNotice.message}
+            </div>
+          ) : null}
+          {stepHelpText ? (
+            <div
+              role="note"
+              style={{
+                padding: '12px 14px',
+                borderRadius: 14,
+                border: '1px solid rgba(59,130,246,0.22)',
+                background: 'rgba(59,130,246,0.08)',
+                color: '#0f172a',
+                fontWeight: 700
+              }}
+            >
+              {stepHelpText}
+            </div>
+          ) : null}
+          {headerTargets.map(t => renderTarget(t, 'header'))}
+          {stepTargets.map(t => renderTarget(t, `step:${activeGuidedStepId}`))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <div className="ck-form-sections">
@@ -5002,7 +6209,7 @@ const FormView: React.FC<FormViewProps> = ({
 
         <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
           <div className="ck-group-stack">
-            {(() => {
+            {guidedEnabled ? renderGuidedContent() : (() => {
               type GroupSection = (typeof groupSections)[number];
 
               const renderGroupSection = (section: GroupSection): React.ReactNode => {

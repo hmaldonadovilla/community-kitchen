@@ -1,4 +1,4 @@
-import { evaluateRules, shouldHideField, validateRules } from '../../core';
+import { evaluateRules, matchesWhen, shouldHideField, validateRules } from '../../core';
 import { FieldValue, LangCode, VisibilityContext, WebFormDefinition, WebFormSubmission } from '../../types';
 import { SubmissionPayload } from '../api';
 import { FormErrors, LineItemState } from '../types';
@@ -17,6 +17,15 @@ const formatTemplate = (value: string, vars?: Record<string, string | number | b
     const raw = (vars as any)[key];
     return raw === undefined || raw === null ? '' : String(raw);
   });
+};
+
+const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
+  if (!filter) return true;
+  const includeWhen = filter?.includeWhen;
+  const excludeWhen = filter?.excludeWhen;
+  const includeOk = includeWhen?.fieldId ? matchesWhen(rowValues[includeWhen.fieldId], includeWhen) : true;
+  const excludeMatch = excludeWhen?.fieldId ? matchesWhen(rowValues[excludeWhen.fieldId], excludeWhen) : false;
+  return includeOk && !excludeMatch;
 };
 
 const resolveUploadErrorMessage = (args: {
@@ -222,6 +231,9 @@ export const validateForm = (args: {
         ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
       const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
       const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
+      const guidedRowFilter = ((q.lineItemConfig as any)?._guidedRowFilter ?? null) as any;
+      // In guided-step scoped definitions we may filter `fields`, but expandGate needs to evaluate against the full group field set.
+      const expandGateFields = (((q.lineItemConfig as any)?._expandGateFields as any[]) || q.lineItemConfig?.fields || []) as any[];
       const lineFieldIdSet = new Set((q.lineItemConfig?.fields || []).map((f: any) => (f?.id !== undefined ? f.id.toString() : '')).filter(Boolean));
       const normalizeLineFieldId = (rawId: string): string => {
         const s = rawId !== undefined && rawId !== null ? rawId.toString() : '';
@@ -234,6 +246,8 @@ export const validateForm = (args: {
       let hasAnyNonDisabledRow = false;
 
       rows.forEach(row => {
+        const rowValues = (row as any)?.values || {};
+        if (guidedRowFilter && !isIncludedByRowFilter(rowValues, guidedRowFilter)) return;
         hasAnyRow = true;
         const collapseKey = `${q.id}::${row.id}`;
         const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
@@ -241,7 +255,7 @@ export const validateForm = (args: {
         if (
           isRowDisabledByExpandGate({
             ui,
-            fields: q.lineItemConfig?.fields || [],
+            fields: expandGateFields,
             row: row as any,
             topValues: values,
             language,
@@ -333,6 +347,8 @@ export const validateForm = (args: {
               (subUi?.collapsedFields || []).length > 0;
             const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
             const subFields = ((sub as any).fields || []) as any[];
+            const subGuidedRowFilter = ((sub as any)?._guidedRowFilter ?? null) as any;
+            const subExpandGateFields = (((sub as any)?._expandGateFields as any[]) || subFields) as any[];
             const subFieldIdSet = new Set(subFields.map((f: any) => (f?.id !== undefined ? f.id.toString() : '')).filter(Boolean));
             const normalizeSubFieldId = (rawId: string): string => {
               const s = rawId !== undefined && rawId !== null ? rawId.toString() : '';
@@ -343,13 +359,15 @@ export const validateForm = (args: {
               return s;
             };
             subRows.forEach(subRow => {
+              const subRowValues = (subRow as any)?.values || {};
+              if (subGuidedRowFilter && !isIncludedByRowFilter(subRowValues, subGuidedRowFilter)) return;
               const subCollapseKey = `${subKey}::${subRow.id}`;
               const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
               // Skip disabled subgroup rows only when they are collapsed and gated.
               if (
                 isRowDisabledByExpandGate({
                   ui: subUi,
-                  fields: subFields,
+                  fields: subExpandGateFields,
                   row: subRow as any,
                   topValues: { ...values, ...(row.values || {}) },
                   language,

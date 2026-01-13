@@ -394,6 +394,55 @@ This project uses TypeScript. You need to build the script before using it in Go
       { "groupBehavior": { "summaryExpandAll": true } }
       ```
 
+    - Want a **guided multi-step Edit view** (stepper + progressive disclosure, reusable per form)? Set `steps` on the dashboard JSON:
+
+      ```json
+      {
+        "steps": {
+          "mode": "guided",
+          "defaultForwardGate": "whenValid",
+          "defaultAutoAdvance": "onValid",
+          "stateFields": { "prefix": "__ckStep" },
+          "header": {
+            "include": [
+              { "kind": "question", "id": "CUSTOMER" },
+              { "kind": "question", "id": "PRODUCTION_DATE" }
+            ]
+          },
+          "items": [
+            {
+              "id": "order",
+              "label": { "en": "Order" },
+              "include": [{ "kind": "question", "id": "SERVICE" }]
+            },
+            {
+              "id": "meals",
+              "label": { "en": "Meals" },
+              "render": { "lineGroups": { "mode": "inline" } },
+              "include": [
+                {
+                  "kind": "lineGroup",
+                  "id": "MP_MEALS_REQUEST",
+                  "presentation": "liftedRowFields",
+                  "fields": ["meal_type", "quantity"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+      ```
+
+      **Notes:**
+      - Steps can mix **top-level questions** and **line item groups**.
+      - Line groups can be rendered **inline** or via a **full-page overlay** (`displayMode: "overlay"` or step `render.lineGroups.mode`).
+      - You can filter visible rows per step using `rows.includeWhen` / `rows.excludeWhen` (e.g., `quantity > 0`) and scope subgroups via `subGroups.include`.
+      - If you need to **show all rows** but only **validate/advance based on a subset** (e.g., ignore rows where `QTY < 1` while still displaying them), use `validationRows.includeWhen` / `validationRows.excludeWhen` on the step target.
+      - The UI exposes virtual step fields (default prefix `__ckStep`) so existing `visibility.showWhen` rules can gate fields/buttons:
+        - `__ckStepValid_<STEP_ID>` / `__ckStepComplete_<STEP_ID>`
+        - `__ckStepMaxValidIndex` / `__ckStepMaxCompleteIndex`
+      - Full design details live in `docs/guided-steps-edit-mode-design.md`.
+
     - Want a **submit confirmation dialog** (Confirm/Cancel overlay) title? Set `submissionConfirmationTitle` (localized). When omitted, the UI uses system string defaults:
 
       ```json

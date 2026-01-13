@@ -725,6 +725,7 @@ export const FORM_VIEW_STYLES = `
         }
         /* Consent checkbox: render checkbox on the left of the label (full-width row). */
         .form-card .field.inline-field.ck-consent-field > label,
+        .ck-group-stack .field.inline-field.ck-consent-field > label,
         .webform-overlay .field.inline-field.ck-consent-field > label {
           flex: 1 1 100%;
           max-width: none;
@@ -733,6 +734,7 @@ export const FORM_VIEW_STYLES = `
           gap: 12px;
         }
         .form-card .field.inline-field.ck-consent-field > label > input[type="checkbox"],
+        .ck-group-stack .field.inline-field.ck-consent-field > label > input[type="checkbox"],
         .webform-overlay .field.inline-field.ck-consent-field > label > input[type="checkbox"] {
           width: 40px;
           height: 40px;
@@ -743,6 +745,7 @@ export const FORM_VIEW_STYLES = `
           margin-top: 2px;
         }
         .form-card .field.inline-field.ck-consent-field > label > .ck-consent-text,
+        .ck-group-stack .field.inline-field.ck-consent-field > label > .ck-consent-text,
         .webform-overlay .field.inline-field.ck-consent-field > label > .ck-consent-text {
           flex: 1 1 auto;
           min-width: 0;

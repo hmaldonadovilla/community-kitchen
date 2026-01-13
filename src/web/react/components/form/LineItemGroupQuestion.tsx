@@ -10,6 +10,7 @@ import {
   toDependencyValue,
   toOptionSet
 } from '../../../core';
+import { matchesWhen } from '../../../rules/visibility';
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
 import {
@@ -164,7 +165,18 @@ export interface LineItemGroupQuestionCtx {
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
-export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: LineItemGroupQuestionCtx }> = ({ q, ctx }) => {
+export const LineItemGroupQuestion: React.FC<{
+  q: WebQuestionDefinition;
+  ctx: LineItemGroupQuestionCtx;
+  /**
+   * Optional rendering-only row filter for the parent group. Does not delete stored rows.
+   */
+  rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
+  /**
+   * When true, hide the inline subgroup editor sections and rely on subgroup "open" pills/overlays instead.
+   */
+  hideInlineSubgroups?: boolean;
+}> = ({ q, ctx, rowFilter, hideInlineSubgroups }) => {
   const {
     definition,
     language,
@@ -206,6 +218,20 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
     setOverlay,
     onDiagnostic
   } = ctx;
+
+  const isIncludedByRowFilter = React.useCallback(
+    (rowValues: Record<string, FieldValue>): boolean => {
+      if (!rowFilter) return true;
+      const includeWhen = (rowFilter as any)?.includeWhen;
+      const excludeWhen = (rowFilter as any)?.excludeWhen;
+      const includeOk =
+        includeWhen && includeWhen.fieldId ? matchesWhen((rowValues as any)[includeWhen.fieldId], includeWhen) : true;
+      const excludeMatch =
+        excludeWhen && excludeWhen.fieldId ? matchesWhen((rowValues as any)[excludeWhen.fieldId], excludeWhen) : false;
+      return includeOk && !excludeMatch;
+    },
+    [rowFilter]
+  );
 
   const groupChoiceSearchDefault = (q.lineItemConfig?.ui as any)?.choiceSearchEnabled;
 
@@ -678,8 +704,9 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
           );
         };
 
-        const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: lineItems[q.id] || [] }, language);
-        const parentRows = lineItems[q.id] || [];
+        const renderRowsAll = lineItems[q.id] || [];
+        const parentRows = rowFilter ? renderRowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any)) : renderRowsAll;
+        const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: parentRows }, language);
         const parentCount = parentRows.length;
         const selectorControl =
           selectorCfg && selectorOptions.length ? (
@@ -1237,7 +1264,14 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                                 const hits = effects
                                   .map(e => (e?.groupId !== undefined && e?.groupId !== null ? e.groupId.toString() : ''))
                                   .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
-                                return Array.from(new Set(hits));
+                                const sourceVal = row.values[titleField.id];
+                                const hasSourceValue = !isEmptyValue(sourceVal as any);
+                                const filtered = hits.filter(subId => {
+                                  const subKey = buildSubgroupKey(q.id, row.id, subId);
+                                  const subRows = lineItems[subKey] || [];
+                                  return (Array.isArray(subRows) && subRows.length > 0) || hasSourceValue;
+                                });
+                                return Array.from(new Set(filtered));
                               })();
                               const subgroupOpenStack = triggeredSubgroupIds.length
                                 ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: titleField.id })
@@ -1531,7 +1565,14 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                         const hits = effects
                           .map(e => (e?.groupId !== undefined && e?.groupId !== null ? e.groupId.toString() : ''))
                           .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
-                        return Array.from(new Set(hits));
+                        const sourceVal = row.values[field.id];
+                        const hasSourceValue = !isEmptyValue(sourceVal as any);
+                        const filtered = hits.filter(subId => {
+                          const subKey = buildSubgroupKey(q.id, row.id, subId);
+                          const subRows = lineItems[subKey] || [];
+                          return (Array.isArray(subRows) && subRows.length > 0) || hasSourceValue;
+                        });
+                        return Array.from(new Set(filtered));
                       })();
                       const fieldIsStacked = (field as any)?.ui?.labelLayout === 'stacked' && labelStyle !== srOnly;
                       const subgroupOpenStack = triggeredSubgroupIds.length && !fieldIsStacked
@@ -1998,7 +2039,7 @@ export const LineItemGroupQuestion: React.FC<{ q: WebQuestionDefinition; ctx: Li
                       </button>
                     )}
                   </div>
-                  {!isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
+                  {!hideInlineSubgroups && !isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
                     const subLabelResolved = resolveLocalizedString(
                       sub.label,
                       language,
