@@ -1000,7 +1000,7 @@ components:
       required: [text]
       properties:
         when:
-          $ref: '#/components/schemas/VisibilityCondition'
+          $ref: '#/components/schemas/WhenClause'
           description: Optional condition evaluated against the current row values.
         text:
           $ref: '#/components/schemas/LocalizedString'
@@ -1763,9 +1763,9 @@ components:
         Filtering affects rendering and step evaluation scope; it does not delete stored rows.
       properties:
         includeWhen:
-          $ref: '#/components/schemas/VisibilityCondition'
+          $ref: '#/components/schemas/WhenClause'
         excludeWhen:
-          $ref: '#/components/schemas/VisibilityCondition'
+          $ref: '#/components/schemas/WhenClause'
       additionalProperties: false
 
     StepSubGroupTargetConfig:
@@ -2735,13 +2735,48 @@ components:
           type: boolean
           description: If true, condition matches when the field has any value other than empty/blank/null. If false, condition matches when the field is empty.
 
+    WhenClause:
+      description: |
+        Condition clause used by visibility, validation, rowDisclaimer, and guided-step row filters.
+
+        Supports both:
+        - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `notEmpty`
+        - Compound conditions:
+          - `all`: AND (every entry must match)
+          - `any`: OR (at least one entry must match)
+          - `not`: NOT (negates a nested clause; useful for "not in" patterns)
+      oneOf:
+        - $ref: '#/components/schemas/VisibilityCondition'
+        - type: object
+          required: [all]
+          properties:
+            all:
+              type: array
+              items:
+                $ref: '#/components/schemas/WhenClause'
+          additionalProperties: false
+        - type: object
+          required: [any]
+          properties:
+            any:
+              type: array
+              items:
+                $ref: '#/components/schemas/WhenClause'
+          additionalProperties: false
+        - type: object
+          required: [not]
+          properties:
+            not:
+              $ref: '#/components/schemas/WhenClause'
+          additionalProperties: false
+
     VisibilityConfig:
       type: object
       properties:
         showWhen:
-          $ref: '#/components/schemas/VisibilityCondition'
+          $ref: '#/components/schemas/WhenClause'
         hideWhen:
-          $ref: '#/components/schemas/VisibilityCondition'
+          $ref: '#/components/schemas/WhenClause'
       description: Show/hide logic tied to another field value.
 
     LineItemSelectorConfig:
@@ -2825,27 +2860,7 @@ components:
             - summary: show warnings only on the summary view
             - both: show warnings on both views
         when:
-          type: object
-          properties:
-            fieldId:
-              type: string
-            equals:
-              oneOf:
-                - type: string
-                - type: array
-                  items:
-                    type: string
-            greaterThan:
-              oneOf:
-                - type: number
-                - type: string
-            lessThan:
-              oneOf:
-                - type: number
-                - type: string
-            notEmpty:
-              type: boolean
-              description: If true, condition matches when the field has any value other than empty/blank/null. If false, condition matches when the field is empty.
+          $ref: '#/components/schemas/WhenClause'
         then:
           type: object
           properties:

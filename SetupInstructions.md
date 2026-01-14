@@ -579,6 +579,29 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
        - Placeholders: `{{FIELD_ID}}`, `{{__ckRowSource}}` (auto/manual), `{{__ckRowSourceLabel}}` (localized).
+       - Conditions (`when`) support **compound logic** using `all` (AND), `any` (OR), and `not` (NOT). This same compound `when` syntax also works for `visibility.showWhen/hideWhen` and `validationRules[].when`.
+       - Guided steps: the **active step id** is exposed as a virtual field at the step state prefix. With the default `steps.stateFields.prefix = "__ckStep"`, you can reference the current step via `"fieldId": "__ckStep"`.
+         Example: show a row disclaimer only for selection-effect rows, except on specific steps:
+
+       ```json
+       {
+         "ui": {
+           "rowDisclaimer": {
+             "cases": [
+               {
+                 "when": {
+                   "all": [
+                     { "fieldId": "__ckSelectionEffectId", "equals": "leftover" },
+                     { "not": { "fieldId": "__ckStep", "equals": ["foodSafety", "portioning"] } }
+                   ]
+                 },
+                 "text": { "en": "Update Requested portions if required" }
+               }
+             ]
+           }
+         }
+       }
+       ```
     - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
 
        ```json

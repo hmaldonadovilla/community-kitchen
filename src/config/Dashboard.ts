@@ -1142,7 +1142,34 @@ export class Dashboard {
     };
 
     const normalizeCondition = (raw: any): any => {
-      if (!raw || typeof raw !== 'object') return undefined;
+      if (!raw) return undefined;
+      if (Array.isArray(raw)) {
+        const list = (raw as any[]).map(entry => normalizeCondition(entry)).filter(Boolean);
+        if (!list.length) return undefined;
+        if (list.length === 1) return list[0];
+        return { all: list };
+      }
+      if (typeof raw !== 'object') return undefined;
+
+      const allRaw = (raw as any).all ?? (raw as any).and;
+      if (Array.isArray(allRaw)) {
+        const list = (allRaw as any[]).map(entry => normalizeCondition(entry)).filter(Boolean);
+        if (!list.length) return undefined;
+        if (list.length === 1) return list[0];
+        return { all: list };
+      }
+      const anyRaw = (raw as any).any ?? (raw as any).or;
+      if (Array.isArray(anyRaw)) {
+        const list = (anyRaw as any[]).map(entry => normalizeCondition(entry)).filter(Boolean);
+        if (!list.length) return undefined;
+        if (list.length === 1) return list[0];
+        return { any: list };
+      }
+      if (Object.prototype.hasOwnProperty.call(raw as any, 'not')) {
+        const nested = normalizeCondition((raw as any).not);
+        return nested ? { not: nested } : undefined;
+      }
+
       const fieldId = normalizeString((raw as any).fieldId ?? (raw as any).field ?? (raw as any).id);
       if (!fieldId) return undefined;
       const out: any = { fieldId };

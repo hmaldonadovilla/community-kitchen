@@ -33,4 +33,28 @@ describe('shouldHideField', () => {
     expect(matchesWhen('   ', { fieldId: 'dep', lessThan: 63 } as any)).toBe(false);
     expect(matchesWhen(0, { fieldId: 'dep', lessThan: 63 } as any)).toBe(true);
   });
+
+  it('supports compound when clauses (all/any/not)', () => {
+    const ctx2: any = {
+      getValue: (id: string) => (id === 'a' ? 'yes' : id === 'b' ? 'ok' : '')
+    };
+
+    expect(shouldHideField({ showWhen: { all: [{ fieldId: 'a', equals: 'yes' }, { fieldId: 'b', equals: 'ok' }] } } as any, ctx2)).toBe(
+      false
+    );
+    expect(shouldHideField({ showWhen: { all: [{ fieldId: 'a', equals: 'yes' }, { fieldId: 'b', equals: 'no' }] } } as any, ctx2)).toBe(
+      true
+    );
+
+    expect(shouldHideField({ showWhen: { any: [{ fieldId: 'a', equals: 'no' }, { fieldId: 'b', equals: 'ok' }] } } as any, ctx2)).toBe(
+      false
+    );
+    expect(
+      shouldHideField({ showWhen: { any: [{ fieldId: 'a', equals: 'no' }, { fieldId: 'b', equals: 'no' }] } } as any, ctx2)
+    ).toBe(true);
+
+    // NOT can be used for "not equals"/"not in" patterns (negating a leaf or compound clause).
+    expect(shouldHideField({ showWhen: { not: { fieldId: 'a', equals: 'yes' } } } as any, ctx2)).toBe(true);
+    expect(shouldHideField({ hideWhen: { not: { fieldId: 'a', equals: 'yes' } } } as any, ctx2)).toBe(false);
+  });
 });

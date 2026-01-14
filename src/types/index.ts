@@ -544,9 +544,33 @@ export interface VisibilityCondition {
   notEmpty?: boolean;
 }
 
+/**
+ * Compound condition support for `when` clauses.
+ *
+ * - Leaf conditions use `VisibilityCondition` (single-field comparison).
+ * - Compound conditions allow combining multiple leaf/compound entries using:
+ *   - all: AND (every entry must match)
+ *   - any: OR (at least one entry must match)
+ *   - not: NOT (negates a nested condition)
+ *
+ * Notes:
+ * - This shape is supported for visibility rules, validation rules, row disclaimers, and guided-step row filters.
+ * - Backwards compatible: any existing single-field `VisibilityCondition` remains valid.
+ */
+export interface WhenAllClause {
+  all: WhenClause[];
+}
+export interface WhenAnyClause {
+  any: WhenClause[];
+}
+export interface WhenNotClause {
+  not: WhenClause;
+}
+export type WhenClause = VisibilityCondition | WhenAllClause | WhenAnyClause | WhenNotClause;
+
 export interface VisibilityConfig {
-  showWhen?: VisibilityCondition;
-  hideWhen?: VisibilityCondition;
+  showWhen?: WhenClause;
+  hideWhen?: WhenClause;
 }
 
 export type LocalizedString = string | {
@@ -557,18 +581,7 @@ export type LocalizedString = string | {
 };
 
 export interface ValidationRule {
-  when: {
-    fieldId: string;
-    equals?: string | string[];
-    greaterThan?: number | string;
-    lessThan?: number | string;
-    /**
-     * Match based on emptiness rather than a specific value.
-     * - true: matches when the field has any non-empty value (not null/undefined/blank)
-     * - false: matches when the field is empty
-     */
-    notEmpty?: boolean;
-  };
+  when: WhenClause;
   then?: {
     fieldId: string;
     required?: boolean;
@@ -841,7 +854,7 @@ export interface RowDisclaimerRule {
    * Optional condition evaluated against the current row values.
    * - fieldId is required; comparisons use the raw row value (arrays use first element).
    */
-  when?: VisibilityCondition;
+  when?: WhenClause;
   /**
    * Localized disclaimer text (supports placeholders like {{FIELD_ID}}).
    */
@@ -1537,8 +1550,8 @@ export interface StepNavigationConfig {
 }
 
 export interface StepRowFilterConfig {
-  includeWhen?: VisibilityCondition;
-  excludeWhen?: VisibilityCondition;
+  includeWhen?: WhenClause;
+  excludeWhen?: WhenClause;
 }
 
 export interface StepSubGroupTargetConfig {

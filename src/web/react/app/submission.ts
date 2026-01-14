@@ -1,4 +1,4 @@
-import { evaluateRules, matchesWhen, shouldHideField, validateRules } from '../../core';
+import { evaluateRules, matchesWhenClause, shouldHideField, validateRules } from '../../core';
 import { FieldValue, LangCode, VisibilityContext, WebFormDefinition, WebFormSubmission } from '../../types';
 import { SubmissionPayload } from '../api';
 import { FormErrors, LineItemState } from '../types';
@@ -7,7 +7,7 @@ import { isEmptyValue } from '../utils/values';
 import { tSystem } from '../../systemStrings';
 import { resolveLocalizedString } from '../../i18n';
 import { buildMaybeFilePayload } from './filePayload';
-import { buildSubgroupKey, resolveSubgroupKey } from './lineItems';
+import { ROW_ID_KEY, buildSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
 
@@ -23,8 +23,9 @@ const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>, filter?: a
   if (!filter) return true;
   const includeWhen = filter?.includeWhen;
   const excludeWhen = filter?.excludeWhen;
-  const includeOk = includeWhen?.fieldId ? matchesWhen(rowValues[includeWhen.fieldId], includeWhen) : true;
-  const excludeMatch = excludeWhen?.fieldId ? matchesWhen(rowValues[excludeWhen.fieldId], excludeWhen) : false;
+  const rowCtx: any = { getValue: (fid: string) => (rowValues as any)[fid] };
+  const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+  const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
   return includeOk && !excludeMatch;
 };
 
@@ -718,7 +719,7 @@ export const buildSubmissionPayload = async (args: {
 
     const serialized = await Promise.all(
       rowsToSave.map(async row => {
-        const base: Record<string, any> = { ...(row.values || {}) };
+        const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
 
         for (const f of lineFileFields) {
           base[f.id] = await buildMaybeFilePayload(base[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
@@ -755,7 +756,7 @@ export const buildSubmissionPayload = async (args: {
           const subFileFields = subFields.filter((f: any) => f?.type === 'FILE_UPLOAD');
           base[key] = await Promise.all(
             subRowsToSave.map(async cr => {
-              const child: Record<string, any> = { ...(cr.values || {}) };
+              const child: Record<string, any> = { ...(cr.values || {}), [ROW_ID_KEY]: cr.id };
               for (const f of subFileFields) {
                 child[f.id] = await buildMaybeFilePayload(child[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
               }
@@ -854,7 +855,7 @@ export const buildDraftPayload = (args: {
     const subGroups = q.lineItemConfig?.subGroups || [];
 
     const serialized = rows.map(row => {
-      const base: Record<string, any> = { ...(row.values || {}) };
+      const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
       lineFileFields.forEach(f => {
         base[f.id] = toUrlOnlyUploadString(base[f.id]);
       });
@@ -867,7 +868,7 @@ export const buildDraftPayload = (args: {
         const subFields = (sub as any).fields || [];
         const subFileFields = subFields.filter((f: any) => f?.type === 'FILE_UPLOAD');
         base[key] = childRows.map(cr => {
-          const child: Record<string, any> = { ...(cr.values || {}) };
+          const child: Record<string, any> = { ...(cr.values || {}), [ROW_ID_KEY]: cr.id };
           subFileFields.forEach((f: any) => {
             child[f.id] = toUrlOnlyUploadString(child[f.id]);
           });
