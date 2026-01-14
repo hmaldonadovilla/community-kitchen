@@ -1,7 +1,7 @@
 import { ValidationRule } from '../../types';
 import { resolveLocalizedString } from '../i18n';
 import { FieldValue, LangCode, LocalizedString, ThenConfig, ValidationError, VisibilityContext } from '../types';
-import { matchesWhen } from './visibility';
+import { firstWhenFieldId, matchesWhenClause } from './visibility';
 
 const validationDebugEnabled = (): boolean => Boolean((globalThis as any)?.__WEB_FORM_DEBUG__);
 
@@ -192,20 +192,21 @@ export function evaluateRules(rules: ValidationRule[], ctx: ValidationContext): 
         validationLog('warningView.normalized', { raw: warningViewRaw, normalized: warningView });
       }
 
-      const whenFieldId = (rule as any)?.when?.fieldId;
-      if (!whenFieldId) return;
-      const whenValue = ctx.getValue(whenFieldId);
-      if (!matchesWhen(whenValue, (rule as any).when)) return;
+      const when = (rule as any)?.when;
+      if (!when) return;
+      if (!matchesWhenClause(when as any, ctx as any)) return;
 
       // "Message-only" rules: allow rules that don't specify `then` and simply emit a message when `when` matches.
       // This is especially useful for non-blocking warnings.
       const thenFieldId = (rule as any)?.then?.fieldId;
       if (!thenFieldId) {
-        if (ctx.isHidden && ctx.isHidden(whenFieldId)) return;
+        const anchorFieldId = firstWhenFieldId(when);
+        if (!anchorFieldId) return;
+        if (ctx.isHidden && ctx.isHidden(anchorFieldId)) return;
         const msg = resolveLocalizedString((rule as any)?.message, ctx.language, '');
         if (!msg) return;
         issues.push({
-          fieldId: whenFieldId,
+          fieldId: anchorFieldId,
           message: msg,
           scope: 'main',
           level,

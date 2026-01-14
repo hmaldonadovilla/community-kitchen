@@ -1,5 +1,5 @@
 import { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../../types';
-import { shouldHideField, matchesWhen } from '../../../../rules/visibility';
+import { shouldHideField, matchesWhenClause } from '../../../../rules/visibility';
 import { validateRules } from '../../../../rules/validation';
 import { LineItemState } from '../../../types';
 import { isEmptyValue } from '../../../utils/values';
@@ -64,8 +64,9 @@ const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>, filter?: a
   if (!filter) return true;
   const includeWhen = filter?.includeWhen;
   const excludeWhen = filter?.excludeWhen;
-  const includeOk = includeWhen?.fieldId ? matchesWhen(rowValues[includeWhen.fieldId], includeWhen) : true;
-  const excludeMatch = excludeWhen?.fieldId ? matchesWhen(rowValues[excludeWhen.fieldId], excludeWhen) : false;
+  const rowCtx: any = { getValue: (fid: string) => (rowValues as any)[fid] };
+  const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+  const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
   return includeOk && !excludeMatch;
 };
 

@@ -47,6 +47,61 @@ describe('runSelectionEffects selectionEffect id tagging', () => {
     expect((rows[0].values as any).__ckSelectionEffectId).toBe('leftover');
   });
 
+  it('does not seed subgroup rows when addLineItems creates a parent row (no presets)', () => {
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'LINES',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Lines', fr: 'Lines', nl: 'Lines' },
+          required: false,
+          lineItemConfig: {
+            fields: [{ id: 'ITEM', type: 'TEXT', label: { en: 'Item', fr: 'Item', nl: 'Item' }, required: false }],
+            // Subgroup is NOT overlay/auto, so default behavior would be to seed an empty row unless explicitly suppressed.
+            subGroups: [
+              {
+                id: 'SUB',
+                label: { en: 'Sub', fr: 'Sub', nl: 'Sub' },
+                fields: [{ id: 'A', type: 'TEXT', label: { en: 'A', fr: 'A', nl: 'A' }, required: false }]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+
+    let values: Record<string, any> = {};
+    let lineItems: Record<string, any> = {};
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'TRIGGER',
+        selectionEffects: [{ id: 'leftover', type: 'addLineItems', groupId: 'LINES', preset: { ITEM: 'Apple' } }]
+      } as any,
+      value: 'Yes',
+      language: 'EN' as any,
+      values,
+      setValues,
+      setLineItems
+    });
+
+    const rows = lineItems['LINES'] || [];
+    expect(rows.length).toBe(1);
+    const subKey = `LINES::${rows[0].id}::SUB`;
+    // We should not create an empty subgroup ROW; an empty array is fine (no presets were provided).
+    expect(Array.isArray((lineItems as any)[subKey]) ? (lineItems as any)[subKey] : []).toEqual([]);
+  });
+
   it('tags added rows with parent relationship metadata when triggered inside a line item row', () => {
     const definition: WebFormDefinition = {
       title: 'Test',

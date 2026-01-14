@@ -3,6 +3,7 @@ import {
   computeAllowedOptions,
   buildLocalizedOptions,
   shouldHideField,
+  matchesWhenClause,
   validateRules,
   computeTotals,
   loadOptionsFromDataSource,
@@ -10,7 +11,6 @@ import {
   toDependencyValue,
   toOptionSet
 } from '../../../core';
-import { matchesWhen } from '../../../rules/visibility';
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
 import {
@@ -230,10 +230,9 @@ export const LineItemGroupQuestion: React.FC<{
       if (!rowFilter) return true;
       const includeWhen = (rowFilter as any)?.includeWhen;
       const excludeWhen = (rowFilter as any)?.excludeWhen;
-      const includeOk =
-        includeWhen && includeWhen.fieldId ? matchesWhen((rowValues as any)[includeWhen.fieldId], includeWhen) : true;
-      const excludeMatch =
-        excludeWhen && excludeWhen.fieldId ? matchesWhen((rowValues as any)[excludeWhen.fieldId], excludeWhen) : false;
+      const rowCtx: any = { getValue: (fid: string) => (rowValues as any)[fid] };
+      const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+      const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
       return includeOk && !excludeMatch;
     },
     [rowFilter]
@@ -594,6 +593,117 @@ export const LineItemGroupQuestion: React.FC<{
     setValues
   ]);
 
+  // Autofill subgroup anchor choice when there is exactly 1 allowed option (avoid extra tap).
+  // This covers cases where subgroup rows already exist (e.g., seeded minRows/defaults) and the anchor is still empty.
+  React.useEffect(() => {
+    if (submitting) return;
+    const parentCfg = q.lineItemConfig;
+    if (!parentCfg?.subGroups?.length) return;
+    const parentRows = (lineItems[q.id] || []) as any[];
+    if (!parentRows.length) return;
+
+    const subgroupTargets = (parentCfg.subGroups || [])
+      .map(sub => ({
+        sub: sub as any,
+        subId: resolveSubgroupKey(sub as any),
+        anchorFieldId:
+          (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
+            ? (sub as any).anchorFieldId.toString()
+            : ''
+      }))
+      .filter(entry => entry.subId && entry.anchorFieldId && Array.isArray(entry.sub?.fields) && entry.sub.fields.length);
+    if (!subgroupTargets.length) return;
+
+    // Prime option loads for subgroup anchor fields.
+    subgroupTargets.forEach(({ sub, subId, anchorFieldId }) => {
+      const anchorField = (sub.fields || []).find((f: any) => f?.id === anchorFieldId);
+      if (!anchorField || anchorField.type !== 'CHOICE') return;
+      parentRows.forEach(row => {
+        const subKey = buildSubgroupKey(q.id, row.id, subId);
+        ensureLineOptions(subKey, anchorField);
+      });
+    });
+
+    const normalizeChoice = (raw: any): string => {
+      if (raw === undefined || raw === null) return '';
+      if (Array.isArray(raw)) {
+        const first = raw[0];
+        return first === undefined || first === null ? '' : first.toString().trim();
+      }
+      return raw.toString().trim();
+    };
+
+    setLineItems(prev => {
+      const parentRowsPrev = (prev[q.id] || []) as any[];
+      if (!parentRowsPrev.length) return prev;
+
+      let next: any = prev;
+      let didChange = false;
+
+      subgroupTargets.forEach(({ sub, subId, anchorFieldId }) => {
+        const anchorField = (sub.fields || []).find((f: any) => f?.id === anchorFieldId);
+        if (!anchorField || anchorField.type !== 'CHOICE') return;
+        const dependencyIds = resolveDependsOnIds(anchorField);
+        const subSelectorId =
+          sub?.sectionSelector?.id !== undefined && sub?.sectionSelector?.id !== null ? sub.sectionSelector.id.toString() : '';
+
+        parentRowsPrev.forEach(parentRow => {
+          const subKey = buildSubgroupKey(q.id, parentRow.id, subId);
+          const subRows = (next[subKey] || prev[subKey] || []) as any[];
+          if (!subRows.length) return;
+
+          const optionSetField = buildOptionSetForLineField(anchorField, subKey);
+          const depVals = dependencyIds.map((dep: string) => {
+            const selectorFallback = subSelectorId && dep === subSelectorId ? (subgroupSelectors as any)[subKey] : undefined;
+            return toDependencyValue(
+              (subRows[0]?.values || {})[dep] ?? (values as any)[dep] ?? (parentRow?.values || {})[dep] ?? selectorFallback
+            );
+          });
+          const allowed = computeAllowedOptions(anchorField.optionFilter, optionSetField, depVals);
+          const localized = buildLocalizedOptions(optionSetField, allowed, language, { sort: optionSortFor(anchorField) });
+          const uniqueVals = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
+          if (uniqueVals.length !== 1) return;
+          const only = uniqueVals[0];
+
+          let changedRows: any[] | null = null;
+          subRows.forEach((subRow, idx) => {
+            const cur = normalizeChoice((subRow?.values || {})[anchorFieldId]);
+            if (cur) return;
+            if (!changedRows) changedRows = subRows.map(r => ({ ...r, values: { ...(r.values || {}) } }));
+            (changedRows[idx].values as any)[anchorFieldId] = only;
+            didChange = true;
+            onDiagnostic?.('ui.subgroup.anchor.autofillSingleOption', {
+              groupId: subKey,
+              rowId: subRow?.id || null,
+              fieldId: anchorFieldId,
+              value: only
+            });
+          });
+          if (changedRows) {
+            if (next === prev) next = { ...prev };
+            next[subKey] = changedRows;
+          }
+        });
+      });
+
+      if (!didChange || next === prev) return prev;
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next as any, { mode: 'change' });
+      setValues(nextValues);
+      return recomputed;
+    });
+  }, [
+    submitting,
+    q,
+    values,
+    language,
+    optionState,
+    lineItems,
+    subgroupSelectors,
+    ensureLineOptions,
+    setLineItems,
+    setValues
+  ]);
+
         const selectorCfg = q.lineItemConfig?.sectionSelector;
         const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
         const selectorValue = selectorCfg ? ((values[selectorCfg.id] as string) || '') : '';
@@ -784,6 +894,201 @@ export const LineItemGroupQuestion: React.FC<{
         const shouldRenderTopToolbar = showSelectorTop || showAddTop;
         const shouldRenderBottomToolbar =
           (parentRows.length > 0 || showAddBottom) && (showAddBottom || showSelectorBottom || groupTotals.length > 0);
+
+        // UX: in progressive/collapsible groups, auto-expand the first row that still needs attention
+        // (errors/warnings or incomplete required fields), as long as the row is expandable.
+        const didAutoExpandAttentionRef = React.useRef(false);
+        const attentionRowId = React.useMemo((): string => {
+          if (didAutoExpandAttentionRef.current) return '';
+          if (!parentRows.length) return '';
+
+          const ui = q.lineItemConfig?.ui as any;
+          const guidedCollapsedFieldsInHeader = Boolean(ui?.guidedCollapsedFieldsInHeader);
+          const isProgressive =
+            ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
+          if (!isProgressive || guidedCollapsedFieldsInHeader) return '';
+
+          const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
+          const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
+          const collapsedFieldConfigs = (ui?.collapsedFields || []) as any[];
+          const allFields = (q.lineItemConfig?.fields || []) as any[];
+          const subGroups = (q.lineItemConfig?.subGroups || []) as any[];
+
+          // Don't fight the user: if any row in this group is explicitly expanded, don't auto-expand.
+          const hasExplicitExpanded = parentRows.some(r => collapsedRows[`${q.id}::${r.id}`] === false);
+          if (hasExplicitExpanded) return '';
+
+          const rowHasAnyWarning = (rowId: string): boolean => {
+            if (!warningByField) return false;
+            const prefix = `${q.id}__`;
+            const suffix = `__${rowId}`;
+            return Object.keys(warningByField).some(k => k.startsWith(prefix) && k.endsWith(suffix));
+          };
+
+          const getTopValue = (fid: string): FieldValue | undefined =>
+            resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid];
+
+          const isRequiredFieldFilled = (field: any, raw: any): boolean => {
+            if (field?.type === 'FILE_UPLOAD') {
+              return isUploadValueComplete({
+                value: raw as any,
+                uploadConfig: (field as any).uploadConfig,
+                required: true
+              });
+            }
+            return !isEmptyValue(raw as any);
+          };
+
+          const canExpandRow = (row: any, rowCollapsed: boolean): boolean => {
+            if (!rowCollapsed) return true;
+            if (expandGate === 'always') return true;
+            if (!collapsedFieldConfigs.length) return true;
+
+            const groupCtx: VisibilityContext = {
+              getValue: fid => getTopValue(fid),
+              getLineValue: (_rowId, fid) => (row?.values || {})[fid]
+            };
+            const isHidden = (fieldId: string) => {
+              const target = (allFields || []).find((f: any) => f?.id === fieldId) as any;
+              if (!target) return false;
+              return shouldHideField(target.visibility, groupCtx, { rowId: row?.id, linePrefix: q.id });
+            };
+
+            for (const cfg of collapsedFieldConfigs) {
+              const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
+              if (!fid) continue;
+              const field = (allFields || []).find((f: any) => f?.id === fid) as any;
+              if (!field) continue;
+
+              const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row?.id, linePrefix: q.id });
+              if (hideField) continue;
+
+              const raw = (row?.values || {})[field.id];
+              if (field.required && !isRequiredFieldFilled(field, raw)) return false;
+
+              const rules = Array.isArray(field.validationRules)
+                ? field.validationRules.filter((r: any) => r?.then?.fieldId === field.id)
+                : [];
+              if (rules.length) {
+                const rulesCtx: any = {
+                  ...groupCtx,
+                  getValue: (fieldId: string) =>
+                    Object.prototype.hasOwnProperty.call(row?.values || {}, fieldId)
+                      ? (row?.values || {})[fieldId]
+                      : getTopValue(fieldId),
+                  language,
+                  phase: 'submit',
+                  isHidden
+                };
+                const errs = validateRules(rules, rulesCtx);
+                if (errs.length) return false;
+              }
+            }
+
+            return true;
+          };
+
+          const rowHasMissingRequired = (row: any): boolean => {
+            const rowValues = (row?.values || {}) as Record<string, FieldValue>;
+            const groupCtx: VisibilityContext = {
+              getValue: fid => getTopValue(fid),
+              getLineValue: (_rowId, fid) => rowValues[fid]
+            };
+
+            for (const field of allFields) {
+              if (!field?.required) continue;
+              const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+              if (hideField) continue;
+              const mapped = field.valueMap
+                ? resolveValueMapValue(
+                    field.valueMap,
+                    (fid: string) => {
+                      if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
+                      return getTopValue(fid);
+                    },
+                    { language, targetOptions: toOptionSet(field as any) }
+                  )
+                : undefined;
+              const raw = field.valueMap ? mapped : (rowValues as any)[field.id];
+              if (!isRequiredFieldFilled(field, raw)) return true;
+            }
+
+            for (const sub of subGroups) {
+              const subId = resolveSubgroupKey(sub as any);
+              if (!subId) continue;
+              const subKey = buildSubgroupKey(q.id, row.id, subId);
+              const subRows = (lineItems[subKey] || []) as any[];
+              if (!subRows.length) continue;
+              const subFields = ((sub as any)?.fields || []) as any[];
+              for (const subRow of subRows) {
+                const subRowValues = ((subRow as any)?.values || {}) as Record<string, FieldValue>;
+                const subCtx: VisibilityContext = {
+                  getValue: (fid: string) => {
+                    if (Object.prototype.hasOwnProperty.call(subRowValues || {}, fid)) return (subRowValues as any)[fid];
+                    if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
+                    return getTopValue(fid);
+                  },
+                  getLineValue: (_rowId, fid) => subRowValues[fid]
+                };
+                for (const field of subFields) {
+                  if (!field?.required) continue;
+                  const hideField = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
+                  if (hideField) continue;
+                  const mapped = field.valueMap
+                    ? resolveValueMapValue(
+                        field.valueMap,
+                        (fid: string) => {
+                          if (Object.prototype.hasOwnProperty.call(subRowValues || {}, fid)) return (subRowValues as any)[fid];
+                          if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
+                          return getTopValue(fid);
+                        },
+                        { language, targetOptions: toOptionSet(field as any) }
+                      )
+                    : undefined;
+                  const raw = field.valueMap ? mapped : (subRowValues as any)[field.id];
+                  if (!isRequiredFieldFilled(field, raw)) return true;
+                }
+              }
+            }
+
+            return false;
+          };
+
+          for (const row of parentRows) {
+            const collapseKey = `${q.id}::${row.id}`;
+            const rowCollapsed = collapsedRows[collapseKey] ?? defaultCollapsed;
+            if (!rowCollapsed) continue;
+            if (!canExpandRow(row, rowCollapsed)) continue;
+
+            const rowHasError = errorIndex.rowErrors.has(collapseKey);
+            const rowNeedsAttention = rowHasError || rowHasAnyWarning(row.id) || rowHasMissingRequired(row);
+            if (rowNeedsAttention) return row.id;
+          }
+          return '';
+        }, [
+          q.id,
+          q.lineItemConfig,
+          parentRows,
+          collapsedRows,
+          warningByField,
+          errorIndex,
+          lineItems,
+          values,
+          resolveVisibilityValue,
+          language
+        ]);
+        React.useEffect(() => {
+          if (!attentionRowId) return;
+          if (didAutoExpandAttentionRef.current) return;
+          didAutoExpandAttentionRef.current = true;
+          const key = `${q.id}::${attentionRowId}`;
+          setCollapsedRows(prev => {
+            if (prev[key] === false) return prev;
+            return { ...prev, [key]: false };
+          });
+          onDiagnostic?.('ui.lineItems.autoExpand.firstAttention', { groupId: q.id, rowId: attentionRowId });
+        }, [attentionRowId, q.id, setCollapsedRows, onDiagnostic]);
+
         return (
             <div
               key={q.id}
@@ -1058,7 +1363,8 @@ export const LineItemGroupQuestion: React.FC<{
                 ui,
                 language,
                 rowValues: (row.values || {}) as any,
-                autoGenerated: !!row.autoGenerated
+                autoGenerated: !!row.autoGenerated,
+                getValue: groupCtx?.getValue
               });
 
               const titleFieldId = (() => {
@@ -2898,11 +3204,21 @@ export const LineItemGroupQuestion: React.FC<{
                               const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
                               const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
                               const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
+                              const optionsForOverlay = localized
+                                .filter(opt => deduped.includes(opt.value))
+                                .map(opt => ({ value: opt.value, label: opt.label }));
+                              if (optionsForOverlay.length === 1) {
+                                onDiagnostic?.('ui.subgroup.addRow.autofillSingleOption', {
+                                  groupId: subKey,
+                                  anchorFieldId: anchorField.id,
+                                  value: optionsForOverlay[0].value
+                                });
+                                addLineItemRowManual(subKey, { [anchorField.id]: optionsForOverlay[0].value });
+                                return;
+                              }
                               setOverlay({
                                 open: true,
-                                options: localized
-                                  .filter(opt => deduped.includes(opt.value))
-                                  .map(opt => ({ value: opt.value, label: opt.label })),
+                                options: optionsForOverlay,
                                 groupId: subKey,
                                 anchorFieldId: anchorField.id,
                                 selected: []
@@ -2922,7 +3238,7 @@ export const LineItemGroupQuestion: React.FC<{
                         <button
                           type="button"
                           disabled={submitting || subSelectorIsMissing}
-                          onClick={() => {
+                          onClick={async () => {
                             const anchorFieldId =
                               (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
                                 ? (sub as any).anchorFieldId.toString()
@@ -2931,7 +3247,52 @@ export const LineItemGroupQuestion: React.FC<{
                               anchorFieldId && (subSelectorValue || '').toString().trim()
                                 ? { [anchorFieldId]: (subSelectorValue || '').toString().trim() }
                                 : undefined;
-                            addLineItemRowManual(subKey, selectorPreset);
+                            if (selectorPreset) {
+                              addLineItemRowManual(subKey, selectorPreset);
+                              return;
+                            }
+                            const anchorField = anchorFieldId ? (sub.fields || []).find(f => f.id === anchorFieldId) : undefined;
+                            if (!anchorField || anchorField.type !== 'CHOICE') {
+                              addLineItemRowManual(subKey);
+                              return;
+                            }
+                            const key = optionKey(anchorField.id, subKey);
+                            let opts = optionState[key];
+                            if (!opts && anchorField.dataSource) {
+                              const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                              if (loaded) {
+                                opts = loaded;
+                                setOptionState(prev => ({ ...prev, [key]: loaded }));
+                              }
+                            }
+                            if (!opts) {
+                              opts = {
+                                en: anchorField.options || [],
+                                fr: (anchorField as any).optionsFr || [],
+                                nl: (anchorField as any).optionsNl || []
+                              };
+                            }
+                            const dependencyIds = (
+                              Array.isArray(anchorField.optionFilter?.dependsOn)
+                                ? anchorField.optionFilter?.dependsOn
+                                : [anchorField.optionFilter?.dependsOn || '']
+                            ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
+                            const depVals = dependencyIds.map(dep =>
+                              toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorValue)
+                            );
+                            const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
+                            const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
+                            const uniqueVals = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
+                            if (uniqueVals.length === 1) {
+                              onDiagnostic?.('ui.subgroup.addRow.autofillSingleOption', {
+                                groupId: subKey,
+                                anchorFieldId: anchorField.id,
+                                value: uniqueVals[0]
+                              });
+                              addLineItemRowManual(subKey, { [anchorField.id]: uniqueVals[0] });
+                              return;
+                            }
+                            addLineItemRowManual(subKey);
                           }}
                           style={withDisabled(buttonStyles.secondary, submitting || subSelectorIsMissing)}
                         >

@@ -162,6 +162,30 @@ describe('validation rules', () => {
     expect(errorsOnly.length).toBe(0);
   });
 
+  it('supports compound when clauses (all/any/not)', () => {
+    const rules = [
+      {
+        when: { all: [{ fieldId: 'A', equals: 'yes' }, { fieldId: 'B', equals: 'go' }] },
+        then: { fieldId: 'C', required: true }
+      }
+    ];
+
+    const match = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'yes' : id === 'B' ? 'go' : ''),
+      isHidden: () => false
+    } as any);
+    expect(match.length).toBe(1);
+    expect(match[0].fieldId).toBe('C');
+
+    const noMatch = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'A' ? 'yes' : id === 'B' ? 'stop' : ''),
+      isHidden: () => false
+    } as any);
+    expect(noMatch.length).toBe(0);
+  });
+
   it('supports warningDisplay (top/field/both) on warning rules', () => {
     const base = {
       level: 'warning',

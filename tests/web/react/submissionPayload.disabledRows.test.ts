@@ -97,7 +97,8 @@ describe('buildSubmissionPayload (disabled progressive rows)', () => {
 
     expect(Array.isArray((payload as any).values.LI)).toBe(true);
     expect((payload as any).values.LI.length).toBe(1);
-    expect((payload as any).values['LI_json']).toBe('[{}]');
+    // We now persist stable row ids in the JSON payload so selection-effect parent/child deletes work after reload.
+    expect((payload as any).values['LI_json']).toBe('[{"__ckRowId":"r1"}]');
   });
 });
 

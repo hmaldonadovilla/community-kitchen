@@ -1,7 +1,7 @@
 import { WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LangCode, ValidationError } from '../types';
 import { checkRule, validateRules } from '../rules/validation';
-import { matchesWhen } from '../rules/visibility';
+import { matchesWhenClause } from '../rules/visibility';
 import {
   getRowValue,
   getValue,
@@ -91,14 +91,14 @@ export function validateFormWithBundle(definition: WebFormDefinition, language: 
       (group.lineItemConfig?.fields || []).forEach(field => {
         (field.validationRules || []).forEach(rule => {
           rows.forEach(row => {
-            const whenName = group.id + '__' + rule.when.fieldId;
             if (!rule?.then?.fieldId) return;
             const thenName = group.id + '__' + rule.then.fieldId;
-            let whenVal = getRowValue(row, whenName);
-            if (whenVal === '' || (Array.isArray(whenVal) && whenVal.length === 0)) {
-              whenVal = getValue(formEl, rule.when.fieldId);
-            }
-            if (!matchesWhen(whenVal, rule.when)) return;
+            const ctx = {
+              getValue: (fieldId: string) => getValue(formEl, fieldId),
+              getLineValue: (_rowId: string, fieldId: string) => getRowValue(row, fieldId)
+            };
+            const rowId = row.dataset.rowId || '';
+            if (!matchesWhenClause(rule.when as any, ctx as any, { rowId, linePrefix: group.id })) return;
             if (isFieldHidden(rule.then.fieldId, formEl, row)) return;
             const targetVal = getRowValue(row, thenName);
             const msg = checkRule(targetVal, rule.then, language, rule.message);

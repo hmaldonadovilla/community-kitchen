@@ -53,6 +53,57 @@ describe('rowDisclaimer', () => {
     });
     expect(out).toBe('Auto row');
   });
+
+  it('supports compound when clauses and can reference external context (e.g., guided step id)', () => {
+    const ui: any = {
+      rowDisclaimer: {
+        cases: [
+          {
+            when: {
+              all: [
+                { fieldId: '__ckSelectionEffectId', equals: 'leftover' },
+                { not: { fieldId: '__ckStep', equals: ['foodSafety', 'portioning'] } }
+              ]
+            },
+            text: { en: 'Update Requested portions if required' }
+          }
+        ]
+      }
+    };
+
+    const visible = resolveRowDisclaimerText({
+      ui,
+      language: 'en' as any,
+      rowValues: { __ckSelectionEffectId: 'leftover' } as any,
+      getValue: (id: string) => (id === '__ckStep' ? ('orderForm' as any) : ('' as any))
+    });
+    expect(visible).toBe('Update Requested portions if required');
+
+    const hidden = resolveRowDisclaimerText({
+      ui,
+      language: 'en' as any,
+      rowValues: { __ckSelectionEffectId: 'leftover' } as any,
+      getValue: (id: string) => (id === '__ckStep' ? ('foodSafety' as any) : ('' as any))
+    });
+    expect(hidden).toBe('');
+  });
+
+  it('treats __ckSelectionEffectId as row-scoped (missing key should not fall back to external context)', () => {
+    const ui: any = {
+      rowDisclaimer: {
+        cases: [{ when: { fieldId: '__ckSelectionEffectId', equals: 'leftover' }, text: { en: 'Leftover row' } }]
+      }
+    };
+
+    // This simulates a buggy external getter that could return a value from another row.
+    const out = resolveRowDisclaimerText({
+      ui,
+      language: 'en' as any,
+      rowValues: { __ckRowSource: 'auto' } as any,
+      getValue: (id: string) => (id === '__ckSelectionEffectId' ? ('leftover' as any) : ('' as any))
+    });
+    expect(out).toBe('');
+  });
 });
 
 

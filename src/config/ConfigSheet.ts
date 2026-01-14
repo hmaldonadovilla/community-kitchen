@@ -26,6 +26,7 @@ import {
   SelectionEffect,
   ValidationRule,
   VisibilityCondition,
+  WhenClause,
   VisibilityConfig
 } from '../types';
 
@@ -1579,19 +1580,50 @@ export class ConfigSheet {
     return result;
   }
 
-  private static normalizeVisibilityCondition(raw: any): VisibilityCondition | undefined {
-    if (!raw || !raw.fieldId) return undefined;
-    const condition: VisibilityCondition = { fieldId: raw.fieldId };
-    if (raw.equals !== undefined) condition.equals = raw.equals;
-    if (raw.greaterThan !== undefined) condition.greaterThan = raw.greaterThan;
-    if (raw.lessThan !== undefined) condition.lessThan = raw.lessThan;
+  private static normalizeWhenClause(raw: any): WhenClause | undefined {
+    if (!raw) return undefined;
+    if (Array.isArray(raw)) {
+      const list = raw.map(entry => this.normalizeWhenClause(entry)).filter(Boolean) as WhenClause[];
+      if (!list.length) return undefined;
+      if (list.length === 1) return list[0];
+      return { all: list };
+    }
+    if (typeof raw !== 'object') return undefined;
+
+    const allRaw = (raw as any).all ?? (raw as any).and;
+    if (Array.isArray(allRaw)) {
+      const list = allRaw.map((entry: any) => this.normalizeWhenClause(entry)).filter(Boolean) as WhenClause[];
+      if (!list.length) return undefined;
+      if (list.length === 1) return list[0];
+      return { all: list };
+    }
+    const anyRaw = (raw as any).any ?? (raw as any).or;
+    if (Array.isArray(anyRaw)) {
+      const list = anyRaw.map((entry: any) => this.normalizeWhenClause(entry)).filter(Boolean) as WhenClause[];
+      if (!list.length) return undefined;
+      if (list.length === 1) return list[0];
+      return { any: list };
+    }
+    if (Object.prototype.hasOwnProperty.call(raw as any, 'not')) {
+      const nested = this.normalizeWhenClause((raw as any).not);
+      return nested ? { not: nested } : undefined;
+    }
+
+    const fieldIdRaw = (raw as any).fieldId ?? (raw as any).field ?? (raw as any).id;
+    if (!fieldIdRaw) return undefined;
+    const fieldId = fieldIdRaw.toString();
+    const condition: VisibilityCondition = { fieldId };
+    if ((raw as any).equals !== undefined) condition.equals = (raw as any).equals;
+    if ((raw as any).greaterThan !== undefined) condition.greaterThan = (raw as any).greaterThan;
+    if ((raw as any).lessThan !== undefined) condition.lessThan = (raw as any).lessThan;
+    if ((raw as any).notEmpty !== undefined) condition.notEmpty = Boolean((raw as any).notEmpty);
     return condition;
   }
 
   private static normalizeVisibility(raw: any): VisibilityConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
-    const showWhen = this.normalizeVisibilityCondition(raw.showWhen || raw.show || raw.visibleWhen);
-    const hideWhen = this.normalizeVisibilityCondition(raw.hideWhen || raw.hide || raw.hiddenWhen);
+    const showWhen = this.normalizeWhenClause(raw.showWhen || raw.show || raw.visibleWhen);
+    const hideWhen = this.normalizeWhenClause(raw.hideWhen || raw.hide || raw.hiddenWhen);
     if (showWhen || hideWhen) return { showWhen, hideWhen };
     return undefined;
   }
@@ -2102,7 +2134,8 @@ export class ConfigSheet {
           if (!c || typeof c !== 'object') return null;
           if (!c.text) return null;
           const out: any = { text: c.text };
-          if (c.when && typeof c.when === 'object' && c.when.fieldId) out.when = c.when;
+          const normalizedWhen = this.normalizeWhenClause((c as any).when);
+          if (normalizedWhen) out.when = normalizedWhen;
           return out;
         })
         .filter(Boolean);
