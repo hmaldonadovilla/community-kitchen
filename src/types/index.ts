@@ -1562,7 +1562,7 @@ export interface StepSubGroupTargetConfig {
   /**
    * Allowlist of visible subgroup row fields for this step.
    */
-  fields?: string[];
+  fields?: StepFieldTargetRef[];
   rows?: StepRowFilterConfig;
   /**
    * Optional row filter used ONLY for guided-step validation/status.
@@ -1581,6 +1581,20 @@ export interface StepSubGroupTargetConfig {
    */
   displayMode?: StepDisplayModeOverride;
 }
+
+export interface StepFieldTargetConfig {
+  /**
+   * Field id within the line item/subgroup row.
+   */
+  id: string;
+  /**
+   * When true, render the field value as a read-only label in this step (guided edit mode).
+   * This is a step-scoped alternative to using `readOnlyFields`.
+   */
+  renderAsLabel?: boolean;
+}
+
+export type StepFieldTargetRef = string | StepFieldTargetConfig;
 
 export interface StepSubGroupCollectionConfig {
   displayMode?: StepDisplayModeOverride;
@@ -1602,7 +1616,7 @@ export interface StepLineGroupTargetConfig {
   /**
    * Allowlist of visible parent row fields for this step.
    */
-  fields?: string[];
+  fields?: StepFieldTargetRef[];
   /**
    * Guided steps UX: when true and the underlying group is `ui.mode: "progressive"`,
    * render the configured `ui.collapsedFields` as controls in the row header and disable

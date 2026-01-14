@@ -127,27 +127,9 @@ export const seedSubgroupDefaults = (
   group: WebQuestionDefinition,
   parentRowId: string
 ): LineItemState => {
-  if (!group.lineItemConfig?.subGroups?.length) return lineItems;
-  let next = lineItems;
-  group.lineItemConfig.subGroups.forEach(sub => {
-    const subKeyRaw = resolveSubgroupKey(sub as any);
-    if (!subKeyRaw || (sub as any).addMode === 'overlay' || (sub as any).addMode === 'auto') return;
-    const subKey = buildSubgroupKey(group.id, parentRowId, subKeyRaw);
-    const existing = next[subKey] || [];
-    if (existing.length) return;
-    const minRows = Math.max(1, (sub as any).minRows || 1);
-    const newRows: LineItemRowState[] = [];
-    for (let i = 0; i < minRows; i += 1) {
-      newRows.push({
-        id: `${subKey}_${i}_${Math.random().toString(16).slice(2)}`,
-        values: {},
-        parentId: parentRowId,
-        parentGroupId: group.id
-      });
-    }
-    next = { ...next, [subKey]: newRows };
-  });
-  return next;
+  // Intentionally no-op: do not auto-create empty subgroup rows in any mode.
+  // Subgroup rows should only exist when explicitly added (manual or selection effects).
+  return lineItems;
 };
 
 export const buildInitialLineItems = (definition: WebFormDefinition, recordValues?: Record<string, any>): LineItemState => {

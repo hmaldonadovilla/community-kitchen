@@ -148,6 +148,14 @@ export function computeGuidedStepsStatus(args: {
       return s.startsWith(prefix) ? s.slice(prefix.length) : s;
     };
 
+    const normalizeStepFieldEntry = (entry: any): string => {
+      if (entry === undefined || entry === null) return '';
+      if (typeof entry === 'object') {
+        return normalizeLineFieldId((entry as any).id ?? (entry as any).fieldId ?? (entry as any).field);
+      }
+      return normalizeLineFieldId(entry);
+    };
+
     const ui = ((q as any).lineItemConfig?.ui || {}) as any;
     const isProgressive =
       ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
@@ -160,7 +168,7 @@ export function computeGuidedStepsStatus(args: {
 
     const allowedFieldIds: string[] = (() => {
       const raw = target?.fields;
-      if (Array.isArray(raw)) return raw.map((v: any) => normalizeLineFieldId(v)).filter(Boolean);
+      if (Array.isArray(raw)) return raw.map((v: any) => normalizeStepFieldEntry(v)).filter(Boolean);
       if (typeof raw === 'string') return raw.split(',').map(s => normalizeLineFieldId(s.trim())).filter(Boolean);
       // Default: include all fields in the group
       return Array.from(fieldById.keys());
@@ -344,9 +352,17 @@ export function computeGuidedStepsStatus(args: {
           return s;
         };
 
+        const normalizeStepSubFieldEntry = (entry: any): string => {
+          if (entry === undefined || entry === null) return '';
+          if (typeof entry === 'object') {
+            return normalizeSubFieldId((entry as any).id ?? (entry as any).fieldId ?? (entry as any).field);
+          }
+          return normalizeSubFieldId(entry);
+        };
+
         const allowedSubFieldIds: string[] = (() => {
           const raw = subTarget?.fields;
-          if (Array.isArray(raw)) return raw.map((v: any) => normalizeSubFieldId(v)).filter(Boolean);
+          if (Array.isArray(raw)) return raw.map((v: any) => normalizeStepSubFieldEntry(v)).filter(Boolean);
           if (typeof raw === 'string') return raw.split(',').map(s => normalizeSubFieldId(s.trim())).filter(Boolean);
           return Array.from(subFieldById.keys());
         })();

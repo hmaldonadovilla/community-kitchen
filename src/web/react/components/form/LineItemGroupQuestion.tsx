@@ -241,6 +241,12 @@ export const LineItemGroupQuestion: React.FC<{
   const groupChoiceSearchDefault = (q.lineItemConfig?.ui as any)?.choiceSearchEnabled;
 
   const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
+  // IMPORTANT: section selectors can commit their value on blur (e.g., SearchableSelect).
+  // When the user clicks "Add" while the selector still has focus, the click handler can run
+  // before React state has re-rendered with the committed value. These refs ensure we can
+  // read the latest committed selector values synchronously in the Add handlers.
+  const latestSectionSelectorValueRef = React.useRef<string>('');
+  const latestSubgroupSelectorValueRef = React.useRef<Record<string, string>>({});
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
     const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
@@ -707,6 +713,7 @@ export const LineItemGroupQuestion: React.FC<{
         const selectorCfg = q.lineItemConfig?.sectionSelector;
         const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
         const selectorValue = selectorCfg ? ((values[selectorCfg.id] as string) || '') : '';
+        latestSectionSelectorValueRef.current = selectorValue || '';
         const selectorDepIds = Array.isArray(selectorCfg?.optionFilter?.dependsOn)
           ? selectorCfg?.optionFilter?.dependsOn
           : selectorCfg?.optionFilter?.dependsOn
@@ -798,13 +805,14 @@ export const LineItemGroupQuestion: React.FC<{
               type="button"
               disabled={submitting || selectorIsMissing}
               onClick={() => {
+                const selectorNow = (latestSectionSelectorValueRef.current || selectorValue || '').toString().trim();
                 const anchorFieldId =
                   q.lineItemConfig?.anchorFieldId !== undefined && q.lineItemConfig?.anchorFieldId !== null
                     ? q.lineItemConfig.anchorFieldId.toString()
                     : '';
                 const selectorPreset =
-                  anchorFieldId && (selectorValue || '').toString().trim()
-                    ? { [anchorFieldId]: (selectorValue || '').toString().trim() }
+                  anchorFieldId && selectorNow
+                    ? { [anchorFieldId]: selectorNow }
                     : undefined;
                 addLineItemRowManual(q.id, selectorPreset);
               }}
@@ -844,6 +852,7 @@ export const LineItemGroupQuestion: React.FC<{
                   options={selectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
                   onDiagnostic={(event, payload) => onDiagnostic?.(event, { scope: 'lineItems.selector', fieldId: selectorCfg.id, ...(payload || {}) })}
                   onChange={nextVal => {
+                    latestSectionSelectorValueRef.current = nextVal;
                     setValues(prev => {
                       if (prev[selectorCfg.id] === nextVal) return prev;
                       return { ...prev, [selectorCfg.id]: nextVal };
@@ -855,6 +864,7 @@ export const LineItemGroupQuestion: React.FC<{
                   value={selectorValue}
                   onChange={e => {
                     const nextVal = e.target.value;
+                    latestSectionSelectorValueRef.current = nextVal;
                     setValues(prev => {
                       if (prev[selectorCfg.id] === nextVal) return prev;
                       return { ...prev, [selectorCfg.id]: nextVal };
@@ -1347,6 +1357,8 @@ export const LineItemGroupQuestion: React.FC<{
                   ? q.lineItemConfig?.anchorFieldId.toString()
                   : '';
               const anchorField = anchorFieldId ? (allFields.find(f => f.id === anchorFieldId) as any) : undefined;
+              const anchorRawValue = anchorFieldId ? (row.values || {})[anchorFieldId] : undefined;
+              const anchorHasValue = !!anchorFieldId && !isEmptyValue(anchorRawValue as any);
               const rowSource = parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]);
               const hideRemoveButton = parseRowHideRemove((row.values as any)?.[ROW_HIDE_REMOVE_KEY]);
               const expandGateCandidate = ((ui?.expandGate || 'collapsedFieldsValid') as any) || 'collapsedFieldsValid';
@@ -1354,10 +1366,61 @@ export const LineItemGroupQuestion: React.FC<{
               // (manual rows can still edit it). For selectionEffect-generated auto rows
               // (e.g., addLineItemsFromDataSource), we apply the same title+lock behavior regardless of expandGate,
               // as long as the group declares anchorFieldId and the row is marked auto.
+              const allowAnchorTitle = !(guidedCollapsedFieldsInHeader && isProgressive);
+              const anchorAsTitle =
+                !!anchorField &&
+                allowAnchorTitle &&
+                (((anchorField as any)?.ui?.renderAsLabel === true) || ((anchorField as any)?.readOnly === true));
+              const anchorTitleLabel = (() => {
+                if (!anchorFieldId || !anchorField || !anchorHasValue) return '';
+                const rawVal = (row.values || {})[anchorFieldId];
+                if ((anchorField as any).type === 'CHOICE') {
+                  ensureLineOptions(q.id, anchorField);
+                  const optionSetField: OptionSet =
+                    optionState[optionKey(anchorField.id, q.id)] || {
+                      en: anchorField.options || [],
+                      fr: (anchorField as any).optionsFr || [],
+                      nl: (anchorField as any).optionsNl || []
+                    };
+                  const dependencyIds = (
+                    Array.isArray(anchorField.optionFilter?.dependsOn)
+                      ? anchorField.optionFilter?.dependsOn
+                      : [anchorField.optionFilter?.dependsOn || '']
+                  ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                  const allowedField = computeAllowedOptions(
+                    anchorField.optionFilter,
+                    optionSetField,
+                    dependencyIds.map((dep: string) => toDependencyValue(row.values[dep] ?? values[dep]))
+                  );
+                  const choiceVal =
+                    Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                  const allowedWithCurrent =
+                    choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
+                      ? [...allowedField, choiceVal]
+                      : allowedField;
+                  const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, {
+                    sort: optionSortFor(anchorField)
+                  });
+                  const selectedOpt = optsField.find(opt => opt.value === choiceVal);
+                  return (selectedOpt?.label || choiceVal || '').toString();
+                }
+                if (Array.isArray(rawVal)) {
+                  return rawVal
+                    .map(v =>
+                      typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : ''
+                    )
+                    .filter(Boolean)
+                    .join(', ');
+                }
+                return typeof rawVal === 'string' || typeof rawVal === 'number' || typeof rawVal === 'boolean'
+                  ? String(rawVal)
+                  : '';
+              })();
               const wantsAnchorTitle =
                 !!anchorField &&
                 isProgressive &&
-                ((addMode === 'auto' && expandGateCandidate === 'collapsedFieldsValid') || rowSource === 'auto');
+                allowAnchorTitle &&
+                (anchorAsTitle || (addMode === 'auto' && expandGateCandidate === 'collapsedFieldsValid') || rowSource === 'auto');
               const lockAnchor = wantsAnchorTitle && rowSource === 'auto';
               const rowDisclaimerText = resolveRowDisclaimerText({
                 ui,
@@ -1382,15 +1445,20 @@ export const LineItemGroupQuestion: React.FC<{
                 ? shouldHideField(titleField.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
                 : true;
               const showTitleControl = !!titleField && !titleHidden;
+              const showAnchorTitleAsHeaderTitle =
+                guidedCollapsedFieldsInHeader && isProgressive && showTitleControl && anchorHasValue && wantsAnchorTitle;
+              const showAnchorTitleAsBodyTitle = !isProgressive && anchorHasValue && (anchorAsTitle || rowSource === 'auto');
               // Guided steps UX: when collapsed fields are rendered in the row header, don't render the special "title control"
               // separately. Instead, we keep all collapsed fields in the header grid so they can appear side-by-side.
               const showTitleControlInHeader = showTitleControl && !guidedCollapsedFieldsInHeader;
               const isAnchorTitle = wantsAnchorTitle && !!titleField && titleField.id === anchorFieldId;
               const titleLocked = isAnchorTitle && lockAnchor;
 
-              const fieldsToRender = showTitleControl
-                ? fieldsToRenderBase.filter((f: any) => f?.id !== titleFieldId)
-                : fieldsToRenderBase;
+              const fieldsToRender = (() => {
+                const base = showTitleControl ? fieldsToRenderBase.filter((f: any) => f?.id !== titleFieldId) : fieldsToRenderBase;
+                if (!showAnchorTitleAsBodyTitle || !anchorFieldId) return base;
+                return (base || []).filter((f: any) => (f?.id || '').toString() !== anchorFieldId);
+              })();
 
               const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
               const gateResult = (() => {
@@ -1607,6 +1675,8 @@ export const LineItemGroupQuestion: React.FC<{
                   ? (collapsedFieldsOrdered || []).filter((f: any) => {
                       const fid = f?.id !== undefined && f?.id !== null ? f.id.toString() : '';
                       if (!fid) return false;
+                      // In guided-header mode we may show the anchor as a standalone row title. Don't also render it in the grid.
+                      if (showAnchorTitleAsHeaderTitle && fid === anchorFieldId) return false;
                       if (showTitleControlInHeader && fid === titleFieldId) return false;
                       return true;
                     })
@@ -2121,6 +2191,8 @@ export const LineItemGroupQuestion: React.FC<{
                   key={row.id}
                   className={`line-item-row${rowLocked ? ' ck-row-disabled' : ''}`}
                   data-row-anchor={`${q.id}__${row.id}`}
+                  data-anchor-field-id={anchorFieldId || undefined}
+                  data-anchor-has-value={anchorHasValue ? 'true' : undefined}
                   data-row-disabled={rowLocked ? 'true' : undefined}
                   style={{
                     background:
@@ -2375,6 +2447,11 @@ export const LineItemGroupQuestion: React.FC<{
                             })()}
                           </div>
                         ) : null}
+                        {guidedCollapsedFieldsInHeader && showAnchorTitleAsHeaderTitle ? (
+                          <div style={{ marginBottom: 8 }}>
+                            <div className="ck-row-title">{anchorTitleLabel || '—'}</div>
+                          </div>
+                        ) : null}
                         {guidedCollapsedFieldsInHeader && headerFieldsToRender.length ? (
                           <div
                             className="ck-row-header-collapsed-fields"
@@ -2492,6 +2569,11 @@ export const LineItemGroupQuestion: React.FC<{
                       {!guidedCollapsedFieldsInHeader && rowDisclaimerText ? (
                         <div className="ck-row-disclaimer ck-row-disclaimer--full">{rowDisclaimerText}</div>
                       ) : null}
+                    </div>
+                  ) : null}
+                  {!isProgressive && showAnchorTitleAsBodyTitle ? (
+                    <div style={{ marginBottom: rowDisclaimerText ? 6 : 10 }}>
+                      <div className="ck-row-title">{anchorTitleLabel || '—'}</div>
                     </div>
                   ) : null}
                   {!isProgressive && rowDisclaimerText ? (
@@ -3132,6 +3214,7 @@ export const LineItemGroupQuestion: React.FC<{
                     const subSelectorCfg = sub.sectionSelector;
                     const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
                     const subSelectorValue = subgroupSelectors[subKey] || '';
+                    latestSubgroupSelectorValueRef.current[subKey] = subSelectorValue || '';
                     const subSelectorDepIds = Array.isArray(subSelectorCfg?.optionFilter?.dependsOn)
                       ? subSelectorCfg?.optionFilter?.dependsOn
                       : subSelectorCfg?.optionFilter?.dependsOn
@@ -3167,6 +3250,9 @@ export const LineItemGroupQuestion: React.FC<{
                             style={buttonStyles.secondary}
                             disabled={submitting || subSelectorIsMissing}
                             onClick={async () => {
+                              const subSelectorNow = (latestSubgroupSelectorValueRef.current[subKey] || subSelectorValue || '')
+                                .toString()
+                                .trim();
                               if (submitting) return;
                               if (subSelectorIsMissing) {
                                 onDiagnostic?.('ui.addRow.blocked', { groupId: subKey, reason: 'sectionSelector.required', selectorId: subSelectorCfg?.id });
@@ -3199,7 +3285,7 @@ export const LineItemGroupQuestion: React.FC<{
                                   : [anchorField.optionFilter?.dependsOn || '']
                               ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
                               const depVals = dependencyIds.map(dep =>
-                                toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorValue)
+                                toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorNow)
                               );
                               const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
                               const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
@@ -3239,13 +3325,16 @@ export const LineItemGroupQuestion: React.FC<{
                           type="button"
                           disabled={submitting || subSelectorIsMissing}
                           onClick={async () => {
+                            const subSelectorNow = (latestSubgroupSelectorValueRef.current[subKey] || subSelectorValue || '')
+                              .toString()
+                              .trim();
                             const anchorFieldId =
                               (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
                                 ? (sub as any).anchorFieldId.toString()
                                 : '';
                             const selectorPreset =
-                              anchorFieldId && (subSelectorValue || '').toString().trim()
-                                ? { [anchorFieldId]: (subSelectorValue || '').toString().trim() }
+                              anchorFieldId && subSelectorNow
+                                ? { [anchorFieldId]: subSelectorNow }
                                 : undefined;
                             if (selectorPreset) {
                               addLineItemRowManual(subKey, selectorPreset);
@@ -3278,7 +3367,7 @@ export const LineItemGroupQuestion: React.FC<{
                                 : [anchorField.optionFilter?.dependsOn || '']
                             ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
                             const depVals = dependencyIds.map(dep =>
-                              toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorValue)
+                              toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorNow)
                             );
                             const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
                             const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
@@ -3364,6 +3453,7 @@ export const LineItemGroupQuestion: React.FC<{
                                               onDiagnostic?.(event, { scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey, ...(payload || {}) })
                                             }
                                             onChange={nextValue => {
+                                              latestSubgroupSelectorValueRef.current[subKey] = nextValue;
                                               setSubgroupSelectors(prev => {
                                                 if (prev[subKey] === nextValue) return prev;
                                                 return { ...prev, [subKey]: nextValue };
@@ -3375,6 +3465,7 @@ export const LineItemGroupQuestion: React.FC<{
                                             value={subSelectorValue}
                                             onChange={e => {
                                               const nextValue = e.target.value;
+                                              latestSubgroupSelectorValueRef.current[subKey] = nextValue;
                                               setSubgroupSelectors(prev => {
                                                 if (prev[subKey] === nextValue) return prev;
                                                 return { ...prev, [subKey]: nextValue };

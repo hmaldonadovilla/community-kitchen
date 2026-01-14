@@ -84,6 +84,57 @@ describe('guidedSteps domain', () => {
     expect(out.steps[0].valid).toBe(false);
   });
 
+  it('accepts { id, renderAsLabel } entries in step lineGroup fields allowlists', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'G',
+          type: 'LINE_ITEM_GROUP',
+          required: false,
+          lineItemConfig: {
+            fields: [
+              { id: 'QTY', type: 'NUMBER', required: false, options: [], optionsFr: [], optionsNl: [] },
+              { id: 'MEAL_TYPE', type: 'CHOICE', required: true, options: [], optionsFr: [], optionsNl: [] }
+            ]
+          }
+        }
+      ],
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'recipes',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'G',
+                presentation: 'liftedRowFields',
+                rows: { includeWhen: { fieldId: 'QTY', greaterThan: 0 } },
+                fields: [{ id: 'MEAL_TYPE', renderAsLabel: true }]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const out = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: {} as any,
+      lineItems: {
+        G: [
+          { id: 'r1', values: { QTY: 0, MEAL_TYPE: '' } },
+          { id: 'r2', values: { QTY: 2, MEAL_TYPE: '' } }
+        ]
+      } as any
+    });
+
+    expect(out.steps[0].missingRequiredCount).toBe(1); // only r2 is in scope
+    expect(out.steps[0].complete).toBe(false);
+    expect(out.steps[0].valid).toBe(false);
+  });
+
   it('supports validationRows to validate a subset of rows while still allowing all rows to be displayed', () => {
     const definition: any = {
       questions: [

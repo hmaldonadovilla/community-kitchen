@@ -356,6 +356,9 @@ const FormView: React.FC<FormViewProps> = ({
   const [fileOverlay, setFileOverlay] = useState<FileOverlayState>({ open: false });
   const [pendingScrollAnchor, setPendingScrollAnchor] = useState<string | null>(null);
   const [subgroupSelectors, setSubgroupSelectors] = useState<Record<string, string>>({});
+  // Mobile/touch UX: section selectors (SearchableSelect) can commit on blur and click ordering can vary by browser.
+  // Keep a ref of the latest selector values so "Add" handlers can reliably seed presets.
+  const latestSubgroupSelectorValueRef = useRef<Record<string, string>>({});
   const [collapsedSubgroups, setCollapsedSubgroups] = useState<Record<string, boolean>>({});
   const [collapsedRows, setCollapsedRows] = useState<Record<string, boolean>>({});
   const subgroupBottomRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -890,6 +893,42 @@ const FormView: React.FC<FormViewProps> = ({
             return s;
           };
 
+          const parseStepFieldEntries = (
+            groupId: string,
+            raw: any
+          ): { allowed: Set<string> | null; renderAsLabel: Set<string> } => {
+            if (!raw) return { allowed: null, renderAsLabel: new Set() };
+
+            const entries: Array<{ id: string; renderAsLabel: boolean }> = [];
+            const pushEntry = (v: any) => {
+              if (v === undefined || v === null) return;
+              if (typeof v === 'object') {
+                const id = normalizeLineFieldId(groupId, (v as any).id ?? (v as any).fieldId ?? (v as any).field);
+                if (!id) return;
+                entries.push({ id, renderAsLabel: Boolean((v as any).renderAsLabel) });
+                return;
+              }
+              const id = normalizeLineFieldId(groupId, v);
+              if (!id) return;
+              entries.push({ id, renderAsLabel: false });
+            };
+
+            if (Array.isArray(raw)) {
+              raw.forEach(pushEntry);
+            } else {
+              raw
+                .toString()
+                .split(',')
+                .map((s: string) => s.trim())
+                .filter(Boolean)
+                .forEach(pushEntry);
+            }
+
+            const ids = entries.map(e => e.id).filter(Boolean);
+            const roIds = entries.filter(e => e.renderAsLabel).map(e => e.id).filter(Boolean);
+            return { allowed: ids.length ? new Set(ids) : null, renderAsLabel: new Set(roIds) };
+          };
+
           const scopedQuestions: WebQuestionDefinition[] = [];
           (definition.questions || []).forEach(q => {
             if (!q) return;
@@ -908,29 +947,16 @@ const FormView: React.FC<FormViewProps> = ({
             const groupId = q.id;
             const lineCfg = (q as any).lineItemConfig || {};
 
-            const allowedFieldIds = (() => {
-              const raw = (t as any).fields;
-              if (!raw) return null;
-              const ids: string[] = Array.isArray(raw)
-                ? raw.map((v: any) => normalizeLineFieldId(groupId, v)).filter(Boolean)
-                : raw
-                    .toString()
-                    .split(',')
-                    .map((s: string) => normalizeLineFieldId(groupId, s))
-                    .filter(Boolean);
-              return ids.length ? new Set(ids) : null;
-            })();
+            const { allowed: allowedFieldIds, renderAsLabel: renderAsLabelFieldIdsFromFields } = parseStepFieldEntries(
+              groupId,
+              (t as any).fields
+            );
             const readOnlyFieldIds = (() => {
               const raw = (t as any).readOnlyFields;
-              if (!raw) return null;
-              const ids: string[] = Array.isArray(raw)
-                ? raw.map((v: any) => normalizeLineFieldId(groupId, v)).filter(Boolean)
-                : raw
-                    .toString()
-                    .split(',')
-                    .map((s: string) => normalizeLineFieldId(groupId, s))
-                    .filter(Boolean);
-              return ids.length ? new Set(ids) : null;
+              const parsed = parseStepFieldEntries(groupId, raw);
+              const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
+              const merged = new Set<string>([...ids, ...Array.from(renderAsLabelFieldIdsFromFields)]);
+              return merged.size ? merged : null;
             })();
             const filteredFieldsBase = allowedFieldIds
               ? ((lineCfg.fields || []) as any[]).filter((f: any) => {
@@ -974,13 +1000,17 @@ const FormView: React.FC<FormViewProps> = ({
                   s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId
                 );
                 const allowedSubFieldsRaw = subTarget?.fields;
-                const allowedSubFields = Array.isArray(allowedSubFieldsRaw)
-                  ? new Set(allowedSubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
-                  : null;
+                const {
+                  allowed: allowedSubFields,
+                  renderAsLabel: renderAsLabelSubFieldIdsFromFields
+                } = parseStepFieldEntries(subId, allowedSubFieldsRaw);
                 const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
-                const readOnlySubFields = Array.isArray(readOnlySubFieldsRaw)
-                  ? new Set(readOnlySubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
-                  : null;
+                const readOnlySubFields = (() => {
+                  const parsed = parseStepFieldEntries(subId, readOnlySubFieldsRaw);
+                  const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
+                  const merged = new Set<string>([...ids, ...Array.from(renderAsLabelSubFieldIdsFromFields)]);
+                  return merged.size ? merged : null;
+                })();
 
                 const nextSub: any = { ...(sub as any) };
                 // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
@@ -2231,6 +2261,7 @@ const FormView: React.FC<FormViewProps> = ({
     const anchor = pendingScrollAnchor;
     const sep = anchor.lastIndexOf('__');
     const targetGroupKey = sep >= 0 ? anchor.slice(0, sep) : anchor;
+    const targetRowId = sep >= 0 ? anchor.slice(sep + 2) : '';
     const targetSubgroupInfo = parseSubgroupKey(targetGroupKey);
 
     // Ensure the target row is actually rendered before attempting to scroll to it.
@@ -2287,9 +2318,29 @@ const FormView: React.FC<FormViewProps> = ({
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }
-      const focusable = el.querySelector(
-        'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
-      ) as HTMLElement | null;
+      const focusables = Array.from(
+        el.querySelectorAll(
+          'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+        )
+      ) as HTMLElement[];
+
+      const shouldSkipAnchorFocus = el.getAttribute('data-anchor-has-value') === 'true';
+      const anchorFieldId = (el.getAttribute('data-anchor-field-id') || '').toString().trim();
+
+      let focusable: HTMLElement | null = focusables[0] || null;
+
+      // When a row is created with its anchor already set (e.g., via sectionSelector preset),
+      // focusing the anchor can open the searchable select and feel like an extra “confirm” step.
+      // Prefer the next field instead.
+      if (shouldSkipAnchorFocus && anchorFieldId && targetRowId) {
+        const anchorFieldPath = `${targetGroupKey}__${anchorFieldId}__${targetRowId}`;
+        const anchorContainer = el.querySelector(`[data-field-path="${anchorFieldPath}"]`) as HTMLElement | null;
+        if (anchorContainer) {
+          focusable = focusables.find(node => !anchorContainer.contains(node)) || focusables[0] || null;
+        } else if (focusables.length > 1) {
+          focusable = focusables[1] || focusables[0] || null;
+        }
+      }
       try {
         focusable?.focus();
       } catch (_) {
@@ -4603,13 +4654,27 @@ const FormView: React.FC<FormViewProps> = ({
             const allowedFieldIds = (() => {
               const rawFields = (t as any).fields;
               if (!rawFields) return null;
-              const ids: string[] = Array.isArray(rawFields)
-                ? rawFields.map((v: any) => normalizeLineFieldId(groupId, v)).filter(Boolean)
-                : rawFields
-                    .toString()
-                    .split(',')
-                    .map((s: string) => normalizeLineFieldId(groupId, s))
-                    .filter(Boolean);
+              const ids: string[] = [];
+              const pushEntry = (v: any) => {
+                if (v === undefined || v === null) return;
+                if (typeof v === 'object') {
+                  const id = normalizeLineFieldId(groupId, (v as any).id ?? (v as any).fieldId ?? (v as any).field);
+                  if (id) ids.push(id);
+                  return;
+                }
+                const id = normalizeLineFieldId(groupId, v);
+                if (id) ids.push(id);
+              };
+              if (Array.isArray(rawFields)) {
+                rawFields.forEach(pushEntry);
+              } else {
+                rawFields
+                  .toString()
+                  .split(',')
+                  .map((s: string) => s.trim())
+                  .filter(Boolean)
+                  .forEach(pushEntry);
+              }
               return ids.length ? new Set(ids) : null;
             })();
             if (allowedFieldIds && !allowedFieldIds.has(fieldIdRaw)) continue;
@@ -4788,6 +4853,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     const subSelectorCfg = subConfig?.sectionSelector;
                     const subSelectorValue = subgroupSelectors[subKey] || '';
+                    latestSubgroupSelectorValueRef.current[subKey] = subSelectorValue || '';
                     const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
                     const subSelectorDepIds = Array.isArray(subSelectorCfg?.optionFilter?.dependsOn)
                       ? subSelectorCfg?.optionFilter?.dependsOn
@@ -4833,6 +4899,7 @@ const FormView: React.FC<FormViewProps> = ({
                             type="button"
             style={buttonStyles.secondary}
                             onClick={async () => {
+              const selectorNow = (latestSubgroupSelectorValueRef.current[subKey] || subSelectorValue || '').toString().trim();
               const anchorField = (subConfig.fields || []).find(f => f.id === subConfig.anchorFieldId);
                               if (!anchorField || anchorField.type !== 'CHOICE') {
                 addLineItemRowManual(subKey);
@@ -4859,7 +4926,7 @@ const FormView: React.FC<FormViewProps> = ({
                                   ? anchorField.optionFilter?.dependsOn
                                   : [anchorField.optionFilter?.dependsOn || '']
                               ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-              const depVals = dependencyIds.map(dep => toDependencyValue(parentRowValues[dep] ?? values[dep] ?? subSelectorValue));
+              const depVals = dependencyIds.map(dep => toDependencyValue(parentRowValues[dep] ?? values[dep] ?? selectorNow));
                               const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
                               const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
                               const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
@@ -4880,7 +4947,23 @@ const FormView: React.FC<FormViewProps> = ({
                         );
                       }
                       return (
-        <button type="button" disabled={subSelectorIsMissing} onClick={() => addLineItemRowManual(subKey)} style={withDisabled(buttonStyles.secondary, subSelectorIsMissing)}>
+        <button
+          type="button"
+          disabled={subSelectorIsMissing}
+          onClick={() => {
+            const selectorNow = (latestSubgroupSelectorValueRef.current[subKey] || subSelectorValue || '').toString().trim();
+            const anchorFieldId =
+              subConfig?.anchorFieldId !== undefined && subConfig?.anchorFieldId !== null ? subConfig.anchorFieldId.toString() : '';
+            const selectorId = subSelectorCfg?.id !== undefined && subSelectorCfg?.id !== null ? subSelectorCfg.id.toString() : '';
+            const preset: Record<string, any> = {};
+            if (selectorNow) {
+              if (selectorId) preset[selectorId] = selectorNow;
+              if (anchorFieldId) preset[anchorFieldId] = selectorNow;
+            }
+            addLineItemRowManual(subKey, Object.keys(preset).length ? preset : undefined);
+          }}
+          style={withDisabled(buttonStyles.secondary, subSelectorIsMissing)}
+        >
           <PlusIcon />
           {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line')}
                         </button>
@@ -4977,6 +5060,7 @@ const FormView: React.FC<FormViewProps> = ({
                                       emptyText={tSystem('common.noMatches', language, 'No matches.')}
                                       options={subSelectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
                                       onChange={nextValue => {
+                                        latestSubgroupSelectorValueRef.current[subKey] = nextValue;
                                         setSubgroupSelectors(prev => {
                                           if (prev[subKey] === nextValue) return prev;
                                           return { ...prev, [subKey]: nextValue };
@@ -4988,6 +5072,7 @@ const FormView: React.FC<FormViewProps> = ({
                                       value={subSelectorValue}
                                       onChange={e => {
                                         const nextValue = e.target.value;
+                                        latestSubgroupSelectorValueRef.current[subKey] = nextValue;
                                         setSubgroupSelectors(prev => {
                                           if (prev[subKey] === nextValue) return prev;
                                           return { ...prev, [subKey]: nextValue };
@@ -5043,7 +5128,11 @@ const FormView: React.FC<FormViewProps> = ({
               const anchorFieldId =
                 subConfig?.anchorFieldId !== undefined && subConfig?.anchorFieldId !== null ? subConfig.anchorFieldId.toString() : '';
               const anchorField = anchorFieldId ? (subConfig?.fields || []).find(f => f.id === anchorFieldId) : undefined;
-              const showAnchorTitle = !!anchorField && isAutoRow;
+              const anchorRawValue = anchorFieldId ? (subRow.values || {})[anchorFieldId] : undefined;
+              const anchorHasValue = !!anchorFieldId && !isEmptyValue(anchorRawValue as any);
+              const anchorAsTitle =
+                !!anchorField && (((anchorField as any)?.readOnly === true) || ((anchorField as any)?.renderAsLabel === true));
+              const showAnchorTitle = !!anchorField && anchorHasValue && (isAutoRow || anchorAsTitle);
               const rowDisclaimerText = resolveRowDisclaimerText({
                 ui: subConfig?.ui as any,
                 language,
@@ -5098,6 +5187,8 @@ const FormView: React.FC<FormViewProps> = ({
                               key={subRow.id}
                               className="line-item-row"
                   data-row-anchor={`${subKey}__${subRow.id}`}
+                  data-anchor-field-id={anchorFieldId || undefined}
+                  data-anchor-has-value={anchorHasValue ? 'true' : undefined}
                               style={{
                     background: subIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
                                 padding: 12,
@@ -5125,6 +5216,8 @@ const FormView: React.FC<FormViewProps> = ({
                               )}
                   {(() => {
                     const renderSubField = (field: any) => {
+                      // If we’re showing the anchor as the row title, don’t render the anchor control/label too.
+                      if (showAnchorTitle && anchorFieldId && field?.id === anchorFieldId) return null;
                                 ensureLineOptions(subKey, field);
                                 const optionSetField: OptionSet =
                                   optionState[optionKey(field.id, subKey)] || {
@@ -6107,29 +6200,49 @@ const FormView: React.FC<FormViewProps> = ({
         if (s.includes('.')) return s.split('.').pop() || s;
         return s;
       };
-      const allowedFieldIds = (() => {
-        const raw = target.fields;
-        if (!raw) return null;
-        const ids: string[] = Array.isArray(raw)
-          ? raw.map((v: any) => normalizeLineFieldId(groupQ.id, v)).filter(Boolean)
-          : raw
-              .toString()
-              .split(',')
-              .map((s: string) => normalizeLineFieldId(groupQ.id, s))
-              .filter(Boolean);
-        return ids.length ? new Set(ids) : null;
-      })();
+      const parseStepFieldEntries = (
+        groupId: string,
+        raw: any
+      ): { allowed: Set<string> | null; renderAsLabel: Set<string> } => {
+        if (!raw) return { allowed: null, renderAsLabel: new Set() };
+        const entries: Array<{ id: string; renderAsLabel: boolean }> = [];
+        const pushEntry = (v: any) => {
+          if (v === undefined || v === null) return;
+          if (typeof v === 'object') {
+            const id = normalizeLineFieldId(groupId, (v as any).id ?? (v as any).fieldId ?? (v as any).field);
+            if (!id) return;
+            entries.push({ id, renderAsLabel: Boolean((v as any).renderAsLabel) });
+            return;
+          }
+          const id = normalizeLineFieldId(groupId, v);
+          if (!id) return;
+          entries.push({ id, renderAsLabel: false });
+        };
+        if (Array.isArray(raw)) {
+          raw.forEach(pushEntry);
+        } else {
+          raw
+            .toString()
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+            .forEach(pushEntry);
+        }
+        const ids = entries.map(e => e.id).filter(Boolean);
+        const roIds = entries.filter(e => e.renderAsLabel).map(e => e.id).filter(Boolean);
+        return { allowed: ids.length ? new Set(ids) : null, renderAsLabel: new Set(roIds) };
+      };
+
+      const { allowed: allowedFieldIds, renderAsLabel: renderAsLabelFieldIdsFromFields } = parseStepFieldEntries(
+        groupQ.id,
+        target.fields
+      );
       const readOnlyFieldIds = (() => {
         const raw = (target as any).readOnlyFields;
-        if (!raw) return null;
-        const ids: string[] = Array.isArray(raw)
-          ? raw.map((v: any) => normalizeLineFieldId(groupQ.id, v)).filter(Boolean)
-          : raw
-              .toString()
-              .split(',')
-              .map((s: string) => normalizeLineFieldId(groupQ.id, s))
-              .filter(Boolean);
-        return ids.length ? new Set(ids) : null;
+        const parsed = parseStepFieldEntries(groupQ.id, raw);
+        const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
+        const merged = new Set<string>([...ids, ...Array.from(renderAsLabelFieldIdsFromFields)]);
+        return merged.size ? merged : null;
       })();
 
       const filteredFieldsBase = allowedFieldIds
@@ -6169,13 +6282,17 @@ const FormView: React.FC<FormViewProps> = ({
           const subId = resolveSubgroupKey(sub as any);
           const subTarget = subIncludeList.find(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId);
           const allowedSubFieldsRaw = subTarget?.fields;
-          const allowedSubFields = Array.isArray(allowedSubFieldsRaw)
-            ? new Set(allowedSubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
-            : null;
+          const {
+            allowed: allowedSubFields,
+            renderAsLabel: renderAsLabelSubFieldIdsFromFields
+          } = parseStepFieldEntries(subId, allowedSubFieldsRaw);
           const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
-          const readOnlySubFields = Array.isArray(readOnlySubFieldsRaw)
-            ? new Set(readOnlySubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
-            : null;
+          const readOnlySubFields = (() => {
+            const parsed = parseStepFieldEntries(subId, readOnlySubFieldsRaw);
+            const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
+            const merged = new Set<string>([...ids, ...Array.from(renderAsLabelSubFieldIdsFromFields)]);
+            return merged.size ? merged : null;
+          })();
 
           const baseFields: any[] = (sub as any).fields || [];
           const nextFields = allowedSubFields && allowedSubFields.size

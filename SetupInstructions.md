@@ -448,7 +448,9 @@ This project uses TypeScript. You need to build the script before using it in Go
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
       - Read-only labels in steps:
         - Top-level step targets accept `renderAsLabel: true` to show the value as a label instead of an input.
-        - Line item step targets accept `readOnlyFields` (and subgroup `include[].readOnlyFields`) to render selected fields as read-only labels in guided steps.
+        - Line item + subgroup step targets support **step-scoped label rendering** in two equivalent ways:
+          - Use `readOnlyFields` (and subgroup `include[].readOnlyFields`) to render selected fields as read-only labels in guided steps.
+          - Or, in `fields`, use object entries like `{ "id": "QTY", "renderAsLabel": true }` (instead of a plain `"QTY"` string).
         - Progressive header collapsed fields respect `collapsedFields[].showLabel` (stacked when shown) and honor `readOnlyFields`, with layout controlled by standard `pair` keys.
       - The UI exposes virtual step fields (default prefix `__ckStep`) so existing `visibility.showWhen` rules can gate fields/buttons:
         - `__ckStepValid_<STEP_ID>` / `__ckStepComplete_<STEP_ID>`
@@ -815,6 +817,10 @@ This project uses TypeScript. You need to build the script before using it in Go
       ```
 
       `deleteLineItems` will remove any child rows under the current row that were tagged with `__ckSelectionEffectId = "leftover"`, and will cascade delete any of their children as well.
+
+      - **Option filter enforcement on generated rows**: Selection effects respect the target line-item/subgroup fields’ `optionFilter` rules.
+        If an effect generates a row (or data-driven entry) where a mapped CHOICE/CHECKBOX value is *not* allowed by that field’s `optionFilter` in the current context, the row is skipped.
+        This is useful for cases like recipes that include “Salt” by default: if your subgroup field `ING` has an `optionFilter` that excludes `"Salt"` for `MEAL_TYPE = "No-salt"`, then `addLineItemsFromDataSource` will not create the Salt ingredient row.
 
     - **Filters & rules**: For CHOICE/CHECKBOX fields, add `optionFilter` in the JSON to filter options based on another field, and `validationRules` to enforce dependencies (works in main form and line items).
       - Example (main form filter):
