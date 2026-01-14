@@ -232,6 +232,42 @@ describe('Dashboard', () => {
     expect(target?.validationRows).toEqual({ includeWhen: { fieldId: 'QTY', greaterThan: 0 } });
   });
 
+  test('getForms preserves steps.include.lineGroup.collapsedFieldsInHeader from dashboard config', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'orderForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                presentation: 'liftedRowFields',
+                fields: ['MEAL_TYPE', 'QTY'],
+                collapsedFieldsInHeader: true
+              }
+            ]
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms.length).toBe(1);
+    const step = (forms[0].steps as any)?.items?.[0];
+    const target = step?.include?.[0];
+    expect(target?.kind).toBe('lineGroup');
+    expect(target?.collapsedFieldsInHeader).toBe(true);
+  });
+
   test('getForms parses list view advanced search config from dashboard config (listView.search)', () => {
     const configJson = JSON.stringify({
       listView: { search: { mode: 'advanced', fields: ['Q1', 'status'] } }

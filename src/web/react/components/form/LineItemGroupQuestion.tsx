@@ -25,6 +25,7 @@ import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { FormErrors, LineItemState, OptionState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
 import {
+  describeUploadItem,
   getUploadMinRequired,
   isUploadValueComplete,
   resolveRowDisclaimerText,
@@ -48,12 +49,15 @@ import { InfoTooltip } from './InfoTooltip';
 import { LineOverlayState } from './overlays/LineSelectOverlay';
 import { SearchableSelect } from './SearchableSelect';
 import { NumberStepper } from './NumberStepper';
+import { PairedRowGrid } from './PairedRowGrid';
 import { resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorLabel } from './lineItemSelectors';
 import {
+  ROW_HIDE_REMOVE_KEY,
   ROW_SOURCE_AUTO,
   ROW_SOURCE_KEY,
   buildSubgroupKey,
+  parseRowHideRemove,
   parseRowSource,
   resolveSubgroupKey
 } from '../../app/lineItems';
@@ -214,6 +218,8 @@ export const LineItemGroupQuestion: React.FC<{
     uploadAnnouncements,
     handleLineFileInputChange,
     handleLineFileDrop,
+    removeLineFile,
+    clearLineFiles,
     errorIndex,
     setOverlay,
     onDiagnostic
@@ -815,11 +821,13 @@ export const LineItemGroupQuestion: React.FC<{
                 getLineValue: (_rowId, fid) => row.values[fid]
               };
               const ui = q.lineItemConfig?.ui;
+              const guidedCollapsedFieldsInHeader = Boolean((ui as any)?.guidedCollapsedFieldsInHeader);
               const isProgressive =
                 ui?.mode === 'progressive' && Array.isArray(ui.collapsedFields) && ui.collapsedFields.length > 0;
               const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
               const collapseKey = `${q.id}::${row.id}`;
-              const rowCollapsed = isProgressive ? (collapsedRows[collapseKey] ?? defaultCollapsed) : false;
+              const rowCollapsedBase = isProgressive ? (collapsedRows[collapseKey] ?? defaultCollapsed) : false;
+              const rowCollapsed = guidedCollapsedFieldsInHeader ? false : rowCollapsedBase;
 
               const collapsedFieldConfigs = isProgressive ? ui?.collapsedFields || [] : [];
               const collapsedLabelMap: Record<string, boolean> = {};
@@ -1035,6 +1043,7 @@ export const LineItemGroupQuestion: React.FC<{
                   : '';
               const anchorField = anchorFieldId ? (allFields.find(f => f.id === anchorFieldId) as any) : undefined;
               const rowSource = parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]);
+              const hideRemoveButton = parseRowHideRemove((row.values as any)?.[ROW_HIDE_REMOVE_KEY]);
               const expandGateCandidate = ((ui?.expandGate || 'collapsedFieldsValid') as any) || 'collapsedFieldsValid';
               // For addMode:auto we show the anchor as the row title when expandGate is collapsedFieldsValid
               // (manual rows can still edit it). For selectionEffect-generated auto rows
@@ -1067,6 +1076,9 @@ export const LineItemGroupQuestion: React.FC<{
                 ? shouldHideField(titleField.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
                 : true;
               const showTitleControl = !!titleField && !titleHidden;
+              // Guided steps UX: when collapsed fields are rendered in the row header, don't render the special "title control"
+              // separately. Instead, we keep all collapsed fields in the header grid so they can appear side-by-side.
+              const showTitleControlInHeader = showTitleControl && !guidedCollapsedFieldsInHeader;
               const isAnchorTitle = wantsAnchorTitle && !!titleField && titleField.id === anchorFieldId;
               const titleLocked = isAnchorTitle && lockAnchor;
 
@@ -1223,6 +1235,581 @@ export const LineItemGroupQuestion: React.FC<{
               const tapCollapseLabel = tSystem('common.tapToCollapse', language, 'Tap to collapse');
               const lockedLabel = tSystem('lineItems.locked', language, 'Locked');
               const pillActionLabel = rowLocked ? lockedLabel : rowCollapsed ? tapExpandLabel : tapCollapseLabel;
+              const buildHeaderRows = (fields: any[]): any[][] => {
+                const used = new Set<string>();
+                const rows: any[][] = [];
+                const isPairable = (field: any): boolean => {
+                  if (!(field as any)?.pair) return false;
+                  if ((field?.type || '').toString() === 'PARAGRAPH') return false;
+                  return true;
+                };
+
+                for (let i = 0; i < fields.length; i += 1) {
+                  const f = fields[i];
+                  const fid = (f?.id ?? '').toString();
+                  if (!fid || used.has(fid)) continue;
+
+                  const pairKey = f?.pair ? f.pair.toString() : '';
+                  if (pairKey && isPairable(f)) {
+                    // Group all pairable fields with the same pairKey into the same header row (3-up supported).
+                    const group: any[] = [f];
+                    for (let j = i + 1; j < fields.length; j += 1) {
+                      const cand = fields[j];
+                      const candId = (cand?.id ?? '').toString();
+                      if (!candId || used.has(candId)) continue;
+                      if ((cand?.pair ? cand.pair.toString() : '') === pairKey && isPairable(cand)) {
+                        group.push(cand);
+                      }
+                    }
+                    group.forEach(g => used.add((g?.id ?? '').toString()));
+                    const maxPerRow = 3;
+                    for (let k = 0; k < group.length; k += maxPerRow) {
+                      rows.push(group.slice(k, k + maxPerRow));
+                    }
+                      continue;
+                    }
+
+                  // Fallback: try to keep 2-up layout by pairing with the next available field.
+                  let partner: any | null = null;
+                  for (let j = i + 1; j < fields.length; j += 1) {
+                    const cand = fields[j];
+                    const candId = (cand?.id ?? '').toString();
+                    if (!candId || used.has(candId)) continue;
+                    partner = cand;
+                    break;
+                  }
+                  used.add(fid);
+                  if (partner) {
+                    used.add((partner.id ?? '').toString());
+                    rows.push([f, partner]);
+                  } else {
+                    rows.push([f]);
+                  }
+                }
+                return rows;
+              };
+
+              const headerCollapsedFieldIdSet = new Set<string>(
+                guidedCollapsedFieldsInHeader && isProgressive
+                  ? (collapsedFieldsOrdered || [])
+                      .map((f: any) => (f?.id !== undefined && f?.id !== null ? f.id.toString() : ''))
+                      .filter(Boolean)
+                  : []
+              );
+              const headerCollapsedFieldsToRender =
+                guidedCollapsedFieldsInHeader && isProgressive
+                  ? (collapsedFieldsOrdered || []).filter((f: any) => {
+                      const fid = f?.id !== undefined && f?.id !== null ? f.id.toString() : '';
+                      if (!fid) return false;
+                      if (showTitleControlInHeader && fid === titleFieldId) return false;
+                      return true;
+                    })
+                  : [];
+              const bodyFieldsToRenderBase =
+                guidedCollapsedFieldsInHeader && isProgressive
+                  ? (fieldsToRender || []).filter((f: any) => !headerCollapsedFieldIdSet.has((f?.id || '').toString()))
+                  : fieldsToRender;
+              const canHoistSingleBodyFieldIntoHeader =
+                guidedCollapsedFieldsInHeader &&
+                isProgressive &&
+                headerCollapsedFieldsToRender.length === 2 &&
+                headerCollapsedFieldsToRender.every((f: any) => (f as any)?.ui?.renderAsLabel === true) &&
+                (bodyFieldsToRenderBase || []).length === 1 &&
+                Boolean((bodyFieldsToRenderBase?.[0] as any)?.pair);
+              const headerFieldsToRender = (() => {
+                if (!canHoistSingleBodyFieldIntoHeader) return headerCollapsedFieldsToRender;
+                const extra = (bodyFieldsToRenderBase?.[0] as any) || null;
+                if (!extra) return headerCollapsedFieldsToRender;
+                const seen = new Set<string>();
+                return [...headerCollapsedFieldsToRender, extra].filter((f: any) => {
+                  const id = (f?.id ?? '').toString();
+                  if (!id || seen.has(id)) return false;
+                  seen.add(id);
+                  return true;
+                });
+              })();
+              const bodyFieldsToRender = canHoistSingleBodyFieldIntoHeader ? [] : bodyFieldsToRenderBase;
+
+              const renderLineItemField = (
+                field: any,
+                opts?: { forceHideLabel?: boolean; showLabel?: boolean; forceStackedLabel?: boolean; inGrid?: boolean }
+              ) => {
+                ensureLineOptions(q.id, field);
+                const optionSetField: OptionSet =
+                  optionState[optionKey(field.id, q.id)] || {
+                    en: field.options || [],
+                    fr: (field as any).optionsFr || [],
+                    nl: (field as any).optionsNl || []
+                  };
+                const dependencyIds = (
+                  Array.isArray(field.optionFilter?.dependsOn)
+                    ? field.optionFilter?.dependsOn
+                    : [field.optionFilter?.dependsOn || '']
+                ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                const allowedField = computeAllowedOptions(
+                  field.optionFilter,
+                  optionSetField,
+                  dependencyIds.map((dep: string) => toDependencyValue(row.values[dep] ?? values[dep]))
+                );
+                const currentVal = row.values[field.id];
+                const allowedWithCurrent =
+                  currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal) ? [...allowedField, currentVal] : allowedField;
+                const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
+                const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
+                if (hideField) return null;
+
+                const fieldPath = `${q.id}__${field.id}__${row.id}`;
+                const showLabelOverride = opts?.showLabel;
+                const forceStackedLabel = opts?.forceStackedLabel === true || (field as any)?.ui?.labelLayout === 'stacked';
+                const hideLabel =
+                  showLabelOverride === false
+                    ? true
+                    : showLabelOverride === true
+                      ? false
+                      : Boolean((field as any)?.ui?.hideLabel) ||
+                        (isProgressive && rowCollapsed && collapsedLabelMap[field.id] === false);
+                const inGrid = opts?.inGrid === true;
+                // In grids (2-up/3-up), we must keep the label in layout to preserve row alignment.
+                // Using `srOnly` (position:absolute) would remove the label from the grid and shift controls upward.
+                const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
+                const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+
+                const triggeredSubgroupIds = (() => {
+                  if (rowCollapsed) return [] as string[];
+                  if (!subIds.length) return [] as string[];
+                  const effects = Array.isArray((field as any).selectionEffects) ? ((field as any).selectionEffects as any[]) : [];
+                  const hits = effects
+                    .map(e => (e?.groupId !== undefined && e?.groupId !== null ? e.groupId.toString() : ''))
+                    .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
+                  const sourceVal = row.values[field.id];
+                  const hasSourceValue = !isEmptyValue(sourceVal as any);
+                  const filtered = hits.filter(subId => {
+                    const subKey = buildSubgroupKey(q.id, row.id, subId);
+                    const subRows = lineItems[subKey] || [];
+                    return (Array.isArray(subRows) && subRows.length > 0) || hasSourceValue;
+                  });
+                  return Array.from(new Set(filtered));
+                })();
+                const fieldIsStacked = forceStackedLabel && labelStyle !== srOnly;
+                const subgroupOpenStack =
+                  triggeredSubgroupIds.length && !fieldIsStacked
+                    ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: field.id, variant: 'stack' })
+                    : null;
+                const subgroupOpenInline =
+                  triggeredSubgroupIds.length && fieldIsStacked
+                    ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: field.id, variant: 'inline' })
+                    : null;
+                const renderReadOnlyLine = (display: React.ReactNode) => {
+                  const cls = `${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                    forceStackedLabel ? ' ck-label-stacked' : ''
+                  } ck-readonly-field`;
+                  return (
+                    <div
+                      key={field.id}
+                      className={cls}
+                      data-field-path={fieldPath}
+                      data-has-error={errors[fieldPath] ? 'true' : undefined}
+                      data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                    >
+                      <label style={labelStyle}>
+                        {resolveFieldLabel(field, language, field.id)}
+                        {field.required && <RequiredStar />}
+                      </label>
+                      <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
+                      {fieldIsStacked ? subgroupOpenInline : subgroupOpenStack}
+                      {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                      {renderWarnings(fieldPath)}
+                    </div>
+                  );
+                };
+
+                switch (field.type) {
+                  case 'CHOICE': {
+                    const rawVal = row.values[field.id];
+                    const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                    if (renderAsLabel) {
+                      const selected = optsField.find(opt => opt.value === choiceVal);
+                      const display = selected?.label || choiceVal || null;
+                      return renderReadOnlyLine(display);
+                    }
+                    return (
+                      <div
+                        key={field.id}
+                        className={`field inline-field${fieldIsStacked ? ' ck-label-stacked' : ''}`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        {fieldIsStacked ? (
+                          <div className="ck-label-row">
+                            <label style={labelStyle}>
+                              {resolveFieldLabel(field, language, field.id)}
+                              {field.required && <RequiredStar />}
+                            </label>
+                            {subgroupOpenInline}
+                          </div>
+                        ) : (
+                          <label style={labelStyle}>
+                            {resolveFieldLabel(field, language, field.id)}
+                            {field.required && <RequiredStar />}
+                          </label>
+                        )}
+                        <div className="ck-control-row">
+                          {renderChoiceControl({
+                            fieldPath,
+                            value: choiceVal || '',
+                            options: optsField,
+                            required: !!field.required,
+                            searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
+                            override: (field as any)?.ui?.control,
+                            disabled: submitting || (field as any)?.readOnly === true,
+                            onChange: next => handleLineFieldChange(q, row.id, field, next)
+                          })}
+                          {(() => {
+                            const selected = optsField.find(opt => opt.value === choiceVal);
+                            const tooltipNode = selected?.tooltip ? (
+                              <InfoTooltip
+                                text={selected.tooltip}
+                                label={resolveLocalizedString(
+                                  field.dataSource?.tooltipLabel,
+                                  language,
+                                  resolveFieldLabel(field, language, field.id)
+                                )}
+                                onOpen={openInfoOverlay}
+                              />
+                            ) : null;
+                            if (!tooltipNode) return null;
+                            return <div className="ck-field-actions">{tooltipNode}</div>;
+                          })()}
+                        </div>
+                        {subgroupOpenStack}
+                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                        {renderWarnings(fieldPath)}
+                      </div>
+                    );
+                  }
+                  case 'CHECKBOX': {
+                    const hasAnyOption =
+                      !!((optionSetField.en && optionSetField.en.length) ||
+                        ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                        ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                    const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
+                    const selected = Array.isArray(row.values[field.id]) ? (row.values[field.id] as string[]) : [];
+                    const allowedWithSelected = selected.reduce((acc, val) => {
+                      if (val && !acc.includes(val)) acc.push(val);
+                      return acc;
+                    }, [...allowedField]);
+                    const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
+                    if (renderAsLabel) {
+                      if (isConsentCheckbox) {
+                        const display = row.values[field.id]
+                          ? tSystem('common.yes', language, 'Yes')
+                          : tSystem('common.no', language, 'No');
+                        return renderReadOnlyLine(display);
+                      }
+                      const labels = selected
+                        .map(val => optsField.find(opt => opt.value === val)?.label || val)
+                        .filter(Boolean);
+                      const display = labels.length ? labels.join(', ') : null;
+                      return renderReadOnlyLine(display);
+                    }
+                    if (isConsentCheckbox) {
+                      return (
+                        <div
+                          key={field.id}
+                          className={`field inline-field ck-consent-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                          data-field-path={fieldPath}
+                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                        >
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={!!row.values[field.id]}
+                              disabled={submitting || (field as any)?.readOnly === true}
+                              onChange={e => {
+                                if (submitting || (field as any)?.readOnly === true) return;
+                                handleLineFieldChange(q, row.id, field, e.target.checked);
+                              }}
+                            />
+                            <span className="ck-consent-text" style={labelStyle}>
+                              {resolveFieldLabel(field, language, field.id)}
+                              {field.required && <RequiredStar />}
+                            </span>
+                          </label>
+                          {subgroupOpenStack}
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                    const controlOverride = ((field as any)?.ui?.control || '').toString().trim().toLowerCase();
+                    const renderAsMultiSelect = controlOverride === 'select';
+                    if (renderAsMultiSelect) {
+                      const selectedStr = selected.length ? selected.join(', ') : '';
+                      return (
+                        <div
+                          key={field.id}
+                          className={`field inline-field${fieldIsStacked ? ' ck-label-stacked' : ''}`}
+                          data-field-path={fieldPath}
+                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                        >
+                          <label style={labelStyle}>
+                            {resolveFieldLabel(field, language, field.id)}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          <div className="ck-control-row">
+                            <select
+                              multiple
+                              value={selected}
+                              disabled={submitting || (field as any)?.readOnly === true}
+                              onChange={e => {
+                                if (submitting || (field as any)?.readOnly === true) return;
+                                const next = Array.from(e.target.selectedOptions).map(o => o.value);
+                                handleLineFieldChange(q, row.id, field, next);
+                              }}
+                            >
+                              {optsField.map(opt => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            {selectedStr ? <span className="muted">{selectedStr}</span> : null}
+                          </div>
+                          {subgroupOpenStack}
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={field.id}
+                        className={`field inline-field${fieldIsStacked ? ' ck-label-stacked' : ''}`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={labelStyle}>
+                          {resolveFieldLabel(field, language, field.id)}
+                          {field.required && <RequiredStar />}
+                        </label>
+                        <div className="inline-options">
+                          {optsField.map(opt => (
+                            <label key={opt.value} className="inline">
+                              <input
+                                type="checkbox"
+                                checked={selected.includes(opt.value)}
+                                disabled={submitting || (field as any)?.readOnly === true}
+                                onChange={e => {
+                                  if (submitting || (field as any)?.readOnly === true) return;
+                                  const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
+                                  handleLineFieldChange(q, row.id, field, next);
+                                }}
+                              />
+                              <span>{opt.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {subgroupOpenStack}
+                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                        {renderWarnings(fieldPath)}
+                      </div>
+                    );
+                  }
+                  case 'FILE_UPLOAD': {
+                    const readOnly = (field as any)?.readOnly === true;
+                    const uploadConfig: any = (field as any)?.uploadConfig || {};
+                    const items = toUploadItems(row.values[field.id]);
+                    if (renderAsLabel) {
+                      const displayContent = items.length
+                        ? items.map((item: any, idx: number) => (
+                            <div key={`${field.id}-file-${idx}`} className="ck-readonly-file">
+                              {describeUploadItem(item as any)}
+                            </div>
+                          ))
+                        : null;
+                      const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
+                      return renderReadOnlyLine(displayNode);
+                    }
+                    const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
+                    const onAdd = () => {
+                      if (submitting || readOnly) return;
+                      if (maxed) return;
+                      fileInputsRef.current[fieldPath]?.click();
+                    };
+                    const onClearAll = () => {
+                      if (submitting || readOnly) return;
+                      clearLineFiles({ group: q, rowId: row.id, field, fieldPath });
+                    };
+                    const onRemoveAt = (idx: number) => {
+                      if (submitting || readOnly) return;
+                      removeLineFile({ group: q, rowId: row.id, field, fieldPath, index: idx });
+                    };
+                    const acceptAttr = Array.isArray(uploadConfig?.accept) ? uploadConfig.accept.join(',') : uploadConfig?.accept || undefined;
+                    const minRequired = getUploadMinRequired({ uploadConfig, required: !!field.required });
+                    const helperText = minRequired
+                      ? tSystem(
+                          minRequired === 1 ? 'files.helper.min1' : 'files.helper.minMany',
+                          language,
+                          minRequired === 1 ? 'Required' : 'Required ({min})',
+                          { min: minRequired }
+                        )
+                      : uploadConfig?.maxFiles
+                        ? tSystem('files.helper.max', language, 'Max ({max})', { max: uploadConfig.maxFiles })
+                        : '';
+                    return (
+                      <div
+                        key={field.id}
+                        className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={labelStyle}>
+                          {resolveFieldLabel(field, language, field.id)}
+                          {field.required && <RequiredStar />}
+                        </label>
+                        <div className="ck-upload-row">
+                          <div className="ck-upload-row__actions">
+                            <button
+                              type="button"
+                              className="ck-progress-pill ck-upload-pill-btn"
+                              aria-disabled={submitting || readOnly ? 'true' : undefined}
+                              onClick={onAdd}
+                            >
+                              <span>{tSystem('files.add', language, 'Add')}</span>
+                              <span className="ck-progress-caret">▸</span>
+                            </button>
+                            {items.length ? (
+                              <button
+                                type="button"
+                                className="ck-progress-pill ck-upload-pill-btn"
+                                aria-disabled={submitting || readOnly ? 'true' : undefined}
+                                onClick={onClearAll}
+                              >
+                                <span>{tSystem('files.clearAll', language, 'Clear all')}</span>
+                                <span className="ck-progress-caret">▸</span>
+                              </button>
+                            ) : null}
+                          </div>
+                          {helperText ? <div className="ck-upload-helper">{helperText}</div> : null}
+                          <div className="ck-upload-items">
+                            {items.map((item: any, idx: number) => (
+                              <div key={`${field.id}-file-${idx}`} className="ck-upload-item">
+                                <a href={item.url} target="_blank" rel="noreferrer">
+                                  {item.label || item.url}
+                                </a>
+                                {!readOnly ? (
+                                  <button type="button" className="ck-upload-remove" onClick={() => onRemoveAt(idx)}>
+                                    ×
+                                  </button>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                          <div style={srOnly} aria-live="polite">
+                            {uploadAnnouncements[fieldPath] || ''}
+                          </div>
+                          <input
+                            ref={el => {
+                              fileInputsRef.current[fieldPath] = el;
+                            }}
+                            type="file"
+                            multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
+                            accept={acceptAttr}
+                            style={{ display: 'none' }}
+                            onChange={e => handleLineFileInputChange({ group: q, rowId: row.id, field, fieldPath, list: e.target.files })}
+                          />
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      </div>
+                    );
+                  }
+                  default: {
+                    const mapped = field.valueMap
+                      ? resolveValueMapValue(
+                          field.valueMap,
+                          fid => {
+                            if (row.values.hasOwnProperty(fid)) return row.values[fid];
+                            return values[fid];
+                          },
+                          { language, targetOptions: toOptionSet(field) }
+                        )
+                      : undefined;
+                    const fieldValueRaw = field.valueMap ? mapped : ((row.values[field.id] as any) ?? '');
+                    const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                    const numberText =
+                      field.type === 'NUMBER'
+                        ? fieldValue === undefined || fieldValue === null
+                          ? ''
+                          : (fieldValue as any).toString()
+                        : '';
+                    if (renderAsLabel) {
+                      const display =
+                        field.type === 'NUMBER'
+                          ? numberText
+                          : field.type === 'DATE'
+                            ? fieldValue
+                            : fieldValue;
+                      return renderReadOnlyLine(display || null);
+                    }
+                    return (
+                      <div
+                        key={field.id}
+                        className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                          forceStackedLabel ? ' ck-label-stacked' : ''
+                        }`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={labelStyle}>
+                          {resolveFieldLabel(field, language, field.id)}
+                          {field.required && <RequiredStar />}
+                        </label>
+                        {field.type === 'NUMBER' ? (
+                          <NumberStepper
+                            value={numberText}
+                            disabled={submitting}
+                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                            ariaLabel={resolveFieldLabel(field, language, field.id)}
+                            onChange={next => handleLineFieldChange(q, row.id, field, next)}
+                          />
+                        ) : field.type === 'PARAGRAPH' ? (
+                          <textarea
+                            value={fieldValue}
+                            onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
+                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                            rows={(field as any)?.ui?.paragraphRows || 4}
+                          />
+                        ) : field.type === 'DATE' ? (
+                          <DateInput
+                            value={fieldValue}
+                            language={language}
+                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                            ariaLabel={resolveFieldLabel(field, language, field.id)}
+                            onChange={next => handleLineFieldChange(q, row.id, field, next)}
+                          />
+                        ) : (
+                          <input
+                            type={field.type === 'DATE' ? 'date' : 'text'}
+                            value={fieldValue}
+                            onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
+                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                          />
+                        )}
+                        {subgroupOpenStack}
+                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                        {renderWarnings(fieldPath)}
+                      </div>
+                    );
+                  }
+                }
+              };
               return (
                 <div
                   key={row.id}
@@ -1248,13 +1835,18 @@ export const LineItemGroupQuestion: React.FC<{
                   {isProgressive ? (
                     <div className="ck-row-header">
                       <div style={{ minWidth: 0 }}>
-                        {showTitleControl && titleField ? (
+                        {/* Row numbering intentionally hidden in all UI modes (requested by product). */}
+                        {showTitleControlInHeader && titleField ? (
                           <div style={{ maxWidth: 420 }}>
                             {(() => {
                               ensureLineOptions(q.id, titleField);
                               const errorKey = `${q.id}__${titleField.id}__${row.id}`;
                               const hideLabel = true;
                               const labelStyle = hideLabel ? srOnly : undefined;
+                              // The title field (rendered in the row header) historically showed disabled controls.
+                              // For consistency with edit rendering elsewhere, treat readOnly/renderAsLabel as "show plain text".
+                              const titleAsLabel =
+                                titleLocked || (titleField as any)?.ui?.renderAsLabel === true || (titleField as any)?.readOnly === true;
                               const triggeredSubgroupIds = (() => {
                                 if (rowCollapsed) return [] as string[];
                                 if (!subIds.length) return [] as string[];
@@ -1317,7 +1909,7 @@ export const LineItemGroupQuestion: React.FC<{
                                       {titleField.required && <RequiredStar />}
                                     </label>
                                     <div className="ck-control-row">
-                                      {titleLocked ? (
+                                      {titleAsLabel ? (
                                         <div className="ck-row-title">{displayLabel || '—'}</div>
                                       ) : (
                                         renderChoiceControl({
@@ -1389,6 +1981,19 @@ export const LineItemGroupQuestion: React.FC<{
                                       {resolveFieldLabel(titleField, language, titleField.id)}
                                       {titleField.required && <RequiredStar />}
                                     </label>
+                                    {titleAsLabel ? (
+                                      <div className="ck-control-row">
+                                        <div className="ck-row-title">
+                                          {optsField
+                                            .filter(opt => selected.includes(opt.value))
+                                            .map(opt => opt.label)
+                                            .filter(Boolean)
+                                            .join(', ') ||
+                                            selected.join(', ') ||
+                                            '—'}
+                                        </div>
+                                      </div>
+                                    ) : (
                                     <div className="inline-options">
                                       {optsField.map(opt => (
                                         <label key={opt.value} className="inline">
@@ -1408,6 +2013,7 @@ export const LineItemGroupQuestion: React.FC<{
                                         </label>
                                       ))}
                                     </div>
+                                    )}
                                     {subgroupOpenStack}
                                     {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                     {renderWarnings(errorKey)}
@@ -1423,6 +2029,7 @@ export const LineItemGroupQuestion: React.FC<{
                                 : undefined;
                               const fieldValueRaw = titleField.valueMap ? mapped : ((row.values[titleField.id] as any) ?? '');
                               const fieldValue = titleField.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                              const display = fieldValue === undefined || fieldValue === null ? '' : fieldValue.toString();
                               return (
                                 <div
                                   className={`field inline-field${titleField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
@@ -1435,6 +2042,11 @@ export const LineItemGroupQuestion: React.FC<{
                                     {resolveFieldLabel(titleField, language, titleField.id)}
                                     {titleField.required && <RequiredStar />}
                                   </label>
+                                  {titleAsLabel ? (
+                                    <div className="ck-control-row">
+                                      <div className="ck-row-title">{display || '—'}</div>
+                                    </div>
+                                  ) : (
                                   <input
                                     type={
                                       titleField.type === 'NUMBER'
@@ -1448,6 +2060,7 @@ export const LineItemGroupQuestion: React.FC<{
                                     readOnly={!!titleField.valueMap || titleLocked}
                                     disabled={titleLocked}
                                   />
+                                  )}
                                   {subgroupOpenStack}
                                   {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
                                   {renderWarnings(errorKey)}
@@ -1456,8 +2069,54 @@ export const LineItemGroupQuestion: React.FC<{
                             })()}
                           </div>
                         ) : null}
-                        {rowDisclaimerText ? <div className="ck-row-disclaimer">{rowDisclaimerText}</div> : null}
-                        {rowCollapsed && !canExpand ? (
+                        {guidedCollapsedFieldsInHeader && headerFieldsToRender.length ? (
+                          <div
+                            className="ck-row-header-collapsed-fields"
+                            style={{
+                              marginTop: showTitleControlInHeader ? 8 : 0,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 12
+                            }}
+                          >
+                            {buildHeaderRows(headerFieldsToRender).map((row, idx) => {
+                              const renderHeaderField = (f: any, opts?: { inGrid?: boolean }) => {
+                                  const fid = (f?.id ?? '').toString();
+                                  const showLabel = collapsedLabelMap[fid] !== false;
+                                const forceAsLabel = guidedCollapsedFieldsInHeader && lockAnchor && fid === anchorFieldId;
+                                const fToRender = forceAsLabel
+                                  ? ({ ...(f as any), ui: { ...((f as any).ui || {}), renderAsLabel: true } } as any)
+                                  : f;
+                                return renderLineItemField(fToRender, {
+                                  showLabel,
+                                  forceStackedLabel: showLabel,
+                                  inGrid: opts?.inGrid === true
+                                });
+                              };
+
+                              const inGrid = row.length > 1;
+                              if (row.length > 1) {
+                                const hasDate = row.some((f: any) => (f?.type || '').toString() === 'DATE');
+                                const colsClass = row.length === 3 ? ' ck-pair-grid--3' : '';
+                                return (
+                                  <PairedRowGrid
+                                    key={`${collapseKey}-header-${idx}`}
+                                    className={`ck-pair-grid ck-row-header-collapsed-grid${colsClass}${hasDate ? ' ck-pair-has-date' : ''}`}
+                                  >
+                                    {row.map((f: any) => renderHeaderField(f, { inGrid }))}
+                              </PairedRowGrid>
+                                );
+                              }
+
+                              return (
+                                <div key={`${collapseKey}-header-${idx}`} className="ck-full-width">
+                                  {row.map((f: any) => renderHeaderField(f, { inGrid }))}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                        {!guidedCollapsedFieldsInHeader && rowCollapsed && !canExpand ? (
                           <div
                             className="muted"
                             style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
@@ -1471,10 +2130,11 @@ export const LineItemGroupQuestion: React.FC<{
                           </div>
                         ) : null}
                       </div>
+                      {!guidedCollapsedFieldsInHeader ? (
                       <button
                         type="button"
                         className="ck-row-toggle"
-                        aria-label={`${pillActionLabel} ${tSystem('lineItems.row', language, 'Row')} ${rowIdx + 1}`}
+                        aria-label={pillActionLabel}
                         aria-expanded={!rowCollapsed}
                         aria-disabled={rowCollapsed && !canExpand}
                         title={
@@ -1495,14 +2155,21 @@ export const LineItemGroupQuestion: React.FC<{
                           onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
                         }}
                       >
+                        {(() => {
+                          const parts: string[] = [];
+                          if (rowHasError) parts.push(tSystem('lineItems.needsAttention', language, 'Needs attention'));
+                          if (rowLocked) parts.push(tSystem('lineItems.locked', language, 'Locked'));
+                          const text = parts.join(' · ');
+                          if (!text) return null;
+                          return (
                         <span
                           className="muted"
                           style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
                         >
-                          {tSystem('lineItems.row', language, 'Row')} {rowIdx + 1}
-                          {rowHasError ? ` · ${tSystem('lineItems.needsAttention', language, 'Needs attention')}` : ''}
-                          {rowLocked ? ` · ${tSystem('lineItems.locked', language, 'Locked')}` : ''}
+                              {text}
                         </span>
+                          );
+                        })()}
                         <span
                           className={`ck-progress-pill ${requiredRowProgressClass}`}
                           data-has-error={rowHasError ? 'true' : undefined}
@@ -1515,6 +2182,10 @@ export const LineItemGroupQuestion: React.FC<{
                           <span className="ck-progress-caret">{rowCollapsed ? '▸' : '▾'}</span>
                         </span>
                       </button>
+                      ) : null}
+                      {!guidedCollapsedFieldsInHeader && rowDisclaimerText ? (
+                        <div className="ck-row-disclaimer ck-row-disclaimer--full">{rowDisclaimerText}</div>
+                      ) : null}
                     </div>
                   ) : null}
                   {!isProgressive && rowDisclaimerText ? (
@@ -1523,7 +2194,10 @@ export const LineItemGroupQuestion: React.FC<{
                     </div>
                   ) : null}
                   {(() => {
-                    const renderLineItemField = (field: any) => {
+                    const renderLineItemField = (
+                      field: any,
+                      opts?: { showLabel?: boolean; forceStackedLabel?: boolean; inGrid?: boolean }
+                    ) => {
                     ensureLineOptions(q.id, field);
                     const optionSetField: OptionSet =
                       optionState[optionKey(field.id, q.id)] || {
@@ -1551,10 +2225,18 @@ export const LineItemGroupQuestion: React.FC<{
                     if (hideField) return null;
 
                       const fieldPath = `${q.id}__${field.id}__${row.id}`;
+                      const showLabelOverride = opts?.showLabel;
+                      const forceStackedLabel = opts?.forceStackedLabel === true || (field as any)?.ui?.labelLayout === 'stacked';
                       const hideLabel =
-                        Boolean((field as any)?.ui?.hideLabel) ||
+                        showLabelOverride === false
+                          ? true
+                          : showLabelOverride === true
+                            ? false
+                            : Boolean((field as any)?.ui?.hideLabel) ||
                         (isProgressive && rowCollapsed && collapsedLabelMap[field.id] === false);
-                      const labelStyle = hideLabel ? srOnly : undefined;
+                      const inGrid = opts?.inGrid === true;
+                      const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
+                      const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
 
                       const triggeredSubgroupIds = (() => {
                         if (rowCollapsed) return [] as string[];
@@ -1574,7 +2256,7 @@ export const LineItemGroupQuestion: React.FC<{
                         });
                         return Array.from(new Set(filtered));
                       })();
-                      const fieldIsStacked = (field as any)?.ui?.labelLayout === 'stacked' && labelStyle !== srOnly;
+                      const fieldIsStacked = forceStackedLabel && labelStyle !== srOnly;
                       const subgroupOpenStack = triggeredSubgroupIds.length && !fieldIsStacked
                         ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: field.id, variant: 'stack' })
                         : null;
@@ -1582,15 +2264,54 @@ export const LineItemGroupQuestion: React.FC<{
                         ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: field.id, variant: 'inline' })
                         : null;
 
+                      const renderReadOnlyLine = (display: React.ReactNode) => {
+                        const cls = `${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                          forceStackedLabel ? ' ck-label-stacked' : ''
+                        } ck-readonly-field`;
+                        return (
+                          <div
+                            key={field.id}
+                            className={cls}
+                            data-field-path={fieldPath}
+                            data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                          >
+                            {fieldIsStacked ? (
+                              <div className="ck-label-row">
+                                <label style={labelStyle}>
+                                  {resolveFieldLabel(field, language, field.id)}
+                                  {field.required && <RequiredStar />}
+                                </label>
+                                {subgroupOpenInline}
+                              </div>
+                            ) : (
+                              <label style={labelStyle}>
+                                {resolveFieldLabel(field, language, field.id)}
+                                {field.required && <RequiredStar />}
+                              </label>
+                            )}
+                            <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
+                            {subgroupOpenStack}
+                            {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                            {renderWarnings(fieldPath)}
+                          </div>
+                        );
+                      };
+
                     switch (field.type) {
                       case 'CHOICE': {
                         const rawVal = row.values[field.id];
                         const choiceVal =
                           Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                        if (renderAsLabel) {
+                          const selected = optsField.find(opt => opt.value === choiceVal);
+                          const display = selected?.label || choiceVal || null;
+                          return renderReadOnlyLine(display);
+                        }
                         return (
                             <div
                               key={field.id}
-                              className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                              className={`field inline-field${fieldIsStacked ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                               data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -1655,11 +2376,24 @@ export const LineItemGroupQuestion: React.FC<{
                           return acc;
                         }, [...allowedField]);
                         const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
+                        if (renderAsLabel) {
+                          if (isConsentCheckbox) {
+                            const display = row.values[field.id]
+                              ? tSystem('common.yes', language, 'Yes')
+                              : tSystem('common.no', language, 'No');
+                            return renderReadOnlyLine(display);
+                          }
+                          const labels = selected
+                            .map(val => optsField.find(opt => opt.value === val)?.label || val)
+                            .filter(Boolean);
+                          const display = labels.length ? labels.join(', ') : null;
+                          return renderReadOnlyLine(display);
+                        }
                         if (isConsentCheckbox) {
                           return (
                             <div
                               key={field.id}
-                              className={`field inline-field ck-consent-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                              className={`field inline-field ck-consent-field${fieldIsStacked ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                               data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -1690,7 +2424,7 @@ export const LineItemGroupQuestion: React.FC<{
                         return (
                             <div
                               key={field.id}
-                              className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                              className={`field inline-field${fieldIsStacked ? ' ck-label-stacked' : ''}`}
                               data-field-path={fieldPath}
                               data-has-error={errors[fieldPath] ? 'true' : undefined}
                               data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -1800,6 +2534,17 @@ export const LineItemGroupQuestion: React.FC<{
                             .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                             .filter(Boolean);
                           const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
+                          if (renderAsLabel) {
+                            const displayContent = items.length
+                              ? items.map((item: any, idx: number) => (
+                                  <div key={`${field.id}-file-${idx}`} className="ck-readonly-file">
+                                    {describeUploadItem(item as any)}
+                                  </div>
+                                ))
+                              : null;
+                            const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
+                            return renderReadOnlyLine(displayNode);
+                          }
                           return (
                             <div
                               key={field.id}
@@ -1916,6 +2661,15 @@ export const LineItemGroupQuestion: React.FC<{
                                 ? ''
                                 : (fieldValue as any).toString()
                               : '';
+                        if (renderAsLabel) {
+                          const display =
+                            field.type === 'NUMBER'
+                              ? numberText
+                              : field.type === 'DATE'
+                                ? fieldValue
+                                : fieldValue;
+                          return renderReadOnlyLine(display || null);
+                        }
                         return (
                             <div
                               key={field.id}
@@ -1973,25 +2727,28 @@ export const LineItemGroupQuestion: React.FC<{
                     if (isProgressive && rowCollapsed) {
                       return (
                         <div
-                          className={`collapsed-fields-grid${fieldsToRender.length > 1 ? ' ck-collapsed-stack' : ''}`}
+                          className={`collapsed-fields-grid${bodyFieldsToRender.length > 1 ? ' ck-collapsed-stack' : ''}`}
                           style={{
                             display: 'grid',
                             gridTemplateColumns:
-                              fieldsToRender.length === 2
+                              bodyFieldsToRender.length === 2
                                 ? 'repeat(2, minmax(0, 1fr))'
                                 : 'repeat(auto-fit, minmax(220px, 1fr))',
                             gap: 12
                           }}
                         >
-                          {fieldsToRender.map(field => renderLineItemField(field))}
+                          {bodyFieldsToRender.map(field => renderLineItemField(field, { inGrid: bodyFieldsToRender.length > 1 }))}
                         </div>
                       );
                     }
 
-                    const visibleExpandedFields = fieldsToRender.filter(field => {
+                    const visibleExpandedFields = bodyFieldsToRender.filter(field => {
                       const hide = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
                       return !hide;
                     });
+                    if (guidedCollapsedFieldsInHeader && isProgressive && !visibleExpandedFields.length) {
+                      return null;
+                    }
 
                     return (
                       <GroupedPairedFields
@@ -2022,6 +2779,11 @@ export const LineItemGroupQuestion: React.FC<{
                       />
                     );
                   })()}
+                  {guidedCollapsedFieldsInHeader && isProgressive && rowDisclaimerText ? (
+                    <div className="ck-row-disclaimer" style={{ marginTop: 10 }}>
+                      {rowDisclaimerText}
+                    </div>
+                  ) : null}
                   {!rowCollapsed && fallbackSubIds.length ? (
                     <div style={{ marginTop: 10 }}>{renderSubgroupOpenStack(fallbackSubIds)}</div>
                   ) : null}
@@ -2033,7 +2795,7 @@ export const LineItemGroupQuestion: React.FC<{
                         : undefined
                     }
                   >
-                    {((q.lineItemConfig as any)?.ui?.allowRemoveAutoRows === false && rowSource === 'auto') ? null : (
+                    {hideRemoveButton ? null : ((q.lineItemConfig as any)?.ui?.allowRemoveAutoRows === false && rowSource === 'auto') ? null : (
                       <button type="button" onClick={() => removeLineRow(q.id, row.id)} style={buttonStyles.negative}>
                         {tSystem('lineItems.remove', language, 'Remove')}
                       </button>
@@ -2310,8 +3072,9 @@ export const LineItemGroupQuestion: React.FC<{
                           };
                           const targetGroup = subGroupDef;
                           const subRowSource = parseRowSource((subRow.values as any)?.[ROW_SOURCE_KEY]);
+                          const subHideRemoveButton = parseRowHideRemove((subRow.values as any)?.[ROW_HIDE_REMOVE_KEY]);
                           const allowRemoveAutoSubRows = (sub as any)?.ui?.allowRemoveAutoRows !== false;
-                          const canRemoveSubRow = allowRemoveAutoSubRows || subRowSource !== 'auto';
+                          const canRemoveSubRow = !subHideRemoveButton && (allowRemoveAutoSubRows || subRowSource !== 'auto');
                           return (
                             <div
                               key={subRow.id}
@@ -2333,7 +3096,7 @@ export const LineItemGroupQuestion: React.FC<{
                                 </div>
                               )}
                               {(() => {
-                                const renderSubField = (field: any) => {
+                                const renderSubField = (field: any, opts?: { inGrid?: boolean }) => {
                                 ensureLineOptions(subKey, field);
                                 const optionSetField: OptionSet =
                                   optionState[optionKey(field.id, subKey)] || {
@@ -2380,7 +3143,100 @@ export const LineItemGroupQuestion: React.FC<{
                                 if (hideField) return null;
                                   const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
                                   const hideLabel = Boolean((field as any)?.ui?.hideLabel);
-                                  const labelStyle = hideLabel ? srOnly : undefined;
+                                  const inGrid = opts?.inGrid === true;
+                                  const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
+                                  const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+
+                                  const renderReadOnlyLine = (display: React.ReactNode) => {
+                                    const cls = `${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                                      (field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
+                                    } ck-readonly-field`;
+                                    return (
+                                      <div
+                                        key={field.id}
+                                        className={cls}
+                                        data-field-path={fieldPath}
+                                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                                      >
+                                        <label style={labelStyle}>
+                                          {resolveFieldLabel(field, language, field.id)}
+                                          {field.required && <RequiredStar />}
+                                        </label>
+                                        <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
+                                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                        {renderWarnings(fieldPath)}
+                                      </div>
+                                    );
+                                  };
+
+                                  if (renderAsLabel) {
+                                    switch (field.type) {
+                                      case 'CHOICE': {
+                                        const rawVal = subRow.values[field.id];
+                                        const choiceVal =
+                                          Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                                        const selected = optsField.find(opt => opt.value === choiceVal);
+                                        const display = selected?.label || choiceVal || null;
+                                        return renderReadOnlyLine(display);
+                                      }
+                                      case 'CHECKBOX': {
+                                        const hasAnyOption =
+                                          !!((optionSetField.en && optionSetField.en.length) ||
+                                            ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                                            ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                                        const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
+                                        if (isConsentCheckbox) {
+                                          const display = subRow.values[field.id]
+                                            ? tSystem('common.yes', language, 'Yes')
+                                            : tSystem('common.no', language, 'No');
+                                          return renderReadOnlyLine(display);
+                                        }
+                                        const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
+                                        const labels = selected
+                                          .map(val => optsField.find(opt => opt.value === val)?.label || val)
+                                          .filter(Boolean);
+                                        const display = labels.length ? labels.join(', ') : null;
+                                        return renderReadOnlyLine(display);
+                                      }
+                                      case 'FILE_UPLOAD': {
+                                        const items = toUploadItems(subRow.values[field.id] as any);
+                                        const displayContent = items.length
+                                          ? items.map((item: any, idx: number) => (
+                                              <div key={`${field.id}-file-${idx}`} className="ck-readonly-file">
+                                                {describeUploadItem(item as any)}
+                                              </div>
+                                            ))
+                                          : null;
+                                        const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
+                                        return renderReadOnlyLine(displayNode);
+                                      }
+                                      default: {
+                                        const mapped = field.valueMap
+                                          ? resolveValueMapValue(field.valueMap, (fid: string) => {
+                                              if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
+                                              if (row.values.hasOwnProperty(fid)) return row.values[fid];
+                                              return values[fid];
+                                            }, { language, targetOptions: toOptionSet(field) })
+                                          : undefined;
+                                        const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
+                                        const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                                        const numberText =
+                                          field.type === 'NUMBER'
+                                            ? fieldValue === undefined || fieldValue === null
+                                              ? ''
+                                              : (fieldValue as any).toString()
+                                            : '';
+                                        const display =
+                                          field.type === 'NUMBER'
+                                            ? numberText
+                                            : field.type === 'DATE'
+                                              ? fieldValue
+                                              : fieldValue;
+                                        return renderReadOnlyLine(display || null);
+                                      }
+                                    }
+                                  }
 
                                 switch (field.type) {
                                   case 'CHOICE': {

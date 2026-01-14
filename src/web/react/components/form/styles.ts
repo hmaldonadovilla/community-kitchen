@@ -268,13 +268,19 @@ export const FORM_VIEW_STYLES = `
           word-break: break-word;
         }
         .ck-row-disclaimer {
-          margin-top: 6px;
-          font-size: var(--ck-font-label);
-          font-weight: 700;
-          color: rgba(15, 23, 42, 0.62);
+          margin-top: 4px;
+          font-size: calc(var(--ck-font-label) * 0.82);
+          font-weight: 600;
+          font-style: italic;
+          color: rgba(15, 23, 42, 0.56);
           line-height: 1.2;
           overflow-wrap: anywhere;
           word-break: break-word;
+        }
+        .ck-row-disclaimer--full {
+          flex: 0 0 100%;
+          width: 100%;
+          margin-top: 0;
         }
 
         /* Field-level action buttons (subgroup + info) */
@@ -475,6 +481,27 @@ export const FORM_VIEW_STYLES = `
           min-height: 0;
           flex: 1 1 100%;
         }
+        .ck-readonly-field .ck-readonly-value {
+          width: 100%;
+          min-height: var(--control-height);
+          padding: 10px 12px;
+          border: 1px dashed var(--border);
+          border-radius: 12px;
+          background: rgba(118, 118, 128, 0.08);
+          font-weight: 700;
+          color: #0f172a;
+        }
+        .ck-readonly-file-list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .ck-readonly-file {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          color: #0f172a;
+        }
         /* In 2-up grids, keep the "aligned label rows" behavior even if a field forces stacked layout. */
         .ck-line-grid > .field.inline-field.ck-label-stacked > label,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field.ck-label-stacked > label {
@@ -485,7 +512,8 @@ export const FORM_VIEW_STYLES = `
           min-height: var(--ck-pair-label-min-height, 0px);
         }
         .form-card .field[data-has-warning="true"]:not([data-has-error="true"]),
-        .webform-overlay .field[data-has-warning="true"]:not([data-has-error="true"]) {
+        .webform-overlay .field[data-has-warning="true"]:not([data-has-error="true"]),
+        .ck-form-sections .field[data-has-warning="true"]:not([data-has-error="true"]) {
           outline: 2px solid rgba(245, 158, 11, 0.6);
           outline-offset: 2px;
           border-radius: 12px;
@@ -493,7 +521,8 @@ export const FORM_VIEW_STYLES = `
           background: rgba(245, 158, 11, 0.08);
         }
         .form-card .field[data-has-error="true"],
-        .webform-overlay .field[data-has-error="true"] {
+        .webform-overlay .field[data-has-error="true"],
+        .ck-form-sections .field[data-has-error="true"] {
           outline: 2px solid rgba(255, 59, 48, 0.65);
           outline-offset: 2px;
           border-radius: 12px;
@@ -600,6 +629,12 @@ export const FORM_VIEW_STYLES = `
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 12px 16px;
         }
+        /* 3-up variant used when 3+ fields share the same pair key. */
+        .ck-pair-grid.ck-pair-grid--3 {
+          /* Force 3 columns so "MEAL_TYPE + QTY + FINAL_QTY" can sit on one row even on phones.
+             Labels can wrap; controls will shrink via minmax(0, 1fr). */
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
         /* Make 2-up grids look "professional": align label rows + control rows across columns.
            We do this by forcing each cell to be a small 2-row grid (label row + control row). */
         .ck-line-grid > .field.inline-field,
@@ -617,7 +652,8 @@ export const FORM_VIEW_STYLES = `
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > label {
           /* Labels should shrink to their actual height (avoid reserving extra lines) */
           line-height: 1.2;
-          min-height: 0;
+          /* Keep at least one label line of height so control rows stay aligned even when a label is hidden/empty. */
+          min-height: 1.2em;
           max-width: none;
           margin: 0;
         }
@@ -664,6 +700,9 @@ export const FORM_VIEW_STYLES = `
           }
           .ck-pair-grid {
             grid-template-columns: 1fr;
+          }
+          .ck-pair-grid.ck-pair-grid--3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
         }
 
@@ -1092,7 +1131,9 @@ export const FORM_VIEW_STYLES = `
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          gap: 10px;
+          flex-wrap: wrap;
+          column-gap: 10px;
+          row-gap: 6px;
           /* Stretch to the row edges (row has padding: 12px inline). */
           margin: -12px -12px 12px;
           padding: 18px 18px 14px;
@@ -1179,5 +1220,4 @@ export const FORM_VIEW_STYLES = `
         }
 
       `;
-
 

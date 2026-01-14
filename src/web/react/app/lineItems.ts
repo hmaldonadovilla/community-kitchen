@@ -4,6 +4,39 @@ import { LineItemState } from '../types';
 export const ROW_SOURCE_KEY = '__ckRowSource';
 export const ROW_SOURCE_AUTO = 'auto';
 export const ROW_SOURCE_MANUAL = 'manual';
+/**
+ * When a line-item row is created by a selectionEffects rule with an explicit `id`,
+ * we tag the row values with this key so rules/disclaimers can reference the originating effect.
+ */
+export const ROW_SELECTION_EFFECT_ID_KEY = '__ckSelectionEffectId';
+
+/**
+ * Parent/child relationship metadata for rows created via selection effects (persisted inside row values).
+ * This is used to support cascading deletes and targeted "delete child row" behaviors.
+ */
+export const ROW_PARENT_ROW_ID_KEY = '__ckParentRowId';
+export const ROW_PARENT_GROUP_ID_KEY = '__ckParentGroupId';
+
+/**
+ * When true, suppress the UI "Remove" action for this row.
+ */
+export const ROW_HIDE_REMOVE_KEY = '__ckHideRemove';
+
+const normalizeMetaString = (raw: any): string => {
+  if (raw === undefined || raw === null) return '';
+  try {
+    return raw.toString().trim();
+  } catch (_) {
+    return '';
+  }
+};
+
+export const parseRowHideRemove = (raw: any): boolean => {
+  if (!raw) return false;
+  const val = typeof raw === 'string' ? raw.toLowerCase().trim() : raw;
+  if (val === true || val === 'true' || val === 1 || val === '1') return true;
+  return false;
+};
 
 export const parseRowSource = (raw: any): 'auto' | 'manual' | undefined => {
   if (!raw) return undefined;
@@ -190,7 +223,14 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
           });
         }
         state = seedSubgroupDefaults(state, q, rowId);
-        return { id: rowId, values };
+        const parentId = normalizeMetaString((values as any)[ROW_PARENT_ROW_ID_KEY]);
+        const parentGroupId = normalizeMetaString((values as any)[ROW_PARENT_GROUP_ID_KEY]);
+        return {
+          id: rowId,
+          values,
+          parentId: parentId && parentGroupId ? parentId : undefined,
+          parentGroupId: parentId && parentGroupId ? parentGroupId : undefined
+        } as any;
       });
 
       if (!parsedRows.length && q.lineItemConfig?.addMode !== 'overlay' && q.lineItemConfig?.addMode !== 'auto') {
@@ -206,6 +246,71 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
     });
 
   return state;
+};
+
+export const cascadeRemoveLineItemRows = (args: {
+  lineItems: LineItemState;
+  roots: Array<{ groupId: string; rowId: string }>;
+}): { lineItems: LineItemState; removed: Array<{ groupId: string; rowId: string }>; removedSubgroupKeys: string[] } => {
+  const { lineItems, roots } = args;
+  const seed = (roots || []).filter(r => r?.groupId && r?.rowId);
+  if (!seed.length) return { lineItems, removed: [], removedSubgroupKeys: [] };
+
+  const childrenByParent = new Map<string, Array<{ groupId: string; rowId: string }>>();
+  Object.keys(lineItems).forEach(groupKey => {
+    const rows = lineItems[groupKey] || [];
+    rows.forEach(row => {
+      const parentRowId =
+        normalizeMetaString((row.values as any)?.[ROW_PARENT_ROW_ID_KEY]) || normalizeMetaString((row as any)?.parentId);
+      const parentGroupId =
+        normalizeMetaString((row.values as any)?.[ROW_PARENT_GROUP_ID_KEY]) ||
+        normalizeMetaString((row as any)?.parentGroupId);
+      if (!parentRowId || !parentGroupId) return;
+      const parentKey = `${parentGroupId}::${parentRowId}`;
+      const existing = childrenByParent.get(parentKey) || [];
+      existing.push({ groupId: groupKey, rowId: row.id });
+      childrenByParent.set(parentKey, existing);
+    });
+  });
+
+  const removed: Array<{ groupId: string; rowId: string }> = [];
+  const removedSet = new Set<string>();
+  const queue: Array<{ groupId: string; rowId: string }> = [...seed];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    const key = `${cur.groupId}::${cur.rowId}`;
+    if (removedSet.has(key)) continue;
+    removedSet.add(key);
+    removed.push(cur);
+    const children = childrenByParent.get(key) || [];
+    children.forEach(child => queue.push(child));
+  }
+
+  // Remove rows from their owning group keys.
+  const removedByGroup = new Map<string, Set<string>>();
+  removed.forEach(({ groupId, rowId }) => {
+    if (!removedByGroup.has(groupId)) removedByGroup.set(groupId, new Set());
+    removedByGroup.get(groupId)!.add(rowId);
+  });
+
+  let nextLineItems: LineItemState = { ...lineItems };
+  removedByGroup.forEach((rowIds, groupKey) => {
+    const rows = nextLineItems[groupKey] || [];
+    nextLineItems = { ...nextLineItems, [groupKey]: rows.filter(r => !rowIds.has(r.id)) };
+  });
+
+  // Also delete any subgroup keys whose parent row was removed.
+  const removedSubgroupKeys: string[] = [];
+  Object.keys(nextLineItems).forEach(key => {
+    const parsed = parseSubgroupKey(key);
+    if (!parsed) return;
+    const parentKey = `${parsed.parentGroupId}::${parsed.parentRowId}`;
+    if (!removedSet.has(parentKey)) return;
+    removedSubgroupKeys.push(key);
+    delete (nextLineItems as any)[key];
+  });
+
+  return { lineItems: nextLineItems, removed, removedSubgroupKeys };
 };
 
 

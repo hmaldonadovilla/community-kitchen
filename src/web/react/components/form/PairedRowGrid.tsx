@@ -37,7 +37,9 @@ export const PairedRowGrid: React.FC<{ children: React.ReactNode; className?: st
       if (labels.length < 2) return;
       const heights = labels.map(l => l.getBoundingClientRect().height).filter(h => Number.isFinite(h) && h > 0);
       const max = heights.length ? Math.max(...heights) : 0;
-      const next = max ? `${Math.ceil(max)}px` : '0px';
+      // Keep at least one label line worth of height even if labels are hidden/empty
+      // so control rows remain aligned.
+      const next = max ? `${Math.ceil(max)}px` : '1.2em';
       if (el.style.getPropertyValue('--ck-pair-label-min-height') !== next) {
         el.style.setProperty('--ck-pair-label-min-height', next);
       }
@@ -78,7 +80,7 @@ export const PairedRowGrid: React.FC<{ children: React.ReactNode; className?: st
   }, []);
 
   return (
-    <div ref={ref} className={className} style={{ ['--ck-pair-label-min-height' as any]: '0px' }}>
+    <div ref={ref} className={className} style={{ ['--ck-pair-label-min-height' as any]: '1.2em' }}>
       {children}
     </div>
   );

@@ -424,7 +424,8 @@ This project uses TypeScript. You need to build the script before using it in Go
                   "kind": "lineGroup",
                   "id": "MP_MEALS_REQUEST",
                   "presentation": "liftedRowFields",
-                  "fields": ["meal_type", "quantity"]
+                  "fields": ["meal_type", "quantity"],
+                  "collapsedFieldsInHeader": true
                 }
               ]
             }
@@ -438,9 +439,21 @@ This project uses TypeScript. You need to build the script before using it in Go
       - Line groups can be rendered **inline** or via a **full-page overlay** (`displayMode: "overlay"` or step `render.lineGroups.mode`).
       - You can filter visible rows per step using `rows.includeWhen` / `rows.excludeWhen` (e.g., `quantity > 0`) and scope subgroups via `subGroups.include`.
       - If you need to **show all rows** but only **validate/advance based on a subset** (e.g., ignore rows where `QTY < 1` while still displaying them), use `validationRows.includeWhen` / `validationRows.excludeWhen` on the step target.
+      - For **progressive** line item groups in guided steps, set `collapsedFieldsInHeader: true` on the step target to:
+        - show the configured `lineItemConfig.ui.collapsedFields` in the **row header**
+        - keep rows **always expanded** (no toggle/pill indicator)
+        - hide the row body when the step only includes collapsed fields (row disclaimer shows as a footer)
+      - Navigation/back labels and controls:
+        - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
+        - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
+      - Read-only labels in steps:
+        - Top-level step targets accept `renderAsLabel: true` to show the value as a label instead of an input.
+        - Line item step targets accept `readOnlyFields` (and subgroup `include[].readOnlyFields`) to render selected fields as read-only labels in guided steps.
+        - Progressive header collapsed fields respect `collapsedFields[].showLabel` (stacked when shown) and honor `readOnlyFields`, with layout controlled by standard `pair` keys.
       - The UI exposes virtual step fields (default prefix `__ckStep`) so existing `visibility.showWhen` rules can gate fields/buttons:
         - `__ckStepValid_<STEP_ID>` / `__ckStepComplete_<STEP_ID>`
         - `__ckStepMaxValidIndex` / `__ckStepMaxCompleteIndex`
+      - Selection effects: you can give any `selectionEffects[]` rule an `id`, and auto-created rows will be tagged with `__ckSelectionEffectId = "<id>"` so row-level `visibility` / `validationRules` / `rowDisclaimer` can reference the originating rule.
       - Full design details live in `docs/guided-steps-edit-mode-design.md`.
 
     - Want a **submit confirmation dialog** (Confirm/Cancel overlay) title? Set `submissionConfirmationTitle` (localized). When omitted, the UI uses system string defaults:
@@ -748,6 +761,37 @@ This project uses TypeScript. You need to build the script before using it in Go
         ]
       }
       ```
+
+      - **Hide "Remove" for effect-created rows**: Set `hideRemoveButton: true` on the effect to suppress the UI Remove action for rows it creates.
+      - **Parent/child row relationships (cascade delete)**: When an effect runs inside a line-item row, the generated rows are automatically tagged with:
+        - `__ckParentGroupId` (the originating group key)
+        - `__ckParentRowId` (the originating row id)
+        This relationship is persisted in the submitted line-item JSON payload, and deleting a parent row will also delete its children (no orphan rows).
+
+      - **Inverse rule: delete child rows**: Use `type: "deleteLineItems"` to delete rows created by an earlier rule (typically the inverse of `addLineItems`). In the common Yes/No case:
+
+      ```json
+      {
+        "selectionEffects": [
+          {
+            "id": "leftover",
+            "type": "addLineItems",
+            "groupId": "MP_MEALS_REQUEST",
+            "triggerValues": ["Yes"],
+            "hideRemoveButton": true,
+            "preset": { "MEAL_TYPE": "$row.MEAL_TYPE", "QTY": "$row.QTY" }
+          },
+          {
+            "id": "leftover",
+            "type": "deleteLineItems",
+            "groupId": "MP_MEALS_REQUEST",
+            "triggerValues": ["No"]
+          }
+        ]
+      }
+      ```
+
+      `deleteLineItems` will remove any child rows under the current row that were tagged with `__ckSelectionEffectId = "leftover"`, and will cascade delete any of their children as well.
 
     - **Filters & rules**: For CHOICE/CHECKBOX fields, add `optionFilter` in the JSON to filter options based on another field, and `validationRules` to enforce dependencies (works in main form and line items).
       - Example (main form filter):

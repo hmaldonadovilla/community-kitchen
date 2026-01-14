@@ -54,6 +54,39 @@ describe('ConfigSheet', () => {
     expect(questions[0].ui).toEqual({ hideLabel: true });
   });
 
+  test('getQuestions preserves selectionEffects.id (for __ckSelectionEffectId tagging)', () => {
+    const sheet = mockSS.insertSheet('Config: SelectionEffectsId');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q1',
+        'CHOICE',
+        'Trigger',
+        'Trigger',
+        'Trigger',
+        false,
+        'Yes,No',
+        'Yes,No',
+        'Yes,No',
+        'Active',
+        `{
+          "selectionEffects": [
+            { "id": "leftover", "type": "addLineItems", "groupId": "LINES", "preset": { "ITEM": "Apple" } }
+          ]
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: SelectionEffectsId');
+    expect(questions.length).toBe(1);
+    expect(questions[0].selectionEffects).toBeDefined();
+    expect((questions[0].selectionEffects as any)?.[0]?.id).toBe('leftover');
+  });
+
   test('getQuestions parses group.pageSection (visual page sections in edit view)', () => {
     const sheet = mockSS.insertSheet('Config: PageSections');
     const exampleRows = [

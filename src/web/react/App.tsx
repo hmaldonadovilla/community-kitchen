@@ -7,6 +7,7 @@ import {
 import {
   FieldValue,
   LangCode,
+  LocalizedString,
   WebQuestionDefinition,
   WebFormSubmission
 } from '../types';
@@ -259,6 +260,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     top: [],
     byField: {}
   });
+  const warningTouchedRef = useRef<Set<string>>(new Set());
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
   type DedupConflictInfo = { ruleId: string; message: string; existingRecordId?: string; existingRowNumber?: number };
@@ -330,7 +332,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const updateRecordBusyOpen = updateRecordBusy.state.open;
 
   const handleUserEdit = useCallback(
-    (args: { scope: 'top' | 'line'; fieldPath: string; fieldId?: string }) => {
+    (args: {
+      scope: 'top' | 'line';
+      fieldPath: string;
+      fieldId?: string;
+      groupId?: string;
+      rowId?: string;
+      event?: 'change' | 'blur';
+      tag?: string;
+      inputType?: string;
+    }) => {
       try {
         const fieldPath = (args?.fieldPath || '').toString();
         const fieldId = (args?.fieldId || '').toString();
@@ -370,11 +381,43 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             fieldPath: fieldPath || fieldId || null
           });
         }
+
+        // Warnings UX: recompute and show inline warnings for the field that just blurred.
+        if (args?.event === 'blur' && fieldPath) {
+          warningTouchedRef.current.add(fieldPath);
+          try {
+            const warnings = collectValidationWarnings({
+              definition,
+              language: languageRef.current,
+              values: valuesRef.current,
+              lineItems: lineItemsRef.current,
+              phase: 'submit',
+              uiView: 'edit'
+            });
+            const touched = warningTouchedRef.current;
+            const byField: Record<string, string[]> = {};
+            Object.keys(warnings.byField || {}).forEach(k => {
+              if (touched.has(k)) byField[k] = (warnings.byField as any)[k];
+            });
+            setValidationWarnings({ top: warnings.top || [], byField });
+            logEvent('validation.warnings.blur', {
+              fieldPath,
+              tag: args?.tag || null,
+              inputType: args?.inputType || null,
+              touchedCount: touched.size,
+              visibleFieldCount: Object.keys(byField).length,
+              totalTopCount: (warnings.top || []).length
+            });
+          } catch (err: any) {
+            // Never block editing because of warning computation bugs.
+            logEvent('validation.warnings.blur.failed', { message: err?.message || err || 'unknown' });
+          }
+        }
       } catch (_) {
         // ignore
       }
     },
-    [dedupNotice, logEvent]
+    [dedupNotice, definition, logEvent]
   );
 
   useEffect(() => {
@@ -469,6 +512,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, [allowLanguageSelection, availableLanguages, defaultLanguage, language, logEvent]);
 
   const formSubmitActionRef = useRef<(() => void) | null>(null);
+  const formBackActionRef = useRef<(() => void) | null>(null);
+  const [guidedUiState, setGuidedUiState] = useState<{
+    activeStepId: string | null;
+    activeStepIndex: number;
+    stepCount: number;
+    isFirst: boolean;
+    isFinal: boolean;
+    backAllowed: boolean;
+    backVisible: boolean;
+    backLabel: string;
+    stepSubmitLabel?: string | LocalizedString;
+  } | null>(null);
   const vvBottomRef = useRef<number>(-1);
   const bottomBarHeightRef = useRef<number>(-1);
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
@@ -1226,6 +1281,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   useEffect(() => {
     if (view === 'form') return;
     setValidationWarnings({ top: [], byField: {} });
+    warningTouchedRef.current.clear();
     setValidationAttempted(false);
     setValidationNoticeHidden(false);
   }, [view]);
@@ -5077,6 +5133,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       </div>
     ) : null;
 
+  const guidedSubmitLabel =
+    view === 'form' && guidedUiState && !guidedUiState.isFinal
+      ? guidedUiState.stepSubmitLabel || definition.submitButtonLabel || tSystem('steps.next', language, 'Next')
+      : definition.submitButtonLabel;
+  const showGuidedBack = view === 'form' && !!guidedUiState?.backVisible;
+  const guidedBackLabel = guidedUiState?.backLabel || tSystem('actions.back', language, 'Back');
+  const guidedBackDisabled = guidedUiState ? !guidedUiState.backAllowed : false;
+
   return (
     <div
       className={`page${view === 'form' ? ' ck-page-form' : ''}`}
@@ -5149,7 +5213,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         createNewEnabled={definition.createNewRecordEnabled !== false}
         createButtonLabel={definition.createButtonLabel}
         copyCurrentRecordLabel={definition.copyCurrentRecordLabel}
-        submitLabel={definition.submitButtonLabel}
+        submitLabel={guidedSubmitLabel}
         summaryLabel={definition.summaryButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
@@ -5177,6 +5241,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           setLineItems={setLineItems}
           onSubmit={handleSubmit}
           submitActionRef={formSubmitActionRef}
+          guidedBackActionRef={formBackActionRef}
           navigateToFieldRef={formNavigateToFieldRef}
           submitting={submitting || updateRecordBusyOpen || isClosedRecord || Boolean(recordLoadingId) || Boolean(recordStale)}
           dedupLockActive={dedupLockActive}
@@ -5209,6 +5274,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           reportBusyId={reportOverlay.buttonId || null}
           onUserEdit={handleUserEdit}
           onDiagnostic={logEvent}
+          onGuidedUiChange={setGuidedUiState}
         />
       ) : null}
 
@@ -5314,7 +5380,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         createNewEnabled={definition.createNewRecordEnabled !== false}
         createButtonLabel={definition.createButtonLabel}
         copyCurrentRecordLabel={definition.copyCurrentRecordLabel}
-        submitLabel={definition.submitButtonLabel}
+        submitLabel={guidedSubmitLabel}
         summaryLabel={definition.summaryButtonLabel}
         summaryEnabled={summaryViewEnabled}
         copyEnabled={copyCurrentRecordEnabled}
@@ -5322,6 +5388,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         customButtons={customButtons as any}
         actionBars={definition.actionBars}
         notice={bottomBarNotice}
+        showBackButton={showGuidedBack}
+        backLabel={guidedBackLabel}
+        backDisabled={guidedBackDisabled}
+        onBack={() => formBackActionRef.current?.()}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
         onCreateCopy={handleDuplicateCurrent}

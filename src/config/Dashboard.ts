@@ -1176,7 +1176,13 @@ export class Dashboard {
       const kind = kindRaw === 'linegroup' || kindRaw === 'line_item_group' ? 'lineGroup' : 'question';
       const id = normalizeString((raw as any).id ?? (raw as any).fieldId);
       if (!id) return null;
-      if (kind === 'question') return { kind: 'question', id };
+      if (kind === 'question') {
+        const outQ: any = { kind: 'question', id };
+        if ((raw as any).renderAsLabel !== undefined && (raw as any).renderAsLabel !== null) {
+          outQ.renderAsLabel = Boolean((raw as any).renderAsLabel);
+        }
+        return outQ;
+      }
 
       const out: any = { kind: 'lineGroup', id };
       const presRaw = normalizeString((raw as any).presentation).toLowerCase();
@@ -1190,10 +1196,23 @@ export class Dashboard {
             ? fieldsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
             : [];
       if (fields.length) out.fields = fields;
+      const readOnlyFieldsRaw = (raw as any).readOnlyFields;
+      const readOnlyFields =
+        Array.isArray(readOnlyFieldsRaw)
+          ? (readOnlyFieldsRaw as any[]).map(v => normalizeString(v)).filter(Boolean)
+          : typeof readOnlyFieldsRaw === 'string'
+            ? readOnlyFieldsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : [];
+      if (readOnlyFields.length) out.readOnlyFields = readOnlyFields;
       const rows = normalizeRowFilter((raw as any).rows);
       if (rows) out.rows = rows;
       const validationRows = normalizeRowFilter((raw as any).validationRows);
       if (validationRows) out.validationRows = validationRows;
+      const collapsedFieldsInHeader =
+        (raw as any).collapsedFieldsInHeader !== undefined && (raw as any).collapsedFieldsInHeader !== null
+          ? Boolean((raw as any).collapsedFieldsInHeader)
+          : false;
+      if (collapsedFieldsInHeader) out.collapsedFieldsInHeader = true;
       const displayMode = normalizeDisplayMode((raw as any).displayMode);
       if (displayMode) out.displayMode = displayMode;
 
@@ -1218,6 +1237,14 @@ export class Dashboard {
                 ? sgFieldsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
                 : [];
           if (sgFields.length) sg.fields = sgFields;
+          const sgReadOnlyFieldsRaw = (entry as any).readOnlyFields;
+          const sgReadOnlyFields =
+            Array.isArray(sgReadOnlyFieldsRaw)
+              ? (sgReadOnlyFieldsRaw as any[]).map(v => normalizeString(v)).filter(Boolean)
+              : typeof sgReadOnlyFieldsRaw === 'string'
+                ? sgReadOnlyFieldsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
+                : [];
+          if (sgReadOnlyFields.length) sg.readOnlyFields = sgReadOnlyFields;
           const sgRows = normalizeRowFilter((entry as any).rows);
           if (sgRows) sg.rows = sgRows;
           const sgValidationRows = normalizeRowFilter((entry as any).validationRows);
@@ -1245,6 +1272,11 @@ export class Dashboard {
 
     const defaultForwardGate = normalizeGate((value as any).defaultForwardGate);
     const defaultAutoAdvance = normalizeAutoAdvance((value as any).defaultAutoAdvance);
+    const stepSubmitLabel = normalizeLocalized((value as any).stepSubmitLabel);
+    const backButtonLabel = normalizeLocalized((value as any).backButtonLabel);
+    const showBackButtonRaw = (value as any).showBackButton;
+    const showBackButton =
+      showBackButtonRaw !== undefined && showBackButtonRaw !== null ? Boolean(showBackButtonRaw) : undefined;
 
     const headerRaw = (value as any).header;
     const header = (() => {
@@ -1279,6 +1311,13 @@ export class Dashboard {
         if (gate) nav.forwardGate = gate;
         if (adv) nav.autoAdvance = adv;
         if ((navRaw as any).allowBack !== undefined) nav.allowBack = Boolean((navRaw as any).allowBack);
+        const submitLabel = normalizeLocalized((navRaw as any).submitLabel);
+        if (submitLabel) nav.submitLabel = submitLabel;
+        const backLabel = normalizeLocalized((navRaw as any).backLabel);
+        if (backLabel) nav.backLabel = backLabel;
+        if ((navRaw as any).showBackButton !== undefined && (navRaw as any).showBackButton !== null) {
+          nav.showBackButton = Boolean((navRaw as any).showBackButton);
+        }
         if (Object.keys(nav).length) step.navigation = nav;
       }
       const renderRaw = (stepRaw as any).render;
@@ -1304,6 +1343,9 @@ export class Dashboard {
     if (stateFields) out.stateFields = stateFields;
     if (defaultForwardGate) out.defaultForwardGate = defaultForwardGate;
     if (defaultAutoAdvance) out.defaultAutoAdvance = defaultAutoAdvance;
+    if (stepSubmitLabel) out.stepSubmitLabel = stepSubmitLabel;
+    if (backButtonLabel) out.backButtonLabel = backButtonLabel;
+    if (showBackButton !== undefined) out.showBackButton = showBackButton;
     if (header) out.header = header;
     return out as StepsConfig;
   }

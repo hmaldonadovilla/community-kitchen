@@ -6,13 +6,17 @@ interface EffectContext {
   addLineItemRow: (
     groupId: string,
     preset?: Record<string, PresetValue>,
-    meta?: { effectContextId?: string; auto?: boolean }
+    meta?: { effectContextId?: string; auto?: boolean; effectId?: string; hideRemoveButton?: boolean }
   ) => void;
   clearLineItems?: (groupId: string, contextId?: string) => void;
   updateAutoLineItems?: (
     groupId: string,
     presets: Array<Record<string, string | number>>,
-    meta: { effectContextId: string; numericTargets: string[]; keyFields?: string[] }
+    meta: { effectContextId: string; numericTargets: string[]; keyFields?: string[]; effectId?: string; hideRemoveButton?: boolean }
+  ) => void;
+  deleteLineItemRows?: (
+    groupId: string,
+    meta?: { effectId?: string; parentGroupId?: string; parentRowId?: string }
   ) => void;
 }
 
@@ -83,12 +87,40 @@ export function handleSelectionEffects(
     if (!match) return;
     if (effect.type === 'addLineItems') {
       const resolvedPreset = resolveAddLineItemsPreset(effect.preset as any, options);
-      ctx.addLineItemRow(effect.groupId, resolvedPreset);
+      const effectId = normalizeEffectId(effect);
+      const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
+      const meta =
+        effectId || hideRemoveButton
+          ? { ...(effectId ? { effectId } : {}), ...(hideRemoveButton ? { hideRemoveButton: true } : {}) }
+          : undefined;
+      if (meta) {
+        ctx.addLineItemRow(effect.groupId, resolvedPreset, meta as any);
+      } else {
+        ctx.addLineItemRow(effect.groupId, resolvedPreset);
+      }
       if (debug && typeof console !== 'undefined') {
         console.info('[SelectionEffects] addLineItems dispatched', {
           groupId: effect.groupId,
           preset: effect.preset,
           resolvedPreset
+        });
+      }
+      return;
+    }
+    if (effect.type === 'deleteLineItems') {
+      if (!ctx.deleteLineItemRows) return;
+      const effectId = normalizeString((effect as any)?.targetEffectId) || normalizeEffectId(effect);
+      ctx.deleteLineItemRows(effect.groupId, {
+        effectId: effectId || undefined,
+        parentGroupId: options?.lineItem?.groupId,
+        parentRowId: options?.lineItem?.rowId
+      });
+      if (debug && typeof console !== 'undefined') {
+        console.info('[SelectionEffects] deleteLineItems dispatched', {
+          groupId: effect.groupId,
+          effectId: effectId || null,
+          parentGroupId: options?.lineItem?.groupId || null,
+          parentRowId: options?.lineItem?.rowId || null
         });
       }
       return;
@@ -229,6 +261,17 @@ function resolveAddLineItemsPreset(
   });
   return Object.keys(resolved).length ? resolved : undefined;
 }
+
+const normalizeEffectId = (effect: SelectionEffect): string => {
+  const raw = (effect as any)?.id;
+  if (raw === undefined || raw === null) return '';
+  try {
+    const str = raw.toString().trim();
+    return str;
+  } catch (_) {
+    return '';
+  }
+};
 
 function normalizeSelectionValues(value: string | string[] | null | undefined): string[] {
   if (!value) return [];
@@ -671,12 +714,15 @@ function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, context
     return;
   }
   const aggregatedPresets = aggregateEntries(entriesForAllSelections, effect, targetConfig.fields);
+  const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
 
   if (ctx.updateAutoLineItems) {
     ctx.updateAutoLineItems(effect.groupId, aggregatedPresets, {
       effectContextId: contextId,
       numericTargets,
-      keyFields: nonNumericFieldIds
+      keyFields: nonNumericFieldIds,
+      effectId: normalizeEffectId(effect) || undefined,
+      hideRemoveButton: hideRemoveButton || undefined
     });
     return;
   }
@@ -685,7 +731,12 @@ function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, context
     ctx.clearLineItems(effect.groupId, contextId);
   }
   aggregatedPresets.forEach(preset => {
-    ctx.addLineItemRow(effect.groupId, preset, { effectContextId: contextId, auto: true });
+    ctx.addLineItemRow(effect.groupId, preset, {
+      effectContextId: contextId,
+      auto: true,
+      effectId: normalizeEffectId(effect) || undefined,
+      hideRemoveButton: hideRemoveButton || undefined
+    });
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] addLineItemsFromDataSource dispatched', {
         groupId: effect.groupId,

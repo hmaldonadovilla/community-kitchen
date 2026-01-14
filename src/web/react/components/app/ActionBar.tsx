@@ -61,6 +61,12 @@ const SummaryIcon: React.FC = () => (
   </svg>
 );
 
+const BackIcon: React.FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" style={{ width: '1.25em', height: '1.25em' }}>
+    <path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 // System "Summary" button should use a checklist/summary icon (distinct from renderDocTemplate buttons).
 const SummarySystemIcon: React.FC = () => (
   <svg
@@ -215,6 +221,13 @@ export const ActionBar: React.FC<{
    * Intended for validation summaries that must remain visible while scrolling.
    */
   notice?: React.ReactNode;
+  /**
+   * Optional Back button (guided steps).
+   */
+  showBackButton?: boolean;
+  backLabel?: LocalizedString | string;
+  backDisabled?: boolean;
+  onBack?: () => void;
   onHome: () => void;
   onCreateNew: () => void;
   onCreateCopy: () => void;
@@ -250,7 +263,11 @@ export const ActionBar: React.FC<{
   onSummary,
   onSubmit,
   onCustomButton,
-  onDiagnostic
+  onDiagnostic,
+  showBackButton,
+  backLabel,
+  backDisabled,
+  onBack
 }) => {
   const [menu, setMenu] = useState<string | null>(null);
   const viewKey = view as ActionBarView;
@@ -282,6 +299,7 @@ export const ActionBar: React.FC<{
     const allowNewRecord = createNewEnabled !== false;
     const capsule: Array<
       | { kind: 'home'; hideWhenActive: boolean }
+      | { kind: 'back'; label: string; disabled: boolean }
       | { kind: 'create'; showMenu: boolean; showCopy: boolean; presetButtons: CustomButton[] }
       | { kind: 'copy' }
       | { kind: 'edit' }
@@ -291,6 +309,11 @@ export const ActionBar: React.FC<{
     > = [];
     const menus: MenuDef[] = [];
     let wantsSubmit = false;
+
+    if (position === 'bottom' && viewKey === 'form' && typeof onBack === 'function' && showBackButton !== false) {
+      const label = resolveLocalizedString(backLabel as any, language, tSystem('actions.back', language, 'Back')).toString();
+      capsule.push({ kind: 'back', label, disabled: !!backDisabled });
+    }
 
     const addMenu = (def: Omit<MenuDef, 'id'>): string => {
       const id = `menu:${menus.length}`;
@@ -439,11 +462,16 @@ export const ActionBar: React.FC<{
     hideEdit,
     globalHideHomeWhenActive,
     language,
+    backDisabled,
+    backLabel,
+    onBack,
+    position,
     summaryLabel,
     summaryEnabled,
     viewConfig.items,
     viewConfig.primary,
-    viewKey
+    viewKey,
+    showBackButton
   ]);
 
   const homeActive = viewKey === 'list';
@@ -668,10 +696,36 @@ export const ActionBar: React.FC<{
         ) : null}
         {hasCapsuleRow ? (
           <div className="ck-bottom-bar-inner">
-            {resolved.capsule.length ? (
-              <div className="ck-bottom-capsule" aria-label={tSystem('app.navigation', language, 'Navigation')}>
-                {resolved.capsule.map((it, idx) => {
-                  if (it.kind === 'home') {
+            {(() => {
+              const capsule = resolved.capsule || [];
+              if (!capsule.length) return <div aria-hidden="true" style={{ flex: '1 1 auto' }} />;
+
+              const backItems = capsule.filter(it => it.kind === 'back') as any[];
+              const mainItems = capsule.filter(it => it.kind !== 'back') as any[];
+
+              return (
+                <>
+                  {backItems.map((it, idx) => (
+                    <button
+                      // eslint-disable-next-line react/no-array-index-key
+                      key={`back-${idx}`}
+                      type="button"
+                      className="ck-bottom-item ck-bottom-item--back"
+                      onClick={onBack}
+                      disabled={disabled || it.disabled}
+                      aria-label={it.label}
+                    >
+                      <IconWrap>
+                        <BackIcon />
+                      </IconWrap>
+                      <span className="ck-bottom-label">{it.label}</span>
+                    </button>
+                  ))}
+
+                  {mainItems.length ? (
+                    <div className="ck-bottom-capsule" aria-label={tSystem('app.navigation', language, 'Navigation')}>
+                      {mainItems.map((it, idx) => {
+                        if (it.kind === 'home') {
                     return (
                       <button
                         // eslint-disable-next-line react/no-array-index-key
@@ -804,11 +858,14 @@ export const ActionBar: React.FC<{
                     );
                   }
                   return null;
-                })}
-              </div>
-            ) : (
-              <div aria-hidden="true" style={{ flex: '1 1 auto' }} />
-            )}
+                      })}
+                    </div>
+                  ) : (
+                    <div aria-hidden="true" style={{ flex: '1 1 auto' }} />
+                  )}
+                </>
+              );
+            })()}
 
             {showSubmit && (
               <button type="button" className="ck-bottom-submit" onClick={onSubmit} disabled={disabled || submitDisabled}>
@@ -832,5 +889,3 @@ export const ActionBar: React.FC<{
     </>
   );
 };
-
-

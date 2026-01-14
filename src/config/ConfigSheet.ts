@@ -1354,16 +1354,47 @@ export class ConfigSheet {
     rawEffects.forEach((effect: any) => {
       if (!effect || !effect.groupId) return;
       const type = (effect.type || 'addLineItems').toString();
-      if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource') return;
+      if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource' && type !== 'deleteLineItems') return;
       const normalized: SelectionEffect = {
         type: type as SelectionEffect['type'],
         groupId: effect.groupId.toString()
       };
+      {
+        const idCandidate =
+          effect.id !== undefined
+            ? effect.id
+            : effect.effectId !== undefined
+              ? effect.effectId
+              : effect.key !== undefined
+                ? effect.key
+                : undefined;
+        if (idCandidate !== undefined && idCandidate !== null) {
+          const id = idCandidate.toString().trim();
+          if (id) normalized.id = id;
+        }
+      }
       if (Array.isArray(effect.triggerValues)) {
         const triggers = effect.triggerValues
           .map((val: any) => (val !== undefined && val !== null ? val.toString() : ''))
           .filter(Boolean);
         if (triggers.length) normalized.triggerValues = triggers;
+      }
+      if (effect.hideRemoveButton !== undefined) {
+        normalized.hideRemoveButton = Boolean(effect.hideRemoveButton);
+      }
+      {
+        const targetCandidate =
+          effect.targetEffectId !== undefined
+            ? effect.targetEffectId
+            : effect.deleteEffectId !== undefined
+              ? effect.deleteEffectId
+              : effect.removeEffectId !== undefined
+                ? effect.removeEffectId
+                : undefined;
+        if (targetCandidate !== undefined && targetCandidate !== null) {
+          const target = targetCandidate.toString().trim();
+          if (target) normalized.targetEffectId = target;
+        }
       }
       if (effect.preset && typeof effect.preset === 'object') {
         const preset: Record<string, any> = {};
