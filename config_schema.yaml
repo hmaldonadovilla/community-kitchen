@@ -1661,6 +1661,15 @@ components:
           type: string
           enum: [off, onComplete, onValid]
           description: Default auto-advance behavior for all steps.
+        stepSubmitLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional label for the primary action while navigating between steps (non-final steps).
+        backButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional Back button label for guided steps.
+        showBackButton:
+          type: boolean
+          description: Global toggle for showing the Back button in guided steps (default true).
         header:
           $ref: '#/components/schemas/StepsHeaderConfig'
         items:
@@ -1736,6 +1745,15 @@ components:
         allowBack:
           type: boolean
           description: When true (default), users can navigate back to previous steps.
+        submitLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional label override for the primary action while this step is active (non-final steps).
+        backLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional label override for the Back button on this step.
+        showBackButton:
+          type: boolean
+          description: Optional per-step toggle to hide/show the Back button (defaults to the global setting).
       additionalProperties: false
 
     StepRowFilterConfig:
@@ -1770,6 +1788,11 @@ components:
             Optional row filter used ONLY for guided-step validation/status (not rendering).
             This lets a step display rows differently than it validates them (e.g. show all rows, but only validate rows where QTY > 0).
             If omitted, `rows` is used for both rendering and validation.
+        readOnlyFields:
+          type: array
+          description: Optional list of subgroup field ids to render as read-only labels in guided steps.
+          items:
+            type: string
         displayMode:
           type: string
           enum: [inline, overlay, inherit]
@@ -1797,6 +1820,9 @@ components:
           enum: [question]
         id:
           type: string
+        renderAsLabel:
+          type: boolean
+          description: When true, render the question value as a read-only label in this step (guided edit mode).
       required: [kind, id]
       additionalProperties: false
 
@@ -1821,6 +1847,13 @@ components:
           items:
             type: string
           description: Allowlist of visible parent row field ids for this step.
+        collapsedFieldsInHeader:
+          type: boolean
+          description: |
+            Guided steps UX: when true and the underlying line group uses `ui.mode: "progressive"`,
+            render the configured `ui.collapsedFields` controls in the row header and disable the
+            collapse/expand toggle and progress pill.
+            When the step only includes collapsed fields, the row body is hidden and only the header is shown.
         rows:
           $ref: '#/components/schemas/StepRowFilterConfig'
         validationRows:
@@ -1832,6 +1865,13 @@ components:
         displayMode:
           type: string
           enum: [inline, overlay, inherit]
+        readOnlyFields:
+          type: array
+          description: |
+            Optional list of parent-row field ids to render as read-only labels in this step.
+            Accepts either bare ids ("FIELD_ID") or prefixed ids ("GROUP__FIELD_ID" / "group.field_id"); prefixes are stripped.
+          items:
+            type: string
         subGroups:
           $ref: '#/components/schemas/StepSubGroupCollectionConfig'
       required: [kind, id]
@@ -2588,12 +2628,18 @@ components:
     SelectionEffect:
       type: object
       properties:
+        id:
+          type: string
+          description: |
+            Optional stable identifier for this selection effect rule.
+            When set, auto-created rows will be tagged with `__ckSelectionEffectId = id` so rules can reference the originating effect.
         type:
           type: string
-          enum: [addLineItems, addLineItemsFromDataSource]
+          enum: [addLineItems, addLineItemsFromDataSource, deleteLineItems]
           description: |
             Effect type. `addLineItems` inserts rows with static presets.
             `addLineItemsFromDataSource` hydrates rows by looking up the selected value inside a data source row (supports JSON columns).
+            `deleteLineItems` deletes previously-created child rows (typically the inverse of an `addLineItems` rule).
         groupId:
           type: string
           description: Target LINE_ITEM_GROUP id where rows are added.
@@ -2617,6 +2663,16 @@ components:
           items:
             type: string
           description: Choice/checkbox values that trigger the effect (omit to trigger on any selection).
+        hideRemoveButton:
+          type: boolean
+          description: |
+            When true, rows created by this effect will hide the UI "Remove" action.
+            (Useful for child rows that should be managed exclusively by selection effects.)
+        targetEffectId:
+          type: string
+          description: |
+            For `type=deleteLineItems`, optionally specify which `selectionEffects.id` to delete rows for.
+            If omitted, the effect's own `id` is used.
         dataSource:
           $ref: '#/components/schemas/DataSourceConfig'
           description: Optional override for data-driven effects. Defaults to the question's own `dataSource`.

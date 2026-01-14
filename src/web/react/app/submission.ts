@@ -484,11 +484,13 @@ export type WarningCollection = {
   byField: Record<string, string[]>;
 };
 
-const normalizeWarningDisplay = (raw: any): 'top' | 'field' | 'both' => {
+const normalizeWarningDisplay = (raw: any, fallback: 'top' | 'field' | 'both'): 'top' | 'field' | 'both' => {
   const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!s) return fallback;
   if (s === 'field') return 'field';
   if (s === 'both') return 'both';
-  return 'top';
+  if (s === 'top') return 'top';
+  return fallback;
 };
 
 const normalizeWarningView = (raw: any): 'edit' | 'summary' | 'both' => {
@@ -540,7 +542,9 @@ export const collectValidationWarnings = (args: {
   };
 
   const pushIssue = (fieldPath: string, msg: string, displayRaw: any) => {
-    const display = normalizeWarningDisplay(displayRaw);
+    // UX: in edit view, default warnings should show inline AND in the top notice (unless explicitly overridden).
+    const defaultDisplay: 'top' | 'field' | 'both' = uiView === 'edit' ? 'both' : 'top';
+    const display = normalizeWarningDisplay(displayRaw, defaultDisplay);
     if (display === 'top' || display === 'both') pushTop(fieldPath, msg);
     if (display === 'field' || display === 'both') pushField(fieldPath, msg);
   };

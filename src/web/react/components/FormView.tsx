@@ -16,6 +16,7 @@ import {
   FieldValue,
   LangCode,
   LineItemRowState,
+  LocalizedString,
   OptionSet,
   QuestionGroupConfig,
   VisibilityContext,
@@ -64,6 +65,7 @@ import { isLineItemGroupQuestionComplete } from './form/completeness';
 import {
   buildLineContextId,
   buildSubgroupKey,
+  cascadeRemoveLineItemRows,
   parseSubgroupKey,
   ROW_SOURCE_KEY,
   resolveSubgroupKey,
@@ -173,6 +175,10 @@ interface FormViewProps {
    */
   submitActionRef?: React.MutableRefObject<(() => void) | null>;
   /**
+   * Optional back navigation hook for guided steps.
+   */
+  guidedBackActionRef?: React.MutableRefObject<(() => void) | null>;
+  /**
    * Optional imperative navigation hook so the app shell can scroll to an error/warning field
    * (expanding groups/rows/overlays as needed).
    */
@@ -247,8 +253,28 @@ interface FormViewProps {
   onReportButton?: (buttonId: string) => void;
   reportBusy?: boolean;
   reportBusyId?: string | null;
-  onUserEdit?: (args: { scope: 'top' | 'line'; fieldPath: string; fieldId?: string; groupId?: string; rowId?: string }) => void;
+  onUserEdit?: (args: {
+    scope: 'top' | 'line';
+    fieldPath: string;
+    fieldId?: string;
+    groupId?: string;
+    rowId?: string;
+    event?: 'change' | 'blur';
+    tag?: string;
+    inputType?: string;
+  }) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
+  onGuidedUiChange?: (state: {
+    activeStepId: string | null;
+    activeStepIndex: number;
+    stepCount: number;
+    isFirst: boolean;
+    isFinal: boolean;
+    backAllowed: boolean;
+    backVisible: boolean;
+    backLabel: string;
+    stepSubmitLabel?: string | LocalizedString;
+  } | null) => void;
 }
 
 const FormView: React.FC<FormViewProps> = ({
@@ -260,6 +286,7 @@ const FormView: React.FC<FormViewProps> = ({
   setLineItems,
   onSubmit,
   submitActionRef,
+  guidedBackActionRef,
   navigateToFieldRef,
   submitting,
   dedupLockActive,
@@ -285,7 +312,8 @@ const FormView: React.FC<FormViewProps> = ({
   reportBusy,
   reportBusyId,
   onUserEdit,
-  onDiagnostic
+  onDiagnostic,
+  onGuidedUiChange
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
@@ -833,6 +861,7 @@ const FormView: React.FC<FormViewProps> = ({
           const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
 
           const topQuestionIds = new Set<string>();
+          const renderQuestionAsLabel = new Set<string>();
           const lineTargetsById = new Map<string, any>();
           const addTarget = (t: any) => {
             if (!t || typeof t !== 'object') return;
@@ -841,6 +870,7 @@ const FormView: React.FC<FormViewProps> = ({
             if (!kind || !id) return;
             if (kind === 'question') {
               topQuestionIds.add(id);
+              if ((t as any)?.renderAsLabel === true) renderQuestionAsLabel.add(id);
               return;
             }
             if (kind === 'lineGroup') {
@@ -864,7 +894,12 @@ const FormView: React.FC<FormViewProps> = ({
           (definition.questions || []).forEach(q => {
             if (!q) return;
             if (q.type !== 'LINE_ITEM_GROUP') {
-              if (topQuestionIds.has(q.id)) scopedQuestions.push(q);
+              if (topQuestionIds.has(q.id)) {
+                const asLabel = renderQuestionAsLabel.has(q.id);
+                scopedQuestions.push(
+                  asLabel ? ({ ...(q as any), ui: { ...((q as any).ui || {}), renderAsLabel: true } } as WebQuestionDefinition) : q
+                );
+              }
               return;
             }
 
@@ -885,9 +920,31 @@ const FormView: React.FC<FormViewProps> = ({
                     .filter(Boolean);
               return ids.length ? new Set(ids) : null;
             })();
-            const filteredFields = allowedFieldIds
-              ? ((lineCfg.fields || []) as any[]).filter((f: any) => allowedFieldIds.has((f?.id || '').toString()))
+            const readOnlyFieldIds = (() => {
+              const raw = (t as any).readOnlyFields;
+              if (!raw) return null;
+              const ids: string[] = Array.isArray(raw)
+                ? raw.map((v: any) => normalizeLineFieldId(groupId, v)).filter(Boolean)
+                : raw
+                    .toString()
+                    .split(',')
+                    .map((s: string) => normalizeLineFieldId(groupId, s))
+                    .filter(Boolean);
+              return ids.length ? new Set(ids) : null;
+            })();
+            const filteredFieldsBase = allowedFieldIds
+              ? ((lineCfg.fields || []) as any[]).filter((f: any) => {
+                  const fid = normalizeLineFieldId(groupId, (f as any)?.id);
+                  return fid && allowedFieldIds.has(fid);
+                })
               : lineCfg.fields || [];
+            const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
+              const fid = normalizeLineFieldId(groupId, (f as any)?.id);
+              if (readOnlyFieldIds && fid && readOnlyFieldIds.has(fid)) {
+                return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
+              }
+              return f;
+            });
 
             const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
             const presentation: 'groupEditor' | 'liftedRowFields' =
@@ -920,6 +977,10 @@ const FormView: React.FC<FormViewProps> = ({
                 const allowedSubFields = Array.isArray(allowedSubFieldsRaw)
                   ? new Set(allowedSubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
                   : null;
+                const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
+                const readOnlySubFields = Array.isArray(readOnlySubFieldsRaw)
+                  ? new Set(readOnlySubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
+                  : null;
 
                 const nextSub: any = { ...(sub as any) };
                 // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
@@ -927,7 +988,19 @@ const FormView: React.FC<FormViewProps> = ({
                 nextSub._expandGateFields = (sub as any).fields || [];
 
                 if (allowedSubFields && allowedSubFields.size) {
-                  nextSub.fields = ((sub as any).fields || []).filter((f: any) => allowedSubFields.has((f?.id || '').toString()));
+                  nextSub.fields = ((sub as any).fields || []).filter((f: any) => {
+                    const fid = normalizeLineFieldId(subId, (f as any)?.id);
+                    return fid && allowedSubFields.has(fid);
+                  });
+                }
+                if (readOnlySubFields && readOnlySubFields.size) {
+                  nextSub.fields = (nextSub.fields || (sub as any).fields || []).map((f: any) => {
+                    const fid = normalizeLineFieldId(subId, (f as any)?.id);
+                    if (fid && readOnlySubFields.has(fid)) {
+                      return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
+                    }
+                    return f;
+                  });
                 }
                 return nextSub;
               });
@@ -1017,6 +1090,83 @@ const FormView: React.FC<FormViewProps> = ({
     submitActionRef,
     submitting,
     values
+  ]);
+
+  useEffect(() => {
+    if (!guidedBackActionRef) return;
+    guidedBackActionRef.current = () => {
+      if (!guidedEnabled) return;
+      if (!guidedStepsCfg || !guidedStepIds.length) return;
+      if (activeGuidedStepIndex <= 0) return;
+      const stepCfg = (guidedStepsCfg.items || [])[activeGuidedStepIndex] as any;
+      const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
+      const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
+      const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
+      if (!allowBack || !showBackGlobal || !showBackStep) {
+        onDiagnostic?.('steps.step.blocked', { from: activeGuidedStepId, to: activeGuidedStepIndex - 1, gate: 'allowBack', reason: 'backAction' });
+        return;
+      }
+      const prevId = guidedStepIds[activeGuidedStepIndex - 1];
+      if (!prevId) return;
+      selectGuidedStep(prevId, 'user');
+    };
+    return () => {
+      guidedBackActionRef.current = null;
+    };
+  }, [
+    activeGuidedStepId,
+    activeGuidedStepIndex,
+    guidedBackActionRef,
+    guidedEnabled,
+    guidedStepIds,
+    guidedStepsCfg,
+    onDiagnostic,
+    selectGuidedStep
+  ]);
+
+  useEffect(() => {
+    if (!onGuidedUiChange) return;
+    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) {
+      onGuidedUiChange(null);
+      return;
+    }
+    const stepCfg = (guidedStepsCfg.items || [])[activeGuidedStepIndex] as any;
+    const isFinal = activeGuidedStepIndex >= guidedStepIds.length - 1;
+    const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
+    const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
+    const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
+    const backVisible = activeGuidedStepIndex > 0 && allowBack && showBackGlobal && showBackStep;
+    const backLabel = resolveLocalizedString(
+      (stepCfg?.navigation?.backLabel as any) || (guidedStepsCfg as any)?.backButtonLabel,
+      language,
+      tSystem('actions.back', language, 'Back')
+    );
+    const submitLabel = !isFinal
+      ? resolveLocalizedString(
+          (stepCfg?.navigation?.submitLabel as any) || (guidedStepsCfg as any)?.stepSubmitLabel,
+          language,
+          tSystem('steps.next', language, 'Next')
+        )
+      : null;
+    onGuidedUiChange({
+      activeStepId: activeGuidedStepId || null,
+      activeStepIndex: activeGuidedStepIndex,
+      stepCount: guidedStepIds.length,
+      isFirst: activeGuidedStepIndex <= 0,
+      isFinal,
+      backAllowed: allowBack,
+      backVisible,
+      backLabel: backLabel?.toString?.() || '',
+      stepSubmitLabel: submitLabel || undefined
+    });
+  }, [
+    activeGuidedStepId,
+    activeGuidedStepIndex,
+    guidedEnabled,
+    guidedStepIds,
+    guidedStepsCfg,
+    language,
+    onGuidedUiChange
   ]);
 
   const hasCopyDerived = useMemo(() => {
@@ -1121,7 +1271,6 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   useEffect(() => {
-    if (!hasCopyDerived) return;
     const handler = (event: FocusEvent) => {
       const target = event.target as HTMLElement | null;
       if (!target) return;
@@ -1132,6 +1281,26 @@ const FormView: React.FC<FormViewProps> = ({
       const root = target.closest('.ck-form-sections') || target.closest('.webform-overlay') || target.closest('.form-card');
       if (!root) return;
       const fieldPath = (target.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
+      const inputType = (target as any)?.type !== undefined && (target as any)?.type !== null ? String((target as any).type) : undefined;
+
+      // Surface blur events to the app shell (used for warning UX + telemetry).
+      if (onUserEdit && fieldPath) {
+        const fp = fieldPath.toString();
+        const parts = fp.split('__');
+        const isLine = parts.length >= 3;
+        onUserEdit({
+          scope: isLine ? 'line' : 'top',
+          fieldPath: fp,
+          fieldId: isLine ? parts[1] : fp,
+          groupId: isLine ? parts[0] : undefined,
+          rowId: isLine ? parts[2] : undefined,
+          event: 'blur',
+          tag,
+          inputType
+        });
+      }
+
+      if (!hasCopyDerived) return;
       if (blurRecomputeTimerRef.current !== null) {
         window.clearTimeout(blurRecomputeTimerRef.current);
       }
@@ -1148,7 +1317,7 @@ const FormView: React.FC<FormViewProps> = ({
         blurRecomputeTimerRef.current = null;
       }
     };
-  }, [hasCopyDerived, recomputeDerivedOnBlur]);
+  }, [hasCopyDerived, onUserEdit, recomputeDerivedOnBlur]);
 
   const groupSections = useMemo(() => {
     type GroupSection = {
@@ -2754,22 +2923,18 @@ const FormView: React.FC<FormViewProps> = ({
       }
     }
     setLineItems(prev => {
-      const rows = prev[groupId] || [];
-      const nextLineItems: LineItemState = { ...prev, [groupId]: rows.filter(r => r.id !== rowId) };
-      const subgroupKeys = Object.keys(prev).filter(key => key.startsWith(`${groupId}::${rowId}::`));
-      subgroupKeys.forEach(key => {
-        delete (nextLineItems as any)[key];
-      });
-      if (subgroupKeys.length) {
+      const cascade = cascadeRemoveLineItemRows({ lineItems: prev, roots: [{ groupId, rowId }] });
+      if (cascade.removedSubgroupKeys.length) {
         setSubgroupSelectors(prevSel => {
           const nextSel = { ...prevSel };
-          subgroupKeys.forEach(key => {
+          cascade.removedSubgroupKeys.forEach(key => {
             delete (nextSel as any)[key];
           });
           return nextSel;
         });
       }
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+      onDiagnostic?.('ui.lineItems.remove.cascade', { groupId, rowId, removedCount: cascade.removed.length });
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, cascade.lineItems, {
         mode: 'init'
       });
       setValues(nextValues);
@@ -3323,7 +3488,7 @@ const FormView: React.FC<FormViewProps> = ({
     }
   }, [autoCollapseGroups, autoOpenNextIncomplete, onDiagnostic, scheduleScrollGroupToTop, topLevelGroupProgress]);
 
-  const renderQuestion = (q: WebQuestionDefinition) => {
+  const renderQuestion = (q: WebQuestionDefinition, renderOpts?: { inGrid?: boolean }) => {
     const optionSet = renderOptions(q);
     const dependencyValues = (dependsOn: string | string[]) => {
       const ids = Array.isArray(dependsOn) ? dependsOn : [dependsOn];
@@ -3342,13 +3507,39 @@ const FormView: React.FC<FormViewProps> = ({
     const allowedWithCurrent =
       currentVal && typeof currentVal === 'string' && !allowed.includes(currentVal) ? [...allowed, currentVal] : allowed;
     const opts = buildLocalizedOptions(optionSet, allowedWithCurrent, language, { sort: optionSortFor(q) });
-        const hidden = shouldHideField(q.visibility, {
-          getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
-        });
+    const hidden = shouldHideField(q.visibility, {
+      getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
+    });
     if (hidden) return null;
     const forceStackedLabel = q.ui?.labelLayout === 'stacked';
     const hideFieldLabel = q.ui?.hideLabel === true;
-    const labelStyle = hideFieldLabel ? srOnly : undefined;
+    const inGrid = renderOpts?.inGrid === true;
+    // In paired grids, keep the label in layout so control rows align even when a label is hidden/missing.
+    const labelStyle = hideFieldLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
+    const renderAsLabel = q.ui?.renderAsLabel === true || q.readOnly === true;
+    const renderReadOnly = (display: React.ReactNode, opts?: { stacked?: boolean }) => {
+      const cls = `${q.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+        opts?.stacked ? ' ck-label-stacked' : ''
+      } ck-readonly-field`;
+      const label = resolveFieldLabel(q, language, q.id);
+      return (
+        <div
+          key={q.id}
+          className={cls}
+          data-field-path={q.id}
+          data-has-error={errors[q.id] ? 'true' : undefined}
+          data-has-warning={hasWarning(q.id) ? 'true' : undefined}
+        >
+          <label style={labelStyle}>
+            {label}
+            {q.required && <RequiredStar />}
+          </label>
+          <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
+          {errors[q.id] && <div className="error">{errors[q.id]}</div>}
+          {renderWarnings(q.id)}
+        </div>
+      );
+    };
 
     switch (q.type) {
       case 'BUTTON': {
@@ -3398,9 +3589,12 @@ const FormView: React.FC<FormViewProps> = ({
           : undefined;
         const inputValueRaw = q.valueMap ? (mappedValue || '') : ((values[q.id] as any) ?? '');
         const inputValue = q.type === 'DATE' ? toDateInputValue(inputValueRaw) : inputValueRaw;
+        const numberText = q.type === 'NUMBER' ? (inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString()) : null;
+        if (renderAsLabel) {
+          const displayValue = q.type === 'NUMBER' ? numberText : inputValue;
+          return renderReadOnly(displayValue || null, { stacked: forceStackedLabel });
+        }
         if (q.type === 'NUMBER') {
-          const numberText =
-            inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString();
           return (
             <div
               key={q.id}
@@ -3472,6 +3666,11 @@ const FormView: React.FC<FormViewProps> = ({
       case 'CHOICE': {
         const rawVal = values[q.id];
         const choiceValue = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+        if (renderAsLabel) {
+          const selected = opts.find(opt => opt.value === choiceValue);
+          const display = selected?.label || choiceValue || null;
+          return renderReadOnly(display, { stacked: forceStackedLabel });
+        }
         return (
           <div
             key={q.id}
@@ -3509,6 +3708,19 @@ const FormView: React.FC<FormViewProps> = ({
         const hasAnyOption = !!((optionSet.en && optionSet.en.length) || (optionSet.fr && optionSet.fr.length) || (optionSet.nl && optionSet.nl.length));
         const isConsentCheckbox = !q.dataSource && !hasAnyOption;
         const selected = Array.isArray(values[q.id]) ? (values[q.id] as string[]) : [];
+        if (renderAsLabel) {
+          if (isConsentCheckbox) {
+            const display = values[q.id]
+              ? tSystem('common.yes', language, 'Yes')
+              : tSystem('common.no', language, 'No');
+            return renderReadOnly(display, { stacked: forceStackedLabel });
+          }
+          const labels = selected
+            .map(val => opts.find(opt => opt.value === val)?.label || val)
+            .filter(Boolean);
+          const display = labels.length ? labels.join(', ') : null;
+          return renderReadOnly(display, { stacked: forceStackedLabel });
+        }
         if (isConsentCheckbox) {
           const consentLabel = resolveLabel(q, language);
           return (
@@ -3651,6 +3863,18 @@ const FormView: React.FC<FormViewProps> = ({
           ? tSystem('files.view', language, 'View photos')
           : tSystem('files.add', language, 'Add photo');
         const cameraStyleBase = viewMode ? buttonStyles.secondary : isEmpty ? buttonStyles.primary : buttonStyles.secondary;
+        if (renderAsLabel) {
+          const displayContent =
+            items.length === 0
+              ? null
+              : items.map((item: any, idx: number) => (
+                  <div key={`${q.id}-file-${idx}`} className="ck-readonly-file">
+                    {describeUploadItem(item as any)}
+                  </div>
+                ));
+          const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
+          return renderReadOnly(displayNode, { stacked: forceStackedLabel });
+        }
         return (
           <div
             key={q.id}
@@ -5844,22 +6068,54 @@ const FormView: React.FC<FormViewProps> = ({
       // Filter parent fields and (optionally) subgroup definitions/fields based on the step target allowlists.
       const lineCfg = (groupQ as any).lineItemConfig || {};
       const rowFilter = target.rows || null;
+      const normalizeLineFieldId = (groupId: string, rawId: any): string => {
+        const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
+        if (!s) return '';
+        const underscorePrefix = `${groupId}__`;
+        if (s.startsWith(underscorePrefix)) return s.slice(underscorePrefix.length);
+        const dotPrefix = `${groupId}.`;
+        if (s.startsWith(dotPrefix)) return s.slice(dotPrefix.length);
+        if (s.includes('.')) return s.split('.').pop() || s;
+        return s;
+      };
       const allowedFieldIds = (() => {
         const raw = target.fields;
         if (!raw) return null;
         const ids: string[] = Array.isArray(raw)
-          ? raw.map((v: any) => (v === undefined || v === null ? '' : v.toString().trim())).filter(Boolean)
+          ? raw.map((v: any) => normalizeLineFieldId(groupQ.id, v)).filter(Boolean)
           : raw
               .toString()
               .split(',')
-              .map((s: string) => s.trim())
+              .map((s: string) => normalizeLineFieldId(groupQ.id, s))
+              .filter(Boolean);
+        return ids.length ? new Set(ids) : null;
+      })();
+      const readOnlyFieldIds = (() => {
+        const raw = (target as any).readOnlyFields;
+        if (!raw) return null;
+        const ids: string[] = Array.isArray(raw)
+          ? raw.map((v: any) => normalizeLineFieldId(groupQ.id, v)).filter(Boolean)
+          : raw
+              .toString()
+              .split(',')
+              .map((s: string) => normalizeLineFieldId(groupQ.id, s))
               .filter(Boolean);
         return ids.length ? new Set(ids) : null;
       })();
 
-      const filteredFields = allowedFieldIds
-        ? (lineCfg.fields || []).filter((f: any) => allowedFieldIds.has((f?.id || '').toString()))
+      const filteredFieldsBase = allowedFieldIds
+        ? (lineCfg.fields || []).filter((f: any) => {
+            const fid = normalizeLineFieldId(groupQ.id, (f as any)?.id);
+            return fid && allowedFieldIds.has(fid);
+          })
         : lineCfg.fields || [];
+      const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
+        const fid = normalizeLineFieldId(groupQ.id, (f as any)?.id);
+        if (readOnlyFieldIds && fid && readOnlyFieldIds.has(fid)) {
+          return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
+        }
+        return f;
+      });
 
       const subGroupsCfgPresent = !!target.subGroups && typeof target.subGroups === 'object';
       const subIncludeRaw = subGroupsCfgPresent ? (target.subGroups as any)?.include : undefined;
@@ -5885,10 +6141,31 @@ const FormView: React.FC<FormViewProps> = ({
           const subTarget = subIncludeList.find(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId);
           const allowedSubFieldsRaw = subTarget?.fields;
           const allowedSubFields = Array.isArray(allowedSubFieldsRaw)
-            ? new Set(allowedSubFieldsRaw.map((v: any) => (v === undefined || v === null ? '' : v.toString().trim())).filter(Boolean))
+            ? new Set(allowedSubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
             : null;
-          if (!allowedSubFields || !allowedSubFields.size) return sub;
-          return { ...(sub as any), fields: ((sub as any).fields || []).filter((f: any) => allowedSubFields.has((f?.id || '').toString())) };
+          const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
+          const readOnlySubFields = Array.isArray(readOnlySubFieldsRaw)
+            ? new Set(readOnlySubFieldsRaw.map((v: any) => normalizeLineFieldId(subId, v)).filter(Boolean))
+            : null;
+
+          const baseFields: any[] = (sub as any).fields || [];
+          const nextFields = allowedSubFields && allowedSubFields.size
+            ? baseFields.filter((f: any) => {
+                const fid = normalizeLineFieldId(subId, (f as any)?.id);
+                return fid && allowedSubFields.has(fid);
+              })
+            : baseFields;
+          const finalFields =
+            readOnlySubFields && readOnlySubFields.size
+              ? nextFields.map((f: any) => {
+                  const fid = normalizeLineFieldId(subId, (f as any)?.id);
+                  if (fid && readOnlySubFields.has(fid)) {
+                    return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
+                  }
+                  return f;
+                })
+              : nextFields;
+          return { ...(sub as any), fields: finalFields };
         });
       })();
 
@@ -5900,6 +6177,10 @@ const FormView: React.FC<FormViewProps> = ({
       if (presentation === 'liftedRowFields') {
         stepLineCfg.totals = [];
         stepLineCfg.ui = { ...(stepLineCfg.ui || {}), showItemPill: false };
+      }
+      if (target?.collapsedFieldsInHeader === true) {
+        // Guided steps UX: render progressive collapsed fields in the row header and hide the toggle/pill UI.
+        stepLineCfg.ui = { ...(stepLineCfg.ui || {}), guidedCollapsedFieldsInHeader: true };
       }
 
       const stepGroup: WebQuestionDefinition = {
@@ -6269,22 +6550,20 @@ const FormView: React.FC<FormViewProps> = ({
                     rows.push([q]);
                     continue;
                   }
-                  let match: WebQuestionDefinition | null = null;
+
+                  const group: WebQuestionDefinition[] = [q];
                   for (let j = i + 1; j < visible.length; j++) {
                     const cand = visible[j];
                     if (used.has(cand.id)) continue;
                     if ((cand.pair ? cand.pair.toString() : '') === pairKey && isPairable(cand)) {
-                      match = cand;
-                      break;
+                      group.push(cand);
                     }
                   }
-                  if (match) {
-                    used.add(q.id);
-                    used.add(match.id);
-                    rows.push([q, match]);
-                  } else {
-                    used.add(q.id);
-                    rows.push([q]);
+
+                  group.forEach(it => used.add(it.id));
+                  const maxPerRow = 3;
+                  for (let k = 0; k < group.length; k += maxPerRow) {
+                    rows.push(group.slice(k, k + maxPerRow));
                   }
                 }
 
@@ -6328,19 +6607,19 @@ const FormView: React.FC<FormViewProps> = ({
                       <div className="ck-group-body">
                         <div className="ck-form-grid">
                           {rows.map(row => {
-                            if (row.length === 2) {
-                              const hasDate = row[0].type === 'DATE' || row[1].type === 'DATE';
+                            if (row.length > 1) {
+                              const hasDate = row.some(q => q.type === 'DATE');
+                              const colsClass = row.length === 3 ? ' ck-pair-grid--3' : '';
                               return (
                                 <PairedRowGrid
-                                  key={`${row[0].id}__${row[1].id}`}
-                                  className={`ck-pair-grid${hasDate ? ' ck-pair-has-date' : ''}`}
+                                  key={row.map(q => q.id).join('__')}
+                                  className={`ck-pair-grid${colsClass}${hasDate ? ' ck-pair-has-date' : ''}`}
                                 >
-                                  {renderQuestion(row[0])}
-                                  {renderQuestion(row[1])}
+                                  {row.map(q => renderQuestion(q, { inGrid: true }))}
                                 </PairedRowGrid>
                               );
                             }
-                            return renderQuestion(row[0]);
+                            return renderQuestion(row[0], { inGrid: false });
                           })}
                         </div>
                       </div>
@@ -6381,4 +6660,3 @@ const FormView: React.FC<FormViewProps> = ({
 };
 
 export default FormView;
-

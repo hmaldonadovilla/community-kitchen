@@ -103,7 +103,8 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
 
         --radius-card: 26px;
         --radius-control: 18px;
-        --control-height: 96px;
+        /* Global control sizing (inputs/selects/buttons). Keep touch-friendly, but avoid wasting vertical space. */
+        --control-height: 72px;
         --safe-bottom: env(safe-area-inset-bottom, 0px);
         --safe-top: env(safe-area-inset-top, 0px);
         /* visualViewport-driven inset (Safari bottom UI / in-app browsers) */
@@ -136,7 +137,8 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
       /* iOS base-scale compensation: if we start in a desktop-like 980px viewport, the whole page is effectively
          scaled down (~0.4 on iPhone). Boost *token values* so labels/controls remain uniform and iOS doesn't zoom. */
       html.ck-ios-basescale {
-        --control-height: 120px;
+        /* iOS base-scale compensation: keep controls large enough to avoid focus-zoom, but not oversized. */
+        --control-height: 92px;
         --ck-font-base: 40px;
         --ck-font-label: 40px;
         --ck-font-control: 40px;
@@ -401,13 +403,13 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         font-family: inherit;
       }
       input[type="text"], input[type="number"], input[type="date"], input[type="file"], select, textarea {
-        padding: 18px 22px;
+        padding: 12px 16px;
         min-height: var(--control-height);
         border: 1px solid var(--border);
         border-radius: var(--radius-control);
         background: #ffffff;
       }
-      textarea { min-height: 120px; resize: vertical; }
+      textarea { min-height: 110px; resize: vertical; }
       button {
         background: var(--accent);
         color: #fff;
@@ -920,6 +922,17 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
         background: var(--ck-secondary-bg);
         border-color: var(--ck-secondary-border);
         color: var(--ck-secondary-text);
+      }
+      .ck-bottom-item--back {
+        /* Guided steps Back button: visually primary, but distinct from the Next/Submit accent color. */
+        flex: 0 0 auto;
+        background: rgba(255, 59, 48, 0.14);
+        border-color: rgba(255, 59, 48, 0.28);
+        color: #b42318;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      }
+      .ck-bottom-item--back:disabled {
+        opacity: 0.6;
       }
       .ck-bottom-icon {
         display: inline-flex;

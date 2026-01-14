@@ -342,6 +342,10 @@ export interface QuestionUiConfig {
    */
   hideLabel?: boolean;
   /**
+   * When true, render the field value as a read-only label in the edit view.
+   */
+  renderAsLabel?: boolean;
+  /**
    * Summary-only override for label visibility.
    *
    * - When omitted, the Summary view inherits from `hideLabel`.
@@ -963,10 +967,27 @@ export interface LineItemGroupConfig {
 }
 
 export interface SelectionEffect {
-  type: 'addLineItems' | 'addLineItemsFromDataSource';
+  /**
+   * Optional stable identifier for this selection effect rule.
+   *
+   * When present, rows created by this effect will be tagged with `__ckSelectionEffectId`
+   * so you can reference the originating effect in visibility/validation/disclaimer rules.
+   */
+  id?: string;
+  type: 'addLineItems' | 'addLineItemsFromDataSource' | 'deleteLineItems';
   groupId: string; // target line item group
   preset?: Record<string, PresetValue>; // preset field values for simple addLineItems (supports $row./$top. references)
   triggerValues?: string[]; // which choice/checkbox values trigger this effect (defaults to any)
+  /**
+   * When true, rows created by this effect should not show the UI "Remove" action.
+   * (Useful for child rows that are managed automatically via selection effects.)
+   */
+  hideRemoveButton?: boolean;
+  /**
+   * For `type: "deleteLineItems"`, optionally specify which `SelectionEffect.id` to delete rows for.
+   * If omitted, the effect's own `id` is used.
+   */
+  targetEffectId?: string;
   dataSource?: DataSourceConfig; // optional override source for data-driven effects
   lookupField?: string; // column/field used to match the selected value
   dataField?: string; // column/field that contains serialized row payloads (e.g., JSON array)
@@ -1480,6 +1501,19 @@ export interface StepsConfig {
   stateFields?: StepsStateFieldsConfig;
   defaultForwardGate?: StepForwardGate;
   defaultAutoAdvance?: StepAutoAdvance;
+  /**
+   * Optional label for the primary action while navigating between steps (non-final steps).
+   * The final step always uses the form's submitButtonLabel (or system default).
+   */
+  stepSubmitLabel?: LocalizedString;
+  /**
+   * Optional Back button label for guided steps.
+   */
+  backButtonLabel?: LocalizedString;
+  /**
+   * Global toggle for showing the Back button in guided steps (default: true).
+   */
+  showBackButton?: boolean;
   header?: StepsHeaderConfig;
   items: StepConfig[];
 }
@@ -1488,6 +1522,18 @@ export interface StepNavigationConfig {
   forwardGate?: StepForwardGate;
   autoAdvance?: StepAutoAdvance;
   allowBack?: boolean;
+  /**
+   * Optional label override for the primary action while this step is active (non-final steps).
+   */
+  submitLabel?: LocalizedString;
+  /**
+   * Optional label override for the Back button on this step.
+   */
+  backLabel?: LocalizedString;
+  /**
+   * Optional per-step toggle to hide/show the Back button (defaults to the global setting).
+   */
+  showBackButton?: boolean;
 }
 
 export interface StepRowFilterConfig {
@@ -1512,6 +1558,11 @@ export interface StepSubGroupTargetConfig {
    * If omitted, `rows` is used for both rendering and validation.
    */
   validationRows?: StepRowFilterConfig;
+  /**
+   * Optional list of subgroup field ids to render as read-only labels in guided steps.
+   * Use the subgroup's field ids (e.g., "FIELD_ID"); dotted/underscored prefixes are normalized.
+   */
+  readOnlyFields?: string[];
   /**
    * Optional override display mode for this subgroup relative to step defaults.
    */
@@ -1539,6 +1590,16 @@ export interface StepLineGroupTargetConfig {
    * Allowlist of visible parent row fields for this step.
    */
   fields?: string[];
+  /**
+   * Guided steps UX: when true and the underlying group is `ui.mode: "progressive"`,
+   * render the configured `ui.collapsedFields` as controls in the row header and disable
+   * the collapse/expand toggle + row progress pill.
+   *
+   * Notes:
+   * - Intended for guided steps to reduce taps/scrolling.
+   * - When the step only includes collapsed fields, the row body is hidden and only the header is shown.
+   */
+  collapsedFieldsInHeader?: boolean;
   rows?: StepRowFilterConfig;
   /**
    * Optional row filter used ONLY for guided-step validation/status.
@@ -1552,6 +1613,11 @@ export interface StepLineGroupTargetConfig {
    */
   displayMode?: StepDisplayModeOverride;
   /**
+   * Optional list of parent-row field ids to render as read-only labels in this step.
+   * Accepts either bare ids ("FIELD_ID") or prefixed ids ("GROUP__FIELD_ID" / "group.field_id"); prefixes are stripped.
+   */
+  readOnlyFields?: string[];
+  /**
    * Optional subgroup scoping + display configuration for this step.
    */
   subGroups?: StepSubGroupCollectionConfig;
@@ -1560,6 +1626,10 @@ export interface StepLineGroupTargetConfig {
 export interface StepQuestionTargetConfig {
   kind: 'question';
   id: string;
+  /**
+   * When true, render the question value as a read-only label in this step (guided edit mode).
+   */
+  renderAsLabel?: boolean;
 }
 
 export type StepTargetConfig = StepQuestionTargetConfig | StepLineGroupTargetConfig;

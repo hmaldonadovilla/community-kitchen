@@ -12,7 +12,7 @@ export type GroupedPairedFieldsProps = {
   language: LangCode;
   collapsedGroups: Record<string, boolean>;
   toggleGroupCollapsed: (groupKey: string) => void;
-  renderField: (field: any) => React.ReactNode;
+  renderField: (field: any, opts?: { inGrid?: boolean }) => React.ReactNode;
   hasError: (field: any) => boolean;
   isComplete?: (field: any) => boolean;
 };
@@ -101,23 +101,24 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
         rows.push([f]);
         continue;
       }
-      let match: any | null = null;
+
+      // Group all pairable fields sharing the same pairKey onto the same row where possible.
+      const group: any[] = [f];
       for (let j = i + 1; j < sectionFields.length; j++) {
         const cand = sectionFields[j];
         const candId = (cand?.id ?? '').toString();
         if (!candId || used.has(candId)) continue;
         if ((cand?.pair ? cand.pair.toString() : '') === pairKey && isPairable(cand)) {
-          match = cand;
-          break;
+          group.push(cand);
         }
       }
-      if (match) {
-        used.add(id);
-        used.add((match.id ?? '').toString());
-        rows.push([f, match]);
-      } else {
-        used.add(id);
-        rows.push([f]);
+
+      group.forEach(g => used.add((g?.id ?? '').toString()));
+
+      // UI constraint: keep rows compact; support 3-up for common "MEAL_TYPE + QTY + FINAL_QTY" patterns.
+      const maxPerRow = 3;
+      for (let k = 0; k < group.length; k += maxPerRow) {
+        rows.push(group.slice(k, k + maxPerRow));
       }
     }
     return rows;
@@ -148,15 +149,19 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
         const body = (
           <div className="ck-form-grid">
             {rows.map(row => {
-              if (row.length === 2) {
+              if (row.length > 1) {
+                const hasDate = row.some((f: any) => (f?.type || '').toString() === 'DATE');
+                const colsClass = row.length === 3 ? ' ck-pair-grid--3' : '';
                 return (
-                  <PairedRowGrid key={`${row[0].id}__${row[1].id}`}>
-                    {renderField(row[0])}
-                    {renderField(row[1])}
+                  <PairedRowGrid
+                    key={row.map((f: any) => (f?.id ?? '').toString()).filter(Boolean).join('__')}
+                    className={`ck-pair-grid${colsClass}${hasDate ? ' ck-pair-has-date' : ''}`}
+                  >
+                    {row.map((f: any) => renderField(f, { inGrid: true }))}
                   </PairedRowGrid>
                 );
               }
-              return renderField(row[0]);
+              return renderField(row[0], { inGrid: false });
             })}
           </div>
         );

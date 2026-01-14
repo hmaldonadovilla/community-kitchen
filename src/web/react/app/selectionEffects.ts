@@ -5,7 +5,12 @@ import { applyValueMapsToForm } from './valueMaps';
 import {
   ROW_SOURCE_AUTO,
   ROW_SOURCE_KEY,
+  ROW_SELECTION_EFFECT_ID_KEY,
+  ROW_HIDE_REMOVE_KEY,
+  ROW_PARENT_GROUP_ID_KEY,
+  ROW_PARENT_ROW_ID_KEY,
   buildSubgroupKey,
+  cascadeRemoveLineItemRows,
   parseRowSource,
   parseSubgroupKey,
   resolveSubgroupKey,
@@ -73,7 +78,7 @@ export const runSelectionEffects = (args: {
       addLineItemRow: (
         groupId: string,
         preset?: Record<string, any>,
-        meta?: { effectContextId?: string; auto?: boolean }
+        meta?: { effectContextId?: string; auto?: boolean; effectId?: string; hideRemoveButton?: boolean }
       ) => {
         setLineItems(prev => {
           const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
@@ -94,6 +99,18 @@ export const runSelectionEffects = (args: {
           });
           if (meta?.auto === true) {
             presetValues[ROW_SOURCE_KEY] = ROW_SOURCE_AUTO;
+          }
+          const normalizedEffectId =
+            meta?.effectId === undefined || meta?.effectId === null ? '' : meta.effectId.toString().trim();
+          if (normalizedEffectId) {
+            presetValues[ROW_SELECTION_EFFECT_ID_KEY] = normalizedEffectId;
+          }
+          if (meta?.hideRemoveButton === true) {
+            presetValues[ROW_HIDE_REMOVE_KEY] = true;
+          }
+          if (opts?.lineItem?.groupId && opts?.lineItem?.rowId) {
+            presetValues[ROW_PARENT_GROUP_ID_KEY] = opts.lineItem.groupId;
+            presetValues[ROW_PARENT_ROW_ID_KEY] = opts.lineItem.rowId;
           }
           if (selectorId && selectorValue !== undefined && selectorValue !== null && presetValues[selectorId] === undefined) {
             presetValues[selectorId] = selectorValue;
@@ -155,7 +172,7 @@ export const runSelectionEffects = (args: {
       updateAutoLineItems: (
         groupId: string,
         presets: Array<Record<string, string | number>>,
-        meta: { effectContextId: string; numericTargets: string[]; keyFields?: string[] }
+        meta: { effectContextId: string; numericTargets: string[]; keyFields?: string[]; effectId?: string; hideRemoveButton?: boolean }
       ) => {
         setLineItems(prev => {
           const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
@@ -203,6 +220,14 @@ export const runSelectionEffects = (args: {
               }
             });
             values[ROW_SOURCE_KEY] = ROW_SOURCE_AUTO;
+            const normalizedEffectId =
+              meta.effectId === undefined || meta.effectId === null ? '' : meta.effectId.toString().trim();
+            if (normalizedEffectId) values[ROW_SELECTION_EFFECT_ID_KEY] = normalizedEffectId;
+            if (meta.hideRemoveButton === true) values[ROW_HIDE_REMOVE_KEY] = true;
+            if (opts?.lineItem?.groupId && opts?.lineItem?.rowId) {
+              values[ROW_PARENT_GROUP_ID_KEY] = opts.lineItem.groupId;
+              values[ROW_PARENT_ROW_ID_KEY] = opts.lineItem.rowId;
+            }
             return {
               id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
               values,
@@ -218,6 +243,69 @@ export const runSelectionEffects = (args: {
             mode: 'change'
           });
           setValues(nextValues);
+          return recomputed;
+        });
+      },
+      deleteLineItemRows: (
+        groupId: string,
+        meta?: { effectId?: string; parentGroupId?: string; parentRowId?: string }
+      ) => {
+        setLineItems(prev => {
+          const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
+          const rows = prev[targetKey] || [];
+          const effectId = meta?.effectId !== undefined && meta?.effectId !== null ? meta.effectId.toString().trim() : '';
+          const parentGroupId =
+            meta?.parentGroupId !== undefined && meta?.parentGroupId !== null ? meta.parentGroupId.toString().trim() : opts?.lineItem?.groupId;
+          const parentRowId =
+            meta?.parentRowId !== undefined && meta?.parentRowId !== null ? meta.parentRowId.toString().trim() : opts?.lineItem?.rowId;
+
+          const matchesTarget = (row: any): boolean => {
+            const rowEffectId =
+              (row?.values as any)?.[ROW_SELECTION_EFFECT_ID_KEY] !== undefined && (row?.values as any)?.[ROW_SELECTION_EFFECT_ID_KEY] !== null
+                ? (row.values as any)[ROW_SELECTION_EFFECT_ID_KEY].toString().trim()
+                : '';
+            if (effectId && rowEffectId !== effectId) return false;
+            const rowParentGroup =
+              (row?.values as any)?.[ROW_PARENT_GROUP_ID_KEY] !== undefined && (row?.values as any)?.[ROW_PARENT_GROUP_ID_KEY] !== null
+                ? (row.values as any)[ROW_PARENT_GROUP_ID_KEY].toString().trim()
+                : '';
+            const rowParentRow =
+              (row?.values as any)?.[ROW_PARENT_ROW_ID_KEY] !== undefined && (row?.values as any)?.[ROW_PARENT_ROW_ID_KEY] !== null
+                ? (row.values as any)[ROW_PARENT_ROW_ID_KEY].toString().trim()
+                : '';
+            if (parentGroupId && parentRowId) {
+              return rowParentGroup === parentGroupId && rowParentRow === parentRowId;
+            }
+            // No parent context: fallback to deleting by effect id only.
+            return !!effectId && rowEffectId === effectId;
+          };
+
+          const roots = rows.filter(matchesTarget).map(r => ({ groupId: targetKey, rowId: r.id }));
+          if (!roots.length) return prev;
+
+          const cascade = cascadeRemoveLineItemRows({ lineItems: prev, roots });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, cascade.lineItems, {
+            mode: 'change'
+          });
+          setValues(nextValues);
+          logEvent?.('selectionEffects.deleteLineItems', {
+            groupId,
+            targetKey,
+            removedCount: cascade.removed.length,
+            effectId: effectId || null,
+            parentGroupId: parentGroupId || null,
+            parentRowId: parentRowId || null
+          });
+          if (typeof console !== 'undefined') {
+            console.info('[SelectionEffects] deleteLineItems removed rows', {
+              groupId,
+              targetKey,
+              removedCount: cascade.removed.length,
+              effectId: effectId || null,
+              parentGroupId: parentGroupId || null,
+              parentRowId: parentRowId || null
+            });
+          }
           return recomputed;
         });
       },
@@ -251,6 +339,5 @@ export const runSelectionEffects = (args: {
     opts ? { ...opts, topValues: values } : { topValues: values }
   );
 };
-
 
 
