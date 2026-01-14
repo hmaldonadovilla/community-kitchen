@@ -268,6 +268,44 @@ describe('Dashboard', () => {
     expect(target?.collapsedFieldsInHeader).toBe(true);
   });
 
+  test('getForms preserves guided steps lineGroup/subGroup field entries with renderAsLabel', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'orderForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                presentation: 'liftedRowFields',
+                fields: [{ id: 'MEAL_TYPE', renderAsLabel: true }, 'QTY'],
+                subGroups: { include: [{ id: 'MP_INGREDIENTS_LI', fields: [{ id: 'ING', renderAsLabel: true }, 'UNIT'] }] }
+              }
+            ]
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms.length).toBe(1);
+    const step = (forms[0].steps as any)?.items?.[0];
+    const target = step?.include?.[0];
+    expect(target?.kind).toBe('lineGroup');
+    expect(target?.fields).toEqual([{ id: 'MEAL_TYPE', renderAsLabel: true }, 'QTY']);
+    expect(target?.subGroups?.include?.[0]?.id).toBe('MP_INGREDIENTS_LI');
+    expect(target?.subGroups?.include?.[0]?.fields).toEqual([{ id: 'ING', renderAsLabel: true }, 'UNIT']);
+  });
+
   test('getForms parses list view advanced search config from dashboard config (listView.search)', () => {
     const configJson = JSON.stringify({
       listView: { search: { mode: 'advanced', fields: ['Q1', 'status'] } }

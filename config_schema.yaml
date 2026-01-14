@@ -1778,8 +1778,25 @@ components:
         fields:
           type: array
           items:
-            type: string
-          description: Allowlist of visible subgroup row field ids for this step.
+            oneOf:
+              - type: string
+              - type: object
+                properties:
+                  id:
+                    type: string
+                    description: Subgroup field id.
+                  renderAsLabel:
+                    type: boolean
+                    description: When true, render this subgroup field value as a read-only label in this step (guided edit mode).
+                required: [id]
+                additionalProperties: false
+          description: |
+            Allowlist of visible subgroup row field ids for this step.
+
+            You can provide either:
+            - A string field id: `"ING"`
+            - Or an object `{ id, renderAsLabel }` to make a field step-scoped read-only:
+              `{ "id": "ING", "renderAsLabel": true }`
         rows:
           $ref: '#/components/schemas/StepRowFilterConfig'
         validationRows:
@@ -1845,8 +1862,25 @@ components:
         fields:
           type: array
           items:
-            type: string
-          description: Allowlist of visible parent row field ids for this step.
+            oneOf:
+              - type: string
+              - type: object
+                properties:
+                  id:
+                    type: string
+                    description: Parent row field id.
+                  renderAsLabel:
+                    type: boolean
+                    description: When true, render this parent-row field value as a read-only label in this step (guided edit mode).
+                required: [id]
+                additionalProperties: false
+          description: |
+            Allowlist of visible parent row field ids for this step.
+
+            You can provide either:
+            - A string field id: `"QTY"`
+            - Or an object `{ id, renderAsLabel }` to make a field step-scoped read-only:
+              `{ "id": "QTY", "renderAsLabel": true }`
         collapsedFieldsInHeader:
           type: boolean
           description: |
@@ -2640,6 +2674,11 @@ components:
             Effect type. `addLineItems` inserts rows with static presets.
             `addLineItemsFromDataSource` hydrates rows by looking up the selected value inside a data source row (supports JSON columns).
             `deleteLineItems` deletes previously-created child rows (typically the inverse of an `addLineItems` rule).
+
+            **Option filter enforcement:** When an effect creates rows (either via `preset` or via a data source),
+            the target line-item/subgroup field `optionFilter` rules are treated as allowlists. Any generated row
+            that sets a CHOICE/CHECKBOX value which is *not* allowed by the corresponding field’s `optionFilter`
+            in the current context is skipped (useful for filtering out disallowed ingredient rows like “Salt”).
         groupId:
           type: string
           description: Target LINE_ITEM_GROUP id where rows are added.

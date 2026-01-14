@@ -1,6 +1,7 @@
 import { PresetValue, SelectionEffect, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LangCode } from '../types';
 import { fetchDataSource } from '../data/dataSources';
+import { computeAllowedOptions } from '../rules/filter';
 
 interface EffectContext {
   addLineItemRow: (
@@ -93,11 +94,29 @@ export function handleSelectionEffects(
         effectId || hideRemoveButton
           ? { ...(effectId ? { effectId } : {}), ...(hideRemoveButton ? { hideRemoveButton: true } : {}) }
           : undefined;
-      if (meta) {
-        ctx.addLineItemRow(effect.groupId, resolvedPreset, meta as any);
-      } else {
-        ctx.addLineItemRow(effect.groupId, resolvedPreset);
+      // Apply target field optionFilters to selectionEffects-created rows:
+      // if the preset sets a value that's not allowed by the target field's optionFilter in the current context,
+      // skip creating the row entirely (prevents disallowed rows like "Salt" ingredients from appearing).
+      const targetConfig = resolveTargetLineConfigForEffect(definition, effect.groupId, options?.lineItem);
+      const allowed =
+        !targetConfig || !targetConfig.fields.length
+          ? true
+          : presetPassesOptionFilters(resolvedPreset as any, targetConfig.fields, {
+              rowValues: options?.lineItem?.rowValues,
+              topValues: options?.topValues
+            });
+      if (!allowed) {
+        if (debug && typeof console !== 'undefined') {
+          console.info('[SelectionEffects] addLineItems skipped (optionFilter)', {
+            groupId: effect.groupId,
+            effectId: effectId || null,
+            preset: resolvedPreset || null
+          });
+        }
+        return;
       }
+      if (meta) ctx.addLineItemRow(effect.groupId, resolvedPreset, meta as any);
+      else ctx.addLineItemRow(effect.groupId, resolvedPreset);
       if (debug && typeof console !== 'undefined') {
         console.info('[SelectionEffects] addLineItems dispatched', {
           groupId: effect.groupId,
@@ -136,7 +155,8 @@ export function handleSelectionEffects(
         contextId,
         normalizedSelections,
         diff: diffPreview,
-        lineItem: options?.lineItem
+        lineItem: options?.lineItem,
+        topValues: options?.topValues
       });
     }
   });
@@ -153,6 +173,7 @@ interface DataDrivenEffectParams {
   normalizedSelections: string[];
   diff: SelectionDiffPreview;
   lineItem?: SelectionEffectOptions['lineItem'];
+  topValues?: Record<string, any>;
 }
 
 interface SelectionCacheEntry {
@@ -519,7 +540,8 @@ function populateLineItemsFromDataSource({
   contextId,
   normalizedSelections,
   diff,
-  lineItem
+  lineItem,
+  topValues
 }: DataDrivenEffectParams): void {
   const sourceConfig = effect.dataSource || question.dataSource;
   if (!sourceConfig) {
@@ -531,22 +553,7 @@ function populateLineItemsFromDataSource({
     }
     return;
   }
-  const resolveTargetLineConfig = (): { id: string; fields: any[] } | null => {
-    const direct = definition.questions.find(q => q.id === effect.groupId);
-    if (direct?.lineItemConfig?.fields) {
-      return { id: direct.id, fields: direct.lineItemConfig.fields };
-    }
-    const parents = lineItem?.groupId
-      ? definition.questions.filter(q => q.id === lineItem.groupId)
-      : definition.questions;
-    for (const parent of parents) {
-      const match = parent.lineItemConfig?.subGroups?.find(sub => resolveSubgroupKey(sub) === effect.groupId);
-      if (match) return { id: effect.groupId, fields: match.fields || [] };
-    }
-    return null;
-  };
-
-  const targetConfig = resolveTargetLineConfig();
+  const targetConfig = resolveTargetLineConfigForEffect(definition, effect.groupId, lineItem);
   if (!targetConfig || !targetConfig.fields.length) {
     if (debug && typeof console !== 'undefined') {
       console.warn('[SelectionEffects] target group missing or misconfigured', {
@@ -659,9 +666,26 @@ function populateLineItemsFromDataSource({
         }
         const scaledEntries = applyScale(entries, effect, lineItem, row, targetConfig.fields);
         const enrichedEntries = attachRowContext(scaledEntries, lineItem?.rowValues);
+        const hasOptionFilters = targetConfig.fields.some((f: any) => !!(f as any)?.optionFilter);
+        const lineFieldIds = targetConfig.fields.map((f: any) => (f?.id ?? '').toString()).filter(Boolean);
+        const filteredEntries = hasOptionFilters
+          ? enrichedEntries.filter(entry => {
+              const preset = buildPreset(entry, effect, lineFieldIds);
+              const rowCtx = getRowContext(entry) || lineItem?.rowValues;
+              const keep = presetPassesOptionFilters(preset as any, targetConfig.fields, { rowValues: rowCtx, topValues });
+              if (!keep && debug && typeof console !== 'undefined') {
+                console.info('[SelectionEffects] addLineItemsFromDataSource filtered entry (optionFilter)', {
+                  groupId: effect.groupId,
+                  selection: selectedValue,
+                  preset
+                });
+              }
+              return keep;
+            })
+          : enrichedEntries;
         contextMap.set(selectedValue, {
           value: selectedValue,
-          entries: enrichedEntries
+          entries: filteredEntries
         });
       });
       renderAggregatedRows({
@@ -678,6 +702,72 @@ function populateLineItemsFromDataSource({
         console.error('[SelectionEffects] data-driven effect failed', err);
       }
     });
+}
+
+function resolveTargetLineConfigForEffect(
+  definition: WebFormDefinition,
+  groupId: string,
+  lineItem?: SelectionEffectOptions['lineItem']
+): { id: string; fields: any[] } | null {
+  const direct = definition.questions.find(q => q.id === groupId);
+  if (direct?.lineItemConfig?.fields) {
+    return { id: direct.id, fields: direct.lineItemConfig.fields };
+  }
+  const contextGroupId = normalizeString(lineItem?.groupId);
+  const parents = contextGroupId ? definition.questions.filter(q => q.id === contextGroupId) : definition.questions;
+  for (const parent of parents) {
+    const match = parent.lineItemConfig?.subGroups?.find(sub => resolveSubgroupKey(sub) === groupId);
+    if (match) return { id: groupId, fields: (match as any).fields || [] };
+  }
+  // Fallback: search all line item groups for a matching subgroup id.
+  for (const parent of definition.questions) {
+    const match = parent.lineItemConfig?.subGroups?.find(sub => resolveSubgroupKey(sub) === groupId);
+    if (match) return { id: groupId, fields: (match as any).fields || [] };
+  }
+  return null;
+}
+
+function toDepValue(raw: any): string | number | null | undefined {
+  if (Array.isArray(raw)) return raw.join('|');
+  return raw as any;
+}
+
+function presetPassesOptionFilters(
+  preset: Record<string, any> | undefined,
+  fields: any[],
+  ctx: { rowValues?: Record<string, any>; topValues?: Record<string, any> }
+): boolean {
+  if (!fields || !fields.length) return true;
+  const presetValues = preset && typeof preset === 'object' ? preset : {};
+  const rowValues = ctx.rowValues || {};
+  const topValues = ctx.topValues || {};
+
+  const resolveValue = (fieldId: string): any => {
+    if (Object.prototype.hasOwnProperty.call(presetValues, fieldId)) return (presetValues as any)[fieldId];
+    if (Object.prototype.hasOwnProperty.call(rowValues, fieldId)) return (rowValues as any)[fieldId];
+    if (Object.prototype.hasOwnProperty.call(topValues, fieldId)) return (topValues as any)[fieldId];
+    return undefined;
+  };
+
+  for (const field of fields) {
+    const filter = (field as any)?.optionFilter;
+    if (!filter) continue;
+    const fieldId = (field as any)?.id !== undefined && (field as any)?.id !== null ? (field as any).id.toString() : '';
+    if (!fieldId) continue;
+    const raw = Object.prototype.hasOwnProperty.call(presetValues, fieldId) ? (presetValues as any)[fieldId] : undefined;
+    if (raw === undefined || raw === null || raw === '') continue;
+    const depIds: string[] = (Array.isArray(filter.dependsOn) ? filter.dependsOn : [filter.dependsOn])
+      .map((d: unknown) => (d === undefined || d === null ? '' : d.toString().trim()))
+      .filter((d: string) => !!d);
+    const depVals = depIds.map((depId: string) => toDepValue(resolveValue(depId)));
+    const allowed = computeAllowedOptions(filter, { en: [] } as any, depVals);
+    const allowedSet = new Set((allowed || []).map(v => (v === undefined || v === null ? '' : v.toString())));
+
+    const valuesToCheck = Array.isArray(raw) ? raw : [raw];
+    const ok = valuesToCheck.every(v => allowedSet.has(v === undefined || v === null ? '' : v.toString()));
+    if (!ok) return false;
+  }
+  return true;
 }
 
 interface RenderParams {

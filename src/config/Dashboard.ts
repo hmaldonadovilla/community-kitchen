@@ -1212,13 +1212,33 @@ export class Dashboard {
       }
 
       const out: any = { kind: 'lineGroup', id };
+
+      const normalizeFieldTarget = (input: any): any => {
+        if (input === undefined || input === null) return null;
+        if (typeof input === 'string' || typeof input === 'number' || typeof input === 'boolean') {
+          const fid = normalizeString(input);
+          return fid ? fid : null;
+        }
+        if (typeof input !== 'object') {
+          const fid = normalizeString(input);
+          return fid ? fid : null;
+        }
+        const fid = normalizeString((input as any).id ?? (input as any).fieldId ?? (input as any).field);
+        if (!fid) return null;
+        const outField: any = { id: fid };
+        if ((input as any).renderAsLabel !== undefined && (input as any).renderAsLabel !== null) {
+          outField.renderAsLabel = Boolean((input as any).renderAsLabel);
+        }
+        return outField;
+      };
+
       const presRaw = normalizeString((raw as any).presentation).toLowerCase();
       if (presRaw === 'groupeditor' || presRaw === 'group') out.presentation = 'groupEditor';
       if (presRaw === 'liftedrowfields' || presRaw === 'lifted') out.presentation = 'liftedRowFields';
       const fieldsRaw = (raw as any).fields;
       const fields =
         Array.isArray(fieldsRaw)
-          ? (fieldsRaw as any[]).map(v => normalizeString(v)).filter(Boolean)
+          ? (fieldsRaw as any[]).map(v => normalizeFieldTarget(v)).filter(Boolean)
           : typeof fieldsRaw === 'string'
             ? fieldsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
             : [];
@@ -1259,7 +1279,7 @@ export class Dashboard {
           const sgFieldsRaw = (entry as any).fields;
           const sgFields =
             Array.isArray(sgFieldsRaw)
-              ? (sgFieldsRaw as any[]).map(v => normalizeString(v)).filter(Boolean)
+              ? (sgFieldsRaw as any[]).map(v => normalizeFieldTarget(v)).filter(Boolean)
               : typeof sgFieldsRaw === 'string'
                 ? sgFieldsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
                 : [];
