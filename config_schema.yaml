@@ -1519,6 +1519,7 @@ components:
             - Saves in the background after a debounce when form values change.
             - No validation is required for draft saves.
             - Writes Status to "In progress" (unless the record is already Closed).
+            - Shows a one-time autosave explainer overlay in the Create/Edit/Copy view (customize copy in `autosaveNotice.*` system strings).
           properties:
             enabled:
               type: boolean

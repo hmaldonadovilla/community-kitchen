@@ -39,6 +39,16 @@
     "saveFailedShort": { "en": "Save failed", "fr": "Échec de l’enregistrement", "nl": "Opslaan mislukt" },
     "unknownError": { "en": "Unknown error", "fr": "Erreur inconnue", "nl": "Onbekende fout" }
   },
+  "autosaveNotice": {
+    "title": { "en": "Autosave is on", "fr": "La sauvegarde automatique est activée", "nl": "Automatisch opslaan staat aan" },
+    "message": {
+      "en": "This form saves your changes automatically in the background. Look for the status indicators in the top right corner of the form.",
+      "fr": "Ce formulaire enregistre automatiquement vos modifications en arrière-plan. Consultez les indicateurs d’état en haut à droite du formulaire.",
+      "nl": "Dit formulier slaat je wijzigingen automatisch op op de achtergrond. Kijk rechtsboven in het formulier voor de statusindicatoren."
+    },
+    "confirm": { "en": "Got it", "fr": "Compris", "nl": "Begrepen" },
+    "cancel": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" }
+  },
   "record": {
     "checking": {
       "en": "Checking for updates…",
@@ -303,5 +313,4 @@
     }
   }
 }
-
 

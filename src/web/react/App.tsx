@@ -313,6 +313,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [isCompact, setIsCompact] = useState<boolean>(false);
   const [isLandscape, setIsLandscape] = useState<boolean>(false);
   const [debugEnabled] = useState<boolean>(() => detectDebug());
+  const [autoSaveNoticeOpen, setAutoSaveNoticeOpen] = useState<boolean>(false);
+  const autoSaveNoticeSeenRef = useRef<boolean>(false);
   const logEvent = useCallback(
     (event: string, payload?: Record<string, unknown>) => {
       // Default diagnostics are gated behind detectDebug() to avoid noisy consoles.
@@ -332,6 +334,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const customConfirm = useConfirmDialog({ closeOnKey: view, eventPrefix: 'ui.customConfirm', onDiagnostic: logEvent });
   const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
   const updateRecordBusyOpen = updateRecordBusy.state.open;
+  const autoSaveNoticeStorageKey = useMemo(() => {
+    const key = (formKey || '').toString().trim() || 'default';
+    return `ck.autosaveNotice.${key}`;
+  }, [formKey]);
 
   const handleUserEdit = useCallback(
     (args: {
@@ -2811,6 +2817,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
   const summaryViewEnabled = definition.summaryViewEnabled !== false;
   const copyCurrentRecordEnabled = definition.copyCurrentRecordEnabled !== false;
+  const autoSaveNoticeTitle = tSystem('autosaveNotice.title', language, 'Autosave is on');
+  const autoSaveNoticeMessage = tSystem(
+    'autosaveNotice.message',
+    language,
+    'This form saves your changes automatically in the background. Look for the status indicators in the top right corner of the form.'
+  );
+  const autoSaveNoticeConfirmLabel = tSystem('autosaveNotice.confirm', language, 'Got it');
+  const autoSaveNoticeCancelLabel = tSystem('autosaveNotice.cancel', language, tSystem('common.close', language, 'Close'));
   const submitButtonLabelResolved = useMemo(
     () =>
       resolveLocalizedString(
@@ -2899,6 +2913,50 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       selectedRecordId,
       values
     ]
+  );
+
+  useEffect(() => {
+    autoSaveNoticeSeenRef.current = false;
+    setAutoSaveNoticeOpen(false);
+  }, [autoSaveNoticeStorageKey]);
+
+  useEffect(() => {
+    if (!autoSaveEnabled || view !== 'form') return;
+    if (autoSaveNoticeSeenRef.current) return;
+    let seen = false;
+    try {
+      seen = globalThis.localStorage?.getItem(autoSaveNoticeStorageKey) === '1';
+    } catch (err: any) {
+      logEvent('autosave.notice.readFailed', { message: err?.message || err || 'unknown' });
+    }
+    if (seen) {
+      autoSaveNoticeSeenRef.current = true;
+      return;
+    }
+    autoSaveNoticeSeenRef.current = true;
+    setAutoSaveNoticeOpen(true);
+    logEvent('autosave.notice.open', {
+      formKey: formKey || null,
+      mode: createFlowRef.current ? 'create' : 'edit'
+    });
+  }, [autoSaveEnabled, autoSaveNoticeStorageKey, formKey, logEvent, view]);
+
+  const dismissAutoSaveNotice = useCallback(
+    (reason: 'confirm' | 'cancel') => {
+      setAutoSaveNoticeOpen(false);
+      autoSaveNoticeSeenRef.current = true;
+      try {
+        globalThis.localStorage?.setItem(autoSaveNoticeStorageKey, '1');
+      } catch (err: any) {
+        logEvent('autosave.notice.persistFailed', { message: err?.message || err || 'unknown' });
+      }
+      logEvent('autosave.notice.dismiss', {
+        formKey: formKey || null,
+        mode: createFlowRef.current ? 'create' : 'edit',
+        reason
+      });
+    },
+    [autoSaveNoticeStorageKey, formKey, logEvent]
   );
 
   const requestSubmit = useCallback(() => {
@@ -5345,6 +5403,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           onSelect={handleRecordSelect}
         />
       )}
+
+      <ConfirmDialogOverlay
+        open={autoSaveNoticeOpen && view === 'form'}
+        title={autoSaveNoticeTitle}
+        message={autoSaveNoticeMessage}
+        confirmLabel={autoSaveNoticeConfirmLabel}
+        cancelLabel={autoSaveNoticeCancelLabel}
+        zIndex={12010}
+        onCancel={() => dismissAutoSaveNotice('cancel')}
+        onConfirm={() => dismissAutoSaveNotice('confirm')}
+      />
 
       <ConfirmDialogOverlay
         open={submitConfirmOpen && view === 'form'}
