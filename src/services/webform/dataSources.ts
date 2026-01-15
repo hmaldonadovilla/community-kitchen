@@ -240,6 +240,81 @@ export class DataSourceService {
     return null;
   }
 
+  /**
+   * Find a data source row index and block field column index for a given selected value.
+   *
+   * Used by SubmissionService to toggle cross-form block flags.
+   */
+  findBlockFieldTarget(
+    dataSource: DataSourceConfig,
+    selectedValue: string,
+    language: 'EN' | 'FR' | 'NL'
+  ): { sheet: GoogleAppsScript.Spreadsheet.Sheet; rowIndex: number; blockCol: number } | null {
+    if (!selectedValue || !dataSource || !dataSource.id || !dataSource.blockFieldId) return null;
+    const ds = dataSource;
+    const normalized = selectedValue.toString().trim().toLowerCase();
+    if (!normalized) return null;
+
+    const { sheetId, tabName } = this.parseDataSourceId(ds.id, ds.tabName, ds.sheetId);
+    const sheet = sheetId
+      ? ((): GoogleAppsScript.Spreadsheet.Sheet | null => {
+          try {
+            const external = SpreadsheetApp.openById(sheetId);
+            return tabName ? external.getSheetByName(tabName) : external.getSheets()[0] || null;
+          } catch (err) {
+            debugLog('dataSources.findBlockFieldTarget.openById.failed', {
+              sheetId,
+              tabName,
+              error: this.stringify(err) || 'unknown'
+            });
+            return null;
+          }
+        })()
+      : this.ss.getSheetByName(tabName || ds.id);
+    if (!sheet) return null;
+
+    const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const headers = headerRow.map(h => sanitizeHeaderCellText((h || '').toString()));
+    if (!headers.length) return null;
+    const columns = this.buildHeaderIndex(headers);
+
+    const blockKey = normalizeHeaderToken(ds.blockFieldId || '');
+    const blockColIdx = blockKey ? columns[blockKey] : undefined;
+    if (!blockColIdx) return null;
+
+    const lookupFields = this.buildDataSourceLookupFields(ds);
+    const maxRows = Math.max(0, sheet.getLastRow() - 1);
+    if (maxRows <= 0) return null;
+
+    try {
+      const data = sheet.getRange(2, 1, maxRows, sheet.getLastColumn()).getValues();
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        const matchField = lookupFields.find(field => {
+          const key = (field || '').toString();
+          if (!key) return false;
+          const colIdx = columns[normalizeHeaderToken(key)];
+          if (!colIdx) return false;
+          const cell = row[colIdx - 1];
+          if (cell === undefined || cell === null) return false;
+          const text = cell.toString().trim().toLowerCase();
+          return text === normalized;
+        });
+        if (matchField) {
+          return { sheet, rowIndex: 2 + i, blockCol: blockColIdx };
+        }
+      }
+    } catch (err) {
+      debugLog('dataSources.findBlockFieldTarget.failed', {
+        id: ds.id,
+        tabName: sheet.getName(),
+        error: this.stringify(err) || 'unknown'
+      });
+    }
+
+    return null;
+  }
+
   private parseDataSourceId(raw: string, tabNameOverride?: string, sheetIdOverride?: string): { sheetId?: string; tabName?: string } {
     if (sheetIdOverride || tabNameOverride) {
       return { sheetId: sheetIdOverride, tabName: tabNameOverride || raw };

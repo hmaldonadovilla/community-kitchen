@@ -11,6 +11,7 @@ import { CacheEtagManager } from './cache';
 import { buildResponsesRecordSchema, normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } from './recordSchema';
 import { HeaderColumns, RecordContext } from './types';
 import { UploadService } from './uploads';
+import { DataSourceService } from './dataSources';
 import {
   ensureRecordIndexSheet,
   getRecordIndexSheetName,
@@ -241,6 +242,11 @@ export class SubmissionService {
         return (fromField || fromMeta || '').toString();
       })();
       const isClosed = existingStatusText.trim().toLowerCase() === 'closed';
+
+      const finalStatusRaw = (form.followupConfig as any)?.statusTransitions?.onClose;
+      const finalStatus = finalStatusRaw ? finalStatusRaw.toString().trim().toLowerCase() : '';
+      const isFinalBefore = finalStatus && existingStatusText.trim().toLowerCase() === finalStatus;
+      const isFinalAfter = finalStatus && statusValue.trim().toLowerCase() === finalStatus;
       // Allow an explicit user-initiated "re-open" (or other status change) for Closed records.
       // This must NOT enable background autosave to mutate closed records by accident, so it is gated behind
       // a dedicated flag (set by the web app only for explicit actions).
@@ -279,13 +285,13 @@ export class SubmissionService {
       }
     });
 
-    const dataSourceBlockFields: Array<{ fieldId: string; blockFieldId: string }> = [];
+    const dataSourceBlockFields: Array<{ fieldId: string; blockFieldId: string; dataSource: any }> = [];
     (questions || []).forEach(q => {
       if (!q || !q.dataSource || !(q as any).dataSource?.blockFieldId) return;
       const fieldId = (q.id || '').toString().trim();
       const blockFieldId = ((q as any).dataSource.blockFieldId || '').toString().trim();
       if (!fieldId || !blockFieldId) return;
-      dataSourceBlockFields.push({ fieldId, blockFieldId });
+      dataSourceBlockFields.push({ fieldId, blockFieldId, dataSource: (q as any).dataSource });
     });
 
     questions.filter(q => q.type !== 'BUTTON').forEach(q => {
@@ -439,6 +445,68 @@ export class SubmissionService {
     }
 
     const destinationRowNumber = existingRowIdx >= 0 ? (2 + existingRowIdx) : (sheet.getLastRow() + 1);
+
+    // Cross-form blockFieldId toggling for dataSource-linked fields.
+    try {
+      if (dataSourceBlockFields.length) {
+        const dsService = new DataSourceService(this.ss);
+        dataSourceBlockFields.forEach(link => {
+          const fieldId = link.fieldId;
+          const blockFieldId = link.blockFieldId;
+          const dsCfg = link.dataSource as any;
+          const safeFieldId = (fieldId || '').toString().trim();
+          const safeBlockFieldId = (blockFieldId || '').toString().trim();
+          if (!safeFieldId || !safeBlockFieldId || !dsCfg || !dsCfg.id) return;
+
+          const oldValue = (() => {
+            if (existingRowIdx < 0) return '';
+            const colIdx = columns.fields[safeFieldId];
+            if (!colIdx) return '';
+            try {
+              const raw = sheet.getRange(2 + existingRowIdx, colIdx, 1, 1).getValues()[0][0];
+              return raw === undefined || raw === null ? '' : raw.toString();
+            } catch (_) {
+              return '';
+            }
+          })();
+
+          const newValue = (candidateValues[safeFieldId] || '').toString();
+          const oldNorm = oldValue.toString().trim();
+          const newNorm = newValue.toString().trim();
+
+          const finalStatusRaw = (form.followupConfig as any)?.statusTransitions?.onClose;
+          const finalStatus = finalStatusRaw ? finalStatusRaw.toString().trim().toLowerCase() : '';
+
+          const toggle = (value: string, nextBlock: boolean) => {
+            const norm = (value || '').toString().trim();
+            if (!norm) return;
+            const target = dsService.findBlockFieldTarget(dsCfg as any, norm, language);
+            if (!target) return;
+            const { sheet: sourceSheet, rowIndex, blockCol } = target;
+            try {
+              const cell = sourceSheet.getRange(rowIndex, blockCol, 1, 1);
+              cell.setValue(nextBlock ? true : false);
+            } catch (_) {
+              // ignore
+            }
+          };
+
+          // When selection changes on a non-final record: unblock old, block new.
+          if (oldNorm !== newNorm && !finalStatus) {
+            if (oldNorm) toggle(oldNorm, false);
+            if (newNorm) toggle(newNorm, true);
+          }
+
+          // When transitioning into final (onClose): unblock the currently selected record.
+          if (finalStatus && newNorm) {
+            toggle(newNorm, false);
+          }
+        });
+      }
+    } catch (_) {
+      // best-effort; do not fail save on blockFieldId issues
+    }
+
     if (existingRowIdx >= 0) {
       sheet.getRange(destinationRowNumber, 1, 1, headers.length).setValues([valuesArray]);
     } else {
