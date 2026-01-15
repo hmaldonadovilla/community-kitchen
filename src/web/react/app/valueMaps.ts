@@ -7,6 +7,11 @@ export type ApplyValueMapsMode = 'change' | 'blur' | 'init' | 'submit';
 
 export type ApplyValueMapsOptions = {
   mode?: ApplyValueMapsMode;
+  /**
+   * Top-level field ids that should not be overwritten by derived/value-map logic
+   * in the current apply pass (e.g., the field currently being edited).
+   */
+  lockedTopFields?: string[];
 };
 
 const derivedDebugEnabled = (): boolean => Boolean((globalThis as any)?.__WEB_FORM_DEBUG__);
@@ -391,6 +396,17 @@ export const applyValueMapsToForm = (
   let values = { ...currentValues };
   let lineItems = { ...currentLineItems };
   const mode: ApplyValueMapsMode = options?.mode || 'change';
+  const lockedTopFields = Array.isArray(options?.lockedTopFields) ? options?.lockedTopFields : [];
+  const lockedTopValues: Record<string, FieldValue> = {};
+  if (lockedTopFields.length) {
+    lockedTopFields.forEach(raw => {
+      const id = (raw || '').toString().trim();
+      if (!id) return;
+      if (Object.prototype.hasOwnProperty.call(values, id)) {
+        lockedTopValues[id] = values[id];
+      }
+    });
+  }
 
   definition.questions.forEach(q => {
     if ((q as any).valueMap) {
@@ -467,6 +483,16 @@ export const applyValueMapsToForm = (
       }
     }
   });
+
+  if (lockedTopFields.length) {
+    lockedTopFields.forEach(raw => {
+      const id = (raw || '').toString().trim();
+      if (!id) return;
+      if (Object.prototype.hasOwnProperty.call(lockedTopValues, id)) {
+        values[id] = lockedTopValues[id];
+      }
+    });
+  }
 
   return { values, lineItems };
 };

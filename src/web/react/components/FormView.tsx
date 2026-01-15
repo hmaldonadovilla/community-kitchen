@@ -164,6 +164,10 @@ const isLineRowComplete = (group: WebQuestionDefinition, rowValues: Record<strin
 
 interface FormViewProps {
   definition: WebFormDefinition;
+  /**
+   * Optional map of dedup key field ids (used to keep dedup keys editable even if valueMap is present).
+   */
+  dedupKeyFieldIdMap?: Record<string, true>;
   language: LangCode;
   values: Record<string, FieldValue>;
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
@@ -185,15 +189,6 @@ interface FormViewProps {
    */
   navigateToFieldRef?: React.MutableRefObject<((fieldKey: string) => void) | null>;
   submitting: boolean;
-  /**
-   * When true, the form is in a dedup-conflict lock state: only dedup key fields should remain editable.
-   */
-  dedupLockActive?: boolean;
-  /**
-   * Field ids that are allowed to be edited while `dedupLockActive` is true.
-   * (Typically the dedup rule composite keys, e.g. DATE + CHECK_FREQ.)
-   */
-  dedupKeyFieldIds?: string[];
   errors: FormErrors;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
   status?: string | null;
@@ -282,6 +277,7 @@ interface FormViewProps {
 
 const FormView: React.FC<FormViewProps> = ({
   definition,
+  dedupKeyFieldIdMap,
   language,
   values,
   setValues,
@@ -292,8 +288,6 @@ const FormView: React.FC<FormViewProps> = ({
   guidedBackActionRef,
   navigateToFieldRef,
   submitting,
-  dedupLockActive,
-  dedupKeyFieldIds,
   errors,
   setErrors,
   status,
@@ -324,21 +318,7 @@ const FormView: React.FC<FormViewProps> = ({
     const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
     return s === 'source' ? 'source' : 'alphabetical';
   };
-  const dedupAllowSet = useMemo(() => {
-    const set = new Set<string>();
-    (dedupKeyFieldIds || []).forEach(id => {
-      const k = (id || '').toString().trim();
-      if (k) set.add(k);
-    });
-    return set;
-  }, [dedupKeyFieldIds]);
   const orderedEntryEnabled = definition.submitValidation?.enforceFieldOrder === true;
-  const isFieldLockedByDedup = (fieldId: string): boolean => {
-    if (!dedupLockActive) return false;
-    const k = (fieldId || '').toString().trim();
-    if (!k) return true;
-    return !dedupAllowSet.has(k);
-  };
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
     const list = key && warningByField ? (warningByField as any)[key] : undefined;
@@ -354,6 +334,38 @@ const FormView: React.FC<FormViewProps> = ({
       </div>
     ));
   };
+  const isFieldLockedByDedup = (_fieldId: string): boolean => false;
+  const dedupKeyFieldIds = useMemo(() => {
+    if (dedupKeyFieldIdMap) {
+      return new Set<string>(Object.keys(dedupKeyFieldIdMap || {}));
+    }
+    const rules = Array.isArray(definition?.dedupRules) ? definition.dedupRules : [];
+    const keys = new Set<string>();
+    rules.forEach(rule => {
+      if (!rule) return;
+      const onConflict = (rule.onConflict || 'reject').toString().trim().toLowerCase();
+      if (onConflict !== 'reject') return;
+      const ruleKeys = Array.isArray(rule.keys) ? rule.keys : [];
+      ruleKeys.forEach(raw => {
+        const id = (raw ?? '').toString().trim().toLowerCase();
+        if (!id) return;
+        keys.add(id);
+      });
+    });
+    return keys;
+  }, [definition, dedupKeyFieldIdMap]);
+  const isDedupKeyField = useCallback(
+    (fieldId: string): boolean => {
+      const id = (fieldId || '').toString().trim();
+      if (!id) return false;
+      const lower = id.toLowerCase();
+      if (dedupKeyFieldIdMap) {
+        return Boolean(dedupKeyFieldIdMap[id] || dedupKeyFieldIdMap[lower]);
+      }
+      return dedupKeyFieldIds.has(lower) || dedupKeyFieldIds.has(id);
+    },
+    [dedupKeyFieldIdMap, dedupKeyFieldIds]
+  );
   const [overlay, setOverlay] = useState<LineOverlayState>({ open: false, options: [], selected: [] });
   const [lineItemGroupOverlay, setLineItemGroupOverlay] = useState<LineItemGroupOverlayState>({ open: false });
   const orderedEntryGateRef = useRef<(args: { targetQuestionId: string; source: string }) => boolean>(() => false);
@@ -2453,7 +2465,7 @@ const FormView: React.FC<FormViewProps> = ({
       }
       const focusables = Array.from(
         el.querySelectorAll(
-          'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+        'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
         )
       ) as HTMLElement[];
 
@@ -3297,12 +3309,12 @@ const FormView: React.FC<FormViewProps> = ({
 
   const handleFieldChange = (q: WebQuestionDefinition, value: FieldValue) => {
     if (submitting) return;
-    if ((q as any)?.valueMap) return;
+    // Allow edits to proceed; readOnly/valueMap are enforced at the input level.
     if (q.readOnly === true) {
       onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'readOnly' });
       return;
     }
-    if (dedupLockActive && isFieldLockedByDedup(q.id)) {
+    if (isFieldLockedByDedup(q.id)) {
       onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'dedupConflict' });
       return;
     }
@@ -3312,11 +3324,12 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
     guidedLastUserEditAtRef.current = Date.now();
-    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id });
+    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change' });
     if (onStatusClear) onStatusClear();
     const baseValues = { ...values, [q.id]: value };
     const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(definition, baseValues, lineItems, {
-      mode: 'change'
+      mode: 'change',
+      lockedTopFields: [q.id]
     });
     setValues(nextValues);
     if (nextLineItems !== lineItems) {
@@ -3334,12 +3347,12 @@ const FormView: React.FC<FormViewProps> = ({
 
   const handleLineFieldChange = (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => {
     if (submitting) return;
-    if (field?.valueMap) return;
+    // Allow edits to proceed; readOnly/valueMap are enforced at the input level.
     if (field?.readOnly === true) {
       onDiagnostic?.('field.change.blocked', { scope: 'line', fieldPath: `${group.id}__${field?.id || ''}__${rowId}`, reason: 'readOnly' });
       return;
     }
-    if (dedupLockActive && isFieldLockedByDedup((field?.id || '').toString())) {
+    if (isFieldLockedByDedup((field?.id || '').toString())) {
       onDiagnostic?.('field.change.blocked', {
         scope: 'line',
         fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
@@ -3374,7 +3387,8 @@ const FormView: React.FC<FormViewProps> = ({
       fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
       fieldId: (field?.id || '').toString(),
       groupId: group.id,
-      rowId
+      rowId,
+      event: 'change'
     });
     if (onStatusClear) onStatusClear();
     const existingRows = lineItems[group.id] || [];
@@ -3918,13 +3932,16 @@ const FormView: React.FC<FormViewProps> = ({
       case 'TEXT':
       case 'PARAGRAPH':
       case 'NUMBER':
-      case 'DATE':
-        const mappedValue = q.valueMap
-          ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId], { language, targetOptions: toOptionSet(q) })
-          : undefined;
-        const inputValueRaw = q.valueMap ? (mappedValue || '') : ((values[q.id] as any) ?? '');
+      case 'DATE': {
+        const useValueMap = !!q.valueMap && !isDedupKeyField(q.id);
+        const mappedValue =
+          useValueMap && q.valueMap
+            ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId], { language, targetOptions: toOptionSet(q) })
+            : undefined;
+        const inputValueRaw = useValueMap ? (mappedValue || '') : ((values[q.id] as any) ?? '');
         const inputValue = q.type === 'DATE' ? toDateInputValue(inputValueRaw) : inputValueRaw;
-        const numberText = q.type === 'NUMBER' ? (inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString()) : null;
+        const numberText =
+          q.type === 'NUMBER' ? (inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString()) : null;
         if (renderAsLabel) {
           const displayValue = q.type === 'NUMBER' ? numberText : inputValue;
           return renderReadOnly(displayValue || null, { stacked: forceStackedLabel });
@@ -3945,7 +3962,7 @@ const FormView: React.FC<FormViewProps> = ({
               <NumberStepper
                 value={numberText}
                 disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
-                readOnly={!!q.valueMap || q.readOnly === true}
+                readOnly={useValueMap || q.readOnly === true}
                 ariaLabel={resolveFieldLabel(q, language, q.id)}
                 onChange={next => handleFieldChange(q, next)}
               />
@@ -3972,7 +3989,7 @@ const FormView: React.FC<FormViewProps> = ({
               <textarea
                 value={inputValue}
                 onChange={e => handleFieldChange(q, e.target.value)}
-                readOnly={!!q.valueMap || q.readOnly === true}
+                readOnly={useValueMap || q.readOnly === true}
                 disabled={submitting || isFieldLockedByDedup(q.id)}
                 rows={((q as any)?.ui as any)?.paragraphRows || 4}
               />
@@ -3980,7 +3997,7 @@ const FormView: React.FC<FormViewProps> = ({
               <DateInput
                 value={inputValue}
                 language={language}
-                readOnly={!!q.valueMap || q.readOnly === true}
+                readOnly={useValueMap || q.readOnly === true}
                 disabled={submitting || isFieldLockedByDedup(q.id)}
                 ariaLabel={resolveLabel(q, language)}
                 onChange={next => handleFieldChange(q, next)}
@@ -3990,7 +4007,7 @@ const FormView: React.FC<FormViewProps> = ({
                 type="text"
                 value={inputValue}
                 onChange={e => handleFieldChange(q, e.target.value)}
-                readOnly={!!q.valueMap || q.readOnly === true}
+                readOnly={useValueMap || q.readOnly === true}
                 disabled={submitting || isFieldLockedByDedup(q.id)}
               />
             )}
@@ -3998,6 +4015,7 @@ const FormView: React.FC<FormViewProps> = ({
             {renderWarnings(q.id)}
           </div>
         );
+      }
       case 'CHOICE': {
         const rawVal = values[q.id];
         const choiceValue = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
@@ -4953,8 +4971,8 @@ const FormView: React.FC<FormViewProps> = ({
                 rawFields.forEach(pushEntry);
               } else {
                 rawFields
-                  .toString()
-                  .split(',')
+                    .toString()
+                    .split(',')
                   .map((s: string) => s.trim())
                   .filter(Boolean)
                   .forEach(pushEntry);
@@ -6506,9 +6524,9 @@ const FormView: React.FC<FormViewProps> = ({
           raw.forEach(pushEntry);
         } else {
           raw
-            .toString()
-            .split(',')
-            .map((s: string) => s.trim())
+              .toString()
+              .split(',')
+              .map((s: string) => s.trim())
             .filter(Boolean)
             .forEach(pushEntry);
         }

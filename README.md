@@ -121,6 +121,7 @@ Enabling `CK_DEBUG` also flips `window.__WEB_FORM_DEBUG__` on the web client, so
    - Set the entry point to `doGet`.
    - Deploy and use the generated URL as your custom form link (supports line items and uploads).
    - React is the only experience; the legacy iframe UI has been removed.
+   - `doGet` serves a minimal shell; the client fetches the full definition via `fetchBootstrapContext`, so keep that function in the deployment and schedule `warmDefinitions()` to avoid cold-start stalls.
 
 ## Config Notes (LINE_ITEM_GROUP / FILE_UPLOAD)
 
@@ -198,3 +199,72 @@ Run unit tests with:
 ```bash
 npm test
 ```
+
+## Deployment & caching (summary)
+
+This section summarizes the deployment flow and the new server-side caching, with full details in:
+
+- `docs/performance-initial-load-solution-design.md`
+
+### Deployment flow (per environment)
+
+1. **Build locally**
+
+   ```bash
+   npm install   # first time or after dependency changes
+   npm run build
+   ```
+
+   This regenerates `dist/Code.js` and `dist/webform-react.js`.
+
+2. **Update the Apps Script project**
+   - Open the Google Sheet.
+   - Go to **Extensions → Apps Script**.
+   - Replace the existing `Code.gs` content with the new `dist/Code.js` bundle.
+   - Ensure the `webform-react.js` bundle is still being served as before (no change to web app URL structure).
+
+3. **Run `setup()` once per spreadsheet**
+   - Only needed on a new Sheet to create the **Forms Dashboard** and example config.
+
+4. **Create/Update All Forms after config changes**
+   - Run `createAllForms()` from the Apps Script editor or custom menu.
+   - This:
+     - Regenerates/updates Forms and destination sheets.
+     - Updates app URLs in the dashboard.
+     - Bumps the server-side cache version via `WebFormService.invalidateServerCache('createAllForms')`, which invalidates all cached definitions and template content.
+   - **Code-only changes** (TypeScript/UI) do **not** require `createAllForms()` — just rebuild + re-deploy the bundle.
+
+5. **Warm up form definitions (optional but recommended)**
+   - Run `warmDefinitions()` once after config changes (or let a scheduled trigger handle it).
+   - This uses `WebFormService.warmDefinitions()` to prebuild and cache `WebFormDefinition` objects for all forms, so `doGet()` does not need to re-parse large config sheets on first user hits.
+   - The web app shell loads the React bundle via `?bundle=react`. You can pass `?app=<bundleKey>` to select an app-specific bundle (defaults to `full`). Bundle keys come from filenames under `src/web/react/entrypoints` (converted to kebab-case).
+   - **Maintainer note**: if you want local-only entrypoints (not committed), add them under `src/web/react/entrypoints` and ignore them locally via `.git/info/exclude`:
+     - `src/web/react/entrypoints/*`
+
+6. **Publish / re-deploy the web app**
+   - In Apps Script, go to **Deploy → Manage deployments**.
+   - Update or create a **Web app** deployment with entrypoint `doGet`.
+   - Keep the same URL for existing testers where possible; query parameters (e.g. `?form=Config:+Recipes`) still route to the same forms.
+
+### Server-side caching behavior
+
+The web app uses several caches to keep first paint and list views responsive while staying inside Apps Script limits:
+
+- **Template & list/record caches**
+  - HTML/Markdown templates and list/record pages are stored in `CacheService` and keyed by a versioned prefix from `CacheEtagManager`.
+  - Running **Create/Update All Forms** or calling `WebFormService.invalidateServerCache(reason)` bumps the cache version in `PropertiesService`, which invalidates all previous caches.
+
+- **Form definition cache (`WebFormDefinition`)**
+  - Each form (`form=Config:+Recipes`, etc.) has its `WebFormDefinition` cached in `CacheService` under a key derived from:
+    - The current cache version (managed by `CacheEtagManager`).
+    - The form key (config sheet name or form title).
+  - Only configuration is cached (questions, options, visibility rules, list view config, app header, steps, dedup rules) – **no submission data** is stored in this cache layer.
+  - `WebFormService.renderForm()` uses `getOrBuildDefinition()` to:
+    - Return the cached definition when present (`definition.cache.hit`).
+    - Otherwise build it once from the dashboard + config sheet (`definition.cache.miss`) and store it for subsequent requests.
+
+- **Definition warm-up (`warmDefinitions`)**
+  - `WebFormService.warmDefinitions()` iterates over all forms from the dashboard and calls `getOrBuildDefinition()` for each, logging `definition.warm` events with timing and question counts.
+  - The script function `warmDefinitions()` is exposed as an Apps Script entrypoint and can be wired to a **time-based trigger** (e.g. hourly in SIT, nightly in PROD) to keep definitions warm.
+
+For a more detailed explanation (including timing diagrams, per-phase implementation notes, and bundle-size targets), see `docs/performance-initial-load-solution-design.md`.
