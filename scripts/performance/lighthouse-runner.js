@@ -135,7 +135,12 @@ async function main() {
     process.exit(1);
   }
 
-  const runs = Number(args.runs || 3);
+  const runsRaw = args.runs ?? '3';
+  const runs = Number(runsRaw);
+  if (!Number.isInteger(runs) || runs <= 0) {
+    console.error(`Invalid value for --runs: "${runsRaw}". Expected a positive integer (e.g., --runs=3).`);
+    process.exit(1);
+  }
   const outputPath = args.output || null;
 
   console.log(`Running Lighthouse performance audit for: ${url}`);
