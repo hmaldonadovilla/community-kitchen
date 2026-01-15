@@ -84,7 +84,7 @@
 
 - `doGet()` must return **minimal HTML + script tags** only:
   - Basic `<html>`/`<body>` with root `<div id="app">` and a **static inline shell placeholder** (optional) so users immediately see something even before JS hydration.
-  - Script tag(s) referencing `dist/Code.js` and any chunk files.
+  - Script tag(s) referencing the appropriate bundle(s), see Section 6.2.
 
 - All **domain data** must be fetched via **Apps Script web APIs** after initial render:
   - E.g., `/api/config`, `/api/recipes`, `/api/meal-production`, `/api/checklists`.
@@ -201,20 +201,67 @@ Notes:
 
 ### 6.1 `doGet()` Responsibilities (per recommendation 3)
 
-`doGet()` for each web app should:
+`doGet()` for the Community Kitchen web app should:
 
+- Keep using the **same published URL** (no change for testers).
+- Interpret the existing **query parameters** to decide which form/app to render, e.g.:
+  - `?page=recipes`
+  - `?page=meal-production`
+  - `?page=checks`
+
+Behavior:
 - Build a minimal HTML shell **without** reading Sheets:
   - Set basic `<title>` and meta tags.
   - Include root `<div id="app">` with a minimal, non‑JS loading message so users on very slow devices see something even before JS loads.
-  - Include `<script>` tag(s) pointing to the compiled bundle and optional chunk files.
-- Avoid:
-  - Reading Google Sheets.
-  - Building lists or performing heavy calculations.
-  - Any logic that can be deferred to API endpoints.
+  - Depending on the `page` query parameter, include exactly **one** main bundle script:
+    - `recipes.bundle.js` for `page=recipes`.
+    - `mealProduction.bundle.js` for `page=meal-production`.
+    - `checks.bundle.js` for `page=checks`.
 
-If currently `doGet()` is returning a fully rendered HTML based on Sheets data, we will refactor so that:
-- `doGet()` becomes a thin wrapper.
-- All data logic moves to dedicated functions like `getConfig`, `getRecipes`, etc., exposed via web APIs.
+Pseudo‑code:
+
+```js
+function doGet(e) {
+  const page = (e && e.parameter && e.parameter.page) || 'recipes';
+
+  var template = HtmlService.createTemplateFromFile('index');
+  template.page = page;
+  return template.evaluate()
+    .setTitle('Community Kitchen')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+```
+
+In `index.html`:
+
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <title>Community Kitchen</title>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Minimal static placeholder -->
+      <h1>Loading…</h1>
+      <p>Please keep this page open. This may take a few seconds.</p>
+    </div>
+
+    <? if (page === 'recipes') { ?>
+      <script src="<?= getRecipesBundleUrl() ?>"></script>
+    <? } else if (page === 'meal-production') { ?>
+      <script src="<?= getMealProductionBundleUrl() ?>"></script>
+    <? } else if (page === 'checks') { ?>
+      <script src="<?= getChecksBundleUrl() ?>"></script>
+    <? } ?>
+  </body>
+</html>
+```
+
+`getRecipesBundleUrl()` / etc. can return the Apps Script‑served bundle URLs (e.g. from `ContentService`) as you do today, but split per app.
+
+**Key point:** we keep **one deployment URL**, but load **different bundles** based on query parameters.
 
 ### 6.2 Data API Endpoints
 
@@ -287,21 +334,22 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
 
 ### 7.2 Tactics to Reduce Bundle Size
 
-1. **Code‑split by app**
-   - Ensure each entry point (Recipes, Meal Production, Checks) only loads code relevant to that app.
-   - Use Webpack/Rollup code splitting or multiple bundles:
-     - e.g., `recipes.js`, `mealProduction.js`, `checks.js`.
-   - Shared utilities stay in a small `vendor`/`shared` chunk loaded on demand.
+1. **Code‑split by app via query params (no URL change)**
+   - Keep the current deployment URL and query parameters that testers already use.
+   - In the bundler, define separate entrypoints:
+     - `recipes`: imports Recipes components, templates, and helpers.
+     - `mealProduction`: imports Meal Production‑specific code.
+     - `checks`: imports Storage & Cleaning Checks code.
+   - Map `?page=...` to the right bundle in `index.html` as shown in Section 6.1.
 
 2. **Tree‑shaking and dead‑code elimination**
    - Ensure build is using production mode with tree‑shaking enabled.
    - Replace wildcard imports with scoped imports (e.g., `import debounce from 'lodash/debounce'` instead of `import _ from 'lodash'`).
    - Remove unused helpers / legacy code paths.
 
-3. **Review UI libraries**
-   - If a heavy component library is used, check if we can:
-     - Import individual components instead of full bundle.
-     - Replace heavy components with lighter custom ones for common cases.
+3. **Review UI libraries and embedded templates**
+   - Where possible, only import templates used by a given app into that app’s entrypoint.
+   - If some templates are extremely large and rarely used, consider loading them via API instead of bundling.
 
 4. **Avoid large static data in bundle**
    - If master data is embedded as JS constants, move them to Sheets or JSON served from backend.
@@ -361,7 +409,7 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
 ### Phase 3 – Bundle Size Optimization
 
 - [ ] Enable/verify production mode and tree‑shaking.
-- [ ] Implement per-app entrypoints and code splitting.
+- [ ] Implement per-app entrypoints and code splitting driven by query params.
 - [ ] Run bundle analysis and remove/replace heavy dependencies.
 - [ ] Measure new bundle size (target: ≤ 250 kB gzip initial bundle).
 
@@ -376,7 +424,7 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
 ## 10. Open Questions / Decisions to Align On
 
 1. **Exact routing & endpoints**
-   - Preferred API shapes and versioning? (e.g., `/api/v1/config`).
+   - Confirm final query parameter names / values for each app (e.g., `page=recipes`, `page=meal-production`, `page=checks`) so we align with current URLs.
 2. **Where to store app‑level configuration**
    - Which parts go in Sheet vs hard‑coded config vs JSON blobs.
 3. **Bundle targets per app**
@@ -384,4 +432,4 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
 4. **Analytics / logging**
    - Do we want to log load times (without PII) to monitor real‑world performance?
 
-Once we align on this solution design, I can help derive a more concrete technical task breakdown (issues/PRs) per phase and app.
+Once we align on this solution design, we can derive a concrete technical task breakdown (issues/PRs) per phase and per app.
