@@ -3051,15 +3051,21 @@ const FormView: React.FC<FormViewProps> = ({
 
   const orderedEntryErrors = useMemo(() => {
     if (!orderedEntryEnabled) return null;
-    return validateForm({
-      definition,
-      language,
-      values,
-      lineItems,
-      collapsedRows,
-      collapsedSubgroups
-    });
-  }, [collapsedRows, collapsedSubgroups, definition, language, lineItems, orderedEntryEnabled, values]);
+    if (!definition?.questions?.length) return null;
+    try {
+      return validateForm({
+        definition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        collapsedSubgroups
+      });
+    } catch (err: any) {
+      onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
+      return null;
+    }
+  }, [collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, orderedEntryEnabled, values]);
 
   const orderedEntryValid = useMemo(() => {
     if (!orderedEntryEnabled) return true;
@@ -3102,14 +3108,19 @@ const FormView: React.FC<FormViewProps> = ({
 
   const triggerOrderedEntryValidation = useCallback(
     (target: OrderedEntryTarget, missingFieldPath: string) => {
-      const nextErrors = validateForm({
-        definition,
-        language,
-        values,
-        lineItems,
-        collapsedRows,
-        collapsedSubgroups
-      });
+      let nextErrors: FormErrors = {};
+      try {
+        nextErrors = validateForm({
+          definition,
+          language,
+          values,
+          lineItems,
+          collapsedRows,
+          collapsedSubgroups
+        });
+      } catch (err: any) {
+        onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
+      }
       setErrors(nextErrors);
       errorNavRequestRef.current += 1;
       onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, scope: 'orderedEntry' });
