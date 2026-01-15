@@ -2660,6 +2660,41 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           ? resolveLocalizedString(confirmCfg?.cancelLabel, languageRef.current, '').toString().trim()
           : '';
 
+        const blockFieldRaw = (cfg?.blockWhenFieldId || '').toString().trim();
+        const blockFieldId = blockFieldRaw || '';
+        if (blockFieldId) {
+          const isFlagTruthy = (raw: unknown): boolean => {
+            if (raw === undefined || raw === null) return false;
+            if (typeof raw === 'boolean') return raw;
+            if (typeof raw === 'number') return raw !== 0;
+            if (Array.isArray(raw)) return raw.length > 0;
+            const text = raw.toString().trim().toLowerCase();
+            if (!text) return false;
+            if (text === '0' || text === 'false' || text === 'no' || text === 'n' || text === 'off') return false;
+            return true;
+          };
+          const liveValues = valuesRef.current || {};
+          const snapshot = selectedRecordSnapshotRef.current;
+          let flagValue: unknown;
+          if (Object.prototype.hasOwnProperty.call(liveValues, blockFieldId)) {
+            flagValue = (liveValues as any)[blockFieldId];
+          } else if (snapshot?.values && Object.prototype.hasOwnProperty.call(snapshot.values, blockFieldId)) {
+            flagValue = (snapshot.values as any)[blockFieldId];
+          }
+          if (isFlagTruthy(flagValue)) {
+            setStatus(
+              tSystem(
+                'actions.updateBlockedByFlag',
+                languageRef.current,
+                'Action not allowed while this record is marked as in use.'
+              )
+            );
+            setStatusLevel('error');
+            logEvent('button.updateRecord.blocked.byFlag', { buttonId: baseId, qIdx: qIdx ?? null, fieldId: blockFieldId });
+            return;
+          }
+        }
+
         const run = () => {
           const busyTitle = btn ? resolveLabel(btn, languageRef.current) : (baseId || '');
           void runUpdateRecordAction(

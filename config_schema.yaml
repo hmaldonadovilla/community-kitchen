@@ -352,6 +352,14 @@ components:
                     - Does not support updating LINE_ITEM_GROUP/FILE_UPLOAD/BUTTON fields.
               required: []
               description: Fields to update.
+            blockWhenFieldId:
+              type: string
+              description: |
+                Optional field id used as a boolean guard for this action.
+                When set, the web app will prevent this button from running if the current record's value for that field is truthy
+                (non-empty string/array/boolean/number  = 0).
+                Typical use: point to a "BLOCKED" or "IN_USE" field that is set by other flows when the record is used as source data,
+                so "Deactivate" buttons can be disabled while that flag is set.
             confirm:
               type: object
               properties:

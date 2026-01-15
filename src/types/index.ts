@@ -285,6 +285,14 @@ export interface UpdateRecordButtonConfig {
     values?: Record<string, DefaultValue | null>;
   };
   /**
+   * Optional field id used as a boolean guard for this action.
+   * When set, the web app will prevent this button from running if the current record's value for that field is truthy
+   * (non-empty string/array/boolean/number  = 0).
+   * Typical use: point to a "BLOCKED" or "IN_USE" field that is set by other flows when the record is used as source data,
+   * so "Deactivate" buttons can be disabled while that flag is set.
+   */
+  blockWhenFieldId?: string;
+  /**
    * Optional confirmation dialog shown before applying the update.
    */
   confirm?: ButtonConfirmConfig;
