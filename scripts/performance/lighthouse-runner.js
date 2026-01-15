@@ -18,7 +18,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const lighthouse = require('lighthouse');
+
+// Lighthouse v13+ ships as an ES module. When required() from CommonJS, the
+// actual function may be exposed as `module.default` instead of the module
+// itself being callable. Normalise here so the rest of the script can always
+// call `lighthouse(url, options, config)`.
+const lighthouseModule = require('lighthouse');
+const lighthouse = lighthouseModule.default || lighthouseModule;
+
 const chromeLauncher = require('chrome-launcher');
 
 /**
