@@ -22,6 +22,11 @@ export type UpdateRecordActionRequest = {
   navigateTo: UpdateRecordActionNavigateTo;
   set: UpdateRecordActionSet;
   busyTitle?: string;
+  /**
+   * Optional guard for actions that attempt to deactivate a source record.
+   * When true, the action should be blocked if the target data source is flagged as `blocked`.
+   */
+  isDeactivation?: boolean;
 };
 
 export type UpdateRecordActionDeps = {
@@ -105,6 +110,34 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       deps.setStatusLevel('error');
       deps.logEvent('button.updateRecord.blocked.noRecord', { buttonId: req.buttonId, qIdx: req.qIdx ?? null });
       return;
+    }
+
+    // Optional guard: prevent deactivation when the target data source is blocked.
+    if (req.isDeactivation) {
+      const targetDataSourceId = (deps.definition?.dataSources || [])
+        .map(ds => (ds?.id || '').toString())
+        .find(id => !!id);
+      const blocked = (deps.definition?.dataSources || []).some(ds => {
+        if (!ds || !ds.id) return false;
+        const id = (ds.id || '').toString();
+        return !!id && ds.blocked === true;
+      });
+      if (blocked) {
+        const msg = deps.tSystem(
+          'actions.deactivate.blockedByActiveUsage',
+          language,
+          'This record cannot be deactivated while it is being used as source data for another record that is not finalised.'
+        );
+        deps.setStatus(msg);
+        deps.setStatusLevel('error');
+        deps.logEvent('button.updateRecord.blocked.deactivation', {
+          buttonId: req.buttonId,
+          qIdx: req.qIdx ?? null,
+          recordId,
+          dataSourceId: targetDataSourceId || null
+        });
+        return;
+      }
     }
 
     const waitForBackgroundSaves = async (reason: string): Promise<{ ok: boolean; message?: string }> => {

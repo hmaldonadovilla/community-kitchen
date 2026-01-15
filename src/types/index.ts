@@ -1112,6 +1112,17 @@ export interface DataSourceConfig {
    * When set, only rows whose status value matches one of these strings (case-insensitive) are returned.
    */
   statusAllowList?: string[];
+  /**
+   * Optional block flag used to prevent deactivation when the data source is actively referenced by
+   * another record that is not yet in a finalised state.
+   *
+   * Notes:
+   * - When `true`, custom button actions that attempt to deactivate the source should surface a user-facing
+   *   error and no-op.
+   * - The block is expected to be managed by the form workflow (set when a dependent record starts editing,
+   *   cleared when that record reaches a final status such as `Closed`).
+   */
+  blocked?: boolean;
   projection?: string[]; // limit columns returned
   limit?: number; // optional max rows
   mapping?: Record<string, string>; // optional map from source column -> target field id
