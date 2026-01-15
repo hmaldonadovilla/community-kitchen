@@ -310,6 +310,91 @@ Frontend: when `ok === false` or network error:
 - Set `phase = 'error'` and `allowRetry = true`.
 - Use generic copy, avoid exposing low‑level errors.
 
+### 6.4 WebFormDefinition caching (server‑side)
+
+To keep `doGet()` lean for production, we cache **form definitions** on the server:
+
+- Cache location:
+  - Apps Script `CacheService` + `DocumentProperties` (via `CacheEtagManager`).
+- What is cached:
+  - `WebFormDefinition` per form key (`Config: Recipes`, etc.), including
+    - questions, options, visibility/validation rules, list view config, app header, steps, dedup rules.
+  - **No submission data** (no responses rows, no per-record values).
+- Cache key:
+  - `DEF:${cacheVersion}:${formKey}` where `cacheVersion` is managed by `CacheEtagManager`.
+- Lifetime:
+  - Long‑lived; definitions stay cached until `cacheVersion` is bumped (e.g. by `createAllForms`) or TTL expires.
+  - `CacheService` TTL set to ~24h for definitions; versioning is the primary invalidation mechanism.
+
+Implementation outline (in `WebFormService`):
+
+```ts
+private getOrBuildDefinition(formKey?: string): WebFormDefinition {
+  const keyBase = (formKey || '').toString().trim() || '__DEFAULT__';
+  const formCacheKey = this.cacheManager.makeCacheKey('DEF', [keyBase]);
+  const startedAt = Date.now();
+
+  try {
+    const cached = this.cacheManager.cacheGet<WebFormDefinition>(formCacheKey);
+    if (cached) {
+      debugLog('definition.cache.hit', { formKey: keyBase, elapsedMs: Date.now() - startedAt });
+      return cached;
+    }
+  } catch (_) {
+    // Fall through to build
+  }
+
+  const def = this.buildDefinition(formKey);
+  try {
+    this.cacheManager.cachePut(formCacheKey, def, 60 * 60 * 24); // 24h TTL
+    debugLog('definition.cache.miss', {
+      formKey: keyBase,
+      title: def.title,
+      questionCount: def.questions?.length || 0,
+      elapsedMs: Date.now() - startedAt
+    });
+  } catch (_) {
+    // Ignore cache write failures
+  }
+  return def;
+}
+
+public renderForm(formKey?: string, _params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
+  debugLog('renderForm.start', { requestedKey: formKey, mode: 'react' });
+  const def = this.getOrBuildDefinition(formKey);
+  const targetKey = formKey || def.title;
+  const bootstrap = null; // list data fetched later via API/client
+  const html = buildReactTemplate(def, targetKey, bootstrap);
+  // ...
+}
+```
+
+Bumping cache version (invalidating definitions) is handled by `WebFormService.invalidateServerCache`, which is already called from `FormGenerator.createAllForms` after `Create/Update All Forms` runs.
+
+### 6.5 Definition warm‑up trigger
+
+To avoid slow first hits after deployments, we provide a warm‑up entrypoint:
+
+- `WebFormService.warmDefinitions()`:
+  - Iterates over all forms from `Dashboard.getForms()`.
+  - Calls `getOrBuildDefinition(form.configSheet || form.title)` to populate the definition cache.
+- Exposed in `src/index.ts` as:
+
+```ts
+export function warmDefinitions(): void {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  service.warmDefinitions();
+}
+```
+
+Operations:
+- Attach a **time‑based trigger** to `warmDefinitions` (e.g. nightly/hourly in production) so definitions are prebuilt at low‑traffic times.
+- Run `Create/Update All Forms` when config changes; it:
+  - Regenerates forms and updates dashboard app URLs.
+  - Calls `WebFormService.invalidateServerCache('createAllForms')` to bump cache version and clear old definitions.
+  - After this, the next scheduled `warmDefinitions` (or first request) rebuilds definitions under the new version.
+
 ---
 
 ## 7. Bundle Size Strategy & Targets
@@ -394,17 +479,19 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
 
 ### Phase 1 – Frontend Shell & Loading Experience
 
-- [ ] Introduce `AppInitializer` and loading state machine.
-- [ ] Implement shared `LoadingScreen` component with required copy.
-- [ ] Render shell + skeletons for Recipes, Meal Production, Checks.
-- [ ] Wire 8s/10s timers and Retry button (retry can initially just re-run the same data function; backend can remain as is during early testing).
+- [x] Introduce `AppInitializer` (`Root`) and loading state machine.
+- [x] Implement shared `LoadingScreen` component with required copy.
+- [x] Render shell + skeleton entry (static HTML shell + React overlay).
+- [x] Wire 8s/10s timers and Retry button (retry currently re-runs the boot state machine; next phases will hook real data reload).
 
-### Phase 2 – Backend Refactor (`doGet()` + APIs)
+### Phase 2 – Backend Refactor (`doGet()` + APIs + Definition Cache)
 
-- [ ] Refactor `doGet()` to minimal HTML shell only (no Sheet reads).
-- [ ] Implement `/api/config`, `/api/recipes`, `/api/meal-production`, `/api/checklists`.
-- [ ] Move existing Sheet/data logic to those APIs.
-- [ ] Implement `CacheService` usage for reference data.
+- [x] Stop server-side list/bootstrap prefetch in `doGet()` (no list pagination in `renderForm`).
+- [x] Implement server-side `WebFormDefinition` caching via `CacheService` + `CacheEtagManager`.
+- [x] Expose `warmDefinitions()` Apps Script entrypoint for scheduled warm-up.
+- [ ] Implement `/api/config`, `/api/recipes`, `/api/meal-production`, `/api/checklists` for client-driven data loading.
+- [ ] Move remaining heavy data reads from `doGet()` to those APIs.
+- [ ] Implement `CacheService` usage for reference data in the new APIs.
 
 ### Phase 3 – Bundle Size Optimization
 
