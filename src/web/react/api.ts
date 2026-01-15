@@ -410,3 +410,6 @@ export interface BootstrapContext {
   formKey: string;
   record?: WebFormSubmission;
 }
+
+export const fetchBootstrapContextApi = (formKey?: string | null): Promise<BootstrapContext> =>
+  runAppsScript<BootstrapContext>('fetchBootstrapContext', formKey ?? null);

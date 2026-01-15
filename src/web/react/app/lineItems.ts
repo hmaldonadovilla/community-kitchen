@@ -269,7 +269,17 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
       });
 
       if (!parsedRows.length && q.lineItemConfig?.addMode !== 'overlay' && q.lineItemConfig?.addMode !== 'auto') {
-        const minRows = Math.max(1, q.lineItemConfig?.minRows || 1);
+        const rawMinRows = q.lineItemConfig?.minRows;
+        const minRows = (() => {
+          if (rawMinRows === undefined || rawMinRows === null) return 0;
+          const parsed = Number(rawMinRows);
+          if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return 0;
+          return Math.max(0, Math.floor(parsed));
+        })();
+        if (!minRows) {
+          state[q.id] = parsedRows;
+          return;
+        }
         for (let i = 0; i < minRows; i += 1) {
           const newRowId = `${q.id}_${i}_${Math.random().toString(16).slice(2)}`;
           parsedRows.push({ id: newRowId, values: {} });

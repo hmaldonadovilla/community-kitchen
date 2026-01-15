@@ -126,7 +126,9 @@ const computeDedupKeyFieldIdMap = (rulesRaw: any): Record<string, true> => {
     if (onConflict !== 'reject') return;
     keys.forEach((k: any) => {
       const id = (k || '').toString().trim();
-      if (id) map[id] = true;
+      if (!id) return;
+      map[id] = true;
+      map[id.toLowerCase()] = true;
     });
   });
   return map;
@@ -358,28 +360,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         // even if the debounced autosave effect hasn't run yet.
         autoSaveDirtyRef.current = true;
 
-        // For top-level dedup keys (reject rules): hold autosave until dedup check completes.
+        // For top-level dedup keys (reject rules): hold autosave; run dedup check on blur only.
         const isDedupKey =
           (fieldId && dedupKeyFieldIdsRef.current[fieldId]) || (fieldPath && dedupKeyFieldIdsRef.current[fieldPath]);
         if (args?.scope === 'top' && isDedupKey) {
-          // Cancel any pending/in-flight dedup check; the next render will schedule a new one for the updated signature.
-          if (dedupCheckTimerRef.current) {
-            globalThis.clearTimeout(dedupCheckTimerRef.current);
-            dedupCheckTimerRef.current = null;
+          if (dedupConflictRef.current) {
+            dedupConflictRef.current = null;
+            setDedupConflict(null);
           }
-          dedupCheckSeqRef.current += 1; // invalidate in-flight responses
-          lastDedupCheckedSignatureRef.current = ''; // force re-check for next signature
-          dedupHoldRef.current = true;
-          autoSaveDirtyRef.current = true;
-          if (autoSaveTimerRef.current) {
-            globalThis.clearTimeout(autoSaveTimerRef.current);
-            autoSaveTimerRef.current = null;
+          if (args?.event === 'blur') {
+            // Cancel any pending/in-flight dedup check; the next render will schedule a new one.
+            if (dedupCheckTimerRef.current) {
+              globalThis.clearTimeout(dedupCheckTimerRef.current);
+              dedupCheckTimerRef.current = null;
+            }
+            dedupCheckSeqRef.current += 1; // invalidate in-flight responses
+            lastDedupCheckedSignatureRef.current = ''; // force re-check for next signature
+            dedupCheckRequestedRef.current = true;
+            dedupHoldRef.current = true;
+            autoSaveDirtyRef.current = true;
+            if (autoSaveTimerRef.current) {
+              globalThis.clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            setDraftSave({ phase: 'idle' });
+            logEvent('dedup.check.requested.blur', {
+              fieldId: fieldId || fieldPath || null,
+              fieldPath: fieldPath || fieldId || null
+            });
+            setDedupCheckRequestTick(prev => prev + 1);
+          } else if (!dedupHoldRef.current) {
+            // Keep autosave held while typing, but do not run dedup precheck yet.
+            dedupHoldRef.current = true;
+            autoSaveDirtyRef.current = true;
+            if (autoSaveTimerRef.current) {
+              globalThis.clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            setDraftSave({ phase: 'idle' });
+            logEvent('autosave.hold.dedupKeyChange', {
+              fieldId: fieldId || fieldPath || null,
+              fieldPath: fieldPath || fieldId || null
+            });
           }
-          setDraftSave({ phase: 'idle' });
-          logEvent('autosave.hold.dedupKeyChange', {
-            fieldId: fieldId || fieldPath || null,
-            fieldPath: fieldPath || fieldId || null
-          });
         }
 
         // Warnings UX: recompute and show inline warnings for the field that just blurred.
@@ -513,22 +536,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   const formSubmitActionRef = useRef<(() => void) | null>(null);
   const formBackActionRef = useRef<(() => void) | null>(null);
+  const orderedEntryEnabled = definition.submitValidation?.enforceFieldOrder === true;
   const [guidedUiState, setGuidedUiState] = useState<{
     activeStepId: string | null;
     activeStepIndex: number;
     stepCount: number;
     isFirst: boolean;
     isFinal: boolean;
+    forwardGateSatisfied: boolean;
     backAllowed: boolean;
     backVisible: boolean;
     backLabel: string;
     stepSubmitLabel?: string | LocalizedString;
   } | null>(null);
+  const [formIsValid, setFormIsValid] = useState<boolean>(() => (orderedEntryEnabled ? false : true));
   const vvBottomRef = useRef<number>(-1);
   const bottomBarHeightRef = useRef<number>(-1);
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
     phase: 'idle'
   }));
+  const [dedupCheckRequestTick, setDedupCheckRequestTick] = useState(0);
+
+  useEffect(() => {
+    if (!orderedEntryEnabled) {
+      setFormIsValid(true);
+    }
+  }, [orderedEntryEnabled]);
 
   const autoSaveTimerRef = useRef<number | null>(null);
   const autoSaveDirtyRef = useRef<boolean>(false);
@@ -579,6 +612,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
    */
   const createFlowUserEditedRef = useRef<boolean>(false);
   const dedupHoldRef = useRef<boolean>(false);
+  const dedupCheckRequestedRef = useRef<boolean>(false);
   // Initialize immediately so the very first user interaction can be dedup-held (before effects run).
   const dedupKeyFieldIdsRef = useRef<Record<string, true>>(computeDedupKeyFieldIdMap((definition as any)?.dedupRules));
 
@@ -643,17 +677,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           logEvent('autosave.armed.userEdit', { fieldPath });
         }
 
-        if (dedupKeyFieldIdsRef.current[fieldPath]) {
-          dedupHoldRef.current = true;
-          autoSaveDirtyRef.current = true;
-          if (autoSaveTimerRef.current) {
-            globalThis.clearTimeout(autoSaveTimerRef.current);
-            autoSaveTimerRef.current = null;
-          }
-          // Avoid confusing "Draft saved" banners while we're validating dedup keys.
-          setDraftSave({ phase: 'idle' });
-          logEvent('autosave.hold.dedupKeyChange', { fieldPath });
-        }
+        // Dedup checks are triggered on blur; avoid holding autosave here.
       } catch (_) {
         // ignore
       }
@@ -2954,34 +2978,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     [definition, values]
   );
 
-  const dedupKeyFieldIds = useMemo(() => {
-    const rules: any[] = Array.isArray((definition as any)?.dedupRules) ? ((definition as any).dedupRules as any[]) : [];
-    if (!rules.length) return [] as string[];
-    const ids = new Set<string>();
-    rules.forEach(rule => {
-      if (!rule) return;
-      const keys = Array.isArray(rule.keys) ? rule.keys : [];
-      if (!keys.length) return;
-      const onConflict = (rule.onConflict || 'reject').toString().trim().toLowerCase();
-      if (onConflict !== 'reject') return;
-      keys.forEach((k: any) => {
-        const id = (k || '').toString().trim();
-        if (id) ids.add(id);
-      });
-    });
-    return Array.from(ids);
-  }, [definition]);
+  const dedupKeyFieldIdMap = useMemo(
+    () => computeDedupKeyFieldIdMap((definition as any)?.dedupRules),
+    [definition]
+  );
 
   useEffect(() => {
-    const next: Record<string, true> = {};
-    (dedupKeyFieldIds || []).forEach(id => {
-      const k = (id || '').toString().trim();
-      if (k) next[k] = true;
-    });
-    dedupKeyFieldIdsRef.current = next;
-  }, [dedupKeyFieldIds]);
-
-  const dedupLockActive = view === 'form' && Boolean(dedupConflict) && dedupKeyFieldIds.length > 0;
+    dedupKeyFieldIdsRef.current = dedupKeyFieldIdMap;
+  }, [dedupKeyFieldIdMap]);
 
   useEffect(() => {
     dedupSignatureRef.current = dedupSignature;
@@ -2990,7 +2994,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   // Dedup precheck (server-side) so we can block duplicate creation early (before autosave/submit).
   useEffect(() => {
     // Only relevant while editing.
-    if (view !== 'form') return;
+    if (view !== 'form') {
+      dedupCheckRequestedRef.current = false;
+      return;
+    }
+
+    if (!dedupCheckRequestedRef.current) return;
+    dedupCheckRequestedRef.current = false;
 
     const signature = (dedupSignature || '').toString();
     const existingRecordId = resolveExistingRecordId({
@@ -3117,7 +3127,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     selectedRecordId,
     selectedRecordSnapshot,
     lastSubmissionMeta?.id,
-    view
+    view,
+    dedupCheckRequestTick
   ]);
 
   const performAutoSave: (reason: string) => Promise<void> = useCallback(
@@ -4714,7 +4725,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
       const cfg: any = btn ? (btn as any).button : null;
       const action = (cfg?.action || '').toString().trim();
-      return action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate' || action === 'openUrlField';
+      return (
+        action === 'renderDocTemplate' ||
+        action === 'renderMarkdownTemplate' ||
+        action === 'renderHtmlTemplate' ||
+        action === 'openUrlField' ||
+        action === 'updateRecord'
+      );
     };
 
     const rowNumberHint = Number((row as any).__rowNumber);
@@ -5107,6 +5124,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       </div>
     ) : null;
 
+  const submitTopErrorMessage = resolveLocalizedString(
+    definition.submitValidation?.submitTopErrorMessage,
+    language,
+    ''
+  )
+    .toString()
+    .trim();
   const validationTopNotice =
     view === 'form' &&
     validationAttempted &&
@@ -5116,6 +5140,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         errors={errors}
         warnings={validationWarnings.top}
+        errorMessageOverride={submitTopErrorMessage || undefined}
         onDismiss={dismissValidationNotice}
         onNavigateToField={navigateToFieldFromHeaderNotice}
       />
@@ -5175,6 +5200,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const showGuidedBack = view === 'form' && !!guidedUiState?.backVisible;
   const guidedBackLabel = guidedUiState?.backLabel || tSystem('actions.back', language, 'Back');
   const guidedBackDisabled = guidedUiState ? !guidedUiState.backAllowed : false;
+  const orderedSubmitDisabled = orderedEntryEnabled
+    ? guidedUiState && !guidedUiState.isFinal
+      ? !guidedUiState.forwardGateSatisfied
+      : !formIsValid
+    : false;
+  const submitDisabledTooltip =
+    view === 'form' && orderedEntryEnabled && orderedSubmitDisabled && !dedupChecking && !dedupConflict
+      ? tSystem('actions.submitDisabledTooltip', language, 'Complete all required fields to activate.')
+      : '';
 
   return (
     <div
@@ -5241,7 +5275,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
+        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
+        submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
@@ -5269,6 +5304,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       {view === 'form' ? (
         <FormView
           definition={definition}
+          dedupKeyFieldIdMap={dedupKeyFieldIdMap}
           language={language}
           values={values}
           setValues={setValues}
@@ -5279,8 +5315,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           guidedBackActionRef={formBackActionRef}
           navigateToFieldRef={formNavigateToFieldRef}
           submitting={submitting || updateRecordBusyOpen || isClosedRecord || Boolean(recordLoadingId) || Boolean(recordStale)}
-          dedupLockActive={dedupLockActive}
-          dedupKeyFieldIds={dedupKeyFieldIds}
           errors={errors}
           setErrors={setErrors}
           status={status}
@@ -5309,6 +5343,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           reportBusyId={reportOverlay.buttonId || null}
           onUserEdit={handleUserEdit}
           onDiagnostic={logEvent}
+          onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
         />
       ) : null}
@@ -5408,7 +5443,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
+        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
+        submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}

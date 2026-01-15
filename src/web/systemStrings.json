@@ -61,6 +61,11 @@
     "submit": { "en": "Submit", "fr": "Envoyer", "nl": "Verzenden" },
     "submitting": { "en": "Submitting…", "fr": "Envoi…", "nl": "Verzenden…" },
     "submittedClosed": { "en": "Submitted and closed.", "fr": "Envoyé et clôturé.", "nl": "Verzonden en gesloten." },
+    "submitDisabledTooltip": {
+      "en": "Complete all required fields to activate.",
+      "fr": "Complétez tous les champs requis pour activer.",
+      "nl": "Vul alle verplichte velden in om te activeren."
+    },
     "newRecord": { "en": "New record", "fr": "Nouvel enregistrement", "nl": "Nieuw record" },
     "copyCurrentRecord": { "en": "Copy current record", "fr": "Copier l'enregistrement actuel", "nl": "Huidig record kopiëren" },
     "viewSummary": { "en": "View summary", "fr": "Voir le résumé", "nl": "Samenvatting bekijken" },

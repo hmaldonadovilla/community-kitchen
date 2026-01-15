@@ -60,21 +60,23 @@ const summarizeOptionMapRefs = (def: WebFormDefinition | undefined): {
 
 const mount = () => {
   const globalAny = globalThis as any;
-  const def: WebFormDefinition | undefined = globalAny.__WEB_FORM_DEF__;
+  const def: WebFormDefinition | null | undefined = globalAny.__WEB_FORM_DEF__;
   const formKey: string = globalAny.__WEB_FORM_KEY__ || (def && def.title) || '';
   const record: any = globalAny.__WEB_FORM_RECORD__;
   const rootEl = document.getElementById('react-prototype-root');
-  if (!rootEl || !def) return;
+  if (!rootEl) return;
 
   if (debugEnabled() && typeof console !== 'undefined' && typeof console.info === 'function') {
     try {
       console.info('[ReactForm]', 'mount', {
         formKey,
-        questions: Array.isArray((def as any).questions) ? (def as any).questions.length : 0
+        questions: def && Array.isArray((def as any).questions) ? (def as any).questions.length : 0
       });
-      const summary = summarizeOptionMapRefs(def);
-      if (summary.total > 0) {
-        console.info('[ReactForm][OptionMapRef]', 'summary', summary);
+      if (def) {
+        const summary = summarizeOptionMapRefs(def);
+        if (summary.total > 0) {
+          console.info('[ReactForm][OptionMapRef]', 'summary', summary);
+        }
       }
     } catch (_) {
       // ignore logging failures
@@ -82,7 +84,8 @@ const mount = () => {
   }
 
   const root = createRoot(rootEl);
-  root.render(<App definition={def} formKey={formKey} record={record} />);
+  const Root = require('./Root').default as typeof import('./Root').Root;
+  root.render(<Root definition={def ?? null} formKey={formKey} record={record} />);
 };
 
 if (typeof document !== 'undefined') {

@@ -7,9 +7,10 @@ export const ValidationHeaderNotice: React.FC<{
   language: LangCode;
   errors: FormErrors;
   warnings: Array<{ message: string; fieldPath: string }>;
+  errorMessageOverride?: string;
   onDismiss: () => void;
   onNavigateToField: (fieldPath: string) => void;
-}> = ({ language, errors, warnings, onDismiss, onNavigateToField }) => {
+}> = ({ language, errors, warnings, errorMessageOverride, onDismiss, onNavigateToField }) => {
   const errorKeys = useMemo(() => Object.keys(errors || {}), [errors]);
   const errorCount = errorKeys.length;
   const warningCount = Array.isArray(warnings) ? warnings.length : 0;
@@ -18,6 +19,9 @@ export const ValidationHeaderNotice: React.FC<{
 
   const firstErrorKey = errorCount ? errorKeys[0] : null;
   const hideLabel = tSystem('common.hide', language, 'Hide');
+  const errorMessage =
+    (errorMessageOverride || '').toString().trim() ||
+    tSystem('validation.fixErrors', language, 'You are almost done. Some required checks are missing. Review the highlighted sections.');
 
   return (
     <div className="ck-validation-notice">
@@ -31,11 +35,7 @@ export const ValidationHeaderNotice: React.FC<{
               onNavigateToField(firstErrorKey);
             }}
           >
-            {tSystem(
-              'validation.fixErrors',
-              language,
-              'You are almost done. Some required checks are missing. Review the highlighted sections.'
-            )}
+            {errorMessage}
           </button>
           <button type="button" className="ck-validation-banner__hide" onClick={onDismiss}>
             {hideLabel}
@@ -78,6 +78,5 @@ export const ValidationHeaderNotice: React.FC<{
     </div>
   );
 };
-
 
 

@@ -508,6 +508,22 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+    - Want **ordered submit validation** (required fields must be completed in order + Submit disabled until valid)? Configure `submitValidation` in the dashboard JSON:
+
+      ```json
+      {
+        "submitValidation": {
+          "enforceFieldOrder": true,
+          "submitTopErrorMessage": {
+            "en": "Please complete the required fields above before submitting."
+          }
+        }
+      }
+      ```
+
+      - In guided steps, **Next** remains clickable once the step forward gate is satisfied.
+      - `submitTopErrorMessage` customizes the top error banner shown after a submit attempt (localized).
+
     - Want to **override the Summary button label**? Set `summaryButtonLabel` (localized). Useful when “Summary” should read like “Checklist”.
 
       ```json
@@ -1314,6 +1330,9 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 - Publish a **Web app** deployment pointing to `doGet`.
 - Share the deployment URL with volunteers; submissions will be writtendirectly to the destination tab and support line items + file uploads.
+- `doGet` now returns a **minimal shell**; the full form definition is fetched client-side via `fetchBootstrapContext`. Ensure that function is included in the deployment and that `warmDefinitions` is scheduled (recommended) to avoid cold-start delays.
+- **Operational note**: run `createAllForms()` and `warmDefinitions()` **only after config/dashboard changes**. For code-only changes, rebuild + re-deploy the bundle; no need to re-run those functions.
+- Optional: add `?app=<bundleKey>` to pick an app-specific React bundle (defaults to `full`). Bundle keys come from filenames you add under `src/web/react/entrypoints` (converted to kebab-case). If no entrypoints exist, only the `full` bundle is available.
 - **Destination “Responses” headers (stable keys)**: The destination tab stores field columns using the convention **`Label [ID]`** (example: `Meal Number [Q5]`). The bracket token is the canonical key, so labels can repeat and can be renamed without breaking storage.
 - The web app supports list views (paginated) and edit-in-place. The frontenduses `fetchSubmissions` and `fetchSubmissionById` to open existing records with`createdAt`/`updatedAt`. Save calls `saveSubmissionWithId` (or client helper`submitWithDedup`), which enforces dedup rules and returns any conflictmessages to display.
 - Validation errors surface in-context: the first invalid field is highlightedand auto-scrolled into view, and a red banner appears under the submit buttonon long forms.

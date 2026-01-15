@@ -17,7 +17,7 @@ import { SubmissionService } from './webform/submissions';
 import { ListingService } from './webform/listing';
 import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
-import { buildReactTemplate } from './webform/template';
+import { buildReactShellTemplate } from './webform/template';
 import { loadDedupRules, computeDedupSignature } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
@@ -57,22 +57,61 @@ export class WebFormService {
     return def;
   }
 
-  public renderForm(formKey?: string, _params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
-    debugLog('renderForm.start', { requestedKey: formKey, mode: 'react' });
+  private getOrBuildDefinition(formKey?: string): WebFormDefinition {
+    const keyBase = (formKey || '').toString().trim() || '__DEFAULT__';
+    const formCacheKey = this.cacheManager.makeCacheKey('DEF', [keyBase]);
+    const startedAt = Date.now();
+
+    try {
+      const cached = this.cacheManager.cacheGet<WebFormDefinition>(formCacheKey);
+      if (cached) {
+        debugLog('definition.cache.hit', { formKey: keyBase, elapsedMs: Date.now() - startedAt });
+        return cached;
+      }
+    } catch (_) {
+      // Ignore cache read failures; fall back to building the definition.
+    }
+
     const def = this.buildDefinition(formKey);
-    const targetKey = formKey || def.title;
-    const bootstrap = this.buildBootstrap(targetKey, def);
-    const html = buildReactTemplate(def, targetKey, bootstrap);
+    try {
+      this.cacheManager.cachePut(formCacheKey, def, 60 * 60 * 24); // 24h TTL; versioning handled by CacheEtagManager.
+      debugLog('definition.cache.miss', {
+        formKey: keyBase,
+        title: def.title,
+        questionCount: def.questions?.length || 0,
+        elapsedMs: Date.now() - startedAt
+      });
+    } catch (_) {
+      // Ignore cache write failures; definition is still valid for this request.
+    }
+    return def;
+  }
+
+  public fetchBootstrapContext(formKey?: string): { definition: WebFormDefinition; formKey: string } {
+    const def = this.getOrBuildDefinition(formKey);
+    const resolvedKey = (formKey || '').toString().trim() || def.title || '__DEFAULT__';
+    debugLog('definition.fetch', { formKey: resolvedKey, questions: def.questions?.length || 0 });
+    return { definition: def, formKey: resolvedKey };
+  }
+
+  public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
+    const targetKey = (formKey || '').toString().trim();
+    const bundleTarget = ((params as any)?.app ?? (params as any)?.page ?? '').toString().trim();
+    debugLog('renderForm.start', {
+      requestedKey: targetKey || '__DEFAULT__',
+      mode: 'react-shell',
+      bundleTarget: bundleTarget || 'full'
+    });
+    const html = buildReactShellTemplate(targetKey, bundleTarget);
     debugLog('renderForm.htmlBuilt', {
-      formKey: targetKey,
-      questionCount: def.questions.length,
-      languages: def.languages,
+      formKey: targetKey || '__DEFAULT__',
+      bundleTarget: bundleTarget || 'full',
       htmlLength: html.length,
       hasInitCall: html.includes('init();'),
       scriptCloseCount: (html.match(/<\/script/gi) || []).length
     });
     const output = HtmlService.createHtmlOutput(html);
-    output.setTitle(def.title || 'Form');
+    output.setTitle(targetKey || 'Community Kitchen');
     return output;
   }
 
@@ -185,6 +224,36 @@ export class WebFormService {
 
   public static invalidateServerCache(reason?: string): void {
     CacheEtagManager.invalidate(getDocumentProperties(), reason);
+  }
+
+  /**
+   * Optional warm-up hook to be called from a time-based trigger.
+   *
+   * This prebuilds and caches WebFormDefinition objects for all forms so
+   * that initial user hits see a warmed definition cache.
+   */
+  public warmDefinitions(): void {
+    const forms = this.dashboard.getForms();
+    const startedAt = Date.now();
+    forms.forEach(form => {
+      try {
+        const def = this.getOrBuildDefinition(form.configSheet || form.title);
+        debugLog('definition.warm', {
+          formKey: form.configSheet || form.title,
+          title: def.title,
+          questions: def.questions?.length || 0
+        });
+      } catch (err: any) {
+        debugLog('definition.warm.error', {
+          formKey: form.configSheet || form.title,
+          message: err?.message || err?.toString?.() || 'unknown'
+        });
+      }
+    });
+    debugLog('definition.warm.completed', {
+      count: forms.length,
+      elapsedMs: Date.now() - startedAt
+    });
   }
 
   public fetchDataSource(

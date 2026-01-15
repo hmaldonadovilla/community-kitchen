@@ -1,8 +1,9 @@
 import { FormGenerator } from './services/FormGenerator';
 import { ConfigSheet } from './config/ConfigSheet';
 import { WebFormService } from './services/WebFormService';
-import { WebFormSubmission } from './types';
+import { WebFormDefinition, WebFormSubmission } from './types';
 import { bumpTemplateCacheEpoch } from './services/webform/followup/templateCacheEpoch';
+import { renderReactBundle } from './services/webform/bundles';
 
 export function setup(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -45,6 +46,19 @@ export function translateAllResponses(): void {
   Browser.msgBox('Translation Complete', results.join('\n\n'), Browser.Buttons.OK);
 }
 
+/**
+ * Optional scheduled warm-up entrypoint.
+ *
+ * Attach a time-based trigger to this function in production to prebuild and
+ * cache WebFormDefinition objects for all forms. This keeps doGet() lean for
+ * end-users by avoiding per-request config parsing on large sheets.
+ */
+export function warmDefinitions(): void {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  service.warmDefinitions();
+}
+
 export function onConfigEdit(e: GoogleAppsScript.Events.SheetsOnEdit): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ConfigSheet.handleOptionEdit(ss, e);
@@ -56,17 +70,30 @@ export function onResponsesEdit(e: GoogleAppsScript.Events.SheetsOnEdit): void {
   service.onResponsesEdit(e);
 }
 
-export function doGet(e: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
+export function doGet(
+  e: GoogleAppsScript.Events.DoGet
+): GoogleAppsScript.HTML.HtmlOutput | GoogleAppsScript.Content.TextOutput {
+  const params = e?.parameter || {};
+  const bundle = (params.bundle || '').toString().trim().toLowerCase();
+  if (bundle === 'react') {
+    return renderReactBundle((params.app ?? params.page ?? '').toString());
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
-  const formKey = e?.parameter?.form;
-  return service.renderForm(formKey, e?.parameter);
+  const formKey = params.form;
+  return service.renderForm(formKey, params);
 }
 
 export function submitWebForm(formObject: any): { success: boolean; message: string } {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.submitWebForm(formObject);
+}
+
+export function fetchBootstrapContext(formKey?: string): { definition: WebFormDefinition; formKey: string } {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchBootstrapContext(formKey);
 }
 
 // New endpoints (scaffolding)
