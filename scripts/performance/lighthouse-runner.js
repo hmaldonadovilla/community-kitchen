@@ -28,8 +28,21 @@ function parseArgs(argv) {
   const args = {};
   for (const arg of argv) {
     if (!arg.startsWith('--')) continue;
-    const [key, value] = arg.substring(2).split('=');
-    args[key] = value ?? true;
+    const eqIndex = arg.indexOf('=');
+    let key;
+    let value;
+
+    if (eqIndex === -1) {
+      // Flag without explicit value, e.g. "--verbose"
+      key = arg.substring(2);
+      value = true;
+    } else {
+      // "--key=value" → key: substring after "--" up to "=", value: everything after "="
+      key = arg.substring(2, eqIndex);
+      value = arg.substring(eqIndex + 1);
+    }
+
+    args[key] = value;
   }
   return args;
 }
