@@ -129,12 +129,28 @@ function summarizeMetrics(runs) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  const url = args.url || args.u;
+  let url = args.url || args.u;
   if (!url) {
     console.error('Usage: node scripts/performance/lighthouse-runner.js --url="<target-url>" [--runs=3] [--output=./perf-results.json]');
     process.exit(1);
   }
 
+  // Validate URL format and protocol before running Lighthouse
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    console.error('Invalid URL provided. Please supply a well-formed absolute URL starting with http:// or https://');
+    process.exit(1);
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    console.error('Invalid URL protocol. URL must start with http:// or https://');
+    process.exit(1);
+  }
+
+  // Use the normalized URL string from the parser
+  url = parsedUrl.href;
   const runsRaw = args.runs ?? '3';
   const runs = Number(runsRaw);
   if (!Number.isInteger(runs) || runs <= 0) {
