@@ -13,14 +13,14 @@ function makeDeps(overrides: Partial<UpdateRecordActionDeps> = {}): UpdateRecord
     title: 'Test',
     destinationTab: 'Responses',
     languages: ['EN'],
-    questions: [],
-    dataSources: [
+    questions: [
       {
-        id: 'SourceA',
-        blocked: true,
-        mode: 'options'
-      }
-    ]
+        id: 'BTN-1',
+        type: 'BUTTON',
+        button: { blockFieldId: 'IS_BLOCKED' }
+      } as any
+    ],
+    dataSources: []
   } as any;
 
   const logEvents: Array<{ event: string; payload?: Record<string, unknown> }> = [];
@@ -35,7 +35,7 @@ function makeDeps(overrides: Partial<UpdateRecordActionDeps> = {}): UpdateRecord
     },
     refs: {
       languageRef: { current: language } as any,
-      valuesRef: { current: {} } as any,
+      valuesRef: { current: { IS_BLOCKED: true } } as any,
       lineItemsRef: { current: {} } as any,
       selectedRecordIdRef: { current: 'REC-1' } as any,
       selectedRecordSnapshotRef: { current: { id: 'REC-1' } as any } as any,
@@ -73,13 +73,14 @@ describe('runUpdateRecordAction (deactivation guard)', () => {
       buttonRef: 'Q1',
       qIdx: 0,
       navigateTo: 'auto',
-      set: { status: 'Inactive' },
-      isDeactivation: true
+      set: { status: 'Inactive' }
     };
 
     await runUpdateRecordAction(deps, req);
 
-    expect(deps.setStatus).toHaveBeenCalledWith('blocked');
+    expect(deps.setStatus).toHaveBeenCalledWith(
+      'This action is currently blocked because this record is in use in another form.'
+    );
     expect(deps.setStatusLevel).toHaveBeenCalledWith('error');
   });
 });

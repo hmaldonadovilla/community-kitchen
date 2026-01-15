@@ -279,6 +279,15 @@ export class SubmissionService {
       }
     });
 
+    const dataSourceBlockFields: Array<{ fieldId: string; blockFieldId: string }> = [];
+    (questions || []).forEach(q => {
+      if (!q || !q.dataSource || !(q as any).dataSource?.blockFieldId) return;
+      const fieldId = (q.id || '').toString().trim();
+      const blockFieldId = ((q as any).dataSource.blockFieldId || '').toString().trim();
+      if (!fieldId || !blockFieldId) return;
+      dataSourceBlockFields.push({ fieldId, blockFieldId });
+    });
+
     questions.filter(q => q.type !== 'BUTTON').forEach(q => {
       const colIdx = columns.fields[q.id];
       if (!colIdx) return;

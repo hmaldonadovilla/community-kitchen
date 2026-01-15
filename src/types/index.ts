@@ -1113,16 +1113,14 @@ export interface DataSourceConfig {
    */
   statusAllowList?: string[];
   /**
-   * Optional block flag used to prevent deactivation when the data source is actively referenced by
-   * another record that is not yet in a finalised state.
+   * Optional field id on the *source record* used as a cross-form block flag when this
+   * data source is referenced by another form.
    *
-   * Notes:
-   * - When `true`, custom button actions that attempt to deactivate the source should surface a user-facing
-   *   error and no-op.
-   * - The block is expected to be managed by the form workflow (set when a dependent record starts editing,
-   *   cleared when that record reaches a final status such as `Closed`).
+   * When set, consumer forms can toggle this boolean field to indicate that the
+   * source record is in active use (and custom button actions on that record can
+   * use the same field to block certain actions).
    */
-  blocked?: boolean;
+  blockFieldId?: string;
   projection?: string[]; // limit columns returned
   limit?: number; // optional max rows
   mapping?: Record<string, string>; // optional map from source column -> target field id

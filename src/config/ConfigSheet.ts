@@ -1306,17 +1306,13 @@ export class ConfigSheet {
       const confirmRaw = cfgRaw.confirm ?? cfgRaw.confirmation;
       const confirm = confirmRaw && typeof confirmRaw === 'object' ? confirmRaw : undefined;
 
-      const isDeactivationRaw = cfgRaw.isDeactivation ?? cfgRaw.deactivate ?? cfgRaw.deactivation;
-      const isDeactivation =
-        isDeactivationRaw === true ||
-        isDeactivationRaw === 'true' ||
-        isDeactivationRaw === '1' ||
-        isDeactivationRaw === 1;
+      const blockFieldIdRaw = cfgRaw.blockFieldId ?? cfgRaw.blockWhenFieldId;
+      const blockFieldId = blockFieldIdRaw ? blockFieldIdRaw.toString().trim() : '';
 
       const config: ButtonConfig = { action: 'updateRecord', set: outSet } as any;
       if (navigateTo) (config as any).navigateTo = navigateTo;
       if (confirm) (config as any).confirm = confirm;
-      if (isDeactivation) (config as any).isDeactivation = true;
+      if (blockFieldId) (config as any).blockFieldId = blockFieldId;
       if (placements.length) (config as any).placements = placements as any;
       return config;
     }

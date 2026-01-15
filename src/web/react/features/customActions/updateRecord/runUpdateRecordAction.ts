@@ -22,11 +22,6 @@ export type UpdateRecordActionRequest = {
   navigateTo: UpdateRecordActionNavigateTo;
   set: UpdateRecordActionSet;
   busyTitle?: string;
-  /**
-   * Optional guard for actions that attempt to deactivate a source record.
-   * When true, the action should be blocked if the target data source is flagged as `blocked`.
-   */
-  isDeactivation?: boolean;
 };
 
 export type UpdateRecordActionDeps = {
@@ -112,29 +107,27 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       return;
     }
 
-    // Optional guard: prevent deactivation when the target data source is blocked.
-    if (req.isDeactivation) {
-      const targetDataSourceId = (deps.definition?.dataSources || [])
-        .map(ds => (ds?.id || '').toString())
-        .find(id => !!id);
-      const blocked = (deps.definition?.dataSources || []).some(ds => {
-        if (!ds || !ds.id) return false;
-        const id = (ds.id || '').toString();
-        return !!id && ds.blocked === true;
-      });
-      if (blocked) {
+    // Optional guard: prevent custom actions when a configured block field is set.
+    const buttonDef = (deps.definition.questions || []).find(q => q && q.id === req.buttonId) as any;
+    const blockFieldId = (buttonDef && buttonDef.button && (buttonDef.button as any).blockFieldId) || undefined;
+    if (blockFieldId) {
+      const currentValues = deps.refs.valuesRef.current || {};
+      const blockValue = (currentValues as any)[blockFieldId];
+      const isBlocked = blockValue === true || blockValue === 'true' || blockValue === 1 || blockValue === '1';
+      if (isBlocked) {
         const msg = deps.tSystem(
-          'actions.deactivate.blockedByActiveUsage',
+          'actions.button.blockedByField',
           language,
-          'This record cannot be deactivated while it is being used as source data for another record that is not finalised.'
+          'This action is currently blocked because this record is in use in another form.'
         );
         deps.setStatus(msg);
         deps.setStatusLevel('error');
-        deps.logEvent('button.updateRecord.blocked.deactivation', {
+        deps.logEvent('button.updateRecord.blocked.byField', {
           buttonId: req.buttonId,
           qIdx: req.qIdx ?? null,
           recordId,
-          dataSourceId: targetDataSourceId || null
+          blockFieldId,
+          blockValue
         });
         return;
       }
