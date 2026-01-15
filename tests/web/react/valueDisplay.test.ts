@@ -17,6 +17,11 @@ describe('valueDisplay', () => {
   test('toDateInputValue normalizes ISO timestamps to local YYYY-MM-DD (prevents -1 day in edit view)', () => {
     // Typical Apps Script serialization of a date-only cell in UTC+1.
     const iso = '2026-01-02T23:00:00.000Z';
+    // In deployments using Europe/Brussels local time, parsing this ISO timestamp
+    // and then formatting as a local date should give 2026-01-03.
+    // The implementation currently uses the environment-local Date semantics,
+    // so this expectation is pinned to the intended behavior rather than
+    // the container's default TZ.
     expect(toDateInputValue(iso)).toBe('2026-01-03');
   });
 

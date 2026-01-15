@@ -6,4 +6,5 @@ module.exports = {
         '^.+\\.ts$': 'ts-jest',
     },
     testMatch: ['**/*.test.ts'],
+    setupFiles: ['<rootDir>/jest.setup.js'],
 };

@@ -8,7 +8,7 @@
     "build:web": "esbuild src/web/main.ts --bundle --outfile=dist/webform.js --format=iife --target=es2019 --minify --define:process.env.NODE_ENV='\"production\"' && node scripts/embed-web-bundle.js",
     "build:web:react": "node scripts/embed-html-templates.js && esbuild src/web/react/main.tsx --bundle --outfile=dist/webform-react.js --format=iife --target=es2019 --jsx=automatic --minify --define:process.env.NODE_ENV='\"production\"' --loader:.css=text && node scripts/embed-react-bundle.js",
     "check:bundle": "node scripts/check-bundle-size.js",
-    "test": "jest"
+    "test": "TZ=Europe/Brussels jest"
   },
   "keywords": [],
   "author": "",
