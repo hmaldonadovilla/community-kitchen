@@ -62,6 +62,7 @@ import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSel
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
+import { findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
 import {
   buildLineContextId,
   buildSubgroupKey,
@@ -259,12 +260,14 @@ interface FormViewProps {
     inputType?: string;
   }) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
+  onFormValidityChange?: (isValid: boolean) => void;
   onGuidedUiChange?: (state: {
     activeStepId: string | null;
     activeStepIndex: number;
     stepCount: number;
     isFirst: boolean;
     isFinal: boolean;
+    forwardGateSatisfied: boolean;
     backAllowed: boolean;
     backVisible: boolean;
     backLabel: string;
@@ -307,6 +310,7 @@ const FormView: React.FC<FormViewProps> = ({
   reportBusyId,
   onUserEdit,
   onDiagnostic,
+  onFormValidityChange,
   onGuidedUiChange
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
@@ -314,6 +318,7 @@ const FormView: React.FC<FormViewProps> = ({
     const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
     return s === 'source' ? 'source' : 'alphabetical';
   };
+  const orderedEntryEnabled = definition.submitValidation?.enforceFieldOrder === true;
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
     const list = key && warningByField ? (warningByField as any)[key] : undefined;
@@ -363,6 +368,7 @@ const FormView: React.FC<FormViewProps> = ({
   );
   const [overlay, setOverlay] = useState<LineOverlayState>({ open: false, options: [], selected: [] });
   const [lineItemGroupOverlay, setLineItemGroupOverlay] = useState<LineItemGroupOverlayState>({ open: false });
+  const orderedEntryGateRef = useRef<(args: { targetQuestionId: string; source: string }) => boolean>(() => false);
   const [subgroupOverlay, setSubgroupOverlay] = useState<SubgroupOverlayState>({ open: false });
   const [infoOverlay, setInfoOverlay] = useState<InfoOverlayState>({ open: false });
   const [fileOverlay, setFileOverlay] = useState<FileOverlayState>({ open: false });
@@ -488,6 +494,11 @@ const FormView: React.FC<FormViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guidedEnabled]);
 
+  useEffect(() => {
+    if (!orderedEntryEnabled) return;
+    onDiagnostic?.('validation.ordered.enabled', { mode: guidedEnabled ? 'guided' : 'standard' });
+  }, [guidedEnabled, onDiagnostic, orderedEntryEnabled]);
+
   // Clamp/initialize the active step when step config or validity changes.
   useEffect(() => {
     if (!guidedEnabled) return;
@@ -553,6 +564,31 @@ const FormView: React.FC<FormViewProps> = ({
 
     return out;
   }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepsCfg]);
+
+  const orderedEntryQuestions = useMemo(() => {
+    if (!orderedEntryEnabled) return [] as WebQuestionDefinition[];
+    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return definition.questions || [];
+    const steps = guidedStepsCfg.items || [];
+    const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
+    const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
+    const ordered: WebQuestionDefinition[] = [];
+    const seen = new Set<string>();
+    const questionById = new Map<string, WebQuestionDefinition>();
+    (definition.questions || []).forEach(q => questionById.set(q.id, q));
+    [...headerTargets, ...stepTargets].forEach(target => {
+      if (!target || typeof target !== 'object') return;
+      const kind = (target.kind || '').toString().trim();
+      const id = (target.id || '').toString().trim();
+      if (!id || (kind !== 'question' && kind !== 'lineGroup')) return;
+      if (seen.has(id)) return;
+      const q = questionById.get(id);
+      if (!q) return;
+      seen.add(id);
+      ordered.push(q);
+    });
+    return ordered.length ? ordered : definition.questions || [];
+  }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepIds, guidedStepsCfg, orderedEntryEnabled]);
 
   const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
   const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
@@ -1174,6 +1210,10 @@ const FormView: React.FC<FormViewProps> = ({
     }
     const stepCfg = (guidedStepsCfg.items || [])[activeGuidedStepIndex] as any;
     const isFinal = activeGuidedStepIndex >= guidedStepIds.length - 1;
+    const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+    const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
+    const forwardGateSatisfied =
+      forwardGate === 'free' ? true : forwardGate === 'whenComplete' ? !!stepStatus?.complete : !!stepStatus?.valid;
     const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
     const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
     const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
@@ -1196,6 +1236,7 @@ const FormView: React.FC<FormViewProps> = ({
       stepCount: guidedStepIds.length,
       isFirst: activeGuidedStepIndex <= 0,
       isFinal,
+      forwardGateSatisfied,
       backAllowed: allowBack,
       backVisible,
       backLabel: backLabel?.toString?.() || '',
@@ -1207,6 +1248,8 @@ const FormView: React.FC<FormViewProps> = ({
     guidedEnabled,
     guidedStepIds,
     guidedStepsCfg,
+    guidedDefaultForwardGate,
+    guidedStatus.steps,
     language,
     onGuidedUiChange
   ]);
@@ -2083,9 +2126,90 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('lineItemGroup.overlay.close');
   }, [onDiagnostic]);
 
+  const buildLineItemGroupOverlayValidationDefinition = useCallback((): WebFormDefinition | null => {
+    if (!lineItemGroupOverlay.open || !lineItemGroupOverlay.groupId) return null;
+    const overrideGroup = lineItemGroupOverlay.group;
+    const baseGroup =
+      overrideGroup && overrideGroup.type === 'LINE_ITEM_GROUP'
+        ? overrideGroup
+        : definition.questions.find(q => q.id === lineItemGroupOverlay.groupId && q.type === 'LINE_ITEM_GROUP');
+    if (!baseGroup) return null;
+    const baseConfig = (baseGroup as any).lineItemConfig;
+    if (!baseConfig) return null;
+    const rowFilter = lineItemGroupOverlay.rowFilter || null;
+    const nextConfig = rowFilter ? { ...baseConfig, _guidedRowFilter: rowFilter } : baseConfig;
+    const validationGroup =
+      nextConfig === baseConfig ? baseGroup : ({ ...(baseGroup as any), lineItemConfig: nextConfig } as WebQuestionDefinition);
+    return { ...(definition as any), questions: [validationGroup] } as WebFormDefinition;
+  }, [
+    definition,
+    lineItemGroupOverlay.group,
+    lineItemGroupOverlay.groupId,
+    lineItemGroupOverlay.open,
+    lineItemGroupOverlay.rowFilter
+  ]);
+
+  const validateLineItemGroupOverlay = useCallback((): FormErrors | null => {
+    const validationDefinition = buildLineItemGroupOverlayValidationDefinition();
+    if (!validationDefinition) return null;
+    try {
+      return validateForm({
+        definition: validationDefinition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        collapsedSubgroups
+      });
+    } catch (err: any) {
+      onDiagnostic?.('validation.lineItemOverlay.error', {
+        message: err?.message || err || 'unknown',
+        groupId: lineItemGroupOverlay.groupId
+      });
+      return null;
+    }
+  }, [
+    buildLineItemGroupOverlayValidationDefinition,
+    collapsedRows,
+    collapsedSubgroups,
+    language,
+    lineItemGroupOverlay.groupId,
+    lineItems,
+    onDiagnostic,
+    values
+  ]);
+
+  const attemptCloseLineItemGroupOverlay = useCallback(
+    (source: 'button' | 'escape') => {
+      if (!lineItemGroupOverlay.open) return;
+      const nextErrors = validateLineItemGroupOverlay();
+      if (!nextErrors || Object.keys(nextErrors).length === 0) {
+        closeLineItemGroupOverlay();
+        return;
+      }
+      setErrors(nextErrors);
+      errorNavRequestRef.current += 1;
+      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, scope: 'lineItemOverlay' });
+      onDiagnostic?.('lineItemGroup.overlay.close.blocked', {
+        groupId: lineItemGroupOverlay.groupId,
+        source,
+        errorCount: Object.keys(nextErrors).length
+      });
+    },
+    [closeLineItemGroupOverlay, lineItemGroupOverlay.groupId, lineItemGroupOverlay.open, onDiagnostic, setErrors, validateLineItemGroupOverlay]
+  );
+
   const openSubgroupOverlay = useCallback(
-    (subKey: string) => {
+    (subKey: string, options?: { source?: 'user' | 'system' | 'autoscroll' | 'navigate' }) => {
       if (!subKey) return;
+      const source = options?.source || 'user';
+      if (source === 'user') {
+        const parentGroupId = parseSubgroupKey(subKey)?.parentGroupId || subKey;
+        if (orderedEntryGateRef.current({ targetQuestionId: parentGroupId, source })) {
+          onDiagnostic?.('subgroup.overlay.open.blocked', { subKey, parentGroupId, source });
+          return;
+        }
+      }
       // Close multi-add overlay if open to avoid stacking confusion.
       if (overlay.open) {
         setOverlay({ open: false, options: [], selected: [] });
@@ -2099,10 +2223,19 @@ const FormView: React.FC<FormViewProps> = ({
   const openLineItemGroupOverlay = useCallback(
     (
       groupOrId: string | WebQuestionDefinition,
-      options?: { rowFilter?: { includeWhen?: any; excludeWhen?: any } | null; hideInlineSubgroups?: boolean }
+      options?: {
+        rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
+        hideInlineSubgroups?: boolean;
+        source?: 'user' | 'system' | 'autoscroll' | 'navigate';
+      }
     ) => {
       const id = (typeof groupOrId === 'string' ? groupOrId : groupOrId?.id || '').toString();
       if (!id) return;
+      const source = options?.source || 'user';
+      if (source === 'user' && orderedEntryGateRef.current({ targetQuestionId: id, source })) {
+        onDiagnostic?.('lineItemGroup.overlay.open.blocked', { groupId: id, source });
+        return;
+      }
       // Close multi-add overlay if open to avoid stacking confusion.
       if (overlay.open) {
         setOverlay({ open: false, options: [], selected: [] });
@@ -2155,7 +2288,7 @@ const FormView: React.FC<FormViewProps> = ({
             setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
           }
           if (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix) {
-            openSubgroupOverlay(prefix);
+            openSubgroupOverlay(prefix, { source: 'navigate' });
             onDiagnostic?.('validation.navigate.openSubgroup', { key, subKey: prefix, source: 'click' });
           }
           return true;
@@ -2167,7 +2300,7 @@ const FormView: React.FC<FormViewProps> = ({
         const suppressOverlayForGuidedInline = guidedEnabled && guidedInlineLineGroupIds.has(prefix);
         if (groupOverlayEnabled && !suppressOverlayForGuidedInline) {
           if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
-            openLineItemGroupOverlay(prefix);
+            openLineItemGroupOverlay(prefix, { source: 'navigate' });
             onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key, groupId: prefix, source: 'click' });
           }
         }
@@ -2369,7 +2502,7 @@ const FormView: React.FC<FormViewProps> = ({
         tries === 4 &&
         (!subgroupOverlay.open || subgroupOverlay.subKey !== targetGroupKey)
       ) {
-        openSubgroupOverlay(targetGroupKey);
+        openSubgroupOverlay(targetGroupKey, { source: 'autoscroll' });
         onDiagnostic?.('ui.autoscroll.openSubgroupOverlay', { anchor, subKey: targetGroupKey });
       }
       // If we're trying to scroll to a line-item group row that is rendered only in an overlay,
@@ -2378,7 +2511,7 @@ const FormView: React.FC<FormViewProps> = ({
         const groupCfg = definition.questions.find(q => q.id === targetGroupKey && q.type === 'LINE_ITEM_GROUP');
         const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
         if (groupOverlayEnabled && (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== targetGroupKey)) {
-          openLineItemGroupOverlay(targetGroupKey);
+          openLineItemGroupOverlay(targetGroupKey, { source: 'autoscroll' });
           onDiagnostic?.('ui.autoscroll.openLineItemGroupOverlay', { anchor, groupId: targetGroupKey });
         }
       }
@@ -2434,7 +2567,7 @@ const FormView: React.FC<FormViewProps> = ({
           closeSubgroupOverlay();
           return;
         }
-        closeLineItemGroupOverlay();
+        attemptCloseLineItemGroupOverlay('escape');
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -2445,7 +2578,7 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     closeFileOverlay,
     closeInfoOverlay,
-    closeLineItemGroupOverlay,
+    attemptCloseLineItemGroupOverlay,
     closeSubgroupOverlay,
     fileOverlay.open,
     infoOverlay.open,
@@ -2782,7 +2915,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     // When the inline Add button provides a preset (e.g. set ING from ITEM_FILTER), reuse the first empty
     // seeded row instead of creating a new blank row. This avoids ending up with an extra empty row
-    // when minRows seeds 1+ rows by default.
+    // when minRows seeds one or more rows.
     if (inlineMode && anchorFieldId && preset && Object.prototype.hasOwnProperty.call(preset, anchorFieldId)) {
       const presetVal = (preset as any)[anchorFieldId] as FieldValue;
       if (!isEmptyValue(presetVal as any)) {
@@ -3019,6 +3152,161 @@ const FormView: React.FC<FormViewProps> = ({
     });
   };
 
+  const resolveVisibilityValue = useCallback(
+    (fieldId: string): FieldValue | undefined => {
+    if (guidedVirtualState) {
+      const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
+      if (virtual !== undefined) return virtual as FieldValue;
+    }
+    const direct = values[fieldId];
+    if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+    const sys = getSystemFieldValue(fieldId, recordMeta);
+    if (sys !== undefined) return sys as FieldValue;
+    // scan all line item groups for the first non-empty occurrence
+    for (const rows of Object.values(lineItems)) {
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const v = (row as LineItemRowState).values[fieldId];
+        if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+      }
+    }
+    return undefined;
+    },
+    [guidedVirtualState, lineItems, recordMeta, values]
+  );
+
+  const getTopValueNoScan = useCallback(
+    (fieldId: string): FieldValue | undefined => {
+      const direct = (values as any)[fieldId];
+      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+      const sys = getSystemFieldValue(fieldId, recordMeta);
+      if (sys !== undefined) return sys as FieldValue;
+      return undefined;
+    },
+    [recordMeta, values]
+  );
+
+  const orderedEntryErrors = useMemo(() => {
+    if (!orderedEntryEnabled) return null;
+    if (!definition?.questions?.length) return null;
+    try {
+      return validateForm({
+        definition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        collapsedSubgroups
+      });
+    } catch (err: any) {
+      onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
+      return null;
+    }
+  }, [collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, orderedEntryEnabled, values]);
+
+  const orderedEntryValid = useMemo(() => {
+    if (!orderedEntryEnabled) return true;
+    return !orderedEntryErrors || Object.keys(orderedEntryErrors).length === 0;
+  }, [orderedEntryEnabled, orderedEntryErrors]);
+
+  const buildOrderedEntryErrors = useCallback(
+    (missingFieldPath: string, allErrors: FormErrors): FormErrors => {
+      if (!missingFieldPath) return allErrors || {};
+      const fromAll = allErrors?.[missingFieldPath];
+      if (fromAll) return { [missingFieldPath]: fromAll };
+      const parts = missingFieldPath.split('__').filter(Boolean);
+      let label = '';
+      if (parts.length >= 2) {
+        const [groupId, fieldId] = parts;
+        const group = (definition.questions || []).find(q => q.id === groupId);
+        const field = group?.lineItemConfig?.fields?.find((f: any) => (f?.id ?? '').toString() === fieldId);
+        if (field) label = resolveFieldLabel(field, language, fieldId);
+      } else {
+        const q = (definition.questions || []).find(q => q.id === missingFieldPath);
+        if (q) label = resolveFieldLabel(q, language, q.id);
+      }
+      const fallbackLabel = label || missingFieldPath;
+      return {
+        [missingFieldPath]: tSystem('validation.fieldRequired', language, '{field} is required.', { field: fallbackLabel })
+      };
+    },
+    [definition.questions, language]
+  );
+
+  useEffect(() => {
+    if (!onFormValidityChange) return;
+    onFormValidityChange(orderedEntryValid);
+  }, [onFormValidityChange, orderedEntryValid]);
+
+  const resolveOrderedEntryBlock = useCallback(
+    (target: OrderedEntryTarget, targetGroup?: WebQuestionDefinition) => {
+      if (!orderedEntryEnabled) return null;
+      return findOrderedEntryBlock({
+        definition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        resolveVisibilityValue,
+        getTopValue: getTopValueNoScan,
+        orderedQuestions: orderedEntryQuestions,
+        target,
+        targetGroup
+      });
+    },
+    [
+      collapsedRows,
+      definition,
+      getTopValueNoScan,
+      language,
+      lineItems,
+      orderedEntryEnabled,
+      orderedEntryQuestions,
+      resolveVisibilityValue,
+      values
+    ]
+  );
+
+  const triggerOrderedEntryValidation = useCallback(
+    (target: OrderedEntryTarget, missingFieldPath: string) => {
+      let nextErrors: FormErrors = {};
+      try {
+        nextErrors = validateForm({
+          definition,
+          language,
+          values,
+          lineItems,
+          collapsedRows,
+          collapsedSubgroups
+        });
+      } catch (err: any) {
+        onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
+      }
+      setErrors(buildOrderedEntryErrors(missingFieldPath, nextErrors));
+      errorNavRequestRef.current += 1;
+      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, scope: 'orderedEntry' });
+      onDiagnostic?.('validation.ordered.blocked', {
+        targetScope: target.scope,
+        targetFieldPath:
+          target.scope === 'top'
+            ? target.questionId
+            : `${target.groupId}__${target.fieldId}__${target.rowId}`,
+        missingFieldPath
+      });
+    },
+    [buildOrderedEntryErrors, collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, setErrors, values]
+  );
+
+  useEffect(() => {
+    orderedEntryGateRef.current = ({ targetQuestionId }) => {
+      if (!orderedEntryEnabled) return false;
+      const orderedBlock = resolveOrderedEntryBlock({ scope: 'top', questionId: targetQuestionId });
+      if (!orderedBlock) return false;
+      triggerOrderedEntryValidation({ scope: 'top', questionId: targetQuestionId }, orderedBlock.missingFieldPath);
+      return true;
+    };
+  }, [orderedEntryEnabled, resolveOrderedEntryBlock, triggerOrderedEntryValidation]);
+
   const handleFieldChange = (q: WebQuestionDefinition, value: FieldValue) => {
     if (submitting) return;
     // Allow edits to proceed; readOnly/valueMap are enforced at the input level.
@@ -3028,6 +3316,11 @@ const FormView: React.FC<FormViewProps> = ({
     }
     if (isFieldLockedByDedup(q.id)) {
       onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'dedupConflict' });
+      return;
+    }
+    const orderedBlock = resolveOrderedEntryBlock({ scope: 'top', questionId: q.id });
+    if (orderedBlock) {
+      triggerOrderedEntryValidation({ scope: 'top', questionId: q.id }, orderedBlock.missingFieldPath);
       return;
     }
     guidedLastUserEditAtRef.current = Date.now();
@@ -3065,6 +3358,27 @@ const FormView: React.FC<FormViewProps> = ({
         fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
         reason: 'dedupConflict'
       });
+      return;
+    }
+    const orderedBlock = resolveOrderedEntryBlock(
+      {
+        scope: 'line',
+        groupId: group.id,
+        rowId,
+        fieldId: (field?.id || '').toString()
+      },
+      group
+    );
+    if (orderedBlock) {
+      triggerOrderedEntryValidation(
+        {
+          scope: 'line',
+          groupId: group.id,
+          rowId,
+          fieldId: (field?.id || '').toString()
+        },
+        orderedBlock.missingFieldPath
+      );
       return;
     }
     guidedLastUserEditAtRef.current = Date.now();
@@ -3294,41 +3608,11 @@ const FormView: React.FC<FormViewProps> = ({
     return optionState[optionKey(q.id)] || toOptionSet(q);
   };
 
-  const resolveVisibilityValue = useCallback(
-    (fieldId: string): FieldValue | undefined => {
-    if (guidedVirtualState) {
-      const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
-      if (virtual !== undefined) return virtual as FieldValue;
-    }
-    const direct = values[fieldId];
-    if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-    const sys = getSystemFieldValue(fieldId, recordMeta);
-    if (sys !== undefined) return sys as FieldValue;
-    // scan all line item groups for the first non-empty occurrence
-    for (const rows of Object.values(lineItems)) {
-      if (!Array.isArray(rows)) continue;
-      for (const row of rows) {
-        const v = (row as LineItemRowState).values[fieldId];
-        if (v !== undefined && v !== null && v !== '') return v as FieldValue;
-      }
-    }
-    return undefined;
-    },
-    [guidedVirtualState, lineItems, recordMeta, values]
-  );
-
   const topLevelGroupProgress = useMemo(() => {
     // Mirror the progress logic used in the group header UI.
     const isQuestionComplete = (q: WebQuestionDefinition): boolean => {
       if (q.type === 'LINE_ITEM_GROUP') {
         if (!q.lineItemConfig) return false;
-        const getTopValueNoScan = (fieldId: string): FieldValue | undefined => {
-          const direct = (values as any)[fieldId];
-          if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-          const sys = getSystemFieldValue(fieldId, recordMeta);
-          if (sys !== undefined) return sys as FieldValue;
-          return undefined;
-        };
         return isLineItemGroupQuestionComplete({
           groupId: q.id,
           lineItemConfig: q.lineItemConfig,
@@ -3648,14 +3932,16 @@ const FormView: React.FC<FormViewProps> = ({
       case 'TEXT':
       case 'PARAGRAPH':
       case 'NUMBER':
-      case 'DATE':
+      case 'DATE': {
         const useValueMap = !!q.valueMap && !isDedupKeyField(q.id);
-        const mappedValue = useValueMap
-          ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId], { language, targetOptions: toOptionSet(q) })
-          : undefined;
+        const mappedValue =
+          useValueMap && q.valueMap
+            ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId], { language, targetOptions: toOptionSet(q) })
+            : undefined;
         const inputValueRaw = useValueMap ? (mappedValue || '') : ((values[q.id] as any) ?? '');
         const inputValue = q.type === 'DATE' ? toDateInputValue(inputValueRaw) : inputValueRaw;
-        const numberText = q.type === 'NUMBER' ? (inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString()) : null;
+        const numberText =
+          q.type === 'NUMBER' ? (inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString()) : null;
         if (renderAsLabel) {
           const displayValue = q.type === 'NUMBER' ? numberText : inputValue;
           return renderReadOnly(displayValue || null, { stacked: forceStackedLabel });
@@ -3729,6 +4015,7 @@ const FormView: React.FC<FormViewProps> = ({
             {renderWarnings(q.id)}
           </div>
         );
+      }
       case 'CHOICE': {
         const rawVal = values[q.id];
         const choiceValue = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
@@ -4759,7 +5046,7 @@ const FormView: React.FC<FormViewProps> = ({
           setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
         }
         if (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix) {
-          openSubgroupOverlay(prefix);
+          openSubgroupOverlay(prefix, { source: 'navigate' });
           onDiagnostic?.('validation.navigate.openSubgroup', { key: firstKey, subKey: prefix });
         }
         return true;
@@ -4769,9 +5056,9 @@ const FormView: React.FC<FormViewProps> = ({
       const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
       const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
       const suppressOverlayForGuidedInline = guidedEnabled && guidedInlineLineGroupIds.has(prefix);
-      if (groupOverlayEnabled && !suppressOverlayForGuidedInline) {
-        if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
-          openLineItemGroupOverlay(prefix);
+        if (groupOverlayEnabled && !suppressOverlayForGuidedInline) {
+          if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
+            openLineItemGroupOverlay(prefix, { source: 'navigate' });
           onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key: firstKey, groupId: prefix, source: 'submit' });
         }
       }
@@ -5693,7 +5980,7 @@ const FormView: React.FC<FormViewProps> = ({
           <div style={{ padding: 16, borderBottom: '1px solid #e5e7eb', background: '#ffffff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div style={{ fontWeight: 900, fontSize: 22 }}>{tSystem('common.error', language, 'Error')}</div>
-              <button type="button" onClick={closeLineItemGroupOverlay} style={buttonStyles.secondary}>
+              <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
                 {tSystem('common.close', language, 'Close')}
               </button>
             </div>
@@ -5904,7 +6191,7 @@ const FormView: React.FC<FormViewProps> = ({
               </div>
             </div>
             <div style={{ justifySelf: 'end' }}>
-              <button type="button" onClick={closeLineItemGroupOverlay} style={buttonStyles.secondary}>
+              <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
                 {tSystem('common.close', language, 'Close')}
               </button>
             </div>

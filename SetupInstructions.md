@@ -508,6 +508,22 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+    - Want **ordered submit validation** (required fields must be completed in order + Submit disabled until valid)? Configure `submitValidation` in the dashboard JSON:
+
+      ```json
+      {
+        "submitValidation": {
+          "enforceFieldOrder": true,
+          "submitTopErrorMessage": {
+            "en": "Please complete the required fields above before submitting."
+          }
+        }
+      }
+      ```
+
+      - In guided steps, **Next** remains clickable once the step forward gate is satisfied.
+      - `submitTopErrorMessage` customizes the top error banner shown after a submit attempt (localized).
+
     - Want to **override the Summary button label**? Set `summaryButtonLabel` (localized). Useful when “Summary” should read like “Checklist”.
 
       ```json

@@ -120,6 +120,7 @@ export class DefinitionBuilder {
       actionBars: form.actionBars,
       appHeader: form.appHeader,
       groupBehavior: form.groupBehavior,
+      submitValidation: form.submitValidation,
       steps: form.steps,
       portraitOnly: form.portraitOnly,
       submissionConfirmationMessage: form.submissionConfirmationMessage,

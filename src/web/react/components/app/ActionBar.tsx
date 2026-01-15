@@ -185,6 +185,10 @@ export const ActionBar: React.FC<{
    * Useful for flows like dedup checks where the form must not be submittable, but the user should still be able to navigate.
    */
   submitDisabled?: boolean;
+  /**
+   * Optional tooltip shown when Submit is disabled (localized upstream).
+   */
+  submitDisabledTooltip?: string;
   submitting?: boolean;
   readOnly?: boolean;
   /**
@@ -242,6 +246,7 @@ export const ActionBar: React.FC<{
   view,
   disabled,
   submitDisabled,
+  submitDisabledTooltip,
   submitting,
   readOnly,
   hideEdit,
@@ -292,6 +297,8 @@ export const ActionBar: React.FC<{
     if (configured !== undefined) return normalizeViewConfig(configured);
     return normalizeViewConfig(position === 'top' ? DEFAULT_TOP[viewKey] : DEFAULT_BOTTOM[viewKey]);
   }, [actionBars?.bottom, actionBars?.top, position, viewKey]);
+
+  const submitTooltip = submitDisabled ? (submitDisabledTooltip || '') : '';
 
   const globalHideHomeWhenActive = Boolean(actionBars?.system?.home?.hideWhenActive);
 
@@ -868,16 +875,21 @@ export const ActionBar: React.FC<{
             })()}
 
             {showSubmit && (
-              <button type="button" className="ck-bottom-submit" onClick={onSubmit} disabled={disabled || submitDisabled}>
-                <IconWrap>
-                  <CheckIcon />
-                </IconWrap>
-                <span className="ck-bottom-label">
-                  {submitting
-                    ? tSystem('actions.submitting', language, 'Submitting…')
-                    : resolveLocalizedString(submitLabel, language, tSystem('actions.submit', language, 'Submit'))}
-                </span>
-              </button>
+              <span
+                style={{ display: 'inline-flex' }}
+                title={submitTooltip || undefined}
+              >
+                <button type="button" className="ck-bottom-submit" onClick={onSubmit} disabled={disabled || submitDisabled}>
+                  <IconWrap>
+                    <CheckIcon />
+                  </IconWrap>
+                  <span className="ck-bottom-label">
+                    {submitting
+                      ? tSystem('actions.submitting', language, 'Submitting…')
+                      : resolveLocalizedString(submitLabel, language, tSystem('actions.submit', language, 'Submit'))}
+                  </span>
+                </button>
+              </span>
             )}
           </div>
         ) : null}

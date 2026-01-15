@@ -1382,6 +1382,10 @@ export interface FormConfig {
    * Optional behavior settings for collapsible group sections in the edit view (dashboard-level).
    */
   groupBehavior?: GroupBehaviorConfig;
+  /**
+   * Optional submission validation UI settings (dashboard-level).
+   */
+  submitValidation?: SubmitValidationConfig;
 
   /**
    * Optional guided steps configuration for the React edit (form) view.
@@ -1472,6 +1476,17 @@ export interface GroupBehaviorConfig {
    * - Intended for "report-like" summary pages where users should not have to expand each section.
    */
   summaryExpandAll?: boolean;
+}
+
+export interface SubmitValidationConfig {
+  /**
+   * When true, require users to complete required fields in order and keep Submit disabled until the form is valid.
+   */
+  enforceFieldOrder?: boolean;
+  /**
+   * Optional localized override for the top submit validation message.
+   */
+  submitTopErrorMessage?: LocalizedString;
 }
 
 export type StepForwardGate = 'free' | 'whenComplete' | 'whenValid';
@@ -1822,6 +1837,10 @@ export interface WebFormDefinition {
    * Optional behavior settings for collapsible group sections in the edit view.
    */
   groupBehavior?: GroupBehaviorConfig;
+  /**
+   * Optional submission validation UI settings.
+   */
+  submitValidation?: SubmitValidationConfig;
 
   /**
    * Optional guided steps configuration for the React edit (form) view.
