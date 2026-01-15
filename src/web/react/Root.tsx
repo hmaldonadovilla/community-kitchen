@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import App from './App';
 import { WebFormDefinition, WebFormSubmission } from '../types';
 import { LoadingScreen } from './components/app/LoadingScreen';
+import { fetchBootstrapContextApi } from './api';
 
 export type AppPhase = 'bootstrapping' | 'loadingData' | 'ready' | 'error';
 
 export interface RootProps {
-  definition: WebFormDefinition;
+  definition?: WebFormDefinition | null;
   formKey: string;
   record?: WebFormSubmission | null;
 }
@@ -20,17 +21,25 @@ const logBootEvent = (event: string, payload?: Record<string, unknown>): void =>
   }
 };
 
-export const Root: React.FC<RootProps> = ({ definition, formKey, record }) => {
+export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formKey, record }) => {
   const [phase, setPhase] = useState<AppPhase>('bootstrapping');
   const [showSlowMessage, setShowSlowMessage] = useState(false);
   const [allowRetry, setAllowRetry] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [retrySeq, setRetrySeq] = useState(0);
+  const [definition, setDefinition] = useState<WebFormDefinition | null>(initialDefinition ?? null);
+  const [activeFormKey, setActiveFormKey] = useState(formKey);
+  const [activeRecord, setActiveRecord] = useState<WebFormSubmission | null>(record ?? null);
+  const definitionRef = useRef<WebFormDefinition | null>(initialDefinition ?? null);
+
+  useEffect(() => {
+    definitionRef.current = definition;
+  }, [definition]);
 
   useEffect(() => {
     let slowTimer: number | undefined;
     let retryTimer: number | undefined;
-    let readyTimer: number | undefined;
+    let cancelled = false;
 
     const startedAt = Date.now();
 
@@ -50,21 +59,54 @@ export const Root: React.FC<RootProps> = ({ definition, formKey, record }) => {
       logBootEvent('retry.visible', { formKey, elapsedMs: Date.now() - startedAt });
     }, 10000);
 
-    setPhase('loadingData');
-    logBootEvent('phase.enter', { phase: 'loadingData', formKey });
+    const loadBootstrap = async () => {
+      setPhase('loadingData');
+      logBootEvent('phase.enter', { phase: 'loadingData', formKey });
 
-    // Phase 1: we rely on the server-side bootstrap data already embedded in the page.
-    // Mark the app ready on the next tick so the shell renders as soon as React mounts.
-    readyTimer = (globalThis as any).setTimeout(() => {
+      const hasExplicitFormKey = !!(formKey && formKey.toString().trim());
+      const needsBootstrap =
+        !definitionRef.current || (hasExplicitFormKey && activeFormKey && activeFormKey !== formKey);
+      let resolvedKey = activeFormKey || formKey;
+      if (needsBootstrap) {
+        logBootEvent('bootstrap.fetch.start', { formKey });
+        try {
+          const res = await fetchBootstrapContextApi(formKey || null);
+          if (cancelled) return;
+          setDefinition(res.definition);
+          resolvedKey = res.formKey || formKey;
+          setActiveFormKey(resolvedKey);
+          setActiveRecord(res.record ?? null);
+          logBootEvent('bootstrap.fetch.success', {
+            formKey: resolvedKey,
+            elapsedMs: Date.now() - startedAt
+          });
+        } catch (err: any) {
+          if (cancelled) return;
+          const message = err?.message ? err.message.toString() : 'Request failed';
+          setErrorMessage('We couldn’t load the form configuration. Please try again.');
+          setAllowRetry(true);
+          setPhase('error');
+          logBootEvent('bootstrap.fetch.error', {
+            formKey,
+            elapsedMs: Date.now() - startedAt,
+            message
+          });
+          return;
+        }
+      }
+
+      if (cancelled) return;
       setPhase('ready');
-      logBootEvent('phase.enter', { phase: 'ready', formKey, elapsedMs: Date.now() - startedAt });
-    }, 0);
+      logBootEvent('phase.enter', { phase: 'ready', formKey: resolvedKey, elapsedMs: Date.now() - startedAt });
+    };
+
+    loadBootstrap();
 
     return () => {
+      cancelled = true;
       if (typeof globalThis !== 'undefined') {
         if (slowTimer) (globalThis as any).clearTimeout(slowTimer);
         if (retryTimer) (globalThis as any).clearTimeout(retryTimer);
-        if (readyTimer) (globalThis as any).clearTimeout(readyTimer);
       }
     };
   }, [formKey, retrySeq]);
@@ -76,11 +118,11 @@ export const Root: React.FC<RootProps> = ({ definition, formKey, record }) => {
     setRetrySeq(prev => prev + 1);
   };
 
-  const showOverlay = phase !== 'ready';
+  const showLoading = phase !== 'ready' || !definition;
 
   return (
     <>
-      {showOverlay && (
+      {showLoading && (
         <LoadingScreen
           showSlowMessage={showSlowMessage}
           allowRetry={allowRetry}
@@ -88,7 +130,9 @@ export const Root: React.FC<RootProps> = ({ definition, formKey, record }) => {
           errorMessage={errorMessage}
         />
       )}
-      <App definition={definition} formKey={formKey} record={record || undefined} />
+      {!showLoading && definition && (
+        <App definition={definition} formKey={activeFormKey || formKey} record={activeRecord || undefined} />
+      )}
     </>
   );
 };

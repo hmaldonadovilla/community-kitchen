@@ -17,7 +17,7 @@ import { SubmissionService } from './webform/submissions';
 import { ListingService } from './webform/listing';
 import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
-import { buildReactTemplate } from './webform/template';
+import { buildReactShellTemplate } from './webform/template';
 import { loadDedupRules, computeDedupSignature } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
@@ -87,24 +87,31 @@ export class WebFormService {
     return def;
   }
 
-  public renderForm(formKey?: string, _params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
-    debugLog('renderForm.start', { requestedKey: formKey, mode: 'react' });
+  public fetchBootstrapContext(formKey?: string): { definition: WebFormDefinition; formKey: string } {
     const def = this.getOrBuildDefinition(formKey);
-    const targetKey = formKey || def.title;
-    // Phase 1 performance fix: avoid heavy server-side list/bootstrap prefetch in doGet().
-    // The React client will fetch list data via APIs after the shell is visible.
-    const bootstrap = null;
-    const html = buildReactTemplate(def, targetKey, bootstrap);
+    const resolvedKey = (formKey || '').toString().trim() || def.title || '__DEFAULT__';
+    debugLog('definition.fetch', { formKey: resolvedKey, questions: def.questions?.length || 0 });
+    return { definition: def, formKey: resolvedKey };
+  }
+
+  public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
+    const targetKey = (formKey || '').toString().trim();
+    const bundleTarget = ((params as any)?.app ?? (params as any)?.page ?? '').toString().trim();
+    debugLog('renderForm.start', {
+      requestedKey: targetKey || '__DEFAULT__',
+      mode: 'react-shell',
+      bundleTarget: bundleTarget || 'full'
+    });
+    const html = buildReactShellTemplate(targetKey, bundleTarget);
     debugLog('renderForm.htmlBuilt', {
-      formKey: targetKey,
-      questionCount: def.questions.length,
-      languages: def.languages,
+      formKey: targetKey || '__DEFAULT__',
+      bundleTarget: bundleTarget || 'full',
       htmlLength: html.length,
       hasInitCall: html.includes('init();'),
       scriptCloseCount: (html.match(/<\/script/gi) || []).length
     });
     const output = HtmlService.createHtmlOutput(html);
-    output.setTitle(def.title || 'Form');
+    output.setTitle(targetKey || 'Community Kitchen');
     return output;
   }
 

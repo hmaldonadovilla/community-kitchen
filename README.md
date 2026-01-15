@@ -121,6 +121,7 @@ Enabling `CK_DEBUG` also flips `window.__WEB_FORM_DEBUG__` on the web client, so
    - Set the entry point to `doGet`.
    - Deploy and use the generated URL as your custom form link (supports line items and uploads).
    - React is the only experience; the legacy iframe UI has been removed.
+   - `doGet` serves a minimal shell; the client fetches the full definition via `fetchBootstrapContext`, so keep that function in the deployment and schedule `warmDefinitions()` to avoid cold-start stalls.
 
 ## Config Notes (LINE_ITEM_GROUP / FILE_UPLOAD)
 
@@ -198,7 +199,6 @@ Run unit tests with:
 npm test
 ```
 
-
 ## Deployment & caching (summary)
 
 This section summarizes the deployment flow and the new server-side caching, with full details in:
@@ -225,16 +225,20 @@ This section summarizes the deployment flow and the new server-side caching, wit
 3. **Run `setup()` once per spreadsheet**
    - Only needed on a new Sheet to create the **Forms Dashboard** and example config.
 
-4. **Create/Update All Forms after config or code changes**
+4. **Create/Update All Forms after config changes**
    - Run `createAllForms()` from the Apps Script editor or custom menu.
    - This:
      - Regenerates/updates Forms and destination sheets.
      - Updates app URLs in the dashboard.
      - Bumps the server-side cache version via `WebFormService.invalidateServerCache('createAllForms')`, which invalidates all cached definitions and template content.
+   - **Code-only changes** (TypeScript/UI) do **not** require `createAllForms()` — just rebuild + re-deploy the bundle.
 
 5. **Warm up form definitions (optional but recommended)**
-   - Run `warmDefinitions()` once after deployment (or let a scheduled trigger handle it).
+   - Run `warmDefinitions()` once after config changes (or let a scheduled trigger handle it).
    - This uses `WebFormService.warmDefinitions()` to prebuild and cache `WebFormDefinition` objects for all forms, so `doGet()` does not need to re-parse large config sheets on first user hits.
+   - The web app shell loads the React bundle via `?bundle=react`. You can pass `?app=<bundleKey>` to select an app-specific bundle (defaults to `full`). Bundle keys come from filenames under `src/web/react/entrypoints` (converted to kebab-case).
+   - **Maintainer note**: if you want local-only entrypoints (not committed), add them under `src/web/react/entrypoints` and ignore them locally via `.git/info/exclude`:
+     - `src/web/react/entrypoints/*`
 
 6. **Publish / re-deploy the web app**
    - In Apps Script, go to **Deploy → Manage deployments**.

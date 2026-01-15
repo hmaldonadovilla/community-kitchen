@@ -7,58 +7,14 @@ export interface LoadingScreenProps {
   errorMessage?: string | null;
 }
 
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  zIndex: 120,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '16px',
-  background: 'rgba(15, 23, 42, 0.45)'
-};
-
-const panelStyle: React.CSSProperties = {
-  width: '100%',
-  maxWidth: 520,
-  borderRadius: 24,
-  border: '1px solid rgba(148, 163, 184, 0.75)',
-  background: '#ffffff',
-  boxShadow: '0 22px 60px rgba(15, 23, 42, 0.35)',
-  padding: '22px 22px 20px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 10,
-  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", "Segoe UI", sans-serif',
-  color: '#0f172a'
-};
-
-const titleStyle: React.CSSProperties = {
-  margin: 0,
-  fontWeight: 900,
-  fontSize: 26,
-  letterSpacing: -0.4
-};
-
-const messageStyle: React.CSSProperties = {
-  margin: '6px 0 0',
-  fontSize: 18,
-  lineHeight: 1.4
-};
-
 const hintStyle: React.CSSProperties = {
-  margin: '10px 0 0',
-  fontSize: 16,
-  lineHeight: 1.4,
-  color: '#4b5563'
+  marginTop: 10
 };
 
 const errorStyle: React.CSSProperties = {
-  margin: '10px 0 0',
-  fontSize: 16,
-  lineHeight: 1.4,
-  color: '#b91c1c',
-  fontWeight: 600
+  marginTop: 10,
+  fontWeight: 600,
+  color: '#b91c1c'
 };
 
 const actionsStyle: React.CSSProperties = {
@@ -88,14 +44,31 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   errorMessage
 }) => {
   return (
-    <div style={overlayStyle}>
-      <div style={panelStyle}>
-        <h1 style={titleStyle}>Loading…</h1>
-        <p style={messageStyle}>Please keep this page open. This may take a few seconds.</p>
-        {showSlowMessage && (
-          <p style={hintStyle}>Still loading… your connection may be slow. Don’t close the page.</p>
+    <div className="page">
+      <header className="ck-app-header">
+        <button className="ck-app-avatar-btn" type="button" disabled>
+          <span className="ck-app-avatar">CK</span>
+        </button>
+        <div className="ck-app-title-row">
+          <div className="ck-app-title">Loading…</div>
+          <div className="ck-app-title-right">
+            <span data-tone="info">Starting Community Kitchen form…</span>
+          </div>
+        </div>
+      </header>
+      <main className="card form-card">
+        <h1>Loading…</h1>
+        <p>Please keep this page open. This may take a few seconds.</p>
+        <p
+          className="muted"
+          data-boot-copy="slow"
+          style={{ ...hintStyle, opacity: showSlowMessage ? 1 : 0.6 }}
+        >
+          Still loading… your connection may be slow. Don’t close the page.
+        </p>
+        {errorMessage && (
+          <p style={errorStyle}>{errorMessage}</p>
         )}
-        {errorMessage && <p style={errorStyle}>{errorMessage}</p>}
         {allowRetry && onRetry && (
           <div style={actionsStyle}>
             <button type="button" style={retryButtonStyle} onClick={onRetry}>
@@ -103,7 +76,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
             </button>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };

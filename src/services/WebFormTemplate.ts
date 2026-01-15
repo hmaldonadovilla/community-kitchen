@@ -1,5 +1,4 @@
 import { WebFormDefinition } from '../types';
-import { WEB_FORM_REACT_BUNDLE } from '../web/react/reactBundle';
 import { isDebugEnabled } from './webform/debug';
 
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
@@ -21,39 +20,39 @@ const escapeJsonForScript = (value: any): string =>
       // Guard against U+2028/2029 which break inline <script> parsing in some browsers.
       .replace(JS_UNSAFE_CHARS, ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`)
   );
-const encodeBase64 = (value: string): string => {
+const resolveServiceUrl = (): string | null => {
   try {
-    if (typeof Utilities !== 'undefined' && Utilities.base64Encode) {
-      return Utilities.base64Encode(value, Utilities.Charset.UTF_8);
+    if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
+      const url = ScriptApp.getService().getUrl();
+      if (url) return url.toString();
     }
   } catch (_) {
-    // ignore server-side errors and fall through
+    // ignore and fall back to relative URL
   }
-  // Fallbacks for non-Apps Script environments (e.g., tests or local execution)
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(value, 'utf-8').toString('base64');
-  }
-  if (typeof btoa === 'function') {
-    return btoa(value);
-  }
-  return value;
+  return null;
 };
 
-let cachedBundleBase64: string | null = null;
-const getBundleBase64 = (): string => {
-  if (cachedBundleBase64 !== null) return cachedBundleBase64;
-  // Base64 contains only A–Z/a–z/0–9/+//= so it is safe to embed directly in a single-quoted string literal.
-  cachedBundleBase64 = encodeBase64(WEB_FORM_REACT_BUNDLE || '');
-  return cachedBundleBase64;
+const buildBundleSrc = (bundleTarget?: string): string => {
+  const target = (bundleTarget || '').toString().trim();
+  const appParam = target ? `&app=${encodeURIComponent(target)}` : '';
+  const query = `bundle=react${appParam}`;
+  const baseUrl = resolveServiceUrl();
+  if (!baseUrl) return `?${query}`;
+  const sep = baseUrl.includes('?') ? '&' : '?';
+  return `${baseUrl}${sep}${query}`;
 };
 
-export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootstrap?: any): string {
-  const defJson = escapeJsonForScript(def);
+export function buildWebFormHtml(
+  def: WebFormDefinition | null,
+  formKey: string,
+  bootstrap?: any,
+  bundleTarget?: string
+): string {
+  const defJson = escapeJsonForScript(def || null);
   const keyJson = escapeJsonForScript(formKey || def?.title || '');
   const debugJson = isDebugEnabled() ? 'true' : 'false';
   const bootstrapJson = escapeJsonForScript(bootstrap || null);
-  // Base64-encode the bundle to avoid parser issues when Google wraps HTML in document.write.
-  const bundleBase64 = escapeScriptTerminator(getBundleBase64());
+  const bundleSrc = buildBundleSrc(bundleTarget);
 
   return `<!DOCTYPE html>
 <html>
@@ -61,10 +60,11 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
     <meta charset="UTF-8" />
     <link rel="preconnect" href="https://docs.google.com" />
     <link rel="preconnect" href="https://drive.google.com" />
-    <meta
+      <meta
       name="viewport"
       content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
+      <link rel="preload" as="script" href="${bundleSrc}" />
     <script>
       // iOS sometimes renders this Apps Script web app with a desktop-like base viewport (e.g., 980px wide),
       // which makes the UI effectively smaller and can trigger focus-zoom on inputs. Detect that early and
@@ -1045,13 +1045,7 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
       </div>
     </div>
     <script>window.__WEB_FORM_DEF__ = ${defJson}; window.__WEB_FORM_KEY__ = ${keyJson}; window.__WEB_FORM_DEBUG__ = ${debugJson}; window.__WEB_FORM_BOOTSTRAP__ = ${bootstrapJson};</script>
-    <script>
-      // Decode + eval to keep the inline script content parser-safe within Google wrappers.
-      (function() {
-        var decoded = typeof atob === 'function' ? atob('${bundleBase64}') : '${bundleBase64}';
-        (0, eval)(decoded);
-      })();
-    </script>
+    <script src="${bundleSrc}" defer></script>
   </body>
 </html>`;
 }

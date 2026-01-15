@@ -153,12 +153,16 @@ All three apps import and reuse this component.
 
 ### 5.3 App Shell First, Feature UI After
 
-Each app entry (e.g., `src/entrypoints/recipes.tsx`) should:
+Each app entry (e.g., `src/web/react/entrypoints/<app>.tsx`) should:
 
 - Render `AppInitializer` into `#app`.
 - `AppInitializer`:
-  - Always renders **header + skeleton** (app shell) first.
-  - Shows `LoadingScreen` overlay while `phase !== 'ready'`.
+- Always renders **header + skeleton** (app shell) first.
+- Uses a single loading view (shell + card) until `phase === 'ready'` (no extra overlay swap).
+  
+**Maintainer note**: entrypoints are optional and can be **local‑only**. If you want app‑specific bundles without committing them, add files under `src/web/react/entrypoints` and ignore them locally via `.git/info/exclude`:
+
+- `src/web/react/entrypoints/*`
 
 Skeleton examples:
 - Header bar with app title and main action buttons disabled.
@@ -481,7 +485,7 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
 
 - [x] Introduce `AppInitializer` (`Root`) and loading state machine.
 - [x] Implement shared `LoadingScreen` component with required copy.
-- [x] Render shell + skeleton entry (static HTML shell + React overlay).
+- [x] Render shell + skeleton entry (single loading view, no overlay swap).
 - [x] Wire 8s/10s timers and Retry button (retry currently re-runs the boot state machine; next phases will hook real data reload).
 
 ### Phase 2 – Backend Refactor (`doGet()` + APIs + Definition Cache)
@@ -495,8 +499,9 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
 
 ### Phase 3 – Bundle Size Optimization
 
-- [ ] Enable/verify production mode and tree‑shaking.
-- [ ] Implement per-app entrypoints and code splitting driven by query params.
+- [x] Enable/verify production mode and tree‑shaking.
+- [x] Implement per-app entrypoints and code splitting driven by query params.
+- [ ] Convert entrypoints into **real** per-app bundles (avoid importing the full app in each entry).
 - [ ] Run bundle analysis and remove/replace heavy dependencies.
 - [ ] Measure new bundle size (target: ≤ 250 kB gzip initial bundle).
 
@@ -505,6 +510,15 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
 - [ ] Instrument basic timing metrics (e.g., log time from `doGet()` response to `ready` state).
 - [ ] Tune cache TTLs and parallelization.
 - [ ] UX polish based on user feedback from kitchens.
+
+### Phase 5 – Next Steps to Improve LCP Further
+
+- [ ] **Real per‑app splits**: entrypoints should import only the app flow they need, not `main`.
+- [ ] **Lazy‑load heavy features**: list view, overlays (file/markdown/html previews), report rendering.
+- [ ] **Reduce bootstrap payload**: defer non‑critical sections of `WebFormDefinition` (e.g., list view config) until after first paint.
+- [ ] **Preload critical assets**: keep `preload` for the JS bundle; add `preconnect` to Apps Script + Drive if not already.
+- [ ] **Cache bootstrap on the client**: session cache for definition + list metadata to skip redundant fetches.
+- [ ] **Tighten render path**: minimize work before first paint (avoid heavy computations in initial React render).
 
 ---
 
