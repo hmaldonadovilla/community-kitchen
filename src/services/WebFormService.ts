@@ -61,7 +61,9 @@ export class WebFormService {
     debugLog('renderForm.start', { requestedKey: formKey, mode: 'react' });
     const def = this.buildDefinition(formKey);
     const targetKey = formKey || def.title;
-    const bootstrap = this.buildBootstrap(targetKey, def);
+    // Phase 1 performance fix: avoid heavy server-side list/bootstrap prefetch in doGet().
+    // The React client will fetch list data via APIs after the shell is visible.
+    const bootstrap = null;
     const html = buildReactTemplate(def, targetKey, bootstrap);
     debugLog('renderForm.htmlBuilt', {
       formKey: targetKey,
