@@ -62,6 +62,7 @@ import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSel
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
+import { findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
 import {
   buildLineContextId,
   buildSubgroupKey,
@@ -264,12 +265,14 @@ interface FormViewProps {
     inputType?: string;
   }) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
+  onFormValidityChange?: (isValid: boolean) => void;
   onGuidedUiChange?: (state: {
     activeStepId: string | null;
     activeStepIndex: number;
     stepCount: number;
     isFirst: boolean;
     isFinal: boolean;
+    forwardGateSatisfied: boolean;
     backAllowed: boolean;
     backVisible: boolean;
     backLabel: string;
@@ -313,6 +316,7 @@ const FormView: React.FC<FormViewProps> = ({
   reportBusyId,
   onUserEdit,
   onDiagnostic,
+  onFormValidityChange,
   onGuidedUiChange
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
@@ -328,6 +332,7 @@ const FormView: React.FC<FormViewProps> = ({
     });
     return set;
   }, [dedupKeyFieldIds]);
+  const orderedEntryEnabled = definition.submitValidation?.enforceFieldOrder === true;
   const isFieldLockedByDedup = (fieldId: string): boolean => {
     if (!dedupLockActive) return false;
     const k = (fieldId || '').toString().trim();
@@ -476,6 +481,11 @@ const FormView: React.FC<FormViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guidedEnabled]);
 
+  useEffect(() => {
+    if (!orderedEntryEnabled) return;
+    onDiagnostic?.('validation.ordered.enabled', { mode: guidedEnabled ? 'guided' : 'standard' });
+  }, [guidedEnabled, onDiagnostic, orderedEntryEnabled]);
+
   // Clamp/initialize the active step when step config or validity changes.
   useEffect(() => {
     if (!guidedEnabled) return;
@@ -541,6 +551,31 @@ const FormView: React.FC<FormViewProps> = ({
 
     return out;
   }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepsCfg]);
+
+  const orderedEntryQuestions = useMemo(() => {
+    if (!orderedEntryEnabled) return [] as WebQuestionDefinition[];
+    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return definition.questions || [];
+    const steps = guidedStepsCfg.items || [];
+    const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
+    const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
+    const ordered: WebQuestionDefinition[] = [];
+    const seen = new Set<string>();
+    const questionById = new Map<string, WebQuestionDefinition>();
+    (definition.questions || []).forEach(q => questionById.set(q.id, q));
+    [...headerTargets, ...stepTargets].forEach(target => {
+      if (!target || typeof target !== 'object') return;
+      const kind = (target.kind || '').toString().trim();
+      const id = (target.id || '').toString().trim();
+      if (!id || (kind !== 'question' && kind !== 'lineGroup')) return;
+      if (seen.has(id)) return;
+      const q = questionById.get(id);
+      if (!q) return;
+      seen.add(id);
+      ordered.push(q);
+    });
+    return ordered.length ? ordered : definition.questions || [];
+  }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepIds, guidedStepsCfg, orderedEntryEnabled]);
 
   const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
   const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
@@ -1162,6 +1197,10 @@ const FormView: React.FC<FormViewProps> = ({
     }
     const stepCfg = (guidedStepsCfg.items || [])[activeGuidedStepIndex] as any;
     const isFinal = activeGuidedStepIndex >= guidedStepIds.length - 1;
+    const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+    const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
+    const forwardGateSatisfied =
+      forwardGate === 'free' ? true : forwardGate === 'whenComplete' ? !!stepStatus?.complete : !!stepStatus?.valid;
     const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
     const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
     const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
@@ -1184,6 +1223,7 @@ const FormView: React.FC<FormViewProps> = ({
       stepCount: guidedStepIds.length,
       isFirst: activeGuidedStepIndex <= 0,
       isFinal,
+      forwardGateSatisfied,
       backAllowed: allowBack,
       backVisible,
       backLabel: backLabel?.toString?.() || '',
@@ -1195,6 +1235,8 @@ const FormView: React.FC<FormViewProps> = ({
     guidedEnabled,
     guidedStepIds,
     guidedStepsCfg,
+    guidedDefaultForwardGate,
+    guidedStatus.steps,
     language,
     onGuidedUiChange
   ]);
@@ -3007,6 +3049,82 @@ const FormView: React.FC<FormViewProps> = ({
     });
   };
 
+  const orderedEntryErrors = useMemo(() => {
+    if (!orderedEntryEnabled) return null;
+    return validateForm({
+      definition,
+      language,
+      values,
+      lineItems,
+      collapsedRows,
+      collapsedSubgroups
+    });
+  }, [collapsedRows, collapsedSubgroups, definition, language, lineItems, orderedEntryEnabled, values]);
+
+  const orderedEntryValid = useMemo(() => {
+    if (!orderedEntryEnabled) return true;
+    return !orderedEntryErrors || Object.keys(orderedEntryErrors).length === 0;
+  }, [orderedEntryEnabled, orderedEntryErrors]);
+
+  useEffect(() => {
+    if (!onFormValidityChange) return;
+    onFormValidityChange(orderedEntryValid);
+  }, [onFormValidityChange, orderedEntryValid]);
+
+  const resolveOrderedEntryBlock = useCallback(
+    (target: OrderedEntryTarget, targetGroup?: WebQuestionDefinition) => {
+      if (!orderedEntryEnabled) return null;
+      return findOrderedEntryBlock({
+        definition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        resolveVisibilityValue,
+        getTopValue: getTopValueNoScan,
+        orderedQuestions: orderedEntryQuestions,
+        target,
+        targetGroup
+      });
+    },
+    [
+      collapsedRows,
+      definition,
+      getTopValueNoScan,
+      language,
+      lineItems,
+      orderedEntryEnabled,
+      orderedEntryQuestions,
+      resolveVisibilityValue,
+      values
+    ]
+  );
+
+  const triggerOrderedEntryValidation = useCallback(
+    (target: OrderedEntryTarget, missingFieldPath: string) => {
+      const nextErrors = validateForm({
+        definition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        collapsedSubgroups
+      });
+      setErrors(nextErrors);
+      errorNavRequestRef.current += 1;
+      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, scope: 'orderedEntry' });
+      onDiagnostic?.('validation.ordered.blocked', {
+        targetScope: target.scope,
+        targetFieldPath:
+          target.scope === 'top'
+            ? target.questionId
+            : `${target.groupId}__${target.fieldId}__${target.rowId}`,
+        missingFieldPath
+      });
+    },
+    [collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, setErrors, values]
+  );
+
   const handleFieldChange = (q: WebQuestionDefinition, value: FieldValue) => {
     if (submitting) return;
     if ((q as any)?.valueMap) return;
@@ -3016,6 +3134,11 @@ const FormView: React.FC<FormViewProps> = ({
     }
     if (dedupLockActive && isFieldLockedByDedup(q.id)) {
       onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'dedupConflict' });
+      return;
+    }
+    const orderedBlock = resolveOrderedEntryBlock({ scope: 'top', questionId: q.id });
+    if (orderedBlock) {
+      triggerOrderedEntryValidation({ scope: 'top', questionId: q.id }, orderedBlock.missingFieldPath);
       return;
     }
     guidedLastUserEditAtRef.current = Date.now();
@@ -3052,6 +3175,27 @@ const FormView: React.FC<FormViewProps> = ({
         fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
         reason: 'dedupConflict'
       });
+      return;
+    }
+    const orderedBlock = resolveOrderedEntryBlock(
+      {
+        scope: 'line',
+        groupId: group.id,
+        rowId,
+        fieldId: (field?.id || '').toString()
+      },
+      group
+    );
+    if (orderedBlock) {
+      triggerOrderedEntryValidation(
+        {
+          scope: 'line',
+          groupId: group.id,
+          rowId,
+          fieldId: (field?.id || '').toString()
+        },
+        orderedBlock.missingFieldPath
+      );
       return;
     }
     guidedLastUserEditAtRef.current = Date.now();
@@ -3303,18 +3447,22 @@ const FormView: React.FC<FormViewProps> = ({
     [guidedVirtualState, lineItems, recordMeta, values]
   );
 
+  const getTopValueNoScan = useCallback(
+    (fieldId: string): FieldValue | undefined => {
+      const direct = (values as any)[fieldId];
+      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+      const sys = getSystemFieldValue(fieldId, recordMeta);
+      if (sys !== undefined) return sys as FieldValue;
+      return undefined;
+    },
+    [recordMeta, values]
+  );
+
   const topLevelGroupProgress = useMemo(() => {
     // Mirror the progress logic used in the group header UI.
     const isQuestionComplete = (q: WebQuestionDefinition): boolean => {
       if (q.type === 'LINE_ITEM_GROUP') {
         if (!q.lineItemConfig) return false;
-        const getTopValueNoScan = (fieldId: string): FieldValue | undefined => {
-          const direct = (values as any)[fieldId];
-          if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-          const sys = getSystemFieldValue(fieldId, recordMeta);
-          if (sys !== undefined) return sys as FieldValue;
-          return undefined;
-        };
         return isLineItemGroupQuestionComplete({
           groupId: q.id,
           lineItemConfig: q.lineItemConfig,

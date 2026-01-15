@@ -513,22 +513,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   const formSubmitActionRef = useRef<(() => void) | null>(null);
   const formBackActionRef = useRef<(() => void) | null>(null);
+  const orderedEntryEnabled = definition.submitValidation?.enforceFieldOrder === true;
   const [guidedUiState, setGuidedUiState] = useState<{
     activeStepId: string | null;
     activeStepIndex: number;
     stepCount: number;
     isFirst: boolean;
     isFinal: boolean;
+    forwardGateSatisfied: boolean;
     backAllowed: boolean;
     backVisible: boolean;
     backLabel: string;
     stepSubmitLabel?: string | LocalizedString;
   } | null>(null);
+  const [formIsValid, setFormIsValid] = useState<boolean>(() => (orderedEntryEnabled ? false : true));
   const vvBottomRef = useRef<number>(-1);
   const bottomBarHeightRef = useRef<number>(-1);
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
     phase: 'idle'
   }));
+
+  useEffect(() => {
+    if (!orderedEntryEnabled) {
+      setFormIsValid(true);
+    }
+  }, [orderedEntryEnabled]);
 
   const autoSaveTimerRef = useRef<number | null>(null);
   const autoSaveDirtyRef = useRef<boolean>(false);
@@ -5072,6 +5081,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       </div>
     ) : null;
 
+  const submitTopErrorMessage = resolveLocalizedString(
+    definition.submitValidation?.submitTopErrorMessage,
+    language,
+    ''
+  )
+    .toString()
+    .trim();
   const validationTopNotice =
     view === 'form' &&
     validationAttempted &&
@@ -5081,6 +5097,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         errors={errors}
         warnings={validationWarnings.top}
+        errorMessageOverride={submitTopErrorMessage || undefined}
         onDismiss={dismissValidationNotice}
         onNavigateToField={navigateToFieldFromHeaderNotice}
       />
@@ -5140,6 +5157,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const showGuidedBack = view === 'form' && !!guidedUiState?.backVisible;
   const guidedBackLabel = guidedUiState?.backLabel || tSystem('actions.back', language, 'Back');
   const guidedBackDisabled = guidedUiState ? !guidedUiState.backAllowed : false;
+  const orderedSubmitDisabled = orderedEntryEnabled
+    ? guidedUiState && !guidedUiState.isFinal
+      ? !guidedUiState.forwardGateSatisfied
+      : !formIsValid
+    : false;
 
   return (
     <div
@@ -5206,7 +5228,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
+        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
@@ -5274,6 +5296,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           reportBusyId={reportOverlay.buttonId || null}
           onUserEdit={handleUserEdit}
           onDiagnostic={logEvent}
+          onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
         />
       ) : null}

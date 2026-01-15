@@ -18,6 +18,7 @@ import {
   ListViewSearchConfig,
   ListViewViewConfig,
   LocalizedString,
+  SubmitValidationConfig,
   StepsConfig
 } from '../types';
 
@@ -142,6 +143,7 @@ export class Dashboard {
       const actionBars = dashboardConfig?.actionBars;
       const appHeader = dashboardConfig?.appHeader;
       const groupBehavior = dashboardConfig?.groupBehavior;
+      const submitValidation = dashboardConfig?.submitValidation;
       const portraitOnly = dashboardConfig?.portraitOnly;
       const submissionConfirmationMessage = dashboardConfig?.submissionConfirmationMessage;
       const submissionConfirmationTitle = dashboardConfig?.submissionConfirmationTitle;
@@ -186,6 +188,7 @@ export class Dashboard {
           actionBars,
           appHeader,
           groupBehavior,
+          submitValidation,
           steps,
           portraitOnly,
           submissionConfirmationMessage,
@@ -248,6 +251,7 @@ export class Dashboard {
     actionBars?: ActionBarsConfig;
     appHeader?: AppHeaderConfig;
     groupBehavior?: GroupBehaviorConfig;
+    submitValidation?: SubmitValidationConfig;
     portraitOnly?: boolean;
     submissionConfirmationMessage?: LocalizedString;
     submissionConfirmationTitle?: LocalizedString;
@@ -775,6 +779,33 @@ export class Dashboard {
 
     const submissionObj =
       parsed.submission !== undefined && parsed.submission !== null && typeof parsed.submission === 'object' ? parsed.submission : undefined;
+    const submitValidationRaw =
+      parsed.submitValidation !== undefined
+        ? parsed.submitValidation
+        : parsed.submitValidationConfig !== undefined
+          ? parsed.submitValidationConfig
+          : submissionObj && (submissionObj.validation !== undefined || submissionObj.validationConfig !== undefined)
+            ? (submissionObj.validation ?? submissionObj.validationConfig)
+            : undefined;
+    const submitValidationObj =
+      submitValidationRaw && typeof submitValidationRaw === 'object' ? (submitValidationRaw as any) : undefined;
+    const submitValidationEnforceRaw =
+      submitValidationObj?.enforceFieldOrder ??
+      submitValidationObj?.orderedFields ??
+      submitValidationObj?.orderedEntry ??
+      submitValidationObj?.enabled;
+    const submitValidationMessageRaw =
+      submitValidationObj?.submitTopErrorMessage ??
+      submitValidationObj?.submitErrorMessage ??
+      submitValidationObj?.topErrorMessage ??
+      submitValidationObj?.errorMessage;
+    const submitValidation: SubmitValidationConfig | undefined =
+      submitValidationEnforceRaw === undefined && submitValidationMessageRaw === undefined
+        ? undefined
+        : {
+            enforceFieldOrder: normalizeBoolean(submitValidationEnforceRaw),
+            submitTopErrorMessage: normalizeLocalized(submitValidationMessageRaw)
+          };
     const submissionConfirmationRaw =
       parsed.submissionConfirmationMessage !== undefined
         ? parsed.submissionConfirmationMessage
@@ -886,6 +917,7 @@ export class Dashboard {
       !actionBars &&
       !appHeader &&
       !groupBehavior &&
+      !submitValidation &&
       portraitOnly === undefined &&
       !submissionConfirmationMessage &&
       !submissionConfirmationTitle &&
@@ -925,6 +957,7 @@ export class Dashboard {
       actionBars,
       appHeader,
       groupBehavior,
+      submitValidation,
       portraitOnly,
       submissionConfirmationMessage,
       submissionConfirmationTitle,

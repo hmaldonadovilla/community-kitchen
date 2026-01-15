@@ -1366,6 +1366,13 @@ components:
             - auto-collapse completed sections
             - optionally open the next incomplete section
             - optionally auto-scroll expanded sections into view
+        submitValidation:
+          $ref: '#/components/schemas/SubmitValidationConfig'
+          description: |
+            Optional submission validation UI settings:
+            - enforce ordered entry for required fields
+            - disable Submit until the form is valid
+            - customize the top error banner message (per language)
         steps:
           $ref: '#/components/schemas/StepsConfig'
           description: |
@@ -1629,6 +1636,18 @@ components:
         summaryExpandAll:
           type: boolean
           description: When true, keep collapsible group sections expanded in the Summary view (native React summary).
+      additionalProperties: false
+
+    SubmitValidationConfig:
+      type: object
+      description: Submission validation UI settings.
+      properties:
+        enforceFieldOrder:
+          type: boolean
+          description: When true, require users to complete required fields in order and disable Submit until the form is valid.
+        submitTopErrorMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional localized override for the top submit validation error banner.
       additionalProperties: false
 
     StepsConfig:
