@@ -82,7 +82,8 @@ const mount = () => {
   }
 
   const root = createRoot(rootEl);
-  root.render(<App definition={def} formKey={formKey} record={record} />);
+  const Root = require('./Root').default as typeof import('./Root').Root;
+  root.render(<Root definition={def} formKey={formKey} record={record} />);
 };
 
 if (typeof document !== 'undefined') {

@@ -1024,7 +1024,26 @@ export function buildWebFormHtml(def: WebFormDefinition, formKey: string, bootst
     </style>
   </head>
   <body>
-    <div id="react-prototype-root"></div>
+    <div id="react-prototype-root">
+      <div class="page">
+        <header class="ck-app-header">
+          <button class="ck-app-avatar-btn" type="button" disabled>
+            <div class="ck-app-avatar">CK</div>
+          </button>
+          <div class="ck-app-title-row">
+            <div class="ck-app-title">Loading…</div>
+            <div class="ck-app-title-right">
+              <span data-tone="info">Starting Community Kitchen form…</span>
+            </div>
+          </div>
+        </header>
+        <main class="card form-card">
+          <h1>Loading…</h1>
+          <p>Please keep this page open. This may take a few seconds.</p>
+          <p class="muted" data-boot-copy="slow">Still loading… your connection may be slow. Don’t close the page.</p>
+        </main>
+      </div>
+    </div>
     <script>window.__WEB_FORM_DEF__ = ${defJson}; window.__WEB_FORM_KEY__ = ${keyJson}; window.__WEB_FORM_DEBUG__ = ${debugJson}; window.__WEB_FORM_BOOTSTRAP__ = ${bootstrapJson};</script>
     <script>
       // Decode + eval to keep the inline script content parser-safe within Google wrappers.
