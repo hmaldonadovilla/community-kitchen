@@ -2270,7 +2270,7 @@ components:
           description: |
             When `openView: "button"`, the BUTTON id (or encoded id via `__ckQIdx=`) to trigger.
 
-            Note: only non-mutating button actions are allowed (renderDocTemplate / renderMarkdownTemplate / renderHtmlTemplate / openUrlField).
+            Allowed button actions: renderDocTemplate / renderMarkdownTemplate / renderHtmlTemplate / openUrlField / updateRecord.
         sortable:
           type: boolean
           description: When true, allow sorting by the computed text value (default false).

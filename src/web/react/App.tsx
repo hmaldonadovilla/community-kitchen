@@ -4688,7 +4688,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
       const cfg: any = btn ? (btn as any).button : null;
       const action = (cfg?.action || '').toString().trim();
-      return action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate' || action === 'openUrlField';
+      return (
+        action === 'renderDocTemplate' ||
+        action === 'renderMarkdownTemplate' ||
+        action === 'renderHtmlTemplate' ||
+        action === 'openUrlField' ||
+        action === 'updateRecord'
+      );
     };
 
     const rowNumberHint = Number((row as any).__rowNumber);
