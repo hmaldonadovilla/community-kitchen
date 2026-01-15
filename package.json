@@ -8,7 +8,8 @@
     "build:web": "esbuild src/web/main.ts --bundle --outfile=dist/webform.js --format=iife --target=es2019 --minify --define:process.env.NODE_ENV='\"production\"' && node scripts/embed-web-bundle.js",
     "build:web:react": "node scripts/embed-html-templates.js && esbuild src/web/react/main.tsx --bundle --outfile=dist/webform-react.js --format=iife --target=es2019 --jsx=automatic --minify --define:process.env.NODE_ENV='\"production\"' --loader:.css=text && node scripts/build-react-entrypoints.js && node scripts/embed-react-bundle.js",
     "check:bundle": "node scripts/check-bundle-size.js",
-    "test": "jest"
+    "test": "jest",
+    "perf:lighthouse": "node scripts/performance/lighthouse-runner.js"
   },
   "keywords": [],
   "author": "",
@@ -18,12 +19,14 @@
     "@types/jest": "^30.0.0",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
+    "chrome-launcher": "^1.2.1",
     "esbuild": "^0.27.0",
     "github-markdown-css": "^5.8.1",
     "jest": "^30.2.0",
+    "lighthouse": "^13.0.1",
     "react": "^18.3.1",
-    "react-markdown": "^9.1.0",
     "react-dom": "^18.3.1",
+    "react-markdown": "^9.1.0",
     "remark-gfm": "^4.0.0",
     "ts-jest": "^29.4.5",
     "typescript": "^5.3.3"
