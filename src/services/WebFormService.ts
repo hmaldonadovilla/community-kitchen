@@ -57,9 +57,39 @@ export class WebFormService {
     return def;
   }
 
+  private getOrBuildDefinition(formKey?: string): WebFormDefinition {
+    const keyBase = (formKey || '').toString().trim() || '__DEFAULT__';
+    const formCacheKey = this.cacheManager.makeCacheKey('DEF', [keyBase]);
+    const startedAt = Date.now();
+
+    try {
+      const cached = this.cacheManager.cacheGet<WebFormDefinition>(formCacheKey);
+      if (cached) {
+        debugLog('definition.cache.hit', { formKey: keyBase, elapsedMs: Date.now() - startedAt });
+        return cached;
+      }
+    } catch (_) {
+      // Ignore cache read failures; fall back to building the definition.
+    }
+
+    const def = this.buildDefinition(formKey);
+    try {
+      this.cacheManager.cachePut(formCacheKey, def, 60 * 60 * 24); // 24h TTL; versioning handled by CacheEtagManager.
+      debugLog('definition.cache.miss', {
+        formKey: keyBase,
+        title: def.title,
+        questionCount: def.questions?.length || 0,
+        elapsedMs: Date.now() - startedAt
+      });
+    } catch (_) {
+      // Ignore cache write failures; definition is still valid for this request.
+    }
+    return def;
+  }
+
   public renderForm(formKey?: string, _params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
     debugLog('renderForm.start', { requestedKey: formKey, mode: 'react' });
-    const def = this.buildDefinition(formKey);
+    const def = this.getOrBuildDefinition(formKey);
     const targetKey = formKey || def.title;
     // Phase 1 performance fix: avoid heavy server-side list/bootstrap prefetch in doGet().
     // The React client will fetch list data via APIs after the shell is visible.
@@ -187,6 +217,36 @@ export class WebFormService {
 
   public static invalidateServerCache(reason?: string): void {
     CacheEtagManager.invalidate(getDocumentProperties(), reason);
+  }
+
+  /**
+   * Optional warm-up hook to be called from a time-based trigger.
+   *
+   * This prebuilds and caches WebFormDefinition objects for all forms so
+   * that initial user hits see a warmed definition cache.
+   */
+  public warmDefinitions(): void {
+    const forms = this.dashboard.getForms();
+    const startedAt = Date.now();
+    forms.forEach(form => {
+      try {
+        const def = this.getOrBuildDefinition(form.configSheet || form.title);
+        debugLog('definition.warm', {
+          formKey: form.configSheet || form.title,
+          title: def.title,
+          questions: def.questions?.length || 0
+        });
+      } catch (err: any) {
+        debugLog('definition.warm.error', {
+          formKey: form.configSheet || form.title,
+          message: err?.message || err?.toString?.() || 'unknown'
+        });
+      }
+    });
+    debugLog('definition.warm.completed', {
+      count: forms.length,
+      elapsedMs: Date.now() - startedAt
+    });
   }
 
   public fetchDataSource(
