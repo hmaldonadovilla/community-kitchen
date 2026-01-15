@@ -5162,6 +5162,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       ? !guidedUiState.forwardGateSatisfied
       : !formIsValid
     : false;
+  const submitDisabledTooltip =
+    view === 'form' && orderedEntryEnabled && orderedSubmitDisabled && !dedupChecking && !dedupConflict
+      ? tSystem('actions.submitDisabledTooltip', language, 'Complete all required fields to activate.')
+      : '';
 
   return (
     <div
@@ -5229,6 +5233,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
         submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
+        submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
@@ -5396,7 +5401,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict)}
+        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
+        submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
         hideEdit={view === 'summary' && isClosedRecord}
