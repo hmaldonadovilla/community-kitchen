@@ -13,8 +13,8 @@ export const buildSelectorOptionSet = (selector?: LineItemSelectorConfig | null)
   return {
     en: base,
     fr: selector.optionsFr && selector.optionsFr.length ? selector.optionsFr : base,
-    nl: selector.optionsNl && selector.optionsNl.length ? selector.optionsNl : base
+    nl: selector.optionsNl && selector.optionsNl.length ? selector.optionsNl : base,
+    raw: selector.optionsRaw
   };
 };
-
 

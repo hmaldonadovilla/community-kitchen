@@ -964,11 +964,22 @@ components:
       properties:
         mode:
           type: string
-          enum: [default, progressive]
+          enum: [default, progressive, table]
           description: |
             UI mode for this line item group.
             - default: existing editor behavior
             - progressive: rows are collapsed by default and can be expanded once collapsed fields are valid
+            - table: compact table layout with one row per line item
+        tableColumns:
+          type: array
+          items:
+            type: string
+          description: Optional ordered list of field ids to render as columns when `mode: "table"`.
+        tableHideUntilAnchor:
+          type: boolean
+          description: |
+            When true (default), hide non-anchor columns until the anchor field has a value.
+            Useful when rows are created by selecting the anchor value first (e.g., ingredients).
         openInOverlay:
           type: boolean
           description: |

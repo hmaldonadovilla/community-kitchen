@@ -151,7 +151,7 @@ export class ConfigSheet {
 
     return data.map(row => {
       const type = row[idxType] ? row[idxType].toString().toUpperCase() as QuestionType : 'TEXT';
-      const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[idxOptionsEn], row[idxOptionsFr], row[idxOptionsNl]);
+      const { options, optionsFr, optionsNl, optionsRaw } = this.parseOptions(ss, row[idxOptionsEn], row[idxOptionsFr], row[idxOptionsNl]);
       const rawConfig = row[idxConfig] ? row[idxConfig].toString().trim() : '';
       const optionFilterRaw = row[idxOptionFilter] ? row[idxOptionFilter].toString().trim() : rawConfig;
       const validationRaw = row[idxValidation] ? row[idxValidation].toString().trim() : rawConfig;
@@ -208,6 +208,7 @@ export class ConfigSheet {
         options,
         optionsFr,
         optionsNl,
+        optionsRaw,
         status,
         uploadConfig,
         lineItemConfig,
@@ -423,19 +424,45 @@ export class ConfigSheet {
     }
   }
 
-  private static parseOptions(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, rawEn: any, rawFr: any, rawNl: any): { options: string[]; optionsFr: string[]; optionsNl: string[] } {
+  private static parseOptions(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    rawEn: any,
+    rawFr: any,
+    rawNl: any
+  ): { options: string[]; optionsFr: string[]; optionsNl: string[]; optionsRaw?: Record<string, any>[] } {
     const rawOptionsEn = rawEn ? rawEn.toString().trim() : '';
     if (rawOptionsEn.startsWith('REF:')) {
       const refSheetName = rawOptionsEn.substring(4).trim();
       const refSheet = ss.getSheetByName(refSheetName);
       if (refSheet) {
         const lastRefRow = refSheet.getLastRow();
+        const lastRefColumn = Math.max(3, refSheet.getLastColumn());
         if (lastRefRow > 1) {
-          const refData = refSheet.getRange(2, 1, lastRefRow - 1, 3).getValues();
+          const refData = refSheet.getRange(2, 1, lastRefRow - 1, lastRefColumn).getValues();
+          const headers = refSheet.getRange(1, 1, 1, lastRefColumn).getValues()[0] || [];
+          const normalizedHeaders = headers.map((h: any, idx: number) => {
+            const key = h !== undefined && h !== null ? h.toString().trim() : '';
+            return key || `Column_${idx + 1}`;
+          });
+          const optionsRaw = refData
+            .map((row: any[]) => {
+              const rowObj: Record<string, any> = {};
+              normalizedHeaders.forEach((key, idx) => {
+                if (!key) return;
+                rowObj[key] = row[idx];
+              });
+              const baseValue = row[0];
+              if (baseValue !== undefined && baseValue !== null && baseValue !== '') {
+                rowObj.__ckOptionValue = baseValue.toString();
+              }
+              return rowObj;
+            })
+            .filter(row => row.__ckOptionValue);
           return {
             options: refData.map(r => r[0].toString()).filter(s => s),
             optionsFr: refData.map(r => r[1].toString()).filter(s => s),
-            optionsNl: refData.map(r => r[2].toString()).filter(s => s)
+            optionsNl: refData.map(r => r[2].toString()).filter(s => s),
+            optionsRaw
           };
         }
       }
@@ -2263,16 +2290,19 @@ export class ConfigSheet {
     let options: string[] = [];
     let optionsFr: string[] = [];
     let optionsNl: string[] = [];
+    let optionsRaw: Record<string, any>[] | undefined;
 
     if (rawSelector.optionsRef) {
       const parsed = this.parseOptions(ss, rawSelector.optionsRef, rawSelector.optionsRefFr, rawSelector.optionsRefNl);
       options = parsed.options;
       optionsFr = parsed.optionsFr;
       optionsNl = parsed.optionsNl;
+      optionsRaw = parsed.optionsRaw;
     } else {
       options = Array.isArray(rawSelector.options) ? rawSelector.options : [];
       optionsFr = Array.isArray(rawSelector.optionsFr) ? rawSelector.optionsFr : [];
       optionsNl = Array.isArray(rawSelector.optionsNl) ? rawSelector.optionsNl : [];
+      optionsRaw = Array.isArray(rawSelector.optionsRaw) ? rawSelector.optionsRaw : undefined;
     }
 
     const optionFilter = this.normalizeOptionMapLike(ss, rawSelector.optionFilter);
@@ -2286,6 +2316,7 @@ export class ConfigSheet {
       options,
       optionsFr,
       optionsNl,
+      optionsRaw,
       optionsRef: rawSelector.optionsRef,
       optionFilter
     };
@@ -2318,7 +2349,7 @@ export class ConfigSheet {
     const lastColumn = Math.max(10, sheet.getLastColumn());
       const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
       const fields: LineItemFieldConfig[] = rows.map((row, idx) => {
-        const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
+        const { options, optionsFr, optionsNl, optionsRaw } = this.parseOptions(ss, row[6], row[7], row[8]);
         const rawConfig = row[9] ? row[9].toString().trim() : '';
         const optionFilter = this.parseOptionFilter(ss, rawConfig);
         const validationRules = this.parseValidationRules(rawConfig);
@@ -2359,6 +2390,7 @@ export class ConfigSheet {
         options,
         optionsFr,
         optionsNl,
+        optionsRaw,
         optionFilter,
         validationRules,
         visibility,
@@ -2431,6 +2463,7 @@ export class ConfigSheet {
       options: Array.isArray(field?.options) ? field.options : [],
       optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],
       optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : [],
+      optionsRaw: Array.isArray(field?.optionsRaw) ? field.optionsRaw : undefined,
       optionFilter,
       validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined,
       visibility: this.normalizeVisibility(field?.visibility),

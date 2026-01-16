@@ -411,6 +411,7 @@ const FormView: React.FC<FormViewProps> = ({
   const errorNavModeRef = useRef<'focus' | 'scroll'>('focus');
   const choiceVariantLogRef = useRef<Record<string, string>>({});
   const choiceSearchLoggedRef = useRef<Set<string>>(new Set());
+  const choiceSearchIndexLoggedRef = useRef<Set<string>>(new Set());
   const hideLabelLoggedRef = useRef<Set<string>>(new Set());
   const groupScrollAnimRafRef = useRef(0);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -2066,10 +2067,24 @@ const FormView: React.FC<FormViewProps> = ({
               enabled: searchEnabled === true ? 'forced' : 'auto'
             });
           }
+          const searchableCount = options.filter(opt => !!opt.searchText).length;
+          if (searchableCount && !choiceSearchIndexLoggedRef.current.has(fieldPath)) {
+            choiceSearchIndexLoggedRef.current.add(fieldPath);
+            onDiagnostic?.('ui.choiceControl.search.multiField', {
+              fieldPath,
+              optionCount: options.length,
+              indexedCount: searchableCount
+            });
+          }
           return (
             <SearchableSelect
               value={value || ''}
-              options={options.map(o => ({ value: o.value, label: o.label, tooltip: (o as any).tooltip }))}
+              options={options.map(o => ({
+                value: o.value,
+                label: o.label,
+                tooltip: (o as any).tooltip,
+                searchText: o.searchText
+              }))}
               disabled={!!disabled}
               placeholder={placeholder}
               emptyText={tSystem('common.noMatches', language, 'No matches.')}
@@ -5821,7 +5836,11 @@ const FormView: React.FC<FormViewProps> = ({
                                       disabled={submitting}
                                       placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
                                       emptyText={tSystem('common.noMatches', language, 'No matches.')}
-                                      options={subSelectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                                      options={subSelectorOptions.map(opt => ({
+                                        value: opt.value,
+                                        label: opt.label,
+                                        searchText: opt.searchText
+                                      }))}
                                       onChange={nextValue => {
                                         latestSubgroupSelectorValueRef.current[subKey] = nextValue;
                                         setSubgroupSelectors(prev => {
@@ -6692,7 +6711,11 @@ const FormView: React.FC<FormViewProps> = ({
                         disabled={locked}
                         placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
                         emptyText={tSystem('common.noMatches', language, 'No matches.')}
-                        options={selectorOptions.map(opt => ({ value: opt.value, label: opt.label }))}
+                        options={selectorOptions.map(opt => ({
+                          value: opt.value,
+                          label: opt.label,
+                          searchText: opt.searchText
+                        }))}
                         onChange={nextValue => {
                           setValues(prev => {
                             if ((prev as any)[selectorCfg.id] === nextValue) return prev;
@@ -7567,6 +7590,7 @@ const FormView: React.FC<FormViewProps> = ({
         setOverlay={setOverlay}
         language={language}
         submitting={submitting}
+        onDiagnostic={onDiagnostic}
         addLineItemRowManual={addLineItemRowManual}
       />
       {lineItemGroupOverlayPortal}

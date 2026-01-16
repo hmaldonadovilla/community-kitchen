@@ -824,8 +824,19 @@ export interface LineItemGroupUiConfig {
    * Optional UI mode for rendering this line item group.
    * - undefined: default/table-like editor (existing behavior)
    * - progressive: collapsed-by-default rows with gated expand
+   * - table: compact table layout with one row per line item
    */
-  mode?: 'progressive' | 'default';
+  mode?: 'progressive' | 'default' | 'table';
+  /**
+   * Optional ordered list of field ids to render as columns when `mode: "table"`.
+   * Defaults to the line item field order.
+   */
+  tableColumns?: string[];
+  /**
+   * When true (default), hide non-anchor columns until the anchor field has a value.
+   * Useful when rows are created by selecting the anchor value first (e.g., ingredients).
+   */
+  tableHideUntilAnchor?: boolean;
   /**
    * When true, the line item group editor is opened in a full-page overlay (similar to subgroup overlays),
    * and the main form shows a compact "Open" card instead of rendering the full table inline.
@@ -981,6 +992,7 @@ export interface LineItemFieldConfig {
   options: string[];
   optionsFr: string[];
   optionsNl: string[];
+  optionsRaw?: Record<string, any>[];
   optionFilter?: OptionFilter;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
@@ -1000,6 +1012,7 @@ export interface LineItemSelectorConfig {
   options?: string[];
   optionsFr?: string[];
   optionsNl?: string[];
+  optionsRaw?: Record<string, any>[];
   optionsRef?: string;
   required?: boolean;
   /**
@@ -1276,6 +1289,7 @@ export interface QuestionConfig {
   options: string[];      // English options
   optionsFr: string[];    // French options
   optionsNl: string[];    // Dutch options
+  optionsRaw?: Record<string, any>[];
   status: 'Active' | 'Archived';
   uploadConfig?: FileUploadConfig;
   lineItemConfig?: LineItemGroupConfig;
@@ -1810,6 +1824,7 @@ export interface WebQuestionDefinition {
     en: string[];
     fr: string[];
     nl: string[];
+    raw?: Record<string, any>[];
   };
   lineItemConfig?: LineItemGroupConfig;
   uploadConfig?: FileUploadConfig;

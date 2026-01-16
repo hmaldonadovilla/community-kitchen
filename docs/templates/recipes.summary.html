@@ -217,20 +217,20 @@
           <colgroup>
             <col class="ck-col-ingredient" />
             <col class="ck-col-quantity" />
-            <col class="ck-col-allergens" />
+            <col class="ck-col-allergens" data-ck-allergen-col />
           </colgroup>
           <thead>
             <tr>
               <th scope="col">Ingredient</th>
               <th scope="col">Quantity</th>
-              <th scope="col">Allergens</th>
+              <th scope="col" class="ck-allergen-header" data-ck-allergen-col>Allergens</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>{{Q65ILNUSGL.ING}}</td>
               <td>{{Q65ILNUSGL.QTY}} {{Q65ILNUSGL.UNIT}}</td>
-              <td>{{DEFAULT(Q65ILNUSGL.ALLERGEN, "None")}}</td>
+              <td data-ck-allergen-cell>{{DEFAULT(Q65ILNUSGL.ALLERGEN, "None")}}</td>
             </tr>
           </tbody>
         </table>
@@ -267,6 +267,27 @@
       tab.addEventListener('click', function () {
         activate(tab.getAttribute('data-tab-target'));
       });
+    });
+
+    var tables = root.querySelectorAll('.ck-ingredients-table');
+    tables.forEach(function (table) {
+      var allergenCells = table.querySelectorAll('[data-ck-allergen-cell]');
+      var hasAllergen = false;
+      allergenCells.forEach(function (cell) {
+        var text = (cell.textContent || '').trim().toLowerCase();
+        if (text && text !== 'none') {
+          hasAllergen = true;
+        }
+      });
+      if (!hasAllergen) {
+        var allergenCols = table.querySelectorAll('[data-ck-allergen-col]');
+        allergenCols.forEach(function (node) {
+          node.style.display = 'none';
+        });
+        allergenCells.forEach(function (node) {
+          node.style.display = 'none';
+        });
+      }
     });
   })();
 </script>

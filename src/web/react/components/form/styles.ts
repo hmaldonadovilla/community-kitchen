@@ -178,6 +178,53 @@ export const FORM_VIEW_STYLES = `
         .form-card .line-item-table textarea {
           font-size: 26px;
         }
+        .form-card .ck-line-item-table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+        }
+        .form-card .ck-line-item-table th,
+        .form-card .ck-line-item-table td {
+          padding: 8px 10px;
+          border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+          text-align: left;
+          vertical-align: top;
+        }
+        .form-card .ck-line-item-table th {
+          font-size: calc(var(--ck-font-label) * 0.85);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: rgba(15, 23, 42, 0.65);
+        }
+        .form-card .ck-line-item-table__actions {
+          width: 1%;
+          white-space: nowrap;
+          text-align: right;
+        }
+        .form-card .ck-line-item-table__control input,
+        .form-card .ck-line-item-table__control select,
+        .form-card .ck-line-item-table__control textarea {
+          width: 100%;
+          min-width: 140px;
+          font-size: var(--ck-font-control);
+        }
+        .form-card .ck-line-item-table__value {
+          font-size: var(--ck-font-control);
+        }
+        .form-card .ck-line-item-table__empty {
+          text-align: center;
+          padding: 16px;
+          color: rgba(15, 23, 42, 0.55);
+        }
+        .form-card .ck-line-item-table__scroll {
+          overflow-x: auto;
+        }
+        .form-card .ck-line-item-table__row--even {
+          background: #ffffff;
+        }
+        .form-card .ck-line-item-table__row--odd {
+          background: #f8fafc;
+        }
         .form-card .field.inline-field,
         .webform-overlay .field.inline-field {
           display: flex;
@@ -1268,4 +1315,3 @@ export const FORM_VIEW_STYLES = `
         }
 
       `;
-

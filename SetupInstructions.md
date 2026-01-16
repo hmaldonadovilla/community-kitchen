@@ -548,7 +548,10 @@ This project uses TypeScript. You need to build the script before using it in Go
           - `ui.showItemPill`: show/hide the “N items” pill in the line-item header (default: true)
           - `ui.addButtonPlacement`: where the Add button appears (`top`, `bottom`, `both`, `hidden`; default: `both`)
           - `ui.openInOverlay`: when `true`, the line-item group editor opens in a **full-page overlay** (like subgroup overlays) and the main form shows a compact “Open” card instead of rendering the full table inline
-          - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`)
+          - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`). Search indexes include extra columns from `optionsRef`/data sources when available.
+          - `ui.mode: "table"`: render line items as a compact table (also supported on subgroups)
+          - `ui.tableColumns`: ordered list of field ids to show as table columns (defaults to the line-item field order)
+          - `ui.tableHideUntilAnchor`: when true (default), hide non-anchor columns until the anchor field has a value
           - `ui.needsAttentionMessage`: localized override for the “Needs attention” helper shown when this line item group or subgroup requires review
           - `ui.allowRemoveAutoRows`: when `false`, hides the **Remove** button for rows marked `__ckRowSource: "auto"`
           - `ui.saveDisabledRows`: when `true`, includes disabled progressive rows in the submitted payload (so they can appear in downstream PDFs)
@@ -1048,6 +1051,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
       - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; you can optionally hide the UI paging controls via `listView.paginationControlsEnabled: false`. Search runs client-side (keyword search by default, or date search via `listView.search`). Header sorting is enabled by default (click a column header to sort), and can be disabled with `listView.headerSortEnabled: false` (totalCount is capped at 200).
     - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
+    - **Line-item table mode**: To render line items as a compact table, set `"ui": { "mode": "table" }` in the line-item config (also supported for subgroups). You can control column order with `"ui": { "tableColumns": ["ING", "QTY", "UNIT"] }` and hide non-anchor columns until the anchor value is chosen with `"ui": { "tableHideUntilAnchor": true }` (default).
     - **Quick recipe for the new features**:
       - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
 

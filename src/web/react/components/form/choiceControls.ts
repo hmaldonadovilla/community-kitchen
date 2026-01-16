@@ -7,6 +7,7 @@ export type OptionLike = {
   label: string;
   labels?: Record<string, string>;
   tooltip?: string;
+  searchText?: string;
 };
 
 export type BooleanChoiceMap = { trueValue: string; falseValue: string };
@@ -86,5 +87,4 @@ export const computeChoiceControlVariant = (
   }
   return { variant: 'select', booleanDetected: !!booleanMap };
 };
-
 
