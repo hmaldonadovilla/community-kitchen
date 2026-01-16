@@ -16,6 +16,7 @@ interface ListViewProps {
   formKey: string;
   definition: WebFormDefinition;
   language: LangCode;
+  disabled?: boolean;
   onSelect: (
     row: ListItem,
     record?: WebFormSubmission,
@@ -40,6 +41,7 @@ const ListView: React.FC<ListViewProps> = ({
   formKey,
   definition,
   language,
+  disabled,
   onSelect,
   cachedResponse,
   cachedRecords,
@@ -51,6 +53,7 @@ const ListView: React.FC<ListViewProps> = ({
   prefetching: prefetchingProp,
   error: errorProp
 }) => {
+  const uiDisabled = Boolean(disabled);
   const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
   const paginationEnabled = definition.listView?.paginationControlsEnabled !== false;
   const [loading, setLoading] = useState(false);
@@ -898,6 +901,15 @@ const ListView: React.FC<ListViewProps> = ({
         ? 'ck-list-nav ck-list-nav--muted'
         : 'ck-list-nav';
 
+    if (uiDisabled) {
+      return (
+        <span className={className} aria-disabled="true" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
+          {icon}
+          <span>{text}</span>
+        </span>
+      );
+    }
+
     const hrefFieldId = (cell.hrefFieldId || '').toString().trim();
     const hrefRaw = hrefFieldId ? (row as any)[hrefFieldId] : null;
     const href = (() => {
@@ -939,6 +951,7 @@ const ListView: React.FC<ListViewProps> = ({
       <button
         type="button"
         className={className}
+        disabled={uiDisabled}
         onClick={e => {
           e.stopPropagation();
           onDiagnostic?.('list.ruleColumn.click', {
@@ -1059,6 +1072,10 @@ const ListView: React.FC<ListViewProps> = ({
 
   const handleRowClick = useCallback(
     (row: ListItem) => {
+      if (uiDisabled) {
+        onDiagnostic?.('list.row.click.disabled', { recordId: row.id });
+        return;
+      }
       const record = row?.id ? records[row.id] : undefined;
       const rowOpen = (() => {
         for (const col of ruleColumns) {
@@ -1087,7 +1104,7 @@ const ListView: React.FC<ListViewProps> = ({
         onSelect(row, record);
       }
     },
-    [onDiagnostic, onSelect, records, ruleColumns]
+    [onDiagnostic, onSelect, records, ruleColumns, uiDisabled]
   );
 
   const clearSearch = useCallback(() => {
@@ -1244,7 +1261,18 @@ const ListView: React.FC<ListViewProps> = ({
   }`;
 
   return (
-    <div className="card">
+    <div className="card" style={{ position: 'relative' }} aria-disabled={uiDisabled}>
+      {uiDisabled ? (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
+            cursor: 'wait'
+          }}
+        />
+      ) : null}
       {titleNode}
 
       <div className="list-toolbar">
@@ -1516,7 +1544,12 @@ const ListView: React.FC<ListViewProps> = ({
           <tbody>
             {pagedItems.length ? (
               pagedItems.map(row => (
-                  <tr key={row.id} onClick={() => handleRowClick(row)} style={{ cursor: 'pointer' }}>
+                  <tr
+                    key={row.id}
+                    onClick={() => handleRowClick(row)}
+                    style={{ cursor: uiDisabled ? 'default' : 'pointer' }}
+                    aria-disabled={uiDisabled}
+                  >
                     {columnsForTable.map(col => (
                     <td
                       key={col.fieldId}
@@ -1545,7 +1578,8 @@ const ListView: React.FC<ListViewProps> = ({
                 key={row.id}
                 className="ck-list-card"
                 role="button"
-                tabIndex={0}
+                tabIndex={uiDisabled ? -1 : 0}
+                aria-disabled={uiDisabled}
                 onClick={() => handleRowClick(row)}
                 onKeyDown={e => {
                   if (e.key !== 'Enter' && e.key !== ' ') return;
