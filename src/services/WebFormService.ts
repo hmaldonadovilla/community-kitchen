@@ -57,6 +57,30 @@ export class WebFormService {
     return def;
   }
 
+  private getFormsCached(): FormConfig[] {
+    const formsCacheKey = this.cacheManager.makeCacheKey('FORMS', ['ALL']);
+    const startedAt = Date.now();
+    try {
+      const cached = this.cacheManager.cacheGet<FormConfig[]>(formsCacheKey);
+      if (cached && Array.isArray(cached)) {
+        debugLog('forms.cache.hit', { count: cached.length, elapsedMs: Date.now() - startedAt });
+        return cached;
+      }
+    } catch (_) {
+      // Ignore cache read failures; fall back to reading the dashboard sheet.
+    }
+
+    const forms = this.dashboard.getForms();
+    try {
+      // Forms dashboard typically changes infrequently; 1 hour TTL is a good balance.
+      this.cacheManager.cachePut(formsCacheKey, forms, 60 * 60);
+      debugLog('forms.cache.miss', { count: forms.length, elapsedMs: Date.now() - startedAt });
+    } catch (_) {
+      // Ignore cache write failures; forms list is still valid for this request.
+    }
+    return forms;
+  }
+
   private getOrBuildDefinition(formKey?: string): WebFormDefinition {
     const keyBase = (formKey || '').toString().trim() || '__DEFAULT__';
     const formCacheKey = this.cacheManager.makeCacheKey('DEF', [keyBase]);
