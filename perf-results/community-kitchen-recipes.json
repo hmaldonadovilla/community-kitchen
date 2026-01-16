@@ -1,0 +1,82 @@
+{
+  "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+  "runs": [
+    {
+      "run": 1,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:49:10.468Z",
+        "performanceScore": 0.69,
+        "ttfb": 5672,
+        "serverResponseTime": 5672,
+        "fcp": 3462.51325,
+        "lcp": 4349.7595,
+        "tti": 4349.7595
+      }
+    },
+    {
+      "run": 2,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:49:31.583Z",
+        "performanceScore": 0.87,
+        "ttfb": 2533,
+        "serverResponseTime": 2533,
+        "fcp": 2744.4765,
+        "lcp": 2744.4765,
+        "tti": 2744.4765
+      }
+    },
+    {
+      "run": 3,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:49:48.972Z",
+        "performanceScore": 0.86,
+        "ttfb": 3036,
+        "serverResponseTime": 3036,
+        "fcp": 2767.438,
+        "lcp": 2767.438,
+        "tti": 2767.438
+      }
+    }
+  ],
+  "summary": {
+    "ttfb": {
+      "avg": 3747,
+      "min": 2533,
+      "max": 5672,
+      "unit": "ms"
+    },
+    "serverResponseTime": {
+      "avg": 3747,
+      "min": 2533,
+      "max": 5672,
+      "unit": "ms"
+    },
+    "fcp": {
+      "avg": 2991.4759166666668,
+      "min": 2744.4765,
+      "max": 3462.51325,
+      "unit": "ms"
+    },
+    "lcp": {
+      "avg": 3287.224666666667,
+      "min": 2744.4765,
+      "max": 4349.7595,
+      "unit": "ms"
+    },
+    "tti": {
+      "avg": 3287.224666666667,
+      "min": 2744.4765,
+      "max": 4349.7595,
+      "unit": "ms"
+    },
+    "performanceScore": {
+      "avg": 0.8066666666666666,
+      "min": 0.69,
+      "max": 0.87,
+      "unit": "0-1"
+    }
+  }
+}

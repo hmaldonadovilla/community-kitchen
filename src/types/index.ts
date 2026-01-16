@@ -373,6 +373,44 @@ export interface QuestionUiConfig {
    * - undefined: auto (enabled only when option count is "large")
    */
   choiceSearchEnabled?: boolean;
+  /**
+   * Optional disclaimer section appended below PARAGRAPH fields.
+   *
+   * The UI renders this as a non-editable block and keeps the stored value in sync by appending
+   * the generated section to the paragraph content on save.
+   */
+  paragraphDisclaimer?: ParagraphDisclaimerConfig;
+}
+
+export interface ParagraphDisclaimerConfig {
+  /**
+   * Line item group id to scan for non-match flags (`__ckNonMatchOptions`).
+   */
+  sourceGroupId: string;
+  /**
+   * Optional subgroup id to scan (aggregates all rows across parent rows).
+   */
+  sourceSubGroupId?: string;
+  /**
+   * Line item field id to use as the item label (defaults to anchorFieldId or first field).
+   */
+  itemFieldId?: string;
+  /**
+   * Optional section title shown before the disclaimer bullets.
+   */
+  title?: LocalizedString | string;
+  /**
+   * Template for each mismatch line. Supports {key} / {value} and {items} / {keys} placeholders.
+   */
+  listMessage?: LocalizedString | string;
+  /**
+   * Optional extra bullet shown after the per-key list.
+   */
+  message?: LocalizedString | string;
+  /**
+   * Optional separator inserted before the disclaimer section (defaults to "---").
+   */
+  separator?: string;
 }
 
 export interface FileUploadConfig {
@@ -517,10 +555,17 @@ export interface OptionMapRefConfig {
   keyDelimiter?: string;
 }
 
+export type OptionFilterMatchMode = 'and' | 'or';
+
 export interface OptionFilter {
   dependsOn: string | string[]; // question/field ID(s) to watch (supports array for composite filters)
   optionMap: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
   optionMapRef?: OptionMapRefConfig; // optional source reference (resolved into optionMap at load time)
+  /**
+   * When a dependency resolves to multiple values (e.g., multi-select checkbox),
+   * control whether allowed options are intersected (and) or unioned (or).
+   */
+  matchMode?: OptionFilterMatchMode;
 }
 
 // Maps a controlling field's value to a derived readonly value for TEXT fields.

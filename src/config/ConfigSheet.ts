@@ -18,6 +18,7 @@ import {
   OptionSortMode,
   OptionMapRefConfig,
   OptionFilter,
+  ParagraphDisclaimerConfig,
   PageSectionConfig,
   QuestionGroupConfig,
   QuestionUiConfig,
@@ -1963,6 +1964,12 @@ export class ConfigSheet {
         rawUi.no_summary_label
     );
     const paragraphRows = this.normalizeParagraphRows(rawUi.paragraphRows ?? rawUi.paragraph_rows ?? rawUi.textareaRows ?? rawUi.textarea_rows);
+    const paragraphDisclaimer = this.normalizeParagraphDisclaimer(
+      rawUi.paragraphDisclaimer ??
+        rawUi.paragraph_disclaimer ??
+        rawUi.paragraphDisclaimerConfig ??
+        rawUi.paragraph_disclaimer_config
+    );
     const cfg: QuestionUiConfig = {};
     if (control) cfg.control = control;
     if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
@@ -1970,6 +1977,7 @@ export class ConfigSheet {
     if (summaryHideLabel !== undefined) cfg.summaryHideLabel = summaryHideLabel;
     if (summaryVisibility) cfg.summaryVisibility = summaryVisibility;
     if (paragraphRows) (cfg as any).paragraphRows = paragraphRows;
+    if (paragraphDisclaimer) (cfg as any).paragraphDisclaimer = paragraphDisclaimer;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
@@ -2142,6 +2150,43 @@ export class ConfigSheet {
     }
     const hasAny = Object.keys(cfg).some(k => (cfg as any)[k] !== undefined);
     return hasAny ? cfg : undefined;
+  }
+
+  private static normalizeParagraphDisclaimer(raw: any): ParagraphDisclaimerConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const groupIdRaw =
+      raw.sourceGroupId ??
+      raw.groupId ??
+      raw.group ??
+      raw.lineItemGroupId ??
+      raw.line_item_group_id ??
+      raw.lineItemGroup ??
+      raw.line_item_group;
+    if (!groupIdRaw) return undefined;
+
+    const cfg: ParagraphDisclaimerConfig = {
+      sourceGroupId: groupIdRaw.toString().trim()
+    };
+
+    const subGroupRaw =
+      raw.sourceSubGroupId ??
+      raw.subGroupId ??
+      raw.subgroupId ??
+      raw.subGroup ??
+      raw.subgroup ??
+      raw.sub_group_id ??
+      raw.subgroup_id;
+    if (subGroupRaw) cfg.sourceSubGroupId = subGroupRaw.toString().trim();
+
+    const itemFieldRaw = raw.itemFieldId ?? raw.fieldId ?? raw.itemField ?? raw.sourceFieldId ?? raw.sourceField;
+    if (itemFieldRaw) cfg.itemFieldId = itemFieldRaw.toString().trim();
+
+    if (raw.title !== undefined) cfg.title = raw.title;
+    if (raw.listMessage !== undefined) cfg.listMessage = raw.listMessage;
+    if (raw.message !== undefined) cfg.message = raw.message;
+    if (raw.separator !== undefined && raw.separator !== null) cfg.separator = raw.separator.toString();
+
+    return cfg;
   }
 
   private static parseLineItemConfig(

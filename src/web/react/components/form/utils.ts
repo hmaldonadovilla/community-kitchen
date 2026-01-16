@@ -13,11 +13,19 @@ import { matchesWhenClause } from '../../../rules/visibility';
 
 type TemplateVars = Record<string, string | number | boolean | null | undefined>;
 
-const formatTemplate = (value: string, vars?: TemplateVars): string => {
+export const formatTemplate = (value: string, vars?: TemplateVars): string => {
   if (!vars) return value;
   return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
     const raw = (vars as any)[key];
     return raw === undefined || raw === null ? '' : String(raw);
+  });
+};
+
+export const formatOptionFilterNonMatchWarning = (args: { language: LangCode; keys: string[] }): string => {
+  const keys = (args.keys || []).map(k => (k ?? '').toString().trim()).filter(Boolean);
+  if (!keys.length) return '';
+  return tSystem('validation.optionFilterMismatch', args.language, 'Does not satisfy: {keys}', {
+    keys: keys.join(', ')
   });
 };
 

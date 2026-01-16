@@ -218,6 +218,7 @@ export const FORM_VIEW_STYLES = `
         .form-card .field.inline-field > input,
         .form-card .field.inline-field > select,
         .form-card .field.inline-field > textarea,
+        .form-card .field.inline-field > .ck-paragraph-shell,
         .form-card .field.inline-field > .inline-options,
         .form-card .field.inline-field > .ck-choice-control,
         .form-card .field.inline-field > .ck-number-stepper,
@@ -225,6 +226,7 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay .field.inline-field > input,
         .webform-overlay .field.inline-field > select,
         .webform-overlay .field.inline-field > textarea,
+        .webform-overlay .field.inline-field > .ck-paragraph-shell,
         .webform-overlay .field.inline-field > .inline-options,
         .webform-overlay .field.inline-field > .ck-choice-control,
         .webform-overlay .field.inline-field > .ck-number-stepper,
@@ -233,6 +235,43 @@ export const FORM_VIEW_STYLES = `
           flex: 1 1 calc(50% - 6px);
           min-width: 0;
           width: 100%;
+        }
+
+        .form-card .ck-paragraph-shell,
+        .webform-overlay .ck-paragraph-shell {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 12px 16px;
+          min-height: var(--control-height);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-control);
+          background: #ffffff;
+          box-sizing: border-box;
+        }
+        .form-card .ck-paragraph-shell > textarea,
+        .webform-overlay .ck-paragraph-shell > textarea {
+          border: none;
+          padding: 0;
+          margin: 0;
+          background: transparent;
+          font: inherit;
+          min-height: 110px;
+          resize: vertical;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .form-card .ck-paragraph-shell > textarea:focus,
+        .webform-overlay .ck-paragraph-shell > textarea:focus {
+          outline: none;
+        }
+        .form-card .ck-paragraph-shell .ck-paragraph-disclaimer,
+        .webform-overlay .ck-paragraph-shell .ck-paragraph-disclaimer {
+          white-space: pre-wrap;
+          font-size: 0.95em;
+          color: var(--text);
+          border-top: 1px dashed var(--border);
+          padding-top: 8px;
         }
 
         /* Number input wrapper (legacy name: ck-number-stepper). */
@@ -664,18 +703,21 @@ export const FORM_VIEW_STYLES = `
         .ck-line-grid > .field.inline-field > input,
         .ck-line-grid > .field.inline-field > select,
         .ck-line-grid > .field.inline-field > textarea,
+        .ck-line-grid > .field.inline-field > .ck-paragraph-shell,
         .ck-line-grid > .field.inline-field > .inline-options,
         .ck-line-grid > .field.inline-field > .ck-choice-control,
         .ck-line-grid > .field.inline-field > .ck-number-stepper,
         .ck-pair-grid > .field.inline-field > input,
         .ck-pair-grid > .field.inline-field > select,
         .ck-pair-grid > .field.inline-field > textarea,
+        .ck-pair-grid > .field.inline-field > .ck-paragraph-shell,
         .ck-pair-grid > .field.inline-field > .inline-options,
         .ck-pair-grid > .field.inline-field > .ck-choice-control,
         .ck-pair-grid > .field.inline-field > .ck-number-stepper,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > input,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > select,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > textarea,
+        .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .ck-paragraph-shell,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .inline-options,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .ck-choice-control,
         .collapsed-fields-grid.ck-collapsed-stack > .field.inline-field > .ck-number-stepper {
