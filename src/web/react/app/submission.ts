@@ -8,6 +8,7 @@ import { tSystem } from '../../systemStrings';
 import { resolveLocalizedString } from '../../i18n';
 import { buildMaybeFilePayload } from './filePayload';
 import { ROW_ID_KEY, buildSubgroupKey, resolveSubgroupKey } from './lineItems';
+import { resolveParagraphUserText } from './paragraphDisclaimer';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
 
@@ -17,6 +18,13 @@ const formatTemplate = (value: string, vars?: Record<string, string | number | b
     const raw = (vars as any)[key];
     return raw === undefined || raw === null ? '' : String(raw);
   });
+};
+
+const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
+  if (!field || field?.type !== 'PARAGRAPH') return rawValue;
+  const cfg = (field?.ui as any)?.paragraphDisclaimer;
+  if (!cfg) return rawValue;
+  return resolveParagraphUserText({ rawValue, config: cfg });
 };
 
 const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
@@ -163,7 +171,7 @@ const isRowDisabledByExpandGate = (args: {
     const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row?.id, linePrefix });
     if (hideField) return;
 
-    const val = (row?.values || {})[field.id];
+    const val = resolveRequiredValue(field, (row?.values || {})[field.id]);
     if (field.required && isEmptyValue(val as any)) {
       blocked.push(field.id);
       return;
@@ -322,7 +330,7 @@ export const validateForm = (args: {
               rowValid = false;
             }
           } else if (field.required) {
-            const val = row.values[field.id];
+            const val = resolveRequiredValue(field, row.values[field.id]);
             if (isEmptyValue(val as any)) {
               const fieldLabel = resolveFieldLabel(field, language, field.id);
               const custom = resolveLocalizedString((field as any)?.requiredMessage, language, '');
@@ -437,7 +445,7 @@ export const validateForm = (args: {
                     rowValid = false;
                   }
                 } else if (field.required) {
-                  const val = subRow.values[field.id];
+                  const val = resolveRequiredValue(field, subRow.values[field.id]);
                   if (isEmptyValue(val as any)) {
                     const fieldLabel = resolveFieldLabel(field, language, field.id);
                     const custom = resolveLocalizedString((field as any)?.requiredMessage, language, '');
@@ -468,7 +476,9 @@ export const validateForm = (args: {
               : tSystem('validation.completeAtLeastOneValidRow', language, 'Complete at least one valid row.')
             : tSystem('validation.atLeastOneLineItemRequired', language, 'At least one line item is required.');
       }
-    } else if ((q as any).required && q.type !== 'FILE_UPLOAD' && !questionHidden && isEmptyValue(values[q.id])) {
+    } else if ((q as any).required && q.type !== 'FILE_UPLOAD' && !questionHidden) {
+      const requiredValue = resolveRequiredValue(q, values[q.id]);
+      if (!isEmptyValue(requiredValue as any)) return;
       const fieldLabel = resolveFieldLabel(q as any, language, q.id);
       const custom = resolveLocalizedString((q as any)?.requiredMessage, language, '');
       allErrors[q.id] = custom
