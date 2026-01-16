@@ -1,5 +1,6 @@
 import { resolveLocalizedString } from '../../../i18n';
 import { FieldValue, LangCode, LineItemGroupUiConfig, WebQuestionDefinition } from '../../../types';
+import type { FormErrors } from '../../types';
 import {
   ROW_HIDE_REMOVE_KEY,
   ROW_PARENT_GROUP_ID_KEY,
@@ -60,6 +61,19 @@ export const formatFileSize = (size: number) => {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+export const clearLineItemGroupErrors = (errors: FormErrors, groupId: string): FormErrors => {
+  if (!groupId) return errors;
+  const prefix = `${groupId}__`;
+  const subPrefix = `${groupId}::`;
+  const next: FormErrors = {};
+  Object.entries(errors || {}).forEach(([key, value]) => {
+    if (key === groupId) return;
+    if (key.startsWith(prefix) || key.startsWith(subPrefix)) return;
+    next[key] = value;
+  });
+  return next;
 };
 
 const normalizeExtensions = (extensions?: string[]) =>
@@ -415,6 +429,5 @@ export const resolveRowDisclaimerText = (args: {
 
   return interpolateTemplate(template, vars).trim();
 };
-
 
 

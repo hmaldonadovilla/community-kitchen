@@ -376,8 +376,9 @@ export interface QuestionUiConfig {
   /**
    * Optional disclaimer section appended below PARAGRAPH fields.
    *
-   * The UI renders this as a non-editable block and keeps the stored value in sync by appending
-   * the generated section to the paragraph content on save.
+   * The UI renders this as a non-editable block by default and keeps the stored value in sync by
+   * appending the generated section to the paragraph content. Set `editable` to true to allow
+   * editing the injected section directly in the textarea.
    */
   paragraphDisclaimer?: ParagraphDisclaimerConfig;
 }
@@ -411,6 +412,11 @@ export interface ParagraphDisclaimerConfig {
    * Optional separator inserted before the disclaimer section (defaults to "---").
    */
   separator?: string;
+  /**
+   * When true, render the disclaimer inside the textarea so it can be edited.
+   * Defaults to false (non-editable disclaimer block).
+   */
+  editable?: boolean;
 }
 
 export interface FileUploadConfig {
@@ -1532,6 +1538,10 @@ export interface SubmitValidationConfig {
    * Optional localized override for the top submit validation message.
    */
   submitTopErrorMessage?: LocalizedString;
+  /**
+   * Optional localized override for the "Needs attention" message shown under line-item group pills.
+   */
+  lineItemGroupNeedsAttentionMessage?: LocalizedString;
 }
 
 export type StepForwardGate = 'free' | 'whenComplete' | 'whenValid';
