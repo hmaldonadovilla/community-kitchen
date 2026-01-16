@@ -1699,6 +1699,9 @@ components:
         submitTopErrorMessage:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional localized override for the top submit validation error banner.
+        lineItemGroupNeedsAttentionMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional localized override for the "Needs attention" helper shown under line-item group pills.
       additionalProperties: false
 
     StepsConfig:

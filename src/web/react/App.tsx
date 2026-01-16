@@ -3599,14 +3599,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const requestNavigateToList = useCallback(
     (trigger: string) => {
       const uploadsInFlight = uploadQueueRef.current.size > 0;
-      const autosaveInFlight = autoSaveInFlightRef.current;
-      if (uploadsInFlight || autosaveInFlight) {
+      if (uploadsInFlight) {
         pendingNavigationRef.current = { target: 'list', trigger };
         setUploadNavigationNoticeOpen(true);
         logEvent('navigate.list.blocked.uploads', {
           trigger,
-          uploadsInFlight,
-          autoSaveInFlight: autosaveInFlight
+          uploadsInFlight
         });
         return;
       }
@@ -3624,7 +3622,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const resumePendingNavigation: (reason: string) => boolean = useCallback(
     (reason: string): boolean => {
       if (uploadQueueRef.current.size > 0) return false;
-      if (autoSaveInFlightRef.current) return false;
       const pending = pendingNavigationRef.current;
       if (!pending || pending.target !== 'list') return false;
       logEvent('navigate.list.resumeAfterUploads', { trigger: pending.trigger, reason });
