@@ -867,6 +867,11 @@ export interface LineItemGroupUiConfig {
   rowDisclaimer?: RowDisclaimerConfig;
 
   /**
+   * Optional localized helper shown when a line-item group or subgroup needs attention.
+   */
+  needsAttentionMessage?: LocalizedString;
+
+  /**
    * Controls whether the "N items" pill is displayed in the group header.
    * Defaults to true.
    */

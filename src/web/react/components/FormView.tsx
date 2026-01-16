@@ -4778,7 +4778,7 @@ const FormView: React.FC<FormViewProps> = ({
           const hideGroupLabel = q.ui?.hideLabel === true;
           const tapToOpenLabel = tSystem('common.tapToOpen', language, 'Tap to open');
           const needsAttentionMessage = resolveLocalizedString(
-            definition.submitValidation?.lineItemGroupNeedsAttentionMessage,
+            q.lineItemConfig?.ui?.needsAttentionMessage,
             language,
             ''
           )

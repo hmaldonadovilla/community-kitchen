@@ -1043,6 +1043,9 @@ components:
 
             - Use `{{FIELD_ID}}` to insert a row field value.
             - Includes `{{__ckRowSource}}` (auto/manual) and `{{__ckRowSourceLabel}}` (localized).
+        needsAttentionMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional localized helper shown when this line item group or subgroup needs attention.
 
     RowDisclaimerRule:
       type: object

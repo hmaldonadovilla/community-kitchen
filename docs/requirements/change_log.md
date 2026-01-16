@@ -20,7 +20,12 @@
 ## technical requirements
 
 - ck-1: initial load performance improvements.
-- ck-2: hide table/cards toggle in list view. We need a legend at the bottom of the list view to explain the statuses use static legend definition in issue 6. And we need a status pill for each result card to display the status. This pill needs to appear in all other pages inclucing edit and sumamry views. We need to normalise statuses values using the existing `statusTransitions` config. We need to have an inProgress and reOpened statuses (which it's value can be set per form, similarly as we do with `onClose`). Also please remove harcoded logic to drive visibility of elements based on the `Closed` status value, the logic needs to be driven by the configured value on statusTransitions. Change `Search recipes (name, dietary category, or status)` to `Search recipes (name, dietary, or status)`. Add a list view title `You can search by recipe name, dietary category or status`.
+- ck-2:
+  - hide table/cards toggle in list view.
+  - We need a legend at the bottom of the list view to explain the statuses use static legend definition in issue 6. We need a status pill for each result card to display the status. This pill needs to appear in all other pages inclucing edit and sumamry views.
+  - We need to normalise statuses values using the existing `statusTransitions` config. We need to have an inProgress and reOpened statuses (which it's value can be set per form, similarly as we do with `onClose`). Also please remove harcoded logic to drive visibility of elements based on the `Closed` status value, the logic needs to be driven by the configured value on statusTransitions.
+  - Change `Search recipes (name, dietary category, or status)` to `Search recipes (name, dietary, or status)`.
+  -Add a list view title `You can search by recipe name, dietary category or status`.
 - ck-3: make cards non clickable in cards mode in list view, only the footer action are clickable.
 - ck-4: create smart search mode to:
 
