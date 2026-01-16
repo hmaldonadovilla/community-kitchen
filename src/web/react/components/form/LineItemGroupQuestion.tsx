@@ -2172,6 +2172,7 @@ export const LineItemGroupQuestion: React.FC<{
                           />
                         ) : field.type === 'PARAGRAPH' ? (
                           <textarea
+                            className="ck-paragraph-input"
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
@@ -3097,6 +3098,7 @@ export const LineItemGroupQuestion: React.FC<{
                               />
                             ) : field.type === 'PARAGRAPH' ? (
                               <textarea
+                                className="ck-paragraph-input"
                                 value={fieldValue}
                                 onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                                 readOnly={!!field.valueMap || (field as any)?.readOnly === true}
@@ -4022,6 +4024,7 @@ export const LineItemGroupQuestion: React.FC<{
                                           />
                                         ) : field.type === 'PARAGRAPH' ? (
                                           <textarea
+                                            className="ck-paragraph-input"
                                             value={fieldValue}
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
                                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}

@@ -16,6 +16,34 @@ const cache: Map<CacheKey, any> = new Map();
 const RUNNER_RETRY_DELAY = 150;
 const RUNNER_MAX_ATTEMPTS = 20;
 
+// Optional lightweight persistence for stable data sources. This is intentionally
+// conservative: only used when localStorage is available and JSON parsing succeeds.
+const PERSIST_VERSION = '1';
+
+const getPersistKey = (id: string, lang: LangCode): string =>
+  `ck.ds.${id || 'default'}.${(lang || 'EN').toString().toUpperCase()}.v${PERSIST_VERSION}`;
+
+const loadPersisted = (id: string, language: LangCode): any | null => {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(getPersistKey(id, language));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+const savePersisted = (id: string, language: LangCode, value: any): void => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(getPersistKey(id, language), JSON.stringify(value));
+  } catch (_) {
+    // Ignore quota / private-mode errors; in-memory cache still works.
+  }
+};
+
 function key(id: string, lang: LangCode): string {
   return `${id || 'default'}::${(lang || 'EN').toString().toUpperCase()}`;
 }
@@ -55,6 +83,13 @@ export async function fetchDataSource(
   const cacheKey = key(config.id, language);
   if (cache.has(cacheKey)) return cache.get(cacheKey);
 
+  // Best-effort persisted cache for stable/master data sources.
+  const persisted = loadPersisted(config.id, language);
+  if (persisted) {
+    cache.set(cacheKey, persisted);
+    return persisted;
+  }
+
   return new Promise((resolve) => {
     let attempts = 0;
 
@@ -82,6 +117,7 @@ export async function fetchDataSource(
               itemCount: Array.isArray(res?.items) ? res.items.length : Array.isArray(res) ? res.length : 0
             });
             cache.set(cacheKey, res);
+            savePersisted(config.id, language, res);
             resolve(res);
           })
           .withFailureHandler((err: any) => {

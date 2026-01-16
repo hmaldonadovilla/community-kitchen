@@ -1478,7 +1478,8 @@ Recommended steps after deploying a new bundle:
 
 - **PARAGRAPH fields (textarea height)**: You can increase the visible height of a paragraph field in the edit view by setting:
   - `ui.paragraphRows` (integer, 2–20; default 4)
-- **PARAGRAPH field disclaimers**: Use `ui.paragraphDisclaimer` to append a non-editable section that summarizes `__ckNonMatchOptions` from a line-item group (useful with `optionFilter.matchMode: "or"`).
+- **PARAGRAPH field disclaimers**: Use `ui.paragraphDisclaimer` to append a disclaimer section that summarizes `__ckNonMatchOptions` from a line-item group (useful with `optionFilter.matchMode: "or"`).  
+  - Defaults to a non-editable footer below the textarea; set `paragraphDisclaimer.editable: true` to render it inside the textarea for editing.
 
   ```json
   {

@@ -534,3 +534,125 @@ These are guidance values; the main KPI is user‑perceived TTFB/TTI rather than
    - Do we want to log load times (without PII) to monitor real‑world performance?
 
 Once we align on this solution design, we can derive a concrete technical task breakdown (issues/PRs) per phase and per app.
+
+
+---
+
+## 11. Updated recommendations based on measurements & current implementation
+
+This addendum consolidates the latest measurements (Lighthouse runs) and the implementation work already in place, and refines the initial-load solution design accordingly.
+
+### 11.1 Observed performance (Recipes Config form)
+
+Based on `perf-results/community-kitchen-recipes*.json`:
+
+- **TTFB (time-to-first-byte)**
+  - v1 (3 runs): avg ~3.75s (min ~2.53s, max ~5.67s).
+  - v2 (10 runs): avg ~2.93s (min ~2.43s, max ~4.35s).
+- **FCP/LCP/TTI**
+  - FCP avg ~2.6–3.0s.
+  - LCP/TTI avg ~2.6–3.3s.
+- **Lighthouse performance score**
+  - v1: ~0.81 avg.
+  - v2: ~0.87 avg.
+
+Interpretation:
+- **TTFB dominates the overall latency**: most of the wait is before the first byte. Once HTML/JS arrives, the additional client work to FCP/LCP/TTI is relatively small (~200–400ms).
+- The current client design (shell + list prefetch) is in a good place; further wins come primarily from:
+  - Keeping backend bootstrap fast and well-cached.
+  - Ensuring non-critical client work runs after the first screen is usable.
+
+### 11.2 What is already implemented (and should be treated as baseline)
+
+These elements in the original design are now **implemented** and should be treated as the baseline, not future work:
+
+- **Paginated list fetch with progressive rendering**
+  - The React client fetches list data via `fetchSortedBatch` with:
+    - Configurable `pageSize` (capped at 50).
+    - Aggregation across pages until `totalCount` or a fixed upper cap (currently ~200 items).
+  - The **first page is rendered as soon as it arrives**, and additional pages are fetched in the background.
+  - Result: above-the-fold list content appears early, while the rest of the list hydrates progressively.
+
+- **Definition warm-up (`warmDefinitions`) scheduled hourly**
+  - The `WebFormService.warmDefinitions()` Apps Script entrypoint is wired and scheduled as an hourly trigger in production.
+  - This pre-populates form definitions in the server-side cache, reducing cold-start latency for definition building.
+
+- **Sheet indexes for `formKey → row`**
+  - `ConfigSheet` / related services already maintain an index from `formKey` (or config sheet name/title) to row number.
+  - This avoids full-sheet scans on each request.
+
+- **Summary and custom HTML templates fetched in the background**
+  - The React client uses `renderSummaryHtmlTemplateApi` / `renderHtmlTemplateApi` and `renderBundledHtmlTemplateClient` in **background flows**:
+    - Summary HTML is prefetched in `applyRecordSnapshot` once a record is opened.
+    - HTML/button templates are cached client-side (`htmlRenderCache` / `htmlRenderInflight`).
+  - These calls are intentionally **decoupled from the critical list-load path**.
+
+These items should no longer be listed as "to-be-done" steps in implementation plans; instead, future work should focus on tuning and extending them.
+
+### 11.3 Refined priorities for initial-load performance
+
+Given the current state and metrics, the priorities are:
+
+1. **Keep Apps Script bootstrap work small and well-cached**
+   - `doGet` should remain a thin shell, relying on:
+     - Definition cache + `warmDefinitions` for form metadata.
+     - Dedicated data APIs (`fetchBootstrapContext`, `fetchSubmissionsSortedBatch`, etc.) for runtime data.
+   - Action item: **verify that the `formKey → row` index itself is cached**, not rebuilt on every `getOrBuildDefinition()` or data API call.
+     - If `ConfigSheet.getForms()` recomputes this mapping per request, move it into `CacheService` so repeated lookups are O(1) without fresh scans.
+
+2. **Respect the existing progressive list fetch, but keep it bounded and non-blocking**
+   - The current behavior (first page → render, then background pagination) matches the original design.
+   - Tuning knobs:
+     - For heavy forms like Config: Recipes, ensure `listView.pageSize` is modest (10–20) and the aggregated cap (currently 200) is sufficient but not excessive.
+     - Consider a smaller cap for mobile (e.g. 100 items) if you observe client-side slowness on low-end devices.
+
+3. **Ensure template prefetch is strictly background and parallel to list fetch**
+   - In the current `App.tsx`, `prefetchTemplatesApi(formKey)` runs in a `useEffect` keyed only by `formKey`, which may fire very early.
+   - Refined behavior (to keep first paint fast while still prefetching templates):
+     - Trigger `prefetchTemplatesApi(formKey)` **only after**:
+       - The first list page has rendered, and
+       - The user is in a context where templates matter (`view` is `form` or `summary`).
+     - Start template prefetch and any summary/custom HTML prefetch **in parallel** with ongoing background list pagination, but never as a hard precondition for showing the first page.
+
+   This matches your intent: *"summary and custom html templates should be fetched but on the background, and in parallel to data fetch of 1st page of list view data"*.
+
+### 11.4 Additional client-side optimizations consistent with current design
+
+These refinements keep the architecture intact and focus on micro-optimizations that align with the existing implementation:
+
+1. **Template prefetch gating**
+   - Update the `prefetchTemplatesApi` effect in `App.tsx` to include `view` in the dependency list and gate prefetch to relevant views:
+     - `view === 'form'` or `view === 'summary'`.
+   - Defer execution slightly (e.g. `requestIdleCallback` or `setTimeout(1500)`) so it doesn’t compete with the very first paint.
+
+2. **Summary HTML prefetch tuning**
+   - Keep the current strategy (prefetch after `applyRecordSnapshot`), but:
+     - Optionally short-circuit when `summaryViewEnabled === false`.
+     - Consider skipping prefetch for very large records or forms where summary is rarely used, based on config.
+
+3. **iOS viewport & layout effects**
+   - The complex iOS zoom-stabilization and header/bottom measurement effects should:
+     - Short-circuit early on desktop/non-iOS to avoid unnecessary work.
+     - Optionally be guarded behind an experimental flag if you measure a meaningful impact on initial render.
+
+4. **Data-source caching**
+   - In addition to the in-memory Map in `dataSources.ts`, consider **optional persistence** (versioned `localStorage`) for stable data sources.
+   - This does not change the initial-load design but can significantly reduce follow-up Apps Script calls and perceived latency when returning to a form.
+
+### 11.5 Summary of what remains to be done
+
+Taking into account the current codebase and the measured perf:
+
+- **Done / baseline:**
+  - Progressive paginated list fetch and first-page rendering.
+  - `warmDefinitions` scheduled as an hourly trigger.
+  - `formKey → row` index implemented.
+  - Background fetching and caching of summary and custom HTML templates.
+
+- **To refine:**
+  1. Confirm and, if needed, cache the `formKey → row` index via `CacheService` to avoid recomputing it per request.
+  2. Gate `prefetchTemplatesApi` and summary/HTML prefetch to **background, view-aware flows** so they never delay first paint of the list.
+  3. Keep list prefetch caps and `pageSize` tuned to balance responsiveness vs. completeness, especially on mobile.
+  4. Optionally extend client caches (data sources, list snapshots, HTML templates) with lightweight persistence to improve repeat loads.
+
+These refinements sit on top of the solution design in Sections 3–10 and should be treated as incremental improvements rather than fundamental architectural changes.

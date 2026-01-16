@@ -261,6 +261,12 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
           box-sizing: border-box;
         }
+        @supports (-webkit-touch-callout: none) {
+          /* Prevent iOS Safari from zooming on paragraph focus (font < 16px). */
+          .ck-paragraph-input {
+            font-size: 16px;
+          }
+        }
         .form-card .ck-paragraph-shell > textarea:focus,
         .webform-overlay .ck-paragraph-shell > textarea:focus {
           outline: none;
