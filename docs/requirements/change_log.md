@@ -2,18 +2,30 @@
 
 ## Bugs
 
-- ck-bug-1: when entering text in a paragraph or text field that is not enabled right now because of ordered submit validation, the user gets sennt in focus to the next field, which is disconcerning, the right approach is to highlight the field so the user can go in focus to start editing. Today the text that is being input starts to appear on the next field and the users does not understand what happened.
+- ck-bug-1: when entering text in a paragraph or text field that is not enabled right now because of ordered submit validation, the user gets sent in focus to the next field, which is disconcerning, the right approach is to highlight the field so the user can go in focus to start editing. Today the text that is being input starts to appear on the next field and the users does not understand what happened.
+  >**DONE - Cursor**
 - ck-bug-2: the injected paragraph disclaimer must have a setting to be editable or not.
+  >**DONE - Cursor**
 - ck-bug-3: the auto save dialog needs to allow a single button instead of two. Ideally we would use the existing react component and make it configurable to only have 1 button.
-- ck-bug-4: when completing the info of a line item group and closing the overlay (on ordered submission mode), the overlay pill still highlights the group as `needing attention`. In this case we need be able to configure the error message.
-- ck-bug-5: when entering on focus in a pragraph input control it is automatically zooming in iOS, please adjust the behavior to not zoom in. Also the injected disclaimmer counts for submit validation as if the user had already entered text, which is not the case.
+  >**DONE - Codex**
+- ck-bug-4: when completing the info of a line item group and closing the overlay (on ordered submission mode), the overlay pill still highlights the group as `needing attention`. When the error message is shown legitimately, we need be able to configure the error message.
+  >**WIP - Codex**
+- ck-bug-5: when entering on focus in a paragraph input control it is automatically zooming in iOS, please adjust the behavior to not zoom in. Also the injected disclaimer counts for submit validation as if the user had already entered text, which is not the case.
+  >**DONE - Cursor**
 - ck-bug-6: there seems to be a bug with the banner that appears when file uploads are pending and the user leaves the edit view to the list view. It is being triggered on a form that does not have file upload fields and even when the user has not entered any data. We should also consider removing the banner altogether, what are the risk?
+  >**WIP - Codex**
 - ck-bug-7: when checking for duplicates on create button, including `createRecordPreset`, disable the list view to prevent the user from navigating to existing records and compiling the actions done on server side.
+  >**DONE - Codex**
 
 ## technical requirements
 
 - ck-1: initial load performance improvements.
-- ck-2: hide table/cards toggle in list view. We need a legend at the bottom of the list view to explain the statuses use static legend definition in issue 6. And we need a status pill for each result card to display the status. This pill needs to appear in all other pages inclucing edit and sumamry views. We need to normalise statuses values using the existing `statusTransitions` config. We need to have an inProgress and reOpened statuses (which it's value can be set per form, similarly as we do with `onClose`). Also please remove harcoded logic to drive visibility of elements based on the `Closed` status value, the logic needs to be driven by the configured value on statusTransitions. Change `Search recipes (name, dietary category, or status)` to `Search recipes (name, dietary, or status)`. Add a list view title `You can search by recipe name, dietary category or status`.
+- ck-2:
+  - hide table/cards toggle in list view.
+  - We need a legend at the bottom of the list view to explain the statuses use static legend definition in issue 6. We need a status pill for each result card to display the status. This pill needs to appear in all other pages inclucing edit and sumamry views.
+  - We need to normalise statuses values using the existing `statusTransitions` config. We need to have an inProgress and reOpened statuses (which it's value can be set per form, similarly as we do with `onClose`). Also please remove harcoded logic to drive visibility of elements based on the `Closed` status value, the logic needs to be driven by the configured value on statusTransitions.
+  - Change `Search recipes (name, dietary category, or status)` to `Search recipes (name, dietary, or status)`.
+  -Add a list view title `You can search by recipe name, dietary category or status`.
 - ck-3: make cards non clickable in cards mode in list view, only the footer action are clickable.
 - ck-4: create smart search mode to:
 

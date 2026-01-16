@@ -516,6 +516,9 @@ This project uses TypeScript. You need to build the script before using it in Go
           "enforceFieldOrder": true,
           "submitTopErrorMessage": {
             "en": "Please complete the required fields above before submitting."
+          },
+          "lineItemGroupNeedsAttentionMessage": {
+            "en": "Please review this group before continuing."
           }
         }
       }
@@ -523,6 +526,7 @@ This project uses TypeScript. You need to build the script before using it in Go
 
       - In guided steps, **Next** remains clickable once the step forward gate is satisfied.
       - `submitTopErrorMessage` customizes the top error banner shown after a submit attempt (localized).
+      - `lineItemGroupNeedsAttentionMessage` customizes the helper shown under line-item group pills when they still need attention (localized).
 
     - Want to **override the Summary button label**? Set `summaryButtonLabel` (localized). Useful when “Summary” should read like “Checklist”.
 
@@ -1475,7 +1479,8 @@ Recommended steps after deploying a new bundle:
 
 - **PARAGRAPH fields (textarea height)**: You can increase the visible height of a paragraph field in the edit view by setting:
   - `ui.paragraphRows` (integer, 2–20; default 4)
-- **PARAGRAPH field disclaimers**: Use `ui.paragraphDisclaimer` to append a non-editable section that summarizes `__ckNonMatchOptions` from a line-item group (useful with `optionFilter.matchMode: "or"`).
+- **PARAGRAPH field disclaimers**: Use `ui.paragraphDisclaimer` to append a disclaimer section that summarizes `__ckNonMatchOptions` from a line-item group (useful with `optionFilter.matchMode: "or"`).  
+  - Defaults to a non-editable footer below the textarea; set `paragraphDisclaimer.editable: true` to render it inside the textarea for editing.
 
   ```json
   {

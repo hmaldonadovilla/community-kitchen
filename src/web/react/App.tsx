@@ -541,27 +541,43 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     });
   }, [blockLandscape, isLandscape, isMobile, logEvent, portraitOnlyEnabled]);
 
-  // Prefetch Drive templates early so report rendering can skip "first read" latency.
+  // Prefetch Drive/HTML templates in the background so report/summary rendering can skip
+  // "first read" latency, but never block the initial list view.
   useEffect(() => {
+    // Only relevant once the user is in a form/summary context.
+    if (view !== 'form' && view !== 'summary') return;
     const key = (formKey || '').toString().trim();
     if (!key) return;
     if (templatePrefetchFormKeyRef.current === key) return;
     templatePrefetchFormKeyRef.current = key;
 
-    logEvent('templates.prefetch.start', { formKey: key });
-    prefetchTemplatesApi(key)
-      .then(res => {
-        logEvent('templates.prefetch.ok', {
-          success: Boolean(res?.success),
-          message: (res as any)?.message || null,
-          counts: (res as any)?.counts || null
+    const run = () => {
+      logEvent('templates.prefetch.start', { formKey: key, view });
+      prefetchTemplatesApi(key)
+        .then(res => {
+          logEvent('templates.prefetch.ok', {
+            success: Boolean(res?.success),
+            message: (res as any)?.message || null,
+            counts: (res as any)?.counts || null
+          });
+        })
+        .catch(err => {
+          const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to prefetch templates.';
+          logEvent('templates.prefetch.failed', { formKey: key, message: msg });
         });
-      })
-      .catch(err => {
-        const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to prefetch templates.';
-        logEvent('templates.prefetch.failed', { formKey: key, message: msg });
-      });
-  }, [formKey, logEvent]);
+    };
+
+    try {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(run, { timeout: 3000 });
+      } else {
+        // Defer slightly to avoid competing with the first paint.
+        setTimeout(run, 1500);
+      }
+    } catch (_) {
+      run();
+    }
+  }, [formKey, view, logEvent]);
 
   useEffect(() => {
     // Enforce language config changes from the definition.
@@ -5507,6 +5523,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           formKey={formKey}
           definition={definition}
           language={language}
+          disabled={precreateDedupChecking}
           cachedResponse={listCache.response}
           cachedRecords={listCache.records}
           refreshToken={listRefreshToken}
@@ -5525,6 +5542,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         message={autoSaveNoticeMessage}
         confirmLabel={autoSaveNoticeConfirmLabel}
         cancelLabel={autoSaveNoticeCancelLabel}
+        showCancel={false}
         zIndex={12010}
         onCancel={() => dismissAutoSaveNotice('cancel')}
         onConfirm={() => dismissAutoSaveNotice('confirm')}

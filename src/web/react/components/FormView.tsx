@@ -82,6 +82,7 @@ import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups
 import {
   buildParagraphDisclaimerSection,
   buildParagraphDisclaimerValue,
+  resolveParagraphUserText,
   splitParagraphDisclaimerValue
 } from '../app/paragraphDisclaimer';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
@@ -162,11 +163,18 @@ const selectionEffectDependsOnField = (field: any, targetFieldId: string): boole
   });
 };
 
+const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
+  if (!field || field?.type !== 'PARAGRAPH') return rawValue;
+  const cfg = (field?.ui as any)?.paragraphDisclaimer;
+  if (!cfg) return rawValue;
+  return resolveParagraphUserText({ rawValue, config: cfg });
+};
+
 const isLineRowComplete = (group: WebQuestionDefinition, rowValues: Record<string, FieldValue>): boolean => {
   const fields = group.lineItemConfig?.fields || [];
   return fields.every(field => {
     if (!field.required) return true;
-    const val = rowValues[field.id];
+    const val = resolveRequiredValue(field, rowValues[field.id]);
     if (Array.isArray(val)) return val.length > 0;
     if (typeof val === 'string') return val.trim() !== '';
     return val !== undefined && val !== null;
@@ -400,6 +408,7 @@ const FormView: React.FC<FormViewProps> = ({
   const firstErrorRef = useRef<string | null>(null);
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
+  const errorNavModeRef = useRef<'focus' | 'scroll'>('focus');
   const choiceVariantLogRef = useRef<Record<string, string>>({});
   const choiceSearchLoggedRef = useRef<Set<string>>(new Set());
   const hideLabelLoggedRef = useRef<Set<string>>(new Set());
@@ -407,11 +416,19 @@ const FormView: React.FC<FormViewProps> = ({
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const valuesRef = useRef(values);
   const lineItemsRef = useRef(lineItems);
+  const optionStateRef = useRef(optionState);
+  const paragraphDisclaimerPendingRef = useRef(false);
+  const paragraphDisclaimerSyncRef = useRef<((source?: string) => void) | null>(null);
+  const paragraphDisclaimerTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     valuesRef.current = values;
     lineItemsRef.current = lineItems;
   }, [values, lineItems]);
+
+  useEffect(() => {
+    optionStateRef.current = optionState;
+  }, [optionState]);
 
   const guidedStepsCfg = definition.steps?.mode === 'guided' ? definition.steps : undefined;
   const guidedEnabled = Boolean(guidedStepsCfg && Array.isArray(guidedStepsCfg.items) && guidedStepsCfg.items.length > 0);
@@ -1123,7 +1140,12 @@ const FormView: React.FC<FormViewProps> = ({
             message: tSystem('steps.fixErrorsToContinue', language, 'Fix the highlighted errors in this step to continue.')
           });
           errorNavRequestRef.current += 1;
-          onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, scope: 'guidedStep' });
+          errorNavModeRef.current = 'focus';
+          onDiagnostic?.('validation.navigate.request', {
+            attempt: errorNavRequestRef.current,
+            scope: 'guidedStep',
+            mode: errorNavModeRef.current
+          });
           return;
         }
 
@@ -1154,7 +1176,8 @@ const FormView: React.FC<FormViewProps> = ({
         // ignore
       }
       errorNavRequestRef.current += 1;
-      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current });
+      errorNavModeRef.current = 'focus';
+      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, mode: errorNavModeRef.current });
       void onSubmit({ collapsedRows, collapsedSubgroups }).catch((err: any) => {
         onDiagnostic?.('submit.exception', { message: err?.message || err || 'unknown' });
       });
@@ -1281,6 +1304,18 @@ const FormView: React.FC<FormViewProps> = ({
     return (definition.questions || []).filter(q => q.ui?.hideLabel === true).map(q => q.id);
   }, [definition.questions]);
 
+  const paragraphDisclaimerFieldIds = useMemo(() => {
+    const ids = new Set<string>();
+    (definition.questions || []).forEach(q => {
+      if (q.type !== 'PARAGRAPH') return;
+      const cfg = (q.ui as any)?.paragraphDisclaimer;
+      if (!cfg) return;
+      const id = (q.id || '').toString().trim();
+      if (id) ids.add(id);
+    });
+    return ids;
+  }, [definition.questions]);
+
   useEffect(() => {
     if (!onDiagnostic) return;
     (hideLabelQuestionIds || []).forEach(id => {
@@ -1291,6 +1326,20 @@ const FormView: React.FC<FormViewProps> = ({
       onDiagnostic('ui.field.hideLabel', { fieldId });
     });
   }, [hideLabelQuestionIds, onDiagnostic]);
+
+  const isParagraphDisclaimerFocused = useCallback((): boolean => {
+    if (typeof document === 'undefined') return false;
+    const active = document.activeElement as HTMLElement | null;
+    if (!active) return false;
+    const tag = (active.tagName || '').toString().toLowerCase();
+    if (tag !== 'textarea') return false;
+    const root = active.closest('.ck-form-sections') || active.closest('.webform-overlay') || active.closest('.form-card');
+    if (!root) return false;
+    const fieldPath = (active.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
+    if (!fieldPath) return false;
+    if (fieldPath.includes('__')) return false;
+    return paragraphDisclaimerFieldIds.has(fieldPath);
+  }, [paragraphDisclaimerFieldIds]);
 
   const blurRecomputeTimerRef = useRef<number | null>(null);
 
@@ -1396,6 +1445,15 @@ const FormView: React.FC<FormViewProps> = ({
         });
       }
 
+      if (paragraphDisclaimerTimerRef.current !== null) {
+        window.clearTimeout(paragraphDisclaimerTimerRef.current);
+      }
+      paragraphDisclaimerTimerRef.current = window.setTimeout(() => {
+        paragraphDisclaimerTimerRef.current = null;
+        if (!paragraphDisclaimerPendingRef.current) return;
+        paragraphDisclaimerSyncRef.current?.('blur');
+      }, 0);
+
       if (!hasCopyDerived) return;
       if (blurRecomputeTimerRef.current !== null) {
         window.clearTimeout(blurRecomputeTimerRef.current);
@@ -1411,6 +1469,10 @@ const FormView: React.FC<FormViewProps> = ({
       if (blurRecomputeTimerRef.current !== null) {
         window.clearTimeout(blurRecomputeTimerRef.current);
         blurRecomputeTimerRef.current = null;
+      }
+      if (paragraphDisclaimerTimerRef.current !== null) {
+        window.clearTimeout(paragraphDisclaimerTimerRef.current);
+        paragraphDisclaimerTimerRef.current = null;
       }
     };
   }, [hasCopyDerived, onUserEdit, recomputeDerivedOnBlur]);
@@ -2201,7 +2263,12 @@ const FormView: React.FC<FormViewProps> = ({
       }
       setErrors(nextErrors);
       errorNavRequestRef.current += 1;
-      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, scope: 'lineItemOverlay' });
+      errorNavModeRef.current = 'focus';
+      onDiagnostic?.('validation.navigate.request', {
+        attempt: errorNavRequestRef.current,
+        scope: 'lineItemOverlay',
+        mode: errorNavModeRef.current
+      });
       onDiagnostic?.('lineItemGroup.overlay.close.blocked', {
         groupId: lineItemGroupOverlay.groupId,
         source,
@@ -3373,7 +3440,11 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const triggerOrderedEntryValidation = useCallback(
-    (target: OrderedEntryTarget, missingFieldPath: string) => {
+    (
+      target: OrderedEntryTarget,
+      missingFieldPath: string,
+      options?: { navigate?: boolean; source?: string; scrollOnly?: boolean }
+    ) => {
       let nextErrors: FormErrors = {};
       try {
         nextErrors = validateForm({
@@ -3388,8 +3459,22 @@ const FormView: React.FC<FormViewProps> = ({
         onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
       }
       setErrors(buildOrderedEntryErrors(missingFieldPath, nextErrors));
-      errorNavRequestRef.current += 1;
-      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, scope: 'orderedEntry' });
+      const shouldNavigate = options?.navigate !== false || options?.scrollOnly === true;
+      if (shouldNavigate) {
+        errorNavRequestRef.current += 1;
+        errorNavModeRef.current = options?.scrollOnly ? 'scroll' : 'focus';
+        onDiagnostic?.('validation.navigate.request', {
+          attempt: errorNavRequestRef.current,
+          scope: 'orderedEntry',
+          mode: errorNavModeRef.current
+        });
+      } else {
+        onDiagnostic?.('validation.ordered.blocked.noNavigate', {
+          scope: target.scope,
+          missingFieldPath,
+          source: options?.source || null
+        });
+      }
       onDiagnostic?.('validation.ordered.blocked', {
         targetScope: target.scope,
         targetFieldPath:
@@ -3427,41 +3512,152 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [definition, values, lineItems, subgroupSelectors, submitting, setLineItems, onDiagnostic]);
 
+  const computeParagraphDisclaimerUpdates = useCallback(
+    (
+      currentValues: Record<string, FieldValue>,
+      currentLineItems: LineItemState,
+      currentOptionState: OptionState
+    ): {
+      updates: Record<string, FieldValue>;
+      updatedCount: number;
+      fieldUpdates: Array<{ fieldId: string; keyCount: number; itemCount: number }>;
+    } => {
+      const updates: Record<string, FieldValue> = {};
+      const fieldUpdates: Array<{ fieldId: string; keyCount: number; itemCount: number }> = [];
+      (definition.questions || []).forEach(q => {
+        if (q.type !== 'PARAGRAPH') return;
+        const disclaimerCfg = (q.ui as any)?.paragraphDisclaimer;
+        if (!disclaimerCfg) return;
+        const { sectionText, separator, keyCount, itemCount } = buildParagraphDisclaimerSection({
+          config: disclaimerCfg,
+          definition,
+          lineItems: currentLineItems,
+          optionState: currentOptionState,
+          language
+        });
+        const current = currentValues[q.id] === undefined || currentValues[q.id] === null ? '' : currentValues[q.id]?.toString?.() || '';
+        const { userText, sectionText: storedSection, hasDisclaimer, marker } = splitParagraphDisclaimerValue({
+          rawValue: current,
+          separator
+        });
+        const editable = !!disclaimerCfg?.editable;
+        if (editable) {
+          if (!sectionText) return;
+          const combined = buildParagraphDisclaimerValue({
+            userText,
+            sectionText,
+            separator,
+            markerOverride: hasDisclaimer ? marker : undefined
+          });
+          if (combined !== current) {
+            updates[q.id] = combined;
+            fieldUpdates.push({ fieldId: q.id, keyCount, itemCount });
+          }
+          return;
+        }
+        const combined = buildParagraphDisclaimerValue({
+          userText,
+          sectionText,
+          separator,
+          markerOverride: hasDisclaimer ? marker : undefined
+        });
+        if (combined !== current) {
+          updates[q.id] = combined;
+          fieldUpdates.push({ fieldId: q.id, keyCount, itemCount });
+        }
+      });
+      return { updates, updatedCount: fieldUpdates.length, fieldUpdates };
+    },
+    [definition, language]
+  );
+
+  const syncParagraphDisclaimers = useCallback(
+    (source?: string) => {
+      if (submitting) return false;
+      const { updates, updatedCount, fieldUpdates } = computeParagraphDisclaimerUpdates(
+        valuesRef.current,
+        lineItemsRef.current,
+        optionStateRef.current as OptionState
+      );
+      if (!updatedCount) return false;
+      setValues(prev => ({ ...prev, ...updates }));
+      fieldUpdates.forEach(meta => {
+        onDiagnostic?.('paragraphDisclaimer.sync.field', meta);
+      });
+      onDiagnostic?.('paragraphDisclaimer.sync', { updatedCount, source });
+      return true;
+    },
+    [computeParagraphDisclaimerUpdates, onDiagnostic, setValues, submitting]
+  );
+
+  const requestParagraphDisclaimerSync = useCallback(
+    (source?: string) => {
+      if (submitting) return;
+      if (isParagraphDisclaimerFocused()) {
+        paragraphDisclaimerPendingRef.current = true;
+        return;
+      }
+      paragraphDisclaimerPendingRef.current = false;
+      syncParagraphDisclaimers(source);
+    },
+    [isParagraphDisclaimerFocused, syncParagraphDisclaimers, submitting]
+  );
+
+  useEffect(() => {
+    paragraphDisclaimerSyncRef.current = (source?: string) => requestParagraphDisclaimerSync(source);
+  }, [requestParagraphDisclaimerSync]);
+
   useEffect(() => {
     if (submitting) return;
-    const updates: Record<string, FieldValue> = {};
-    let updatedCount = 0;
-    (definition.questions || []).forEach(q => {
-      if (q.type !== 'PARAGRAPH') return;
-      const disclaimerCfg = (q.ui as any)?.paragraphDisclaimer;
-      if (!disclaimerCfg) return;
-      const { sectionText, separator, keyCount, itemCount } = buildParagraphDisclaimerSection({
-        config: disclaimerCfg,
-        definition,
-        lineItems,
-        optionState,
-        language
-      });
-      const { userText } = splitParagraphDisclaimerValue({
-        rawValue: values[q.id],
-        separator
-      });
-      const combined = buildParagraphDisclaimerValue({ userText, sectionText, separator });
-      const current = values[q.id] === undefined || values[q.id] === null ? '' : values[q.id]?.toString?.() || '';
-      if (combined !== current) {
-        updates[q.id] = combined;
-        updatedCount += 1;
-        onDiagnostic?.('paragraphDisclaimer.sync.field', {
-          fieldId: q.id,
-          keyCount,
-          itemCount
-        });
+    const { updatedCount } = computeParagraphDisclaimerUpdates(
+      valuesRef.current,
+      lineItemsRef.current,
+      optionStateRef.current as OptionState
+    );
+    if (!updatedCount) {
+      paragraphDisclaimerPendingRef.current = false;
+      return;
+    }
+    const active = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+    const tag = active?.tagName ? active.tagName.toLowerCase() : '';
+    const isFormInput = active && (tag === 'input' || tag === 'textarea' || tag === 'select');
+    if (isFormInput) {
+      paragraphDisclaimerPendingRef.current = true;
+      return;
+    }
+    paragraphDisclaimerPendingRef.current = false;
+    syncParagraphDisclaimers('change');
+  }, [definition, lineItems, optionState, language, submitting, computeParagraphDisclaimerUpdates, syncParagraphDisclaimers]);
+
+  const overlayOpenStateRef = useRef({ line: false, sub: false });
+
+  useEffect(() => {
+    const prev = overlayOpenStateRef.current;
+    const next = { line: lineItemGroupOverlay.open, sub: subgroupOverlay.open };
+    overlayOpenStateRef.current = next;
+    const closedLine = prev.line && !next.line;
+    const closedSub = prev.sub && !next.sub;
+    if (!closedLine && !closedSub) return;
+    if (!paragraphDisclaimerPendingRef.current) return;
+    if (isParagraphDisclaimerFocused()) return;
+    paragraphDisclaimerPendingRef.current = false;
+    syncParagraphDisclaimers('overlayClose');
+  }, [lineItemGroupOverlay.open, subgroupOverlay.open, isParagraphDisclaimerFocused, syncParagraphDisclaimers]);
+
+  const blurActiveElement = useCallback(
+    (reason: string, meta?: Record<string, any>) => {
+      try {
+        const el = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+        if (el && typeof (el as any).blur === 'function') {
+          (el as any).blur();
+          onDiagnostic?.('ui.blur', { reason, ...(meta || {}) });
+        }
+      } catch (_) {
+        // ignore blur failures
       }
-    });
-    if (!updatedCount) return;
-    setValues(prev => ({ ...prev, ...updates }));
-    onDiagnostic?.('paragraphDisclaimer.sync', { updatedCount });
-  }, [definition, lineItems, optionState, language, values, submitting, setValues, onDiagnostic]);
+    },
+    [onDiagnostic]
+  );
 
   const handleFieldChange = (q: WebQuestionDefinition, value: FieldValue) => {
     if (submitting) return;
@@ -3476,7 +3672,12 @@ const FormView: React.FC<FormViewProps> = ({
     }
     const orderedBlock = resolveOrderedEntryBlock({ scope: 'top', questionId: q.id });
     if (orderedBlock) {
-      triggerOrderedEntryValidation({ scope: 'top', questionId: q.id }, orderedBlock.missingFieldPath);
+      blurActiveElement('orderedEntry.blocked', { scope: 'top', fieldId: q.id });
+      triggerOrderedEntryValidation({ scope: 'top', questionId: q.id }, orderedBlock.missingFieldPath, {
+        navigate: false,
+        scrollOnly: true,
+        source: 'change'
+      });
       return;
     }
     guidedLastUserEditAtRef.current = Date.now();
@@ -3526,6 +3727,12 @@ const FormView: React.FC<FormViewProps> = ({
       group
     );
     if (orderedBlock) {
+      blurActiveElement('orderedEntry.blocked', {
+        scope: 'line',
+        groupId: group.id,
+        fieldId: (field?.id || '').toString(),
+        rowId
+      });
       triggerOrderedEntryValidation(
         {
           scope: 'line',
@@ -3533,7 +3740,8 @@ const FormView: React.FC<FormViewProps> = ({
           rowId,
           fieldId: (field?.id || '').toString()
         },
-        orderedBlock.missingFieldPath
+        orderedBlock.missingFieldPath,
+        { navigate: false, scrollOnly: true, source: 'change' }
       );
       return;
     }
@@ -3806,6 +4014,13 @@ const FormView: React.FC<FormViewProps> = ({
       const raw = (q as any).valueMap ? mappedValue : (values[q.id] as any);
       if (q.type === 'FILE_UPLOAD') {
         return isUploadValueComplete({ value: raw as any, uploadConfig: (q as any).uploadConfig, required: !!q.required });
+      }
+      if (q.type === 'PARAGRAPH') {
+        const cfg = (q.ui as any)?.paragraphDisclaimer;
+        if (cfg && !cfg.editable) {
+          const userText = resolveParagraphUserText({ rawValue: raw as any, config: cfg });
+          return !isEmptyValue(userText as any);
+        }
       }
       return !isEmptyValue(raw as any);
     };
@@ -4114,6 +4329,7 @@ const FormView: React.FC<FormViewProps> = ({
             : undefined;
         const inputValueRaw = useValueMap ? (mappedValue || '') : ((values[q.id] as any) ?? '');
         const paragraphDisclaimerCfg = q.type === 'PARAGRAPH' ? (q.ui as any)?.paragraphDisclaimer : undefined;
+        const paragraphEditable = !!paragraphDisclaimerCfg?.editable;
         const paragraphDisclaimer = paragraphDisclaimerCfg
           ? buildParagraphDisclaimerSection({
               config: paragraphDisclaimerCfg,
@@ -4124,20 +4340,22 @@ const FormView: React.FC<FormViewProps> = ({
             })
           : null;
         const paragraphUserText = paragraphDisclaimer
-          ? splitParagraphDisclaimerValue({ rawValue: inputValueRaw, separator: paragraphDisclaimer.separator }).userText
+          ? resolveParagraphUserText({ rawValue: inputValueRaw, config: paragraphDisclaimerCfg })
           : inputValueRaw;
         const paragraphCombined = paragraphDisclaimer
-          ? buildParagraphDisclaimerValue({
-              userText: paragraphUserText?.toString?.() || '',
-              sectionText: paragraphDisclaimer.sectionText,
-              separator: paragraphDisclaimer.separator
-            })
+          ? paragraphEditable
+            ? (inputValueRaw as any)
+            : buildParagraphDisclaimerValue({
+                userText: paragraphUserText?.toString?.() || '',
+                sectionText: paragraphDisclaimer.sectionText,
+                separator: paragraphDisclaimer.separator
+              })
           : (paragraphUserText as any);
         const inputValue =
           q.type === 'DATE'
             ? toDateInputValue(inputValueRaw)
             : q.type === 'PARAGRAPH'
-              ? paragraphUserText
+              ? (paragraphEditable ? inputValueRaw : paragraphUserText)
               : inputValueRaw;
         const numberText =
           q.type === 'NUMBER' ? (inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString()) : null;
@@ -4190,20 +4408,18 @@ const FormView: React.FC<FormViewProps> = ({
               {q.required && <RequiredStar />}
             </label>
             {q.type === 'PARAGRAPH' ? (
-              paragraphDisclaimer?.sectionText ? (
+              paragraphDisclaimer?.sectionText && !paragraphEditable ? (
                 <div className="ck-paragraph-shell">
                   <textarea
                     className="ck-paragraph-input"
                     value={inputValue}
                     onChange={e => {
                       const nextUserText = e.target.value;
-                      const nextCombined = paragraphDisclaimer
-                        ? buildParagraphDisclaimerValue({
-                            userText: nextUserText,
-                            sectionText: paragraphDisclaimer.sectionText,
-                            separator: paragraphDisclaimer.separator
-                          })
-                        : nextUserText;
+                      const nextCombined = buildParagraphDisclaimerValue({
+                        userText: nextUserText,
+                        sectionText: paragraphDisclaimer.sectionText,
+                        separator: paragraphDisclaimer.separator
+                      });
                       handleFieldChange(q, nextCombined);
                     }}
                     readOnly={useValueMap || q.readOnly === true}
@@ -4214,17 +4430,11 @@ const FormView: React.FC<FormViewProps> = ({
                 </div>
               ) : (
                 <textarea
+                  className="ck-paragraph-input"
                   value={inputValue}
                   onChange={e => {
                     const nextUserText = e.target.value;
-                    const nextCombined = paragraphDisclaimer
-                      ? buildParagraphDisclaimerValue({
-                          userText: nextUserText,
-                          sectionText: paragraphDisclaimer.sectionText,
-                          separator: paragraphDisclaimer.separator
-                        })
-                      : nextUserText;
-                    handleFieldChange(q, nextCombined);
+                    handleFieldChange(q, nextUserText);
                   }}
                   readOnly={useValueMap || q.readOnly === true}
                   disabled={submitting || isFieldLockedByDedup(q.id)}
@@ -4629,7 +4839,7 @@ const FormView: React.FC<FormViewProps> = ({
                 if (!field) return;
                 const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row?.id, linePrefix });
                 if (hideField) return;
-                const val = (row?.values || {})[field.id];
+                const val = resolveRequiredValue(field, (row?.values || {})[field.id]);
                 if (field.required && isEmptyValue(val as any)) {
                   blocked.push(field.id);
                   return;
@@ -4714,7 +4924,8 @@ const FormView: React.FC<FormViewProps> = ({
                   if (!ok) return false;
                   continue;
                 }
-                if (isEmptyValue(raw as any)) return false;
+                const requiredVal = resolveRequiredValue(field, raw as any);
+                if (isEmptyValue(requiredVal as any)) return false;
               }
 
               for (const sub of subGroups) {
@@ -4778,7 +4989,8 @@ const FormView: React.FC<FormViewProps> = ({
                       if (!ok) return false;
                       continue;
                     }
-                    if (isEmptyValue(raw as any)) return false;
+                    const requiredVal = resolveRequiredValue(field, raw as any);
+                    if (isEmptyValue(requiredVal as any)) return false;
                   }
                 }
               }
@@ -5321,15 +5533,17 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const scrollToError = (): boolean => {
-    const target = document.querySelector<HTMLElement>(`[data-field-path="${firstKey}"]`);
+      const target = document.querySelector<HTMLElement>(`[data-field-path="${firstKey}"]`);
       if (!target) return false;
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const focusable = target.querySelector<HTMLElement>('input, select, textarea, button');
-    try {
-      focusable?.focus({ preventScroll: true } as any);
-    } catch (_) {
-      // ignore focus issues
-    }
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (errorNavModeRef.current !== 'scroll') {
+        const focusable = target.querySelector<HTMLElement>('input, select, textarea, button');
+        try {
+          focusable?.focus({ preventScroll: true } as any);
+        } catch (_) {
+          // ignore focus issues
+        }
+      }
       return true;
     };
 
@@ -6184,7 +6398,8 @@ const FormView: React.FC<FormViewProps> = ({
                               required: !!field.required
                             });
                           }
-                          return !isEmptyValue(raw as any);
+                          const requiredVal = resolveRequiredValue(field, raw as any);
+                          return !isEmptyValue(requiredVal as any);
                         }}
                       />
                     );
