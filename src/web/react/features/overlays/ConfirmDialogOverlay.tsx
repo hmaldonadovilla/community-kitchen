@@ -13,10 +13,23 @@ export const ConfirmDialogOverlay: React.FC<{
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  showCancel?: boolean;
+  showConfirm?: boolean;
   zIndex?: number;
   onCancel: () => void;
   onConfirm: () => void;
-}> = ({ open, title, message, confirmLabel, cancelLabel, zIndex = 12020, onCancel, onConfirm }) => {
+}> = ({
+  open,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  showCancel = true,
+  showConfirm = true,
+  zIndex = 12020,
+  onCancel,
+  onConfirm
+}) => {
   if (!open) return null;
 
   return (
@@ -116,39 +129,42 @@ export const ConfirmDialogOverlay: React.FC<{
           {message}
         </div>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 26, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={onCancel}
-            style={{
-              marginRight: 'auto',
-              padding: '10px 14px',
-              borderRadius: 12,
-              border: '1px solid rgba(15, 23, 42, 0.18)',
-              background: 'rgba(15,23,42,0.06)',
-              color: '#0f172a',
-              fontWeight: 600,
-              minWidth: 110
-            }}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            style={{
-              padding: '10px 14px',
-              borderRadius: 12,
-              border: '1px solid rgba(59,130,246,0.35)',
-              background: '#2563eb',
-              color: '#ffffff',
-              fontWeight: 900
-            }}
-          >
-            {confirmLabel}
-          </button>
+          {showCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                marginRight: 'auto',
+                padding: '10px 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(15, 23, 42, 0.18)',
+                background: 'rgba(15,23,42,0.06)',
+                color: '#0f172a',
+                fontWeight: 600,
+                minWidth: 110
+              }}
+            >
+              {cancelLabel}
+            </button>
+          ) : null}
+          {showConfirm ? (
+            <button
+              type="button"
+              onClick={onConfirm}
+              style={{
+                padding: '10px 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(59,130,246,0.35)',
+                background: '#2563eb',
+                color: '#ffffff',
+                fontWeight: 900
+              }}
+            >
+              {confirmLabel}
+            </button>
+          ) : null}
         </div>
       </dialog>
     </div>
   );
 };
-
