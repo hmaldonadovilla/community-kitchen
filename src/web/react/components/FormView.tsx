@@ -28,6 +28,7 @@ import { FormErrors, LineItemState, OptionState } from '../types';
 import { isEmptyValue } from '../utils/values';
 import {
   applyUploadConstraints,
+  clearLineItemGroupErrors,
   describeUploadItem,
   formatOptionFilterNonMatchWarning,
   getUploadMinRequired,
@@ -2195,6 +2196,7 @@ const FormView: React.FC<FormViewProps> = ({
       const nextErrors = validateLineItemGroupOverlay();
       if (!nextErrors || Object.keys(nextErrors).length === 0) {
         closeLineItemGroupOverlay();
+        setErrors(prev => clearLineItemGroupErrors(prev, lineItemGroupOverlay.groupId || ''));
         return;
       }
       setErrors(nextErrors);
@@ -4565,6 +4567,13 @@ const FormView: React.FC<FormViewProps> = ({
         if (groupOverlayEnabled) {
           const hideGroupLabel = q.ui?.hideLabel === true;
           const tapToOpenLabel = tSystem('common.tapToOpen', language, 'Tap to open');
+          const needsAttentionMessage = resolveLocalizedString(
+            q.lineItemConfig?.ui?.needsAttentionMessage,
+            language,
+            ''
+          )
+            .toString()
+            .trim();
           const groupHasAnyError = (() => {
             if (errors[q.id]) return true;
             const prefix = `${q.id}__`;
@@ -4820,7 +4829,9 @@ const FormView: React.FC<FormViewProps> = ({
               {errors[q.id] ? (
                 <div className="error">{errors[q.id]}</div>
               ) : groupHasAnyError ? (
-                <div className="error">{tSystem('validation.needsAttention', language, 'Needs attention')}</div>
+                <div className="error">
+                  {needsAttentionMessage || tSystem('validation.needsAttention', language, 'Needs attention')}
+                </div>
               ) : null}
             </div>
           );
