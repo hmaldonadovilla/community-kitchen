@@ -3,6 +3,7 @@ import type { FieldValue, LangCode, VisibilityContext, WebFormDefinition, WebQue
 import type { LineItemState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
 import { parseSubgroupKey } from '../../app/lineItems';
+import { resolveParagraphUserText } from '../../app/paragraphDisclaimer';
 import { resolveValueMapValue } from './valueMaps';
 import { isUploadValueComplete } from './utils';
 import { isLineItemGroupQuestionComplete } from './completeness';
@@ -26,10 +27,14 @@ const isRequiredFieldMissing = (args: {
   const { field, rawValue, mappedValue, required } = args;
   if (!required) return false;
   const value = field?.valueMap ? mappedValue : rawValue;
+  const requiredValue =
+    field?.type === 'PARAGRAPH'
+      ? resolveParagraphUserText({ rawValue: value as FieldValue, config: (field?.ui as any)?.paragraphDisclaimer })
+      : value;
   if (field?.type === 'FILE_UPLOAD') {
     return !isUploadValueComplete({ value: value as any, uploadConfig: field?.uploadConfig, required: true });
   }
-  return isEmptyValue(value as any);
+  return isEmptyValue(requiredValue as any);
 };
 
 const resolveTopQuestionMissing = (args: {

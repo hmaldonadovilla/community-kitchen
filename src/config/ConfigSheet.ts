@@ -2185,6 +2185,7 @@ export class ConfigSheet {
     if (raw.listMessage !== undefined) cfg.listMessage = raw.listMessage;
     if (raw.message !== undefined) cfg.message = raw.message;
     if (raw.separator !== undefined && raw.separator !== null) cfg.separator = raw.separator.toString();
+    if (raw.editable !== undefined && raw.editable !== null) cfg.editable = Boolean(raw.editable);
 
     return cfg;
   }

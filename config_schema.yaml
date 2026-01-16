@@ -858,8 +858,9 @@ components:
         paragraphDisclaimer:
           $ref: '#/components/schemas/ParagraphDisclaimerConfig'
           description: |
-            Optional non-editable disclaimer section appended to PARAGRAPH fields based on line-item warnings.
-            The UI renders the disclaimer below the textarea and keeps the stored value in sync.
+            Optional disclaimer section appended to PARAGRAPH fields based on line-item warnings.
+            The UI renders the disclaimer below the textarea by default (non-editable) and keeps the stored value in sync.
+            Set `paragraphDisclaimer.editable: true` to render it inside the textarea for editing.
         choiceSearchEnabled:
           type: boolean
           description: |
@@ -898,6 +899,11 @@ components:
           type: string
           description: |
             Optional separator line inserted before the disclaimer section (default: "---").
+        editable:
+          type: boolean
+          description: |
+            When true, render the disclaimer inside the textarea so it can be edited.
+            Defaults to false (non-editable disclaimer block).
       example:
         sourceGroupId: INGREDIENTS
         title:

@@ -1,5 +1,5 @@
 import { resolveLocalizedString } from '../../i18n';
-import { FieldValue, LangCode, LocalizedString, WebFormDefinition } from '../../types';
+import { FieldValue, LangCode, LocalizedString, ParagraphDisclaimerConfig, WebFormDefinition } from '../../types';
 import { LineItemState, OptionState } from '../types';
 import { formatDisplayText, EMPTY_DISPLAY } from '../utils/valueDisplay';
 import { optionKey, toOptionSet } from '../../core';
@@ -162,25 +162,63 @@ export const buildParagraphDisclaimerSection = (args: {
   };
 };
 
-export const splitParagraphDisclaimerValue = (args: { rawValue: FieldValue; separator: string }): { userText: string; hasDisclaimer: boolean } => {
+const buildDisclaimerMarker = (separator: string, mode: 'spaced' | 'legacy' = 'spaced'): string => {
+  const sep = normalizeSeparator(separator);
+  if (mode === 'legacy') return `\n\n${sep}\n`;
+  // Keep two blank lines between the user text and the disclaimer header.
+  return `\n\n\n${sep}\n`;
+};
+
+export const splitParagraphDisclaimerValue = (args: {
+  rawValue: FieldValue;
+  separator: string;
+}): { userText: string; sectionText: string; hasDisclaimer: boolean; marker: string } => {
   const { rawValue, separator } = args;
   const raw = rawValue === undefined || rawValue === null ? '' : rawValue.toString();
-  const marker = `\n\n${normalizeSeparator(separator)}\n`;
-  const idx = raw.indexOf(marker);
-  if (idx >= 0) {
-    return { userText: raw.slice(0, idx), hasDisclaimer: true };
+  const spacedMarker = buildDisclaimerMarker(separator, 'spaced');
+  const legacyMarker = buildDisclaimerMarker(separator, 'legacy');
+  const spacedIdx = raw.indexOf(spacedMarker);
+  if (spacedIdx >= 0) {
+    return {
+      userText: raw.slice(0, spacedIdx),
+      sectionText: raw.slice(spacedIdx + spacedMarker.length),
+      hasDisclaimer: true,
+      marker: spacedMarker
+    };
   }
-  return { userText: raw, hasDisclaimer: false };
+  const legacyIdx = raw.indexOf(legacyMarker);
+  if (legacyIdx >= 0) {
+    return {
+      userText: raw.slice(0, legacyIdx),
+      sectionText: raw.slice(legacyIdx + legacyMarker.length),
+      hasDisclaimer: true,
+      marker: legacyMarker
+    };
+  }
+  return { userText: raw, sectionText: '', hasDisclaimer: false, marker: spacedMarker };
 };
 
 export const buildParagraphDisclaimerValue = (args: {
   userText: string;
   sectionText: string;
   separator: string;
+  markerOverride?: string;
 }): string => {
-  const { userText, sectionText, separator } = args;
+  const { userText, sectionText, separator, markerOverride } = args;
   const base = (userText || '').toString().replace(/\s+$/, '');
   if (!sectionText) return base;
-  const marker = `\n\n${normalizeSeparator(separator)}\n`;
+  const marker = markerOverride || buildDisclaimerMarker(separator, 'spaced');
   return `${base}${marker}${sectionText}`;
+};
+
+export const resolveParagraphUserText = (args: {
+  rawValue: FieldValue;
+  config?: ParagraphDisclaimerConfig | null;
+}): string => {
+  const { rawValue, config } = args;
+  const raw = rawValue === undefined || rawValue === null ? '' : rawValue.toString();
+  if (!config) return raw;
+  const { userText, hasDisclaimer } = splitParagraphDisclaimerValue({ rawValue, separator: config.separator || '' });
+  if (hasDisclaimer) return userText;
+  return raw;
 };
