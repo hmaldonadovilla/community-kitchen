@@ -897,6 +897,23 @@ This project uses TypeScript. You need to build the script before using it in Go
         { "optionFilter": { "dependsOn": "Delivery type", "optionMap": { "Frozen": ["Freezer"], "*": ["Fridge", "Freezer"] } } }
         ```
 
+      - Partial matches for multi-select dependencies (e.g., dietary restrictions): set `"matchMode": "or"` to union allowed options.
+        Rows that don’t satisfy all selected keys are tagged with `__ckNonMatchOptions` and show warnings during editing.
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": "DIET",
+            "matchMode": "or",
+            "optionMap": {
+              "Vegan": ["Beans", "Rice"],
+              "Vegetarian": ["Beans", "Rice", "Cheese"],
+              "*": []
+            }
+          }
+        }
+        ```
+
       - Example (main form validation):
 
         ```json
@@ -1457,6 +1474,20 @@ Recommended steps after deploying a new bundle:
 
 - **PARAGRAPH fields (textarea height)**: You can increase the visible height of a paragraph field in the edit view by setting:
   - `ui.paragraphRows` (integer, 2–20; default 4)
+- **PARAGRAPH field disclaimers**: Use `ui.paragraphDisclaimer` to append a non-editable section that summarizes `__ckNonMatchOptions` from a line-item group (useful with `optionFilter.matchMode: "or"`).
+
+  ```json
+  {
+    "ui": {
+      "paragraphDisclaimer": {
+        "sourceGroupId": "ING",
+        "title": { "en": "Pay attention to:" },
+        "listMessage": { "en": "For {key}, do not use: {items}." },
+        "message": { "en": "Remember to add salt only after reserving non-salt portions." }
+      }
+    }
+  }
+  ```
 
 #### Example: PDF preview button
 

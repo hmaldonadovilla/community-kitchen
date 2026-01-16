@@ -1,5 +1,7 @@
-import { FieldValue, LineItemRowState, WebFormDefinition, WebQuestionDefinition } from '../../types';
+import { FieldValue, LineItemRowState, OptionFilter, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LineItemState } from '../types';
+import { toDependencyValue } from '../../core';
+import { computeNonMatchOptionKeys } from '../../rules/filter';
 
 export const ROW_SOURCE_KEY = '__ckRowSource';
 export const ROW_SOURCE_AUTO = 'auto';
@@ -21,6 +23,12 @@ export const ROW_PARENT_GROUP_ID_KEY = '__ckParentGroupId';
  * When true, suppress the UI "Remove" action for this row.
  */
 export const ROW_HIDE_REMOVE_KEY = '__ckHideRemove';
+
+/**
+ * Warning metadata for optionFilter matchMode="or".
+ * Stores the dependency keys that were NOT satisfied by the row's selected option.
+ */
+export const ROW_NON_MATCH_OPTIONS_KEY = '__ckNonMatchOptions';
 
 /**
  * Persisted stable row id (stored inside row values so it survives save/load).
@@ -50,6 +58,206 @@ export const parseRowSource = (raw: any): 'auto' | 'manual' | undefined => {
   if (val === ROW_SOURCE_AUTO || val === 'a' || val === 1 || val === '1' || val === true || val === 'true') return 'auto';
   if (val === ROW_SOURCE_MANUAL || val === 'm' || val === 0 || val === '0' || val === false || val === 'false') return 'manual';
   return undefined;
+};
+
+const normalizeStringList = (raw: any): string[] => {
+  if (raw === undefined || raw === null) return [];
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string' && raw.includes(',')
+      ? raw.split(',')
+      : [raw];
+  const seen = new Set<string>();
+  return list
+    .map(v => (v === undefined || v === null ? '' : v.toString().trim()))
+    .filter(v => {
+      if (!v || seen.has(v)) return false;
+      seen.add(v);
+      return true;
+    });
+};
+
+export const parseRowNonMatchOptions = (raw: any): string[] => normalizeStringList(raw);
+
+const isOrMatchMode = (filter: OptionFilter | undefined): boolean => {
+  const raw = (filter as any)?.matchMode;
+  return typeof raw === 'string' && raw.trim().toLowerCase() === 'or';
+};
+
+const resolveNonMatchSourceFieldId = (fields: any[], anchorFieldId?: string): string => {
+  const candidates = (fields || []).filter(f => f && f.optionFilter && isOrMatchMode(f.optionFilter));
+  if (!candidates.length) return '';
+  if (anchorFieldId && candidates.some(f => (f?.id ?? '').toString() === anchorFieldId)) return anchorFieldId;
+  const first = candidates[0];
+  return (first?.id ?? '').toString();
+};
+
+const resolveDependencyValues = (args: {
+  filter: OptionFilter;
+  rowValues: Record<string, FieldValue>;
+  topValues: Record<string, FieldValue>;
+  parentValues?: Record<string, FieldValue>;
+  selectorId?: string;
+  selectorValue?: FieldValue;
+}): (string | number | null | undefined)[] => {
+  const { filter, rowValues, topValues, parentValues, selectorId, selectorValue } = args;
+  const depIds = Array.isArray(filter.dependsOn) ? filter.dependsOn : [filter.dependsOn];
+  return depIds
+    .map(depId => {
+      const dep = depId !== undefined && depId !== null ? depId.toString().trim() : '';
+      if (!dep) return undefined;
+      if (selectorId && dep === selectorId) {
+        if (selectorValue !== undefined && selectorValue !== null) return toDependencyValue(selectorValue);
+        if (Object.prototype.hasOwnProperty.call(rowValues || {}, dep)) return toDependencyValue((rowValues as any)[dep]);
+        if (parentValues && Object.prototype.hasOwnProperty.call(parentValues || {}, dep)) return toDependencyValue((parentValues as any)[dep]);
+        return toDependencyValue((topValues as any)[dep]);
+      }
+      if (Object.prototype.hasOwnProperty.call(rowValues || {}, dep)) return toDependencyValue((rowValues as any)[dep]);
+      if (parentValues && Object.prototype.hasOwnProperty.call(parentValues || {}, dep)) return toDependencyValue((parentValues as any)[dep]);
+      return toDependencyValue((topValues as any)[dep]);
+    })
+    .filter(v => v !== undefined);
+};
+
+const resolveSingleChoiceValue = (raw: FieldValue): string => {
+  if (raw === undefined || raw === null) return '';
+  if (Array.isArray(raw)) {
+    const first = raw[0];
+    return first === undefined || first === null ? '' : first.toString().trim();
+  }
+  return raw.toString().trim();
+};
+
+export const computeRowNonMatchOptions = (args: {
+  fields: any[];
+  rowValues: Record<string, FieldValue>;
+  topValues: Record<string, FieldValue>;
+  parentValues?: Record<string, FieldValue>;
+  selectorId?: string;
+  selectorValue?: FieldValue;
+  anchorFieldId?: string;
+  sourceField?: any;
+}): string[] => {
+  const { fields, rowValues, topValues, parentValues, selectorId, selectorValue, anchorFieldId, sourceField } = args;
+  const resolvedFields = Array.isArray(fields) ? fields : [];
+  const sourceFieldId = resolveNonMatchSourceFieldId(resolvedFields, anchorFieldId);
+  const targetField =
+    sourceField ||
+    (sourceFieldId ? resolvedFields.find(f => (f?.id ?? '').toString() === sourceFieldId) : undefined);
+  if (!targetField?.optionFilter || !isOrMatchMode(targetField.optionFilter)) return [];
+
+  const selectedRaw = (rowValues as any)[(targetField?.id ?? sourceFieldId) as any];
+  const selectedList = Array.isArray(selectedRaw) ? selectedRaw : [selectedRaw];
+  const dependencyValues = resolveDependencyValues({
+    filter: targetField.optionFilter,
+    rowValues,
+    topValues,
+    parentValues,
+    selectorId,
+    selectorValue
+  });
+  const nonMatchKeys = selectedList.flatMap(rawSelected => {
+    const selected = resolveSingleChoiceValue(rawSelected as FieldValue);
+    if (!selected) return [];
+    return computeNonMatchOptionKeys({
+      filter: targetField.optionFilter,
+      dependencyValues,
+      selectedValue: selected
+    });
+  });
+  return normalizeStringList(nonMatchKeys);
+};
+
+export const recomputeLineItemNonMatchOptions = (args: {
+  definition: WebFormDefinition;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  subgroupSelectors?: Record<string, string>;
+}): { lineItems: LineItemState; changed: boolean; updatedRows: number } => {
+  const { definition, values, lineItems, subgroupSelectors = {} } = args;
+  let nextState: LineItemState = lineItems;
+  let changed = false;
+  let updatedRows = 0;
+
+  const updateRows = (rowList: LineItemRowState[], fields: any[], opts: { anchorFieldId?: string; parentValues?: Record<string, FieldValue>; selectorId?: string; selectorValue?: FieldValue }) => {
+    let anyRowChanged = false;
+    const nextRows = rowList.map(row => {
+      const rowValues = { ...(row.values || {}) };
+      const normalized = computeRowNonMatchOptions({
+        fields,
+        rowValues,
+        topValues: values,
+        parentValues: opts.parentValues,
+        selectorId: opts.selectorId,
+        selectorValue: opts.selectorValue,
+        anchorFieldId: opts.anchorFieldId
+      });
+      const existing = parseRowNonMatchOptions((rowValues as any)[ROW_NON_MATCH_OPTIONS_KEY]);
+
+      const same =
+        normalized.length === existing.length && normalized.every((val, idx) => val === existing[idx]);
+      if (same) return row;
+
+      if (normalized.length) {
+        rowValues[ROW_NON_MATCH_OPTIONS_KEY] = normalized;
+      } else {
+        delete (rowValues as any)[ROW_NON_MATCH_OPTIONS_KEY];
+      }
+      anyRowChanged = true;
+      updatedRows += 1;
+      return { ...row, values: rowValues };
+    });
+
+    if (!anyRowChanged) return rowList;
+    changed = true;
+    return nextRows;
+  };
+
+  (definition.questions || [])
+    .filter(q => q.type === 'LINE_ITEM_GROUP')
+    .forEach(group => {
+      const groupRows = nextState[group.id] || [];
+      const groupFields = group.lineItemConfig?.fields || [];
+      const updatedGroupRows = updateRows(groupRows, groupFields, { anchorFieldId: group.lineItemConfig?.anchorFieldId });
+      if (updatedGroupRows !== groupRows) {
+        if (nextState === lineItems) nextState = { ...lineItems };
+        nextState[group.id] = updatedGroupRows;
+      }
+
+      const subGroups = group.lineItemConfig?.subGroups || [];
+      if (!subGroups.length) return;
+      const parentRows = nextState[group.id] || groupRows;
+
+      parentRows.forEach(parentRow => {
+        const parentValues = parentRow?.values || {};
+        subGroups.forEach(sub => {
+          const subId = resolveSubgroupKey(sub as any);
+          if (!subId) return;
+          const subKey = buildSubgroupKey(group.id, parentRow.id, subId);
+          const subRows = nextState[subKey] || [];
+          if (!subRows.length) return;
+
+          const subFields = (sub as any)?.fields || [];
+          const selectorId =
+            (sub as any)?.sectionSelector?.id !== undefined && (sub as any)?.sectionSelector?.id !== null
+              ? (sub as any).sectionSelector.id.toString()
+              : undefined;
+          const selectorValue = selectorId ? subgroupSelectors[subKey] : undefined;
+          const updatedSubRows = updateRows(subRows, subFields, {
+            anchorFieldId: (sub as any)?.anchorFieldId,
+            parentValues,
+            selectorId,
+            selectorValue
+          });
+          if (updatedSubRows !== subRows) {
+            if (nextState === lineItems) nextState = { ...lineItems };
+            nextState[subKey] = updatedSubRows;
+          }
+        });
+      });
+    });
+
+  return { lineItems: nextState, changed, updatedRows };
 };
 
 export const buildSubgroupKey = (parentGroupId: string, parentRowId: string, subGroupId: string) =>

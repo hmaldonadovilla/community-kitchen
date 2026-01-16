@@ -612,7 +612,9 @@ export const collectValidationWarnings = (args: {
           .filter(i => (i as any)?.level === 'warning' && allowWarning((i as any)?.warningView))
           .forEach(i => {
             const targetId = (i.fieldId || '').toString();
-            const fieldPath = fieldIds.has(targetId) ? `${q.id}__${targetId}__${row.id}` : targetId;
+            const fallbackId = (field?.id ?? '').toString();
+            const resolvedId = fieldIds.has(targetId) ? targetId : fallbackId || targetId;
+            const fieldPath = fieldIds.has(resolvedId) ? `${q.id}__${resolvedId}__${row.id}` : resolvedId;
             pushIssue(fieldPath, i.message, (i as any)?.warningDisplay);
           });
       });
@@ -655,7 +657,9 @@ export const collectValidationWarnings = (args: {
                 .filter((i: any) => i?.level === 'warning' && allowWarning(i?.warningView))
                 .forEach((i: any) => {
                   const targetId = (i.fieldId || '').toString();
-                  const fieldPath = fieldIds.has(targetId) ? `${subKey}__${targetId}__${subRow.id}` : targetId;
+                  const fallbackId = (field?.id ?? '').toString();
+                  const resolvedId = fieldIds.has(targetId) ? targetId : fallbackId || targetId;
+                  const fieldPath = fieldIds.has(resolvedId) ? `${subKey}__${resolvedId}__${subRow.id}` : resolvedId;
                   pushIssue(fieldPath, i.message, i?.warningDisplay);
                 });
             });

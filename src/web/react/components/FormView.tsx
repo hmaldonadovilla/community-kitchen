@@ -29,6 +29,7 @@ import { isEmptyValue } from '../utils/values';
 import {
   applyUploadConstraints,
   describeUploadItem,
+  formatOptionFilterNonMatchWarning,
   getUploadMinRequired,
   isUploadValueComplete,
   resolveRowDisclaimerText,
@@ -67,12 +68,21 @@ import {
   buildLineContextId,
   buildSubgroupKey,
   cascadeRemoveLineItemRows,
+  computeRowNonMatchOptions,
+  parseRowNonMatchOptions,
   parseSubgroupKey,
+  recomputeLineItemNonMatchOptions,
+  ROW_NON_MATCH_OPTIONS_KEY,
   ROW_SOURCE_KEY,
   resolveSubgroupKey,
   seedSubgroupDefaults
 } from '../app/lineItems';
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
+import {
+  buildParagraphDisclaimerSection,
+  buildParagraphDisclaimerValue,
+  splitParagraphDisclaimerValue
+} from '../app/paragraphDisclaimer';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 import { validateRules } from '../../rules/validation';
 import { matchesWhenClause } from '../../rules/visibility';
@@ -2822,20 +2832,63 @@ const FormView: React.FC<FormViewProps> = ({
     return next;
   };
 
+  const computeRowNonMatchKeys = useCallback(
+    (args: {
+      group: WebQuestionDefinition;
+      rowValues: Record<string, FieldValue>;
+      lineItemsSnapshot?: LineItemState;
+      valuesSnapshot?: Record<string, FieldValue>;
+      subgroupSelectorsSnapshot?: Record<string, string>;
+    }): string[] => {
+      const {
+        group,
+        rowValues,
+        lineItemsSnapshot = lineItems,
+        valuesSnapshot = values,
+        subgroupSelectorsSnapshot = subgroupSelectors
+      } = args;
+      const cfg = group.lineItemConfig;
+      if (!cfg || !Array.isArray(cfg.fields) || !cfg.fields.length) return [];
+      const subgroupInfo = parseSubgroupKey(group.id);
+      const anchorFieldId =
+        cfg.anchorFieldId !== undefined && cfg.anchorFieldId !== null ? cfg.anchorFieldId.toString() : undefined;
+      const selectorId =
+        cfg.sectionSelector?.id !== undefined && cfg.sectionSelector?.id !== null ? cfg.sectionSelector.id.toString() : undefined;
+      const selectorValue = selectorId
+        ? subgroupInfo
+          ? (subgroupSelectorsSnapshot as any)[group.id]
+          : (valuesSnapshot as any)[selectorId]
+        : undefined;
+      const parentValues = subgroupInfo
+        ? (lineItemsSnapshot[subgroupInfo.parentGroupId] || []).find(r => r.id === subgroupInfo.parentRowId)?.values
+        : undefined;
+      return computeRowNonMatchOptions({
+        fields: cfg.fields,
+        rowValues,
+        topValues: valuesSnapshot,
+        parentValues,
+        selectorId,
+        selectorValue,
+        anchorFieldId
+      });
+    },
+    [lineItems, subgroupSelectors, values]
+  );
+
   const addLineItemRow = (groupId: string, preset?: Record<string, any>, rowIdOverride?: string) => {
     setLineItems(prev => {
       const subgroupInfo = parseSubgroupKey(groupId);
       const groupDef = subgroupInfo ? undefined : definition.questions.find(q => q.id === groupId);
+      const parentDef = subgroupInfo ? definition.questions.find(q => q.id === subgroupInfo.parentGroupId) : undefined;
+      const subDef = subgroupInfo
+        ? parentDef?.lineItemConfig?.subGroups?.find(s => resolveSubgroupKey(s) === subgroupInfo.subGroupId)
+        : undefined;
       const current = prev[groupId] || [];
 
       // resolve selector for top-level or subgroup
       let selectorId: string | undefined;
       let selectorValue: FieldValue | undefined;
       if (subgroupInfo) {
-        const parentDef = definition.questions.find(q => q.id === subgroupInfo.parentGroupId);
-        const subDef = parentDef?.lineItemConfig?.subGroups?.find(
-          s => resolveSubgroupKey(s) === subgroupInfo.subGroupId
-        );
         selectorId = subDef?.sectionSelector?.id;
         selectorValue = subgroupSelectors[groupId];
       } else {
@@ -2848,6 +2901,30 @@ const FormView: React.FC<FormViewProps> = ({
         rowValues[selectorId] = selectorValue;
       }
       const rowId = rowIdOverride || `${groupId}_${Math.random().toString(16).slice(2)}`;
+      const groupForNonMatch: WebQuestionDefinition | undefined = subgroupInfo
+        ? subDef
+          ? ({
+              ...(parentDef as any),
+              id: groupId,
+              lineItemConfig: { ...(subDef as any), fields: subDef.fields || [], subGroups: [] }
+            } as WebQuestionDefinition)
+          : undefined
+        : groupDef;
+      if (groupForNonMatch?.lineItemConfig?.fields?.length) {
+        const nonMatchKeys = computeRowNonMatchKeys({
+          group: groupForNonMatch,
+          rowValues,
+          lineItemsSnapshot: prev,
+          valuesSnapshot: values,
+          subgroupSelectorsSnapshot: subgroupSelectors
+        });
+        if (nonMatchKeys.length) {
+          rowValues[ROW_NON_MATCH_OPTIONS_KEY] = nonMatchKeys;
+          onDiagnostic?.('optionFilter.nonMatch.seed', { groupId, rowId, keys: nonMatchKeys });
+        } else {
+          delete rowValues[ROW_NON_MATCH_OPTIONS_KEY];
+        }
+      }
       const row: LineItemRowState = {
         id: rowId,
         values: rowValues,
@@ -2872,6 +2949,11 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const subgroupInfo = parseSubgroupKey(groupId);
+    const parentDef = subgroupInfo ? definition.questions.find(q => q.id === subgroupInfo.parentGroupId) : undefined;
+    const subDef = subgroupInfo
+      ? parentDef?.lineItemConfig?.subGroups?.find(s => resolveSubgroupKey(s) === subgroupInfo.subGroupId)
+      : undefined;
+    const groupDef = subgroupInfo ? undefined : definition.questions.find(q => q.id === groupId);
 
     // Enforce required section selector before allowing manual inline adds.
     // (The selector control is not a formal question, so we guard here in addition to disabling the UI button.)
@@ -2881,8 +2963,6 @@ const FormView: React.FC<FormViewProps> = ({
     let selectorValue: FieldValue | undefined;
     let anchorFieldId: string | undefined;
     if (subgroupInfo) {
-      const parentDef = definition.questions.find(q => q.id === subgroupInfo.parentGroupId);
-      const subDef = parentDef?.lineItemConfig?.subGroups?.find(s => resolveSubgroupKey(s) === subgroupInfo.subGroupId);
       addMode = (subDef as any)?.addMode;
       selectorCfg = (subDef as any)?.sectionSelector;
       selectorId = selectorCfg?.id;
@@ -2892,7 +2972,6 @@ const FormView: React.FC<FormViewProps> = ({
           ? (subDef as any).anchorFieldId.toString()
           : undefined;
     } else {
-      const groupDef = definition.questions.find(q => q.id === groupId);
       addMode = groupDef?.lineItemConfig?.addMode;
       selectorCfg = groupDef?.lineItemConfig?.sectionSelector;
       selectorId = selectorCfg?.id;
@@ -2902,6 +2981,15 @@ const FormView: React.FC<FormViewProps> = ({
           ? groupDef.lineItemConfig.anchorFieldId.toString()
           : undefined;
     }
+    const groupForNonMatch: WebQuestionDefinition | undefined = subgroupInfo
+      ? subDef
+        ? ({
+            ...(parentDef as any),
+            id: groupId,
+            lineItemConfig: { ...(subDef as any), fields: subDef.fields || [], subGroups: [] }
+          } as WebQuestionDefinition)
+        : undefined
+      : groupDef;
     const inlineMode = addMode === undefined || addMode === null || addMode === 'inline';
     if (inlineMode && selectorCfg?.required && selectorId) {
       const presetSelector =
@@ -2953,6 +3041,21 @@ const FormView: React.FC<FormViewProps> = ({
             };
             if (selectorId && selectorValue !== undefined && selectorValue !== null && nextRowValues[selectorId] === undefined) {
               nextRowValues[selectorId] = selectorValue;
+            }
+            if (groupForNonMatch?.lineItemConfig?.fields?.length) {
+              const nonMatchKeys = computeRowNonMatchKeys({
+                group: groupForNonMatch,
+                rowValues: nextRowValues,
+                lineItemsSnapshot: prev,
+                valuesSnapshot: values,
+                subgroupSelectorsSnapshot: subgroupSelectors
+              });
+              if (nonMatchKeys.length) {
+                nextRowValues[ROW_NON_MATCH_OPTIONS_KEY] = nonMatchKeys;
+                onDiagnostic?.('optionFilter.nonMatch.seed', { groupId, rowId: emptyRow.id, keys: nonMatchKeys });
+              } else {
+                delete nextRowValues[ROW_NON_MATCH_OPTIONS_KEY];
+              }
             }
 
             const nextRow: LineItemRowState = { ...base, values: nextRowValues };
@@ -3307,6 +3410,57 @@ const FormView: React.FC<FormViewProps> = ({
     };
   }, [orderedEntryEnabled, resolveOrderedEntryBlock, triggerOrderedEntryValidation]);
 
+  useEffect(() => {
+    if (submitting) return;
+    const res = recomputeLineItemNonMatchOptions({
+      definition,
+      values,
+      lineItems,
+      subgroupSelectors
+    });
+    if (!res.changed) return;
+    setLineItems(res.lineItems);
+    onDiagnostic?.('optionFilter.nonMatch.reconcile', {
+      updatedRows: res.updatedRows
+    });
+  }, [definition, values, lineItems, subgroupSelectors, submitting, setLineItems, onDiagnostic]);
+
+  useEffect(() => {
+    if (submitting) return;
+    const updates: Record<string, FieldValue> = {};
+    let updatedCount = 0;
+    (definition.questions || []).forEach(q => {
+      if (q.type !== 'PARAGRAPH') return;
+      const disclaimerCfg = (q.ui as any)?.paragraphDisclaimer;
+      if (!disclaimerCfg) return;
+      const { sectionText, separator, keyCount, itemCount } = buildParagraphDisclaimerSection({
+        config: disclaimerCfg,
+        definition,
+        lineItems,
+        optionState,
+        language
+      });
+      const { userText } = splitParagraphDisclaimerValue({
+        rawValue: values[q.id],
+        separator
+      });
+      const combined = buildParagraphDisclaimerValue({ userText, sectionText, separator });
+      const current = values[q.id] === undefined || values[q.id] === null ? '' : values[q.id]?.toString?.() || '';
+      if (combined !== current) {
+        updates[q.id] = combined;
+        updatedCount += 1;
+        onDiagnostic?.('paragraphDisclaimer.sync.field', {
+          fieldId: q.id,
+          keyCount,
+          itemCount
+        });
+      }
+    });
+    if (!updatedCount) return;
+    setValues(prev => ({ ...prev, ...updates }));
+    onDiagnostic?.('paragraphDisclaimer.sync', { updatedCount });
+  }, [definition, lineItems, optionState, language, values, submitting, setValues, onDiagnostic]);
+
   const handleFieldChange = (q: WebQuestionDefinition, value: FieldValue) => {
     if (submitting) return;
     // Allow edits to proceed; readOnly/valueMap are enforced at the input level.
@@ -3394,6 +3548,24 @@ const FormView: React.FC<FormViewProps> = ({
     const existingRows = lineItems[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
     const nextRowValues: Record<string, FieldValue> = { ...(currentRow?.values || {}), [field.id]: value };
+    const nonMatchKeys = computeRowNonMatchKeys({ group, rowValues: nextRowValues });
+    const existingNonMatchKeys = parseRowNonMatchOptions((currentRow?.values as any)?.[ROW_NON_MATCH_OPTIONS_KEY]);
+    const nonMatchSame =
+      nonMatchKeys.length === existingNonMatchKeys.length &&
+      nonMatchKeys.every((val, idx) => val === existingNonMatchKeys[idx]);
+    if (nonMatchKeys.length) {
+      nextRowValues[ROW_NON_MATCH_OPTIONS_KEY] = nonMatchKeys;
+      if (!nonMatchSame) {
+        onDiagnostic?.('optionFilter.nonMatch.update', {
+          groupId: group.id,
+          rowId,
+          fieldId: (field?.id || '').toString(),
+          keys: nonMatchKeys
+        });
+      }
+    } else {
+      delete nextRowValues[ROW_NON_MATCH_OPTIONS_KEY];
+    }
     const nextRows = existingRows.map(row =>
       row.id === rowId ? { ...row, values: nextRowValues } : row
     );
@@ -3939,11 +4111,41 @@ const FormView: React.FC<FormViewProps> = ({
             ? resolveValueMapValue(q.valueMap, fieldId => values[fieldId], { language, targetOptions: toOptionSet(q) })
             : undefined;
         const inputValueRaw = useValueMap ? (mappedValue || '') : ((values[q.id] as any) ?? '');
-        const inputValue = q.type === 'DATE' ? toDateInputValue(inputValueRaw) : inputValueRaw;
+        const paragraphDisclaimerCfg = q.type === 'PARAGRAPH' ? (q.ui as any)?.paragraphDisclaimer : undefined;
+        const paragraphDisclaimer = paragraphDisclaimerCfg
+          ? buildParagraphDisclaimerSection({
+              config: paragraphDisclaimerCfg,
+              definition,
+              lineItems,
+              optionState,
+              language
+            })
+          : null;
+        const paragraphUserText = paragraphDisclaimer
+          ? splitParagraphDisclaimerValue({ rawValue: inputValueRaw, separator: paragraphDisclaimer.separator }).userText
+          : inputValueRaw;
+        const paragraphCombined = paragraphDisclaimer
+          ? buildParagraphDisclaimerValue({
+              userText: paragraphUserText?.toString?.() || '',
+              sectionText: paragraphDisclaimer.sectionText,
+              separator: paragraphDisclaimer.separator
+            })
+          : (paragraphUserText as any);
+        const inputValue =
+          q.type === 'DATE'
+            ? toDateInputValue(inputValueRaw)
+            : q.type === 'PARAGRAPH'
+              ? paragraphUserText
+              : inputValueRaw;
         const numberText =
           q.type === 'NUMBER' ? (inputValue === undefined || inputValue === null ? '' : (inputValue as any).toString()) : null;
         if (renderAsLabel) {
-          const displayValue = q.type === 'NUMBER' ? numberText : inputValue;
+          const displayValue =
+            q.type === 'NUMBER'
+              ? numberText
+              : q.type === 'PARAGRAPH'
+                ? paragraphCombined
+                : inputValue;
           return renderReadOnly(displayValue || null, { stacked: forceStackedLabel });
         }
         if (q.type === 'NUMBER') {
@@ -3986,13 +4188,47 @@ const FormView: React.FC<FormViewProps> = ({
               {q.required && <RequiredStar />}
             </label>
             {q.type === 'PARAGRAPH' ? (
-              <textarea
-                value={inputValue}
-                onChange={e => handleFieldChange(q, e.target.value)}
-                readOnly={useValueMap || q.readOnly === true}
-                disabled={submitting || isFieldLockedByDedup(q.id)}
-                rows={((q as any)?.ui as any)?.paragraphRows || 4}
-              />
+              paragraphDisclaimer?.sectionText ? (
+                <div className="ck-paragraph-shell">
+                  <textarea
+                    className="ck-paragraph-input"
+                    value={inputValue}
+                    onChange={e => {
+                      const nextUserText = e.target.value;
+                      const nextCombined = paragraphDisclaimer
+                        ? buildParagraphDisclaimerValue({
+                            userText: nextUserText,
+                            sectionText: paragraphDisclaimer.sectionText,
+                            separator: paragraphDisclaimer.separator
+                          })
+                        : nextUserText;
+                      handleFieldChange(q, nextCombined);
+                    }}
+                    readOnly={useValueMap || q.readOnly === true}
+                    disabled={submitting || isFieldLockedByDedup(q.id)}
+                    rows={((q as any)?.ui as any)?.paragraphRows || 4}
+                  />
+                  <div className="ck-paragraph-disclaimer">{`${paragraphDisclaimer.separator}\n${paragraphDisclaimer.sectionText}`}</div>
+                </div>
+              ) : (
+                <textarea
+                  value={inputValue}
+                  onChange={e => {
+                    const nextUserText = e.target.value;
+                    const nextCombined = paragraphDisclaimer
+                      ? buildParagraphDisclaimerValue({
+                          userText: nextUserText,
+                          sectionText: paragraphDisclaimer.sectionText,
+                          separator: paragraphDisclaimer.separator
+                        })
+                      : nextUserText;
+                    handleFieldChange(q, nextCombined);
+                  }}
+                  readOnly={useValueMap || q.readOnly === true}
+                  disabled={submitting || isFieldLockedByDedup(q.id)}
+                  rows={((q as any)?.ui as any)?.paragraphRows || 4}
+                />
+              )
             ) : q.type === 'DATE' ? (
               <DateInput
                 value={inputValue}
@@ -5442,6 +5678,10 @@ const FormView: React.FC<FormViewProps> = ({
                 autoGenerated: isAutoRow,
                 getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
               });
+              const rowNonMatchKeys = parseRowNonMatchOptions((subRow.values as any)?.[ROW_NON_MATCH_OPTIONS_KEY]);
+              const rowNonMatchWarning = rowNonMatchKeys.length
+                ? formatOptionFilterNonMatchWarning({ language, keys: rowNonMatchKeys })
+                : '';
 
               const anchorTitleLabel = (() => {
                 if (!showAnchorTitle || !anchorField) return '';
@@ -5561,6 +5801,9 @@ const FormView: React.FC<FormViewProps> = ({
                       const forceStackedSubFieldLabel = (field as any)?.ui?.labelLayout === 'stacked';
                       const hideLabel = Boolean((field as any)?.ui?.hideLabel);
                       const labelStyle = hideLabel ? srOnly : undefined;
+                      const showNonMatchWarning =
+                        !!rowNonMatchWarning && typeof (field as any)?.optionFilter?.matchMode === 'string' && (field as any).optionFilter.matchMode === 'or';
+                      const nonMatchWarningNode = showNonMatchWarning ? <div className="warning">{rowNonMatchWarning}</div> : null;
 
                                 switch (field.type) {
                                   case 'CHOICE': {
@@ -5598,6 +5841,7 @@ const FormView: React.FC<FormViewProps> = ({
                                         })()}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                               {renderWarnings(fieldPath)}
+                              {nonMatchWarningNode}
                                       </div>
                                     );
                                   }
@@ -5634,6 +5878,7 @@ const FormView: React.FC<FormViewProps> = ({
                                           </label>
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                                           {renderWarnings(fieldPath)}
+                                          {nonMatchWarningNode}
                                         </div>
                                       );
                                     }
@@ -5689,6 +5934,7 @@ const FormView: React.FC<FormViewProps> = ({
                                         })()}
                                         {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                                         {renderWarnings(fieldPath)}
+                                        {nonMatchWarningNode}
                                       </div>
                                     );
                                   }

@@ -13,6 +13,34 @@ const normalize = (val: string | number | null | undefined): string => {
   return val.toString();
 };
 
+const normalizeMatchMode = (raw: any): 'and' | 'or' => {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return s === 'or' ? 'or' : 'and';
+};
+
+const splitMultiValue = (raw: string): string[] =>
+  raw
+    .split('|')
+    .map(part => part.trim())
+    .filter(Boolean);
+
+const buildOrAllowed = (filter: OptionFilter, keys: string[]): string[] => {
+  if (!keys.length) return filter.optionMap['*'] || [];
+  const allowed = new Set<string>();
+  let matched = false;
+  keys.forEach(key => {
+    const list = filter.optionMap[key];
+    if (!list) return;
+    matched = true;
+    list.forEach(v => allowed.add(v));
+  });
+  if (!matched) {
+    const fallback = filter.optionMap['*'] || [];
+    fallback.forEach(v => allowed.add(v));
+  }
+  return Array.from(allowed);
+};
+
 export function computeAllowedOptions(
   filter: OptionFilter | undefined,
   options: OptionSet,
@@ -21,18 +49,22 @@ export function computeAllowedOptions(
   if (!filter) return options.en || [];
 
   const depValues = dependencyValues.map(v => normalize(v));
+  const matchMode = normalizeMatchMode((filter as any).matchMode);
 
   // Multi-select CHECKBOX values are normalized by `toDependencyValue` as a single string joined by '|'.
-  // When used as a dependency, treat selections as cumulative constraints by intersecting allowed sets.
-  // Explicit full-key mappings (e.g. "A|B") still take precedence when present.
+  // When used as a dependency, treat selections as cumulative constraints by intersecting allowed sets (and)
+  // or combining them (or). Explicit full-key mappings (e.g. "A|B") take precedence when present.
   if (depValues.length === 1) {
     const raw = depValues[0] || '';
-    if (raw.includes('|') && filter.optionMap[raw] === undefined) {
-      const parts = raw
-        .split('|')
-        .map(s => s.trim())
-        .filter(Boolean);
+    if (raw.includes('|')) {
+      if (filter.optionMap[raw] !== undefined) {
+        return filter.optionMap[raw] || [];
+      }
+      const parts = splitMultiValue(raw);
       if (parts.length > 1) {
+        if (matchMode === 'or') {
+          return buildOrAllowed(filter, parts);
+        }
         const fallback = filter.optionMap['*'] || [];
         let acc: string[] | null = null;
         for (const part of parts) {
@@ -48,6 +80,15 @@ export function computeAllowedOptions(
       }
     }
   }
+
+  if (matchMode === 'or') {
+    const keys =
+      depValues.length === 1 && depValues[0]?.includes('|')
+        ? splitMultiValue(depValues[0])
+        : depValues.filter(Boolean);
+    return buildOrAllowed(filter, keys);
+  }
+
   const candidateKeys: string[] = [];
   if (depValues.length > 1) candidateKeys.push(depValues.join('||'));
   depValues.filter(Boolean).forEach(v => candidateKeys.push(v));
@@ -56,6 +97,31 @@ export function computeAllowedOptions(
   const match = candidateKeys.reduce<string[] | undefined>((acc, key) => acc || filter.optionMap[key], undefined);
   if (match) return match;
   return [];
+}
+
+export function computeNonMatchOptionKeys(args: {
+  filter: OptionFilter | undefined;
+  dependencyValues: (string | number | null | undefined)[];
+  selectedValue: string | number | null | undefined;
+}): string[] {
+  const { filter, dependencyValues, selectedValue } = args;
+  if (!filter) return [];
+  const matchMode = normalizeMatchMode((filter as any).matchMode);
+  if (matchMode !== 'or') return [];
+
+  const selected = normalize(selectedValue);
+  if (!selected) return [];
+
+  const depValues = dependencyValues.map(v => normalize(v));
+  const keys =
+    depValues.length === 1 && depValues[0]?.includes('|') ? splitMultiValue(depValues[0]) : depValues.filter(Boolean);
+  if (!keys.length) return [];
+
+  const fallback = filter.optionMap['*'] || [];
+  return keys.filter(key => {
+    const allowed = filter.optionMap[key] || fallback;
+    return !allowed.includes(selected);
+  });
 }
 
 const normalizeValue = (value: string | number | null | undefined): string => {

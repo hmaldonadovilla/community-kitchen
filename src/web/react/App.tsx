@@ -62,8 +62,11 @@ import { detectDebug } from './app/utils';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import {
   buildInitialLineItems,
+  buildSubgroupKey,
   clearAutoIncrementFields,
-  resolveSubgroupKey
+  parseRowNonMatchOptions,
+  resolveSubgroupKey,
+  ROW_NON_MATCH_OPTIONS_KEY
 } from './app/lineItems';
 import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
@@ -132,6 +135,37 @@ const computeDedupKeyFieldIdMap = (rulesRaw: any): Record<string, true> => {
     });
   });
   return map;
+};
+
+const whenContainsFieldId = (when: any, targetFieldId: string): boolean => {
+  if (!when || !targetFieldId) return false;
+  if (Array.isArray(when)) return when.some(entry => whenContainsFieldId(entry, targetFieldId));
+  if (typeof when !== 'object') return false;
+  const allList = (when as any).all ?? (when as any).and;
+  if (Array.isArray(allList)) return allList.some(entry => whenContainsFieldId(entry, targetFieldId));
+  const anyList = (when as any).any ?? (when as any).or;
+  if (Array.isArray(anyList)) return anyList.some(entry => whenContainsFieldId(entry, targetFieldId));
+  if ((when as any).not) return whenContainsFieldId((when as any).not, targetFieldId);
+  const fid = (when as any).fieldId;
+  if (fid === undefined || fid === null) return false;
+  return fid.toString().trim() === targetFieldId.toString().trim();
+};
+
+const resolveNonMatchWarningFieldIds = (fields: any[]): string[] => {
+  const ids: string[] = [];
+  (fields || []).forEach(field => {
+    const fid = (field?.id ?? '').toString();
+    if (!fid) return;
+    const rules = Array.isArray(field?.validationRules) ? field.validationRules : [];
+    const hasRule = rules.some((rule: any) => {
+      const level = (rule?.level ?? '').toString().trim().toLowerCase();
+      if (level && level !== 'warning' && level !== 'warn') return false;
+      const when = (rule as any)?.when;
+      return whenContainsFieldId(when, ROW_NON_MATCH_OPTIONS_KEY);
+    });
+    if (hasRule) ids.push(fid);
+  });
+  return ids;
 };
 
 // Build marker to verify deployed bundle version in UI
@@ -263,6 +297,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     byField: {}
   });
   const warningTouchedRef = useRef<Set<string>>(new Set());
+  const nonMatchWarningPathsRef = useRef<Set<string>>(new Set());
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
   type DedupConflictInfo = { ruleId: string; message: string; existingRecordId?: string; existingRowNumber?: number };
@@ -319,7 +354,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     (event: string, payload?: Record<string, unknown>) => {
       // Default diagnostics are gated behind detectDebug() to avoid noisy consoles.
       // Guided steps diagnostics are always enabled because they are essential for troubleshooting user flows.
-      const alwaysLog = event.startsWith('steps.') || event.startsWith('validation.navigate.');
+      const alwaysLog =
+        event.startsWith('steps.') ||
+        event.startsWith('validation.navigate.') ||
+        event.startsWith('optionFilter.') ||
+        event.startsWith('paragraphDisclaimer.');
       if ((!debugEnabled && !alwaysLog) || typeof console === 'undefined' || typeof console.info !== 'function') return;
       try {
         console.info('[ReactForm]', event, payload || {});
@@ -634,6 +673,85 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   useEffect(() => {
     lineItemsRef.current = lineItems;
   }, [lineItems]);
+  useEffect(() => {
+    if (view !== 'form') return;
+    const nextPaths = new Set<string>();
+    (definition.questions || []).forEach(q => {
+      if (q.type !== 'LINE_ITEM_GROUP') return;
+      const targetFieldIds = resolveNonMatchWarningFieldIds(q.lineItemConfig?.fields || []);
+      const rows = lineItems[q.id] || [];
+      if (targetFieldIds.length) {
+        rows.forEach(row => {
+          const nonMatch = parseRowNonMatchOptions((row as any)?.values?.[ROW_NON_MATCH_OPTIONS_KEY]);
+          if (!nonMatch.length) return;
+          targetFieldIds.forEach(fid => nextPaths.add(`${q.id}__${fid}__${row.id}`));
+        });
+      }
+      const subGroups = q.lineItemConfig?.subGroups || [];
+      if (!subGroups.length) return;
+      rows.forEach(row => {
+        subGroups.forEach(sub => {
+          const subId = resolveSubgroupKey(sub as any);
+          if (!subId) return;
+          const subTargetFieldIds = resolveNonMatchWarningFieldIds((sub as any)?.fields || []);
+          if (!subTargetFieldIds.length) return;
+          const subKey = buildSubgroupKey(q.id, row.id, subId);
+          const subRows = lineItems[subKey] || [];
+          subRows.forEach(subRow => {
+            const nonMatch = parseRowNonMatchOptions((subRow as any)?.values?.[ROW_NON_MATCH_OPTIONS_KEY]);
+            if (!nonMatch.length) return;
+            subTargetFieldIds.forEach(fid => nextPaths.add(`${subKey}__${fid}__${subRow.id}`));
+          });
+        });
+      });
+    });
+
+    const prevPaths = nonMatchWarningPathsRef.current;
+    let changed = prevPaths.size !== nextPaths.size;
+    if (!changed) {
+      for (const key of nextPaths) {
+        if (!prevPaths.has(key)) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    nonMatchWarningPathsRef.current = nextPaths;
+
+    let touchedAdded = false;
+    nextPaths.forEach(path => {
+      if (!warningTouchedRef.current.has(path)) {
+        warningTouchedRef.current.add(path);
+        touchedAdded = true;
+      }
+    });
+
+    if (!changed && !touchedAdded) return;
+    if (!warningTouchedRef.current.size) return;
+    try {
+      const warnings = collectValidationWarnings({
+        definition,
+        language,
+        values,
+        lineItems,
+        phase: 'submit',
+        uiView: 'edit'
+      });
+      const touched = warningTouchedRef.current;
+      const byField: Record<string, string[]> = {};
+      Object.keys(warnings.byField || {}).forEach(k => {
+        if (touched.has(k)) byField[k] = (warnings.byField as any)[k];
+      });
+      setValidationWarnings({ top: warnings.top || [], byField });
+      logEvent('optionFilter.nonMatch.warning.auto', {
+        nonMatchCount: nextPaths.size,
+        touchedAdded,
+        touchedCount: touched.size
+      });
+    } catch (err: any) {
+      logEvent('optionFilter.nonMatch.warning.auto.failed', { message: err?.message || err || 'unknown' });
+    }
+  }, [definition, lineItems, values, view, language, logEvent]);
   useEffect(() => {
     languageRef.current = language;
   }, [language]);

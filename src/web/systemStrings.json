@@ -42,9 +42,9 @@
   "autosaveNotice": {
     "title": { "en": "Autosave is on", "fr": "La sauvegarde automatique est activée", "nl": "Automatisch opslaan staat aan" },
     "message": {
-      "en": "This form saves your changes automatically in the background. Look for the status indicators in the top right corner of the form.",
-      "fr": "Ce formulaire enregistre automatiquement vos modifications en arrière-plan. Consultez les indicateurs d’état en haut à droite du formulaire.",
-      "nl": "Dit formulier slaat je wijzigingen automatisch op op de achtergrond. Kijk rechtsboven in het formulier voor de statusindicatoren."
+      "en": "Changes are saved automatically. You can safely leave and come back later.",
+      "fr": "Les modifications sont sauvegardées automatiquement. Vous pouvez quitter et revenir plus tard.",
+      "nl": "Wijzigingen worden automatisch opgeslagen. Je kunt veilig verlaten en later terugkomen."
     },
     "confirm": { "en": "Got it", "fr": "Compris", "nl": "Begrepen" },
     "cancel": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" }
@@ -295,6 +295,11 @@
       "nl": "Je bent bijna klaar. Sommige verplichte controles ontbreken. Bekijk de gemarkeerde secties."
     },
     "warningsTitle": { "en": "Warnings", "fr": "Avertissements", "nl": "Waarschuwingen" },
+    "optionFilterMismatch": {
+      "en": "Does not satisfy: {keys}",
+      "fr": "Ne respecte pas : {keys}",
+      "nl": "Voldoet niet aan: {keys}"
+    },
     "fieldRequired": { "en": "{field} is required.", "fr": "{field} est requis.", "nl": "{field} is verplicht." },
     "completeAtLeastOneRowFillCollapsed": {
       "en": "Complete at least one row (fill the collapsed fields).",
@@ -310,6 +315,14 @@
       "en": "At least one line item is required.",
       "fr": "Au moins une ligne est requise.",
       "nl": "Minstens één regel is verplicht."
+    }
+  },
+  "paragraphDisclaimer": {
+    "title": { "en": "Pay attention to:", "fr": "Attention :", "nl": "Let op:" },
+    "listMessage": {
+      "en": "For {key}, do not use: {items}.",
+      "fr": "Pour {key}, n'utilisez pas : {items}.",
+      "nl": "Voor {key}, gebruik niet: {items}."
     }
   }
 }

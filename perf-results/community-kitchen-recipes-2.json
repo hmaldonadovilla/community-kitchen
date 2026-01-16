@@ -1,0 +1,173 @@
+{
+  "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+  "runs": [
+    {
+      "run": 1,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:51:47.726Z",
+        "performanceScore": 0.84,
+        "ttfb": 4351,
+        "serverResponseTime": 4351,
+        "fcp": 2725.687,
+        "lcp": 2725.687,
+        "tti": 2725.687
+      }
+    },
+    {
+      "run": 2,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:52:11.640Z",
+        "performanceScore": 0.87,
+        "ttfb": 2510,
+        "serverResponseTime": 2510,
+        "fcp": 2617.804,
+        "lcp": 2617.804,
+        "tti": 2617.804
+      }
+    },
+    {
+      "run": 3,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:52:26.483Z",
+        "performanceScore": 0.89,
+        "ttfb": 2425,
+        "serverResponseTime": 2425,
+        "fcp": 2563.073,
+        "lcp": 2563.073,
+        "tti": 2563.0730000000003
+      }
+    },
+    {
+      "run": 4,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:52:44.154Z",
+        "performanceScore": 0.88,
+        "ttfb": 2676,
+        "serverResponseTime": 2676,
+        "fcp": 2578.411,
+        "lcp": 2578.411,
+        "tti": 2578.411
+      }
+    },
+    {
+      "run": 5,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:53:01.725Z",
+        "performanceScore": 0.89,
+        "ttfb": 2677,
+        "serverResponseTime": 2677,
+        "fcp": 2518.2909999999997,
+        "lcp": 2518.2909999999997,
+        "tti": 2518.291
+      }
+    },
+    {
+      "run": 6,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:53:18.516Z",
+        "performanceScore": 0.87,
+        "ttfb": 2734,
+        "serverResponseTime": 2734,
+        "fcp": 2660.9439999999995,
+        "lcp": 2660.9439999999995,
+        "tti": 2660.9439999999995
+      }
+    },
+    {
+      "run": 7,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:53:36.182Z",
+        "performanceScore": 0.86,
+        "ttfb": 2849,
+        "serverResponseTime": 2849,
+        "fcp": 2619.794,
+        "lcp": 2619.794,
+        "tti": 2619.794
+      }
+    },
+    {
+      "run": 8,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:53:54.097Z",
+        "performanceScore": 0.86,
+        "ttfb": 3048,
+        "serverResponseTime": 3048,
+        "fcp": 2616.79,
+        "lcp": 2616.79,
+        "tti": 2616.79
+      }
+    },
+    {
+      "run": 9,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:54:13.674Z",
+        "performanceScore": 0.86,
+        "ttfb": 2795,
+        "serverResponseTime": 2795,
+        "fcp": 2753.1615,
+        "lcp": 2753.1615,
+        "tti": 2753.1615
+      }
+    },
+    {
+      "run": 10,
+      "metrics": {
+        "url": "https://script.google.com/macros/s/AKfycbwMWjWvXEeQLADuaEFq2hXUIn7IcU5lnd62WTFALTN7GnyHk4dIGEwGZl7eXEtZaIUJ/exec?app=recipes&form=Config:+Recipes",
+        "fetchTime": "2026-01-15T23:54:32.718Z",
+        "performanceScore": 0.86,
+        "ttfb": 3268,
+        "serverResponseTime": 3268,
+        "fcp": 2740.9425,
+        "lcp": 2740.9425,
+        "tti": 2740.9425
+      }
+    }
+  ],
+  "summary": {
+    "ttfb": {
+      "avg": 2933.3,
+      "min": 2425,
+      "max": 4351,
+      "unit": "ms"
+    },
+    "serverResponseTime": {
+      "avg": 2933.3,
+      "min": 2425,
+      "max": 4351,
+      "unit": "ms"
+    },
+    "fcp": {
+      "avg": 2639.4898000000003,
+      "min": 2518.2909999999997,
+      "max": 2753.1615,
+      "unit": "ms"
+    },
+    "lcp": {
+      "avg": 2639.4898000000003,
+      "min": 2518.2909999999997,
+      "max": 2753.1615,
+      "unit": "ms"
+    },
+    "tti": {
+      "avg": 2639.4898000000003,
+      "min": 2518.291,
+      "max": 2753.1615,
+      "unit": "ms"
+    },
+    "performanceScore": {
+      "avg": 0.8680000000000001,
+      "min": 0.84,
+      "max": 0.89,
+      "unit": "0-1"
+    }
+  }
+}

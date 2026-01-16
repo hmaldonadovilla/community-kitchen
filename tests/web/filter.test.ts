@@ -1,4 +1,4 @@
-import { buildLocalizedOptions, computeAllowedOptions } from '../../src/web/rules/filter';
+import { buildLocalizedOptions, computeAllowedOptions, computeNonMatchOptionKeys } from '../../src/web/rules/filter';
 
 describe('computeAllowedOptions', () => {
   const options = { en: ['A', 'B', 'C'], fr: ['Aa', 'Bb', 'Cc'], nl: ['Aa', 'Bb', 'Cc'] };
@@ -51,6 +51,40 @@ describe('computeAllowedOptions', () => {
     };
     const allowed = computeAllowedOptions(multi as any, { en: ['Rice', 'Beans', 'Pasta'] } as any, ['Vegan|No-salt']);
     expect(allowed).toEqual(['Pasta']);
+  });
+
+  it('supports matchMode="or" for multi-select dependencies (union)', () => {
+    const multi = {
+      dependsOn: 'x',
+      matchMode: 'or',
+      optionMap: {
+        Vegan: ['Rice', 'Beans'],
+        'No-salt': ['Rice'],
+        '*': ['Rice', 'Beans', 'Salt']
+      }
+    };
+    const allowed = computeAllowedOptions(multi as any, { en: ['Rice', 'Beans', 'Salt'] } as any, ['Vegan|No-salt']);
+    expect(allowed).toEqual(['Rice', 'Beans']);
+  });
+});
+
+describe('computeNonMatchOptionKeys', () => {
+  it('returns non-matching keys for matchMode="or"', () => {
+    const filter = {
+      dependsOn: 'x',
+      matchMode: 'or',
+      optionMap: {
+        Vegan: ['Rice', 'Beans'],
+        'No-salt': ['Rice'],
+        '*': ['Rice', 'Beans', 'Salt']
+      }
+    };
+    const nonMatch = computeNonMatchOptionKeys({
+      filter: filter as any,
+      dependencyValues: ['Vegan|No-salt'],
+      selectedValue: 'Beans'
+    });
+    expect(nonMatch).toEqual(['No-salt']);
   });
 });
 

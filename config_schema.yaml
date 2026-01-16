@@ -855,6 +855,11 @@ components:
           description: |
             For `PARAGRAPH` fields, controls the textarea height (visible rows).
             Default when omitted: 4.
+        paragraphDisclaimer:
+          $ref: '#/components/schemas/ParagraphDisclaimerConfig'
+          description: |
+            Optional non-editable disclaimer section appended to PARAGRAPH fields based on line-item warnings.
+            The UI renders the disclaimer below the textarea and keeps the stored value in sync.
         choiceSearchEnabled:
           type: boolean
           description: |
@@ -863,6 +868,44 @@ components:
             - When `true`, always use the searchable control (even for smaller lists)
             - When `false`, always use the native select (no search)
             - When omitted, the UI enables it automatically only for large option sets
+
+    ParagraphDisclaimerConfig:
+      type: object
+      required: [sourceGroupId]
+      properties:
+        sourceGroupId:
+          type: string
+          description: Line item group id to scan for `__ckNonMatchOptions`.
+        sourceSubGroupId:
+          type: string
+          description: Optional subgroup id to scan (aggregates all rows across parent rows).
+        itemFieldId:
+          type: string
+          description: Line item field id to use as the item label (defaults to anchorFieldId or first field).
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional section title shown before the disclaimer bullets.
+        listMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Template for each mismatch line. Supports placeholders:
+            - {key} / {value}: the non-satisfied restriction key
+            - {items} / {keys}: the list of items that do not satisfy it
+        message:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional extra bullet shown after the per-key list.
+        separator:
+          type: string
+          description: |
+            Optional separator line inserted before the disclaimer section (default: "---").
+      example:
+        sourceGroupId: INGREDIENTS
+        title:
+          en: "Pay attention to:"
+        listMessage:
+          en: "For {key}, do not use: {items}."
+        message:
+          en: "Remember to add salt only after reserving non-salt portions."
 
     QuestionGroupConfig:
       type: object
@@ -1097,6 +1140,13 @@ components:
           description: |
             Alternative to `optionMap`: load the mapping from a sheet tab with key/value columns.
             Each row contributes a `key -> value` entry; repeated keys are merged.
+        matchMode:
+          type: string
+          enum: [and, or]
+          description: |
+            How to combine allowed sets when a dependency resolves to multiple values (e.g., multi-select checkbox).
+            - and (default): intersect allowed sets (must satisfy all selected values).
+            - or: union allowed sets (satisfy any selected value) and record non-matching keys in `__ckNonMatchOptions`.
       required: [dependsOn]
       oneOf:
         - required: [optionMap]
