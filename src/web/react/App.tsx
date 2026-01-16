@@ -5510,6 +5510,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           formKey={formKey}
           definition={definition}
           language={language}
+          disabled={precreateDedupChecking}
           cachedResponse={listCache.response}
           cachedRecords={listCache.records}
           refreshToken={listRefreshToken}
@@ -5528,6 +5529,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         message={autoSaveNoticeMessage}
         confirmLabel={autoSaveNoticeConfirmLabel}
         cancelLabel={autoSaveNoticeCancelLabel}
+        showCancel={false}
         zIndex={12010}
         onCancel={() => dismissAutoSaveNotice('cancel')}
         onConfirm={() => dismissAutoSaveNotice('confirm')}
