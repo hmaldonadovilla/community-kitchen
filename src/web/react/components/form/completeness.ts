@@ -3,8 +3,16 @@ import { FieldValue, LangCode, VisibilityContext } from '../../../types';
 import { LineItemState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
 import { buildSubgroupKey, resolveSubgroupKey } from '../../app/lineItems';
+import { resolveParagraphUserText } from '../../app/paragraphDisclaimer';
 import { resolveValueMapValue } from './valueMaps';
 import { isUploadValueComplete } from './utils';
+
+const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
+  if (!field || field?.type !== 'PARAGRAPH') return rawValue;
+  const cfg = (field?.ui as any)?.paragraphDisclaimer;
+  if (!cfg) return rawValue;
+  return resolveParagraphUserText({ rawValue, config: cfg });
+};
 
 /**
  * Pure helper for UI progress/completeness: determine whether a LINE_ITEM_GROUP question should be
@@ -62,7 +70,7 @@ export function isLineItemGroupQuestionComplete(args: {
       const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row?.id, linePrefix: groupId });
       if (hideField) return;
 
-      const val = (row?.values || {})[field.id];
+      const val = resolveRequiredValue(field, (row?.values || {})[field.id]);
       if (field.required && isEmptyValue(val as any)) {
         blocked.push(field.id);
         return;
@@ -95,7 +103,7 @@ export function isLineItemGroupQuestionComplete(args: {
         required: true
       });
     }
-    return !isEmptyValue(raw as any);
+    return !isEmptyValue(resolveRequiredValue(field, raw) as any);
   };
 
   let hasAnyEnabledRow = false;
@@ -179,7 +187,7 @@ export function isLineItemGroupQuestionComplete(args: {
             if (!field) return;
             const hideField = shouldHideField(field.visibility, subCtx, { rowId: subRow?.id, linePrefix: subKey });
             if (hideField) return;
-            const val = (subRow?.values || {})[field.id];
+            const val = resolveRequiredValue(field, (subRow?.values || {})[field.id]);
             if (field.required && isEmptyValue(val as any)) {
               blocked.push(field.id);
               return;
