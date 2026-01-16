@@ -516,6 +516,9 @@ This project uses TypeScript. You need to build the script before using it in Go
           "enforceFieldOrder": true,
           "submitTopErrorMessage": {
             "en": "Please complete the required fields above before submitting."
+          },
+          "lineItemGroupNeedsAttentionMessage": {
+            "en": "Please review this group before continuing."
           }
         }
       }
@@ -523,6 +526,7 @@ This project uses TypeScript. You need to build the script before using it in Go
 
       - In guided steps, **Next** remains clickable once the step forward gate is satisfied.
       - `submitTopErrorMessage` customizes the top error banner shown after a submit attempt (localized).
+      - `lineItemGroupNeedsAttentionMessage` customizes the helper shown under line-item group pills when they still need attention (localized).
 
     - Want to **override the Summary button label**? Set `summaryButtonLabel` (localized). Useful when “Summary” should read like “Checklist”.
 

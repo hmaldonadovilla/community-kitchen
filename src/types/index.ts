@@ -1538,6 +1538,10 @@ export interface SubmitValidationConfig {
    * Optional localized override for the top submit validation message.
    */
   submitTopErrorMessage?: LocalizedString;
+  /**
+   * Optional localized override for the "Needs attention" message shown under line-item group pills.
+   */
+  lineItemGroupNeedsAttentionMessage?: LocalizedString;
 }
 
 export type StepForwardGate = 'free' | 'whenComplete' | 'whenValid';
