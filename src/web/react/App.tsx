@@ -39,6 +39,7 @@ import { ActionBar } from './components/app/ActionBar';
 import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
+import { InlineMarkdown } from './components/app/InlineMarkdown';
 import { FORM_VIEW_STYLES } from './components/form/styles';
 import { FileOverlay } from './components/form/overlays/FileOverlay';
 import { FormErrors, LineItemState, OptionState, View } from './types';
@@ -85,6 +86,11 @@ import { shouldHideField } from '../rules/visibility';
 import { getSystemFieldValue } from '../rules/systemFields';
 import { computeGuidedStepsStatus } from './features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from './features/steps/domain/resolveVirtualStepField';
+import {
+  hasStatusTransitionValue,
+  matchesStatusTransition,
+  resolveStatusTransitionValue
+} from '../../domain/statusTransitions';
 
 type SubmissionMeta = {
   id?: string;
@@ -367,6 +373,43 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       }
     },
     [debugEnabled]
+  );
+
+  const statusTransitions = definition.followup?.statusTransitions;
+  const closedStatusLabel = useMemo(
+    () => resolveStatusTransitionValue(statusTransitions, 'onClose', language, { includeDefaultOnClose: true }) || 'Closed',
+    [language, statusTransitions]
+  );
+  const hasProgressStatus = useMemo(
+    () =>
+      hasStatusTransitionValue(statusTransitions, 'inProgress') ||
+      hasStatusTransitionValue(statusTransitions, 'reOpened'),
+    [statusTransitions]
+  );
+  const matchesClosedStatus = useCallback(
+    (rawStatus: any) => matchesStatusTransition(rawStatus, statusTransitions, 'onClose', { includeDefaultOnClose: true }),
+    [statusTransitions]
+  );
+  const resolveStatusAutoView = useCallback(
+    (
+      rawStatus: any,
+      summaryEnabled: boolean
+    ): { view: 'form' | 'summary'; statusKey: 'onClose' | 'inProgress' | 'reOpened' | 'other' | 'fallback' } => {
+      if (matchesClosedStatus(rawStatus)) {
+        return { view: summaryEnabled ? 'summary' : 'form', statusKey: 'onClose' };
+      }
+      if (matchesStatusTransition(rawStatus, statusTransitions, 'inProgress')) {
+        return { view: 'form', statusKey: 'inProgress' };
+      }
+      if (matchesStatusTransition(rawStatus, statusTransitions, 'reOpened')) {
+        return { view: 'form', statusKey: 'reOpened' };
+      }
+      if (!hasProgressStatus) {
+        return { view: 'form', statusKey: 'fallback' };
+      }
+      return { view: summaryEnabled ? 'summary' : 'form', statusKey: 'other' };
+    },
+    [hasProgressStatus, matchesClosedStatus, statusTransitions]
   );
 
   // Feature overlays (kept out of App.tsx as much as possible; App only wires them).
@@ -1186,6 +1229,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             lineItems: mapped.lineItems,
             existingRecordId: id
           });
+          if (snapshot?.status !== undefined && snapshot?.status !== null) {
+            (payload as any).status = snapshot.status;
+          }
+          if (snapshot?.createdAt !== undefined && snapshot?.createdAt !== null) {
+            (payload as any).createdAt = snapshot.createdAt;
+          }
+          if (snapshot?.updatedAt !== undefined && snapshot?.updatedAt !== null) {
+            (payload as any).updatedAt = snapshot.updatedAt;
+          }
+          if ((snapshot as any)?.pdfUrl !== undefined && (snapshot as any)?.pdfUrl !== null) {
+            (payload as any).pdfUrl = (snapshot as any).pdfUrl;
+          }
           const resolved = resolveTemplateIdForRecord((definition as any).summaryHtmlTemplateId, payload.values || {}, payload.language);
           if (isBundledHtmlTemplateId(resolved || '')) {
             logEvent('summary.htmlTemplate.bundle.prefetch.start', { recordId: id });
@@ -1864,9 +1919,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       if (cached) {
         applyRecordSnapshot(cached);
         const statusRaw = ((cached.status || '') as any)?.toString?.() || '';
-        const isClosed = statusRaw.trim().toLowerCase() === 'closed';
-        const allowSummary = definition.summaryViewEnabled !== false;
-        setView(allowSummary && isClosed ? 'summary' : 'form');
+        const summaryEnabled = definition.summaryViewEnabled !== false;
+        const resolved = resolveStatusAutoView(statusRaw, summaryEnabled);
+        setView(resolved.view);
+        logEvent('dedup.precreate.openExisting.viewByStatus', {
+          source: args.source,
+          recordId: id,
+          status: statusRaw || null,
+          statusKey: resolved.statusKey,
+          nextView: resolved.view
+        });
         logEvent('dedup.precreate.openExisting.cached', { source: args.source, recordId: id });
         return true;
       }
@@ -1877,13 +1939,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return false;
       }
       const statusRaw = ((selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
-      const isClosed = statusRaw.trim().toLowerCase() === 'closed';
-      const allowSummary = definition.summaryViewEnabled !== false;
-      setView(allowSummary && isClosed ? 'summary' : 'form');
+      const summaryEnabled = definition.summaryViewEnabled !== false;
+      const resolved = resolveStatusAutoView(statusRaw, summaryEnabled);
+      setView(resolved.view);
+      logEvent('dedup.precreate.openExisting.viewByStatus', {
+        source: args.source,
+        recordId: id,
+        status: statusRaw || null,
+        statusKey: resolved.statusKey,
+        nextView: resolved.view
+      });
       logEvent('dedup.precreate.openExisting.ok', { source: args.source, recordId: id, rowNumber: rowNumber ?? null });
       return true;
     },
-    [applyRecordSnapshot, bumpRecordSession, definition.summaryViewEnabled, listCache.records, loadRecordSnapshot, logEvent]
+    [
+      applyRecordSnapshot,
+      bumpRecordSession,
+      definition.summaryViewEnabled,
+      listCache.records,
+      loadRecordSnapshot,
+      logEvent,
+      resolveStatusAutoView
+    ]
   );
 
   const precheckCreateDedupAndMaybeNavigate = useCallback(
@@ -2541,6 +2618,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           lineItems: lineItemsRef.current,
           existingRecordId
         });
+        const metaSource: any = selectedRecordSnapshotRef.current || lastSubmissionMetaRef.current || null;
+        if (metaSource?.status !== undefined && metaSource?.status !== null) {
+          (draft as any).status = metaSource.status;
+        }
+        if (metaSource?.createdAt !== undefined && metaSource?.createdAt !== null) {
+          (draft as any).createdAt = metaSource.createdAt;
+        }
+        if (metaSource?.updatedAt !== undefined && metaSource?.updatedAt !== null) {
+          (draft as any).updatedAt = metaSource.updatedAt;
+        }
+        if (metaSource?.pdfUrl !== undefined && metaSource?.pdfUrl !== null) {
+          (draft as any).pdfUrl = metaSource.pdfUrl;
+        }
 
         const templateIdMap = btn ? (btn as any)?.button?.templateId : undefined;
         const resolved = resolveTemplateIdForRecord(templateIdMap, draft.values || {}, draft.language);
@@ -3122,12 +3212,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     if (!Number.isFinite(n)) return 2000;
     return Math.max(300, Math.min(60000, Math.floor(n)));
   })();
-  const autoSaveStatusValue = (definition.autoSave?.status || 'In progress').toString();
+  const autoSaveDefaultStatus = (() => {
+    const fromTransitions = resolveStatusTransitionValue(statusTransitions, 'inProgress', language);
+    if (fromTransitions !== undefined && fromTransitions !== null && fromTransitions.toString().trim()) {
+      return fromTransitions.toString().trim();
+    }
+    const explicit = definition.autoSave?.status;
+    if (explicit !== undefined && explicit !== null && explicit.toString().trim()) {
+      return explicit.toString().trim();
+    }
+    return 'In progress';
+  })();
+  const resolveAutoSaveStatus = useCallback(
+    (rawStatus: any): string => {
+      const trimmed = rawStatus === undefined || rawStatus === null ? '' : rawStatus.toString().trim();
+      return trimmed || autoSaveDefaultStatus;
+    },
+    [autoSaveDefaultStatus]
+  );
 
   const isClosedRecord = (() => {
-    const raw =
-      (lastSubmissionMeta?.status || selectedRecordSnapshot?.status || '').toString();
-    return raw.trim().toLowerCase() === 'closed';
+    const raw = (lastSubmissionMeta?.status || selectedRecordSnapshot?.status || '').toString();
+    return matchesStatusTransition(raw, statusTransitions, 'onClose', { includeDefaultOnClose: true });
   })();
 
   const dedupSignature = useMemo(
@@ -3304,10 +3410,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const statusRaw =
         ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
         '';
-      if (statusRaw.trim().toLowerCase() === 'closed') {
-        setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: 'Closed (read-only)' }));
+      if (matchesClosedStatus(statusRaw)) {
+        setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: tSystem('app.closedReadOnly', language, 'Closed (read-only)') }));
         return;
       }
+      const statusForSave = resolveAutoSaveStatus(statusRaw);
 
       // If the record is stale (modified elsewhere), do not autosave; user must refresh first.
       if (recordStaleRef.current) {
@@ -3396,7 +3503,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           existingRecordId
         }) as any;
         payload.__ckSaveMode = 'draft';
-        payload.__ckStatus = autoSaveStatusValue;
+        payload.__ckStatus = statusForSave;
         payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
         const baseVersion = recordDataVersionRef.current;
         if (existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
@@ -3472,10 +3579,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               });
             }
           }
-          // If the server rejects because the record was closed, lock the UI.
-          if (errText.toLowerCase().includes('closed')) {
-            setLastSubmissionMeta(prev => ({ ...(prev || {}), status: 'Closed' }));
-            setDraftSave({ phase: 'paused', message: 'Closed (read-only)' });
+          // If the server rejects because the record is closed, lock the UI.
+          const currentStatus =
+            (lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '').toString();
+          const closedMatch = matchesClosedStatus(currentStatus);
+          const closedLabel = closedStatusLabel || 'Closed';
+          const closedMessageMatch = closedLabel && errText.toLowerCase().includes(closedLabel.toLowerCase());
+          if (closedMatch || closedMessageMatch) {
+            setLastSubmissionMeta(prev => ({ ...(prev || {}), status: closedLabel }));
+            setDraftSave({ phase: 'paused', message: tSystem('app.closedReadOnly', language, 'Closed (read-only)') });
             return;
           }
           autoSaveDirtyRef.current = true;
@@ -3499,7 +3611,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           values: (payload as any).values as any,
           createdAt: (res?.meta?.createdAt || '').toString() || undefined,
           updatedAt: updatedAt || undefined,
-          status: autoSaveStatusValue,
+          status: statusForSave,
           dataVersion: nextDataVersion,
           rowNumber: nextRowNumber
         });
@@ -3528,7 +3640,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           createdAt: res?.meta?.createdAt || prev?.createdAt,
           updatedAt: updatedAt || prev?.updatedAt,
           dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion)) ? Number((res as any).meta.dataVersion) : prev?.dataVersion,
-          status: autoSaveStatusValue
+          status: statusForSave
         }));
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
         logEvent('autosave.success', {
@@ -3567,7 +3679,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         }
       }
     },
-    [autoSaveDebounceMs, autoSaveEnabled, autoSaveStatusValue, definition, formKey, loadRecordSnapshot, logEvent, upsertListCacheRow]
+    [
+      autoSaveDebounceMs,
+      autoSaveEnabled,
+      resolveAutoSaveStatus,
+      closedStatusLabel,
+      definition,
+      formKey,
+      language,
+      loadRecordSnapshot,
+      logEvent,
+      matchesClosedStatus,
+      upsertListCacheRow
+    ]
   );
 
   const flushAutoSaveBeforeNavigate: (reason: string) => Promise<boolean> = useCallback(
@@ -3768,7 +3892,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     if (view !== 'form') return;
     if (submitting) return;
     if (isClosedRecord) {
-      setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: 'Closed (read-only)' }));
+      setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: tSystem('app.closedReadOnly', language, 'Closed (read-only)') }));
       return;
     }
     // In create-flow, do not autosave until the user actually changes a field value.
@@ -3838,7 +3962,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }): Promise<{ success: boolean; message?: string }> => {
       if (viewRef.current !== 'form') return { success: false, message: 'Not in form view.' };
       if (submittingRef.current) return { success: false, message: 'Submitting.' };
-      if (isClosedRecord) return { success: false, message: 'Closed (read-only).' };
+      if (isClosedRecord) return { success: false, message: tSystem('app.closedReadOnly', language, 'Closed (read-only)') };
       if (recordStaleRef.current) {
         // Block uploads (they require draft saves) until the user refreshes the record.
         return {
@@ -3917,6 +4041,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           }
           try {
             setDraftSave({ phase: 'saving' });
+            const statusRaw =
+              ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
+              '';
+            const draftStatus = resolveAutoSaveStatus(statusRaw);
             const draft = buildDraftPayload({
               definition,
               formKey,
@@ -3925,7 +4053,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               lineItems: lineItemsRef.current
             }) as any;
             draft.__ckSaveMode = 'draft';
-            draft.__ckStatus = autoSaveStatusValue;
+            draft.__ckStatus = draftStatus;
             draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
             const res = await submit(draft);
             if (!res?.success) {
@@ -3950,7 +4078,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion))
                 ? Number((res as any).meta.dataVersion)
                 : prev?.dataVersion,
-              status: autoSaveStatusValue
+              status: draftStatus
             }));
             recordStaleRef.current = null;
             setRecordStale(null);
@@ -3971,7 +4099,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               values: (draft as any).values as any,
               createdAt: (res?.meta?.createdAt || '').toString() || undefined,
               updatedAt: (res?.meta?.updatedAt || '').toString() || undefined,
-              status: autoSaveStatusValue,
+              status: draftStatus,
               dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion))
                 ? Number((res as any).meta.dataVersion)
                 : undefined,
@@ -4141,6 +4269,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             // ignore
           }
 
+          const statusRaw2 =
+            ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
+            '';
+          const draftStatus2 = resolveAutoSaveStatus(statusRaw2);
           const draft2 = buildDraftPayload({
             definition,
             formKey,
@@ -4150,7 +4282,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             existingRecordId: recordId
           }) as any;
           draft2.__ckSaveMode = 'draft';
-          draft2.__ckStatus = autoSaveStatusValue;
+          draft2.__ckStatus = draftStatus2;
           draft2.__ckCreateFlow = createFlowRef.current ? '1' : '';
           const baseVersion = recordDataVersionRef.current;
           if (recordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
@@ -4196,7 +4328,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               id: recordId,
               updatedAt: (res2?.meta?.updatedAt || prev?.updatedAt) as any,
               dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : prev?.dataVersion,
-              status: autoSaveStatusValue
+              status: draftStatus2
             }));
             setDraftSave({ phase: 'saved', updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined });
           }
@@ -4206,7 +4338,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             // IMPORTANT: use the fully serialized draft payload values so list cache retains line item groups/subgroups.
             values: (draft2 as any).values as any,
             updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined,
-            status: autoSaveStatusValue,
+            status: draftStatus2,
             dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : undefined,
             rowNumber: Number.isFinite(Number((res2 as any)?.meta?.rowNumber)) ? Number((res2 as any).meta.rowNumber) : undefined
           });
@@ -4247,7 +4379,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       });
       return next;
     },
-    [autoSaveDebounceMs, autoSaveStatusValue, definition, formKey, isClosedRecord, logEvent, performAutoSave, syncUploadQueueSize, upsertListCacheRow]
+    [autoSaveDebounceMs, definition, formKey, isClosedRecord, logEvent, performAutoSave, resolveAutoSaveStatus, syncUploadQueueSize, upsertListCacheRow]
   );
 
   useEffect(() => {
@@ -4847,14 +4979,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const statusRaw =
         ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || row.status || '') as any)?.toString?.() ||
         '';
-      const isClosed = statusRaw.trim().toLowerCase() === 'closed';
       if (requested === 'form') {
         setView('form');
       } else if (requested === 'summary') {
         setView(summaryViewEnabled ? 'summary' : 'form');
       } else {
-        const nextView = summaryViewEnabled && isClosed ? 'summary' : 'form';
-        setView(nextView);
+        const resolved = resolveStatusAutoView(statusRaw, summaryViewEnabled);
+        setView(resolved.view);
+        logEvent('list.openView.autoByStatus', {
+          recordId: row.id,
+          source: 'resumeLocalEdits',
+          status: statusRaw || null,
+          statusKey: resolved.statusKey,
+          nextView: resolved.view
+        });
       }
       return;
     }
@@ -5011,7 +5149,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
 
     const statusRaw = ((sourceRecord?.status || row.status || '') as any)?.toString?.() || '';
-    const isClosed = statusRaw.trim().toLowerCase() === 'closed';
     // When Summary view is disabled, always open the Form view (closed records are read-only).
     if (shouldTriggerButton) {
       // Stay on the list view; the button action will open a preview overlay when the record snapshot is ready.
@@ -5027,8 +5164,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     } else if (requested === 'summary') {
       setView(summaryViewEnabled ? 'summary' : 'form');
     } else {
-      const nextView = summaryViewEnabled && isClosed ? 'summary' : 'form';
-      setView(nextView);
+      const resolved = resolveStatusAutoView(statusRaw, summaryViewEnabled);
+      setView(resolved.view);
+      logEvent('list.openView.autoByStatus', {
+        recordId: row.id,
+        source: sourceRecord ? 'cached' : 'fetched',
+        status: statusRaw || null,
+        statusKey: resolved.statusKey,
+        nextView: resolved.view
+      });
     }
   };
 
@@ -5336,12 +5480,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         {listLegendItems.length ? (
           <div className="ck-list-legend ck-list-legend--bottomBar" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
             <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
-            {listLegendItems.map((item, idx) => (
-              <span key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
-                {item.icon ? <ListViewIcon name={item.icon} /> : null}
-                <span>{item.text}</span>
-              </span>
-            ))}
+            <ul className="ck-list-legend-list">
+              {listLegendItems.map((item, idx) => (
+                <li key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
+                  {item.icon ? <ListViewIcon name={item.icon} /> : null}
+                  <InlineMarkdown className="ck-list-legend-text" markdown={item.text} />
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
       </div>

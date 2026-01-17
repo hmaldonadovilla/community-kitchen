@@ -19,6 +19,7 @@ import {
   writeRecordIndexRow
 } from './recordIndex';
 import { normalizeToIsoDate } from './followup/utils';
+import { matchesStatusTransition, resolveStatusTransitionValue } from '../../domain/statusTransitions';
 
 const AUTO_INCREMENT_PROPERTY_PREFIX = 'CK_AUTO_';
 
@@ -214,9 +215,14 @@ export class SubmissionService {
     // Draft autosave: write status + protect closed records from background saves.
     const saveMode = ((formObject as any).__ckSaveMode || '').toString().trim().toLowerCase();
     if (saveMode === 'draft') {
+      const transitions = form.followupConfig?.statusTransitions;
+      const inProgressFallback =
+        resolveStatusTransitionValue(transitions, 'inProgress', language) ||
+        (form.autoSave?.status ? form.autoSave.status.toString() : '') ||
+        'In progress';
       const statusValueRaw =
-        ((formObject as any).__ckStatus || form.autoSave?.status || 'In progress')?.toString?.() || 'In progress';
-      const statusValue = statusValueRaw.toString().trim() || 'In progress';
+        ((formObject as any).__ckStatus || form.autoSave?.status || inProgressFallback)?.toString?.() || inProgressFallback;
+      const statusValue = statusValueRaw.toString().trim() || inProgressFallback || 'In progress';
 
       // Determine the "status" column to write to (either a configured statusFieldId, or the default Status meta column).
       const statusFieldId = form.followupConfig?.statusFieldId;
@@ -240,8 +246,8 @@ export class SubmissionService {
         const fromMeta = metaStatusIdx ? readCellText(metaStatusIdx).trim() : '';
         return (fromField || fromMeta || '').toString();
       })();
-      const isClosed = existingStatusText.trim().toLowerCase() === 'closed';
-      // Allow an explicit user-initiated "re-open" (or other status change) for Closed records.
+      const isClosed = matchesStatusTransition(existingStatusText, transitions, 'onClose', { includeDefaultOnClose: true });
+      // Allow an explicit user-initiated "re-open" (or other status change) for records matching statusTransitions.onClose.
       // This must NOT enable background autosave to mutate closed records by accident, so it is gated behind
       // a dedicated flag (set by the web app only for explicit actions).
       const allowClosedUpdateRaw = (formObject as any).__ckAllowClosedUpdate;
@@ -250,13 +256,15 @@ export class SubmissionService {
         allowClosedUpdateRaw === 'true' ||
         allowClosedUpdateRaw === '1' ||
         allowClosedUpdateRaw === 1;
-      const nextStatusIsClosed = statusValue.trim().toLowerCase() === 'closed';
+      const nextStatusIsClosed = matchesStatusTransition(statusValue, transitions, 'onClose', { includeDefaultOnClose: true });
       const allowReopen = allowClosedUpdate && !nextStatusIsClosed;
 
       if (existingRowIdx >= 0 && isClosed && !allowReopen) {
+        const closedLabel =
+          resolveStatusTransitionValue(transitions, 'onClose', language, { includeDefaultOnClose: true }) || 'Closed';
         return {
           success: false,
-          message: 'Record is Closed and read-only.',
+          message: `Record is ${closedLabel} and read-only.`,
           meta: {
             id: recordId
           }

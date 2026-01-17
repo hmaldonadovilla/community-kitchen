@@ -176,16 +176,28 @@ const buildValuesSignature = (values: Record<string, any> | undefined | null): s
   return fnv1a32(stableStringifyForCacheKey(compact));
 };
 
+const buildMetaSignature = (payload: SubmissionPayload): string => {
+  const meta = {
+    status: payload.status || '',
+    createdAt: payload.createdAt || '',
+    updatedAt: payload.updatedAt || '',
+    pdfUrl: payload.pdfUrl || ''
+  };
+  return fnv1a32(stableStringifyForCacheKey(meta));
+};
+
 const buildSummaryHtmlCacheKey = (payload: SubmissionPayload): string => {
   const recordId = (payload.id || '').toString();
   const valuesSig = buildValuesSignature(payload.values);
-  return `summary|${payload.formKey}|${payload.language}|${recordId}|${valuesSig}`;
+  const metaSig = buildMetaSignature(payload);
+  return `summary|${payload.formKey}|${payload.language}|${recordId}|${valuesSig}|${metaSig}`;
 };
 
 const buildButtonHtmlCacheKey = (payload: SubmissionPayload, buttonId: string): string => {
   const recordId = (payload.id || '').toString();
   const valuesSig = buildValuesSignature(payload.values);
-  return `button|${payload.formKey}|${payload.language}|${recordId}|${buttonId}|${valuesSig}`;
+  const metaSig = buildMetaSignature(payload);
+  return `button|${payload.formKey}|${payload.language}|${recordId}|${buttonId}|${valuesSig}|${metaSig}`;
 };
 
 export const peekSummaryHtmlTemplateCache = (payload: SubmissionPayload): RenderHtmlTemplateResult | null => {

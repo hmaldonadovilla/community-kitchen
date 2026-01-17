@@ -193,7 +193,7 @@ export const ActionBar: React.FC<{
   readOnly?: boolean;
   /**
    * Optional UI override: hide the Edit button even if it is configured for this view.
-   * Used to suppress Edit on Summary for Closed records.
+   * Used to suppress Edit on Summary for records matching statusTransitions.onClose.
    */
   hideEdit?: boolean;
   /**

@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { View } from '../../../types';
 import { buildDraftPayload, resolveExistingRecordId } from '../../../app/submission';
 import type { LineItemState } from '../../../types';
+import { resolveStatusTransitionValue } from '../../../../../domain/statusTransitions';
 
 type DraftSaveState = { phase: 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused'; updatedAt?: string; message?: string };
 type StatusTone = 'info' | 'success' | 'error' | null;
@@ -224,9 +225,13 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
           appliedValueCount: appliedValueFields.length,
           skippedValueCount: skippedValueFields.length
         });
-        // If the server says Closed, keep UI locked.
-        if (msg.toLowerCase().includes('closed')) {
-          deps.setLastSubmissionMeta(prev => ({ ...(prev || {}), status: 'Closed' }));
+        // If the server says this record is closed, keep UI locked.
+        const closedLabel =
+          resolveStatusTransitionValue(deps.definition.followup?.statusTransitions, 'onClose', language, {
+            includeDefaultOnClose: true
+          }) || 'Closed';
+        if (closedLabel && msg.toLowerCase().includes(closedLabel.toLowerCase())) {
+          deps.setLastSubmissionMeta(prev => ({ ...(prev || {}), status: closedLabel }));
         }
         return;
       }

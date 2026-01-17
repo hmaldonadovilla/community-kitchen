@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveLocalizedString } from '../../i18n';
+import { collectStatusTransitionValues } from '../../../domain/statusTransitions';
 import { LangCode, ListViewColumnConfig, ListViewRuleColumnConfig, WebFormDefinition, WebFormSubmission } from '../../types';
 import { toOptionSet } from '../../core';
 import { tSystem } from '../../systemStrings';
@@ -11,6 +12,7 @@ import { normalizeToIsoDateLocal } from '../app/listViewSearch';
 import { paginateItemsForListViewUi } from '../app/listViewPagination';
 import { ListViewIcon } from './ListViewIcon';
 import { DateInput } from './form/DateInput';
+import { resolveStatusPillKey } from '../utils/statusPill';
 
 interface ListViewProps {
   formKey: string;
@@ -657,7 +659,10 @@ const ListView: React.FC<ListViewProps> = ({
 
   const searchableFieldIds = useMemo(() => {
     const ids = new Set<string>();
-    columnsAll.forEach(col => ids.add(col.fieldId));
+    columnsAll.forEach(col => {
+      if (isRuleColumn(col)) return;
+      ids.add(col.fieldId);
+    });
     ['status', 'pdfUrl', 'updatedAt', 'createdAt', 'id'].forEach(id => ids.add(id));
     return Array.from(ids);
   }, [columnsAll]);
@@ -1171,6 +1176,11 @@ const ListView: React.FC<ListViewProps> = ({
     return fieldId;
   };
 
+  const resolveStatusKey = useCallback(
+    (raw: any) => resolveStatusPillKey(raw !== undefined && raw !== null ? raw.toString().trim() : '', definition.followup?.statusTransitions),
+    [definition.followup?.statusTransitions]
+  );
+
   const statusFilterOptions = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
@@ -1182,26 +1192,24 @@ const ListView: React.FC<ListViewProps> = ({
       out.push(s);
     };
 
-    const transitions = definition.followup?.statusTransitions || {};
-    add((transitions as any).onPdf);
-    add((transitions as any).onEmail);
-    add((transitions as any).onClose);
+    const transitions = definition.followup?.statusTransitions;
+    collectStatusTransitionValues(transitions, { includeDefaultOnClose: true }).forEach(add);
 
     add(definition.autoSave?.status);
-
-    (definition.questions || []).forEach(q => {
-      if ((q as any).type !== 'BUTTON') return;
-      const btn = (q as any).button;
-      if (!btn || typeof btn !== 'object') return;
-      if ((btn as any).action !== 'updateRecord') return;
-      add((btn as any)?.set?.status);
-    });
 
     // Include any statuses already present in the fetched list results (covers legacy/hand-edited statuses).
     (allItems || []).forEach(row => add((row as any)?.status));
 
     return out;
-  }, [allItems, definition.autoSave?.status, definition.followup?.statusTransitions, definition.questions]);
+  }, [allItems, definition.autoSave?.status, definition.followup?.statusTransitions]);
+
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    onDiagnostic('list.search.statusOptions', {
+      count: statusFilterOptions.length,
+      sample: statusFilterOptions.slice(0, 12)
+    });
+  }, [onDiagnostic, statusFilterOptions]);
 
   const buildSelectOptionsForField = useCallback(
     (fieldId: string): Array<{ value: string; label: string }> => {
@@ -1594,7 +1602,24 @@ const ListView: React.FC<ListViewProps> = ({
                     handleRowClick(row);
                   }}
                 >
-                  <div className="ck-list-card-title">{renderCellValue(row, cardTitleFieldId)}</div>
+                  <div className="ck-list-card-title-row">
+                    <div className="ck-list-card-title">{renderCellValue(row, cardTitleFieldId)}</div>
+                    {(() => {
+                      const statusText = (row.status || '').toString().trim();
+                      if (!statusText) return null;
+                      const statusKey = resolveStatusKey(statusText);
+                      return (
+                        <span
+                          className="ck-status-pill"
+                          title={statusText}
+                          aria-label={`Status: ${statusText}`}
+                          data-status-key={statusKey || undefined}
+                        >
+                          {statusText}
+                        </span>
+                      );
+                    })()}
+                  </div>
                   {ruleColumnsForCards.length ? (
                     <div className="ck-list-card-footer">
                       {ruleColumnsForCards.map(col => {

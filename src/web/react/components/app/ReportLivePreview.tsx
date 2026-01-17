@@ -8,6 +8,7 @@ import { buildSubgroupKey, resolveSubgroupKey } from '../../app/lineItems';
 import { LineItemState } from '../../types';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from '../../utils/valueDisplay';
+import { resolveStatusPillKey } from '../../utils/statusPill';
 import { GroupCard } from '../form/GroupCard';
 import { resolveGroupSectionKey } from '../form/grouping';
 import { CameraIcon, CheckIcon, PaperclipIcon, XIcon, srOnly } from '../form/ui';
@@ -652,6 +653,11 @@ export const ReportLivePreview: React.FC<{
       }),
     [definition, language, lineItems, values]
   );
+  const statusText = (recordMeta?.status || '').toString().trim();
+  const statusKey = useMemo(
+    () => resolveStatusPillKey(statusText, definition.followup?.statusTransitions),
+    [definition.followup?.statusTransitions, statusText]
+  );
 
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
@@ -835,19 +841,33 @@ export const ReportLivePreview: React.FC<{
         </div>
       ) : null}
 
-      {recordMeta?.pdfUrl ? (
+      {statusText || recordMeta?.pdfUrl ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          <MetaCard label={tSystem('summary.pdf', language, 'PDF')}>
-            <a
-              href={recordMeta.pdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: '#0f172a', textDecoration: 'underline' }}
-              onClick={e => e.stopPropagation()}
-            >
-              {tSystem('summary.openPdf', language, 'Open PDF')}
-            </a>
-          </MetaCard>
+          {statusText ? (
+            <MetaCard label={tSystem('list.meta.status', language, 'Status')}>
+              <span
+                className="ck-status-pill"
+                title={statusText}
+                aria-label={`Status: ${statusText}`}
+                data-status-key={statusKey || undefined}
+              >
+                {statusText}
+              </span>
+            </MetaCard>
+          ) : null}
+          {recordMeta?.pdfUrl ? (
+            <MetaCard label={tSystem('summary.pdf', language, 'PDF')}>
+              <a
+                href={recordMeta.pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#0f172a', textDecoration: 'underline' }}
+                onClick={e => e.stopPropagation()}
+              >
+                {tSystem('summary.openPdf', language, 'Open PDF')}
+              </a>
+            </MetaCard>
+          ) : null}
         </div>
       ) : null}
 
