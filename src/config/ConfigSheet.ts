@@ -151,7 +151,7 @@ export class ConfigSheet {
 
     return data.map(row => {
       const type = row[idxType] ? row[idxType].toString().toUpperCase() as QuestionType : 'TEXT';
-      const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[idxOptionsEn], row[idxOptionsFr], row[idxOptionsNl]);
+      const { options, optionsFr, optionsNl, optionsRaw } = this.parseOptions(ss, row[idxOptionsEn], row[idxOptionsFr], row[idxOptionsNl]);
       const rawConfig = row[idxConfig] ? row[idxConfig].toString().trim() : '';
       const optionFilterRaw = row[idxOptionFilter] ? row[idxOptionFilter].toString().trim() : rawConfig;
       const validationRaw = row[idxValidation] ? row[idxValidation].toString().trim() : rawConfig;
@@ -208,6 +208,7 @@ export class ConfigSheet {
         options,
         optionsFr,
         optionsNl,
+        optionsRaw,
         status,
         uploadConfig,
         lineItemConfig,
@@ -423,19 +424,45 @@ export class ConfigSheet {
     }
   }
 
-  private static parseOptions(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, rawEn: any, rawFr: any, rawNl: any): { options: string[]; optionsFr: string[]; optionsNl: string[] } {
+  private static parseOptions(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    rawEn: any,
+    rawFr: any,
+    rawNl: any
+  ): { options: string[]; optionsFr: string[]; optionsNl: string[]; optionsRaw?: Record<string, any>[] } {
     const rawOptionsEn = rawEn ? rawEn.toString().trim() : '';
     if (rawOptionsEn.startsWith('REF:')) {
       const refSheetName = rawOptionsEn.substring(4).trim();
       const refSheet = ss.getSheetByName(refSheetName);
       if (refSheet) {
         const lastRefRow = refSheet.getLastRow();
+        const lastRefColumn = Math.max(3, refSheet.getLastColumn());
         if (lastRefRow > 1) {
-          const refData = refSheet.getRange(2, 1, lastRefRow - 1, 3).getValues();
+          const refData = refSheet.getRange(2, 1, lastRefRow - 1, lastRefColumn).getValues();
+          const headers = refSheet.getRange(1, 1, 1, lastRefColumn).getValues()[0] || [];
+          const normalizedHeaders = headers.map((h: any, idx: number) => {
+            const key = h !== undefined && h !== null ? h.toString().trim() : '';
+            return key || `Column_${idx + 1}`;
+          });
+          const optionsRaw = refData
+            .map((row: any[]) => {
+              const rowObj: Record<string, any> = {};
+              normalizedHeaders.forEach((key, idx) => {
+                if (!key) return;
+                rowObj[key] = row[idx];
+              });
+              const baseValue = row[0];
+              if (baseValue !== undefined && baseValue !== null && baseValue !== '') {
+                rowObj.__ckOptionValue = baseValue.toString();
+              }
+              return rowObj;
+            })
+            .filter(row => row.__ckOptionValue);
           return {
             options: refData.map(r => r[0].toString()).filter(s => s),
             optionsFr: refData.map(r => r[1].toString()).filter(s => s),
-            optionsNl: refData.map(r => r[2].toString()).filter(s => s)
+            optionsNl: refData.map(r => r[2].toString()).filter(s => s),
+            optionsRaw
           };
         }
       }
@@ -2008,6 +2035,33 @@ export class ConfigSheet {
         rawUi.paragraphDisclaimerConfig ??
         rawUi.paragraph_disclaimer_config
     );
+    const choiceSearchEnabled = normalizeBool(
+      rawUi.choiceSearchEnabled ??
+        rawUi.choiceSearch ??
+        rawUi.selectSearchEnabled ??
+        rawUi.searchEnabled ??
+        rawUi.searchable
+    );
+    const nonMatchWarningModeRaw =
+      rawUi.nonMatchWarningMode ??
+      rawUi.nonMatchWarnings ??
+      rawUi.optionFilterWarningMode ??
+      rawUi.optionFilterWarnings;
+    const nonMatchWarningModeCandidate =
+      nonMatchWarningModeRaw !== undefined && nonMatchWarningModeRaw !== null
+        ? nonMatchWarningModeRaw.toString().trim().toLowerCase()
+        : '';
+    const nonMatchWarningMode: LineItemGroupUiConfig['nonMatchWarningMode'] =
+      nonMatchWarningModeCandidate === 'validation' ||
+      nonMatchWarningModeCandidate === 'rules' ||
+      nonMatchWarningModeCandidate === 'rule' ||
+      nonMatchWarningModeCandidate === 'generic'
+        ? 'validation'
+        : nonMatchWarningModeCandidate === 'both' || nonMatchWarningModeCandidate === 'all'
+          ? 'both'
+          : nonMatchWarningModeCandidate
+              ? 'descriptive'
+              : undefined;
     const cfg: QuestionUiConfig = {};
     if (control) cfg.control = control;
     if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
@@ -2016,6 +2070,7 @@ export class ConfigSheet {
     if (summaryVisibility) cfg.summaryVisibility = summaryVisibility;
     if (paragraphRows) (cfg as any).paragraphRows = paragraphRows;
     if (paragraphDisclaimer) (cfg as any).paragraphDisclaimer = paragraphDisclaimer;
+    if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
@@ -2048,7 +2103,13 @@ export class ConfigSheet {
     const modeRaw = rawUi.mode !== undefined ? rawUi.mode : rawUi.type;
     const modeCandidate = modeRaw !== undefined && modeRaw !== null ? modeRaw.toString().toLowerCase() : '';
     const mode: LineItemGroupUiConfig['mode'] =
-      modeCandidate === 'progressive' ? 'progressive' : modeCandidate === 'default' ? 'default' : undefined;
+      modeCandidate === 'progressive'
+        ? 'progressive'
+        : modeCandidate === 'default'
+          ? 'default'
+          : modeCandidate === 'table'
+            ? 'table'
+            : undefined;
 
     const collapsedRaw = rawUi.collapsedFields || rawUi.collapsed || rawUi.summaryFields;
     const collapsedFields: LineItemCollapsedFieldConfig[] | undefined = Array.isArray(collapsedRaw)
@@ -2073,6 +2134,57 @@ export class ConfigSheet {
       rawUi.defaultCollapsed !== undefined && rawUi.defaultCollapsed !== null ? !!rawUi.defaultCollapsed : undefined;
 
     const rowDisclaimer = this.normalizeRowDisclaimer(rawUi.rowDisclaimer ?? rawUi.row_disclaimer ?? rawUi.disclaimer);
+
+    const tableColumnsRaw =
+      rawUi.tableColumns ??
+      rawUi.table_columns ??
+      rawUi.tableColumnIds ??
+      rawUi.table_column_ids ??
+      rawUi.columns;
+    const tableColumns = (Array.isArray(tableColumnsRaw)
+      ? tableColumnsRaw
+      : typeof tableColumnsRaw === 'string'
+        ? tableColumnsRaw.split(',')
+        : []
+    )
+      .map(entry => (entry !== undefined && entry !== null ? entry.toString().trim() : ''))
+      .filter(Boolean);
+    const tableColumnWidthsRaw =
+      rawUi.tableColumnWidths ??
+      rawUi.table_column_widths ??
+      rawUi.tableColumnWidthMap ??
+      rawUi.table_column_width_map ??
+      rawUi.columnWidths ??
+      rawUi.columnWidth ??
+      rawUi.column_widths;
+    const tableColumnWidths = (() => {
+      if (!tableColumnWidthsRaw || typeof tableColumnWidthsRaw !== 'object' || Array.isArray(tableColumnWidthsRaw)) return undefined;
+      const entries = Object.entries(tableColumnWidthsRaw).reduce<Record<string, string | number>>((acc, [key, value]) => {
+        const normalizedKey = key !== undefined && key !== null ? key.toString().trim() : '';
+        if (!normalizedKey) return acc;
+        if (value === undefined || value === null) return acc;
+        if (typeof value === 'number') {
+          acc[normalizedKey] = value;
+          return acc;
+        }
+        const stringValue = value.toString().trim();
+        if (stringValue) acc[normalizedKey] = stringValue;
+        return acc;
+      }, {});
+      return Object.keys(entries).length ? entries : undefined;
+    })();
+    const tableHideUntilAnchor = normalizeBool(
+      rawUi.tableHideUntilAnchor ??
+        rawUi.table_hide_until_anchor ??
+        rawUi.hideUntilAnchor ??
+        rawUi.hide_until_anchor
+    );
+    const needsAttentionMessage =
+      rawUi.needsAttentionMessage ??
+      rawUi.needs_attention_message ??
+      rawUi.needsAttention ??
+      rawUi.attentionMessage ??
+      rawUi.attention_message;
 
     const showItemPill = normalizeBool(
       rawUi.showItemPill ??
@@ -2136,6 +2248,26 @@ export class ConfigSheet {
         rawUi.searchEnabled ??
         rawUi.searchable
     );
+    const nonMatchWarningModeRaw =
+      rawUi.nonMatchWarningMode ??
+      rawUi.nonMatchWarnings ??
+      rawUi.optionFilterWarningMode ??
+      rawUi.optionFilterWarnings;
+    const nonMatchWarningModeCandidate =
+      nonMatchWarningModeRaw !== undefined && nonMatchWarningModeRaw !== null
+        ? nonMatchWarningModeRaw.toString().trim().toLowerCase()
+        : '';
+    const nonMatchWarningMode: LineItemGroupUiConfig['nonMatchWarningMode'] =
+      nonMatchWarningModeCandidate === 'validation' ||
+      nonMatchWarningModeCandidate === 'rules' ||
+      nonMatchWarningModeCandidate === 'rule' ||
+      nonMatchWarningModeCandidate === 'generic'
+        ? 'validation'
+        : nonMatchWarningModeCandidate === 'both' || nonMatchWarningModeCandidate === 'all'
+          ? 'both'
+          : nonMatchWarningModeCandidate
+              ? 'descriptive'
+              : undefined;
 
     const cfg: LineItemGroupUiConfig = {};
     if (mode) cfg.mode = mode;
@@ -2143,12 +2275,17 @@ export class ConfigSheet {
     if (expandGate) cfg.expandGate = expandGate;
     if (defaultCollapsed !== undefined) cfg.defaultCollapsed = defaultCollapsed;
     if (rowDisclaimer) (cfg as any).rowDisclaimer = rowDisclaimer;
+    if (tableColumns.length) (cfg as any).tableColumns = tableColumns;
+    if (tableColumnWidths) (cfg as any).tableColumnWidths = tableColumnWidths;
+    if (tableHideUntilAnchor !== undefined) (cfg as any).tableHideUntilAnchor = tableHideUntilAnchor;
+    if (needsAttentionMessage !== undefined) (cfg as any).needsAttentionMessage = needsAttentionMessage;
     if (showItemPill !== undefined) (cfg as any).showItemPill = showItemPill;
     if (addButtonPlacement) (cfg as any).addButtonPlacement = addButtonPlacement;
     if (allowRemoveAutoRows !== undefined) (cfg as any).allowRemoveAutoRows = allowRemoveAutoRows;
     if (saveDisabledRows !== undefined) (cfg as any).saveDisabledRows = saveDisabledRows;
     if (openInOverlay !== undefined) (cfg as any).openInOverlay = openInOverlay;
     if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
+    if (nonMatchWarningMode !== undefined) (cfg as any).nonMatchWarningMode = nonMatchWarningMode;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
@@ -2301,30 +2438,55 @@ export class ConfigSheet {
     let options: string[] = [];
     let optionsFr: string[] = [];
     let optionsNl: string[] = [];
+    let optionsRaw: Record<string, any>[] | undefined;
 
     if (rawSelector.optionsRef) {
       const parsed = this.parseOptions(ss, rawSelector.optionsRef, rawSelector.optionsRefFr, rawSelector.optionsRefNl);
       options = parsed.options;
       optionsFr = parsed.optionsFr;
       optionsNl = parsed.optionsNl;
+      optionsRaw = parsed.optionsRaw;
     } else {
       options = Array.isArray(rawSelector.options) ? rawSelector.options : [];
       optionsFr = Array.isArray(rawSelector.optionsFr) ? rawSelector.optionsFr : [];
       optionsNl = Array.isArray(rawSelector.optionsNl) ? rawSelector.optionsNl : [];
+      optionsRaw = Array.isArray(rawSelector.optionsRaw) ? rawSelector.optionsRaw : undefined;
     }
 
     const optionFilter = this.normalizeOptionMapLike(ss, rawSelector.optionFilter);
+    const choiceSearchEnabled = this.normalizeBoolean(
+      rawSelector.choiceSearchEnabled ??
+        rawSelector.choiceSearch ??
+        rawSelector.selectSearchEnabled ??
+        rawSelector.searchEnabled ??
+        rawSelector.searchable
+    );
+    const placeholderRaw = rawSelector.placeholder ?? rawSelector.placeholderText ?? rawSelector.placeholderLabel;
+    const placeholderObj = placeholderRaw && typeof placeholderRaw === 'object' ? placeholderRaw : null;
+    const placeholderStr = typeof placeholderRaw === 'string' ? placeholderRaw : '';
+    const placeholderEn =
+      rawSelector.placeholderEn || (placeholderObj && placeholderObj.en) || placeholderStr || '';
+    const placeholderFr =
+      rawSelector.placeholderFr || (placeholderObj && placeholderObj.fr) || '';
+    const placeholderNl =
+      rawSelector.placeholderNl || (placeholderObj && placeholderObj.nl) || '';
 
     return {
       id: id.toString(),
       labelEn: rawSelector.labelEn || '',
       labelFr: rawSelector.labelFr || '',
       labelNl: rawSelector.labelNl || '',
+      placeholder: placeholderObj || (placeholderStr ? placeholderStr : undefined),
+      placeholderEn: placeholderEn || undefined,
+      placeholderFr: placeholderFr || undefined,
+      placeholderNl: placeholderNl || undefined,
       required: !!rawSelector.required,
       options,
       optionsFr,
       optionsNl,
+      optionsRaw,
       optionsRef: rawSelector.optionsRef,
+      choiceSearchEnabled,
       optionFilter
     };
   }
@@ -2356,7 +2518,7 @@ export class ConfigSheet {
     const lastColumn = Math.max(10, sheet.getLastColumn());
       const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
       const fields: LineItemFieldConfig[] = rows.map((row, idx) => {
-        const { options, optionsFr, optionsNl } = this.parseOptions(ss, row[6], row[7], row[8]);
+        const { options, optionsFr, optionsNl, optionsRaw } = this.parseOptions(ss, row[6], row[7], row[8]);
         const rawConfig = row[9] ? row[9].toString().trim() : '';
         const optionFilter = this.parseOptionFilter(ss, rawConfig);
         const validationRules = this.parseValidationRules(rawConfig);
@@ -2397,6 +2559,7 @@ export class ConfigSheet {
         options,
         optionsFr,
         optionsNl,
+        optionsRaw,
         optionFilter,
         validationRules,
         visibility,
@@ -2469,6 +2632,7 @@ export class ConfigSheet {
       options: Array.isArray(field?.options) ? field.options : [],
       optionsFr: Array.isArray(field?.optionsFr) ? field.optionsFr : [],
       optionsNl: Array.isArray(field?.optionsNl) ? field.optionsNl : [],
+      optionsRaw: Array.isArray(field?.optionsRaw) ? field.optionsRaw : undefined,
       optionFilter,
       validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined,
       visibility: this.normalizeVisibility(field?.visibility),
