@@ -9,28 +9,35 @@
 - ck-bug-3: the auto save dialog needs to allow a single button instead of two. Ideally we would use the existing react component and make it configurable to only have 1 button.
   >**DONE - Codex**
 - ck-bug-4: when completing the info of a line item group and closing the overlay (on ordered submission mode), the overlay pill still highlights the group as `needing attention`. When the error message is shown legitimately, we need be able to configure the error message.
-  >**WIP - Codex**
+  >**DONE - Codex**
 - ck-bug-5: when entering on focus in a paragraph input control it is automatically zooming in iOS, please adjust the behavior to not zoom in. Also the injected disclaimer counts for submit validation as if the user had already entered text, which is not the case.
   >**DONE - Cursor**
 - ck-bug-6: there seems to be a bug with the banner that appears when file uploads are pending and the user leaves the edit view to the list view. It is being triggered on a form that does not have file upload fields and even when the user has not entered any data. We should also consider removing the banner altogether, what are the risk?
-  >**WIP - Codex**
+  >**DONE - Codex**
 - ck-bug-7: when checking for duplicates on create button, including `createRecordPreset`, disable the list view to prevent the user from navigating to existing records and compiling the actions done on server side.
   >**DONE - Codex**
+- ck-bug-8: tested using Steps UI. Ordered validation (`enforceFieldOrder`) is not working as expected on steps UI for line item groups that open in regular way. For subgroups in overlay the order validation works as expected. However for subgroups in overlay it is allowed to close the overlay without completing the required fields, which is not the case for line item groups in overlay. Finally we need a config setting to define if closing the overlay without completing the required fields is allowed or not.
+  >**BACKLOG**
+- ck-bug-9: when opening records we are unnecesarrily saving the record even if the user didn't change any data. I think this is trigering some cache inconsistencies and showing the banner to refresh the record unnecessarily.
+  >**BACKLOG**
+- ck-bug-10: we need to prevent racing conditions that would show the banner to refresh the record or the one asking to wait for file uploads to complete before leaving to the list view. I thing the best solution is that when the user taps the home button to leave the edit or summary view to the list view, we should block the navigation, disable al editing actions and show a banner asking to wait because we saving. No need to specify what is being saved or give options, just a simple message like "Please wait while we save your changes...". We use the blocking overlay dialog without buttons or posibility to dismiss it.
 
 ## technical requirements
 
 - ck-1: initial load performance improvements.
 - ck-2:
   - hide table/cards toggle in list view.
-  - We need a legend at the bottom of the list view to explain the statuses use static legend definition in issue 6. We need a status pill for each result card to display the status. This pill needs to appear in all other pages inclucing edit and sumamry views.
-  - We need to normalise statuses values using the existing `statusTransitions` config. We need to have an inProgress and reOpened statuses (which it's value can be set per form, similarly as we do with `onClose`). Also please remove harcoded logic to drive visibility of elements based on the `Closed` status value, the logic needs to be driven by the configured value on statusTransitions.
+  - We need a legend at the bottom of the list view to explain the statuses use static legend definition in issue 6.
+  - We need to normalise statuses values using the existing `statusTransitions` config. We need to have an inProgress and reOpened statuses (which it's value can be set per form, similarly as we do with `onClose`). Also please remove harcoded logic to drive visibility of elements based on the `Closed` status value, the logic needs to be driven by the configured value on statusTransitions. For example the edit button on summary view is not visible if the status is at `onClose`, regarless of it's label value. The list view standard actions on rows and cards that are driven by the status value will use `inProgress` to land on the edit view and `onClose` to land on the summary view. The search bar will allow search by status compiling the values per language that are defined on the `statusTransitions` config and remove the logic that uses the `set` key on custom buttons with `updateRecord` action.
+  - We need a status pill for each result card to display the status. This pill needs to appear in all other pages inclucing edit and summary views. For summary view add the pill to the native sumary view and to the html summary template that we already have.
   - Change `Search recipes (name, dietary category, or status)` to `Search recipes (name, dietary, or status)`.
   -Add a list view title `You can search by recipe name, dietary category or status`.
-- ck-3: make cards non clickable in cards mode in list view, only the footer action are clickable.
+  > **WIP - Cursor**
+- ck-3: make cards non clickable in cards mode in list view page, only the footer actions are clickable.
 - ck-4: create smart search mode to:
 
   ```text
-  Improve the existing smart search so it covers Recipe name + Dietary category + Status, then remove the advanced search icon.
+  Recipe name + Dietary category + Status, then remove the advanced search icon.
 
   What the user should be able to type (single field):
   • Recipe name keywords: “mushroom”, “couscous”
@@ -60,31 +67,30 @@
 
 - ck-6: create custom button action to delete a record. And define dynamic legends based on list results.
 - ck-7: define optional max input length for fields and auto expand text and paragraph area vertically.
-- ck-8: define a non editable default text paragraph for paragraph fields at the end of the field.
 - ck-9: helper text on all fields, this is localizable and can be set below the field label or inside the input control. Define number of decimals allowed on numeric input fields, 0 means integer only. On numeric field if the user is entering a non numeric character, the field should show a warning because today the input is blocked but the user does not understand why.
 - ck-10: LineItemGroupConfig.label should also modify the pill content for the line item groups shown in overlay as it does today for subgroups. Avoid showing count.
 - ck-11: smart search on section selector fields.
+  - Improve the existing search at CHOICE and section selector fields (`choiceSearchEnabled`) so it covers multiple fields at same time with one input field. The idea is to use the ref: functionality that we already have in place for options. For example if you check our master data in `master_data/IngredientsOptions.csv` you will see that we have columns on the right that define each option's category, dietary applicability, supplier, etc... We can use this to build a search index that covers all these fields at same time. This search index will be used to filter the options in the section selector field.
+  - Create a new UI component for line item groups and subgroups that shows the rows as a table.
+  - Functional requirements, example for the community kitchen use case:
+    Update ingredient selection to support the real kitchen workflow (build the list first, then fill quantities)
 
-  ```text
-  Update ingredient selection to support the real kitchen workflow (build the list first, then fill quantities):
+    1) One search field that searches across:
+    • Ingredient name
+    • Ingredient category (e.g., “Fresh vegetables”, “Spices / herbs / condiments”)
 
-  1) One search field (smart search) that searches across:
-  • Ingredient name
-  • Ingredient category (e.g., “Fresh vegetables”, “Spices / herbs / condiments”)
+    2) Search results must allow MULTIPLE SELECTION before adding:
+    • Example: user types “spice” → results show cumin, paprika, curry, pepper, etc.
+    • User taps multiple items (checkbox or “+” on each line) then clicks one button: “Add selected (n)”.
+    This prevents repeating “search → add → search → add” for 10+ items.
 
-  2) Search results must allow MULTIPLE SELECTION before adding:
-  • Example: user types “spice” → results show cumin, paprika, curry, pepper, etc.
-  • User taps multiple items (checkbox or “+” on each line) then clicks one button: “Add selected (n)”.
-  This prevents repeating “search → add → search → add” for 10+ items.
+    3) After items are added, show a compact ingredient list where each row has ONLY:
+    Ingredient | Quantity | Unit | Remove
+    (Quantity + Unit appear only after the ingredient exists on the recipe.)
 
-  3) After items are added, show a compact ingredient list where each row has ONLY:
-  Ingredient | Quantity | Unit | Remove
-  (Quantity + Unit appear only after the ingredient exists on the recipe.)
-
-  4) Category and Allergen are VIEW‑ONLY:
-  • Do not show Category and Allergen in the Create/Edit ingredient rows.
-  • On the View recipe page, group by Category (already good) and show Allergen only when it is not “None”.
-  ```
+    4) Category and Allergen are VIEW‑ONLY:
+    • On the html summary template for the recipe form (`docs/templates/recipes.summary.html`), show the Allergen column only when at least one ingredient has an allergen value different than `None`, otherwise hide the entire column.
+  > **WIP - Codex**
 
 - ck-13: on option filter via array, we need to configure a modality were we match via `or` instead of `and` by default. This would allow to add ingredients that matches part of the diatery restrictions. In this case we display a warning message. These elements will marked with a warning flag that contains the non-satisfied keys in memory and server side. Then, we will add a non editable message in the paragraph field summarizing, per non-satisfied key, the list of elements that are not satisfying the restrictions.
 
@@ -94,17 +100,27 @@
   - For Diabetic recipe, do not use: Sugar, Honey, Syrup, Sweetener
   ```
 
+  > **DONE - Cursor**
 - ck-14: verbatim requirements for html summary template.
 - ck-15: create fields to enter createdBy and updatedBy, free text or auto set with the user email, when user is authenticated.
 - ck-16: prevent deactivation (custom button action) of a record if it is being used as source data for another record which has not a finalised status. I think easiest check would be to write a blocked flag on the dataSource record when the other form is using it. The block will be released when the ofether form finalises it's data entry process.
+  > **CANCELLED**
 - ck-17: submit top error message must be configurable and localizable per form. Fields need to be entered in order, if a field a required field is missing input, when the user tries to enter a value for a later field, the form will block will trigger submit validation so the user can enter the value of the field that was missed. This is control via a config setting at the form level.
+  > **DONE - Cursor**
 - ck-18: one time overlay blocking banner on create/edit/copy to explain to the user that auto save is on and that it works in the background and indicators are on the top right corner of the form. We would save in browser that the user has seen the banner so we don't show it again.
+  > **DONE - Codex**
 - ck-20: Disable submit button until all required fields are valid. Tooltip: “Complete all required fields to activate.”
+  > **DONE - Cursor**
 - ck-21: add status badge in edit view
+  > **DONE - Cursor**
 - ck-22: fix button issue `[Info] [ReactForm] – "list.openButton.ignored" – {openButtonId: "RE_OPEN", reason: "unsupportedAction"}` -> action is `updateRecord` which works fine in summary view but fails in list view, cards mode.
-- ck-23: the search field `x` icon should not clear the search results, add a separate control for that.
+  > **DONE - Cursor**
+- ck-23: the search field `x` icon should not clear the search results, add a separate control for that underneath the search field. This separate control appears only when the search results are not empty.
+  > **DONE - Cursor**
 - ck-24: remove default empty line items in line item groups.
-- ck-25: add buttons below the search bar on cards mode in list view page. To trigger predefined search queries.
+  > **DONE - Cursor**
+- ck-25: add buttons below the search bar on cards mode in list view page, within the body of the page. They are displayed when search results are not showing. They are used to trigger predefined search queries. These bottons should have a new action type `listViewSearchPreset` that will be used to trigger the predefined search queries.
+  > **DONE - Cursor**
 - ck-26: add `source` sort type to the listViewSort config
 - ck-27: support placeholders in the email subject
 - ck-28: remove the translate stuff to english button on google sheet

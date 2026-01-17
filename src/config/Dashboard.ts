@@ -1493,6 +1493,8 @@ export class Dashboard {
     const transitionsSource = source.statusTransitions || source.transitions || {};
     if (transitionsSource && typeof transitionsSource === 'object') {
       const transitions: FollowupStatusConfig = {};
+      if (transitionsSource.inProgress) transitions.inProgress = transitionsSource.inProgress;
+      if (transitionsSource.reOpened) transitions.reOpened = transitionsSource.reOpened;
       if (transitionsSource.onPdf) transitions.onPdf = transitionsSource.onPdf;
       if (transitionsSource.onEmail) transitions.onEmail = transitionsSource.onEmail;
       if (transitionsSource.onClose) transitions.onClose = transitionsSource.onClose;
@@ -1913,6 +1915,8 @@ export class Dashboard {
               ? (value as any).hint
               : undefined;
     const placeholder = normalizeLocalizedMaybeEmpty(placeholderRaw);
+    const presetsTitleRaw = (value as any).presetsTitle;
+    const presetsTitle = normalizeLocalizedMaybeEmpty(presetsTitleRaw);
     if (mode === 'advanced') {
       const fieldsRaw =
         (value as any).fields !== undefined
@@ -1939,11 +1943,13 @@ export class Dashboard {
       })();
       const out: any = fields ? { mode: 'advanced', fields } : { mode: 'advanced' };
       if (placeholder !== undefined) out.placeholder = placeholder;
+      if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
       return out as ListViewSearchConfig;
     }
     if (mode !== 'date') {
       const out: any = { mode };
       if (placeholder !== undefined) out.placeholder = placeholder;
+      if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
       return out as ListViewSearchConfig;
     }
 
@@ -1960,6 +1966,7 @@ export class Dashboard {
     const dateFieldId = fidRaw !== undefined && fidRaw !== null ? fidRaw.toString().trim() : '';
     const out: any = dateFieldId ? { mode: 'date', dateFieldId } : { mode: 'date' };
     if (placeholder !== undefined) out.placeholder = placeholder;
+    if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
     return out as ListViewSearchConfig;
   }
 

@@ -1,6 +1,7 @@
 import { DataSourceConfig, WebFormDefinition, WebFormSubmission, WebQuestionDefinition } from '../../../types';
 import { RenderHtmlTemplateResult, fetchDataSourceApi, SubmissionPayload } from '../api';
 import { resolveTemplateIdForRecord } from './templateId';
+import { StatusTransitionKey, resolveStatusTransitionKey } from '../../../domain/statusTransitions';
 import { applyHtmlLineItemBlocks } from '../../../services/webform/followup/htmlLineItemBlocks';
 import { addConsolidatedPlaceholders, collectLineItemRows } from '../../../services/webform/followup/placeholders';
 import { linkifyUploadedFileUrlsInHtml } from '../../../services/webform/followup/fileLinks';
@@ -17,6 +18,7 @@ const renderedBundleInflight = new Map<string, Promise<RenderHtmlTemplateResult>
 const MAX_DS_DETAILS_CACHE_ENTRIES = 80;
 const dsDetailsCache = new Map<string, Record<string, string> | null>();
 const dsDetailsInflight = new Map<string, Promise<Record<string, string> | null>>();
+const STATUS_PILL_KEYS: StatusTransitionKey[] = ['onClose', 'inProgress', 'reOpened'];
 
 const pruneMap = (map: Map<string, any>, max: number) => {
   if (map.size <= max) return;
@@ -86,6 +88,16 @@ const buildValuesSignature = (values: Record<string, any> | undefined | null): s
     compact[k] = (values as any)[k];
   });
   return fnv1a32(stableStringifyForKey(compact));
+};
+
+const buildMetaSignature = (payload: SubmissionPayload): string => {
+  const meta = {
+    status: payload.status || '',
+    createdAt: payload.createdAt || '',
+    updatedAt: payload.updatedAt || '',
+    pdfUrl: payload.pdfUrl || ''
+  };
+  return fnv1a32(stableStringifyForKey(meta));
 };
 
 const escapeAttr = (value: string): string => {
@@ -486,7 +498,8 @@ export const renderBundledHtmlTemplateClient = async (args: {
   if (!raw) return { success: false, message: `Bundled HTML template not found: ${bundledKey}` };
 
   const valuesSig = buildValuesSignature(payload.values);
-  const cacheKey = `bundle|${payload.formKey}|${language}|${payload.id || ''}|${buttonId || 'summary'}|${bundledKey}|${valuesSig}`;
+  const metaSig = buildMetaSignature(payload);
+  const cacheKey = `bundle|${payload.formKey}|${language}|${payload.id || ''}|${buttonId || 'summary'}|${bundledKey}|${valuesSig}|${metaSig}`;
   const cached = renderedBundleHtmlCache.get(cacheKey);
   if (cached?.result?.success && cached?.result?.html) {
     return cached.result;
@@ -500,7 +513,11 @@ export const renderBundledHtmlTemplateClient = async (args: {
         formKey: payload.formKey,
         language: language as any,
         values: recordValues,
-        id: payload.id
+        id: payload.id,
+        createdAt: payload.createdAt ? payload.createdAt.toString() : undefined,
+        updatedAt: payload.updatedAt ? payload.updatedAt.toString() : undefined,
+        status: payload.status ? payload.status.toString() : undefined,
+        pdfUrl: payload.pdfUrl ? payload.pdfUrl.toString() : undefined
       };
 
       const projectionFieldIds = extractProjectionFieldIds({ html: raw, questions: definition.questions || [] });
@@ -532,6 +549,11 @@ export const renderBundledHtmlTemplateClient = async (args: {
       });
       addConsolidatedPlaceholders(placeholders, definition.questions as any, lineItemRows);
       addFileIconPlaceholders(placeholders, definition.questions || [], record);
+      const statusKey = resolveStatusTransitionKey(record.status, definition.followup?.statusTransitions, {
+        includeDefaultOnClose: true,
+        keys: STATUS_PILL_KEYS
+      });
+      addPlaceholderVariants(placeholders, 'STATUS_KEY', statusKey || '', undefined, formatTemplateValueForHtml);
 
       // Bundled templates may include <script> tags, but we must still prevent script injection via user-entered values.
       // Extract template-authored scripts, strip any scripts introduced after placeholder replacement, then restore.

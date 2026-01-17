@@ -318,6 +318,35 @@ components:
           properties:
             action:
               type: string
+              enum: [listViewSearchPreset]
+              description: |
+                Trigger a predefined search query in the list view (cards mode).
+                These buttons render below the search bar when no search results are showing.
+            mode:
+              type: string
+              enum: [text, date, advanced]
+              description: Optional search mode override (defaults to `listView.search.mode`).
+            keyword:
+              type: string
+              description: Keyword to search for (text or advanced modes).
+            dateValue:
+              type: string
+              description: Date to search for (`YYYY-MM-DD`) when `mode` is `date`.
+            fieldFilters:
+              type: object
+              additionalProperties:
+                oneOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: string
+              description: Advanced field filters (AND-ed together).
+          required: [action]
+
+        - type: object
+          properties:
+            action:
+              type: string
               enum: [updateRecord]
               description: |
                 Update an existing record (draft save) and optionally navigate to another view.
@@ -974,7 +1003,8 @@ components:
           type: array
           items:
             type: string
-          description: Optional ordered list of field ids to render as columns when `mode: "table"`.
+          description: |
+            Optional ordered list of field ids to render as columns when `mode: "table"`.
         tableHideUntilAnchor:
           type: boolean
           description: |
@@ -1562,6 +1592,14 @@ components:
           type: string
         statusTransitions:
           $ref: '#/components/schemas/FollowupStatusConfig'
+          description: |
+            Optional status values used by follow-up actions and status-aware UI.
+
+            Keys:
+            - `inProgress`: value for draft/in-progress records (used by autosave/list view defaults).
+            - `reOpened`: value written when explicitly re-opening a closed record.
+            - `onPdf`, `onEmail`, `onClose`: values written when follow-up actions complete.
+            - Values can be localized objects (per language).
         listViewMetaColumns:
           deprecated: true
           type: array
@@ -1588,7 +1626,7 @@ components:
 
             - Saves in the background after a debounce when form values change.
             - No validation is required for draft saves.
-            - Writes Status to "In progress" (unless the record is already Closed).
+            - Writes Status to `autoSave.status` or `statusTransitions.inProgress` (unless the record matches `statusTransitions.onClose`).
             - Shows a one-time autosave explainer overlay in the Create/Edit/Copy view (customize copy in `autosaveNotice.*` system strings).
           properties:
             enabled:
@@ -1599,14 +1637,14 @@ components:
               description: Debounce interval (ms) before sending a background save. Default 2000.
             status:
               type: string
-              description: Status value written during autosave. Default "In progress".
+              description: Status value written during autosave. Defaults to `statusTransitions.inProgress` (or "In progress").
         summaryViewEnabled:
           type: boolean
           description: |
             Enable the React Summary view for this form.
 
-            - When `true` (default), clicking a **Closed** record in the list opens the Summary view.
-            - When `false`, list-row clicks always open the **Edit** view (Closed records will be read-only).
+            - When `true` (default), clicking a record whose status matches `statusTransitions.onClose` opens the Summary view.
+            - When `false`, list-row clicks always open the **Edit** view (onClose records are read-only).
         summaryHtmlTemplateId:
           $ref: '#/components/schemas/TemplateIdMap'
           description: |
@@ -2244,13 +2282,20 @@ components:
 
     FollowupStatusConfig:
       type: object
+      description: Status values written by follow-up actions and used by the web app for status-aware UI.
       properties:
+        inProgress:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Status value for draft/in-progress records (used by autosave/list view defaults).
+        reOpened:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Status value written when explicitly re-opening a closed record.
         onPdf:
-          type: string
+          $ref: '#/components/schemas/LocalizedString'
         onEmail:
-          type: string
+          $ref: '#/components/schemas/LocalizedString'
         onClose:
-          type: string
+          $ref: '#/components/schemas/LocalizedString'
 
     ListViewColumnConfig:
       oneOf:
@@ -2513,7 +2558,10 @@ components:
           description: Optional icon name shown next to the text.
         text:
           $ref: '#/components/schemas/LocalizedString'
-          description: Explanatory text shown next to the icon.
+          description: |
+            Explanatory text shown next to the icon.
+
+            Supports basic inline Markdown (`**bold**`, `*italic*`, `code`, and links).
       required:
         - text
 
@@ -2594,6 +2642,13 @@ components:
 
                 When omitted, the UI falls back to system strings (e.g., "Search records").
                 Set to an empty string (`""`) to remove the placeholder text.
+            presetsTitle:
+              oneOf:
+                - type: string
+                - $ref: '#/components/schemas/LocalizedString'
+              description: |
+                Optional title shown inline before list view search preset buttons.
+                Example: "View recipes:".
             dateFieldId:
               type: string
               description: |
@@ -2617,6 +2672,7 @@ components:
             Notes:
             - The legend is **only shown when you define it**.
             - Each legend entry can include an `icon`, or omit it for text-only legend lines.
+            - Legend text supports basic inline Markdown (bold/italic/code/links).
           items:
             $ref: '#/components/schemas/ListViewLegendItem'
         defaultSort:

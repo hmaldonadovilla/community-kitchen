@@ -78,6 +78,24 @@ export const SummaryView: React.FC<{
       lineItems,
       existingRecordId
     });
+    const statusMeta = {
+      status: currentRecord?.status || lastSubmissionMeta?.status || null,
+      createdAt: currentRecord?.createdAt || lastSubmissionMeta?.createdAt,
+      updatedAt: currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt,
+      pdfUrl: currentRecord?.pdfUrl || undefined
+    };
+    if (statusMeta.status !== undefined && statusMeta.status !== null) {
+      (draft as any).status = statusMeta.status;
+    }
+    if (statusMeta.createdAt !== undefined && statusMeta.createdAt !== null) {
+      (draft as any).createdAt = statusMeta.createdAt;
+    }
+    if (statusMeta.updatedAt !== undefined && statusMeta.updatedAt !== null) {
+      (draft as any).updatedAt = statusMeta.updatedAt;
+    }
+    if (statusMeta.pdfUrl !== undefined && statusMeta.pdfUrl !== null) {
+      (draft as any).pdfUrl = statusMeta.pdfUrl;
+    }
     const resolvedTemplateId = resolveTemplateIdForRecord(definition.summaryHtmlTemplateId as any, draft.values || {}, draft.language);
     const isBundled = isBundledHtmlTemplateId(resolvedTemplateId || '');
     if (isBundled) {
@@ -136,7 +154,24 @@ export const SummaryView: React.FC<{
         setSummaryHtml({ phase: 'error', message: msg, allowScripts: false });
         onDiagnostic?.('summary.htmlTemplate.render.exception', { message: msg });
       });
-  }, [definition, existingRecordId, formKey, language, lineItems, onDiagnostic, recordLoadingId, useSummaryHtml, values]);
+  }, [
+    currentRecord?.createdAt,
+    currentRecord?.pdfUrl,
+    currentRecord?.status,
+    currentRecord?.updatedAt,
+    definition,
+    existingRecordId,
+    formKey,
+    language,
+    lastSubmissionMeta?.createdAt,
+    lastSubmissionMeta?.status,
+    lastSubmissionMeta?.updatedAt,
+    lineItems,
+    onDiagnostic,
+    recordLoadingId,
+    useSummaryHtml,
+    values
+  ]);
 
   return (
     <div

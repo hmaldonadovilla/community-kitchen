@@ -162,6 +162,7 @@ export type ButtonAction =
   | 'renderMarkdownTemplate'
   | 'renderHtmlTemplate'
   | 'createRecordPreset'
+  | 'listViewSearchPreset'
   | 'updateRecord'
   | 'openUrlField';
 
@@ -266,11 +267,37 @@ export interface CreateRecordPresetButtonConfig {
   placements?: ButtonPlacement[];
 }
 
+export interface ListViewSearchPresetButtonConfig {
+  /**
+   * Trigger a predefined search query in the list view.
+   *
+   * Note: these buttons render only in the list view (cards mode, when results are hidden).
+   */
+  action: 'listViewSearchPreset';
+  /**
+   * Optional search mode override (defaults to `listView.search.mode`).
+   */
+  mode?: 'text' | 'date' | 'advanced';
+  /**
+   * Keyword to search for (text or advanced modes).
+   */
+  keyword?: string;
+  /**
+   * Date to search for (YYYY-MM-DD) when `mode` is `date`.
+   */
+  dateValue?: string;
+  /**
+   * Advanced field filters (AND-ed together).
+   */
+  fieldFilters?: Record<string, string | string[]>;
+}
+
 export interface UpdateRecordButtonConfig {
   /**
    * Update an existing record (draft save), then optionally navigate to another view.
    *
-   * Primary use case: "Re-open" a Closed record from the Summary view (set status != Closed, then navigate to Form).
+   * Primary use case: "Re-open" a record whose status matches `statusTransitions.onClose`
+   * (set status to `statusTransitions.reOpened` or another non-closed value, then navigate to Form).
    */
   action: 'updateRecord';
   /**
@@ -315,6 +342,7 @@ export type ButtonConfig =
   | RenderMarkdownTemplateButtonConfig
   | RenderHtmlTemplateButtonConfig
   | CreateRecordPresetButtonConfig
+  | ListViewSearchPresetButtonConfig
   | UpdateRecordButtonConfig
   | OpenUrlFieldButtonConfig;
 
@@ -1088,9 +1116,17 @@ export interface ListViewSortConfig {
 }
 
 export interface FollowupStatusConfig {
-  onPdf?: string;
-  onEmail?: string;
-  onClose?: string;
+  /**
+   * Status value for draft/in-progress records (used by autosave/list view defaults).
+   */
+  inProgress?: LocalizedString | string;
+  /**
+   * Status value written when explicitly re-opening a closed record.
+   */
+  reOpened?: LocalizedString | string;
+  onPdf?: LocalizedString | string;
+  onEmail?: LocalizedString | string;
+  onClose?: LocalizedString | string;
 }
 
 export type TemplateIdBase = string | Record<string, string>;
@@ -1157,6 +1193,7 @@ export interface AutoSaveConfig {
   debounceMs?: number;
   /**
    * Status value written to the sheet when autosaving drafts. Defaults to "In progress".
+   * When omitted, the app falls back to `statusTransitions.inProgress` if configured.
    */
   status?: string;
 }
@@ -1394,7 +1431,8 @@ export interface FormConfig {
   autoSave?: AutoSaveConfig;
   /**
    * Enable/disable the Summary view in the React web app.
-   * When false, list-row clicks always open the Form view (closed records will be read-only).
+   * When false, list-row clicks always open the Form view
+   * (records matching `statusTransitions.onClose` are read-only).
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   summaryViewEnabled?: boolean;
@@ -1865,7 +1903,8 @@ export interface WebFormDefinition {
   autoSave?: AutoSaveConfig;
   /**
    * Enable/disable the Summary view in the React web app.
-   * When false, list-row clicks always open the Form view (closed records will be read-only).
+   * When false, list-row clicks always open the Form view
+   * (records matching `statusTransitions.onClose` are read-only).
    */
   summaryViewEnabled?: boolean;
   /**
@@ -2058,7 +2097,7 @@ export type ListViewOpenViewConfig =
       /**
        * Which view opens when clicking the computed cell:
        * - auto: preserve default list click behavior
-       * - form: force edit view (Closed records are read-only)
+       * - form: force edit view (records matching `statusTransitions.onClose` are read-only)
        * - summary: force Summary view (falls back to form if Summary is disabled)
        * - button: run a configured custom BUTTON action for the record (opens a preview overlay)
        * - copy: trigger the app's "Copy record" action for the record (opens a new draft in the form view)
@@ -2067,7 +2106,7 @@ export type ListViewOpenViewConfig =
       target: ListViewOpenViewTarget;
       /**
        * When true, clicking anywhere on the row (not just the computed cell) uses this same open target.
-       * Useful to make list rows open Summary for closed records, or run a BUTTON preview overlay.
+       * Useful to make list rows open Summary for `statusTransitions.onClose` records, or run a BUTTON preview overlay.
        */
       rowClick?: boolean;
     };
@@ -2124,7 +2163,7 @@ export interface ListViewRuleColumnConfig {
   /**
    * Controls which view opens when clicking the cell.
    * - auto: preserve the app's default "list row click" behavior
-   * - form: force the edit view (Closed records will be read-only)
+   * - form: force the edit view (records matching `statusTransitions.onClose` are read-only)
    * - summary: force Summary view (if enabled; otherwise falls back to form)
    * - button: run a configured custom BUTTON action (e.g. renderDocTemplate/renderMarkdownTemplate/renderHtmlTemplate)
    */
@@ -2182,6 +2221,11 @@ export interface ListViewSearchConfig {
    * Set to an empty string to remove the placeholder text.
    */
   placeholder?: LocalizedString | string;
+  /**
+   * Optional title shown inline before list view preset buttons.
+   * Example: "View recipes:".
+   */
+  presetsTitle?: LocalizedString | string;
 }
 
 export interface ListViewViewConfig {

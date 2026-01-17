@@ -434,6 +434,25 @@ export function buildWebFormHtml(
         align-items: center;
         margin-bottom: 12px;
       }
+      .ck-list-clear-results {
+        display: flex;
+        justify-content: flex-start;
+        margin: 4px 0 12px;
+      }
+      .ck-list-search-presets {
+        display: flex;
+        align-items: center;
+        flex-wrap: nowrap;
+        gap: 8px;
+        margin: 4px 0 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .ck-list-search-presets-title {
+        font-weight: 700;
+        color: var(--muted);
+        white-space: nowrap;
+      }
       .list-toolbar .ck-list-search-label {
         flex: 0 1 auto;
         min-width: 0;
@@ -736,10 +755,58 @@ export function buildWebFormHtml(
         outline: 4px solid rgba(0, 122, 255, 0.28);
         outline-offset: 3px;
       }
+      .ck-list-card-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
       .ck-list-card-title {
         font-weight: 900;
         font-size: 1.05em;
-        margin-bottom: 10px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .ck-list-card-title-row .ck-status-pill {
+        margin-left: auto;
+      }
+      .ck-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(59, 130, 246, 0.28);
+        background: rgba(59, 130, 246, 0.12);
+        color: #1e3a8a;
+        font-weight: 800;
+        font-size: 0.78em;
+        line-height: 1;
+        white-space: nowrap;
+      }
+      .ck-status-pill[data-status-key="onClose"] {
+        border: 1px solid rgba(34, 197, 94, 0.45);
+        background: rgba(34, 197, 94, 0.14);
+        color: #166534;
+      }
+      .ck-status-pill[data-status-key="reOpened"] {
+        border: 1px solid rgba(249, 115, 22, 0.45);
+        background: rgba(249, 115, 22, 0.14);
+        color: #9a3412;
+      }
+      .ck-record-status-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .ck-record-status-label {
+        font-size: 0.7em;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 800;
       }
       .ck-list-card-footer {
         display: flex;
@@ -759,29 +826,45 @@ export function buildWebFormHtml(
       .ck-list-legend {
         margin-top: 10px;
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px 14px;
-        align-items: center;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
         color: var(--muted);
         font-size: 0.85em;
       }
       .ck-list-legend--bottomBar {
         margin-top: 0;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
         padding: 2px 0;
-        padding-left: 40px;
+        padding-left: 20px;
       }
       .ck-list-legend-title {
         font-weight: 800;
         color: var(--text);
+      }
+      .ck-list-legend-list {
+        list-style: none;
+        margin: 0;
+        padding: 0 0 0 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
       }
       .ck-list-legend-item {
         display: inline-flex;
         align-items: center;
         gap: 6px;
         font-weight: 700;
+        position: relative;
+      }
+      .ck-list-legend-item::before {
+        content: '-';
+        position: absolute;
+        left: -12px;
+        color: var(--muted);
+      }
+      .ck-list-legend-text strong {
+        font-weight: 800;
+      }
       }
       .required-star {
         color: #dc2626;

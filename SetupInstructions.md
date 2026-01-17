@@ -198,6 +198,42 @@ This project uses TypeScript. You need to build the script before using it in Go
       { "listView": { "view": { "toggleEnabled": true, "defaultMode": "cards" } } }
       ```
 
+    - Want **quick search presets** under the search bar in cards view? Add a BUTTON question with `button.action: "listViewSearchPreset"`:
+
+      ```json
+      {
+        "id": "PRESET_ACTIVE",
+        "type": "BUTTON",
+        "label": { "en": "Active recipes" },
+        "button": {
+          "action": "listViewSearchPreset",
+          "mode": "text",
+          "keyword": "Active"
+        }
+      }
+      ```
+
+      Optional: add an inline title before the preset buttons:
+
+      ```json
+      { "listView": { "search": { "presetsTitle": { "en": "View recipes:" } } } }
+      ```
+
+      Advanced mode example (filters):
+
+      ```json
+      {
+        "id": "PRESET_STATUS",
+        "type": "BUTTON",
+        "label": { "en": "Closed (status)" },
+        "button": {
+          "action": "listViewSearchPreset",
+          "mode": "advanced",
+          "fieldFilters": { "status": "Closed" }
+        }
+      }
+      ```
+
     - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
       - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.
 
@@ -299,14 +335,14 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
-      Optional: show a **legend in the sticky bottom bar** to explain icons / table elements. The legend is **only shown when you define it** (recommended when you use `icon` in rule columns):
+      Optional: show a **legend in the sticky bottom bar** to explain icons / table elements. The legend is **only shown when you define it** (recommended when you use `icon` in rule columns). Legend text supports basic inline Markdown (`**bold**`, `*italic*`, `code`, and links):
 
       ```json
       {
         "listView": {
           "legend": [
-            { "icon": "warning", "text": { "en": "Needs attention (e.g. Missing DATE)" } },
-            { "icon": "check", "text": { "en": "OK / complete" } },
+            { "icon": "warning", "text": { "en": "**Needs attention** (e.g. Missing DATE)" } },
+            { "icon": "check", "text": { "en": "**OK:** ready for *Meal Production*" } },
             { "text": { "en": "Click Action to open the record." } }
           ]
         }
@@ -1288,6 +1324,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
      ],
      "statusFieldId": "STATUS_FIELD",
      "statusTransitions": {
+      "inProgress": "In progress",
+      "reOpened": "Re-opened",
        "onPdf": "PDF ready",
        "onEmail": "Emailed",
        "onClose": "Closed"
@@ -1326,8 +1364,11 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
      - `fallbackEmail` (optional): used when the lookup fails.
    - `emailCc` / `emailBcc`: same structure as `emailRecipients`, useful for copying chefs/managers automatically.
    - `statusFieldId` (optional): question ID to overwrite when actions run. If omitted we use the auto-generated `Status` column in the response tab.
-   - `statusTransitions`: strings written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
-  - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes the configured `status` (default `In progress`). If the record’s status is `Closed`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI shows a “Refresh record” banner to avoid overwriting remote changes. The first time a user opens Create/Edit/Copy, a one-time autosave explainer overlay is shown (customize via `autosaveNotice.*` in `src/web/systemStrings.json`).
+  - `statusTransitions`: status values written by follow-up actions and used by the web app. Supports localized values.
+    - `inProgress`: value for draft/in-progress records (used by autosave/list view defaults).
+    - `reOpened`: value written when explicitly re-opening a closed record.
+    - `onPdf`, `onEmail`, `onClose`: values written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
+ - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes `autoSave.status` (or `statusTransitions.inProgress`, default `In progress`). If the record’s status matches `statusTransitions.onClose`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI shows a “Refresh record” banner to avoid overwriting remote changes. The first time a user opens Create/Edit/Copy, a one-time autosave explainer overlay is shown (customize via `autosaveNotice.*` in `src/web/systemStrings.json`).
 
 2. **Provide templates**:
    - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).

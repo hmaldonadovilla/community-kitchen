@@ -24,6 +24,7 @@ import {
   WebQuestionDefinition
 } from '../../types';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
+import { resolveStatusPillKey } from '../utils/statusPill';
 import { FormErrors, LineItemState, OptionState } from '../types';
 import { isEmptyValue } from '../utils/values';
 import {
@@ -353,6 +354,11 @@ const FormView: React.FC<FormViewProps> = ({
       </div>
     ));
   };
+  const recordStatusText = (recordMeta?.status || '').toString().trim();
+  const recordStatusKey = useMemo(
+    () => resolveStatusPillKey(recordStatusText, definition.followup?.statusTransitions),
+    [definition.followup?.statusTransitions, recordStatusText]
+  );
   const isFieldLockedByDedup = (_fieldId: string): boolean => false;
   const dedupKeyFieldIds = useMemo(() => {
     if (dedupKeyFieldIdMap) {
@@ -7353,6 +7359,19 @@ const FormView: React.FC<FormViewProps> = ({
   return (
     <>
       <div className="ck-form-sections">
+        {recordStatusText ? (
+          <div className="ck-record-status-row">
+            <span className="ck-record-status-label">{tSystem('list.meta.status', language, 'Status')}</span>
+            <span
+              className="ck-status-pill"
+              title={recordStatusText}
+              aria-label={`Status: ${recordStatusText}`}
+              data-status-key={recordStatusKey || undefined}
+            >
+              {recordStatusText}
+            </span>
+          </div>
+        ) : null}
         {showWarningsBanner && warningTop && warningTop.length ? (
           <div
             role="status"
