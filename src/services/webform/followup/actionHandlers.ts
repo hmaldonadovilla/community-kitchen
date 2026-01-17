@@ -13,6 +13,7 @@ import { addPlaceholderVariants, applyPlaceholders } from './utils';
 import { buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
 import { resolveLocalizedStringValue, resolveRecipients, resolveTemplateId } from './recipients';
+import { resolveStatusTransitionValue } from '../../../domain/statusTransitions';
 
 export const handleCreatePdfAction = (args: {
   form: FormConfig;
@@ -42,7 +43,7 @@ export const handleCreatePdfAction = (args: {
   if (ctx.columns.pdfUrl && pdfArtifact.url) {
     ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
   }
-  const statusValue = followup.statusTransitions?.onPdf;
+  const statusValue = resolveStatusTransitionValue(followup.statusTransitions, 'onPdf', ctx.record?.language);
   let updatedAt = statusValue
     ? submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
     : null;
@@ -126,7 +127,7 @@ export const handleSendEmailAction = (args: {
     debugLog('followup.email.failed', { error: err ? err.toString() : 'unknown' });
     return { success: false, message: 'Failed to send follow-up email.' };
   }
-  const statusValue = followup.statusTransitions?.onEmail;
+  const statusValue = resolveStatusTransitionValue(followup.statusTransitions, 'onEmail', ctx.record?.language);
   let updatedAt = statusValue
     ? submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
     : null;
@@ -155,7 +156,9 @@ export const handleCloseRecordAction = (args: {
   if (!ctx) {
     return { success: false, message: 'Record not found.' };
   }
-  const statusValue = followup.statusTransitions?.onClose || 'Closed';
+  const statusValue = resolveStatusTransitionValue(followup.statusTransitions, 'onClose', ctx.record?.language, {
+    includeDefaultOnClose: true
+  });
   const updatedAt =
     submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId) ||
     submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);

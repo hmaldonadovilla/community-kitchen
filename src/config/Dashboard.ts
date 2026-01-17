@@ -1493,6 +1493,8 @@ export class Dashboard {
     const transitionsSource = source.statusTransitions || source.transitions || {};
     if (transitionsSource && typeof transitionsSource === 'object') {
       const transitions: FollowupStatusConfig = {};
+      if (transitionsSource.inProgress) transitions.inProgress = transitionsSource.inProgress;
+      if (transitionsSource.reOpened) transitions.reOpened = transitionsSource.reOpened;
       if (transitionsSource.onPdf) transitions.onPdf = transitionsSource.onPdf;
       if (transitionsSource.onEmail) transitions.onEmail = transitionsSource.onEmail;
       if (transitionsSource.onClose) transitions.onClose = transitionsSource.onClose;

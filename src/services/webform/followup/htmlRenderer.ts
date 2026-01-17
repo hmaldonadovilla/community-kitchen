@@ -5,6 +5,7 @@ import { resolveTemplateId } from './recipients';
 import { addConsolidatedPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
 import { addPlaceholderVariants, applyPlaceholders, formatTemplateValueForHtml } from './utils';
+import { StatusTransitionKey, resolveStatusTransitionKey } from '../../../domain/statusTransitions';
 import {
   getCachedHtmlTemplate,
   readHtmlTemplateRawFromDrive,
@@ -14,6 +15,8 @@ import { applyHtmlLineItemBlocks } from './htmlLineItemBlocks';
 import { linkifyUploadedFileUrlsInHtml } from './fileLinks';
 import { parseBundledHtmlTemplateId } from './bundledHtmlTemplates';
 import { containsScriptTag, extractScriptTags, restoreScriptTags, stripScriptTags } from './scriptTags';
+
+const STATUS_PILL_KEYS: StatusTransitionKey[] = ['onClose', 'inProgress', 'reOpened'];
 
 const escapeAttr = (value: string): string => {
   return (value || '')
@@ -149,6 +152,11 @@ export const renderHtmlFromHtmlTemplate = (args: {
     const validationWarnings = collectValidationWarnings(questions, record);
     addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'), 'PARAGRAPH', formatTemplateValueForHtml);
     addFileIconPlaceholders(placeholders, questions, record);
+    const statusKey = resolveStatusTransitionKey(record.status, form.followupConfig?.statusTransitions, {
+      includeDefaultOnClose: true,
+      keys: STATUS_PILL_KEYS
+    });
+    addPlaceholderVariants(placeholders, 'STATUS_KEY', statusKey || '', undefined, formatTemplateValueForHtml);
 
     // Apply Doc-like line-item directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE) for HTML blocks,
     // then apply normal placeholder replacement across the full document.
