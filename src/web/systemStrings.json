@@ -62,6 +62,13 @@
     },
     "refresh": { "en": "Refresh record", "fr": "Actualiser l'enregistrement", "nl": "Record vernieuwen" }
   },
+  "navigation": {
+    "waitSaving": {
+      "en": "Please wait while we save your changes...",
+      "fr": "Veuillez patienter pendant que nous enregistrons vos modifications...",
+      "nl": "Wacht even terwijl we je wijzigingen opslaan..."
+    }
+  },
   "actions": {
     "home": { "en": "Home", "fr": "Accueil", "nl": "Start" },
     "create": { "en": "Create", "fr": "Créer", "nl": "Aanmaken" },
@@ -326,4 +333,3 @@
     }
   }
 }
-

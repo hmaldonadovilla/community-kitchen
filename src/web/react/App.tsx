@@ -415,6 +415,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   // Feature overlays (kept out of App.tsx as much as possible; App only wires them).
   const customConfirm = useConfirmDialog({ closeOnKey: view, eventPrefix: 'ui.customConfirm', onDiagnostic: logEvent });
   const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
+  const navigateHomeBusy = useBlockingOverlay({ eventPrefix: 'navigate.home.busy', onDiagnostic: logEvent });
   const updateRecordBusyOpen = updateRecordBusy.state.open;
   const autoSaveNoticeStorageKey = useMemo(() => {
     const key = (formKey || '').toString().trim() || 'default';
@@ -442,6 +443,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         if (createFlowRef.current && !createFlowUserEditedRef.current) {
           createFlowUserEditedRef.current = true;
           logEvent('autosave.armed.userEdit', { fieldPath: fieldPath || fieldId || null });
+        }
+        if (!autoSaveUserEditedRef.current) {
+          autoSaveUserEditedRef.current = true;
         }
 
         // Mark dirty immediately on user edits so navigation handlers can flush autosave
@@ -671,6 +675,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const autoSaveDirtyRef = useRef<boolean>(false);
   const autoSaveInFlightRef = useRef<boolean>(false);
   const autoSaveQueuedRef = useRef<boolean>(false);
+  const autoSaveUserEditedRef = useRef<boolean>(false);
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   /**
    * Monotonic session counter used to ignore late async results (autosave, uploads, etc)
@@ -679,10 +684,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const recordSessionRef = useRef<number>(0);
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
   const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
-  const pendingNavigationRef = useRef<{ target: 'list'; trigger: string } | null>(null);
   const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const [uploadNavigationNoticeOpen, setUploadNavigationNoticeOpen] = useState(false);
-  const [autoSaveDrainTick, setAutoSaveDrainTick] = useState(0);
+  const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
     setUploadQueueSize(uploadQueueRef.current.size);
   }, []);
@@ -858,6 +861,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         if (!createFlowUserEditedRef.current) {
           createFlowUserEditedRef.current = true;
           logEvent('autosave.armed.userEdit', { fieldPath });
+        }
+        if (!autoSaveUserEditedRef.current) {
+          autoSaveUserEditedRef.current = true;
         }
 
         // Dedup checks are triggered on blur; avoid holding autosave here.
@@ -1146,6 +1152,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         createFlowRef.current = false;
       }
       createFlowUserEditedRef.current = true;
+      if (!isReloadingCurrentCreateFlow) {
+        autoSaveUserEditedRef.current = false;
+      }
       dedupHoldRef.current = false;
       const normalized = normalizeRecordValues(definition, snapshot.values || {});
       const initialLineItems = buildInitialLineItems(definition, normalized);
@@ -2030,6 +2039,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       bumpRecordSession({ reason: 'createNew', nextRecordId: null });
       createFlowRef.current = true;
       createFlowUserEditedRef.current = false;
+      autoSaveUserEditedRef.current = false;
       dedupHoldRef.current = false;
       autoSaveDirtyRef.current = false;
       if (autoSaveTimerRef.current) {
@@ -2068,6 +2078,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     bumpRecordSession({ reason: 'duplicateCurrent', nextRecordId: null });
     createFlowRef.current = true;
     createFlowUserEditedRef.current = false;
+    autoSaveUserEditedRef.current = false;
     dedupHoldRef.current = false;
     // Preserve current values/line items but clear record context so the next submit creates a new record.
     autoSaveDirtyRef.current = false;
@@ -3666,7 +3677,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         logEvent('autosave.exception', { reason, message: errText });
       } finally {
         autoSaveInFlightRef.current = false;
-        setAutoSaveDrainTick(tick => tick + 1);
         if (autoSaveQueuedRef.current && !submittingRef.current) {
           autoSaveQueuedRef.current = false;
           if (autoSaveTimerRef.current) {
@@ -3698,7 +3708,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     async (reason: string): Promise<boolean> => {
       try {
         if (!autoSaveEnabled) return false;
-        if (viewRef.current !== 'form') return false;
+        if (viewRef.current !== 'form' && viewRef.current !== 'summary') return false;
         if (submittingRef.current) return false;
         if (isClosedRecord) return false;
         if (recordStaleRef.current) return false;
@@ -3737,82 +3747,53 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   );
 
   const requestNavigateToList = useCallback(
-    (trigger: string) => {
-      const uploadsInFlight = uploadQueueRef.current.size > 0;
-      if (uploadsInFlight) {
-        pendingNavigationRef.current = { target: 'list', trigger };
-        setUploadNavigationNoticeOpen(true);
-        logEvent('navigate.list.blocked.uploads', {
-          trigger,
-          uploadsInFlight
-        });
+    async (trigger: string) => {
+      if (viewRef.current === 'list') return;
+      if (navigateHomeInFlightRef.current) return;
+      const needsWait =
+        uploadQueueRef.current.size > 0 || autoSaveInFlightRef.current || autoSaveDirtyRef.current;
+      if (!needsWait) {
+        setView('list');
+        setStatus(null);
+        setStatusLevel(null);
         return;
       }
-      pendingNavigationRef.current = null;
-      setUploadNavigationNoticeOpen(false);
-      // Kick autosave in the background (do not block navigation).
-      void flushAutoSaveBeforeNavigate(trigger);
-      setView('list');
-      setStatus(null);
-      setStatusLevel(null);
-    },
-    [flushAutoSaveBeforeNavigate, logEvent]
-  );
 
-  const resumePendingNavigation: (reason: string) => boolean = useCallback(
-    (reason: string): boolean => {
-      if (uploadQueueRef.current.size > 0) return false;
-      const pending = pendingNavigationRef.current;
-      if (!pending || pending.target !== 'list') return false;
-      logEvent('navigate.list.resumeAfterUploads', { trigger: pending.trigger, reason });
-      pendingNavigationRef.current = null;
-      setUploadNavigationNoticeOpen(false);
-      // Kick autosave in the background (do not block navigation).
-      void flushAutoSaveBeforeNavigate(reason);
-      setView('list');
-      setStatus(null);
-      setStatusLevel(null);
-      return true;
+      navigateHomeInFlightRef.current = true;
+      const startedAt = Date.now();
+      const seq = navigateHomeBusy.lock({
+        title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
+        message: tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
+        kind: 'navigateHome',
+        diagnosticMeta: { trigger }
+      });
+      logEvent('navigate.list.wait.start', {
+        trigger,
+        uploadsInFlight: uploadQueueRef.current.size,
+        autoSaveInFlight: autoSaveInFlightRef.current,
+        dirty: autoSaveDirtyRef.current
+      });
+      try {
+        const sleep = (ms: number) => new Promise<void>(r => globalThis.setTimeout(r, ms));
+        while (uploadQueueRef.current.size > 0 || autoSaveInFlightRef.current) {
+          await sleep(80);
+        }
+        await flushAutoSaveBeforeNavigate(trigger);
+        logEvent('navigate.list.wait.done', { trigger, durationMs: Date.now() - startedAt });
+        setView('list');
+        setStatus(null);
+        setStatusLevel(null);
+      } finally {
+        navigateHomeBusy.unlock(seq, { durationMs: Date.now() - startedAt });
+        navigateHomeInFlightRef.current = false;
+      }
     },
-    [flushAutoSaveBeforeNavigate, logEvent]
+    [flushAutoSaveBeforeNavigate, logEvent, navigateHomeBusy]
   );
 
   const handleGoHome = useCallback(() => {
-    requestNavigateToList('navigate.home');
+    void requestNavigateToList('navigate.home');
   }, [requestNavigateToList]);
-
-  const cancelUploadsAndLeave = useCallback(() => {
-    const trigger = pendingNavigationRef.current?.trigger || 'navigate.home';
-    logEvent('navigate.list.cancelUploads', {
-      trigger,
-      uploadsInFlight: uploadQueueRef.current.size,
-      autoSaveInFlight: autoSaveInFlightRef.current
-    });
-    bumpRecordSession({ reason: 'navigate.cancelUploads', nextRecordId: selectedRecordIdRef.current || null });
-    autoSaveDirtyRef.current = false;
-    autoSaveQueuedRef.current = false;
-    autoSaveInFlightRef.current = false;
-    if (autoSaveTimerRef.current) {
-      globalThis.clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    pendingNavigationRef.current = null;
-    setUploadNavigationNoticeOpen(false);
-    try {
-      uploadQueueRef.current.clear();
-    } catch (_) {
-      // ignore
-    }
-    syncUploadQueueSize();
-    setDraftSave({ phase: 'idle' });
-    const snapshot = selectedRecordSnapshotRef.current;
-    if (snapshot) {
-      applyRecordSnapshot(snapshot);
-    }
-    setView('list');
-    setStatus(null);
-    setStatusLevel(null);
-  }, [applyRecordSnapshot, bumpRecordSession, logEvent, syncUploadQueueSize]);
 
   const handleGoSummary = useCallback(() => {
     if (!summaryViewEnabled) return;
@@ -3829,11 +3810,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
     setView('summary');
   }, [flushAutoSaveBeforeNavigate, summaryViewEnabled]);
-
-  useEffect(() => {
-    if (uploadQueueSize !== 0) return;
-    void resumePendingNavigation('navigate.list.afterUploads');
-  }, [autoSaveDrainTick, resumePendingNavigation, uploadQueueSize]);
 
   // Release autosave hold after dedup evaluation completes (or keys become incomplete),
   // and persist any pending changes once it's safe.
@@ -3861,6 +3837,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
     // In create-flow, autosave must still wait for the first real user edit.
     if (createFlowRef.current && !createFlowUserEditedRef.current) return;
+    if (!autoSaveUserEditedRef.current) return;
     // If the record is stale, do not resume autosave; user must refresh first.
     if (recordStaleRef.current) return;
     if (!autoSaveDirtyRef.current) return;
@@ -3897,6 +3874,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
     // In create-flow, do not autosave until the user actually changes a field value.
     if (createFlowRef.current && !createFlowUserEditedRef.current) return;
+    if (!autoSaveUserEditedRef.current) return;
     // If the record is stale (modified elsewhere), do not schedule autosave.
     if (recordStaleRef.current) {
       autoSaveDirtyRef.current = false;
@@ -5310,68 +5288,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       </div>
     ) : null;
 
-  const uploadNavigationNotice =
-    uploadNavigationNoticeOpen && (view === 'form' || view === 'summary') ? (
-      <div
-        role="status"
-        aria-live="polite"
-        style={{
-          padding: '12px 14px',
-          borderRadius: 14,
-          border: '1px solid rgba(59,130,246,0.35)',
-          background: 'rgba(59,130,246,0.12)',
-          color: '#0f172a',
-          fontWeight: 900,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10
-        }}
-      >
-        <div>{tSystem('uploads.pendingNavigation.title', language, 'Finishing your uploads')}</div>
-        <div className="muted" style={{ fontWeight: 700 }}>
-          {tSystem(
-            'uploads.pendingNavigation.body',
-            language,
-            'We are still adding your files. We will take you back to the list when they finish. You can leave now, but uploads may fail and not appear.'
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => {
-              const trigger = pendingNavigationRef.current?.trigger || 'navigate.home';
-              logEvent('navigate.list.uploads.stay', { trigger });
-              setUploadNavigationNoticeOpen(false);
-            }}
-            style={{
-              padding: '10px 12px',
-              borderRadius: 12,
-              border: '1px solid rgba(15,23,42,0.18)',
-              background: '#ffffff',
-              color: '#0f172a',
-              fontWeight: 900
-            }}
-          >
-            {tSystem('uploads.pendingNavigation.stay', language, 'Stay and finish')}
-          </button>
-          <button
-            type="button"
-            onClick={cancelUploadsAndLeave}
-            style={{
-              padding: '10px 12px',
-              borderRadius: 12,
-              border: '1px solid rgba(239,68,68,0.35)',
-              background: 'rgba(239,68,68,0.14)',
-              color: '#991b1b',
-              fontWeight: 900
-            }}
-          >
-            {tSystem('uploads.pendingNavigation.leave', language, 'Leave without saving uploads')}
-          </button>
-        </div>
-      </div>
-    ) : null;
-
   const recordStaleTopNotice =
     (view === 'form' || view === 'summary') && recordStale ? (
       <div
@@ -5448,10 +5364,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     view === 'form' && (definition as any)?.steps?.mode === 'guided' ? <div id="ck-guided-stepsbar-slot" /> : null;
 
   const topBarNotice =
-    guidedStepsTopSlot || uploadNavigationNotice || recordStaleTopNotice || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
+    guidedStepsTopSlot || recordStaleTopNotice || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {guidedStepsTopSlot}
-        {uploadNavigationNotice}
         {recordStaleTopNotice}
         {dedupCheckingNotice}
         {dedupTopNotice}
@@ -5726,6 +5641,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         open={updateRecordBusy.state.open}
         title={updateRecordBusy.state.title || tSystem('common.loading', language, 'Loading…')}
         message={updateRecordBusy.state.message || tSystem('draft.savingShort', language, 'Saving…')}
+      />
+
+      <BlockingOverlay
+        open={navigateHomeBusy.state.open}
+        title={navigateHomeBusy.state.title || tSystem('draft.savingShort', language, 'Saving…')}
+        message={navigateHomeBusy.state.message || tSystem('navigation.waitSaving', language, 'Please wait while we save your changes...')}
+        zIndex={12050}
       />
 
       <ReportOverlay
