@@ -4,7 +4,11 @@ import { fetchDataSource } from '../data/dataSources';
 
 export const toOptionSet = (question: any): OptionSet => {
   if (question?.options?.en || question?.options?.fr || question?.options?.nl) {
-    return question.options as OptionSet;
+    const optionSet = question.options as OptionSet;
+    if (!optionSet.raw && Array.isArray(question?.optionsRaw)) {
+      return { ...optionSet, raw: question.optionsRaw as any[] };
+    }
+    return optionSet;
   }
   if (question.options) {
     const opts = question.options as any;
@@ -23,7 +27,8 @@ export const toOptionSet = (question: any): OptionSet => {
       const optionSet: OptionSet = {
         en: normalized,
         fr: (question as any).optionsFr,
-        nl: (question as any).optionsNl
+        nl: (question as any).optionsNl,
+        raw: Array.isArray(question?.optionsRaw) ? (question.optionsRaw as any[]) : undefined
       };
       if (Object.keys(tooltips).length) optionSet.tooltips = tooltips;
       return optionSet;
@@ -133,6 +138,13 @@ export const loadOptionsFromDataSource = async (
     const valueKey = pickValueKey();
     if (!valueKey) return null;
     const tooltips: Record<string, string> = {};
+    const rawWithValue = items.map((row: any) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+      const rawVal = row?.[valueKey];
+      const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString();
+      if (!val) return row;
+      return { ...row, __ckOptionValue: val };
+    });
     const mappedValues = items
       .map((row: any) => {
         const rawVal = row?.[valueKey];
@@ -149,12 +161,10 @@ export const loadOptionsFromDataSource = async (
     const optionSet = buildOptionSet(mappedValues);
     if (optionSet) {
       optionSet.tooltips = tooltips;
-      optionSet.raw = items;
+      optionSet.raw = rawWithValue;
     }
     return optionSet;
   } catch (_) {
     return null;
   }
 };
-
-

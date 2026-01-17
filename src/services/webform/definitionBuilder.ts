@@ -61,7 +61,8 @@ export class DefinitionBuilder {
         ? {
             en: q.options,
             fr: q.optionsFr,
-            nl: q.optionsNl
+            nl: q.optionsNl,
+            raw: q.optionsRaw
           }
         : undefined,
       lineItemConfig: q.lineItemConfig,

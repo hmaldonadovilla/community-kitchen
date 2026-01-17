@@ -476,7 +476,14 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
         } as any;
       });
 
-      if (!parsedRows.length && q.lineItemConfig?.addMode !== 'overlay' && q.lineItemConfig?.addMode !== 'auto') {
+      const addMode = (q.lineItemConfig?.addMode || '').toString().trim().toLowerCase();
+      if (
+        !parsedRows.length &&
+        addMode !== 'overlay' &&
+        addMode !== 'auto' &&
+        addMode !== 'selectoroverlay' &&
+        addMode !== 'selector-overlay'
+      ) {
         const rawMinRows = q.lineItemConfig?.minRows;
         const minRows = (() => {
           if (rawMinRows === undefined || rawMinRows === null) return 0;

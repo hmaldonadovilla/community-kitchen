@@ -6,6 +6,7 @@ export interface OptionItem {
   label: string;
   labels: Record<string, string>;
   tooltip?: string;
+  searchText?: string;
 }
 
 const normalize = (val: string | number | null | undefined): string => {
@@ -129,6 +130,57 @@ const normalizeValue = (value: string | number | null | undefined): string => {
   return value.toString();
 };
 
+const SEARCH_INTERNAL_KEYS = new Set(['__ckOptionValue']);
+
+const normalizeSearchValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.map(v => normalizeSearchValue(v)).filter(Boolean).join(' ');
+  if (typeof value === 'object') return '';
+  return String(value).trim();
+};
+
+const buildRawOptionIndex = (raw?: any[]): Map<string, any> => {
+  const index = new Map<string, any>();
+  if (!Array.isArray(raw)) return index;
+  raw.forEach(row => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return;
+    const candidate =
+      row.__ckOptionValue ??
+      row.value ??
+      row.id ??
+      row.label ??
+      row.optionEn ??
+      row.option ??
+      '';
+    const key = normalizeValue(candidate);
+    if (!key || index.has(key)) return;
+    index.set(key, row);
+  });
+  return index;
+};
+
+const buildSearchText = (args: {
+  value: string;
+  label: string;
+  labels: Record<string, string>;
+  raw?: any;
+}): string => {
+  const { value, label, labels, raw } = args;
+  const parts = new Set<string>();
+  [value, label, labels.en, labels.fr, labels.nl].forEach(entry => {
+    const normalized = normalizeSearchValue(entry);
+    if (normalized) parts.add(normalized);
+  });
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    Object.entries(raw).forEach(([key, val]) => {
+      if (SEARCH_INTERNAL_KEYS.has(key)) return;
+      const normalized = normalizeSearchValue(val);
+      if (normalized) parts.add(normalized);
+    });
+  }
+  return Array.from(parts).join(' ').toLowerCase();
+};
+
 export function buildLocalizedOptions(
   options: OptionSet,
   allowed: string[],
@@ -138,6 +190,7 @@ export function buildLocalizedOptions(
   const langKey = (language || 'en').toString().toLowerCase();
   const labels = (options as any)[langKey] || options.en || [];
   const baseOpts = options.en || labels;
+  const rawIndex = buildRawOptionIndex(options.raw as any[] | undefined);
   const allowedSet = allowed ? new Set(allowed) : null;
   const values = allowed ? allowed : baseOpts;
   const seen = new Set<string>();
@@ -156,6 +209,7 @@ export function buildLocalizedOptions(
             return value;
           })();
     const resolvedIndex = labelIdx >= 0 ? labelIdx : baseOpts.findIndex((opt: string) => opt === value);
+    const rawRow = rawIndex.get(value);
     return {
       value,
       label,
@@ -165,6 +219,16 @@ export function buildLocalizedOptions(
         nl: options.nl?.[resolvedIndex] || value
       },
       tooltip: (options as any)?.tooltips?.[value],
+      searchText: buildSearchText({
+        value,
+        label,
+        labels: {
+          en: options.en?.[resolvedIndex] || value,
+          fr: options.fr?.[resolvedIndex] || value,
+          nl: options.nl?.[resolvedIndex] || value
+        },
+        raw: rawRow
+      }),
       // carry original index to keep a stable secondary sort
       originalIndex
     } as OptionItem & { originalIndex: number };
@@ -196,6 +260,7 @@ export function buildLocalizedOptions(
     value: item.value,
     label: item.label,
     labels: item.labels,
-    tooltip: (item as any).tooltip
+    tooltip: (item as any).tooltip,
+    searchText: (item as any).searchText
   }));
 }
