@@ -1083,6 +1083,17 @@ export interface LineItemTotalConfig {
   decimalPlaces?: number;
 }
 
+export interface LineItemDedupRule {
+  /**
+   * Field ids that must be unique together within a line-item group or subgroup.
+   */
+  fields: string[];
+  /**
+   * Optional localized error message shown when a duplicate is detected.
+   */
+  message?: LocalizedString;
+}
+
 export interface LineItemGroupConfig {
   id?: string;
   label?: LocalizedString;
@@ -1097,6 +1108,7 @@ export interface LineItemGroupConfig {
   anchorFieldId?: string; // field to drive overlay multi-add
   addMode?: 'overlay' | 'selectorOverlay' | 'inline' | 'auto';
   sectionSelector?: LineItemSelectorConfig;
+  dedupRules?: LineItemDedupRule[];
   totals?: LineItemTotalConfig[];
   fields: LineItemFieldConfig[];
   subGroups?: LineItemGroupConfig[]; // nested line item groups driven by this header group

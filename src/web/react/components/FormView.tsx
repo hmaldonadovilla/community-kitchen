@@ -15,6 +15,7 @@ import { tSystem } from '../../systemStrings';
 import {
   FieldValue,
   LangCode,
+  LineItemDedupRule,
   LineItemRowState,
   LocalizedString,
   OptionSet,
@@ -70,6 +71,7 @@ import { findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEn
 import {
   buildLineContextId,
   buildSubgroupKey,
+  buildLineItemDedupKey,
   cascadeRemoveLineItemRows,
   computeRowNonMatchOptions,
   parseRowNonMatchOptions,
@@ -94,6 +96,12 @@ import { validateForm } from '../app/submission';
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
+
+const lineItemDedupDefaultMessage: LocalizedString = {
+  en: 'This entry already exists in this list.',
+  fr: 'Cette entrée existe déjà dans cette liste.',
+  nl: 'Deze invoer bestaat al in deze lijst.'
+};
 
 interface SubgroupOverlayState {
   open: boolean;
@@ -355,6 +363,33 @@ const FormView: React.FC<FormViewProps> = ({
       </div>
     ));
   };
+  const normalizeLineItemDedupRules = (raw: any): LineItemDedupRule[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map(rule => {
+        if (!rule || typeof rule !== 'object') return null;
+        const rawFields = (rule as any).fields ?? (rule as any).fieldIds ?? (rule as any).keys ?? (rule as any).keyFields;
+        const fields = (() => {
+          if (Array.isArray(rawFields)) {
+            return rawFields
+              .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
+              .filter(Boolean);
+          }
+          if (typeof rawFields === 'string') {
+            return rawFields
+              .split(',')
+              .map(v => v.trim())
+              .filter(Boolean);
+          }
+          return [];
+        })();
+        if (!fields.length) return null;
+        return { fields, message: (rule as any).message } as LineItemDedupRule;
+      })
+      .filter(Boolean) as LineItemDedupRule[];
+  };
+  const resolveLineItemDedupMessage = (rule: LineItemDedupRule): string =>
+    resolveLocalizedString(rule.message || lineItemDedupDefaultMessage, language, 'This entry already exists in this list.');
   const recordStatusText = (recordMeta?.status || '').toString().trim();
   const recordStatusKey = useMemo(
     () => resolveStatusPillKey(recordStatusText, definition.followup?.statusTransitions),
@@ -573,6 +608,25 @@ const FormView: React.FC<FormViewProps> = ({
     if (!nonMatchWarningModeGroups.length) return;
     onDiagnostic?.('form.lineItems.nonMatchWarningMode.enabled', { groups: nonMatchWarningModeGroups });
   }, [nonMatchWarningModeGroups, onDiagnostic]);
+
+  const lineItemDedupGroups = useMemo(() => {
+    return (definition.questions || [])
+      .filter(q => q.type === 'LINE_ITEM_GROUP')
+      .map(q => {
+        const rules = normalizeLineItemDedupRules((q.lineItemConfig as any)?.dedupRules);
+        if (!rules.length) return null;
+        return {
+          id: q.id,
+          rules: rules.map(rule => rule.fields)
+        };
+      })
+      .filter(Boolean) as Array<{ id: string; rules: string[][] }>;
+  }, [definition.questions]);
+
+  useEffect(() => {
+    if (!lineItemDedupGroups.length) return;
+    onDiagnostic?.('form.lineItems.dedupRules.enabled', { groups: lineItemDedupGroups });
+  }, [lineItemDedupGroups, onDiagnostic]);
 
   // Clamp/initialize the active step when step config or validity changes.
   useEffect(() => {
@@ -3819,6 +3873,59 @@ const FormView: React.FC<FormViewProps> = ({
     const existingRows = lineItems[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
     const nextRowValues: Record<string, FieldValue> = { ...(currentRow?.values || {}), [field.id]: value };
+    const dedupRules = normalizeLineItemDedupRules((group.lineItemConfig as any)?.dedupRules);
+    const dedupRuleMessages = dedupRules
+      .map(rule => {
+        const fieldId = (rule.fields || []).map(fid => (fid ?? '').toString().trim()).filter(Boolean)[0];
+        if (!fieldId) return null;
+        return {
+          fieldId,
+          message: resolveLineItemDedupMessage(rule),
+          fields: rule.fields
+        };
+      })
+      .filter(Boolean) as Array<{ fieldId: string; message: string; fields: string[] }>;
+    const dedupConflict = (() => {
+      for (const rule of dedupRules) {
+        const fields = (rule.fields || []).map(fid => (fid ?? '').toString().trim()).filter(Boolean);
+        if (!fields.length) continue;
+        const nextKey = buildLineItemDedupKey(nextRowValues, fields);
+        if (!nextKey) continue;
+        const match = existingRows.find(row => {
+          if (row.id === rowId) return false;
+          const key = buildLineItemDedupKey((row.values || {}) as Record<string, FieldValue>, fields);
+          return key === nextKey;
+        });
+        if (match) {
+          return {
+            fieldId: fields[0],
+            message: resolveLineItemDedupMessage(rule),
+            fields,
+            matchRowId: match.id
+          };
+        }
+      }
+      return null;
+    })();
+    if (dedupConflict) {
+      const conflictPath = `${group.id}__${dedupConflict.fieldId}__${rowId}`;
+      setErrors(prev => {
+        const next = { ...prev };
+        dedupRuleMessages.forEach(entry => {
+          const key = `${group.id}__${entry.fieldId}__${rowId}`;
+          if (next[key] === entry.message) delete next[key];
+        });
+        next[conflictPath] = dedupConflict.message;
+        return next;
+      });
+      onDiagnostic?.('lineItems.dedup.blocked', {
+        groupId: group.id,
+        rowId,
+        fields: dedupConflict.fields,
+        matchRowId: dedupConflict.matchRowId
+      });
+      return;
+    }
     const nonMatchKeys = computeRowNonMatchKeys({ group, rowValues: nextRowValues });
     const existingNonMatchKeys = parseRowNonMatchOptions((currentRow?.values as any)?.[ROW_NON_MATCH_OPTIONS_KEY]);
     const nonMatchSame =
@@ -3850,6 +3957,10 @@ const FormView: React.FC<FormViewProps> = ({
       const next = { ...prev };
       delete next[group.id];
       delete next[`${group.id}__${field.id}__${rowId}`];
+      dedupRuleMessages.forEach(entry => {
+        const key = `${group.id}__${entry.fieldId}__${rowId}`;
+        if (next[key] === entry.message) delete next[key];
+      });
       return next;
     });
     if (onSelectionEffect) {
@@ -5665,12 +5776,7 @@ const FormView: React.FC<FormViewProps> = ({
     const parentLabel = parentGroup ? resolveLabel(parentGroup, language) : (parsed?.parentGroupId || 'Group');
 
     const rows = lineItems[subKey] || [];
-    const orderedRows = [...rows].sort((a, b) => {
-                      const aAuto = !!a.autoGenerated;
-                      const bAuto = !!b.autoGenerated;
-                      if (aAuto === bAuto) return 0;
-                      return aAuto ? -1 : 1;
-                    });
+    const orderedRows = [...rows];
 
     const totalsCfg = subConfig ? { ...subConfig, fields: subConfig.fields || [] } : undefined;
     const totals = totalsCfg ? computeTotals({ config: totalsCfg as any, rows: orderedRows }, language) : [];

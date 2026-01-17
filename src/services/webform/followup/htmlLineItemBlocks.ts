@@ -147,6 +147,7 @@ const expandBlock = (args: {
     if (repeatDirective.kind === 'GROUP_TABLE') {
       const groupedValues = collectGroupFieldValues(rows, repeatDirective.fieldId);
       if (!groupedValues.length) return '';
+      const orderBy = extractOrderByFromText(blockText);
       const out: string[] = [];
       groupedValues.forEach((groupValue, idx) => {
         const scopedRows = rows.filter(r => normalizeText(r?.[repeatDirective.fieldId]) === normalizeText(groupValue));
@@ -154,7 +155,11 @@ const expandBlock = (args: {
         const template = stripDirectiveTokens(
           replaceRepeatDirectiveToken(blockText, repeatDirective, formatTemplateValue(groupValue))
         );
-        scopedRows.forEach((row, rowIdx) => {
+        const orderedRows =
+          orderBy && orderBy.keys.length
+            ? applyOrderBy({ rows: scopedRows, orderBy, group, opts: { subConfig: subConfig as any, subToken: targetSubToken } })
+            : scopedRows;
+        orderedRows.forEach((row, rowIdx) => {
           const rendered = replaceLineItemPlaceholders(template, group, row, {
             subGroup: subConfig as any,
             subGroupToken: targetSubToken
@@ -332,11 +337,42 @@ export const applyHtmlLineItemBlocks = (args: {
     if (repeatDirective.kind === 'GROUP_TABLE') {
       const groupedValues = collectGroupFieldValues(rows, repeatDirective.fieldId);
       if (!groupedValues.length) return '';
+      const orderBy = extractOrderByFromText(tableHtml);
+      const orderedGroupValues = (() => {
+        if (!orderBy || !orderBy.keys.length) return groupedValues;
+        const groupFieldToken = (repeatDirective.fieldId || '').toString().toUpperCase();
+        const groupId = (group?.id || '').toString().toUpperCase();
+        const groupOrderKey = orderBy.keys.find(key => {
+          const raw = (key?.key || '').toString().toUpperCase();
+          if (!raw) return false;
+          const segs = raw.split('.').filter(Boolean);
+          if (segs.length === 1) return segs[0] === groupFieldToken;
+          if (segs.length === 2) {
+            const [maybeGroup, field] = segs;
+            return field === groupFieldToken && maybeGroup === groupId;
+          }
+          return false;
+        });
+        if (!groupOrderKey) return groupedValues;
+        const direction = groupOrderKey.direction === 'desc' ? 'desc' : 'asc';
+        return groupedValues
+          .slice()
+          .sort((a, b) => {
+            const as = normalizeText(a);
+            const bs = normalizeText(b);
+            const cmp = as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
+            return direction === 'desc' ? -cmp : cmp;
+          });
+      })();
       const out: string[] = [];
-      groupedValues.forEach((groupValue, idx) => {
+      orderedGroupValues.forEach((groupValue, idx) => {
         const scopedRows = rows.filter(r => normalizeText(r?.[repeatDirective.fieldId]) === normalizeText(groupValue));
         if (!scopedRows.length) return;
-        const scopedMap = { ...lineItemRows, [group.id]: scopedRows };
+        const orderedRows =
+          orderBy && orderBy.keys.length
+            ? applyOrderBy({ rows: scopedRows, orderBy, group, opts: { subConfig: undefined, subToken: undefined } })
+            : scopedRows;
+        const scopedMap = { ...lineItemRows, [group.id]: orderedRows };
         let clone = replaceRepeatDirectiveToken(tableHtml, repeatDirective, formatTemplateValue(groupValue));
         clone = replaceGroupFieldTokens(clone, repeatDirective, groupValue);
         out.push(renderRows(clone, scopedMap));

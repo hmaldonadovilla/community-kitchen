@@ -593,6 +593,22 @@ This project uses TypeScript. You need to build the script before using it in Go
           - `ui.needsAttentionMessage`: localized override for the “Needs attention” helper shown when this line item group or subgroup requires review
           - `ui.allowRemoveAutoRows`: when `false`, hides the **Remove** button for rows marked `__ckRowSource: "auto"`
           - `ui.saveDisabledRows`: when `true`, includes disabled progressive rows in the submitted payload (so they can appear in downstream PDFs)
+        - `dedupRules`: optional row-level de-duplication rules for this group or subgroup. Each rule lists field ids that must be unique together; the check runs once all listed fields have values.
+          Example:
+          ```json
+          {
+            "dedupRules": [
+              {
+                "fields": ["ING", "UNIT"],
+                "message": {
+                  "en": "This ingredient already exists with the same unit.",
+                  "fr": "Cet ingrédient existe déjà avec la même unité.",
+                  "nl": "Dit ingrediënt bestaat al met dezelfde eenheid."
+                }
+              }
+            ]
+          }
+          ```
         - Progressive disclosure (collapsed-by-default rows): in the LINE_ITEM_GROUP JSON, add a `ui` block. The collapsed view renders only `collapsedFields` (editable). The expand toggle is gated by `expandGate`:
             - The expand/collapse control is also a **progress pill** `completed/required` for required fields within that row.
 

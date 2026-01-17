@@ -801,6 +801,13 @@ components:
         sectionSelector:
           $ref: '#/components/schemas/LineItemSelectorConfig'
           description: Optional selector rendered above the line items to scope filters/validation rules (options can come from a REF tab).
+        dedupRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemDedupRule'
+          description: |
+            Optional row-level de-duplication rules. Each rule defines the field ids that must be unique together
+            within a line-item group or subgroup. Dedup checks run only once all listed fields have values.
         totals:
           type: array
           items:
@@ -3061,6 +3068,21 @@ components:
         decimalPlaces:
           type: integer
           description: Optional decimal precision for totals.
+
+    LineItemDedupRule:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            type: string
+          description: Field ids that must be unique together within the group/subgroup.
+        message:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Optional localized error message for duplicate rows.
+      required: [fields]
 
     ValidationRule:
       type: object
