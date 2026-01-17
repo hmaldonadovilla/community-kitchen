@@ -79,6 +79,30 @@ const normalizeStringList = (raw: any): string[] => {
 
 export const parseRowNonMatchOptions = (raw: any): string[] => normalizeStringList(raw);
 
+const normalizeDedupScalar = (raw: unknown): string => {
+  if (raw === undefined || raw === null) return '';
+  if (Array.isArray(raw)) {
+    const parts = raw.map(normalizeDedupScalar).filter(Boolean);
+    if (!parts.length) return '';
+    return Array.from(new Set(parts)).sort().join('||');
+  }
+  if (raw instanceof Date) return raw.toISOString();
+  if (typeof raw === 'string') return raw.trim().toLowerCase();
+  if (typeof raw === 'number' || typeof raw === 'boolean') return raw.toString().toLowerCase();
+  try {
+    return raw.toString().trim().toLowerCase();
+  } catch (_) {
+    return '';
+  }
+};
+
+export const buildLineItemDedupKey = (rowValues: Record<string, FieldValue>, fieldIds: string[]): string | null => {
+  if (!fieldIds.length) return null;
+  const parts = fieldIds.map(fid => normalizeDedupScalar((rowValues as any)[fid]));
+  if (parts.some(p => !p)) return null;
+  return parts.join('||');
+};
+
 const isOrMatchMode = (filter: OptionFilter | undefined): boolean => {
   const raw = (filter as any)?.matchMode;
   return typeof raw === 'string' && raw.trim().toLowerCase() === 'or';

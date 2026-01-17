@@ -51,8 +51,7 @@
 
   .ck-meta-label {
     font-size: 0.75em;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    letter-spacing: 0.01em;
     color: rgba(15, 23, 42, 0.55);
   }
 
@@ -170,7 +169,6 @@
   .ck-ingredients-table th {
     font-size: 0.76em;
     letter-spacing: 0.03em;
-    text-transform: uppercase;
     color: rgba(15, 23, 42, 0.65);
   }
 
@@ -211,7 +209,7 @@
   <div class="ck-hero" role="banner">
     <ul class="ck-meta-list">
       <li class="ck-meta-item">
-        <span class="ck-meta-label">Dish Name</span>
+        <span class="ck-meta-label">Recipe Name</span>
         <span class="ck-meta-value">{{QFTD5RD2EM}}</span>
       </li>
       <li class="ck-meta-item">
@@ -244,7 +242,6 @@
     <div class="ck-tab-panel is-active" role="tabpanel" aria-labelledby="ck-tab-btn-ingredients" id="ck-tab-ingredients" data-tab-panel="ingredients">
       <div class="ck-panel-card">
         <table class="ck-ingredients-table" aria-label="Ingredients by category">
-          <caption class="ck-category-title">{{GROUP_TABLE(Q65ILNUSGL.CAT)}}{{ORDER_BY(Q65ILNUSGL.CAT ASC, Q65ILNUSGL.ING ASC)}}</caption>
           <colgroup>
             <col class="ck-col-ingredient" />
             <col class="ck-col-quantity" />
@@ -252,7 +249,7 @@
           </colgroup>
           <thead>
             <tr>
-              <th scope="col">Ingredient</th>
+              <th scope="col">{{GROUP_TABLE(Q65ILNUSGL.CAT)}}{{ORDER_BY(Q65ILNUSGL.CAT ASC, Q65ILNUSGL.ING ASC)}}</th>
               <th scope="col">Quantity</th>
               <th scope="col" class="ck-allergen-header" data-ck-allergen-col>Allergens</th>
             </tr>

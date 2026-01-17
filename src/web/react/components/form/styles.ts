@@ -382,6 +382,11 @@ export const FORM_VIEW_STYLES = `
           overflow-wrap: anywhere;
           word-break: break-word;
         }
+        .form-card .required-star,
+        .webform-overlay .required-star {
+          color: #dc2626;
+          font-weight: 600;
+        }
         .form-card .field.inline-field > input,
         .form-card .field.inline-field > select,
         .form-card .field.inline-field > textarea,

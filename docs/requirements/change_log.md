@@ -125,5 +125,8 @@
 - ck-26: add `source` sort type to the listViewSort config
 - ck-27: support placeholders in the email subject
 - ck-28: remove the translate stuff to english button on google sheet
+- ck-29:
+  - Alphabetical order on ingredients list on summary view
+  - We need to prevent duplicate ingredient entries, so validation dedup rules are needed within a line item or subgroup
 
 ---

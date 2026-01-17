@@ -9,6 +9,7 @@ import {
   LineItemFieldType,
   LineItemFieldConfig,
   LineItemCollapsedFieldConfig,
+  LineItemDedupRule,
   LineItemGroupConfig,
   LineItemGroupUiConfig,
   LineItemSelectorConfig,
@@ -2398,6 +2399,7 @@ export class ConfigSheet {
         const mergedFields = jsonFields.length ? jsonFields : refFields;
         const sectionSelector = this.normalizeLineItemSelector(ss, parsed.sectionSelector);
         const totals = this.normalizeLineItemTotals(parsed.totals);
+        const dedupRules = this.normalizeLineItemDedupRules(parsed.dedupRules);
         const ui = this.normalizeLineItemUi(parsed.ui || parsed.view || parsed.layout);
         const subGroups = Array.isArray(parsed.subGroups)
           ? parsed.subGroups
@@ -2415,6 +2417,7 @@ export class ConfigSheet {
           anchorFieldId: parsed.anchorFieldId,
           addMode: parsed.addMode,
           sectionSelector,
+          dedupRules,
           totals,
           fields: mergedFields,
           subGroups
@@ -2506,6 +2509,34 @@ export class ConfigSheet {
       return cfg;
     }).filter(cfg => cfg.type === 'count' || !!cfg.fieldId);
     return totals.length ? totals : undefined;
+  }
+
+  private static normalizeLineItemDedupRules(rawRules: any): LineItemDedupRule[] | undefined {
+    if (!Array.isArray(rawRules)) return undefined;
+    const rules: LineItemDedupRule[] = rawRules.map((entry: any) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const rawFields = entry.fields ?? entry.fieldIds ?? entry.keys ?? entry.keyFields;
+      const fields = (() => {
+        if (Array.isArray(rawFields)) {
+          return rawFields
+            .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
+            .filter(Boolean);
+        }
+        if (typeof rawFields === 'string') {
+          return rawFields
+            .split(',')
+            .map(v => v.trim())
+            .filter(Boolean);
+        }
+        return [];
+      })();
+      if (!fields.length) return null;
+      const message = entry.message ?? entry.errorMessage ?? entry.error ?? entry.msg;
+      const cfg: LineItemDedupRule = { fields };
+      if (message !== undefined) cfg.message = message;
+      return cfg;
+    }).filter(Boolean) as LineItemDedupRule[];
+    return rules.length ? rules : undefined;
   }
 
   private static parseLineItemSheet(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, sheetName: string): LineItemGroupConfig | undefined {
@@ -2666,6 +2697,7 @@ export class ConfigSheet {
           addButtonLabel: entry.addButtonLabel ?? refCfg.addButtonLabel,
           anchorFieldId: entry.anchorFieldId ?? refCfg.anchorFieldId,
           sectionSelector: entry.sectionSelector ? this.normalizeLineItemSelector(ss, entry.sectionSelector) : refCfg.sectionSelector,
+          dedupRules: entry.dedupRules ? this.normalizeLineItemDedupRules(entry.dedupRules) : refCfg.dedupRules,
           totals: entry.totals ? this.normalizeLineItemTotals(entry.totals) : refCfg.totals
         };
       }
@@ -2675,6 +2707,7 @@ export class ConfigSheet {
       ? entry.fields.map((f: any, idx: number) => this.normalizeLineItemField(ss, f, idx))
       : [];
     const sectionSelector = this.normalizeLineItemSelector(ss, entry.sectionSelector);
+    const dedupRules = this.normalizeLineItemDedupRules(entry.dedupRules);
     const totals = this.normalizeLineItemTotals(entry.totals);
     const ui = this.normalizeLineItemUi(entry.ui);
 
@@ -2688,6 +2721,7 @@ export class ConfigSheet {
       anchorFieldId: entry.anchorFieldId,
       addMode: entry.addMode,
       sectionSelector,
+      dedupRules,
       totals,
       fields
     };
