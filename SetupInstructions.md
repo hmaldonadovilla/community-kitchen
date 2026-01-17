@@ -198,6 +198,42 @@ This project uses TypeScript. You need to build the script before using it in Go
       { "listView": { "view": { "toggleEnabled": true, "defaultMode": "cards" } } }
       ```
 
+    - Want **quick search presets** under the search bar in cards view? Add a BUTTON question with `button.action: "listViewSearchPreset"`:
+
+      ```json
+      {
+        "id": "PRESET_ACTIVE",
+        "type": "BUTTON",
+        "label": { "en": "Active recipes" },
+        "button": {
+          "action": "listViewSearchPreset",
+          "mode": "text",
+          "keyword": "Active"
+        }
+      }
+      ```
+
+      Optional: add an inline title before the preset buttons:
+
+      ```json
+      { "listView": { "search": { "presetsTitle": { "en": "View recipes:" } } } }
+      ```
+
+      Advanced mode example (filters):
+
+      ```json
+      {
+        "id": "PRESET_STATUS",
+        "type": "BUTTON",
+        "label": { "en": "Closed (status)" },
+        "button": {
+          "action": "listViewSearchPreset",
+          "mode": "advanced",
+          "fieldFilters": { "status": "Closed" }
+        }
+      }
+      ```
+
     - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
       - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.
 
