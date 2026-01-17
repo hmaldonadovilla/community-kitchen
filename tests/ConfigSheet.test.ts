@@ -321,6 +321,33 @@ describe('ConfigSheet', () => {
     expect(questions[0].lineItemConfig!.fields[1].options).toEqual(['Kg', 'Litre']);
   });
 
+  test('getQuestions preserves selectorOverlay addMode for line items', () => {
+    const configSheet = mockSS.insertSheet('Config: LineItemSelectorOverlay');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q_LI2',
+        'LINE_ITEM_GROUP',
+        'Ingredients',
+        'Ingredients',
+        'Ingredients',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"addMode":"selectorOverlay","anchorFieldId":"ING","sectionSelector":{"id":"ITEM_FILTER","labelEn":"Search"},"fields":[{"id":"ING","type":"CHOICE","labelEn":"Ingredient","options":["A"]},{"id":"QTY","type":"NUMBER","labelEn":"Qty"}]}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: LineItemSelectorOverlay');
+    expect(questions[0].lineItemConfig?.addMode).toBe('selectorOverlay');
+  });
+
   test('getQuestions parses upload config JSON', () => {
     const configSheet = mockSS.insertSheet('Config: Upload');
     const exampleRows = [

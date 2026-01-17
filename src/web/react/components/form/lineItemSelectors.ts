@@ -7,6 +7,20 @@ export const resolveSelectorLabel = (selector: LineItemSelectorConfig | undefine
   return selector.labelEn || selector.id;
 };
 
+export const resolveSelectorPlaceholder = (selector: LineItemSelectorConfig | undefined, language: LangCode): string => {
+  if (!selector) return '';
+  const raw = selector.placeholder;
+  if (typeof raw === 'string') return raw;
+  if (raw && typeof raw === 'object') {
+    if (language === 'FR') return (raw as any).fr || (raw as any).en || '';
+    if (language === 'NL') return (raw as any).nl || (raw as any).en || '';
+    return (raw as any).en || '';
+  }
+  if (language === 'FR') return selector.placeholderFr || selector.placeholderEn || '';
+  if (language === 'NL') return selector.placeholderNl || selector.placeholderEn || '';
+  return selector.placeholderEn || '';
+};
+
 export const buildSelectorOptionSet = (selector?: LineItemSelectorConfig | null): OptionSet | null => {
   if (!selector) return null;
   const base = selector.options || [];

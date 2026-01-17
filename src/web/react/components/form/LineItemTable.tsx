@@ -4,8 +4,9 @@ import type { LineItemRowState } from '../../../types';
 
 export type LineItemTableColumn = {
   id: string;
-  label: string;
+  label: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
   renderCell: (row: LineItemRowState, rowIndex: number) => React.ReactNode;
 };
 
@@ -15,7 +16,8 @@ export const LineItemTable: React.FC<{
   emptyText?: string;
   className?: string;
   rowClassName?: (row: LineItemRowState, rowIndex: number) => string | undefined;
-}> = ({ columns, rows, emptyText, className, rowClassName }) => {
+  renderRowMessage?: (row: LineItemRowState, rowIndex: number) => React.ReactNode;
+}> = ({ columns, rows, emptyText, className, rowClassName, renderRowMessage }) => {
   const colCount = columns.length || 1;
   const tableClass = ['ck-line-item-table', className].filter(Boolean).join(' ');
 
@@ -24,7 +26,7 @@ export const LineItemTable: React.FC<{
       <thead>
         <tr>
           {columns.map(col => (
-            <th key={col.id} className={col.className} scope="col">
+            <th key={col.id} className={col.className} scope="col" style={col.style}>
               {col.label}
             </th>
           ))}
@@ -32,15 +34,27 @@ export const LineItemTable: React.FC<{
       </thead>
       <tbody>
         {rows.length ? (
-          rows.map((row, idx) => (
-            <tr key={row.id} className={rowClassName?.(row, idx)}>
-              {columns.map(col => (
-                <td key={`${row.id}-${col.id}`} className={col.className}>
-                  {col.renderCell(row, idx)}
-                </td>
-              ))}
-            </tr>
-          ))
+          rows.map((row, idx) => {
+            const messageNode = renderRowMessage?.(row, idx);
+            return (
+              <React.Fragment key={row.id}>
+                <tr className={rowClassName?.(row, idx)}>
+                  {columns.map(col => (
+                    <td key={`${row.id}-${col.id}`} className={col.className} style={col.style}>
+                      {col.renderCell(row, idx)}
+                    </td>
+                  ))}
+                </tr>
+                {messageNode ? (
+                  <tr className="ck-line-item-table__message-row">
+                    <td colSpan={colCount} className="ck-line-item-table__message-cell">
+                      {messageNode}
+                    </td>
+                  </tr>
+                ) : null}
+              </React.Fragment>
+            );
+          })
         ) : (
           <tr>
             <td colSpan={colCount} className="ck-line-item-table__empty">

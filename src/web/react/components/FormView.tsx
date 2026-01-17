@@ -55,13 +55,14 @@ import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectO
 import { InfoTooltip } from './form/InfoTooltip';
 import { DateInput } from './form/DateInput';
 import { SearchableSelect } from './form/SearchableSelect';
+import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { PairedRowGrid } from './form/PairedRowGrid';
 import { PageSection } from './form/PageSection';
 import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './form/grouping';
 import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
-import { buildSelectorOptionSet, resolveSelectorLabel } from './form/lineItemSelectors';
+import { buildSelectorOptionSet, resolveSelectorLabel, resolveSelectorPlaceholder } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
@@ -533,6 +534,45 @@ const FormView: React.FC<FormViewProps> = ({
     if (!orderedEntryEnabled) return;
     onDiagnostic?.('validation.ordered.enabled', { mode: guidedEnabled ? 'guided' : 'standard' });
   }, [guidedEnabled, onDiagnostic, orderedEntryEnabled]);
+
+  const selectorOverlayGroups = useMemo(() => {
+    return (definition.questions || [])
+      .filter(q => q.type === 'LINE_ITEM_GROUP')
+      .map(q => ({ id: q.id, addMode: (q.lineItemConfig as any)?.addMode }))
+      .filter(entry => {
+        const mode = (entry.addMode || '').toString().trim().toLowerCase();
+        return mode === 'selectoroverlay' || mode === 'selector-overlay';
+      })
+      .map(entry => entry.id);
+  }, [definition.questions]);
+
+  useEffect(() => {
+    if (!selectorOverlayGroups.length) return;
+    onDiagnostic?.('form.lineItems.selectorOverlay.enabled', { groupIds: selectorOverlayGroups });
+  }, [onDiagnostic, selectorOverlayGroups]);
+
+  const nonMatchWarningModeGroups = useMemo(() => {
+    return (definition.questions || [])
+      .filter(q => q.type === 'LINE_ITEM_GROUP')
+      .map(q => {
+        const raw = (q.lineItemConfig?.ui as any)?.nonMatchWarningMode;
+        if (raw === undefined || raw === null || raw === '') return null;
+        const candidate = raw.toString().trim().toLowerCase();
+        const mode =
+          candidate === 'validation' || candidate === 'rules' || candidate === 'rule' || candidate === 'generic'
+            ? 'validation'
+            : candidate === 'both' || candidate === 'all'
+              ? 'both'
+              : 'descriptive';
+        return { id: q.id, mode };
+      })
+      .filter(Boolean) as Array<{ id: string; mode: string }>;
+  }, [definition.questions]);
+
+  useEffect(() => {
+    if (!nonMatchWarningModeGroups.length) return;
+    onDiagnostic?.('form.lineItems.nonMatchWarningMode.enabled', { groups: nonMatchWarningModeGroups });
+  }, [nonMatchWarningModeGroups, onDiagnostic]);
 
   // Clamp/initialize the active step when step config or validity changes.
   useEffect(() => {
@@ -3021,7 +3061,7 @@ const FormView: React.FC<FormViewProps> = ({
         parentId: subgroupInfo?.parentRowId,
         parentGroupId: subgroupInfo?.parentGroupId
       };
-      const nextWithRow = { ...prev, [groupId]: [...current, row] };
+      const nextWithRow = { ...prev, [groupId]: [row, ...current] };
       const nextLineItems = groupDef ? seedSubgroupDefaults(nextWithRow, groupDef, row.id) : nextWithRow;
       const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
         mode: 'init'
@@ -5666,7 +5706,57 @@ const FormView: React.FC<FormViewProps> = ({
                           language
                         )
                       : [];
-                    const subSelectorIsMissing = !!subSelectorCfg?.required && !(subSelectorValue || '').toString().trim();
+    const subAddModeRaw = (subConfig as any)?.addMode;
+    const subAddMode = subAddModeRaw ? subAddModeRaw.toString().trim().toLowerCase() : 'inline';
+    const isSubOverlayAddMode = subAddMode === 'overlay';
+    const isSubSelectorOverlayMode = subAddMode === 'selectoroverlay' || subAddMode === 'selector-overlay';
+    const subSelectorOverlayAnchorFieldId =
+      (subConfig as any)?.anchorFieldId !== undefined && (subConfig as any)?.anchorFieldId !== null
+        ? (subConfig as any).anchorFieldId.toString()
+        : '';
+    const subSelectorOverlayAnchorField = subSelectorOverlayAnchorFieldId
+      ? (subConfig?.fields || []).find(f => f.id === subSelectorOverlayAnchorFieldId)
+      : undefined;
+    const canUseSubSelectorOverlay =
+      isSubSelectorOverlayMode && !!subSelectorOverlayAnchorField && subSelectorOverlayAnchorField.type === 'CHOICE';
+    const subSelectorIsMissing = !canUseSubSelectorOverlay && !!subSelectorCfg?.required && !(subSelectorValue || '').toString().trim();
+    const subSelectorOverlayOptions = (() => {
+      if (!canUseSubSelectorOverlay || !subSelectorOverlayAnchorField) return [];
+      ensureLineOptions(subKey, subSelectorOverlayAnchorField);
+      const optionSetField =
+        optionState[optionKey(subSelectorOverlayAnchorField.id, subKey)] || {
+          en: subSelectorOverlayAnchorField.options || [],
+          fr: (subSelectorOverlayAnchorField as any).optionsFr || [],
+          nl: (subSelectorOverlayAnchorField as any).optionsNl || [],
+          raw: (subSelectorOverlayAnchorField as any).optionsRaw
+        };
+      const dependencyIds = (
+        Array.isArray(subSelectorOverlayAnchorField.optionFilter?.dependsOn)
+          ? subSelectorOverlayAnchorField.optionFilter?.dependsOn
+          : [subSelectorOverlayAnchorField.optionFilter?.dependsOn || '']
+      ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+      const depVals = dependencyIds.map(dep =>
+        toDependencyValue(parentRowValues[dep] ?? values[dep] ?? subSelectorValue)
+      );
+      let allowed = computeAllowedOptions(subSelectorOverlayAnchorField.optionFilter, optionSetField, depVals);
+      if (subSelectorCfg?.optionFilter) {
+        const selectorAllowed = computeAllowedOptions(subSelectorCfg.optionFilter, optionSetField, subSelectorDepVals);
+        if (selectorAllowed.length) {
+          const selectorAllowedSet = new Set(selectorAllowed);
+          allowed = allowed.filter(val => selectorAllowedSet.has(val));
+        }
+      }
+      const localized = buildLocalizedOptions(optionSetField, allowed, language, { sort: optionSortFor(subSelectorOverlayAnchorField) });
+      const seen = new Set<string>();
+      return localized
+        .map(opt => ({ value: opt.value, label: opt.label, searchText: opt.searchText }))
+        .filter(opt => {
+          const key = (opt.value || '').toString();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    })();
 
     const renderAddButton = () => {
       if (!subConfig) {
@@ -5677,7 +5767,7 @@ const FormView: React.FC<FormViewProps> = ({
           </button>
         );
       }
-      if (subConfig.addMode === 'overlay' && subConfig.anchorFieldId) {
+      if (isSubOverlayAddMode && subConfig.anchorFieldId) {
                         return (
                           <button
                             type="button"
@@ -5730,6 +5820,9 @@ const FormView: React.FC<FormViewProps> = ({
                           </button>
                         );
                       }
+      if (canUseSubSelectorOverlay) {
+        return null;
+      }
                       return (
         <button
           type="button"
@@ -5828,15 +5921,37 @@ const FormView: React.FC<FormViewProps> = ({
                 justifyContent: 'space-between'
               }}
             >
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                {subSelectorCfg && subSelectorOptions.length ? (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', flex: 1, minWidth: 0 }}>
+                {subSelectorCfg && (canUseSubSelectorOverlay ? subSelectorOverlayOptions.length : subSelectorOptions.length) ? (
                                 <div
                                   className="section-selector"
                                   data-field-path={subSelectorCfg.id}
-                    style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}
+                                  style={{ minWidth: 0, width: '100%', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}
                                 >
                     <label style={{ fontWeight: 700 }}>{resolveSelectorLabel(subSelectorCfg, language)}</label>
-                                  {subSelectorOptions.length >= 20 ? (
+                                  {canUseSubSelectorOverlay ? (
+                                    <LineItemMultiAddSelect
+                                      label={resolveSelectorLabel(subSelectorCfg, language)}
+                                      language={language}
+                                      options={subSelectorOverlayOptions}
+                                      disabled={submitting}
+                                      placeholder={
+                                        resolveSelectorPlaceholder(subSelectorCfg, language) ||
+                                        tSystem('lineItems.selectLinesSearch', language, 'Search items')
+                                      }
+                                      emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                                      onDiagnostic={(event, payload) =>
+                                        onDiagnostic?.(event, { scope: 'subgroup.selectorOverlay', fieldId: subSelectorCfg.id, subKey, ...(payload || {}) })
+                                      }
+                                      onAddSelected={valuesToAdd => {
+                                        if (submitting) return;
+                                        if (!subSelectorOverlayAnchorFieldId) return;
+                                        const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
+                                        if (!deduped.length) return;
+                                        deduped.forEach(val => addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val }));
+                                      }}
+                                    />
+                                  ) : subSelectorOptions.length >= 20 ? (
                                     <SearchableSelect
                                       value={subSelectorValue || ''}
                                       disabled={submitting}
@@ -5904,7 +6019,7 @@ const FormView: React.FC<FormViewProps> = ({
             flexDirection: 'column'
           }}
         >
-          <div data-overlay-scroll-container="true" style={{ padding: 16, overflowY: 'auto', flex: 1, minHeight: 0 }}>
+        <div data-overlay-scroll-container="true" style={{ padding: '0 10px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {!subGroupDef ? (
             <div className="error">
               Unable to load subgroup editor (missing group/subgroup configuration for <code>{subKey}</code>).
@@ -6510,6 +6625,17 @@ const FormView: React.FC<FormViewProps> = ({
 
     const groupCfg = (group as any).lineItemConfig as any;
     const locked = submitting || isFieldLockedByDedup(groupId);
+    const addModeRaw = groupCfg?.addMode;
+    const addMode = addModeRaw ? addModeRaw.toString().trim().toLowerCase() : 'inline';
+    const isOverlayAddMode = addMode === 'overlay';
+    const isSelectorOverlayMode = addMode === 'selectoroverlay' || addMode === 'selector-overlay';
+    const selectorOverlayAnchorFieldId =
+      groupCfg?.anchorFieldId !== undefined && groupCfg?.anchorFieldId !== null ? groupCfg.anchorFieldId.toString() : '';
+    const selectorOverlayAnchorField = selectorOverlayAnchorFieldId
+      ? (groupCfg?.fields || []).find((f: any) => f.id === selectorOverlayAnchorFieldId)
+      : undefined;
+    const canUseSelectorOverlay =
+      isSelectorOverlayMode && !!selectorOverlayAnchorField && selectorOverlayAnchorField.type === 'CHOICE';
 
     const selectorCfg = groupCfg?.sectionSelector;
     const selectorOptionSet = buildSelectorOptionSet(selectorCfg);
@@ -6541,7 +6667,42 @@ const FormView: React.FC<FormViewProps> = ({
           language
         )
       : [];
-    const selectorIsMissing = !!selectorCfg?.required && !(selectorValue || '').toString().trim();
+    const selectorOverlayOptions = (() => {
+      if (!canUseSelectorOverlay || !selectorOverlayAnchorField) return [];
+      ensureLineOptions(groupId, selectorOverlayAnchorField);
+      const optionSetField =
+        optionState[optionKey(selectorOverlayAnchorField.id, groupId)] || {
+          en: selectorOverlayAnchorField.options || [],
+          fr: (selectorOverlayAnchorField as any).optionsFr || [],
+          nl: (selectorOverlayAnchorField as any).optionsNl || [],
+          raw: (selectorOverlayAnchorField as any).optionsRaw
+        };
+      const dependencyIds = (
+        Array.isArray(selectorOverlayAnchorField.optionFilter?.dependsOn)
+          ? selectorOverlayAnchorField.optionFilter?.dependsOn
+          : [selectorOverlayAnchorField.optionFilter?.dependsOn || '']
+      ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+      const depVals = dependencyIds.map((dep: string) => toDependencyValue((values as any)[dep]));
+      let allowed = computeAllowedOptions(selectorOverlayAnchorField.optionFilter, optionSetField, depVals);
+      if (selectorCfg?.optionFilter) {
+        const selectorAllowed = computeAllowedOptions(selectorCfg.optionFilter, optionSetField, selectorDepVals);
+        if (selectorAllowed.length) {
+          const selectorAllowedSet = new Set(selectorAllowed);
+          allowed = allowed.filter(val => selectorAllowedSet.has(val));
+        }
+      }
+      const localized = buildLocalizedOptions(optionSetField, allowed, language, { sort: optionSortFor(selectorOverlayAnchorField) });
+      const seen = new Set<string>();
+      return localized
+        .map(opt => ({ value: opt.value, label: opt.label, searchText: opt.searchText }))
+        .filter(opt => {
+          const key = (opt.value || '').toString();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    })();
+    const selectorIsMissing = !canUseSelectorOverlay && !!selectorCfg?.required && !(selectorValue || '').toString().trim();
 
     const totals = groupCfg ? computeTotals({ config: groupCfg as any, rows }, language) : [];
 
@@ -6554,7 +6715,7 @@ const FormView: React.FC<FormViewProps> = ({
           </button>
         );
       }
-      if (groupCfg.addMode === 'overlay' && groupCfg.anchorFieldId) {
+      if (isOverlayAddMode && groupCfg.anchorFieldId) {
         return (
           <button
             type="button"
@@ -6607,6 +6768,9 @@ const FormView: React.FC<FormViewProps> = ({
             {resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLines', language, 'Add lines'))}
           </button>
         );
+      }
+      if (canUseSelectorOverlay) {
+        return null;
       }
       return (
         <button
@@ -6704,14 +6868,45 @@ const FormView: React.FC<FormViewProps> = ({
                 justifyContent: 'space-between'
               }}
             >
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                {selectorCfg && selectorOptions.length ? (
-                  <div className="section-selector" data-field-path={selectorCfg.id} style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', flex: 1, minWidth: 0 }}>
+                {selectorCfg && (canUseSelectorOverlay ? selectorOverlayOptions.length : selectorOptions.length) ? (
+                  <div
+                    className="section-selector"
+                    data-field-path={selectorCfg.id}
+                    style={{ minWidth: 0, width: '100%', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}
+                  >
                     <label style={{ fontWeight: 700 }}>
                       {resolveSelectorLabel(selectorCfg, language)}
                       {selectorCfg.required && <RequiredStar />}
                     </label>
-                    {selectorOptions.length >= 20 ? (
+                    {canUseSelectorOverlay ? (
+                      <LineItemMultiAddSelect
+                        label={resolveSelectorLabel(selectorCfg, language)}
+                        language={language}
+                        options={selectorOverlayOptions}
+                        disabled={locked}
+                        placeholder={
+                          resolveSelectorPlaceholder(selectorCfg, language) ||
+                          tSystem('lineItems.selectLinesSearch', language, 'Search items')
+                        }
+                        emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                        onDiagnostic={(event, payload) =>
+                          onDiagnostic?.(event, {
+                            scope: 'lineItems.selectorOverlay',
+                            groupId,
+                            fieldId: selectorCfg.id,
+                            ...(payload || {})
+                          })
+                        }
+                        onAddSelected={valuesToAdd => {
+                          if (locked) return;
+                          if (!selectorOverlayAnchorFieldId) return;
+                          const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
+                          if (!deduped.length) return;
+                          deduped.forEach(val => addLineItemRowManual(groupId, { [selectorOverlayAnchorFieldId]: val }));
+                        }}
+                      />
+                    ) : selectorOptions.length >= 20 ? (
                       <SearchableSelect
                         value={selectorValue || ''}
                         disabled={locked}
@@ -6777,12 +6972,13 @@ const FormView: React.FC<FormViewProps> = ({
             flexDirection: 'column'
           }}
         >
-          <div data-overlay-scroll-container="true" style={{ padding: 16, overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          <div data-overlay-scroll-container="true" style={{ padding: '0 10px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
             <LineItemGroupQuestion
               key={overlayGroup.id}
               q={overlayGroup as any}
               rowFilter={overlayRowFilter}
               hideInlineSubgroups={overlayHideInlineSubgroups}
+              hideToolbars
               ctx={{
                 definition,
                 language,

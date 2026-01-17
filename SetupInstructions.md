@@ -587,6 +587,8 @@ This project uses TypeScript. You need to build the script before using it in Go
           - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`). Search indexes include extra columns from `optionsRef`/data sources when available.
           - `ui.mode: "table"`: render line items as a compact table (also supported on subgroups)
           - `ui.tableColumns`: ordered list of field ids to show as table columns (defaults to the line-item field order)
+          - `ui.tableColumnWidths`: optional per-column widths map (e.g., `{ "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" }`)
+          - `ui.nonMatchWarningMode`: choose how optionFilter non-match warnings show in the table legend (`descriptive`, `validation`, or `both`)
           - `ui.tableHideUntilAnchor`: when true (default), hide non-anchor columns until the anchor field has a value
           - `ui.needsAttentionMessage`: localized override for the “Needs attention” helper shown when this line item group or subgroup requires review
           - `ui.allowRemoveAutoRows`: when `false`, hides the **Remove** button for rows marked `__ckRowSource: "auto"`
@@ -664,7 +666,7 @@ This project uses TypeScript. You need to build the script before using it in Go
          }
        }
        ```
-    - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
+   - Overlay add flow (multi-select): include `addMode`, `anchorFieldId`, and optional `addButtonLabel` in the JSON. The anchor must be a CHOICE field ID inside the line-item fields. Example:
 
        ```json
        {
@@ -678,7 +680,8 @@ This project uses TypeScript. You need to build the script before using it in Go
        }
        ```
 
-       Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
+      Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
+   - Selector overlay add flow (search + multi-select): use `addMode: "selectorOverlay"` with `anchorFieldId` and a `sectionSelector` label. The selector becomes the search input + multi-select results list (no separate **Add** button), and search indexes include extra columns from `optionsRef` / data sources so typing a category or dietary label surfaces matching items.
     - Auto add flow (no overlay): use `addMode: "auto"` with `anchorFieldId` pointing to a CHOICE line-item field that has an `optionFilter.dependsOn` (one or more controlling fields). When all `dependsOn` fields are filled, the form will automatically create one row per allowed anchor option (same filtering logic as overlay). If the controlling fields change later, auto-generated rows are recomputed and overwritten; manual rows are preserved.
       - Progressive + expand gate: if you also set `"ui": { "mode": "progressive", "expandGate": "collapsedFieldsValid", "collapsedFields": [...] }` then:
         - Auto-generated rows treat the anchor field as the row title and it is not editable (it’s system-selected).
@@ -1087,7 +1090,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
       - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; you can optionally hide the UI paging controls via `listView.paginationControlsEnabled: false`. Search runs client-side (keyword search by default, or date search via `listView.search`). Header sorting is enabled by default (click a column header to sort), and can be disabled with `listView.headerSortEnabled: false` (totalCount is capped at 200).
     - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
-    - **Line-item table mode**: To render line items as a compact table, set `"ui": { "mode": "table" }` in the line-item config (also supported for subgroups). You can control column order with `"ui": { "tableColumns": ["ING", "QTY", "UNIT"] }` and hide non-anchor columns until the anchor value is chosen with `"ui": { "tableHideUntilAnchor": true }` (default).
+    - **Line-item table mode**: To render line items as a compact table, set `"ui": { "mode": "table" }` in the line-item config (also supported for subgroups). You can control column order with `"ui": { "tableColumns": ["ING", "QTY", "UNIT"] }`, set column widths with `"ui": { "tableColumnWidths": { "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" } }`, and hide non-anchor columns until the anchor value is chosen with `"ui": { "tableHideUntilAnchor": true }` (default).
     - **Quick recipe for the new features**:
       - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
 
@@ -1104,7 +1107,10 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```
 
        Use `ITEM_FILTER` in line-item `optionFilter.dependsOn` or validation `when.fieldId` so options/rules react to the selector.
-       If `required: true`, the **Add line** button is disabled until the selector has a value (prevents adding empty rows in `addMode: "inline"`).
+      If `required: true`, the **Add line** button is disabled until the selector has a value (prevents adding empty rows in `addMode: "inline"`).
+      Set `choiceSearchEnabled: true` on the selector to always show the searchable input (search indexes include extra `optionsRef` columns).
+      Set `placeholder` (or `placeholderEn`/`placeholderFr`/`placeholderNl`) to override the selector search placeholder text.
+      For multi-select search without a separate Add button, set `addMode: "selectorOverlay"` and `anchorFieldId`; the selector becomes the search + multi-select list.
 
        You can also filter the selector options themselves with an `optionFilter` (supports `optionMapRef`, including composite key columns):
 

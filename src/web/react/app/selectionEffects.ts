@@ -146,7 +146,8 @@ export const runSelectionEffects = (args: {
             }
           }
           if (!nextRows.length) {
-            nextRows = [...rows, newRow];
+            nextRows = [newRow, ...rows];
+            appended = false;
           }
           let nextLineItems = { ...prev, [targetKey]: nextRows };
           // Important: do NOT auto-seed subgroup default rows for selection-effect-created rows.

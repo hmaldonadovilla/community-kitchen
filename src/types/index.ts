@@ -861,6 +861,20 @@ export interface LineItemGroupUiConfig {
    */
   tableColumns?: string[];
   /**
+   * Optional per-column widths for table mode.
+   * Keys should match field ids; use "__remove" to target the remove button column.
+   * Values can be CSS widths (e.g., "50%", "120px") or numbers (treated as percent).
+   */
+  tableColumnWidths?: Record<string, string | number>;
+  /**
+   * Controls how non-match option warnings are shown in the table legend.
+   *
+   * - descriptive: show per-row optionFilter warnings that list which dependency keys were not satisfied
+   * - validation: show warning messages from validationRules (e.g., __ckNonMatchOptions) instead
+   * - both: show both (deduped)
+   */
+  nonMatchWarningMode?: 'descriptive' | 'validation' | 'both';
+  /**
    * When true (default), hide non-anchor columns until the anchor field has a value.
    * Useful when rows are created by selecting the anchor value first (e.g., ingredients).
    */
@@ -1037,12 +1051,24 @@ export interface LineItemSelectorConfig {
   labelEn?: string;
   labelFr?: string;
   labelNl?: string;
+  placeholder?: LocalizedString | string;
+  placeholderEn?: string;
+  placeholderFr?: string;
+  placeholderNl?: string;
   options?: string[];
   optionsFr?: string[];
   optionsNl?: string[];
   optionsRaw?: Record<string, any>[];
   optionsRef?: string;
   required?: boolean;
+  /**
+   * For selectors rendered as a select, enable the type-to-search input.
+   *
+   * - true: always use the searchable control (even for smaller lists)
+   * - false: always use the native select (no search)
+   * - undefined: auto (enabled only when option count is "large")
+   */
+  choiceSearchEnabled?: boolean;
   /**
    * Optional option filter for the selector itself (supports optionMap or optionMapRef).
    * Useful for cascading selectors where available sections depend on other fields.
@@ -1069,7 +1095,7 @@ export interface LineItemGroupConfig {
     nl?: string;
   };
   anchorFieldId?: string; // field to drive overlay multi-add
-  addMode?: 'overlay' | 'inline' | 'auto';
+  addMode?: 'overlay' | 'selectorOverlay' | 'inline' | 'auto';
   sectionSelector?: LineItemSelectorConfig;
   totals?: LineItemTotalConfig[];
   fields: LineItemFieldConfig[];
