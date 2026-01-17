@@ -318,6 +318,35 @@ components:
           properties:
             action:
               type: string
+              enum: [listViewSearchPreset]
+              description: |
+                Trigger a predefined search query in the list view (cards mode).
+                These buttons render below the search bar when no search results are showing.
+            mode:
+              type: string
+              enum: [text, date, advanced]
+              description: Optional search mode override (defaults to `listView.search.mode`).
+            keyword:
+              type: string
+              description: Keyword to search for (text or advanced modes).
+            dateValue:
+              type: string
+              description: Date to search for (`YYYY-MM-DD`) when `mode` is `date`.
+            fieldFilters:
+              type: object
+              additionalProperties:
+                oneOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: string
+              description: Advanced field filters (AND-ed together).
+          required: [action]
+
+        - type: object
+          properties:
+            action:
+              type: string
               enum: [updateRecord]
               description: |
                 Update an existing record (draft save) and optionally navigate to another view.
@@ -2601,6 +2630,13 @@ components:
 
                 When omitted, the UI falls back to system strings (e.g., "Search records").
                 Set to an empty string (`""`) to remove the placeholder text.
+            presetsTitle:
+              oneOf:
+                - type: string
+                - $ref: '#/components/schemas/LocalizedString'
+              description: |
+                Optional title shown inline before list view search preset buttons.
+                Example: "View recipes:".
             dateFieldId:
               type: string
               description: |

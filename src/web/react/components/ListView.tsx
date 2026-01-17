@@ -67,7 +67,8 @@ const ListView: React.FC<ListViewProps> = ({
   const [pageIndex, setPageIndex] = useState(0);
   const defaultSortField = definition.listView?.defaultSort?.fieldId || 'updatedAt';
   const defaultSortDirection = (definition.listView?.defaultSort?.direction || 'desc') as 'asc' | 'desc';
-  const [searchValue, setSearchValue] = useState('');
+  const [searchInputValue, setSearchInputValue] = useState('');
+  const [searchQueryValue, setSearchQueryValue] = useState('');
   const [sortField, setSortField] = useState<string>(defaultSortField);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
 
@@ -603,7 +604,8 @@ const ListView: React.FC<ListViewProps> = ({
 
   useEffect(() => {
     setPageIndex(0);
-    setSearchValue('');
+    setSearchInputValue('');
+    setSearchQueryValue('');
     setAdvancedOpen(false);
     setAdvancedFieldFilters({});
     setAdvancedHasSearched(false);
@@ -632,7 +634,7 @@ const ListView: React.FC<ListViewProps> = ({
   useEffect(() => {
     // Reset paging when filtering changes to avoid landing on an empty page after narrowing results.
     setPageIndex(0);
-  }, [searchValue]);
+  }, [searchQueryValue]);
 
   useEffect(() => {
     if (!advancedSearchEnabled) return;
@@ -760,8 +762,8 @@ const ListView: React.FC<ListViewProps> = ({
             return (next || row) as ListItem;
           })
         : baseItems;
-    const trimmed = searchValue.trim();
-    const advancedQuery = { keyword: searchValue, fieldFilters: advancedFieldFilters };
+    const trimmed = searchQueryValue.trim();
+    const advancedQuery = { keyword: searchQueryValue, fieldFilters: advancedFieldFilters };
     const applyAdvanced = advancedSearchEnabled && advancedHasSearched && hasActiveAdvancedSearch(advancedQuery);
     const filtered =
       dateSearchEnabled && trimmed
@@ -800,7 +802,7 @@ const ListView: React.FC<ListViewProps> = ({
     keywordSearchFieldIds,
     language,
     ruleColumns,
-    searchValue,
+    searchQueryValue,
     searchableFieldIds,
     sortField,
     sortDirection
@@ -816,10 +818,10 @@ const ListView: React.FC<ListViewProps> = ({
   const loadedCount = (allItems || []).length;
   const activeSearch =
     listSearchMode === 'date'
-      ? Boolean(searchValue.trim())
+      ? Boolean(searchQueryValue.trim())
       : listSearchMode === 'advanced'
-        ? advancedHasSearched && hasActiveAdvancedSearch({ keyword: searchValue, fieldFilters: advancedFieldFilters })
-        : Boolean(searchValue.trim());
+        ? advancedHasSearched && hasActiveAdvancedSearch({ keyword: searchQueryValue, fieldFilters: advancedFieldFilters })
+        : Boolean(searchQueryValue.trim());
   const showLoadedOfTotal = !activeSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
 
   const formatDateOnly = (value: any): string | null => {
@@ -1112,26 +1114,30 @@ const ListView: React.FC<ListViewProps> = ({
     [onDiagnostic, onSelect, records, ruleColumns, uiDisabled]
   );
 
-  const clearSearch = useCallback(() => {
+  const clearSearchInputOnly = useCallback(() => {
+    setSearchInputValue('');
+    onDiagnostic?.('list.search.clearInput', { mode: listSearchMode });
+  }, [listSearchMode, onDiagnostic]);
+
+  const clearSearchResults = useCallback(() => {
+    setSearchInputValue('');
+    setSearchQueryValue('');
     if (advancedSearchEnabled) {
-      setSearchValue('');
       setAdvancedFieldFilters({});
       setAdvancedHasSearched(false);
       setAdvancedOpen(false);
-      onDiagnostic?.('list.search.clear', { mode: 'advanced' });
-      return;
     }
-    setSearchValue('');
-    onDiagnostic?.('list.search.clear', { mode: dateSearchEnabled ? 'date' : 'text' });
-  }, [advancedSearchEnabled, dateSearchEnabled, onDiagnostic]);
+    onDiagnostic?.('list.search.clearResults', { mode: listSearchMode });
+  }, [advancedSearchEnabled, listSearchMode, onDiagnostic]);
 
   const applyAdvancedSearchNow = useCallback(() => {
     if (!advancedSearchEnabled) return;
-    const query = { keyword: searchValue, fieldFilters: advancedFieldFilters };
+    const query = { keyword: searchInputValue, fieldFilters: advancedFieldFilters };
     if (!hasActiveAdvancedSearch(query)) {
       onDiagnostic?.('list.search.advanced.empty', {});
       return;
     }
+    setSearchQueryValue(searchInputValue);
     setAdvancedHasSearched(true);
     setAdvancedOpen(false);
     setPageIndex(0);
@@ -1142,22 +1148,15 @@ const ListView: React.FC<ListViewProps> = ({
       }))
       .filter(v => Boolean(v.value));
     onDiagnostic?.('list.search.advanced.apply', {
-      keyword: (searchValue || '').trim() || null,
+      keyword: (searchInputValue || '').trim() || null,
       filters: activeFilters.map(f => f.fieldId),
       filterCount: activeFilters.length
     });
-  }, [advancedFieldFilters, advancedSearchEnabled, onDiagnostic, searchValue]);
+  }, [advancedFieldFilters, advancedSearchEnabled, onDiagnostic, searchInputValue]);
 
   const showClearSearch = useMemo(() => {
-    if (advancedSearchEnabled) {
-      return (
-        Boolean(searchValue.trim()) ||
-        Object.values(advancedFieldFilters).some(v => (Array.isArray(v) ? v.some(item => (item || '').trim().length > 0) : (v || '').trim().length > 0)) ||
-        advancedHasSearched
-      );
-    }
-    return Boolean(searchValue.trim());
-  }, [advancedFieldFilters, advancedHasSearched, advancedSearchEnabled, searchValue]);
+    return Boolean(searchInputValue.trim());
+  }, [searchInputValue]);
 
   const cardTitleFieldId = useMemo(() => {
     const firstNonRule = columnsForCards.find(col => !isRuleColumn(col));
@@ -1238,7 +1237,57 @@ const ListView: React.FC<ListViewProps> = ({
     [language, optionSetById, statusFilterOptions]
   );
 
+  const listSearchPresetButtons = useMemo(() => {
+    const out: Array<{ q: any; cfg: any }> = [];
+    (definition.questions || []).forEach(q => {
+      if ((q as any)?.type !== 'BUTTON') return;
+      const cfg = (q as any)?.button;
+      if (!cfg || typeof cfg !== 'object') return;
+      if ((cfg as any).action !== 'listViewSearchPreset') return;
+      out.push({ q, cfg });
+    });
+    return out;
+  }, [definition.questions]);
+
+  const applySearchPreset = useCallback(
+    (preset: {
+      mode?: 'text' | 'date' | 'advanced';
+      keyword?: string;
+      dateValue?: string;
+      fieldFilters?: Record<string, string | string[]>;
+    }) => {
+      const requestedMode = preset.mode || listSearchMode;
+      const mode = requestedMode === 'date' && !dateSearchEnabled ? 'text' : requestedMode;
+      const nextKeyword = (preset.keyword || '').toString();
+      const nextDateValue = (preset.dateValue || '').toString();
+      const nextFieldFilters = (preset.fieldFilters || {}) as Record<string, string | string[]>;
+      const nextValue = mode === 'date' ? nextDateValue : nextKeyword;
+
+      setSearchInputValue(nextValue);
+      setSearchQueryValue(nextValue);
+
+      if (advancedSearchEnabled && mode === 'advanced') {
+        setAdvancedFieldFilters(nextFieldFilters);
+        setAdvancedHasSearched(hasActiveAdvancedSearch({ keyword: nextKeyword, fieldFilters: nextFieldFilters }));
+        setAdvancedOpen(false);
+      } else {
+        setAdvancedFieldFilters({});
+        setAdvancedHasSearched(false);
+      }
+
+      setPageIndex(0);
+      onDiagnostic?.('list.search.preset.apply', {
+        mode,
+        keyword: nextKeyword || null,
+        dateValue: nextDateValue || null,
+        filterCount: Object.keys(nextFieldFilters || {}).length
+      });
+    },
+    [advancedSearchEnabled, dateSearchEnabled, listSearchMode, onDiagnostic]
+  );
+
   const showResults = viewMode === 'table' || activeSearch;
+  const showClearResults = activeSearch && visibleItems.length > 0;
 
   const titleNode = (() => {
     const configured = definition.listView?.title;
@@ -1263,6 +1312,21 @@ const ListView: React.FC<ListViewProps> = ({
   const searchPlaceholder = placeholderIsExplicitlyEmpty
     ? ''
     : resolveLocalizedString(configuredPlaceholder, language, tSystem('list.searchPlaceholder', language, 'Search records'));
+  const presetsTitleConfig = (definition.listView?.search as any)?.presetsTitle;
+  const presetsTitleText = useMemo(() => {
+    if (presetsTitleConfig === undefined || presetsTitleConfig === null) return '';
+    if (typeof presetsTitleConfig === 'string' && presetsTitleConfig.trim() === '') return '';
+    return resolveLocalizedString(presetsTitleConfig, language, '');
+  }, [language, presetsTitleConfig]);
+  const showPresetsTitle = Boolean(presetsTitleText && presetsTitleText.toString().trim());
+
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    onDiagnostic('list.search.presets.config', {
+      count: listSearchPresetButtons.length,
+      title: showPresetsTitle ? presetsTitleText : null
+    });
+  }, [listSearchPresetButtons.length, onDiagnostic, presetsTitleText, showPresetsTitle]);
 
   const searchControlClass = `ck-list-search-control${
     (advancedSearchEnabled ? ' ck-has-advanced' : '') + (showClearSearch ? ' ck-has-clear' : '') + ((advancedSearchEnabled || showClearSearch) ? ' ck-has-icons' : '')
@@ -1295,10 +1359,13 @@ const ListView: React.FC<ListViewProps> = ({
             {dateSearchEnabled ? (
               <DateInput
                 id={searchInputId}
-                value={searchValue}
+                value={searchInputValue}
                 language={language}
                 ariaLabel={tSystem('list.searchDateLabel', language, 'Filter by date')}
-                onChange={next => setSearchValue(next)}
+                onChange={next => {
+                  setSearchInputValue(next);
+                  setSearchQueryValue(next);
+                }}
               />
             ) : (
               <input
@@ -1306,8 +1373,11 @@ const ListView: React.FC<ListViewProps> = ({
                 type="search"
                 placeholder={searchPlaceholder}
                 aria-label={searchPlaceholder || tSystem('list.searchPlaceholder', language, 'Search records')}
-                value={searchValue}
-                onChange={e => setSearchValue(e.target.value)}
+                value={searchInputValue}
+                onChange={e => {
+                  setSearchInputValue(e.target.value);
+                  setSearchQueryValue(e.target.value);
+                }}
                 onKeyDown={e => {
                   if (!advancedSearchEnabled) return;
                   if (e.key !== 'Enter') return;
@@ -1338,8 +1408,8 @@ const ListView: React.FC<ListViewProps> = ({
               <button
                 type="button"
                 className="ck-list-search-clear-icon"
-                aria-label={tSystem('list.clearSearch', language, 'Clear')}
-                onClick={clearSearch}
+                aria-label={tSystem('list.clearSearchInput', language, 'Clear search text')}
+                onClick={clearSearchInputOnly}
               >
                 <span aria-hidden="true">×</span>
               </button>
@@ -1371,6 +1441,40 @@ const ListView: React.FC<ListViewProps> = ({
             </div>
           ) : null}
         </div>
+
+        {showClearResults ? (
+          <div className="ck-list-clear-results">
+            <button type="button" className="secondary" onClick={clearSearchResults}>
+              {tSystem('list.clearSearchResults', language, 'Clear search results')}
+            </button>
+          </div>
+        ) : null}
+
+        {viewMode === 'cards' && !showResults && listSearchPresetButtons.length ? (
+          <div className="ck-list-search-presets" aria-label={tSystem('list.predefinedSearches', language, 'Quick filters')}>
+            {showPresetsTitle ? <span className="ck-list-search-presets-title">{presetsTitleText}</span> : null}
+            {listSearchPresetButtons.map(({ q, cfg }) => {
+              const labelNode = resolveLocalizedString((q as any)?.label ?? q?.id ?? cfg.action ?? '', language, q?.id ?? '');
+              const mode = (cfg.mode || listSearchMode) as 'text' | 'date' | 'advanced';
+              const keyword = (cfg.keyword || '').toString();
+              const dateValue = (cfg.dateValue || '').toString();
+              const fieldFilters = (cfg.fieldFilters || {}) as Record<string, string | string[]>;
+              return (
+                <button
+                  key={(q as any)?.id || cfg.action}
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    applySearchPreset({ mode, keyword, dateValue, fieldFilters });
+                    onDiagnostic?.('list.search.preset.click', { buttonId: (q as any)?.id || null, mode });
+                  }}
+                >
+                  {labelNode}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
         {advancedSearchEnabled && advancedOpen ? (
           <div
@@ -1488,7 +1592,7 @@ const ListView: React.FC<ListViewProps> = ({
               >
                 {tSystem('common.close', language, 'Close')}
               </button>
-              <button type="button" className="secondary" onClick={clearSearch}>
+            <button type="button" className="secondary" onClick={clearSearchResults}>
                 {tSystem('list.clearSearch', language, 'Clear')}
               </button>
               <button type="button" onClick={applyAdvancedSearchNow}>

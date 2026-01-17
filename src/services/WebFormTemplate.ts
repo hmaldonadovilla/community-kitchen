@@ -434,6 +434,25 @@ export function buildWebFormHtml(
         align-items: center;
         margin-bottom: 12px;
       }
+      .ck-list-clear-results {
+        display: flex;
+        justify-content: flex-start;
+        margin: 4px 0 12px;
+      }
+      .ck-list-search-presets {
+        display: flex;
+        align-items: center;
+        flex-wrap: nowrap;
+        gap: 8px;
+        margin: 4px 0 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .ck-list-search-presets-title {
+        font-weight: 700;
+        color: var(--muted);
+        white-space: nowrap;
+      }
       .list-toolbar .ck-list-search-label {
         flex: 0 1 auto;
         min-width: 0;

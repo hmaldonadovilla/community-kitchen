@@ -1269,6 +1269,44 @@ export class ConfigSheet {
       return config;
     }
 
+    if (action === 'listViewSearchPreset') {
+      const modeRaw = cfgRaw.mode !== undefined && cfgRaw.mode !== null ? cfgRaw.mode.toString().trim().toLowerCase() : '';
+      const mode = modeRaw === 'date' || modeRaw === 'advanced' || modeRaw === 'text' ? modeRaw : undefined;
+      const keyword =
+        cfgRaw.keyword !== undefined && cfgRaw.keyword !== null ? cfgRaw.keyword.toString() : undefined;
+      const dateValue =
+        cfgRaw.dateValue !== undefined && cfgRaw.dateValue !== null ? cfgRaw.dateValue.toString() : undefined;
+      const fieldFiltersRaw = cfgRaw.fieldFilters;
+      let fieldFilters: Record<string, string | string[]> | undefined;
+      if (fieldFiltersRaw && typeof fieldFiltersRaw === 'object' && !Array.isArray(fieldFiltersRaw)) {
+        fieldFilters = {};
+        Object.keys(fieldFiltersRaw).forEach(key => {
+          const id = (key || '').toString().trim();
+          if (!id) return;
+          const value = (fieldFiltersRaw as any)[key];
+          if (Array.isArray(value)) {
+            const normalized = value
+              .map(v => (v === undefined || v === null ? '' : v.toString().trim()))
+              .filter(Boolean);
+            if (normalized.length) fieldFilters![id] = normalized;
+            return;
+          }
+          if (value === undefined || value === null) return;
+          const normalized = value.toString().trim();
+          if (!normalized) return;
+          fieldFilters![id] = normalized;
+        });
+        if (!Object.keys(fieldFilters).length) fieldFilters = undefined;
+      }
+
+      const config: ButtonConfig = { action: 'listViewSearchPreset' } as any;
+      if (mode) (config as any).mode = mode;
+      if (keyword !== undefined) (config as any).keyword = keyword;
+      if (dateValue !== undefined) (config as any).dateValue = dateValue;
+      if (fieldFilters) (config as any).fieldFilters = fieldFilters;
+      return config;
+    }
+
     if (action === 'updateRecord') {
       const setRaw = cfgRaw.set ?? cfgRaw.patch ?? cfgRaw.update ?? cfgRaw.changes;
       if (!setRaw || typeof setRaw !== 'object') return undefined;

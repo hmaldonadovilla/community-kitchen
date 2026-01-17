@@ -20,6 +20,7 @@
   >**BACKLOG**
 - ck-bug-9: when opening records we are unnecesarrily saving the record even if the user didn't change any data. I think this is trigering some cache inconsistencies and showing the banner to refresh the record unnecessarily.
   >**BACKLOG**
+- ck-bug-10: we need to prevent racing conditions that would show the banner to refresh the record or the one asking to wait for file uploads to complete before leaving to the list view. I thing the best solution is that when the user taps the home button to leave the edit or summary view to the list view, we should block the navigation, disable al editing actions and show a banner asking to wait because we saving. No need to specify what is being saved or give options, just a simple message like "Please wait while we save your changes...". We use the blocking overlay dialog without buttons or posibility to dismiss it.
 
 ## technical requirements
 
@@ -114,11 +115,11 @@
   > **DONE - Cursor**
 - ck-22: fix button issue `[Info] [ReactForm] – "list.openButton.ignored" – {openButtonId: "RE_OPEN", reason: "unsupportedAction"}` -> action is `updateRecord` which works fine in summary view but fails in list view, cards mode.
   > **DONE - Cursor**
-- ck-23: the search field `x` icon should not clear the search results, add a separate control for that underneath the search field.
+- ck-23: the search field `x` icon should not clear the search results, add a separate control for that underneath the search field. This separate control appears only when the search results are not empty.
   > **WIP - SoftwareEngineer**
 - ck-24: remove default empty line items in line item groups.
   > **DONE - Cursor**
-- ck-25: add buttons below the search bar on cards mode in list view page. To trigger predefined search queries.
+- ck-25: add buttons below the search bar on cards mode in list view page, within the body of the page. They are displayed when search results are not showing. They are used to trigger predefined search queries. These bottons should have a new action type `listViewSearchPreset` that will be used to trigger the predefined search queries.
   > **WIP - SoftwareEngineer**
 - ck-26: add `source` sort type to the listViewSort config
 - ck-27: support placeholders in the email subject

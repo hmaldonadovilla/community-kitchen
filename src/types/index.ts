@@ -162,6 +162,7 @@ export type ButtonAction =
   | 'renderMarkdownTemplate'
   | 'renderHtmlTemplate'
   | 'createRecordPreset'
+  | 'listViewSearchPreset'
   | 'updateRecord'
   | 'openUrlField';
 
@@ -266,6 +267,31 @@ export interface CreateRecordPresetButtonConfig {
   placements?: ButtonPlacement[];
 }
 
+export interface ListViewSearchPresetButtonConfig {
+  /**
+   * Trigger a predefined search query in the list view.
+   *
+   * Note: these buttons render only in the list view (cards mode, when results are hidden).
+   */
+  action: 'listViewSearchPreset';
+  /**
+   * Optional search mode override (defaults to `listView.search.mode`).
+   */
+  mode?: 'text' | 'date' | 'advanced';
+  /**
+   * Keyword to search for (text or advanced modes).
+   */
+  keyword?: string;
+  /**
+   * Date to search for (YYYY-MM-DD) when `mode` is `date`.
+   */
+  dateValue?: string;
+  /**
+   * Advanced field filters (AND-ed together).
+   */
+  fieldFilters?: Record<string, string | string[]>;
+}
+
 export interface UpdateRecordButtonConfig {
   /**
    * Update an existing record (draft save), then optionally navigate to another view.
@@ -316,6 +342,7 @@ export type ButtonConfig =
   | RenderMarkdownTemplateButtonConfig
   | RenderHtmlTemplateButtonConfig
   | CreateRecordPresetButtonConfig
+  | ListViewSearchPresetButtonConfig
   | UpdateRecordButtonConfig
   | OpenUrlFieldButtonConfig;
 
@@ -2179,6 +2206,11 @@ export interface ListViewSearchConfig {
    * Set to an empty string to remove the placeholder text.
    */
   placeholder?: LocalizedString | string;
+  /**
+   * Optional title shown inline before list view preset buttons.
+   * Example: "View recipes:".
+   */
+  presetsTitle?: LocalizedString | string;
 }
 
 export interface ListViewViewConfig {
