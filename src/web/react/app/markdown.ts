@@ -1,3 +1,5 @@
+import { SYSTEM_FONT_STACK } from '../../../constants/typography';
+
 const escapeHtml = (raw: string): string => {
   return (raw || '')
     .toString()
@@ -316,7 +318,7 @@ export const markdownToHtmlDocument = (rawMarkdown: string, opts?: { title?: str
       body {
         margin: 0;
         padding: 18px;
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        font-family: ${SYSTEM_FONT_STACK};
         color: #0f172a;
         background: #ffffff;
         line-height: 1.45;
@@ -373,7 +375,7 @@ export const markdownToHtmlDocument = (rawMarkdown: string, opts?: { title?: str
         text-decoration: underline;
       }
       code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-family: inherit;
         background: rgba(15, 23, 42, 0.06);
         padding: 2px 6px;
         border-radius: 8px;
@@ -401,5 +403,4 @@ export const markdownToHtmlDocument = (rawMarkdown: string, opts?: { title?: str
 
   return doc;
 };
-
 

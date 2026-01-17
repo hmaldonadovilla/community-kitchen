@@ -1,4 +1,5 @@
 import { WebFormDefinition } from '../types';
+import { SYSTEM_FONT_STACK } from '../constants/typography';
 import { isDebugEnabled } from './webform/debug';
 
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
@@ -117,6 +118,9 @@ export function buildWebFormHtml(
         --ck-font-group-title: 36px;
         --ck-font-pill: 26px;
         --ck-font-caret: 38px;
+
+        /* Typography */
+        --ck-font-family: ${SYSTEM_FONT_STACK};
       }
       * { box-sizing: border-box; }
       html {
@@ -126,7 +130,7 @@ export function buildWebFormHtml(
       }
       body {
         margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", "Segoe UI", sans-serif;
+        font-family: var(--ck-font-family);
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
         background: var(--bg);
