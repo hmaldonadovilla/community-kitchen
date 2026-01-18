@@ -3,7 +3,7 @@ alwaysApply: true
 always_on: true
 trigger: always_on
 applyTo: "**"
-description: Snyk Security At Inception
+description: Development Rules
 ---
 
 # Development rules
@@ -38,3 +38,7 @@ description: Snyk Security At Inception
 - Keep state local by default. Promote state upward only when multiple siblings need it. Avoid global state for transient UI concerns.
 - Tests: unit test domain logic; integration test service layers; keep UI tests focused on user flows.
 - Every new module should have a clear owner and a doc comment explaining responsibility and boundaries.
+
+## UI Hygiene & Typography Contract – Authoritative Reset
+
+Strictly follow the UI Hygiene & Typography Contract – Authoritative Reset rules. defined in `.cursor/rules/style_guide.mdc` file.

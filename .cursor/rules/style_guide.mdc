@@ -1,3 +1,11 @@
+---
+alwaysApply: true
+always_on: true
+trigger: always_on
+applyTo: "**"
+description: UI Hygiene & Typography Contract – Authoritative Reset
+---
+
 # UI Hygiene & Typography Contract – Authoritative Reset
 
 This document is the single authoritative reference for UI hygiene, typography, colour, and framing across all applications.
