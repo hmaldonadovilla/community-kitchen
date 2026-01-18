@@ -1352,7 +1352,7 @@ const ListView: React.FC<ListViewProps> = ({
 
         <div className="list-toolbar">
           <label className="ck-list-search-label" htmlFor={searchInputId}>
-            {dateSearchEnabled ? tSystem('list.searchByDate', language, '🔍 by date') : tSystem('list.searchByText', language, '🔍')}
+            {dateSearchEnabled ? tSystem('list.searchByDate', language, 'Search by date') : tSystem('list.searchByText', language, 'Search')}
           </label>
 
           <div className={searchControlClass}>
@@ -1400,7 +1400,7 @@ const ListView: React.FC<ListViewProps> = ({
                   });
                 }}
               >
-                <span aria-hidden="true">⚙︎</span>
+                <span aria-hidden="true">Filters</span>
               </button>
             ) : null}
 

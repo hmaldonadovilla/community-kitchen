@@ -29,6 +29,7 @@ export const LineItemMultiAddSelect: React.FC<{
 
   const selectedCount = selected.length;
   const normalizedQuery = query.trim().toLowerCase();
+  const hasQuery = normalizedQuery.length > 0;
   const showClear = !disabled && Boolean(normalizedQuery);
   const maxItems = 60;
   const mergeDiagnostic = (payload?: Record<string, unknown>) => {
@@ -38,14 +39,14 @@ export const LineItemMultiAddSelect: React.FC<{
   };
 
   const filtered = useMemo(() => {
-    if (!normalizedQuery) return options;
+    if (!hasQuery) return [];
     return options.filter(opt => {
       const labelValue = (opt.label || '').toString().toLowerCase();
       const valueValue = (opt.value || '').toString().toLowerCase();
       const extra = (opt.searchText || '').toString().toLowerCase();
       return labelValue.includes(normalizedQuery) || valueValue.includes(normalizedQuery) || extra.includes(normalizedQuery);
     });
-  }, [normalizedQuery, options]);
+  }, [hasQuery, normalizedQuery, options]);
 
   const visibleOptions = filtered.slice(0, maxItems);
 
@@ -125,7 +126,7 @@ export const LineItemMultiAddSelect: React.FC<{
                   const haystack = `${opt.label || ''} ${opt.value || ''} ${opt.searchText || ''}`.toLowerCase();
                   return haystack.includes(nextNormalized);
                 }).length
-              : options.length;
+              : 0;
             setQuery(next);
             setOpen(true);
             onDiagnostic?.('ui.lineItems.selectorOverlay.search', mergeDiagnostic({
@@ -191,7 +192,9 @@ export const LineItemMultiAddSelect: React.FC<{
               })
             ) : (
               <div className="ck-line-item-multiadd__empty">
-                {emptyText || tSystem('lineItems.noOptionsAvailable', language, 'No options available.')}
+                {hasQuery
+                  ? emptyText || tSystem('lineItems.noOptionsAvailable', language, 'No options available.')
+                  : tSystem('lineItems.searchPrompt', language, 'Enter at least 1 character to search.')}
               </div>
             )}
           </div>

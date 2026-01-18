@@ -453,7 +453,7 @@ export function buildWebFormHtml(
         -webkit-overflow-scrolling: touch;
       }
       .ck-list-search-presets-title {
-        font-weight: 700;
+        font-weight: 600;
         color: var(--muted);
         white-space: nowrap;
       }
@@ -462,7 +462,7 @@ export function buildWebFormHtml(
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
-        font-weight: 800;
+        font-weight: 600;
         color: var(--muted);
         /* Match list/table typography (same as column headers). */
         font-size: var(--ck-font-control);
@@ -497,7 +497,7 @@ export function buildWebFormHtml(
         max-width: 100%;
         text-align: left;
       }
-      /* Hide native iOS/WebKit search clear so we can show our own red "×". */
+      /* Hide native iOS/WebKit search clear so we can show our own clear button. */
       .list-toolbar input[type="search"]::-webkit-search-cancel-button {
         -webkit-appearance: none;
         appearance: none;
@@ -521,13 +521,14 @@ export function buildWebFormHtml(
         right: 10px;
         top: 50%;
         transform: translateY(-50%);
-        width: 36px;
+        min-width: 36px;
+        padding: 0 6px;
         height: 36px;
         border-radius: 999px;
         border: none;
         background: transparent;
         color: var(--muted);
-        font-weight: 900;
+        font-weight: 600;
         font-size: 1.05em;
         line-height: 1;
         display: inline-flex;
@@ -557,8 +558,8 @@ export function buildWebFormHtml(
         border-radius: 999px;
         border: none;
         background: transparent;
-        color: var(--danger);
-        font-weight: 900;
+        color: var(--text);
+        font-weight: 600;
         font-size: 1.2em;
         line-height: 1;
         display: inline-flex;
@@ -568,7 +569,7 @@ export function buildWebFormHtml(
         box-shadow: none;
       }
       .list-toolbar .ck-list-search-clear-icon:focus-visible {
-        outline: 4px solid rgba(255, 59, 48, 0.28);
+        outline: 4px solid rgba(15, 23, 42, 0.2);
         outline-offset: 3px;
       }
       .list-toolbar .sort-control {

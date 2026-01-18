@@ -64,23 +64,13 @@
     align-items: center;
     padding: 4px 10px;
     border-radius: 999px;
-    border: 1px solid rgba(59, 130, 246, 0.28);
-    background: rgba(59, 130, 246, 0.12);
-    color: #1e3a8a;
-    font-weight: 800;
+    border: 1px solid rgba(15, 23, 42, 0.15);
+    background: transparent;
+    color: inherit;
+    font-weight: 600;
     font-size: 0.78em;
     line-height: 1;
     white-space: nowrap;
-  }
-  .ck-status-pill[data-status-key="onClose"] {
-    border-color: rgba(34, 197, 94, 0.45);
-    background: rgba(34, 197, 94, 0.14);
-    color: #166534;
-  }
-  .ck-status-pill[data-status-key="reOpened"] {
-    border-color: rgba(249, 115, 22, 0.45);
-    background: rgba(249, 115, 22, 0.14);
-    color: #9a3412;
   }
 
   .ck-tabs {
@@ -297,25 +287,5 @@
       });
     });
 
-    var tables = root.querySelectorAll('.ck-ingredients-table');
-    tables.forEach(function (table) {
-      var allergenCells = table.querySelectorAll('[data-ck-allergen-cell]');
-      var hasAllergen = false;
-      allergenCells.forEach(function (cell) {
-        var text = (cell.textContent || '').trim().toLowerCase();
-        if (text && text !== 'none') {
-          hasAllergen = true;
-        }
-      });
-      if (!hasAllergen) {
-        var allergenCols = table.querySelectorAll('[data-ck-allergen-col]');
-        allergenCols.forEach(function (node) {
-          node.style.display = 'none';
-        });
-        allergenCells.forEach(function (node) {
-          node.style.display = 'none';
-        });
-      }
-    });
   })();
 </script>

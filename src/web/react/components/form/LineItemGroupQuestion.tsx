@@ -1845,14 +1845,11 @@ export const LineItemGroupQuestion: React.FC<{
               {warningsLegendVisible ? (
                 <div className="ck-line-item-table__legend">
                   <div className="ck-line-item-table__legend-title">
-                    {tSystem('validation.warningsTitle', language, 'Warnings')}
+                    {tSystem('validation.warningTitle', language, 'Warning')}
                   </div>
                   <div className="ck-line-item-table__legend-items">
                     {warningsLegend.map((entry, idx) => (
                       <div key={`${entry.rowId}-legend-${idx}`} className="ck-line-item-table__legend-item">
-                        <span className="ck-line-item-table__legend-icon" aria-hidden="true">
-                          !
-                        </span>
                         <span className="ck-line-item-table__legend-text">
                           {entry.label ? (
                             <span className="ck-line-item-table__legend-label">{entry.label}: </span>
