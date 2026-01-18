@@ -78,6 +78,7 @@ import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveLabel } from './utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from './utils/valueDisplay';
+import { SYSTEM_FONT_STACK } from '../../constants/typography';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { toUploadItems } from './components/form/utils';
@@ -2338,7 +2339,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>
     <style>
-      body { margin: 0; padding: 24px; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial; color: #0f172a; background: #ffffff; }
+      body { margin: 0; padding: 24px; font-family: ${SYSTEM_FONT_STACK}; color: #0f172a; background: #ffffff; }
       .sub { margin-top: 8px; font-weight: 700; color: rgba(15,23,42,0.7); }
       .box { margin-top: 22px; padding: 18px 18px; border: 1px solid rgba(148,163,184,0.45); border-radius: 16px; background: rgba(148,163,184,0.10); font-weight: 900; font-size: 20px; }
     </style>
@@ -2423,7 +2424,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           try {
             if (popup && !popup.closed) {
               popup.document.open();
-              popup.document.write(`<pre style="white-space:pre-wrap;font-family:ui-sans-serif,system-ui;padding:18px;">${msg}</pre>`);
+              popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${msg}</pre>`);
               popup.document.close();
             }
           } catch (_) {
@@ -2465,7 +2466,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         try {
           if (popup && !popup.closed) {
             popup.document.open();
-            popup.document.write(`<pre style="white-space:pre-wrap;font-family:ui-sans-serif,system-ui;padding:18px;">${msg}</pre>`);
+            popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${msg}</pre>`);
             popup.document.close();
           }
         } catch (_) {

@@ -1,5 +1,14 @@
 import { evaluateRules, matchesWhenClause, shouldHideField, validateRules } from '../../core';
-import { FieldValue, LangCode, VisibilityContext, WebFormDefinition, WebFormSubmission } from '../../types';
+import {
+  FieldValue,
+  LangCode,
+  LineItemDedupRule,
+  LineItemRowState,
+  LocalizedString,
+  VisibilityContext,
+  WebFormDefinition,
+  WebFormSubmission
+} from '../../types';
 import { SubmissionPayload } from '../api';
 import { FormErrors, LineItemState } from '../types';
 import { resolveFieldLabel } from '../utils/labels';
@@ -7,7 +16,7 @@ import { isEmptyValue } from '../utils/values';
 import { tSystem } from '../../systemStrings';
 import { resolveLocalizedString } from '../../i18n';
 import { buildMaybeFilePayload } from './filePayload';
-import { ROW_ID_KEY, buildSubgroupKey, resolveSubgroupKey } from './lineItems';
+import { ROW_ID_KEY, buildLineItemDedupKey, buildSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { resolveParagraphUserText } from './paragraphDisclaimer';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
@@ -19,6 +28,41 @@ const formatTemplate = (value: string, vars?: Record<string, string | number | b
     return raw === undefined || raw === null ? '' : String(raw);
   });
 };
+
+const lineItemDedupDefaultMessage: LocalizedString = {
+  en: 'This entry already exists in this list.',
+  fr: 'Cette entrée existe déjà dans cette liste.',
+  nl: 'Deze invoer bestaat al in deze lijst.'
+};
+
+const normalizeLineItemDedupRules = (raw: any): LineItemDedupRule[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(rule => {
+      if (!rule || typeof rule !== 'object') return null;
+      const rawFields = (rule as any).fields ?? (rule as any).fieldIds ?? (rule as any).keys ?? (rule as any).keyFields;
+      const fields = (() => {
+        if (Array.isArray(rawFields)) {
+          return rawFields
+            .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
+            .filter(Boolean);
+        }
+        if (typeof rawFields === 'string') {
+          return rawFields
+            .split(',')
+            .map(v => v.trim())
+            .filter(Boolean);
+        }
+        return [];
+      })();
+      if (!fields.length) return null;
+      return { fields, message: (rule as any).message } as LineItemDedupRule;
+    })
+    .filter(Boolean) as LineItemDedupRule[];
+};
+
+const resolveLineItemDedupMessage = (rule: LineItemDedupRule, language: LangCode): string =>
+  resolveLocalizedString(rule.message || lineItemDedupDefaultMessage, language, 'This entry already exists in this list.');
 
 const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
   if (!field || field?.type !== 'PARAGRAPH') return rawValue;
@@ -207,6 +251,36 @@ export const validateForm = (args: {
   const { definition, language, values, lineItems, collapsedRows } = args;
   const ctx = buildValidationContext(values, lineItems);
   const allErrors: FormErrors = {};
+  const applyLineItemDedupRules = (args: {
+    groupId: string;
+    rows: LineItemRowState[];
+    rules: LineItemDedupRule[];
+    buildFieldPath: (rowId: string, fieldId: string) => string;
+  }): void => {
+    const { rows, rules, buildFieldPath } = args;
+    if (!rows.length || !rules.length) return;
+    rules.forEach(rule => {
+      const fields = (rule.fields || []).map((fid: string) => (fid ?? '').toString().trim()).filter(Boolean);
+      if (!fields.length) return;
+      const message = resolveLineItemDedupMessage(rule, language);
+      const matches = new Map<string, string[]>();
+      rows.forEach(row => {
+        const key = buildLineItemDedupKey((row.values || {}) as Record<string, FieldValue>, fields);
+        if (!key) return;
+        const list = matches.get(key) || [];
+        list.push(row.id);
+        matches.set(key, list);
+      });
+      matches.forEach(rowIds => {
+        if (rowIds.length < 2) return;
+        rowIds.forEach(rowId => {
+          const fieldPath = buildFieldPath(rowId, fields[0]);
+          if (!fieldPath) return;
+          if (!allErrors[fieldPath]) allErrors[fieldPath] = message;
+        });
+      });
+    });
+  };
 
   definition.questions.forEach(q => {
     const questionHidden = shouldHideField(q.visibility, ctx);
@@ -253,6 +327,7 @@ export const validateForm = (args: {
       let hasAtLeastOneValidEnabledRow = false;
       let hasAnyRow = false;
       let hasAnyNonDisabledRow = false;
+      const eligibleRows: LineItemRowState[] = [];
 
       rows.forEach(row => {
         const rowValues = (row as any)?.values || {};
@@ -275,6 +350,7 @@ export const validateForm = (args: {
           return;
         }
         hasAnyNonDisabledRow = true;
+        eligibleRows.push(row as LineItemRowState);
         let rowValid = true;
         const groupCtx: VisibilityContext = {
           getValue: fid => values[fid],
@@ -349,6 +425,7 @@ export const validateForm = (args: {
             if (!subId) return;
             const subKey = buildSubgroupKey(q.id, row.id, subId);
             const subRows = lineItems[subKey] || [];
+          const eligibleSubRows: LineItemRowState[] = [];
             const subUi = (sub as any)?.ui;
             const isSubProgressive =
               subUi?.mode === 'progressive' &&
@@ -386,6 +463,7 @@ export const validateForm = (args: {
               ) {
                 return;
               }
+              eligibleSubRows.push(subRow as LineItemRowState);
               const subCtx: VisibilityContext = {
                 getValue: fid => values[fid],
                 getLineValue: (_rowId, fid) => subRow.values[fid]
@@ -457,10 +535,26 @@ export const validateForm = (args: {
                 }
               });
             });
+
+            const subDedupRules = normalizeLineItemDedupRules((sub as any)?.dedupRules);
+            applyLineItemDedupRules({
+              groupId: subKey,
+              rows: eligibleSubRows,
+              rules: subDedupRules,
+              buildFieldPath: (rowId: string, fieldId: string) => `${subKey}__${fieldId}__${rowId}`
+            });
           });
         }
 
         if (rowValid) hasAtLeastOneValidEnabledRow = true;
+      });
+
+      const dedupRules = normalizeLineItemDedupRules((q.lineItemConfig as any)?.dedupRules);
+      applyLineItemDedupRules({
+        groupId: q.id,
+        rows: eligibleRows,
+        rules: dedupRules,
+        buildFieldPath: (rowId: string, fieldId: string) => `${q.id}__${fieldId}__${rowId}`
       });
 
       // Required LINE_ITEM_GROUPs must have at least one enabled+valid row (disabled rows are ignored).

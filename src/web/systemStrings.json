@@ -127,7 +127,9 @@
     "remove": { "en": "Remove", "fr": "Supprimer", "nl": "Verwijderen" },
     "addLine": { "en": "Add line", "fr": "Ajouter une ligne", "nl": "Regel toevoegen" },
     "addLines": { "en": "Add lines", "fr": "Ajouter des lignes", "nl": "Regels toevoegen" },
+    "addSelected": { "en": "Add selected ({count})", "fr": "Ajouter la sélection ({count})", "nl": "Selectie toevoegen ({count})" },
     "selectLinesTitle": { "en": "Select lines", "fr": "Sélectionner des lignes", "nl": "Regels selecteren" },
+    "selectLinesSearch": { "en": "Search items", "fr": "Rechercher des éléments", "nl": "Zoek items" },
     "noOptionsAvailable": { "en": "No options available.", "fr": "Aucune option disponible.", "nl": "Geen opties beschikbaar." }
   },
   "common": {

@@ -178,6 +178,173 @@ export const FORM_VIEW_STYLES = `
         .form-card .line-item-table textarea {
           font-size: 26px;
         }
+        .form-card .ck-line-item-table,
+        .webform-overlay .ck-line-item-table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+          table-layout: fixed;
+        }
+        .form-card .ck-line-item-table th,
+        .form-card .ck-line-item-table td,
+        .webform-overlay .ck-line-item-table th,
+        .webform-overlay .ck-line-item-table td {
+          padding: 8px 10px;
+          border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+          text-align: left;
+          vertical-align: top;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+        .form-card .ck-line-item-table th,
+        .webform-overlay .ck-line-item-table th {
+          font-size: calc(var(--ck-font-label) * 0.85);
+          font-weight: 600;
+          color: rgba(15, 23, 42, 0.65);
+        }
+        .form-card .ck-line-item-table thead th,
+        .webform-overlay .ck-line-item-table thead th {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          background: #f8fafc;
+          box-shadow: 0 2px 0 rgba(226, 232, 240, 0.9);
+        }
+        .form-card .ck-line-item-table__actions,
+        .webform-overlay .ck-line-item-table__actions {
+          width: 1%;
+          white-space: nowrap;
+          text-align: right;
+        }
+        .form-card .ck-line-item-table__remove-button,
+        .webform-overlay .ck-line-item-table__remove-button {
+          border: 1px solid #dc2626;
+          background: #ef4444;
+          color: #ffffff;
+          border-radius: 10px;
+          width: 38px;
+          height: 38px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        }
+        .form-card .ck-line-item-table__remove-button:disabled,
+        .webform-overlay .ck-line-item-table__remove-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .form-card .ck-line-item-table__control input,
+        .form-card .ck-line-item-table__control select,
+        .form-card .ck-line-item-table__control textarea,
+        .webform-overlay .ck-line-item-table__control input,
+        .webform-overlay .ck-line-item-table__control select,
+        .webform-overlay .ck-line-item-table__control textarea {
+          width: 100%;
+          min-width: 0;
+          max-width: 100%;
+          font-size: var(--ck-font-control);
+          box-sizing: border-box;
+        }
+        .form-card .ck-line-item-table__control[data-has-warning="true"],
+        .form-card .ck-line-item-table__value[data-has-warning="true"],
+        .webform-overlay .ck-line-item-table__control[data-has-warning="true"],
+        .webform-overlay .ck-line-item-table__value[data-has-warning="true"] {
+          box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.55);
+          border-radius: 10px;
+          background: rgba(245, 158, 11, 0.08);
+        }
+        .form-card .ck-line-item-table__control[data-has-error="true"],
+        .form-card .ck-line-item-table__value[data-has-error="true"],
+        .webform-overlay .ck-line-item-table__control[data-has-error="true"],
+        .webform-overlay .ck-line-item-table__value[data-has-error="true"] {
+          box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.6);
+          border-radius: 10px;
+          background: rgba(239, 68, 68, 0.08);
+        }
+        .form-card .ck-line-item-table__value {
+          font-size: var(--ck-font-control);
+        }
+        .form-card .ck-line-item-table__empty {
+          text-align: center;
+          padding: 16px;
+          color: rgba(15, 23, 42, 0.55);
+        }
+        .form-card .ck-line-item-table__message-row td {
+          border-bottom: 1px solid rgba(226, 232, 240, 0.65);
+          padding: 4px 10px 12px;
+        }
+        .form-card .ck-line-item-table__row-errors {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .form-card .ck-line-item-table__legend,
+        .webform-overlay .ck-line-item-table__legend {
+          margin-top: 10px;
+          padding: 0 60px;
+          border-radius: 12px;
+          border: 1px solid #fdba74;
+          background: #ffedd5;
+          color: #0f172a;
+          position: sticky;
+          bottom: 0;
+          z-index: 3;
+          box-shadow: 0 -8px 16px rgba(15, 23, 42, 0.08);
+          padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+        }
+        .form-card .ck-line-item-table__legend-title,
+        .webform-overlay .ck-line-item-table__legend-title {
+          font-weight: 600;
+          margin-bottom: 6px;
+        }
+        .form-card .ck-line-item-table__legend-items,
+        .webform-overlay .ck-line-item-table__legend-items {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .form-card .ck-line-item-table__legend-item,
+        .webform-overlay .ck-line-item-table__legend-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          font-weight: 400;
+          color: #b45309;
+        }
+        .form-card .ck-line-item-table__legend-icon,
+        .webform-overlay .ck-line-item-table__legend-icon {
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          border: 1px solid rgba(180, 83, 9, 0.35);
+          background: rgba(255, 237, 213, 0.75);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 700;
+          font-size: 0.9em;
+          flex: 0 0 auto;
+        }
+        .form-card .ck-line-item-table__legend-label,
+        .webform-overlay .ck-line-item-table__legend-label {
+          font-weight: 600;
+        }
+        .form-card .ck-line-item-table__legend-text,
+        .webform-overlay .ck-line-item-table__legend-text {
+          font-weight: 400;
+        }
+        .form-card .ck-line-item-table__scroll,
+        .webform-overlay .ck-line-item-table__scroll {
+          overflow: visible;
+        }
+        .form-card .ck-line-item-table__row--even {
+          background: #ffffff;
+        }
+        .form-card .ck-line-item-table__row--odd {
+          background: #f8fafc;
+        }
         .form-card .field.inline-field,
         .webform-overlay .field.inline-field {
           display: flex;
@@ -214,6 +381,11 @@ export const FORM_VIEW_STYLES = `
           color: var(--text);
           overflow-wrap: anywhere;
           word-break: break-word;
+        }
+        .form-card .required-star,
+        .webform-overlay .required-star {
+          color: #dc2626;
+          font-weight: 600;
         }
         .form-card .field.inline-field > input,
         .form-card .field.inline-field > select,
@@ -851,6 +1023,118 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
           min-width: 0;
         }
+        /* Line-item selector overlay: inline multi-select search. */
+        .form-card .ck-line-item-multiadd,
+        .webform-overlay .ck-line-item-multiadd {
+          position: relative;
+          width: 100%;
+          min-width: 0;
+        }
+        .form-card .ck-line-item-multiadd__input,
+        .webform-overlay .ck-line-item-multiadd__input {
+          position: relative;
+          width: 100%;
+          min-width: 0;
+        }
+        .form-card .ck-line-item-multiadd__input > input,
+        .webform-overlay .ck-line-item-multiadd__input > input {
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          padding-right: 52px;
+        }
+        .form-card .ck-line-item-multiadd__clear,
+        .webform-overlay .ck-line-item-multiadd__clear {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 36px;
+          height: 36px;
+          border-radius: 999px;
+          border: none;
+          background: transparent;
+          color: var(--danger);
+          font-weight: 900;
+          font-size: 1.2em;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          box-shadow: none;
+          padding: 0;
+        }
+        .form-card .ck-line-item-multiadd__clear:focus-visible,
+        .webform-overlay .ck-line-item-multiadd__clear:focus-visible {
+          outline: 4px solid rgba(255, 59, 48, 0.28);
+          outline-offset: 3px;
+        }
+        .form-card .ck-line-item-multiadd__menu,
+        .webform-overlay .ck-line-item-multiadd__menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          right: 0;
+          z-index: 200;
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.14);
+          border-radius: 14px;
+          box-shadow: 0 22px 70px rgba(15, 23, 42, 0.18);
+          padding: 8px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .form-card .ck-line-item-multiadd__options,
+        .webform-overlay .ck-line-item-multiadd__options {
+          max-height: 320px;
+          overflow: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .form-card .ck-line-item-multiadd__option,
+        .webform-overlay .ck-line-item-multiadd__option {
+          width: 100%;
+          text-align: left;
+          padding: 10px 12px;
+          border: 1px solid rgba(15, 23, 42, 0.14);
+          border-radius: 12px;
+          background: #ffffff;
+          font-size: var(--ck-font-control);
+          font-weight: 800;
+          color: var(--text);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .form-card .ck-line-item-multiadd__option input,
+        .webform-overlay .ck-line-item-multiadd__option input {
+          width: 24px;
+          height: 24px;
+          accent-color: var(--accent);
+          flex: 0 0 auto;
+        }
+        .form-card .ck-line-item-multiadd__option.is-selected,
+        .webform-overlay .ck-line-item-multiadd__option.is-selected {
+          background: rgba(59, 130, 246, 0.16);
+          border-color: rgba(59, 130, 246, 0.28);
+        }
+        .form-card .ck-line-item-multiadd__empty,
+        .webform-overlay .ck-line-item-multiadd__empty {
+          padding: 8px 10px;
+          color: rgba(15, 23, 42, 0.62);
+          font-weight: 700;
+        }
+        .form-card .ck-line-item-multiadd__footer,
+        .webform-overlay .ck-line-item-multiadd__footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          padding-top: 6px;
+          border-top: 1px solid rgba(226, 232, 240, 0.9);
+        }
         .ck-searchable-select > input {
           width: 100%;
           min-width: 0;
@@ -1268,4 +1552,3 @@ export const FORM_VIEW_STYLES = `
         }
 
       `;
-

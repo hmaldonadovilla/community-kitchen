@@ -4,6 +4,7 @@ export type SearchableSelectOption = {
   value: string;
   label: string;
   tooltip?: string;
+  searchText?: string;
 };
 
 export const SearchableSelect: React.FC<{
@@ -36,7 +37,8 @@ export const SearchableSelect: React.FC<{
     return options.filter(o => {
       const label = (o.label || '').toString().toLowerCase();
       const val = (o.value || '').toString().toLowerCase();
-      return label.includes(normalizedQuery) || val.includes(normalizedQuery);
+      const extra = (o.searchText || '').toString().toLowerCase();
+      return label.includes(normalizedQuery) || val.includes(normalizedQuery) || extra.includes(normalizedQuery);
     });
   }, [normalizedQuery, options]);
 
@@ -206,4 +208,3 @@ export const SearchableSelect: React.FC<{
     </div>
   );
 };
-

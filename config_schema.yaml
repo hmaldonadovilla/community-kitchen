@@ -665,6 +665,17 @@ components:
           type: string
         labelNl:
           type: string
+        placeholder:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Optional placeholder text for the selector input.
+        placeholderEn:
+          type: string
+        placeholderFr:
+          type: string
+        placeholderNl:
+          type: string
         required:
           type: boolean
         requiredMessage:
@@ -780,15 +791,23 @@ components:
           description: ID of the line-item field used as anchor when bulk-adding rows.
         addMode:
           type: string
-          enum: [overlay, inline, auto]
+          enum: [overlay, selectorOverlay, inline, auto]
           description: |
             How rows are added for this line-item group.
             - overlay: open a multi-select overlay for the anchor CHOICE field, then create one row per selected value.
+            - selectorOverlay: use the section selector as a searchable multi-select list for the anchor CHOICE field (no separate Add button). Search indexes include extra columns from `optionsRef` / data sources.
             - auto: automatically add/recompute rows when the anchor field's `optionFilter.dependsOn` fields are filled (one row per allowed anchor option). Auto-generated rows are overwritten when dependencies change, while manual rows are preserved.
             - inline: default; show a simple "Add line" button and create an empty row per click.
         sectionSelector:
           $ref: '#/components/schemas/LineItemSelectorConfig'
           description: Optional selector rendered above the line items to scope filters/validation rules (options can come from a REF tab).
+        dedupRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemDedupRule'
+          description: |
+            Optional row-level de-duplication rules. Each rule defines the field ids that must be unique together
+            within a line-item group or subgroup. Dedup checks run only once all listed fields have values.
         totals:
           type: array
           items:
@@ -993,11 +1012,41 @@ components:
       properties:
         mode:
           type: string
-          enum: [default, progressive]
+          enum: [default, progressive, table]
           description: |
             UI mode for this line item group.
             - default: existing editor behavior
             - progressive: rows are collapsed by default and can be expanded once collapsed fields are valid
+            - table: compact table layout with one row per line item
+        tableColumns:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional ordered list of field ids to render as columns when `mode: "table"`.
+        tableColumnWidths:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+          description: |
+            Optional per-column widths for table mode. Keys should match field ids, plus `__remove`
+            to target the remove button column. Values can be CSS widths (e.g., "50%", "120px")
+            or numbers (treated as percent).
+        nonMatchWarningMode:
+          type: string
+          enum: [descriptive, validation, both]
+          description: |
+            Controls how non-match option warnings are shown in the table legend.
+            - descriptive: show per-row optionFilter warnings listing which dependency keys were not satisfied
+            - validation: show warning messages from validationRules (e.g., __ckNonMatchOptions) instead
+            - both: show both (deduped)
+        tableHideUntilAnchor:
+          type: boolean
+          description: |
+            When true (default), hide non-anchor columns until the anchor field has a value.
+            Useful when rows are created by selecting the anchor value first (e.g., ingredients).
         openInOverlay:
           type: boolean
           description: |
@@ -2985,6 +3034,14 @@ components:
         required:
           type: boolean
           description: Whether the selector is required before adding lines.
+        choiceSearchEnabled:
+          type: boolean
+          description: |
+            For selectors rendered as a select, enable a type-to-search input.
+
+            - When `true`, always use the searchable control (even for smaller lists)
+            - When `false`, always use the native select (no search)
+            - When omitted, the UI enables it automatically only for large option sets
         optionFilter:
           $ref: '#/components/schemas/OptionFilter'
           description: |
@@ -3011,6 +3068,21 @@ components:
         decimalPlaces:
           type: integer
           description: Optional decimal precision for totals.
+
+    LineItemDedupRule:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            type: string
+          description: Field ids that must be unique together within the group/subgroup.
+        message:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Optional localized error message for duplicate rows.
+      required: [fields]
 
     ValidationRule:
       type: object

@@ -18,9 +18,10 @@
   >**DONE - Codex**
 - ck-bug-8: tested using Steps UI. Ordered validation (`enforceFieldOrder`) is not working as expected on steps UI for line item groups that open in regular way. For subgroups in overlay the order validation works as expected. However for subgroups in overlay it is allowed to close the overlay without completing the required fields, which is not the case for line item groups in overlay. Finally we need a config setting to define if closing the overlay without completing the required fields is allowed or not.
   >**BACKLOG**
-- ck-bug-9: when opening records we are unnecesarrily saving the record even if the user didn't change any data. I think this is trigering some cache inconsistencies and showing the banner to refresh the record unnecessarily.
+- ck-bug-9:
+  - when opening records we are unnecesarrily saving the record even if the user didn't change any data. I think this is trigering some cache inconsistencies and showing the banner to refresh the record unnecessarily.
+  - we need to prevent racing conditions that would show the banner to refresh the record or the one asking to wait for file uploads to complete before leaving to the list view. I thing the best solution is that when the user taps the home button to leave the edit or summary view to the list view, we should block the navigation, disable al editing actions and show a banner asking to wait because we saving. No need to specify what is being saved or give options, just a simple message like "Please wait while we save your changes...". We use the blocking overlay dialog without buttons or posibility to dismiss it.
   >**BACKLOG**
-- ck-bug-10: we need to prevent racing conditions that would show the banner to refresh the record or the one asking to wait for file uploads to complete before leaving to the list view. I thing the best solution is that when the user taps the home button to leave the edit or summary view to the list view, we should block the navigation, disable al editing actions and show a banner asking to wait because we saving. No need to specify what is being saved or give options, just a simple message like "Please wait while we save your changes...". We use the blocking overlay dialog without buttons or posibility to dismiss it.
 
 ## technical requirements
 
@@ -116,13 +117,16 @@
 - ck-22: fix button issue `[Info] [ReactForm] – "list.openButton.ignored" – {openButtonId: "RE_OPEN", reason: "unsupportedAction"}` -> action is `updateRecord` which works fine in summary view but fails in list view, cards mode.
   > **DONE - Cursor**
 - ck-23: the search field `x` icon should not clear the search results, add a separate control for that underneath the search field. This separate control appears only when the search results are not empty.
-  > **WIP - SoftwareEngineer**
+  > **DONE - Cursor**
 - ck-24: remove default empty line items in line item groups.
   > **DONE - Cursor**
 - ck-25: add buttons below the search bar on cards mode in list view page, within the body of the page. They are displayed when search results are not showing. They are used to trigger predefined search queries. These bottons should have a new action type `listViewSearchPreset` that will be used to trigger the predefined search queries.
-  > **WIP - SoftwareEngineer**
+  > **DONE - Cursor**
 - ck-26: add `source` sort type to the listViewSort config
 - ck-27: support placeholders in the email subject
 - ck-28: remove the translate stuff to english button on google sheet
+- ck-29:
+  - Alphabetical order on ingredients list on summary view
+  - We need to prevent duplicate ingredient entries, so validation dedup rules are needed within a line item or subgroup
 
 ---
