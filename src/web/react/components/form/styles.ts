@@ -192,13 +192,12 @@ export const FORM_VIEW_STYLES = `
           padding: 8px 10px;
           border-bottom: 1px solid rgba(226, 232, 240, 0.9);
           text-align: left;
-          vertical-align: top;
           overflow-wrap: anywhere;
           word-break: break-word;
         }
         .form-card .ck-line-item-table th,
         .webform-overlay .ck-line-item-table th {
-          font-size: calc(var(--ck-font-label) * 0.85);
+          font-size: var(--ck-font-control);
           font-weight: 600;
           color: rgba(15, 23, 42, 0.65);
         }
@@ -218,9 +217,9 @@ export const FORM_VIEW_STYLES = `
         }
         .form-card .ck-line-item-table__remove-button,
         .webform-overlay .ck-line-item-table__remove-button {
-          border: 1px solid #dc2626;
-          background: #ef4444;
-          color: #ffffff;
+          border: 1px solid var(--border);
+          background: #ffffff;
+          color: var(--text);
           border-radius: 10px;
           width: 38px;
           height: 38px;
@@ -246,6 +245,12 @@ export const FORM_VIEW_STYLES = `
           max-width: 100%;
           font-size: var(--ck-font-control);
           box-sizing: border-box;
+        }
+        .form-card .ck-line-item-table__control,
+        .webform-overlay .ck-line-item-table__control,
+        .form-card .ck-line-item-table__value,
+        .webform-overlay .ck-line-item-table__value {
+          position: relative;
         }
         .form-card .ck-line-item-table__control[data-has-warning="true"],
         .form-card .ck-line-item-table__value[data-has-warning="true"],
@@ -285,9 +290,9 @@ export const FORM_VIEW_STYLES = `
           margin-top: 10px;
           padding: 0 60px;
           border-radius: 12px;
-          border: 1px solid #fdba74;
-          background: #ffedd5;
-          color: #0f172a;
+          border: 1px solid var(--border);
+          background: #ffffff;
+          color: var(--text);
           position: sticky;
           bottom: 0;
           z-index: 3;
@@ -311,21 +316,54 @@ export const FORM_VIEW_STYLES = `
           align-items: flex-start;
           gap: 10px;
           font-weight: 400;
+          color: var(--text);
+        }
+        .form-card .ck-line-item-table__legend-footnote,
+        .webform-overlay .ck-line-item-table__legend-footnote {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          border: 1px solid rgba(245, 158, 11, 0.55);
           color: #b45309;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.7em;
+          font-weight: 700;
+          line-height: 1;
+          flex: 0 0 auto;
+          margin-top: 1px;
         }
         .form-card .ck-line-item-table__legend-icon,
         .webform-overlay .ck-line-item-table__legend-icon {
           width: 22px;
           height: 22px;
           border-radius: 999px;
-          border: 1px solid rgba(180, 83, 9, 0.35);
-          background: rgba(255, 237, 213, 0.75);
+          border: 1px solid var(--border);
+          background: #ffffff;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-weight: 700;
+          font-weight: 600;
           font-size: 0.9em;
           flex: 0 0 auto;
+        }
+        .form-card .ck-line-item-table__warning-footnote,
+        .webform-overlay .ck-line-item-table__warning-footnote {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          margin-left: 6px;
+          font-size: 0.7em;
+          font-weight: 700;
+          color: #b45309;
+          border: 1px solid rgba(245, 158, 11, 0.55);
+          border-radius: 999px;
+          padding: 0 4px;
+          line-height: 1.2;
+          background: #ffffff;
+          pointer-events: none;
+          vertical-align: middle;
         }
         .form-card .ck-line-item-table__legend-label,
         .webform-overlay .ck-line-item-table__legend-label {
@@ -1043,6 +1081,12 @@ export const FORM_VIEW_STYLES = `
           box-sizing: border-box;
           padding-right: 52px;
         }
+        .form-card .ck-line-item-multiadd__input > input::-webkit-search-cancel-button,
+        .webform-overlay .ck-line-item-multiadd__input > input::-webkit-search-cancel-button {
+          -webkit-appearance: none;
+          appearance: none;
+          display: none;
+        }
         .form-card .ck-line-item-multiadd__clear,
         .webform-overlay .ck-line-item-multiadd__clear {
           position: absolute;
@@ -1054,8 +1098,8 @@ export const FORM_VIEW_STYLES = `
           border-radius: 999px;
           border: none;
           background: transparent;
-          color: var(--danger);
-          font-weight: 900;
+          color: var(--text);
+          font-weight: 600;
           font-size: 1.2em;
           line-height: 1;
           display: inline-flex;
@@ -1067,7 +1111,7 @@ export const FORM_VIEW_STYLES = `
         }
         .form-card .ck-line-item-multiadd__clear:focus-visible,
         .webform-overlay .ck-line-item-multiadd__clear:focus-visible {
-          outline: 4px solid rgba(255, 59, 48, 0.28);
+          outline: 4px solid rgba(15, 23, 42, 0.2);
           outline-offset: 3px;
         }
         .form-card .ck-line-item-multiadd__menu,
@@ -1086,6 +1130,18 @@ export const FORM_VIEW_STYLES = `
           flex-direction: column;
           gap: 10px;
         }
+        .webform-overlay .ck-line-item-multiadd {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          height: 100%;
+        }
+        .webform-overlay .ck-line-item-multiadd__menu {
+          position: static;
+          margin-top: 6px;
+          flex: 1;
+          min-height: 0;
+        }
         .form-card .ck-line-item-multiadd__options,
         .webform-overlay .ck-line-item-multiadd__options {
           max-height: 320px;
@@ -1093,6 +1149,11 @@ export const FORM_VIEW_STYLES = `
           display: flex;
           flex-direction: column;
           gap: 8px;
+        }
+        .webform-overlay .ck-line-item-multiadd__options {
+          max-height: none;
+          flex: 1;
+          min-height: 0;
         }
         .form-card .ck-line-item-multiadd__option,
         .webform-overlay .ck-line-item-multiadd__option {
@@ -1103,7 +1164,7 @@ export const FORM_VIEW_STYLES = `
           border-radius: 12px;
           background: #ffffff;
           font-size: var(--ck-font-control);
-          font-weight: 800;
+          font-weight: 600;
           color: var(--text);
           display: flex;
           align-items: center;
@@ -1125,7 +1186,7 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay .ck-line-item-multiadd__empty {
           padding: 8px 10px;
           color: rgba(15, 23, 42, 0.62);
-          font-weight: 700;
+          font-weight: 600;
         }
         .form-card .ck-line-item-multiadd__footer,
         .webform-overlay .ck-line-item-multiadd__footer {
@@ -1142,7 +1203,7 @@ export const FORM_VIEW_STYLES = `
           /* Leave room for the clear "×" button. */
           padding-right: 52px;
         }
-        /* Hide native iOS/WebKit search clear so we can show our own red "×". */
+        /* Hide native iOS/WebKit search clear so we can show our own clear button. */
         .ck-searchable-select > input::-webkit-search-cancel-button {
           -webkit-appearance: none;
           appearance: none;
@@ -1158,8 +1219,8 @@ export const FORM_VIEW_STYLES = `
           border-radius: 999px;
           border: none;
           background: transparent;
-          color: var(--danger);
-          font-weight: 900;
+          color: var(--text);
+          font-weight: 600;
           font-size: 1.2em;
           line-height: 1;
           display: inline-flex;
@@ -1170,7 +1231,7 @@ export const FORM_VIEW_STYLES = `
           padding: 0;
         }
         .ck-searchable-select__clear-icon:focus-visible {
-          outline: 4px solid rgba(255, 59, 48, 0.28);
+          outline: 4px solid rgba(15, 23, 42, 0.2);
           outline-offset: 3px;
         }
         .ck-searchable-select__menu {
@@ -1195,7 +1256,7 @@ export const FORM_VIEW_STYLES = `
           background: transparent;
           border-radius: 12px;
           font-size: var(--ck-font-control);
-          font-weight: 800;
+          font-weight: 600;
           color: var(--text);
           -webkit-text-fill-color: var(--text);
           cursor: pointer;

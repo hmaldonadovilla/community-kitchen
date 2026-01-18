@@ -133,6 +133,30 @@ export const XIcon: React.FC<{ size?: number; style?: React.CSSProperties; class
   </svg>
 );
 
+export const TrashIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
+  size = 22,
+  style,
+  className
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    focusable="false"
+    className={className}
+    style={{ width: size, height: size, ...(style as React.CSSProperties) }}
+  >
+    <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M6 6l1 14h10l1-14" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+    <path d="M10 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
 export const PaperclipIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
   size = 24,
   style,

@@ -297,25 +297,5 @@
       });
     });
 
-    var tables = root.querySelectorAll('.ck-ingredients-table');
-    tables.forEach(function (table) {
-      var allergenCells = table.querySelectorAll('[data-ck-allergen-cell]');
-      var hasAllergen = false;
-      allergenCells.forEach(function (cell) {
-        var text = (cell.textContent || '').trim().toLowerCase();
-        if (text && text !== 'none') {
-          hasAllergen = true;
-        }
-      });
-      if (!hasAllergen) {
-        var allergenCols = table.querySelectorAll('[data-ck-allergen-col]');
-        allergenCols.forEach(function (node) {
-          node.style.display = 'none';
-        });
-        allergenCells.forEach(function (node) {
-          node.style.display = 'none';
-        });
-      }
-    });
   })();
 </script>

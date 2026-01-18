@@ -2473,6 +2473,7 @@ export class ConfigSheet {
       rawSelector.placeholderFr || (placeholderObj && placeholderObj.fr) || '';
     const placeholderNl =
       rawSelector.placeholderNl || (placeholderObj && placeholderObj.nl) || '';
+    const hideLabel = this.normalizeBoolean(rawSelector.hideLabel ?? rawSelector.hideLabelText ?? rawSelector.hideSelectorLabel);
 
     return {
       id: id.toString(),
@@ -2483,6 +2484,7 @@ export class ConfigSheet {
       placeholderEn: placeholderEn || undefined,
       placeholderFr: placeholderFr || undefined,
       placeholderNl: placeholderNl || undefined,
+      hideLabel: hideLabel === undefined ? undefined : hideLabel,
       required: !!rawSelector.required,
       options,
       optionsFr,
