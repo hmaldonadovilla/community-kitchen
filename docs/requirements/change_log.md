@@ -23,6 +23,15 @@
   - we need to prevent racing conditions that would show the banner to refresh the record or the one asking to wait for file uploads to complete before leaving to the list view. I thing the best solution is that when the user taps the home button to leave the edit or summary view to the list view, we should block the navigation, disable al editing actions and show a banner asking to wait because we saving. No need to specify what is being saved or give options, just a simple message like "Please wait while we save your changes...". We use the blocking overlay dialog without buttons or posibility to dismiss it.
   >**BACKLOG**
 - ck-bug-10: The dedup validation of warning messages in the overlay line item and subgroup view is not working as expected.
+  >**BACKLOG**
+- ck-bug-11:
+  - In the line item overlay the `selectorOverlay` search box has 2 `x` to remove the search input text, one to clear the search results and one to clear the search query. We should only have the one to clear the search results.
+  - The warning messages are not clearly defined, I would prefer that we add footnote markers that point to the warning section. Make sure to account for the `nonMatchWarningMode` modes as sometimes the footnotes and markes need to be numbered.
+  - Warning validations should highlight the field with orange border similarly as we do on error validations. This is valid only for fields that are editable. Non editable fields need to use the foot note markers.
+  - The icon to remove rows should be a trash can icon.
+  - The section selector needs a setting to hide the label.
+  - Move the footnote markers next to the field labels.
+  >**DONE - Cursor**
 
 ## technical requirements
 
@@ -139,14 +148,14 @@
   - Keep the preset buttons always visible. Even if results are showing, this allows the user to change trigger a different preset with one click.
   - Change status pill color to avoid green, red and orange, keep neutral colors but distinct.
   - In legend we need controls to define part of the text message to show as a pill and the color used for the pill. This way we can showthe legend elements to be tied to the same pills that are shown on the page.
-  > **WIP - Cursor**
+  > **DONE - Cursor**
 - ck-42:
   - the search box should not show results before 1st character is entered.
   - use the full height below the search box to show the overlay results.
-  > **WIP - Codex**
+  > **DONE - Codex**
 - ck-45: Line item overlay
   - The font size of header of table is smaller than the font size of the data.
   - legend: title is `Warning` without `s` | remove the exclamation point
-  > **WIP - Codex**
+  > **DONE - Codex**
 - ck-46: Do not hide even if all the values are `None` the allergen column in docs/templates/recipes.summary.html
-  > **WIP - Codex**
+  > **DONE - Codex**

@@ -1055,6 +1055,7 @@ export interface LineItemSelectorConfig {
   placeholderEn?: string;
   placeholderFr?: string;
   placeholderNl?: string;
+  hideLabel?: boolean;
   options?: string[];
   optionsFr?: string[];
   optionsNl?: string[];

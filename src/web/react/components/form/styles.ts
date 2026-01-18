@@ -247,13 +247,19 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-control);
           box-sizing: border-box;
         }
+        .form-card .ck-line-item-table__control,
+        .webform-overlay .ck-line-item-table__control,
+        .form-card .ck-line-item-table__value,
+        .webform-overlay .ck-line-item-table__value {
+          position: relative;
+        }
         .form-card .ck-line-item-table__control[data-has-warning="true"],
         .form-card .ck-line-item-table__value[data-has-warning="true"],
         .webform-overlay .ck-line-item-table__control[data-has-warning="true"],
         .webform-overlay .ck-line-item-table__value[data-has-warning="true"] {
-          box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.12);
+          box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.55);
           border-radius: 10px;
-          background: rgba(15, 23, 42, 0.04);
+          background: rgba(245, 158, 11, 0.08);
         }
         .form-card .ck-line-item-table__control[data-has-error="true"],
         .form-card .ck-line-item-table__value[data-has-error="true"],
@@ -313,6 +319,22 @@ export const FORM_VIEW_STYLES = `
           font-weight: 400;
           color: var(--text);
         }
+        .form-card .ck-line-item-table__legend-footnote,
+        .webform-overlay .ck-line-item-table__legend-footnote {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          border: 1px solid rgba(245, 158, 11, 0.55);
+          color: #b45309;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.7em;
+          font-weight: 700;
+          line-height: 1;
+          flex: 0 0 auto;
+          margin-top: 1px;
+        }
         .form-card .ck-line-item-table__legend-icon,
         .webform-overlay .ck-line-item-table__legend-icon {
           width: 22px;
@@ -326,6 +348,23 @@ export const FORM_VIEW_STYLES = `
           font-weight: 600;
           font-size: 0.9em;
           flex: 0 0 auto;
+        }
+        .form-card .ck-line-item-table__warning-footnote,
+        .webform-overlay .ck-line-item-table__warning-footnote {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          margin-left: 6px;
+          font-size: 0.7em;
+          font-weight: 700;
+          color: #b45309;
+          border: 1px solid rgba(245, 158, 11, 0.55);
+          border-radius: 999px;
+          padding: 0 4px;
+          line-height: 1.2;
+          background: #ffffff;
+          pointer-events: none;
+          vertical-align: middle;
         }
         .form-card .ck-line-item-table__legend-label,
         .webform-overlay .ck-line-item-table__legend-label {
@@ -1042,6 +1081,12 @@ export const FORM_VIEW_STYLES = `
           min-width: 0;
           box-sizing: border-box;
           padding-right: 52px;
+        }
+        .form-card .ck-line-item-multiadd__input > input::-webkit-search-cancel-button,
+        .webform-overlay .ck-line-item-multiadd__input > input::-webkit-search-cancel-button {
+          -webkit-appearance: none;
+          appearance: none;
+          display: none;
         }
         .form-card .ck-line-item-multiadd__clear,
         .webform-overlay .ck-line-item-multiadd__clear {

@@ -3033,6 +3033,9 @@ components:
           type: string
         labelNl:
           type: string
+        hideLabel:
+          type: boolean
+          description: When true, hide the selector label (placeholder only).
         optionsRef:
           type: string
           description: REF:TabName pointing to a 3-column list of options for the selector.

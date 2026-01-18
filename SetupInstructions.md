@@ -1130,6 +1130,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       If `required: true`, the **Add line** button is disabled until the selector has a value (prevents adding empty rows in `addMode: "inline"`).
       Set `choiceSearchEnabled: true` on the selector to always show the searchable input (search indexes include extra `optionsRef` columns).
       Set `placeholder` (or `placeholderEn`/`placeholderFr`/`placeholderNl`) to override the selector search placeholder text.
+      Set `hideLabel: true` to hide the selector label (placeholder only).
       For multi-select search without a separate Add button, set `addMode: "selectorOverlay"` and `anchorFieldId`; the selector becomes the search + multi-select list.
 
        You can also filter the selector options themselves with an `optionFilter` (supports `optionMapRef`, including composite key columns):

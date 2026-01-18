@@ -6034,7 +6034,15 @@ const FormView: React.FC<FormViewProps> = ({
                                   data-field-path={subSelectorCfg.id}
                                   style={{ minWidth: 0, width: '100%', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}
                                 >
-                    <label style={{ fontWeight: 700 }}>{resolveSelectorLabel(subSelectorCfg, language)}</label>
+                    <label
+                      style={
+                        Boolean((subSelectorCfg as any)?.hideLabel || (subSelectorCfg as any)?.ui?.hideLabel)
+                          ? srOnly
+                          : { fontWeight: 700 }
+                      }
+                    >
+                      {resolveSelectorLabel(subSelectorCfg, language)}
+                    </label>
                                   {canUseSubSelectorOverlay ? (
                                     <LineItemMultiAddSelect
                                       label={resolveSelectorLabel(subSelectorCfg, language)}
@@ -6981,9 +6989,16 @@ const FormView: React.FC<FormViewProps> = ({
                     data-field-path={selectorCfg.id}
                     style={{ minWidth: 0, width: '100%', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}
                   >
-                    <label style={{ fontWeight: 700 }}>
+                    <label
+                      style={
+                        Boolean((selectorCfg as any)?.hideLabel || (selectorCfg as any)?.ui?.hideLabel)
+                          ? srOnly
+                          : { fontWeight: 700 }
+                      }
+                    >
                       {resolveSelectorLabel(selectorCfg, language)}
-                      {selectorCfg.required && <RequiredStar />}
+                      {selectorCfg.required &&
+                        !Boolean((selectorCfg as any)?.hideLabel || (selectorCfg as any)?.ui?.hideLabel) && <RequiredStar />}
                     </label>
                     {canUseSelectorOverlay ? (
                       <LineItemMultiAddSelect
