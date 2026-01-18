@@ -1817,18 +1817,30 @@ export class Dashboard {
 
     const items: ListViewLegendItem[] = [];
     const seenIcons = new Set<string>();
-    const push = (iconRaw: any, textRaw: any) => {
+    const normalizePill = (input: any): ListViewLegendItem['pill'] | undefined => {
+      if (!input || typeof input !== 'object') return undefined;
+      const text = normalizeLocalized((input as any).text ?? (input as any).label ?? (input as any).title);
+      if (!text) return undefined;
+      const toneRaw = ((input as any).tone ?? (input as any).color ?? (input as any).variant ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+      const tone = toneRaw === 'default' || toneRaw === 'muted' || toneRaw === 'strong' ? (toneRaw as any) : undefined;
+      return tone ? ({ text, tone } as any) : ({ text } as any);
+    };
+    const push = (iconRaw: any, textRaw: any, pillRaw?: any) => {
       const text = normalizeLocalized(textRaw);
       if (!text) return;
+      const pill = normalizePill(pillRaw);
 
       const icon = (iconRaw || '').toString().trim().toLowerCase();
       if (!icon) {
-        items.push({ text } as any);
+        items.push(pill ? ({ text, pill } as any) : ({ text } as any));
         return;
       }
       if (!allowedIcons.has(icon) || seenIcons.has(icon)) return;
       seenIcons.add(icon);
-      items.push({ icon: icon as any, text });
+      items.push(pill ? ({ icon: icon as any, text, pill } as any) : ({ icon: icon as any, text } as any));
     };
 
     // Accept object map form: { warning: "Missing date", error: {en: "..."} }
@@ -1845,7 +1857,11 @@ export class Dashboard {
     const raw: any[] = Array.isArray(value) ? value : [value];
     raw.forEach(entry => {
       if (!entry || typeof entry !== 'object') return;
-      push((entry as any).icon, (entry as any).text ?? (entry as any).label ?? (entry as any).description);
+      push(
+        (entry as any).icon,
+        (entry as any).text ?? (entry as any).label ?? (entry as any).description,
+        (entry as any).pill
+      );
     });
     return items.length ? items : undefined;
   }

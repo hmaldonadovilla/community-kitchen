@@ -1,8 +1,18 @@
-import type { LangCode, ListViewColumnConfig, ListViewLegendItem, ListViewRuleColumnConfig, ListViewRuleIcon } from '../../types';
+import type {
+  LangCode,
+  ListViewColumnConfig,
+  ListViewLegendItem,
+  ListViewRuleColumnConfig,
+  ListViewRuleIcon
+} from '../../types';
 import { resolveLocalizedString } from '../../i18n';
 import { tSystem } from '../../systemStrings';
 
-export type ResolvedListViewLegendItem = { icon?: ListViewRuleIcon; text: string };
+export type ResolvedListViewLegendItem = {
+  icon?: ListViewRuleIcon;
+  text: string;
+  pill?: { text: string; tone?: 'default' | 'muted' | 'strong' };
+};
 
 const isRuleColumn = (col: ListViewColumnConfig): col is ListViewRuleColumnConfig => (col as any)?.type === 'rule';
 
@@ -59,14 +69,23 @@ export const buildListViewLegendItems = (
     if (!item) return;
     const resolved = resolveLocalizedString(item.text, language, '').trim();
     if (!resolved) return;
+    const pillCfg = (item as any).pill;
+    const pill = (() => {
+      if (!pillCfg || typeof pillCfg !== 'object') return undefined;
+      const pillText = resolveLocalizedString(pillCfg.text, language, '').trim();
+      if (!pillText) return undefined;
+      const toneRaw = (pillCfg.tone ?? pillCfg.color ?? pillCfg.variant ?? '').toString().trim().toLowerCase();
+      const tone = toneRaw === 'muted' || toneRaw === 'strong' ? (toneRaw as any) : 'default';
+      return { text: pillText, tone };
+    })();
     const icon = item.icon;
     if (icon) {
       if (seen.has(icon)) return;
       seen.add(icon);
-      out.push({ icon, text: resolved });
+      out.push({ icon, text: resolved, pill });
       return;
     }
-    out.push({ text: resolved });
+    out.push({ text: resolved, pill });
   });
 
   return out;
