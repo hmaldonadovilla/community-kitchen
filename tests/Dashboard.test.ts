@@ -80,7 +80,7 @@ describe('Dashboard', () => {
   test('getForms parses list view legend from dashboard config', () => {
     const configJson = JSON.stringify({
       listViewLegend: [
-        { icon: 'warning', text: { en: 'Missing DATE' } },
+        { icon: 'warning', text: { en: 'Missing DATE' }, pill: { text: { en: 'Draft' }, tone: 'muted' } },
         { text: 'Click Action to open the record.' }
       ]
     });
@@ -94,7 +94,7 @@ describe('Dashboard', () => {
     const dashboard = new Dashboard(mockSS as any);
     const forms = dashboard.getForms();
     expect(forms[0].listViewLegend).toEqual([
-      { icon: 'warning', text: { en: 'Missing DATE' } },
+      { icon: 'warning', text: { en: 'Missing DATE' }, pill: { text: { en: 'Draft' }, tone: 'muted' } },
       { text: 'Click Action to open the record.' }
     ]);
   });

@@ -234,6 +234,8 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+      Note: presets can apply advanced `fieldFilters` even when the main list search mode is `text`.
+
     - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
       - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.
 
@@ -343,6 +345,7 @@ This project uses TypeScript. You need to build the script before using it in Go
           "legend": [
             { "icon": "warning", "text": { "en": "**Needs attention** (e.g. Missing DATE)" } },
             { "icon": "check", "text": { "en": "**OK:** ready for *Meal Production*" } },
+            { "pill": { "text": { "en": "Draft" }, "tone": "muted" }, "text": { "en": "Not submitted yet." } },
             { "text": { "en": "Click Action to open the record." } }
           ]
         }
@@ -350,6 +353,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       ```
 
       Supported icons: `warning`, `check`, `error`, `info`, `external`, `lock`, `edit`, `view`.
+      Pill tones: `default`, `muted`, `strong` (neutral palette).
 
       Optional: show a column only in **table** or only in **cards** view via `showIn`:
 

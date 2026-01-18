@@ -22,6 +22,7 @@
   - when opening records we are unnecesarrily saving the record even if the user didn't change any data. I think this is trigering some cache inconsistencies and showing the banner to refresh the record unnecessarily.
   - we need to prevent racing conditions that would show the banner to refresh the record or the one asking to wait for file uploads to complete before leaving to the list view. I thing the best solution is that when the user taps the home button to leave the edit or summary view to the list view, we should block the navigation, disable al editing actions and show a banner asking to wait because we saving. No need to specify what is being saved or give options, just a simple message like "Please wait while we save your changes...". We use the blocking overlay dialog without buttons or posibility to dismiss it.
   >**BACKLOG**
+- ck-bug-10: The dedup validation of warning messages in the overlay line item and subgroup view is not working as expected.
 
 ## technical requirements
 
@@ -128,5 +129,24 @@
 - ck-29:
   - Alphabetical order on ingredients list on summary view
   - We need to prevent duplicate ingredient entries, so validation dedup rules are needed within a line item or subgroup
-
----
+  > **DONE - Cursor**
+- ck-38: Review the full application and adjust the UI according to the guidelines defined in `docs/design_patterns/style_guide.md`
+  > **WIP - Codex**
+- ck-40 & ck-41:
+  - Adjust inital visual on page load according to the screenshot.
+  - On preset search, show the search results without entering the value in the input search box, ideally presets works via advance mode even if the main search box is on text mode.
+  - Remove the clear results button, it has no utility because we can always type and new query that will adjust the results.
+  - Keep the preset buttons always visible. Even if results are showing, this allows the user to change trigger a different preset with one click.
+  - Change status pill color to avoid green, red and orange, keep neutral colors but distinct.
+  - In legend we need controls to define part of the text message to show as a pill and the color used for the pill. This way we can showthe legend elements to be tied to the same pills that are shown on the page.
+  > **WIP - Cursor**
+- ck-42:
+  - the search box should not show results before 1st character is entered.
+  - use the full height below the search box to show the overlay results.
+  > **WIP - Codex**
+- ck-45: Line item overlay
+  - The font size of header of table is smaller than the font size of the data.
+  - legend: title is `Warning` without `s` | remove the exclamation point
+  > **WIP - Codex**
+- ck-46: Do not hide even if all the values are `None` the allergen column in docs/templates/recipes.summary.html
+  > **WIP - Codex**
