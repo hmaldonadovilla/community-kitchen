@@ -2219,6 +2219,17 @@ export interface ListViewRuleColumnConfig {
 
 export type ListViewColumnConfig = ListViewFieldColumnConfig | ListViewRuleColumnConfig;
 
+export interface ListViewLegendPill {
+  /**
+   * Pill label shown before the legend text.
+   */
+  text: LocalizedString;
+  /**
+   * Optional neutral tone for the pill styling.
+   */
+  tone?: 'default' | 'muted' | 'strong';
+}
+
 export interface ListViewLegendItem {
   /**
    * Optional icon displayed in the legend (must match a supported list view icon name).
@@ -2226,6 +2237,10 @@ export interface ListViewLegendItem {
    * When omitted, the legend entry is rendered as plain text.
    */
   icon?: ListViewRuleIcon;
+  /**
+   * Optional pill displayed before the legend text (used to match status pills).
+   */
+  pill?: ListViewLegendPill;
   /**
    * Text explaining what the icon means for this form.
    */

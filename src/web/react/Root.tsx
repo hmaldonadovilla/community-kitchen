@@ -52,7 +52,7 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
     slowTimer = (globalThis as any).setTimeout(() => {
       setShowSlowMessage(true);
       logBootEvent('slow.threshold', { formKey, elapsedMs: Date.now() - startedAt });
-    }, 8000);
+    }, 10000);
 
     retryTimer = (globalThis as any).setTimeout(() => {
       setAllowRetry(true);
