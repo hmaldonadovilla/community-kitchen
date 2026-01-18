@@ -192,7 +192,6 @@ export const FORM_VIEW_STYLES = `
           padding: 8px 10px;
           border-bottom: 1px solid rgba(226, 232, 240, 0.9);
           text-align: left;
-          vertical-align: top;
           overflow-wrap: anywhere;
           word-break: break-word;
         }

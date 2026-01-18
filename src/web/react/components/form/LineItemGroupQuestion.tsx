@@ -1793,7 +1793,7 @@ export const LineItemGroupQuestion: React.FC<{
                   aria-label={tSystem('lineItems.remove', language, 'Remove')}
                   title={tSystem('lineItems.remove', language, 'Remove')}
                 >
-                  <TrashIcon size={18} />
+                  <TrashIcon size={50} />
                 </button>
               );
             }
