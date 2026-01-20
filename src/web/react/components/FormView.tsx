@@ -91,7 +91,7 @@ import {
 } from '../app/paragraphDisclaimer';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 import { validateRules } from '../../rules/validation';
-import { matchesWhenClause } from '../../rules/visibility';
+import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
 import { validateForm } from '../app/submission';
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
@@ -3462,6 +3462,14 @@ const FormView: React.FC<FormViewProps> = ({
     [guidedVirtualState, lineItems, recordMeta, values]
   );
 
+  const topVisibilityCtx = useMemo(
+    () => ({
+      getValue: (fieldId: string) => resolveVisibilityValue(fieldId),
+      getLineItems: (groupId: string) => lineItems[groupId] || []
+    }),
+    [lineItems, resolveVisibilityValue]
+  );
+
   const getTopValueNoScan = useCallback(
     (fieldId: string): FieldValue | undefined => {
       const direct = (values as any)[fieldId];
@@ -3472,6 +3480,64 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [recordMeta, values]
   );
+
+  const lineItemVisibilityTargets = useMemo(() => {
+    const questions = definition.questions || [];
+    return questions
+      .filter(q => q?.visibility && (containsLineItemsClause(q.visibility.showWhen) || containsLineItemsClause(q.visibility.hideWhen)))
+      .map(q => ({ id: q.id, visibility: q.visibility }));
+  }, [definition.questions]);
+
+  const parentScopedVisibilityTargets = useMemo(() => {
+    const questions = definition.questions || [];
+    return questions
+      .filter(
+        q =>
+          q?.visibility &&
+          (containsParentLineItemsClause(q.visibility.showWhen) || containsParentLineItemsClause(q.visibility.hideWhen))
+      )
+      .map(q => q.id)
+      .filter(Boolean);
+  }, [definition.questions]);
+
+  useEffect(() => {
+    if (!onDiagnostic || !lineItemVisibilityTargets.length) return;
+    const fields = lineItemVisibilityTargets.map(target => target.id).filter(Boolean);
+    onDiagnostic('visibility.lineItems.enabled', { count: fields.length, fields: fields.slice(0, 10) });
+  }, [lineItemVisibilityTargets, onDiagnostic]);
+
+  useEffect(() => {
+    if (!onDiagnostic || !parentScopedVisibilityTargets.length) return;
+    onDiagnostic('visibility.lineItems.parentScope.enabled', {
+      count: parentScopedVisibilityTargets.length,
+      fields: parentScopedVisibilityTargets.slice(0, 10)
+    });
+  }, [onDiagnostic, parentScopedVisibilityTargets]);
+
+  const lineItemVisibilityState = useMemo<Record<string, boolean>>(() => {
+    if (!lineItemVisibilityTargets.length) return {};
+    const next: Record<string, boolean> = {};
+    lineItemVisibilityTargets.forEach(target => {
+      next[target.id] = shouldHideField(target.visibility, topVisibilityCtx);
+    });
+    return next;
+  }, [lineItemVisibilityTargets, topVisibilityCtx]);
+
+  const lineItemVisibilityRef = useRef<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!onDiagnostic || !lineItemVisibilityTargets.length) return;
+    const prev = lineItemVisibilityRef.current || {};
+    const isInit = Object.keys(prev).length === 0;
+    lineItemVisibilityTargets.forEach(target => {
+      const hidden = lineItemVisibilityState[target.id];
+      if (hidden === undefined) return;
+      if (isInit || prev[target.id] !== hidden) {
+        onDiagnostic('visibility.lineItems.state', { fieldId: target.id, hidden, reason: isInit ? 'init' : 'update' });
+      }
+    });
+    lineItemVisibilityRef.current = lineItemVisibilityState;
+  }, [lineItemVisibilityState, lineItemVisibilityTargets, onDiagnostic]);
 
   const orderedEntryErrors = useMemo(() => {
     if (!orderedEntryEnabled) return null;
@@ -4200,12 +4266,7 @@ const FormView: React.FC<FormViewProps> = ({
     const groups = (groupSections || []).filter(s => s && !s.isHeader && s.collapsible);
     return groups
       .map(section => {
-        const visible = (section.questions || []).filter(
-          q =>
-            !shouldHideField(q.visibility, {
-              getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
-            })
-        );
+        const visible = (section.questions || []).filter(q => !shouldHideField(q.visibility, topVisibilityCtx));
         if (!visible.length) return null;
 
         const requiredQs = visible.filter(q => !!q.required);
@@ -4215,7 +4276,7 @@ const FormView: React.FC<FormViewProps> = ({
         return { key: section.key, complete, totalRequired, requiredComplete };
       })
       .filter(Boolean) as Array<{ key: string; complete: boolean; totalRequired: number; requiredComplete: number }>;
-  }, [collapsedRows, groupSections, language, lineItems, recordMeta, resolveVisibilityValue, values]);
+  }, [collapsedRows, groupSections, language, lineItems, recordMeta, topVisibilityCtx, values]);
 
   const prevGroupCompleteRef = useRef<Record<string, boolean>>({});
   const pendingAutoCollapseRef = useRef<string[]>([]);
@@ -4417,9 +4478,7 @@ const FormView: React.FC<FormViewProps> = ({
     const allowedWithCurrent =
       currentVal && typeof currentVal === 'string' && !allowed.includes(currentVal) ? [...allowed, currentVal] : allowed;
     const opts = buildLocalizedOptions(optionSet, allowedWithCurrent, language, { sort: optionSortFor(q) });
-    const hidden = shouldHideField(q.visibility, {
-      getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
-    });
+    const hidden = shouldHideField(q.visibility, topVisibilityCtx);
     if (hidden) return null;
     const forceStackedLabel = q.ui?.labelLayout === 'stacked';
     const hideFieldLabel = q.ui?.hideLabel === true;
@@ -7771,12 +7830,7 @@ const FormView: React.FC<FormViewProps> = ({
               type GroupSection = (typeof groupSections)[number];
 
               const renderGroupSection = (section: GroupSection): React.ReactNode => {
-                const visible = (section.questions || []).filter(
-                  q =>
-                    !shouldHideField(q.visibility, {
-                      getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
-                    })
-                );
+                const visible = (section.questions || []).filter(q => !shouldHideField(q.visibility, topVisibilityCtx));
                 if (!visible.length) return null;
 
                 const isCollapsed = section.collapsible ? !!collapsedGroups[section.key] : false;

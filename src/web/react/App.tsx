@@ -2275,7 +2275,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       return undefined;
     };
     const visibilityCtx = {
-      getValue: (fieldId: string) => resolveButtonVisibilityValue(fieldId)
+      getValue: (fieldId: string) => resolveButtonVisibilityValue(fieldId),
+      getLineItems: (groupId: string) => lineItems[groupId] || []
     } as any;
     return definition.questions
       .map((q, idx) => ({ q, idx }))
