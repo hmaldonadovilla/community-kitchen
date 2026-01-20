@@ -159,3 +159,8 @@
   > **DONE - Codex**
 - ck-46: Do not hide even if all the values are `None` the allergen column in docs/templates/recipes.summary.html
   > **DONE - Codex**
+- ck-47: field-level guarded change dialog for sensitive fields.
+  - Allow configuring a per-field `changeDialog` with `when` conditions using the same DSL as visibility rules.
+  - When `when` is satisfied on blur, the UI holds autosave, shows a confirm/cancel dialog, and only applies the change when the user confirms.
+  - If the field is part of a `onConflict: reject` dedup rule, a dedup precheck runs before accepting the change; on conflict, the value is reverted and a dedup notice is shown.
+  > **WIP - Codex**

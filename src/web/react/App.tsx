@@ -83,7 +83,7 @@ import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { toUploadItems } from './components/form/utils';
 import { clearFetchDataSourceCache } from '../data/dataSources';
-import { shouldHideField } from '../rules/visibility';
+import { matchesWhenClause, shouldHideField } from '../rules/visibility';
 import { getSystemFieldValue } from '../rules/systemFields';
 import { computeGuidedStepsStatus } from './features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from './features/steps/domain/resolveVirtualStepField';
@@ -303,6 +303,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     top: [],
     byField: {}
   });
+  const fieldChangeGuardRef = useRef<{
+    fieldId?: string;
+    fieldPath?: string;
+    prevValue?: FieldValue;
+    nextValue?: FieldValue;
+    outcome?: 'pending' | 'confirmed' | 'cancelled';
+  }>({ outcome: 'pending' });
   const warningTouchedRef = useRef<Set<string>>(new Set());
   const nonMatchWarningPathsRef = useRef<Set<string>>(new Set());
   const [status, setStatus] = useState<string | null>(null);
@@ -456,6 +463,192 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         // For top-level dedup keys (reject rules): hold autosave; run dedup check on blur only.
         const isDedupKey =
           (fieldId && dedupKeyFieldIdsRef.current[fieldId]) || (fieldPath && dedupKeyFieldIdsRef.current[fieldPath]);
+
+        // Field-level guarded change dialog (ck-47)
+        if (args?.scope === 'top' && args?.event === 'blur' && fieldId) {
+          const q = (definition.questions || []).find(qq => qq && qq.id === fieldId) as any;
+          const dialogCfg = (q?.changeDialog || null) as any;
+          if (dialogCfg && dialogCfg.when) {
+            try {
+              const ctx: VisibilityContext = {
+                getValue: fid => (valuesRef.current as any)[fid],
+                getLineValue: undefined
+              };
+              const shouldTrigger = matchesWhenClause(dialogCfg.when as any, ctx);
+              if (shouldTrigger) {
+                const prevValues = lastAutoSaveSeenRef.current?.values || {};
+                const prevValue = (prevValues as any)[fieldId];
+                const nextValue = (valuesRef.current as any)[fieldId];
+
+                // Hold autosave while dialog is open.
+                dedupHoldRef.current = true;
+                autoSaveDirtyRef.current = false;
+                autoSaveQueuedRef.current = false;
+                if (autoSaveTimerRef.current) {
+                  globalThis.clearTimeout(autoSaveTimerRef.current);
+                  autoSaveTimerRef.current = null;
+                }
+                setDraftSave({ phase: 'paused' });
+
+                const title = resolveLocalizedString(
+                  dialogCfg.title,
+                  languageRef.current,
+                  tSystem('fieldChangeDialog.title', languageRef.current, 'Confirm change')
+                );
+                const message = resolveLocalizedString(
+                  dialogCfg.message,
+                  languageRef.current,
+                  tSystem('fieldChangeDialog.message', languageRef.current, 'Are you sure you want to update this field?')
+                );
+                const confirmLabel = resolveLocalizedString(
+                  dialogCfg.confirmLabel,
+                  languageRef.current,
+                  tSystem('common.confirm', languageRef.current, 'Confirm')
+                );
+                const cancelLabel = resolveLocalizedString(
+                  dialogCfg.cancelLabel,
+                  languageRef.current,
+                  tSystem('common.cancel', languageRef.current, 'Cancel')
+                );
+
+                fieldChangeGuardRef.current = {
+                  fieldId,
+                  fieldPath,
+                  prevValue,
+                  nextValue,
+                  outcome: 'pending'
+                };
+
+                const dedupMode = (dialogCfg.dedupMode || 'auto') as 'auto' | 'always' | 'never';
+                const shouldRunFieldDedup =
+                  dedupMode === 'always' ||
+                  (dedupMode === 'auto' && isDedupKey && createFlowRef.current);
+
+                customConfirm.openConfirm({
+                  title,
+                  message,
+                  confirmLabel,
+                  cancelLabel,
+                  kind: 'fieldChange',
+                  refId: fieldPath,
+                  onConfirm: async () => {
+                    const guard = fieldChangeGuardRef.current;
+                    if (!guard || guard.fieldPath !== fieldPath) return;
+
+                    if (shouldRunFieldDedup) {
+                      const values = valuesRef.current;
+                      const lineItems = lineItemsRef.current;
+                      const signature = computeDedupSignatureFromValues((definition as any)?.dedupRules, values as any);
+                      if (signature) {
+                        const startedAt = Date.now();
+                        setDedupChecking(true);
+                        logEvent('dedup.fieldChange.check.start', {
+                          source: 'fieldChangeDialog',
+                          fieldId,
+                          signatureLen: signature.length
+                        });
+                        try {
+                          const payload = buildDraftPayload({
+                            definition,
+                            formKey,
+                            language: languageRef.current,
+                            values,
+                            lineItems
+                          }) as any;
+                          const res = await checkDedupConflictApi(payload);
+                          if (res?.success) {
+                            const conflict: any = (res as any)?.conflict || null;
+                            if (conflict?.existingRecordId) {
+                              const info: DedupConflictInfo = {
+                                ruleId: conflict.ruleId,
+                                message: conflict.message,
+                                existingRecordId: conflict.existingRecordId,
+                                existingRowNumber: conflict.existingRowNumber
+                              };
+                              setDedupNotice(info);
+                              setDedupConflict(info);
+                              // Revert value on conflict.
+                              setValues(prev => {
+                                const next = { ...prev } as any;
+                                if (prevValue === undefined) {
+                                  delete next[fieldId];
+                                } else {
+                                  next[fieldId] = prevValue;
+                                }
+                                valuesRef.current = next;
+                                lastAutoSaveSeenRef.current = {
+                                  values: next,
+                                  lineItems: lineItemsRef.current
+                                };
+                                return next;
+                              });
+                              logEvent('fieldChange.dedupRejected', {
+                                fieldPath,
+                                fieldId,
+                                ruleId: info.ruleId,
+                                existingRecordId: info.existingRecordId || null
+                              });
+                              dedupHoldRef.current = false;
+                              setDraftSave({ phase: 'idle' });
+                              setDedupChecking(false);
+                              logEvent('dedup.fieldChange.check.end', {
+                                source: 'fieldChangeDialog',
+                                durationMs: Date.now() - startedAt
+                              });
+                              return;
+                            }
+                          }
+                          logEvent('dedup.fieldChange.check.ok', { source: 'fieldChangeDialog', fieldId });
+                        } catch (err: any) {
+                          const msg = (err?.message || err?.toString?.() || 'Failed').toString();
+                          logEvent('dedup.fieldChange.check.exception', {
+                            source: 'fieldChangeDialog',
+                            fieldId,
+                            message: msg
+                          });
+                        } finally {
+                          setDedupChecking(false);
+                        }
+                      }
+                    }
+
+                    // Accept change and resume autosave.
+                    dedupHoldRef.current = false;
+                    autoSaveDirtyRef.current = true;
+                    setDraftSave({ phase: 'dirty' });
+                    lastAutoSaveSeenRef.current = {
+                      values: valuesRef.current,
+                      lineItems: lineItemsRef.current
+                    };
+                    logEvent('fieldChange.accepted', {
+                      fieldPath,
+                      fieldId,
+                      isDedupKey,
+                      dedupMode
+                    });
+                  }
+                });
+
+                logEvent('fieldChange.dialog.open', {
+                  fieldPath,
+                  fieldId,
+                  isDedupKey,
+                  hasPrevValue: prevValue !== undefined
+                });
+
+                // Do not run the standard dedup blur logic when a field dialog is active.
+                return;
+              }
+            } catch (err: any) {
+              logEvent('fieldChange.dialog.error', {
+                fieldPath,
+                fieldId,
+                message: err?.message || err || 'unknown'
+              });
+            }
+          }
+        }
+
         if (args?.scope === 'top' && isDedupKey) {
           if (dedupConflictRef.current) {
             dedupConflictRef.current = null;
