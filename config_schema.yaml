@@ -116,6 +116,12 @@ components:
         visibility:
           $ref: '#/components/schemas/VisibilityConfig'
           description: Show or hide this question based on another field value.
+        changeDialog:
+          $ref: '#/components/schemas/FieldChangeDialogConfig'
+          description: |
+            Optional field-level guarded change dialog. When configured, the edit view will prompt the
+            user before applying changes that satisfy `changeDialog.when`. See FieldChangeDialogConfig
+            for interaction details with autosave and dedup rules.
         clearOnChange:
           type: boolean
           description: If true, changing this field clears all other fields and line items.
