@@ -1,6 +1,7 @@
 import {
   DedupRule,
   FileUploadConfig,
+  FieldChangeDialogConfig,
   ListViewConfig,
   ListViewColumnConfig,
   ListViewFieldColumnConfig,
