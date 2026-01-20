@@ -16,7 +16,12 @@
       "fr": "Ce formulaire fonctionne mieux en mode portrait. Veuillez revenir en mode portrait.",
       "nl": "Dit formulier werkt het best in portretmodus. Draai terug."
     },
-    "topActions": { "en": "Actions", "fr": "Actions", "nl": "Acties" }
+    "topActions": { "en": "Actions", "fr": "Actions", "nl": "Acties" },
+    "refreshToRetry": {
+      "en": "We could not load this right now. Tap the app logo in the top left, then tap Refresh.",
+      "fr": "Impossible de charger pour le moment. Touchez le logo de l’application en haut à gauche, puis touchez Actualiser.",
+      "nl": "We kunnen dit nu niet laden. Tik op het app-logo linksboven en tik daarna op Vernieuwen."
+    }
   },
   "draft": {
     "saving": { "en": "Saving draft…", "fr": "Enregistrement du brouillon…", "nl": "Concept opslaan…" },
