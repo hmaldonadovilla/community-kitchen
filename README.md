@@ -35,6 +35,8 @@ Meal Production (Steps UI) | Recipes (Home Page) | Storage and cleaning checks (
 
 ### Data, rules, and configuration
 
+- **Field-level guarded changes (ck-47)**: You can configure per-field `changeDialog` rules in the Config JSON. When `changeDialog.when` evaluates to true on blur, the React app will hold autosave, show a confirm/cancel dialog, and only apply the change when the user confirms. If the field participates in a `dedupRules` entry with `onConflict: "reject"`, a dedup precheck runs before accepting the new value; on conflict, the change is reverted and a dedup notice is shown.
+
 - **Dynamic Options & Rules**: Option filtering based on another field plus cross-field validation rules (main form and line items), including non-blocking warning rules (`level: "warning"`).
 - **Localized Sorting & Tooltips**: All option lists sort alphabetically per language; options can show tooltips from data sources (with inline fallback).
 - **Derived TEXT Maps**: TEXT fields (and line-item fields) can be readonly value-maps that derive their content from another field via `optionMap` (inline) or `optionMapRef` (sheet-driven).
