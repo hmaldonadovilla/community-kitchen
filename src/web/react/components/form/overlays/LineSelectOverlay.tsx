@@ -29,13 +29,14 @@ export const LineSelectOverlay: React.FC<{
   }, [overlay.open]);
 
   const normalizedQuery = query.trim().toLowerCase();
+  const hasQuery = normalizedQuery.length > 0;
   const filteredOptions = useMemo(() => {
-    if (!normalizedQuery) return overlay.options;
+    if (!hasQuery) return [];
     return overlay.options.filter(opt => {
       const haystack = `${opt.label || ''} ${opt.value || ''} ${opt.searchText || ''}`.toLowerCase();
       return haystack.includes(normalizedQuery);
     });
-  }, [normalizedQuery, overlay.options]);
+  }, [hasQuery, normalizedQuery, overlay.options]);
 
   return (
     <div
@@ -56,8 +57,11 @@ export const LineSelectOverlay: React.FC<{
           padding: 24,
           width: '560px',
           maxWidth: '92%',
+          height: '80vh',
           border: '1px solid var(--border)',
-          boxShadow: '0 18px 50px rgba(15,23,42,0.18)'
+          boxShadow: '0 18px 50px rgba(15,23,42,0.18)',
+          display: 'flex',
+          flexDirection: 'column'
         }}
       >
         <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 'var(--ck-font-group-title)', letterSpacing: -0.3 }}>
@@ -76,7 +80,7 @@ export const LineSelectOverlay: React.FC<{
                     const haystack = `${opt.label || ''} ${opt.value || ''} ${opt.searchText || ''}`.toLowerCase();
                     return haystack.includes(nextNormalized);
                   }).length
-                : overlay.options.length;
+                : 0;
               setQuery(next);
               onDiagnostic?.('ui.lineItems.overlay.search', {
                 groupId: overlay.groupId,
@@ -88,7 +92,7 @@ export const LineSelectOverlay: React.FC<{
             style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)' }}
           />
         </div>
-        <div style={{ maxHeight: '50vh', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
           {filteredOptions.map(opt => (
             <label
               key={opt.value}
@@ -100,7 +104,7 @@ export const LineSelectOverlay: React.FC<{
                 borderRadius: 14,
                 border: '1px solid var(--border)',
                 background: '#ffffff',
-                fontWeight: 800
+                fontWeight: 600
               }}
             >
               <input
@@ -125,7 +129,11 @@ export const LineSelectOverlay: React.FC<{
             </label>
           ))}
           {!filteredOptions.length && (
-            <div className="muted">{tSystem('lineItems.noOptionsAvailable', language, 'No options available.')}</div>
+            <div className="muted">
+              {hasQuery
+                ? tSystem('lineItems.noOptionsAvailable', language, 'No options available.')
+                : tSystem('lineItems.searchPrompt', language, 'Enter at least 1 character to search.')}
+            </div>
           )}
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 12 }}>
@@ -161,4 +169,3 @@ export const LineSelectOverlay: React.FC<{
     </div>
   );
 };
-

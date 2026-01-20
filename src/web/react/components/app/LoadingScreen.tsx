@@ -30,7 +30,7 @@ const retryButtonStyle: React.CSSProperties = {
   border: 'none',
   padding: '12px 20px',
   fontSize: 18,
-  fontWeight: 800,
+  fontWeight: 600,
   cursor: 'pointer',
   background: '#0ea5e9',
   color: '#ffffff',
@@ -45,27 +45,14 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
 }) => {
   return (
     <div className="page">
-      <header className="ck-app-header">
-        <button className="ck-app-avatar-btn" type="button" disabled>
-          <span className="ck-app-avatar">CK</span>
-        </button>
-        <div className="ck-app-title-row">
-          <div className="ck-app-title">Loading…</div>
-          <div className="ck-app-title-right">
-            <span data-tone="info">Starting Community Kitchen form…</span>
-          </div>
-        </div>
-      </header>
       <main className="card form-card">
         <h1>Loading…</h1>
         <p>Please keep this page open. This may take a few seconds.</p>
-        <p
-          className="muted"
-          data-boot-copy="slow"
-          style={{ ...hintStyle, opacity: showSlowMessage ? 1 : 0.6 }}
-        >
-          Still loading… your connection may be slow. Don’t close the page.
-        </p>
+        {showSlowMessage ? (
+          <p className="muted" data-boot-copy="slow" style={hintStyle}>
+            Still loading… your connection may be slow. Don’t close the page.
+          </p>
+        ) : null}
         {errorMessage && (
           <p style={errorStyle}>{errorMessage}</p>
         )}

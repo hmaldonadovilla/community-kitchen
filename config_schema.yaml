@@ -2593,12 +2593,29 @@ components:
           type: string
           enum: [warning, check, error, info, external, lock, edit, copy, view]
           description: Optional icon name shown next to the text.
+        pill:
+          $ref: '#/components/schemas/ListViewLegendPill'
+          description: Optional pill label shown before the legend text (neutral tones only).
         text:
           $ref: '#/components/schemas/LocalizedString'
           description: |
             Explanatory text shown next to the icon.
 
             Supports basic inline Markdown (`**bold**`, `*italic*`, `code`, and links).
+      required:
+        - text
+
+    ListViewLegendPill:
+      type: object
+      description: Neutral pill token displayed inline with legend text.
+      properties:
+        text:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Pill label text.
+        tone:
+          type: string
+          enum: [default, muted, strong]
+          description: Optional neutral tone for the pill style.
       required:
         - text
 
@@ -3016,6 +3033,9 @@ components:
           type: string
         labelNl:
           type: string
+        hideLabel:
+          type: boolean
+          description: When true, hide the selector label (placeholder only).
         optionsRef:
           type: string
           description: REF:TabName pointing to a 3-column list of options for the selector.

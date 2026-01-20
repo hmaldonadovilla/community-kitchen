@@ -5474,6 +5474,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
               {listLegendItems.map((item, idx) => (
                 <li key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
                   {item.icon ? <ListViewIcon name={item.icon} /> : null}
+                  {item.pill ? (
+                    <span className="ck-list-legend-pill" data-tone={item.pill.tone || 'default'}>
+                      {item.pill.text}
+                    </span>
+                  ) : null}
                   <InlineMarkdown className="ck-list-legend-text" markdown={item.text} />
                 </li>
               ))}

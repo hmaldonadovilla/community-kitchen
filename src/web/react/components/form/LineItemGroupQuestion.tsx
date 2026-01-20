@@ -39,7 +39,7 @@ import {
   CameraIcon,
   CheckIcon,
   EyeIcon,
-  XIcon,
+  TrashIcon,
   PaperclipIcon,
   PlusIcon,
   RequiredStar,
@@ -260,6 +260,7 @@ export const LineItemGroupQuestion: React.FC<{
   const latestSubgroupSelectorValueRef = React.useRef<Record<string, string>>({});
   const selectorSearchLoggedRef = React.useRef<Set<string>>(new Set());
   const selectorOverlayLoggedRef = React.useRef<Set<string>>(new Set());
+  const selectorLabelLoggedRef = React.useRef<Set<string>>(new Set());
   const warningModeLoggedRef = React.useRef<Set<string>>(new Set());
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
@@ -959,6 +960,15 @@ export const LineItemGroupQuestion: React.FC<{
             });
           }
         }
+        const selectorHideLabel = Boolean((selectorCfg as any)?.hideLabel || (selectorCfg as any)?.ui?.hideLabel);
+        React.useEffect(() => {
+          if (!onDiagnostic || !selectorCfg || !selectorHideLabel) return;
+          const key = `${q.id}::${selectorCfg.id}::selectorLabelHidden`;
+          if (selectorLabelLoggedRef.current.has(key)) return;
+          selectorLabelLoggedRef.current.add(key);
+          onDiagnostic('ui.lineItems.selector.hideLabel', { groupId: q.id, selectorId: selectorCfg.id });
+        }, [onDiagnostic, q.id, selectorCfg, selectorHideLabel]);
+
         const selectorControl =
           selectorCfg && (canUseSelectorOverlay ? selectorOverlayOptions.length : selectorOptions.length) ? (
             <div
@@ -966,9 +976,9 @@ export const LineItemGroupQuestion: React.FC<{
               data-field-path={selectorCfg.id}
               style={{ minWidth: 0, width: '100%', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}
             >
-              <label style={{ fontWeight: 600 }}>
+              <label style={selectorHideLabel ? srOnly : { fontWeight: 600 }}>
                 {resolveSelectorLabel(selectorCfg, language)}
-                {selectorCfg.required && <RequiredStar />}
+                {selectorCfg.required && !selectorHideLabel && <RequiredStar />}
               </label>
               {canUseSelectorOverlay ? (
                 <LineItemMultiAddSelect
@@ -1419,6 +1429,33 @@ export const LineItemGroupQuestion: React.FC<{
             return out;
           };
 
+          const buildWarningKey = (rowLabel: string, message: string, isGeneric: boolean): string => {
+            if (isGeneric) return message;
+            return rowLabel ? `${rowLabel}::${message}` : message;
+          };
+
+          const resolveWarningKeysForField = (args: {
+            fieldPath: string;
+            rowLabel: string;
+            rowNonMatchWarning: string;
+            showNonMatchWarning: boolean;
+          }): string[] => {
+            const { fieldPath, rowLabel, rowNonMatchWarning, showNonMatchWarning } = args;
+            const keys = new Set<string>();
+            const shouldDropGeneric =
+              showNonMatchWarning && useValidationNonMatchWarnings && useDescriptiveNonMatchWarnings && genericNonMatchWarnings.size > 0;
+            warningsFor(fieldPath).forEach(msg => {
+              if (!useValidationNonMatchWarnings && genericNonMatchWarnings.has(msg)) return;
+              if (shouldDropGeneric && genericNonMatchWarnings.has(msg)) return;
+              const isGeneric = genericNonMatchWarnings.has(msg);
+              keys.add(buildWarningKey(rowLabel, msg, isGeneric));
+            });
+            if (showNonMatchWarning && rowNonMatchWarning) {
+              keys.add(buildWarningKey(rowLabel, rowNonMatchWarning, false));
+            }
+            return Array.from(keys);
+          };
+
           const renderTableField = (field: any, row: any, rowIdx: number) => {
             const groupCtx: VisibilityContext = {
               getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
@@ -1462,6 +1499,16 @@ export const LineItemGroupQuestion: React.FC<{
             const fieldWarning = warningsFor(fieldPath);
             const hasFieldWarning = fieldWarning.length > 0 || showNonMatchWarning;
             const hasFieldError = !!errors[fieldPath];
+            const rowLabel = resolveRowLabel(row);
+            const isEditable = !renderAsLabel && !(field as any)?.valueMap;
+            const warningKeys = resolveWarningKeysForField({
+              fieldPath,
+              rowLabel,
+              rowNonMatchWarning,
+              showNonMatchWarning
+            });
+            const warningFootnote = !isEditable ? renderWarningFootnote(warningKeys) : null;
+            const showWarningHighlight = hasFieldWarning && isEditable;
 
             if (field.type === 'CHOICE') {
               const rawVal = row.values[field.id];
@@ -1476,17 +1523,18 @@ export const LineItemGroupQuestion: React.FC<{
                 return (
                   <div
                     className="ck-line-item-table__value"
-                    data-has-warning={hasFieldWarning ? 'true' : undefined}
+                    data-has-warning={showWarningHighlight ? 'true' : undefined}
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
                     {selected?.label || choiceVal || '—'}
+                    {warningFootnote}
                   </div>
                 );
               }
               return (
                 <div
                   className="ck-line-item-table__control"
-                  data-has-warning={hasFieldWarning ? 'true' : undefined}
+                  data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
                   {renderChoiceControl({
@@ -1499,6 +1547,7 @@ export const LineItemGroupQuestion: React.FC<{
                     disabled: submitting || (field as any)?.readOnly === true,
                     onChange: next => handleLineFieldChange(q, row.id, field, next)
                   })}
+                  {warningFootnote}
                 </div>
               );
             }
@@ -1517,10 +1566,11 @@ export const LineItemGroupQuestion: React.FC<{
                 return (
                   <div
                     className="ck-line-item-table__value"
-                    data-has-warning={hasFieldWarning ? 'true' : undefined}
+                    data-has-warning={showWarningHighlight ? 'true' : undefined}
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
                     {labels.length ? labels.join(', ') : '—'}
+                    {warningFootnote}
                   </div>
                 );
               }
@@ -1529,7 +1579,7 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__control"
-                  data-has-warning={hasFieldWarning ? 'true' : undefined}
+                  data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
                   {renderAsMultiSelect ? (
@@ -1570,6 +1620,7 @@ export const LineItemGroupQuestion: React.FC<{
                       ))}
                     </div>
                   )}
+                  {warningFootnote}
                 </div>
               );
             }
@@ -1581,17 +1632,18 @@ export const LineItemGroupQuestion: React.FC<{
                 return (
                   <div
                     className="ck-line-item-table__value"
-                    data-has-warning={hasFieldWarning ? 'true' : undefined}
+                    data-has-warning={showWarningHighlight ? 'true' : undefined}
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
                     {count ? `${count}` : '—'}
+                    {warningFootnote}
                   </div>
                 );
               }
               return (
                 <div
                   className="ck-line-item-table__control"
-                  data-has-warning={hasFieldWarning ? 'true' : undefined}
+                  data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
                   <button
@@ -1612,6 +1664,7 @@ export const LineItemGroupQuestion: React.FC<{
                   >
                     {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
                   </button>
+                  {warningFootnote}
                 </div>
               );
             }
@@ -1644,10 +1697,11 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__value"
-                  data-has-warning={hasFieldWarning ? 'true' : undefined}
+                  data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
                   {display || '—'}
+                  {warningFootnote}
                 </div>
               );
             }
@@ -1655,7 +1709,7 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__control"
-                  data-has-warning={hasFieldWarning ? 'true' : undefined}
+                  data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
                   <NumberStepper
@@ -1665,6 +1719,7 @@ export const LineItemGroupQuestion: React.FC<{
                     ariaLabel={resolveFieldLabel(field, language, field.id)}
                     onChange={next => handleLineFieldChange(q, row.id, field, next)}
                   />
+                  {warningFootnote}
                 </div>
               );
             }
@@ -1672,7 +1727,7 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__control"
-                  data-has-warning={hasFieldWarning ? 'true' : undefined}
+                  data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
                   <textarea
@@ -1682,6 +1737,7 @@ export const LineItemGroupQuestion: React.FC<{
                     readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                     rows={(field as any)?.ui?.paragraphRows || 3}
                   />
+                  {warningFootnote}
                 </div>
               );
             }
@@ -1689,7 +1745,7 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__control"
-                  data-has-warning={hasFieldWarning ? 'true' : undefined}
+                  data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
                   <DateInput
@@ -1699,13 +1755,14 @@ export const LineItemGroupQuestion: React.FC<{
                     ariaLabel={resolveFieldLabel(field, language, field.id)}
                     onChange={next => handleLineFieldChange(q, row.id, field, next)}
                   />
+                  {warningFootnote}
                 </div>
               );
             }
             return (
               <div
                 className="ck-line-item-table__control"
-                data-has-warning={hasFieldWarning ? 'true' : undefined}
+                data-has-warning={showWarningHighlight ? 'true' : undefined}
                 data-has-error={hasFieldError ? 'true' : undefined}
               >
                 <input
@@ -1714,6 +1771,7 @@ export const LineItemGroupQuestion: React.FC<{
                   onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                   readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                 />
+                {warningFootnote}
               </div>
             );
           };
@@ -1735,7 +1793,7 @@ export const LineItemGroupQuestion: React.FC<{
                   aria-label={tSystem('lineItems.remove', language, 'Remove')}
                   title={tSystem('lineItems.remove', language, 'Remove')}
                 >
-                  <XIcon size={18} />
+                  <TrashIcon size={50} />
                 </button>
               );
             }
@@ -1768,7 +1826,7 @@ export const LineItemGroupQuestion: React.FC<{
             { ...removeColumn, style: resolveTableColumnStyle(removeColumn.id) }
           ];
 
-          const warningsLegend: Array<{ rowId: string; label: string; message: string }> = [];
+          const warningsLegend: Array<{ rowId: string; label: string; message: string; key: string }> = [];
           const seenRowMessage = new Set<string>();
           const seenGeneric = new Set<string>();
           parentRows.forEach(row => {
@@ -1779,16 +1837,32 @@ export const LineItemGroupQuestion: React.FC<{
               if (isGeneric) {
                 if (seenGeneric.has(message)) return;
                 seenGeneric.add(message);
-                warningsLegend.push({ rowId: row.id, label: '', message });
+                warningsLegend.push({ rowId: row.id, label: '', message, key: buildWarningKey('', message, true) });
                 return;
               }
               const dedupeKey = `${rowLabel || ''}::${message}`;
               if (seenRowMessage.has(dedupeKey)) return;
               seenRowMessage.add(dedupeKey);
-              warningsLegend.push({ rowId: row.id, label: rowLabel, message });
+              warningsLegend.push({ rowId: row.id, label: rowLabel, message, key: buildWarningKey(rowLabel, message, false) });
             });
           });
-          const warningsLegendVisible = warningsLegend.length > 0;
+          const warningsLegendNumbered = warningsLegend.map((entry, idx) => ({ ...entry, index: idx + 1 }));
+          const warningIndexByKey = new Map<string, number>();
+          warningsLegendNumbered.forEach(entry => warningIndexByKey.set(entry.key, entry.index));
+          const warningsLegendVisible = warningsLegendNumbered.length > 0;
+          const renderWarningFootnote = (warningKeys: string[]): React.ReactNode => {
+            if (!warningKeys.length) return null;
+            const indices = warningKeys
+              .map(key => warningIndexByKey.get(key))
+              .filter((val): val is number => typeof val === 'number');
+            if (!indices.length) return null;
+            const unique = Array.from(new Set(indices)).sort((a, b) => a - b);
+            return (
+              <span className="ck-line-item-table__warning-footnote" aria-hidden="true">
+                {unique.join(',')}
+              </span>
+            );
+          };
 
           return (
             <div
@@ -1845,13 +1919,13 @@ export const LineItemGroupQuestion: React.FC<{
               {warningsLegendVisible ? (
                 <div className="ck-line-item-table__legend">
                   <div className="ck-line-item-table__legend-title">
-                    {tSystem('validation.warningsTitle', language, 'Warnings')}
+                    {tSystem('validation.warningTitle', language, 'Warning')}
                   </div>
                   <div className="ck-line-item-table__legend-items">
-                    {warningsLegend.map((entry, idx) => (
-                      <div key={`${entry.rowId}-legend-${idx}`} className="ck-line-item-table__legend-item">
-                        <span className="ck-line-item-table__legend-icon" aria-hidden="true">
-                          !
+                    {warningsLegendNumbered.map(entry => (
+                      <div key={`${entry.rowId}-legend-${entry.index}`} className="ck-line-item-table__legend-item">
+                        <span className="ck-line-item-table__legend-footnote" aria-hidden="true">
+                          {entry.index}
                         </span>
                         <span className="ck-line-item-table__legend-text">
                           {entry.label ? (
@@ -4742,7 +4816,7 @@ export const LineItemGroupQuestion: React.FC<{
                                             aria-label={tSystem('lineItems.remove', language, 'Remove')}
                                             title={tSystem('lineItems.remove', language, 'Remove')}
                                           >
-                                            <XIcon size={18} />
+                                            <TrashIcon size={18} />
                                           </button>
                                         );
                                       }

@@ -25,13 +25,13 @@ describe('listViewLegend', () => {
       }
     ];
     const configured: any[] = [
-      { icon: 'warning', text: { en: 'Missing DATE' } },
+      { icon: 'warning', pill: { text: { en: 'Draft' }, tone: 'muted' }, text: { en: 'Missing DATE' } },
       { text: { en: 'Click Action to open the record.' } }
     ];
     const legend = buildListViewLegendItems(columns as any, configured as any, 'EN');
 
     expect(legend).toEqual([
-      { icon: 'warning', text: 'Missing DATE' },
+      { icon: 'warning', text: 'Missing DATE', pill: { text: 'Draft', tone: 'muted' } },
       { text: 'Click Action to open the record.' }
     ]);
   });

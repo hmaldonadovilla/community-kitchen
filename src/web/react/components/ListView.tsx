@@ -83,6 +83,7 @@ const ListView: React.FC<ListViewProps> = ({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedFieldFilters, setAdvancedFieldFilters] = useState<Record<string, string | string[]>>({});
   const [advancedHasSearched, setAdvancedHasSearched] = useState(false);
+  const [advancedKeyword, setAdvancedKeyword] = useState('');
 
   const viewToggleEnabled = Boolean(definition.listView?.view?.toggleEnabled);
   const viewModeConfigured: 'table' | 'cards' = definition.listView?.view?.mode === 'cards' ? 'cards' : 'table';
@@ -643,10 +644,9 @@ const ListView: React.FC<ListViewProps> = ({
   }, [searchQueryValue]);
 
   useEffect(() => {
-    if (!advancedSearchEnabled) return;
     if (!advancedHasSearched) return;
     setPageIndex(0);
-  }, [advancedFieldFilters, advancedHasSearched, advancedSearchEnabled]);
+  }, [advancedFieldFilters, advancedHasSearched]);
 
   useEffect(() => {
     if (!onDiagnostic) return;
@@ -769,8 +769,9 @@ const ListView: React.FC<ListViewProps> = ({
           })
         : baseItems;
     const trimmed = searchQueryValue.trim();
-    const advancedQuery = { keyword: searchQueryValue, fieldFilters: advancedFieldFilters };
-    const applyAdvanced = advancedSearchEnabled && advancedHasSearched && hasActiveAdvancedSearch(advancedQuery);
+    const advancedQuery = { keyword: advancedKeyword, fieldFilters: advancedFieldFilters };
+    const advancedActive = advancedHasSearched && hasActiveAdvancedSearch(advancedQuery);
+    const applyAdvanced = advancedActive;
     const filtered =
       dateSearchEnabled && trimmed
         ? items.filter(row => normalizeToIsoDateLocal((row as any)[dateSearchFieldId]) === trimmed)
@@ -800,6 +801,7 @@ const ListView: React.FC<ListViewProps> = ({
   }, [
     advancedFieldFilters,
     advancedHasSearched,
+    advancedKeyword,
     advancedSearchEnabled,
     allItems,
     dateSearchEnabled,
@@ -822,12 +824,14 @@ const ListView: React.FC<ListViewProps> = ({
   const showPrev = paginationEnabled && pageIndex > 0;
   const showNext = paginationEnabled && pageIndex < totalPages - 1;
   const loadedCount = (allItems || []).length;
+  const advancedActive =
+    advancedHasSearched && hasActiveAdvancedSearch({ keyword: advancedKeyword, fieldFilters: advancedFieldFilters });
   const activeSearch =
     listSearchMode === 'date'
       ? Boolean(searchQueryValue.trim())
       : listSearchMode === 'advanced'
-        ? advancedHasSearched && hasActiveAdvancedSearch({ keyword: searchQueryValue, fieldFilters: advancedFieldFilters })
-        : Boolean(searchQueryValue.trim());
+        ? advancedActive
+        : advancedActive || Boolean(searchQueryValue.trim());
   const showLoadedOfTotal = !activeSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
 
   const formatDateOnly = (value: any): string | null => {
@@ -1131,6 +1135,7 @@ const ListView: React.FC<ListViewProps> = ({
     if (advancedSearchEnabled) {
       setAdvancedFieldFilters({});
       setAdvancedHasSearched(false);
+      setAdvancedKeyword('');
       setAdvancedOpen(false);
     }
     onDiagnostic?.('list.search.clearResults', { mode: listSearchMode });
@@ -1143,6 +1148,7 @@ const ListView: React.FC<ListViewProps> = ({
       onDiagnostic?.('list.search.advanced.empty', {});
       return;
     }
+    setAdvancedKeyword(searchInputValue);
     setSearchQueryValue(searchInputValue);
     setAdvancedHasSearched(true);
     setAdvancedOpen(false);
@@ -1268,17 +1274,21 @@ const ListView: React.FC<ListViewProps> = ({
       const nextDateValue = (preset.dateValue || '').toString();
       const nextFieldFilters = (preset.fieldFilters || {}) as Record<string, string | string[]>;
       const nextValue = mode === 'date' ? nextDateValue : nextKeyword;
+      const usesAdvancedOverride = mode === 'advanced' && !advancedSearchEnabled;
 
-      setSearchInputValue(nextValue);
-      setSearchQueryValue(nextValue);
+      setSearchInputValue('');
+      setSearchQueryValue(mode === 'advanced' ? '' : nextValue);
 
-      if (advancedSearchEnabled && mode === 'advanced') {
+      if (mode === 'advanced') {
         setAdvancedFieldFilters(nextFieldFilters);
+        setAdvancedKeyword(nextKeyword);
         setAdvancedHasSearched(hasActiveAdvancedSearch({ keyword: nextKeyword, fieldFilters: nextFieldFilters }));
         setAdvancedOpen(false);
       } else {
         setAdvancedFieldFilters({});
         setAdvancedHasSearched(false);
+        setAdvancedKeyword('');
+        setAdvancedOpen(false);
       }
 
       setPageIndex(0);
@@ -1286,14 +1296,14 @@ const ListView: React.FC<ListViewProps> = ({
         mode,
         keyword: nextKeyword || null,
         dateValue: nextDateValue || null,
-        filterCount: Object.keys(nextFieldFilters || {}).length
+        filterCount: Object.keys(nextFieldFilters || {}).length,
+        advancedOverride: usesAdvancedOverride
       });
     },
     [advancedSearchEnabled, dateSearchEnabled, listSearchMode, onDiagnostic]
   );
 
   const showResults = viewMode === 'table' || activeSearch;
-  const showClearResults = activeSearch && visibleItems.length > 0;
 
   const titleNode = (() => {
     const configured = definition.listView?.title;
@@ -1358,7 +1368,9 @@ const ListView: React.FC<ListViewProps> = ({
 
         <div className="list-toolbar">
           <label className="ck-list-search-label" htmlFor={searchInputId}>
-            {dateSearchEnabled ? tSystem('list.searchByDate', language, '🔍 by date') : tSystem('list.searchByText', language, '🔍')}
+            {dateSearchEnabled
+              ? tSystem('list.searchByDate', language, 'Search by date')
+              : tSystem('list.searchByText', language, 'Search')}
           </label>
 
           <div className={searchControlClass}>
@@ -1371,6 +1383,11 @@ const ListView: React.FC<ListViewProps> = ({
                 onChange={next => {
                   setSearchInputValue(next);
                   setSearchQueryValue(next);
+                  if (!advancedSearchEnabled && advancedHasSearched) {
+                    setAdvancedFieldFilters({});
+                    setAdvancedHasSearched(false);
+                    setAdvancedKeyword('');
+                  }
                 }}
               />
             ) : (
@@ -1383,6 +1400,11 @@ const ListView: React.FC<ListViewProps> = ({
                 onChange={e => {
                   setSearchInputValue(e.target.value);
                   setSearchQueryValue(e.target.value);
+                  if (!advancedSearchEnabled && advancedHasSearched) {
+                    setAdvancedFieldFilters({});
+                    setAdvancedHasSearched(false);
+                    setAdvancedKeyword('');
+                  }
                 }}
                 onKeyDown={e => {
                   if (!advancedSearchEnabled) return;
@@ -1406,7 +1428,7 @@ const ListView: React.FC<ListViewProps> = ({
                   });
                 }}
               >
-                <span aria-hidden="true">⚙︎</span>
+                {tSystem('list.advancedSearch', language, 'Advanced')}
               </button>
             ) : null}
 
@@ -1448,15 +1470,7 @@ const ListView: React.FC<ListViewProps> = ({
           ) : null}
         </div>
 
-        {showClearResults ? (
-          <div className="ck-list-clear-results">
-            <button type="button" className="secondary" onClick={clearSearchResults}>
-              {tSystem('list.clearSearchResults', language, 'Clear search results')}
-            </button>
-          </div>
-        ) : null}
-
-        {viewMode === 'cards' && !showResults && listSearchPresetButtons.length ? (
+        {viewMode === 'cards' && listSearchPresetButtons.length ? (
           <div className="ck-list-search-presets" aria-label={tSystem('list.predefinedSearches', language, 'Quick filters')}>
             {showPresetsTitle ? <span className="ck-list-search-presets-title">{presetsTitleText}</span> : null}
             {listSearchPresetButtons.map(({ q, cfg }) => {

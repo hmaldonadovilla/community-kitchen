@@ -234,6 +234,8 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+      Note: presets can apply advanced `fieldFilters` even when the main list search mode is `text`.
+
     - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
       - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.
 
@@ -343,6 +345,7 @@ This project uses TypeScript. You need to build the script before using it in Go
           "legend": [
             { "icon": "warning", "text": { "en": "**Needs attention** (e.g. Missing DATE)" } },
             { "icon": "check", "text": { "en": "**OK:** ready for *Meal Production*" } },
+            { "pill": { "text": { "en": "Draft" }, "tone": "muted" }, "text": { "en": "Not submitted yet." } },
             { "text": { "en": "Click Action to open the record." } }
           ]
         }
@@ -350,6 +353,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       ```
 
       Supported icons: `warning`, `check`, `error`, `info`, `external`, `lock`, `edit`, `view`.
+      Pill tones: `default`, `muted`, `strong` (neutral palette).
 
       Optional: show a column only in **table** or only in **cards** view via `showIn`:
 
@@ -1126,6 +1130,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       If `required: true`, the **Add line** button is disabled until the selector has a value (prevents adding empty rows in `addMode: "inline"`).
       Set `choiceSearchEnabled: true` on the selector to always show the searchable input (search indexes include extra `optionsRef` columns).
       Set `placeholder` (or `placeholderEn`/`placeholderFr`/`placeholderNl`) to override the selector search placeholder text.
+      Set `hideLabel: true` to hide the selector label (placeholder only).
       For multi-select search without a separate Add button, set `addMode: "selectorOverlay"` and `anchorFieldId`; the selector becomes the search + multi-select list.
 
        You can also filter the selector options themselves with an `optionFilter` (supports `optionMapRef`, including composite key columns):
