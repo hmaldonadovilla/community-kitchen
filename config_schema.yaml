@@ -1227,6 +1227,23 @@ components:
           description: |
             Alternative to `optionMap`: load the mapping from a sheet tab with key/value columns.
             Each row contributes a `key -> value` entry; repeated keys are merged.
+        dataSourceField:
+          type: string
+          description: |
+            Column name from a data source row to use for filtering dataSource-backed options.
+            The values in this column are compared against the `dependsOn` values.
+        dataSourceDelimiter:
+          type: string
+          description: |
+            Optional delimiter for dataSourceField values stored in a single cell (defaults to comma/semicolon/newline splitting).
+            Use "none" to disable splitting.
+        bypassValues:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional dependency values that bypass option filtering entirely (returns the full option list).
+            If any selected dependency value matches, filtering is skipped.
         matchMode:
           type: string
           enum: [and, or]
@@ -1238,6 +1255,7 @@ components:
       oneOf:
         - required: [optionMap]
         - required: [optionMapRef]
+        - required: [dataSourceField]
       example:
         dependsOn: [Product, Supplier]
         optionMap:

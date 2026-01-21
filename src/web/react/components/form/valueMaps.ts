@@ -1,8 +1,8 @@
 import { toDependencyValue } from '../../../core';
-import { FieldValue, LangCode, OptionFilter, OptionSet } from '../../../types';
+import { FieldValue, LangCode, OptionSet, ValueMapConfig } from '../../../types';
 
 export const resolveValueMapValue = (
-  valueMap: OptionFilter,
+  valueMap: ValueMapConfig,
   getValue: (fieldId: string) => FieldValue,
   opts?: { language?: LangCode; targetOptions?: OptionSet }
 ): string => {

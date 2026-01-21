@@ -593,8 +593,22 @@ export type OptionFilterMatchMode = 'and' | 'or';
 
 export interface OptionFilter {
   dependsOn: string | string[]; // question/field ID(s) to watch (supports array for composite filters)
-  optionMap: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
+  optionMap?: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
   optionMapRef?: OptionMapRefConfig; // optional source reference (resolved into optionMap at load time)
+  /**
+   * Optional data source column used to filter dataSource-backed options.
+   * When set, the filter compares dependency values against this column.
+   */
+  dataSourceField?: string;
+  /**
+   * Optional delimiter for values stored in a single data source cell (defaults to comma/semicolon/newline).
+   * Use "none" to disable splitting.
+   */
+  dataSourceDelimiter?: string;
+  /**
+   * Optional dependency values that bypass filtering (returns the full option list).
+   */
+  bypassValues?: string[];
   /**
    * When a dependency resolves to multiple values (e.g., multi-select checkbox),
    * control whether allowed options are intersected (and) or unioned (or).

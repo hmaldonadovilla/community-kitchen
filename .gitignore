@@ -6,3 +6,5 @@ src/web/react/reactBundle.ts
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc
 .DS_Store
+
+.vscode/

@@ -952,6 +952,29 @@ This project uses TypeScript. You need to build the script before using it in Go
         }
         ```
 
+      - Data-source-driven filters: when a field’s options come from a `dataSource`, you can filter those options by comparing the `dependsOn` value(s) against a column in each data-source row. Set `dataSourceField` to the column name and optionally `dataSourceDelimiter` to split multi-value cells (defaults to comma/semicolon/newline; use `"none"` to disable splitting).
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": "DIETARY_APPLICABILITY",
+            "dataSourceField": "dietaryApplicability",
+            "dataSourceDelimiter": ","
+          }
+        }
+        ```
+
+      - Bypass values: if any `dependsOn` value matches `bypassValues`, option filtering is skipped and the full option list is shown.
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": "MEAL_TYPE",
+            "bypassValues": ["All"]
+          }
+        }
+        ```
+
       - Composite filters and cross-scope dependencies:
         - `dependsOn` can be a single ID or an array (for multi-field filters). When you provide an array, join dependency values with `||` in `optionMap` keys, plus `*` as a fallback.
         - Line-item filters can depend on top-level fields; reference the parent field ID directly.
