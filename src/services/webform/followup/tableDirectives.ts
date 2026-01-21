@@ -136,6 +136,18 @@ export const extractExcludeWhenDirective = (
   return clauses.length ? { clauses } : null;
 };
 
+export const extractExcludeWhenWhenDirective = (
+  table: GoogleAppsScript.Document.Table
+): { raw: string } | null => {
+  const text = table.getText && table.getText();
+  if (!text) return null;
+  const match = text.match(/{{EXCLUDE_WHEN_WHEN\(([\s\S]*?)\)}}/i);
+  if (!match) return null;
+  const raw = (match[1] || '').toString();
+  if (!raw.trim()) return null;
+  return { raw };
+};
+
 export const parseExcludeWhenClauses = (raw: string): Array<{ key: string; values: string[] }> => {
   const clause = (raw || '').toString().trim();
   if (!clause) return [];
@@ -167,6 +179,18 @@ export const stripExcludeWhenDirectivePlaceholders = (table: GoogleAppsScript.Do
   if (!table) return;
   // IMPORTANT: replaceText() uses regex.
   const pattern = `(?i){{EXCLUDE_WHEN\\([^)]*\\)}}`;
+  for (let r = 0; r < table.getNumRows(); r++) {
+    const tableRow = table.getRow(r);
+    for (let c = 0; c < tableRow.getNumCells(); c++) {
+      tableRow.getCell(c).replaceText(pattern, '');
+    }
+  }
+};
+
+export const stripExcludeWhenWhenDirectivePlaceholders = (table: GoogleAppsScript.Document.Table): void => {
+  if (!table) return;
+  // IMPORTANT: replaceText() uses regex.
+  const pattern = `(?i){{EXCLUDE_WHEN_WHEN\\([\\s\\S]*?\\)}}`;
   for (let r = 0; r < table.getNumRows(); r++) {
     const tableRow = table.getRow(r);
     for (let c = 0; c < tableRow.getNumCells(); c++) {

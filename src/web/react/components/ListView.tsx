@@ -4,7 +4,7 @@ import { collectStatusTransitionValues } from '../../../domain/statusTransitions
 import { LangCode, ListViewColumnConfig, ListViewRuleColumnConfig, WebFormDefinition, WebFormSubmission } from '../../types';
 import { toOptionSet } from '../../core';
 import { tSystem } from '../../systemStrings';
-import { fetchBatch, fetchList, ListItem, ListResponse } from '../api';
+import { fetchBatch, fetchList, ListItem, ListResponse, resolveUserFacingErrorMessage } from '../api';
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
 import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/listViewAdvancedSearch';
@@ -359,9 +359,10 @@ const ListView: React.FC<ListViewProps> = ({
           });
         } catch (err: any) {
           if (requestId !== activeFetchRef.current) return;
-          const message = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
+          const message = resolveUserFacingErrorMessage(err, 'Failed to load records.');
+          const logMessage = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
           setPrefetching(false);
-          onDiagnostic?.('list.fetch.background.error', { message });
+          onDiagnostic?.('list.fetch.background.error', { message: logMessage });
         }
       })();
       return;
@@ -569,9 +570,14 @@ const ListView: React.FC<ListViewProps> = ({
       })();
     } catch (err: any) {
       if (requestId !== activeFetchRef.current) return;
-      const message = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
-      setError(message);
-      onDiagnostic?.('list.fetch.error', { message });
+      const message = resolveUserFacingErrorMessage(err, 'Failed to load records.');
+      const logMessage = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
+      if (message) {
+        setError(message);
+      } else {
+        setError(null);
+      }
+      onDiagnostic?.('list.fetch.error', { message: logMessage });
     } finally {
       if (requestId === activeFetchRef.current) {
         setLoading(false);

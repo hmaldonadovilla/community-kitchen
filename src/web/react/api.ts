@@ -1,6 +1,8 @@
 import { PaginatedResult, WebFormSubmission } from '../../types';
 import { DataSourceConfig, FollowupActionResult, WebFormDefinition } from '../../types';
 import { LangCode } from '../types';
+import { normalizeLanguage } from '../core/options';
+import { tSystem } from '../systemStrings';
 
 declare const google: any;
 
@@ -268,6 +270,53 @@ export interface RecordVersionResult {
 
 type Runner = typeof google.script.run;
 
+const APPS_SCRIPT_CONNECTION_ERROR_CODE = 'CK_APPS_SCRIPT_CONNECTION';
+
+const resolveErrorLanguage = (): LangCode => {
+  const navLang =
+    (typeof navigator !== 'undefined' && (navigator.language || (navigator as any).userLanguage)) || undefined;
+  return normalizeLanguage(navLang);
+};
+
+const isAppsScriptConnectionFailureMessage = (message: string): boolean => {
+  const normalized = (message || '').toString().trim().toLowerCase();
+  return normalized.includes('connection failure due to http 0') || normalized.includes('networkerror');
+};
+
+const emitAppsScriptDiagnostic = (payload: Record<string, unknown>): void => {
+  const entry = { source: 'appsScript', ...payload };
+  const localConsole = typeof console !== 'undefined' ? console : undefined;
+  localConsole?.error?.('[AppsScript] connection failure', entry);
+  try {
+    if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+      const parentConsole = (window.parent as any).console as Console | undefined;
+      parentConsole?.error?.('[AppsScript] connection failure', entry);
+    }
+  } catch (_) {
+    // ignore cross-origin errors
+  }
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('ck:appsScriptError', { detail: entry }));
+    }
+  } catch (_) {
+    // ignore event errors
+  }
+};
+
+export const resolveUserFacingErrorMessage = (err: any, fallback: string): string | null => {
+  if (err?.code === APPS_SCRIPT_CONNECTION_ERROR_CODE) return null;
+  const message = (err?.message || err?.toString?.() || fallback || '').toString().trim();
+  return message || (fallback || null);
+};
+
+const toAppsScriptErrorMessage = (err: any): string => {
+  const raw = err?.message?.toString?.() || err?.toString?.() || '';
+  const message = raw.toString().trim();
+  if (!message) return 'Request failed.';
+  return message;
+};
+
 const getRunner = (): Runner | null => {
   const runner = google?.script?.run;
   return runner && typeof runner.withSuccessHandler === 'function' ? runner : null;
@@ -283,11 +332,37 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
     try {
       runner
         .withSuccessHandler((res: T) => resolve(res))
-        .withFailureHandler((err: any) =>
-          reject(err?.message ? new Error(err.message) : err || new Error('Request failed'))
-        )[fnName](...args);
+        .withFailureHandler((err: any) => {
+          const rawMessage = (err?.message || err?.toString?.() || '').toString();
+          if (isAppsScriptConnectionFailureMessage(rawMessage)) {
+            const language = resolveErrorLanguage();
+            const userMessage = tSystem(
+              'app.refreshToRetry',
+              language,
+              'We could not load this right now. Tap the app logo in the top left, then tap Refresh.'
+            );
+            const diagnostic = {
+              fnName,
+              message: rawMessage || 'connection failure',
+              userMessage,
+              argCount: args.length,
+              argTypes: args.map(arg => (arg === null ? 'null' : Array.isArray(arg) ? 'array' : typeof arg)),
+              href: typeof window !== 'undefined' ? window.location?.href || null : null,
+              userAgent: typeof navigator !== 'undefined' ? navigator.userAgent || null : null,
+              timestamp: new Date().toISOString()
+            };
+            emitAppsScriptDiagnostic(diagnostic);
+            const error = new Error(userMessage);
+            (error as any).code = APPS_SCRIPT_CONNECTION_ERROR_CODE;
+            (error as any).suppressUserMessage = true;
+            (error as any).diagnostic = diagnostic;
+            reject(error);
+            return;
+          }
+          reject(new Error(toAppsScriptErrorMessage(err)));
+        })[fnName](...args);
     } catch (err) {
-      reject(err instanceof Error ? err : new Error('Request failed'));
+      reject(new Error(toAppsScriptErrorMessage(err)));
     }
   });
 };

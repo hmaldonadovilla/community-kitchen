@@ -1,13 +1,15 @@
 import { QuestionConfig } from '../../../types';
-import { replaceLineItemPlaceholders } from './lineItemPlaceholders';
+import { replaceLineItemPlaceholders, resolveLineItemTokenValue } from './lineItemPlaceholders';
 import { applyOrderBy, consolidateConsolidatedTableRows } from './tableConsolidation';
 import { extractLineItemPlaceholders, parseExcludeWhenClauses, parseOrderByKeys } from './tableDirectives';
 import { formatTemplateValue, normalizeText, resolveSubgroupKey, slugifyPlaceholder } from './utils';
+import { matchesTemplateWhenClause, parseTemplateWhenClause } from './templateWhen';
 
 type SubGroupConfig = any;
 
 const ORDER_BY_RE = /{{\s*ORDER_BY\s*\(([^)]*)\)\s*}}/gi;
 const EXCLUDE_WHEN_RE = /{{\s*EXCLUDE_WHEN\s*\(([^)]*)\)\s*}}/gi;
+const EXCLUDE_WHEN_WHEN_RE = /{{\s*EXCLUDE_WHEN_WHEN\s*\(([\s\S]*?)\)\s*}}/gi;
 const REPEAT_TABLE_RE = /{{\s*(GROUP_TABLE|ROW_TABLE)\s*\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\)\s*}}/gi;
 // Support both:
 // - CONSOLIDATED_TABLE(GROUP.SUBGROUP)   (Doc directive)
@@ -19,6 +21,7 @@ const stripDirectiveTokens = (text: string): string => {
   let out = (text || '').toString();
   out = out.replace(ORDER_BY_RE, '');
   out = out.replace(EXCLUDE_WHEN_RE, '');
+  out = out.replace(EXCLUDE_WHEN_WHEN_RE, '');
   out = out.replace(CONSOLIDATED_TABLE_RE, '');
   out = out.replace(REPEAT_TABLE_RE, '');
   return out;
@@ -74,6 +77,13 @@ const extractExcludeWhenFromText = (text: string): { clauses: Array<{ key: strin
   if (!m) return null;
   const clauses = parseExcludeWhenClauses((m[1] || '').toString());
   return clauses.length ? { clauses } : null;
+};
+
+const extractExcludeWhenWhenFromText = (text: string): { when: any } | null => {
+  const m = (text || '').match(/{{\s*EXCLUDE_WHEN_WHEN\s*\(([\s\S]*?)\)\s*}}/i);
+  if (!m) return null;
+  const when = parseTemplateWhenClause((m[1] || '').toString());
+  return when ? { when } : null;
 };
 
 const extractConsolidatedTableFromText = (text: string): { groupId: string; subGroupId: string } | null => {
@@ -209,13 +219,31 @@ const expandBlock = (args: {
         const key = (clause.key || '').toString().trim();
         if (!key) return false;
         const fullKey = key.includes('.') ? key : `${defaultPrefix}.${key}`;
-        const rendered = replaceLineItemPlaceholders(`{{${fullKey}}}`, group, dataRow, {
+        const rendered = resolveLineItemTokenValue({
+          token: fullKey,
+          group,
+          rowData: dataRow,
           subGroup: subConfig as any,
           subGroupToken: targetSubToken
         });
         const current = normalizeText(rendered).toLowerCase();
         if (!current) return false;
         return (clause.values || []).some(v => normalizeText(v).toLowerCase() === current);
+      });
+      return !shouldExclude;
+    });
+  }
+
+  const excludeWhenWhen = extractExcludeWhenWhenFromText(blockText);
+  if (excludeWhenWhen && rows.length) {
+    rows = rows.filter(dataRow => {
+      const shouldExclude = matchesTemplateWhenClause({
+        when: excludeWhenWhen.when,
+        group,
+        rowData: dataRow,
+        subGroup: subConfig as any,
+        subGroupToken: targetSubToken,
+        lineItemRows
       });
       return !shouldExclude;
     });

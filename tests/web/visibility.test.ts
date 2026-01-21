@@ -57,4 +57,136 @@ describe('shouldHideField', () => {
     expect(shouldHideField({ showWhen: { not: { fieldId: 'a', equals: 'yes' } } } as any, ctx2)).toBe(true);
     expect(shouldHideField({ hideWhen: { not: { fieldId: 'a', equals: 'yes' } } } as any, ctx2)).toBe(false);
   });
+
+  it('supports lineItems row matching for top-level visibility', () => {
+    const lineItems: any = {
+      MEALS: [
+        { id: 'r1', values: { RECIPE: '', MP_IS_REHEAT: 'No' } },
+        { id: 'r2', values: { RECIPE: 'Soup', MP_IS_REHEAT: 'No' } }
+      ]
+    };
+    const ctx: any = {
+      getValue: (_id: string) => '',
+      getLineItems: (groupId: string) => lineItems[groupId] || []
+    };
+    const visibility: any = {
+      showWhen: {
+        lineItems: {
+          groupId: 'MEALS',
+          when: {
+            all: [
+              { fieldId: 'RECIPE', notEmpty: true },
+              { fieldId: 'MP_IS_REHEAT', equals: 'No' }
+            ]
+          }
+        }
+      }
+    };
+    expect(shouldHideField(visibility, ctx)).toBe(false);
+
+    const lineItemsNoMatch: any = {
+      MEALS: [
+        { id: 'r1', values: { RECIPE: 'Soup', MP_IS_REHEAT: 'Yes' } },
+        { id: 'r2', values: { RECIPE: '', MP_IS_REHEAT: 'No' } }
+      ]
+    };
+    const ctxNoMatch: any = {
+      getValue: (_id: string) => '',
+      getLineItems: (groupId: string) => lineItemsNoMatch[groupId] || []
+    };
+    expect(shouldHideField(visibility, ctxNoMatch)).toBe(true);
+  });
+
+  it('supports lineItems subgroup matching', () => {
+    const lineItems: any = {
+      MEALS: [{ id: 'p1', values: { DISH: 'Pasta' } }],
+      'MEALS::p1::INGREDIENTS': [{ id: 'c1', values: { ING_NAME: 'Tomato' } }]
+    };
+    const ctx: any = {
+      getValue: (_id: string) => '',
+      getLineItems: (groupId: string) => lineItems[groupId] || []
+    };
+    const visibility: any = {
+      showWhen: {
+        lineItems: {
+          groupId: 'MEALS',
+          subGroupId: 'INGREDIENTS',
+          when: { fieldId: 'ING_NAME', equals: 'Tomato' }
+        }
+      }
+    };
+    expect(shouldHideField(visibility, ctx)).toBe(false);
+  });
+
+  it('does not fall back to top-level values for lineItems row fields', () => {
+    const lineItems: any = {
+      MEALS: [
+        { id: 'r1', values: { RECIPE: 'Soup', MP_IS_REHEAT: 'Yes' } },
+        { id: 'r2', values: { MP_IS_REHEAT: 'No' } }
+      ]
+    };
+    const ctx: any = {
+      getValue: (id: string) => (id === 'RECIPE' ? 'TopLevelRecipe' : ''),
+      getLineItems: (groupId: string) => lineItems[groupId] || []
+    };
+    const visibility: any = {
+      showWhen: {
+        lineItems: {
+          groupId: 'MEALS',
+          match: 'any',
+          when: {
+            all: [
+              { fieldId: 'RECIPE', notEmpty: true },
+              { fieldId: 'MP_IS_REHEAT', equals: 'No' }
+            ]
+          }
+        }
+      }
+    };
+    expect(shouldHideField(visibility, ctx)).toBe(true);
+  });
+
+  it('supports parent-scoped subgroup matching', () => {
+    const lineItems: any = {
+      MEALS: [
+        { id: 'p1', values: { RECIPE: 'Soup', MP_IS_REHEAT: 'No' } },
+        { id: 'p2', values: { RECIPE: 'Salad', MP_IS_REHEAT: 'Yes' } }
+      ],
+      'MEALS::p1::ING': [{ id: 'c1', values: { __ckRowSource: 'manual' } }],
+      'MEALS::p2::ING': [{ id: 'c2', values: { __ckRowSource: 'auto' } }]
+    };
+    const ctx: any = {
+      getValue: (_id: string) => '',
+      getLineItems: (groupId: string) => lineItems[groupId] || []
+    };
+    const visibility: any = {
+      showWhen: {
+        lineItems: {
+          groupId: 'MEALS',
+          subGroupId: 'ING',
+          parentWhen: {
+            all: [
+              { fieldId: 'RECIPE', notEmpty: true },
+              { fieldId: 'MP_IS_REHEAT', equals: 'No' }
+            ]
+          },
+          when: { fieldId: '__ckRowSource', equals: 'manual' }
+        }
+      }
+    };
+    expect(shouldHideField(visibility, ctx)).toBe(false);
+
+    const visibilityAllParents: any = {
+      showWhen: {
+        lineItems: {
+          groupId: 'MEALS',
+          subGroupId: 'ING',
+          parentWhen: { fieldId: 'RECIPE', notEmpty: true },
+          parentMatch: 'all',
+          when: { fieldId: '__ckRowSource', equals: 'manual' }
+        }
+      }
+    };
+    expect(shouldHideField(visibilityAllParents, ctx)).toBe(true);
+  });
 });

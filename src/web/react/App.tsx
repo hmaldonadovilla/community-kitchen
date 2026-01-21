@@ -29,7 +29,8 @@ import {
   ListItem,
   fetchRecordById,
   fetchRecordByRowNumber,
-  getRecordVersionApi
+  getRecordVersionApi,
+  resolveUserFacingErrorMessage
 } from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
@@ -381,6 +382,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       }
     },
     [debugEnabled]
+  );
+  const resolveUiErrorMessage = useCallback(
+    (err: any, fallback: string) => resolveUserFacingErrorMessage(err, fallback),
+    []
+  );
+  const resolveLogMessage = useCallback(
+    (err: any, fallback: string) => (err?.message || err?.toString?.() || fallback).toString(),
+    []
   );
 
   const statusTransitions = definition.followup?.statusTransitions;
@@ -1271,9 +1280,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         });
       } catch (err: any) {
         if (seq !== listFetchSeqRef.current) return;
-        const msg = (err?.message || err?.toString?.() || 'Failed to load list.').toString();
-        setListFetch(prev => ({ ...prev, phase: 'error', message: msg }));
-        logEvent('list.sorted.prefetch.error', { message: msg });
+        const uiMessage = resolveUiErrorMessage(err, 'Failed to load list.');
+        const logMessage = resolveLogMessage(err, 'Failed to load list.');
+        if (uiMessage) {
+          setListFetch(prev => ({ ...prev, phase: 'error', message: uiMessage }));
+        } else {
+          setListFetch(prev => ({ ...prev, phase: 'idle', message: undefined }));
+        }
+        logEvent('list.sorted.prefetch.error', { message: logMessage });
       }
     })();
     // Do NOT cancel on view changes; this prefetch should continue in the background.
@@ -1576,10 +1590,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         return true;
       } catch (err: any) {
         if (seq !== recordFetchSeqRef.current) return false;
-        const message = (err?.message || err?.toString?.() || 'Failed to load record.').toString();
-        setRecordLoadError(message);
+        const uiMessage = resolveUiErrorMessage(err, 'Failed to load record.');
+        const logMessage = resolveLogMessage(err, 'Failed to load record.');
+        setRecordLoadError(uiMessage);
         setRecordLoadingId(null);
-        logEvent('record.fetch.error', { recordId, message, rowNumberHint, durationMs: Date.now() - startedAt });
+        logEvent('record.fetch.error', { recordId, message: logMessage, rowNumberHint, durationMs: Date.now() - startedAt });
         return false;
       }
     },
@@ -2453,7 +2468,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       return undefined;
     };
     const visibilityCtx = {
-      getValue: (fieldId: string) => resolveButtonVisibilityValue(fieldId)
+      getValue: (fieldId: string) => resolveButtonVisibilityValue(fieldId),
+      getLineItems: (groupId: string) => lineItems[groupId] || []
     } as any;
     return definition.questions
       .map((q, idx) => ({ q, idx }))
@@ -2653,19 +2669,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         logEvent('report.pdfPreview.ok', { buttonId, opened });
       } catch (err: any) {
         if (seq !== reportPdfSeqRef.current) return;
-        const msg = (err?.message || err?.toString?.() || 'Failed to generate PDF preview.').toString();
-        // Always surface errors in-app as well.
-        setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'error', pdfMessage: msg }));
-        try {
-          if (popup && !popup.closed) {
-            popup.document.open();
-            popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${msg}</pre>`);
-            popup.document.close();
+        const uiMessage = resolveUiErrorMessage(err, 'Failed to generate PDF preview.');
+        const logMessage = resolveLogMessage(err, 'Failed to generate PDF preview.');
+        if (uiMessage) {
+          // Always surface errors in-app as well.
+          setReportOverlay(prev =>
+            prev?.buttonId !== buttonId
+              ? prev
+              : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'error', pdfMessage: uiMessage }
+          );
+          try {
+            if (popup && !popup.closed) {
+              popup.document.open();
+              popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${uiMessage}</pre>`);
+              popup.document.close();
+            }
+          } catch (_) {
+            // ignore
           }
-        } catch (_) {
-          // ignore
+        } else {
+          setReportOverlay(prev =>
+            prev?.buttonId !== buttonId
+              ? prev
+              : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'idle', pdfMessage: undefined }
+          );
         }
-        logEvent('report.pdfPreview.exception', { buttonId, message: msg });
+        logEvent('report.pdfPreview.exception', { buttonId, message: logMessage });
       }
     },
     [base64ToPdfObjectUrl, definition, formKey, logEvent]
@@ -2755,12 +2784,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         logEvent('report.markdownPreview.ok', { buttonId, markdownLength: (res.markdown || '').toString().length });
       } catch (err: any) {
         if (seq !== reportPdfSeqRef.current) return;
-        const msg = (err?.message || err?.toString?.() || 'Failed to render preview.').toString();
-        setReportOverlay(prev => {
-          if (prev?.buttonId !== buttonId) return prev;
-          return { ...prev, open: true, pdfPhase: 'error', pdfMessage: msg };
-        });
-        logEvent('report.markdownPreview.exception', { buttonId, message: msg });
+        const uiMessage = resolveUiErrorMessage(err, 'Failed to render preview.');
+        const logMessage = resolveLogMessage(err, 'Failed to render preview.');
+        if (uiMessage) {
+          setReportOverlay(prev => {
+            if (prev?.buttonId !== buttonId) return prev;
+            return { ...prev, open: true, pdfPhase: 'error', pdfMessage: uiMessage };
+          });
+        } else {
+          setReportOverlay(prev => {
+            if (prev?.buttonId !== buttonId) return prev;
+            return { ...prev, open: false, pdfPhase: 'idle', pdfMessage: undefined };
+          });
+        }
+        logEvent('report.markdownPreview.exception', { buttonId, message: logMessage });
       }
     },
     [definition, formKey, logEvent, parseButtonRef, resolveTemplateIdForClient]
@@ -2881,12 +2918,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         });
       } catch (err: any) {
         if (seq !== reportPdfSeqRef.current) return;
-        const msg = (err?.message || err?.toString?.() || 'Failed to render preview.').toString();
-        setReportOverlay(prev => {
-          if (prev?.buttonId !== buttonId) return prev;
-          return { ...prev, open: true, pdfPhase: 'error', pdfMessage: msg };
-        });
-        logEvent('report.htmlPreview.exception', { buttonId, message: msg });
+        const uiMessage = resolveUiErrorMessage(err, 'Failed to render preview.');
+        const logMessage = resolveLogMessage(err, 'Failed to render preview.');
+        if (uiMessage) {
+          setReportOverlay(prev => {
+            if (prev?.buttonId !== buttonId) return prev;
+            return { ...prev, open: true, pdfPhase: 'error', pdfMessage: uiMessage };
+          });
+        } else {
+          setReportOverlay(prev => {
+            if (prev?.buttonId !== buttonId) return prev;
+            return { ...prev, open: false, pdfPhase: 'idle', pdfMessage: undefined };
+          });
+        }
+        logEvent('report.htmlPreview.exception', { buttonId, message: logMessage });
       }
     },
     [definition, formKey, logEvent, parseButtonRef, resolveTemplateIdForClient]
@@ -3570,12 +3615,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           if (seq !== dedupCheckSeqRef.current) return;
           dedupCheckingRef.current = false;
           setDedupChecking(false);
-          const msg = (err?.message || err?.toString?.() || 'Failed to check duplicates.').toString();
-          logEvent('dedup.check.exception', { recordId: candidateId || null, message: msg });
+          const uiMessage = resolveUiErrorMessage(err, 'Failed to check duplicates.');
+          const logMessage = resolveLogMessage(err, 'Failed to check duplicates.');
+          logEvent('dedup.check.exception', { recordId: candidateId || null, message: logMessage });
           if (!candidateId) {
-            const conflictObj = { ruleId: 'dedupCheckFailed', message: msg };
-            dedupConflictRef.current = conflictObj;
-            setDedupConflict({ ruleId: 'dedupCheckFailed', message: msg });
+            if (uiMessage) {
+              const conflictObj = { ruleId: 'dedupCheckFailed', message: uiMessage };
+              dedupConflictRef.current = conflictObj;
+              setDedupConflict({ ruleId: 'dedupCheckFailed', message: uiMessage });
+            }
           }
         });
     }, 350) as any;
@@ -3861,14 +3909,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             reason,
             sessionAtStart,
             sessionNow,
-            message: (err?.message || err?.toString?.() || 'failed').toString()
+            message: resolveLogMessage(err, 'failed')
           });
           return;
         }
-        const errText = (err?.message || err?.toString?.() || 'Autosave failed.').toString();
+        const uiMessage = resolveUiErrorMessage(err, 'Autosave failed.');
+        const logMessage = resolveLogMessage(err, 'Autosave failed.');
         autoSaveDirtyRef.current = true;
-        setDraftSave({ phase: 'error', message: errText });
-        logEvent('autosave.exception', { reason, message: errText });
+        if (uiMessage) {
+          setDraftSave({ phase: 'error', message: uiMessage });
+        } else {
+          setDraftSave({ phase: 'idle' });
+        }
+        logEvent('autosave.exception', { reason, message: logMessage });
       } finally {
         autoSaveInFlightRef.current = false;
         if (autoSaveQueuedRef.current && !submittingRef.current) {
@@ -4281,9 +4334,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             });
             logEvent('upload.ensureRecord.saved', { recordId, fieldPath: args.fieldPath });
           } catch (err: any) {
-            const msg = (err?.message || err?.toString?.() || 'Failed to create draft record.').toString();
-            setDraftSave({ phase: 'error', message: msg });
-            return { success: false, message: msg };
+            const uiMessage = resolveUiErrorMessage(err, 'Failed to create draft record.');
+            const logMessage = resolveLogMessage(err, 'Failed to create draft record.');
+            if (uiMessage) {
+              setDraftSave({ phase: 'error', message: uiMessage });
+            } else {
+              setDraftSave({ phase: 'idle' });
+            }
+            logEvent('upload.ensureRecord.error', { fieldPath: args.fieldPath, message: logMessage });
+            return { success: false, message: uiMessage || '' };
           }
         }
 
@@ -4517,9 +4576,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           logEvent('upload.saveUrls.success', { fieldPath: args.fieldPath, recordId, urls: mergedItems.length });
           return { success: true };
         } catch (err: any) {
-          const msg = (err?.message || err?.toString?.() || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')).toString();
-          logEvent('upload.files.exception', { fieldPath: args.fieldPath, message: msg });
-          return { success: false, message: msg };
+          const uiMessage = resolveUiErrorMessage(
+            err,
+            tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')
+          );
+          const logMessage = resolveLogMessage(
+            err,
+            tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')
+          );
+          logEvent('upload.files.exception', { fieldPath: args.fieldPath, message: logMessage });
+          return { success: false, message: uiMessage || '' };
         }
       };
 
@@ -5015,9 +5081,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
                 : prev
             );
           } catch (err: any) {
-            const msg = (err?.message || err || 'Failed').toString();
-            followupErrors.push(`${action}: ${msg}`);
-            logEvent('followup.auto.exception', { action, recordId, message: msg });
+            const uiMessage = resolveUiErrorMessage(err, 'Failed');
+            const logMessage = resolveLogMessage(err, 'Failed');
+            if (uiMessage) {
+              followupErrors.push(`${action}: ${uiMessage}`);
+            }
+            logEvent('followup.auto.exception', { action, recordId, message: logMessage });
           }
         }
 
@@ -5040,9 +5109,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       }
       setView(summaryViewEnabled ? 'summary' : 'form');
     } catch (err: any) {
-      setStatus(err?.message || 'Submit failed');
-      setStatusLevel('error');
-      logEvent('submit.exception', { message: err?.message || err });
+      const uiMessage = resolveUiErrorMessage(err, 'Submit failed');
+      const logMessage = resolveLogMessage(err, 'Submit failed');
+      if (uiMessage) {
+        setStatus(uiMessage);
+        setStatusLevel('error');
+      } else {
+        setStatusLevel(null);
+      }
+      logEvent('submit.exception', { message: logMessage });
     } finally {
       setSubmitting(false);
     }

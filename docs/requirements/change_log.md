@@ -32,6 +32,8 @@
   - The section selector needs a setting to hide the label.
   - Move the footnote markers next to the field labels.
   >**DONE - Cursor**
+- ck-bug-12: EXCLUDE_WHEN in follow-up templates compared formatted values (e.g., Yes/No → ✔/❌), causing rows to skip exclusion.
+  >**DONE - Codex**
 
 ## technical requirements
 
@@ -159,8 +161,12 @@
   > **DONE - Codex**
 - ck-46: Do not hide even if all the values are `None` the allergen column in docs/templates/recipes.summary.html
   > **DONE - Codex**
-- ck-47: field-level guarded change dialog for sensitive fields.
-  - Allow configuring a per-field `changeDialog` with `when` conditions using the same DSL as visibility rules.
-  - When `when` is satisfied on blur, the UI holds autosave, shows a confirm/cancel dialog, and only applies the change when the user confirms.
-  - If the field is part of a `onConflict: reject` dedup rule, a dedup precheck runs before accepting the change; on conflict, the value is reverted and a dedup notice is shown.
+- ck-47: Introduce field level dialog modals that can be triggered to hold field changes given a condition that looks on other fields values for the same record. The dialog will put auto-save on hold. If the user accepts the dialog, if the field is part of dedup rules we evaluate that before allowing the value to be cahnged. If dedup validation passes or the field is not concerned by dedup rules, the field change is made, and auto-save resumes, otherwise the change is cancel as well as auto-save.
+  > **WIP - Software Engineer**
+- ck-48:
+  -For line item groups rows, with the `MP_IS_REHEAT` field set to `Yes`, the `Ingredient Needed` button does not need to be shown because these type of meals do not need for the cook to retrieve ingredients from the pantry. Logically we must hide Ingredients needed unless there is at least one row with a recipe selection and the value `No` on the `MP_IS_REHEAT` field. To define this generically we should create a feature where visibility of top level fields, including buttons shown in edit view, is impacted by logic that looks at nested line item and subgroups.
+  - When
+  > **WIP - Cursor**
+- ck-49:
+  - Assess if we can apply option filter to data coming from dataSource, based on values from current record fields. The specific use case to enable is: we are setting recipies on a different form, these records are defined by a multi-select field that contains the dietary applicability of the recipe and the values are being saved in the sever as strings separated by commas. In the meal production form we are defining a single dietary applicability for the meal to be preparead and we require the cook to select the recipe that will be used, therefore we need to define an option filter to will exclude the recipies that are not compatible with the dietary applicability of the meal. Please follow guidelines defined in AGENT.md.
   > **WIP - Codex**

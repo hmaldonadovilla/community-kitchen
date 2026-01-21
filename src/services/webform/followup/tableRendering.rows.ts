@@ -4,16 +4,19 @@ import {
   clearTableRow,
   extractConsolidatedTableDirective,
   extractExcludeWhenDirective,
+  extractExcludeWhenWhenDirective,
   extractLineItemPlaceholders,
   extractOrderByDirective,
   stripConsolidatedTableDirectivePlaceholders,
   stripExcludeWhenDirectivePlaceholders,
+  stripExcludeWhenWhenDirectivePlaceholders,
   stripOrderByDirectivePlaceholders
 } from './tableDirectives';
 import { applyOrderBy, consolidateConsolidatedTableRows } from './tableConsolidation';
-import { replaceLineItemPlaceholders } from './lineItemPlaceholders';
+import { replaceLineItemPlaceholders, resolveLineItemTokenValue } from './lineItemPlaceholders';
 import { shouldRenderCollapsedOnlyForProgressiveRow } from './progressiveRows';
 import { applyZebraStripeToRow } from './tableZebra';
+import { matchesTemplateWhenClause, parseTemplateWhenClause } from './templateWhen';
 
 type SubGroupConfig = LineItemGroupConfig;
 
@@ -37,6 +40,11 @@ export const renderTableRows = (
   if (excludeWhen && excludeWhen.clauses.length) {
     stripExcludeWhenDirectivePlaceholders(table);
   }
+  const excludeWhenWhenRaw = extractExcludeWhenWhenDirective(table);
+  if (excludeWhenWhenRaw) {
+    stripExcludeWhenWhenDirectivePlaceholders(table);
+  }
+  const excludeWhenWhen = excludeWhenWhenRaw ? parseTemplateWhenClause(excludeWhenWhenRaw.raw) : null;
 
   for (let r = 0; r < table.getNumRows(); r++) {
     const row = table.getRow(r);
@@ -84,13 +92,30 @@ export const renderTableRows = (
           const key = (clause.key || '').toString().trim();
           if (!key) return false;
           const fullKey = key.includes('.') ? key : `${defaultPrefix}.${key}`;
-          const rendered = replaceLineItemPlaceholders(`{{${fullKey}}}`, group, dataRow, {
+          const rendered = resolveLineItemTokenValue({
+            token: fullKey,
+            group,
+            rowData: dataRow,
             subGroup: subConfig as any,
             subGroupToken: targetSubGroupId
           });
           const current = normalizeText(rendered).toLowerCase();
           if (!current) return false;
           return (clause.values || []).some(v => normalizeText(v).toLowerCase() === current);
+        });
+        return !shouldExclude;
+      });
+    }
+
+    if (excludeWhenWhen && rows && rows.length) {
+      rows = rows.filter(dataRow => {
+        const shouldExclude = matchesTemplateWhenClause({
+          when: excludeWhenWhen,
+          group,
+          rowData: dataRow,
+          subGroup: subConfig as any,
+          subGroupToken: targetSubGroupId,
+          lineItemRows
         });
         return !shouldExclude;
       });

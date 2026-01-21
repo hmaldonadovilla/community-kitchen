@@ -19,6 +19,7 @@ import {
   OptionSortMode,
   OptionMapRefConfig,
   OptionFilter,
+  ValueMapConfig,
   ParagraphDisclaimerConfig,
   PageSectionConfig,
   QuestionGroupConfig,
@@ -896,6 +897,21 @@ export class ConfigSheet {
       .filter(Boolean);
   }
 
+  private static normalizeBypassValues(raw: any): string[] | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    const values = Array.isArray(raw)
+      ? raw.map(v => (v ?? '').toString().trim()).filter(Boolean)
+      : this.splitOptionMapCell(raw);
+    if (!values.length) return undefined;
+    const seen = new Set<string>();
+    const unique = values.filter(value => {
+      if (seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
+    return unique.length ? unique : undefined;
+  }
+
   private static normalizeOptionMapRecord(raw: any): Record<string, string[]> | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const out: Record<string, string[]> = {};
@@ -1007,16 +1023,53 @@ export class ConfigSheet {
     if (Array.isArray(dependsOn) && !dependsOn.length) return undefined;
     if (!Array.isArray(dependsOn) && !dependsOn) return undefined;
 
+    const bypassValues = this.normalizeBypassValues((raw as any).bypassValues);
+    const bypassConfig = bypassValues ? { bypassValues } : {};
+
     const optionMap = this.normalizeOptionMapRecord((raw as any).optionMap);
     if (optionMap) {
-      return { ...(raw as any), dependsOn, optionMap } as OptionFilter;
+      return { ...(raw as any), dependsOn, optionMap, ...bypassConfig } as OptionFilter;
     }
 
     const refCfg = this.normalizeOptionMapRef((raw as any).optionMapRef);
     if (refCfg) {
       const resolved = this.buildOptionMapFromRef(ss, refCfg);
       if (!resolved) return undefined;
-      return { ...(raw as any), dependsOn, optionMap: resolved, optionMapRef: refCfg } as OptionFilter;
+      return { ...(raw as any), dependsOn, optionMap: resolved, optionMapRef: refCfg, ...bypassConfig } as OptionFilter;
+    }
+
+    const dataSourceField = (raw as any).dataSourceField;
+    if (typeof dataSourceField === 'string' && dataSourceField.trim()) {
+      return { ...(raw as any), dependsOn, dataSourceField: dataSourceField.trim(), ...bypassConfig } as OptionFilter;
+    }
+
+    return undefined;
+  }
+
+  private static normalizeValueMapLike(
+    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+    raw: any
+  ): ValueMapConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+
+    const dependsOnRaw = (raw as any).dependsOn;
+    if (dependsOnRaw === undefined || dependsOnRaw === null) return undefined;
+    const dependsOn = Array.isArray(dependsOnRaw)
+      ? dependsOnRaw.map(v => (v === undefined || v === null ? '' : v.toString().trim())).filter(Boolean)
+      : dependsOnRaw.toString().trim();
+    if (Array.isArray(dependsOn) && !dependsOn.length) return undefined;
+    if (!Array.isArray(dependsOn) && !dependsOn) return undefined;
+
+    const optionMap = this.normalizeOptionMapRecord((raw as any).optionMap);
+    if (optionMap) {
+      return { dependsOn, optionMap };
+    }
+
+    const refCfg = this.normalizeOptionMapRef((raw as any).optionMapRef);
+    if (refCfg) {
+      const resolved = this.buildOptionMapFromRef(ss, refCfg);
+      if (!resolved) return undefined;
+      return { dependsOn, optionMap: resolved, optionMapRef: refCfg };
     }
 
     return undefined;
@@ -1156,12 +1209,12 @@ export class ConfigSheet {
   private static parseValueMap(
     ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
     rawConfig?: string
-  ): OptionFilter | undefined {
+  ): ValueMapConfig | undefined {
     if (!rawConfig) return undefined;
     try {
       const parsed = JSON.parse(this.sanitizeJson(rawConfig || ''));
       const vm = parsed?.valueMap;
-      const normalized = this.normalizeOptionMapLike(ss, vm);
+      const normalized = this.normalizeValueMapLike(ss, vm);
       if (normalized) return normalized;
     } catch (_) {
       // ignore parse errors
@@ -1674,6 +1727,46 @@ export class ConfigSheet {
     if (Object.prototype.hasOwnProperty.call(raw as any, 'not')) {
       const nested = this.normalizeWhenClause((raw as any).not);
       return nested ? { not: nested } : undefined;
+    }
+
+    const lineItemsRaw = (raw as any).lineItems ?? (raw as any).lineItem;
+    if (lineItemsRaw && typeof lineItemsRaw === 'object') {
+      const groupIdRaw =
+        (lineItemsRaw as any).groupId ??
+        (lineItemsRaw as any).group ??
+        (lineItemsRaw as any).lineGroupId ??
+        (lineItemsRaw as any).lineGroup;
+      const groupId = groupIdRaw !== undefined && groupIdRaw !== null ? groupIdRaw.toString().trim() : '';
+      if (!groupId) return undefined;
+
+      const subGroupRaw = (lineItemsRaw as any).subGroupId ?? (lineItemsRaw as any).subGroup;
+      const subGroupId = subGroupRaw !== undefined && subGroupRaw !== null ? subGroupRaw.toString().trim() : '';
+
+      const whenRaw = (lineItemsRaw as any).when;
+      const when = this.normalizeWhenClause(whenRaw);
+
+      const parentWhenRaw =
+        (lineItemsRaw as any).parentWhen ??
+        (lineItemsRaw as any).parent ??
+        (lineItemsRaw as any).parentRowWhen;
+      const parentWhen = this.normalizeWhenClause(parentWhenRaw);
+
+      const matchRaw = (lineItemsRaw as any).match ?? (lineItemsRaw as any).mode;
+      const matchStr = typeof matchRaw === 'string' ? matchRaw.trim().toLowerCase() : '';
+      const match = matchStr === 'all' || matchStr === 'any' ? (matchStr as 'all' | 'any') : undefined;
+
+      const parentMatchRaw = (lineItemsRaw as any).parentMatch ?? (lineItemsRaw as any).parentMode;
+      const parentMatchStr = typeof parentMatchRaw === 'string' ? parentMatchRaw.trim().toLowerCase() : '';
+      const parentMatch =
+        parentMatchStr === 'all' || parentMatchStr === 'any' ? (parentMatchStr as 'all' | 'any') : undefined;
+
+      const cfg: any = { groupId };
+      if (subGroupId) cfg.subGroupId = subGroupId;
+      if (when) cfg.when = when;
+      if (parentWhen) cfg.parentWhen = parentWhen;
+      if (match) cfg.match = match;
+      if (parentMatch) cfg.parentMatch = parentMatch;
+      return { lineItems: cfg } as any;
     }
 
     const fieldIdRaw = (raw as any).fieldId ?? (raw as any).field ?? (raw as any).id;
@@ -2620,7 +2713,7 @@ export class ConfigSheet {
       baseType === 'FILE_UPLOAD' ? this.normalizeUploadConfig(field?.uploadConfig || field?.upload) : undefined;
     const selectionEffects = this.normalizeSelectionEffects(field?.selectionEffects);
     const optionFilter = this.normalizeOptionMapLike(ss, field?.optionFilter);
-    const valueMap = this.normalizeOptionMapLike(ss, field?.valueMap);
+    const valueMap = this.normalizeValueMapLike(ss, field?.valueMap);
     const derivedValue = this.normalizeDerivedValue(field?.derivedValue);
     const ui = this.normalizeQuestionUi(field?.ui || field?.view || field?.layout);
     const group = this.normalizeQuestionGroup(field?.group || field?.section || field?.card);
@@ -2732,8 +2825,8 @@ export class ConfigSheet {
   private static normalizeValueMap(
     ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
     raw: any
-  ): OptionFilter | undefined {
-    return this.normalizeOptionMapLike(ss, raw);
+  ): ValueMapConfig | undefined {
+    return this.normalizeValueMapLike(ss, raw);
   }
 
   private static normalizeDerivedValue(raw: any): DerivedValueConfig | undefined {

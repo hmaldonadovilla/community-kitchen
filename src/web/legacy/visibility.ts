@@ -1,6 +1,6 @@
 import { WebQuestionDefinition } from '../../types';
 import { shouldHideField } from '../rules/visibility';
-import { getRowValue, getValue, toggleFieldVisibility } from './dom';
+import { findLineItemRows, getRowValue, getValue, toggleFieldVisibility } from './dom';
 
 interface ApplyVisibilityOptions {
   definition: { questions: WebQuestionDefinition[] };
@@ -10,10 +10,29 @@ interface ApplyVisibilityOptions {
 
 export function applyVisibility(options: ApplyVisibilityOptions): void {
   const { definition, formEl } = options;
+  const lineItemRowsByGroup: Record<string, Array<{ id: string; values: Record<string, any> }>> = {};
+
+  definition.questions
+    .filter(q => q.type === 'LINE_ITEM_GROUP')
+    .forEach(group => {
+      const rows = findLineItemRows(group.id, formEl);
+      const fields = group.lineItemConfig?.fields || [];
+      lineItemRowsByGroup[group.id] = rows.map(row => {
+        const values: Record<string, any> = {};
+        fields.forEach(field => {
+          const name = `${group.id}__${field.id}`;
+          values[field.id] = getRowValue(row, name);
+        });
+        return { id: row.dataset.rowId || '', values };
+      });
+    });
 
   definition.questions.forEach(q => {
     if (q.visibility) {
-      const ctx = { getValue: (fieldId: string) => getValue(formEl, fieldId) };
+      const ctx = {
+        getValue: (fieldId: string) => getValue(formEl, fieldId),
+        getLineItems: (groupId: string) => lineItemRowsByGroup[groupId] || []
+      };
       const shouldHide = shouldHideField(q.visibility, ctx, { linePrefix: q.type === 'LINE_ITEM_GROUP' ? q.id : undefined });
       const holder = formEl.querySelector<HTMLElement>('[data-qid="' + q.id + '"]');
       toggleFieldVisibility(holder, shouldHide);

@@ -952,6 +952,29 @@ This project uses TypeScript. You need to build the script before using it in Go
         }
         ```
 
+      - Data-source-driven filters: when a field’s options come from a `dataSource`, you can filter those options by comparing the `dependsOn` value(s) against a column in each data-source row. Set `dataSourceField` to the column name and optionally `dataSourceDelimiter` to split multi-value cells (defaults to comma/semicolon/newline; use `"none"` to disable splitting).
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": "DIETARY_APPLICABILITY",
+            "dataSourceField": "dietaryApplicability",
+            "dataSourceDelimiter": ","
+          }
+        }
+        ```
+
+      - Bypass values: if any `dependsOn` value matches `bypassValues`, option filtering is skipped and the full option list is shown.
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": "MEAL_TYPE",
+            "bypassValues": ["All"]
+          }
+        }
+        ```
+
       - Composite filters and cross-scope dependencies:
         - `dependsOn` can be a single ID or an array (for multi-field filters). When you provide an array, join dependency values with `||` in `optionMap` keys, plus `*` as a fallback.
         - Line-item filters can depend on top-level fields; reference the parent field ID directly.
@@ -1166,6 +1189,51 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```
 
         Supports `showWhen`/`hideWhen` with `equals`, `greaterThan`, `lessThan`. Line-item fields can reference top-level or sibling fields (including `sectionSelector`).
+      - *Line-item aware visibility*: Use a `lineItems` clause inside `showWhen`/`hideWhen` to evaluate row-level conditions across a line-item group (or subgroup).
+
+        Example: show an "Ingredients needed" BUTTON only when any meal row has a recipe and `MP_IS_REHEAT = "No"`:
+
+        ```json
+        {
+          "visibility": {
+            "showWhen": {
+              "lineItems": {
+                "groupId": "MEALS",
+                "when": {
+                  "all": [
+                    { "fieldId": "RECIPE", "notEmpty": true },
+                    { "fieldId": "MP_IS_REHEAT", "equals": "No" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        ```
+
+        Add `subGroupId` to scan subgroup rows (across all parent rows) with the same row-level `when` shape.
+        Row-level `when` reads only row/subgroup values; put top-level conditions outside the `lineItems` clause.
+        To require both a parent row condition and a child row condition, use `parentWhen` (subgroup only):
+
+        ```json
+        {
+          "visibility": {
+            "showWhen": {
+              "lineItems": {
+                "groupId": "MEALS",
+                "subGroupId": "INGREDIENTS",
+                "parentWhen": {
+                  "all": [
+                    { "fieldId": "RECIPE", "notEmpty": true },
+                    { "fieldId": "MP_IS_REHEAT", "equals": "No" }
+                  ]
+                },
+                "when": { "fieldId": "__ckRowSource", "equals": "manual" }
+              }
+            }
+          }
+        }
+        ```
       - *Clear-on-change reset*: On a controlling question add `clearOnChange: true` in Config JSON. When that field changes, all other fields and line items clear, then filters/visibility reapply. Handy for “mode” or “category” selectors.
       - *List view (start on list)*: Add a `List View?` column to the config sheet and mark `TRUE` on the fields you want to display in the list. If at least one is `TRUE`, the form definition includes `listView` and `startRoute: "list"` so the app opens in list mode showing those fields plus `createdAt`/`updatedAt` with pagination (optional: hide paging controls via `listView.paginationControlsEnabled: false`).
       - *Data sources (options/prefill from sheets/tabs)*: For CHOICE/CHECKBOX questions (or line-item fields via field JSON), set `dataSource`:
@@ -1470,6 +1538,9 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - **Exclude rows**: Add `{{EXCLUDE_WHEN(KEY=VALUE[, KEY2=VALUE2 ...])}}` anywhere inside the table to exclude matching rows *before* consolidation/sorting.
     - Keys: `FIELD_ID`, `GROUP.FIELD_ID`, or `GROUP.SUBGROUP.FIELD_ID`
     - Values: use `|` to match multiple values (example: `{{EXCLUDE_WHEN(STATUS=Removed|Deleted)}}`)
+  - **Exclude rows with visibility-style logic**: Add `{{EXCLUDE_WHEN_WHEN(<WhenClause JSON>)}}` to use `fieldId` / `equals` / `notEmpty` / `all` / `any` / `not` rules.
+    - Row context: evaluates against row/subgroup values (parent row values are available in subgroup tables).
+    - Example: `{{EXCLUDE_WHEN_WHEN({"all":[{"fieldId":"MP_IS_REHEAT","equals":"Yes"},{"fieldId":"RECIPE","notEmpty":true}]})}}`
 - **Sorting generated rows (tables/lists)**: Add `{{ORDER_BY(...)}}` anywhere inside a table to control the order of generated rows (works with `CONSOLIDATED_TABLE`, normal line-item tables, and subgroup tables).
   - **Syntax**: `{{ORDER_BY(KEY1 [ASC|DESC], KEY2 [ASC|DESC], ...)}}`
   - **Keys**:

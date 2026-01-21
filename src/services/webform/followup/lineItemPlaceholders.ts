@@ -4,6 +4,101 @@ import { formatTemplateValue, slugifyPlaceholder, resolveSubgroupKey } from './u
 type SubGroupConfig = LineItemGroupConfig;
 
 /**
+ * Resolve a line-item placeholder token to its raw (unformatted) value.
+ * This is used by EXCLUDE_WHEN filters to avoid display-only formatting.
+ */
+export const resolveLineItemTokenValue = (args: {
+  token: string;
+  group: QuestionConfig;
+  rowData: Record<string, any>;
+  subGroup?: SubGroupConfig;
+  subGroupToken?: string;
+}): unknown => {
+  const { token, group, rowData, subGroup, subGroupToken } = args;
+  if (!token) return '';
+  const normalizedToken = token.toString().toUpperCase().replace(/\s+/g, '');
+  const normalizedGroupId = (group.id || '').toString().toUpperCase();
+  if (!normalizedGroupId) return '';
+
+  const replacements: Record<string, unknown> = {};
+  const parent = (rowData as any)?.__parent;
+  const resolveGroupValue = (fieldId: string): unknown => {
+    if (!fieldId) return '';
+    const hasParent = parent && Object.prototype.hasOwnProperty.call(parent || {}, fieldId);
+    if (subGroup && hasParent) return (parent as any)[fieldId];
+    if (Object.prototype.hasOwnProperty.call(rowData || {}, fieldId)) return (rowData as any)[fieldId];
+    if (hasParent) return (parent as any)[fieldId];
+    return '';
+  };
+  const resolveSubGroupValue = (fieldId: string): unknown => {
+    if (!fieldId) return '';
+    if (Object.prototype.hasOwnProperty.call(rowData || {}, fieldId)) return (rowData as any)[fieldId];
+    if (parent && Object.prototype.hasOwnProperty.call(parent || {}, fieldId)) return (parent as any)[fieldId];
+    return '';
+  };
+
+  (group.lineItemConfig?.fields || []).forEach(field => {
+    const raw = resolveGroupValue(field.id);
+    const tokens = [
+      `${normalizedGroupId}.${field.id.toUpperCase()}`,
+      `${normalizedGroupId}.${slugifyPlaceholder(field.labelEn || field.id)}`
+    ];
+    tokens.forEach(t => {
+      replacements[t] = raw;
+    });
+  });
+
+  // Consolidated table pseudo-fields (computed by the renderer, not part of the form schema).
+  const countRaw = (rowData as any)?.__COUNT;
+  replacements[`${normalizedGroupId}.__COUNT`] = countRaw ?? '';
+
+  if (subGroup) {
+    const subKeyRaw = resolveSubgroupKey(subGroup);
+    const subToken = subGroupToken || slugifyPlaceholder(subKeyRaw);
+    const normalizedSubKey = (subToken || '').toString().toUpperCase();
+    replacements[`${normalizedGroupId}.${normalizedSubKey}.__COUNT`] = countRaw ?? '';
+    (subGroup.fields || []).forEach((field: any) => {
+      const raw = resolveSubGroupValue(field.id);
+      const tokens = [
+        `${normalizedGroupId}.${normalizedSubKey}.${field.id.toUpperCase()}`,
+        `${normalizedGroupId}.${normalizedSubKey}.${slugifyPlaceholder(field.labelEn || field.id)}`
+      ];
+      tokens.forEach(t => {
+        replacements[t] = raw;
+      });
+    });
+  }
+
+  if (Object.prototype.hasOwnProperty.call(replacements, normalizedToken)) {
+    return replacements[normalizedToken] ?? '';
+  }
+
+  const parts = token
+    .toString()
+    .trim()
+    .split('.')
+    .map(p => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return '';
+  const groupToken = (parts[0] || '').toString().toUpperCase();
+  if (groupToken !== normalizedGroupId) return '';
+  if (parts.length === 2) {
+    return resolveGroupValue(parts[1] || '');
+  }
+  if (!subGroup) return '';
+  const subTokenRaw = (parts[1] || '').toString();
+  const subTokenUpper = subTokenRaw.toUpperCase();
+  const subKeyRaw = resolveSubgroupKey(subGroup);
+  const slugSubKey = slugifyPlaceholder(subKeyRaw || '');
+  const allowedSubTokens = new Set<string>();
+  if (subGroupToken) allowedSubTokens.add((subGroupToken || '').toString().toUpperCase());
+  if (subKeyRaw) allowedSubTokens.add(subKeyRaw.toString().toUpperCase());
+  if (slugSubKey) allowedSubTokens.add(slugSubKey.toString().toUpperCase());
+  if (!allowedSubTokens.has(subTokenUpper)) return '';
+  return resolveSubGroupValue(parts[2] || '');
+};
+
+/**
  * Replace {{GROUP.FIELD}} / {{GROUP.SUBGROUP.FIELD}} placeholders inside a table cell template
  * for a specific line-item row (or subgroup row).
  *
@@ -32,9 +127,25 @@ export const replaceLineItemPlaceholders = (
       : []
   );
   const replacements: Record<string, string> = {};
+  const parent = (rowData as any)?.__parent;
+  const resolveGroupValue = (fieldId: string): any => {
+    if (!fieldId) return '';
+    const hasParent = parent && Object.prototype.hasOwnProperty.call(parent || {}, fieldId);
+    if (opts?.subGroup && hasParent) return (parent as any)[fieldId];
+    if (Object.prototype.hasOwnProperty.call(rowData || {}, fieldId)) return (rowData as any)[fieldId];
+    if (hasParent) return (parent as any)[fieldId];
+    return '';
+  };
+  const resolveSubGroupValue = (fieldId: string): any => {
+    if (!fieldId) return '';
+    if (Object.prototype.hasOwnProperty.call(rowData || {}, fieldId)) return (rowData as any)[fieldId];
+    if (parent && Object.prototype.hasOwnProperty.call(parent || {}, fieldId)) return (parent as any)[fieldId];
+    return '';
+  };
   (group.lineItemConfig?.fields || []).forEach(field => {
     const include = !groupCollapsedOnly || groupCollapsedFieldIds.has((field.id || '').toString().trim().toUpperCase());
-    const text = include ? formatTemplateValue(rowData ? rowData[field.id] : '', (field as any).type) : '';
+    const raw = include ? resolveGroupValue(field.id) : '';
+    const text = include ? formatTemplateValue(raw, (field as any).type) : '';
     const tokens = [
       `${normalizedGroupId}.${field.id.toUpperCase()}`,
       `${normalizedGroupId}.${slugifyPlaceholder(field.labelEn || field.id)}`
@@ -70,7 +181,8 @@ export const replaceLineItemPlaceholders = (
     );
     (opts.subGroup.fields || []).forEach((field: any) => {
       const include = !subCollapsedOnly || subCollapsedFieldIds.has((field.id || '').toString().trim().toUpperCase());
-      const text = include ? formatTemplateValue(rowData ? rowData[field.id] : '', (field as any).type) : '';
+      const raw = include ? resolveSubGroupValue(field.id) : '';
+      const text = include ? formatTemplateValue(raw, (field as any).type) : '';
       const tokens = [
         `${normalizedGroupId}.${normalizedSubKey}.${field.id.toUpperCase()}`,
         `${normalizedGroupId}.${normalizedSubKey}.${slugifyPlaceholder(field.labelEn || field.id)}`

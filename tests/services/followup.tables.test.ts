@@ -2,6 +2,8 @@ import '../mocks/GoogleAppsScript';
 import { QuestionConfig } from '../../src/types';
 import {
   extractExcludeWhenDirective,
+  extractExcludeWhenWhenDirective,
+  extractLineItemPlaceholders,
   extractOrderByDirective,
   extractTableRepeatDirective,
   replaceTableRepeatDirectivePlaceholders
@@ -10,7 +12,6 @@ import { formatTemplateValue } from '../../src/services/webform/followup/utils';
 import { replaceLineItemPlaceholders } from '../../src/services/webform/followup/lineItemPlaceholders';
 import { shouldRenderCollapsedOnlyForProgressiveRow } from '../../src/services/webform/followup/progressiveRows';
 import { applyOrderBy, consolidateConsolidatedTableRows } from '../../src/services/webform/followup/tableConsolidation';
-import { extractLineItemPlaceholders } from '../../src/services/webform/followup/tableDirectives';
 import { applyMarkdownLineItemBlocks } from '../../src/services/webform/followup/markdownLineItemBlocks';
 
 describe('FollowupService table directives', () => {
@@ -84,6 +85,13 @@ describe('FollowupService table directives', () => {
     });
   });
 
+  it('extracts EXCLUDE_WHEN_WHEN directives from table text', () => {
+    const table = { getText: () => '{{EXCLUDE_WHEN_WHEN({"fieldId":"STATUS","equals":"Removed"})}}' };
+    expect(extractExcludeWhenWhenDirective(table as any)).toEqual({
+      raw: '{"fieldId":"STATUS","equals":"Removed"}'
+    });
+  });
+
   it('applies ORDER_BY / EXCLUDE_WHEN directives to markdown line-item blocks (subgroup)', () => {
     const group: QuestionConfig = {
       id: 'MP_MEALS_REQUEST',
@@ -137,6 +145,165 @@ describe('FollowupService table directives', () => {
     // Sorted output
     expect(rendered).toContain('Fruit - Apple');
     expect(rendered).toContain('Fruit - Banana');
+  });
+
+  it('EXCLUDE_WHEN compares raw values (no boolean formatting)', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'MP_IS_REHEAT', type: 'TEXT', labelEn: 'Reheat', required: false }] as any,
+        subGroups: [
+          {
+            id: 'MP_INGREDIENTS_LI',
+            fields: [{ id: 'ING', type: 'TEXT', labelEn: 'Ingredient', required: false }]
+          } as any
+        ]
+      }
+    } as any;
+
+    const markdown = `
+{{MP_MEALS_REQUEST.MP_INGREDIENTS_LI.ING}}
+{{EXCLUDE_WHEN(MP_MEALS_REQUEST.MP_IS_REHEAT=Yes)}}
+`.trim();
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          MP_IS_REHEAT: 'Yes',
+          MP_INGREDIENTS_LI: [{ ING: 'Salt' }]
+        }
+      ]
+    };
+
+    const rendered = applyMarkdownLineItemBlocks({ markdown, questions: [group], lineItemRows });
+    expect(rendered).not.toContain('Salt');
+  });
+
+  it('EXCLUDE_WHEN uses parent group values when subgroup ids clash', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'QTY', type: 'NUMBER', labelEn: 'Quantity', required: false }] as any,
+        subGroups: [
+          {
+            id: 'MP_INGREDIENTS_LI',
+            fields: [
+              { id: 'QTY', type: 'NUMBER', labelEn: 'Quantity', required: false },
+              { id: 'ING', type: 'TEXT', labelEn: 'Ingredient', required: false }
+            ]
+          } as any
+        ]
+      }
+    } as any;
+
+    const markdown = `
+{{MP_MEALS_REQUEST.MP_INGREDIENTS_LI.ING}}
+{{EXCLUDE_WHEN(MP_MEALS_REQUEST.QTY=0)}}
+`.trim();
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          QTY: 5,
+          MP_INGREDIENTS_LI: [{ QTY: 0, ING: 'Salt' }]
+        }
+      ]
+    };
+
+    const rendered = applyMarkdownLineItemBlocks({ markdown, questions: [group], lineItemRows });
+    expect(rendered).toContain('Salt');
+  });
+
+  it('EXCLUDE_WHEN_WHEN supports when clauses for subgroup rows', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'MP_IS_REHEAT', type: 'TEXT', labelEn: 'Reheat', required: false }] as any,
+        subGroups: [
+          {
+            id: 'MP_INGREDIENTS_LI',
+            fields: [{ id: '__ckRowSource', type: 'TEXT', labelEn: 'Source', required: false }]
+          } as any
+        ]
+      }
+    } as any;
+
+    const markdown = `
+{{MP_MEALS_REQUEST.MP_INGREDIENTS_LI.__ckRowSource}}
+{{EXCLUDE_WHEN_WHEN({"fieldId":"MP_IS_REHEAT","equals":"Yes"})}}
+`.trim();
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          MP_IS_REHEAT: 'Yes',
+          MP_INGREDIENTS_LI: [{ __ckRowSource: 'manual' }]
+        }
+      ]
+    };
+
+    const rendered = applyMarkdownLineItemBlocks({ markdown, questions: [group], lineItemRows });
+    expect(rendered).not.toContain('manual');
+  });
+
+  it('EXCLUDE_WHEN_WHEN resolves qualified system fields for subgroups', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'MEAL_TYPE', type: 'TEXT', labelEn: 'Meal type', required: false }] as any,
+        subGroups: [
+          {
+            id: 'MP_INGREDIENTS_LI',
+            fields: [{ id: 'ING', type: 'TEXT', labelEn: 'Ingredient', required: false }]
+          } as any
+        ]
+      }
+    } as any;
+
+    const markdown = `
+{{MP_MEALS_REQUEST.MP_INGREDIENTS_LI.ING}}
+{{EXCLUDE_WHEN_WHEN({"fieldId":"MP_MEALS_REQUEST.MP_INGREDIENTS_LI.__ckRowSource","equals":"manual"})}}
+`.trim();
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          MEAL_TYPE: 'Dinner',
+          MP_INGREDIENTS_LI: [{ ING: 'Salt', __ckRowSource: 'manual' }]
+        }
+      ]
+    };
+
+    const rendered = applyMarkdownLineItemBlocks({ markdown, questions: [group], lineItemRows });
+    expect(rendered).not.toContain('Salt');
   });
 
   it('markdown line-item blocks tolerate spaces and CONSOLIDATED_TABLE(GROUP.SUBGROUP.FIELD)', () => {
