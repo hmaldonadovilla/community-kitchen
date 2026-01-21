@@ -48,7 +48,10 @@ const resolveTopQuestionMissing = (args: {
 }): boolean => {
   const { question, language, values, lineItems, collapsedRows, resolveVisibilityValue, getTopValue } = args;
   if (!question.required) return false;
-  const hidden = shouldHideField(question.visibility, { getValue: resolveVisibilityValue });
+  const hidden = shouldHideField(question.visibility, {
+    getValue: resolveVisibilityValue,
+    getLineItems: (groupId: string) => lineItems[groupId] || []
+  });
   if (hidden) return false;
   if (question.type === 'LINE_ITEM_GROUP') {
     if (!question.lineItemConfig) return true;

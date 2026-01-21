@@ -1,5 +1,5 @@
 import { VisibilityConfig, VisibilityCondition, WhenClause } from '../../types';
-import { VisibilityContext } from '../types';
+import { FieldValue, VisibilityContext } from '../types';
 
 const whenDebugEnabled = (): boolean => Boolean((globalThis as any)?.__WEB_FORM_DEBUG__);
 let compoundWhenLogged = false;
@@ -104,6 +104,27 @@ const pickWhenAnyList = (raw: any): any[] | null => {
   return null;
 };
 
+const pickLineItemsClause = (raw: any): any | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const clause = (raw as any).lineItems ?? (raw as any).lineItem;
+  if (clause && typeof clause === 'object') return clause;
+  return null;
+};
+
+const normalizeLineItemMatchMode = (raw: any): 'any' | 'all' => {
+  const mode = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return mode === 'all' ? 'all' : 'any';
+};
+
+const normalizeLineItemId = (raw: any): string => {
+  if (raw === undefined || raw === null) return '';
+  try {
+    return raw.toString().trim();
+  } catch (_) {
+    return '';
+  }
+};
+
 /**
  * Extract the first referenced fieldId from a (possibly compound) `when` clause.
  * Used for UI/validation surfaces that need a stable anchor field id.
@@ -140,8 +161,55 @@ export const firstWhenFieldId = (when: any): string => {
   const notNode = (when as any).not;
   if (notNode) return firstWhenFieldId(notNode);
 
+  const lineItemsClause = pickLineItemsClause(when);
+  if (lineItemsClause) {
+    const groupId = normalizeLineItemId(
+      (lineItemsClause as any).groupId ?? (lineItemsClause as any).group ?? (lineItemsClause as any).lineGroupId ?? (lineItemsClause as any).lineGroup
+    );
+    return groupId;
+  }
+
   const fid = (when as any).fieldId;
   return fid !== undefined && fid !== null ? fid.toString().trim() : '';
+};
+
+export const containsLineItemsClause = (when: WhenClause | undefined): boolean => {
+  if (!when) return false;
+  if (Array.isArray(when)) return when.some(entry => containsLineItemsClause(entry as any));
+  if (typeof when !== 'object') return false;
+  if (pickLineItemsClause(when)) return true;
+
+  const allList = pickWhenList(when);
+  if (allList) return allList.some(entry => containsLineItemsClause(entry as any));
+
+  const anyList = pickWhenAnyList(when);
+  if (anyList) return anyList.some(entry => containsLineItemsClause(entry as any));
+
+  const notNode = (when as any).not;
+  if (notNode) return containsLineItemsClause(notNode as any);
+
+  return false;
+};
+
+export const containsParentLineItemsClause = (when: WhenClause | undefined): boolean => {
+  if (!when) return false;
+  if (Array.isArray(when)) return when.some(entry => containsParentLineItemsClause(entry as any));
+  if (typeof when !== 'object') return false;
+  const lineItemsClause = pickLineItemsClause(when);
+  if (lineItemsClause) {
+    return Boolean((lineItemsClause as any).parentWhen || (lineItemsClause as any).parentMatch);
+  }
+
+  const allList = pickWhenList(when);
+  if (allList) return allList.some(entry => containsParentLineItemsClause(entry as any));
+
+  const anyList = pickWhenAnyList(when);
+  if (anyList) return anyList.some(entry => containsParentLineItemsClause(entry as any));
+
+  const notNode = (when as any).not;
+  if (notNode) return containsParentLineItemsClause(notNode as any);
+
+  return false;
 };
 
 /**
@@ -149,6 +217,7 @@ export const firstWhenFieldId = (when: any): string => {
  *
  * Supported shapes:
  * - Leaf: { fieldId, equals?, greaterThan?, lessThan?, notEmpty? }
+ * - Line items: { lineItems: { groupId, subGroupId?, when?, match? } }
  * - Compound AND: { all: WhenClause[] } (also supports alias key `and`)
  * - Compound OR:  { any: WhenClause[] } (also supports alias key `or`)
  * - NOT:          { not: WhenClause }
@@ -185,6 +254,11 @@ export const matchesWhenClause = (
     return !matchesWhenClause(((when as any).not as any) || undefined, ctx, options);
   }
 
+  const lineItemsClause = pickLineItemsClause(when);
+  if (lineItemsClause) {
+    return matchesLineItemsClause(lineItemsClause, ctx);
+  }
+
   // Leaf condition
   const fieldIdRaw = (when as any).fieldId;
   const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
@@ -192,6 +266,102 @@ export const matchesWhenClause = (
   const leaf: VisibilityCondition = { ...(when as any), fieldId };
   const value = resolveVisibilityValue(leaf, ctx, options?.rowId, options?.linePrefix);
   return matchesWhen(value, leaf as any);
+};
+
+const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
+  if (!raw || typeof raw !== 'object') return true;
+  if (typeof ctx.getLineItems !== 'function') return false;
+
+  const groupId = normalizeLineItemId((raw as any).groupId ?? (raw as any).group ?? (raw as any).lineGroupId ?? (raw as any).lineGroup);
+  if (!groupId) return false;
+  const subGroupId = normalizeLineItemId((raw as any).subGroupId ?? (raw as any).subGroup ?? (raw as any).subGroupID);
+  const matchRaw = (raw as any).match;
+  const parentMatchRaw = (raw as any).parentMatch;
+  const matchMode = normalizeLineItemMatchMode(matchRaw);
+  const parentMatchMode = parentMatchRaw !== undefined ? normalizeLineItemMatchMode(parentMatchRaw) : undefined;
+  const when = (raw as any).when as WhenClause | undefined;
+  const parentWhen = (raw as any).parentWhen as WhenClause | undefined;
+
+  const getRows = (key: string): any[] => {
+    const rows = ctx.getLineItems?.(key);
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  const buildRowCtx = (
+    rowValues: Record<string, FieldValue>,
+    parentValues: Record<string, FieldValue> | undefined,
+    linePrefix: string
+  ): VisibilityContext => {
+    const normalizeRowFieldId = (fieldId: string): string => {
+      const raw = fieldId ? fieldId.toString() : '';
+      const prefix = linePrefix ? `${linePrefix}__` : '';
+      if (prefix && raw.startsWith(prefix)) return raw.slice(prefix.length);
+      return raw;
+    };
+
+    const resolveRowValue = (fieldId: string): FieldValue | undefined => {
+      const localId = normalizeRowFieldId(fieldId);
+      if (Object.prototype.hasOwnProperty.call(rowValues || {}, localId)) return (rowValues as any)[localId] as FieldValue;
+      if (parentValues && Object.prototype.hasOwnProperty.call(parentValues || {}, localId)) return (parentValues as any)[localId] as FieldValue;
+      if (Object.prototype.hasOwnProperty.call(rowValues || {}, fieldId)) return (rowValues as any)[fieldId] as FieldValue;
+      if (parentValues && Object.prototype.hasOwnProperty.call(parentValues || {}, fieldId)) return (parentValues as any)[fieldId] as FieldValue;
+      return undefined;
+    };
+
+    return {
+      getValue: resolveRowValue,
+      getLineItems: ctx.getLineItems,
+      getLineValue: (_rowId: string, fieldId: string) => resolveRowValue(fieldId)
+    };
+  };
+
+  const rowMatches = (
+    row: any,
+    linePrefix: string,
+    parentValues: Record<string, FieldValue> | undefined,
+    clause: WhenClause | undefined
+  ): boolean => {
+    if (!clause) return true;
+    const rowValues = ((row as any)?.values || {}) as Record<string, FieldValue>;
+    const rowCtx = buildRowCtx(rowValues, parentValues, linePrefix);
+    const rowId = (row as any)?.id ?? '';
+    return matchesWhenClause(clause, rowCtx, { rowId, linePrefix });
+  };
+
+  if (!subGroupId) {
+    const rows = getRows(groupId);
+    if (!rows.length) return false;
+    const clause = when || parentWhen;
+    const mode = matchRaw !== undefined ? matchMode : parentMatchMode || matchMode;
+    if (mode === 'all') return rows.every(row => rowMatches(row, groupId, undefined, clause));
+    return rows.some(row => rowMatches(row, groupId, undefined, clause));
+  }
+
+  const parentRows = getRows(groupId);
+  if (!parentRows.length) return false;
+
+  let hasAnyParentCandidate = false;
+  const effectiveParentMatchMode =
+    parentMatchMode || (parentWhen ? 'any' : matchMode === 'all' ? 'all' : 'any');
+  for (const parentRow of parentRows) {
+    const parentId = normalizeLineItemId((parentRow as any)?.id);
+    if (!parentId) continue;
+    if (parentWhen && !rowMatches(parentRow, groupId, undefined, parentWhen)) continue;
+    hasAnyParentCandidate = true;
+    const subKey = `${groupId}::${parentId}::${subGroupId}`;
+    const subRows = getRows(subKey);
+    if (!subRows.length) {
+      if (effectiveParentMatchMode === 'all') return false;
+      continue;
+    }
+    const parentValues = ((parentRow as any)?.values || {}) as Record<string, FieldValue>;
+    const childMatches = subRows.map(subRow => rowMatches(subRow, subKey, parentValues, when));
+    const parentHasMatch = matchMode === 'all' ? childMatches.every(Boolean) : childMatches.some(Boolean);
+    if (effectiveParentMatchMode === 'any' && parentHasMatch) return true;
+    if (effectiveParentMatchMode === 'all' && !parentHasMatch) return false;
+  }
+
+  return effectiveParentMatchMode === 'all' ? hasAnyParentCandidate : false;
 };
 
 function resolveVisibilityValue(

@@ -1793,7 +1793,7 @@ export const LineItemGroupQuestion: React.FC<{
                   aria-label={tSystem('lineItems.remove', language, 'Remove')}
                   title={tSystem('lineItems.remove', language, 'Remove')}
                 >
-                  <TrashIcon size={50} />
+                  <TrashIcon size={40} />
                 </button>
               );
             }
@@ -2226,6 +2226,8 @@ export const LineItemGroupQuestion: React.FC<{
               const anchorHasValue = !!anchorFieldId && !isEmptyValue(anchorRawValue as any);
               const rowSource = parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]);
               const hideRemoveButton = parseRowHideRemove((row.values as any)?.[ROW_HIDE_REMOVE_KEY]);
+              const allowRemoveAutoRows = (q.lineItemConfig as any)?.ui?.allowRemoveAutoRows !== false;
+              const canRemoveRow = !hideRemoveButton && (allowRemoveAutoRows || rowSource !== 'auto');
               const expandGateCandidate = ((ui?.expandGate || 'collapsedFieldsValid') as any) || 'collapsedFieldsValid';
               // For addMode:auto we show the anchor as the row title when expandGate is collapsedFieldsValid
               // (manual rows can still edit it). For selectionEffect-generated auto rows
@@ -2480,6 +2482,55 @@ export const LineItemGroupQuestion: React.FC<{
               const tapCollapseLabel = tSystem('common.tapToCollapse', language, 'Tap to collapse');
               const lockedLabel = tSystem('lineItems.locked', language, 'Locked');
               const pillActionLabel = rowLocked ? lockedLabel : rowCollapsed ? tapExpandLabel : tapCollapseLabel;
+              const rowTogglePill = !guidedCollapsedFieldsInHeader ? (
+                <button
+                  type="button"
+                  className="ck-row-toggle"
+                  aria-label={pillActionLabel}
+                  aria-expanded={!rowCollapsed}
+                  aria-disabled={rowCollapsed && !canExpand}
+                  title={rowCollapsed && !canExpand ? gateResult.reason : pillActionLabel}
+                  onClick={() => {
+                    if (rowCollapsed && !canExpand) {
+                      onDiagnostic?.('edit.progressive.expand.blocked', {
+                        groupId: q.id,
+                        rowId: row.id,
+                        reason: gateResult.reason
+                      });
+                      return;
+                    }
+                    setCollapsedRows(prev => ({ ...prev, [collapseKey]: !rowCollapsed }));
+                    onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
+                  }}
+                >
+                  {(() => {
+                    const parts: string[] = [];
+                    if (rowHasError) parts.push(tSystem('lineItems.needsAttention', language, 'Needs attention'));
+                    if (rowLocked) parts.push(tSystem('lineItems.locked', language, 'Locked'));
+                    const text = parts.join(' · ');
+                    if (!text) return null;
+                    return (
+                      <span
+                        className="muted"
+                        style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
+                      >
+                        {text}
+                      </span>
+                    );
+                  })()}
+                  <span
+                    className={`ck-progress-pill ${requiredRowProgressClass}`}
+                    data-has-error={rowHasError ? 'true' : undefined}
+                    aria-disabled={rowCollapsed && !canExpand ? 'true' : undefined}
+                  >
+                    {requiredRowProgressClass === 'ck-progress-good' ? (
+                      <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
+                    ) : null}
+                    <span className="ck-progress-label">{pillActionLabel}</span>
+                    <span className="ck-progress-caret">{rowCollapsed ? '▸' : '▾'}</span>
+                  </span>
+                </button>
+              ) : null;
               const buildHeaderRows = (fields: any[]): any[][] => {
                 const used = new Set<string>();
                 const rows: any[][] = [];
@@ -3096,11 +3147,12 @@ export const LineItemGroupQuestion: React.FC<{
                 >
                   {isProgressive ? (
                     <div className="ck-row-header">
-                      <div style={{ minWidth: 0 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
                         {/* Row numbering intentionally hidden in all UI modes (requested by product). */}
                         {showTitleControlInHeader && titleField ? (
-                          <div style={{ maxWidth: 420 }}>
-                            {(() => {
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              {(() => {
                               ensureLineOptions(q.id, titleField);
                               const errorKey = `${q.id}__${titleField.id}__${row.id}`;
                               const hideLabel = true;
@@ -3159,55 +3211,55 @@ export const LineItemGroupQuestion: React.FC<{
                                 const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(titleField) });
                                 const selectedOpt = optsField.find(opt => opt.value === choiceVal);
                                 const displayLabel = (selectedOpt?.label || choiceVal || '').toString();
-                                return (
-                                  <div
-                                    className={`field inline-field${titleField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
-                                    style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
-                                    data-field-path={errorKey}
-                                    data-has-error={errors[errorKey] ? 'true' : undefined}
-                                    data-has-warning={hasWarning(errorKey) ? 'true' : undefined}
-                                  >
-                                    <label style={labelStyle}>
-                                      {resolveFieldLabel(titleField, language, titleField.id)}
-                                      {titleField.required && <RequiredStar />}
-                                    </label>
-                                    <div className="ck-control-row">
-                                      {titleAsLabel ? (
-                                        <div className="ck-row-title">{displayLabel || '—'}</div>
-                                      ) : (
-                                        renderChoiceControl({
-                                          fieldPath: errorKey,
-                                          value: choiceVal || '',
-                                          options: optsField,
-                                          required: !!titleField.required,
-                                          searchEnabled: titleField.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
-                                          override: titleField.ui?.control,
-                                          disabled: submitting || (titleField as any)?.readOnly === true,
-                                          onChange: next => handleLineFieldChange(q, row.id, titleField, next)
-                                        })
-                                      )}
-                                      {(() => {
-                                        const tooltipNode = selectedOpt?.tooltip ? (
-                                          <InfoTooltip
-                                            text={selectedOpt.tooltip}
-                                            label={resolveLocalizedString(
-                                              titleField.dataSource?.tooltipLabel,
-                                              language,
-                                              resolveFieldLabel(titleField, language, titleField.id)
-                                            )}
-                                            onOpen={openInfoOverlay}
-                                          />
-                                        ) : null;
-                                        if (!tooltipNode) return null;
-                                        return <div className="ck-field-actions">{tooltipNode}</div>;
-                                      })()}
-                                    </div>
-                                    {subgroupOpenStack}
-                                    {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
-                                    {renderWarnings(errorKey)}
+                              return (
+                                <div
+                                  className={`field inline-field${titleField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                                  style={{ border: 'none', padding: 0, background: 'transparent', margin: 0 }}
+                                  data-field-path={errorKey}
+                                  data-has-error={errors[errorKey] ? 'true' : undefined}
+                                  data-has-warning={hasWarning(errorKey) ? 'true' : undefined}
+                                >
+                                  <label style={labelStyle}>
+                                    {resolveFieldLabel(titleField, language, titleField.id)}
+                                    {titleField.required && <RequiredStar />}
+                                  </label>
+                                  <div className="ck-control-row">
+                                    {titleAsLabel ? (
+                                      <div className="ck-row-title">{displayLabel || '—'}</div>
+                                    ) : (
+                                      renderChoiceControl({
+                                        fieldPath: errorKey,
+                                        value: choiceVal || '',
+                                        options: optsField,
+                                        required: !!titleField.required,
+                                        searchEnabled: titleField.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
+                                        override: titleField.ui?.control,
+                                        disabled: submitting || (titleField as any)?.readOnly === true,
+                                        onChange: next => handleLineFieldChange(q, row.id, titleField, next)
+                                      })
+                                    )}
+                                    {(() => {
+                                      const tooltipNode = selectedOpt?.tooltip ? (
+                                        <InfoTooltip
+                                          text={selectedOpt.tooltip}
+                                          label={resolveLocalizedString(
+                                            titleField.dataSource?.tooltipLabel,
+                                            language,
+                                            resolveFieldLabel(titleField, language, titleField.id)
+                                          )}
+                                          onOpen={openInfoOverlay}
+                                        />
+                                      ) : null;
+                                      if (!tooltipNode) return null;
+                                      return <div className="ck-field-actions">{tooltipNode}</div>;
+                                    })()}
                                   </div>
-                                );
-                              }
+                                  {subgroupOpenStack}
+                                  {errors[errorKey] && <div className="error">{errors[errorKey]}</div>}
+                                  {renderWarnings(errorKey)}
+                                </div>
+                              );
+                            }
 
                               if (titleField.type === 'CHECKBOX') {
                                 const optionSetField: OptionSet =
@@ -3248,13 +3300,13 @@ export const LineItemGroupQuestion: React.FC<{
                                     {titleAsLabel ? (
                                       <div className="ck-control-row">
                                         <div className="ck-row-title">
-                                          {optsField
-                                            .filter(opt => selected.includes(opt.value))
-                                            .map(opt => opt.label)
-                                            .filter(Boolean)
-                                            .join(', ') ||
-                                            selected.join(', ') ||
-                                            '—'}
+                                        {optsField
+                                          .filter(opt => selected.includes(opt.value))
+                                          .map(opt => opt.label)
+                                          .filter(Boolean)
+                                          .join(', ') ||
+                                          selected.join(', ') ||
+                                          '—'}
                                         </div>
                                       </div>
                                     ) : (
@@ -3331,6 +3383,7 @@ export const LineItemGroupQuestion: React.FC<{
                                 </div>
                               );
                             })()}
+                            </div>
                           </div>
                         ) : null}
                         {guidedCollapsedFieldsInHeader && showAnchorTitleAsHeaderTitle ? (
@@ -3399,58 +3452,21 @@ export const LineItemGroupQuestion: React.FC<{
                           </div>
                         ) : null}
                       </div>
-                      {!guidedCollapsedFieldsInHeader ? (
-                      <button
-                        type="button"
-                        className="ck-row-toggle"
-                        aria-label={pillActionLabel}
-                        aria-expanded={!rowCollapsed}
-                        aria-disabled={rowCollapsed && !canExpand}
-                        title={
-                          rowCollapsed && !canExpand
-                            ? gateResult.reason
-                            : pillActionLabel
-                        }
-                        onClick={() => {
-                          if (rowCollapsed && !canExpand) {
-                            onDiagnostic?.('edit.progressive.expand.blocked', {
-                              groupId: q.id,
-                              rowId: row.id,
-                              reason: gateResult.reason
-                            });
-                            return;
-                          }
-                          setCollapsedRows(prev => ({ ...prev, [collapseKey]: !rowCollapsed }));
-                          onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
-                        }}
-                      >
-                        {(() => {
-                          const parts: string[] = [];
-                          if (rowHasError) parts.push(tSystem('lineItems.needsAttention', language, 'Needs attention'));
-                          if (rowLocked) parts.push(tSystem('lineItems.locked', language, 'Locked'));
-                          const text = parts.join(' · ');
-                          if (!text) return null;
-                          return (
-                        <span
-                          className="muted"
-                          style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
-                        >
-                              {text}
-                        </span>
-                          );
-                        })()}
-                        <span
-                          className={`ck-progress-pill ${requiredRowProgressClass}`}
-                          data-has-error={rowHasError ? 'true' : undefined}
-                          aria-disabled={rowCollapsed && !canExpand ? 'true' : undefined}
-                        >
-                          {requiredRowProgressClass === 'ck-progress-good' ? (
-                            <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
+                      {canRemoveRow || rowTogglePill ? (
+                        <div className="ck-row-header-actions">
+                          {rowTogglePill}
+                          {canRemoveRow ? (
+                            <button
+                              type="button"
+                              className="ck-line-item-table__remove-button"
+                              onClick={() => removeLineRow(q.id, row.id)}
+                              aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                              title={tSystem('lineItems.remove', language, 'Remove')}
+                            >
+                              <TrashIcon size={40} />
+                            </button>
                           ) : null}
-                          <span className="ck-progress-label">{pillActionLabel}</span>
-                          <span className="ck-progress-caret">{rowCollapsed ? '▸' : '▾'}</span>
-                        </span>
-                      </button>
+                        </div>
                       ) : null}
                       {!guidedCollapsedFieldsInHeader && rowDisclaimerText ? (
                         <div className="ck-row-disclaimer ck-row-disclaimer--full">{rowDisclaimerText}</div>
@@ -4071,11 +4087,17 @@ export const LineItemGroupQuestion: React.FC<{
                         : undefined
                     }
                   >
-                    {hideRemoveButton ? null : ((q.lineItemConfig as any)?.ui?.allowRemoveAutoRows === false && rowSource === 'auto') ? null : (
-                      <button type="button" onClick={() => removeLineRow(q.id, row.id)} style={buttonStyles.negative}>
-                        {tSystem('lineItems.remove', language, 'Remove')}
+                    {!isProgressive && canRemoveRow ? (
+                      <button
+                        type="button"
+                        className="ck-line-item-table__remove-button"
+                        onClick={() => removeLineRow(q.id, row.id)}
+                        aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                        title={tSystem('lineItems.remove', language, 'Remove')}
+                      >
+                        <TrashIcon size={40} />
                       </button>
-                    )}
+                    ) : null}
                   </div>
                   {!hideInlineSubgroups && !isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
                     const subLabelResolved = resolveLocalizedString(
@@ -4816,7 +4838,7 @@ export const LineItemGroupQuestion: React.FC<{
                                             aria-label={tSystem('lineItems.remove', language, 'Remove')}
                                             title={tSystem('lineItems.remove', language, 'Remove')}
                                           >
-                                            <TrashIcon size={18} />
+                                            <TrashIcon size={40} />
                                           </button>
                                         );
                                       }
@@ -5395,10 +5417,12 @@ export const LineItemGroupQuestion: React.FC<{
                                 <div className="line-actions">
                                   <button
                                     type="button"
+                                    className="ck-line-item-table__remove-button"
                                     onClick={() => removeLineRow(subKey, subRow.id)}
-                                    style={buttonStyles.negative}
+                                    aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                                    title={tSystem('lineItems.remove', language, 'Remove')}
                                   >
-                                    {tSystem('lineItems.remove', language, 'Remove')}
+                                    <TrashIcon size={40} />
                                   </button>
                                 </div>
                               ) : null}

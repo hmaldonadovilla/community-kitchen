@@ -20,23 +20,25 @@ export const LineSelectOverlay: React.FC<{
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   addLineItemRowManual: (groupId: string, preset?: Record<string, any>) => void;
 }> = ({ overlay, setOverlay, language, submitting, onDiagnostic, addLineItemRowManual }) => {
-  if (!overlay.open) return null;
   const [query, setQuery] = useState('');
   const selectedCount = (overlay.selected || []).length;
 
   useEffect(() => {
+    if (!overlay.open) return;
     setQuery('');
   }, [overlay.open]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const hasQuery = normalizedQuery.length > 0;
   const filteredOptions = useMemo(() => {
-    if (!hasQuery) return [];
+    if (!overlay.open || !hasQuery) return [];
     return overlay.options.filter(opt => {
       const haystack = `${opt.label || ''} ${opt.value || ''} ${opt.searchText || ''}`.toLowerCase();
       return haystack.includes(normalizedQuery);
     });
-  }, [hasQuery, normalizedQuery, overlay.options]);
+  }, [hasQuery, normalizedQuery, overlay.open, overlay.options]);
+
+  if (!overlay.open) return null;
 
   return (
     <div
@@ -45,8 +47,10 @@ export const LineSelectOverlay: React.FC<{
         inset: 0,
         background: 'rgba(0,0,0,0.35)',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'stretch',
         justifyContent: 'center',
+        padding: 16,
+        boxSizing: 'border-box',
         zIndex: 11000
       }}
     >
@@ -55,13 +59,15 @@ export const LineSelectOverlay: React.FC<{
           background: '#fff',
           borderRadius: 20,
           padding: 24,
-          width: '560px',
-          maxWidth: '92%',
-          height: '80vh',
+          width: '100%',
+          maxWidth: '560px',
+          height: 'min(80vh, 100%)',
+          maxHeight: '92vh',
           border: '1px solid var(--border)',
           boxShadow: '0 18px 50px rgba(15,23,42,0.18)',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          overflow: 'hidden'
         }}
       >
         <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 'var(--ck-font-group-title)', letterSpacing: -0.3 }}>
@@ -92,7 +98,20 @@ export const LineSelectOverlay: React.FC<{
             style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)' }}
           />
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            marginTop: 10,
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+            touchAction: 'pan-y'
+          }}
+        >
           {filteredOptions.map(opt => (
             <label
               key={opt.value}
@@ -136,7 +155,18 @@ export const LineSelectOverlay: React.FC<{
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            justifyContent: 'flex-end',
+            marginTop: 12,
+            paddingTop: 10,
+            paddingBottom: 'calc(6px + env(safe-area-inset-bottom))',
+            borderTop: '1px solid var(--border)',
+            background: '#ffffff'
+          }}
+        >
           <button
             type="button"
             onClick={() => setOverlay({ open: false, options: [], selected: [] })}
