@@ -163,7 +163,10 @@
   > **DONE - Codex**
 - ck-47: Introduce field level dialog modals that can be triggered to hold field changes given a condition that looks on other fields values for the same record. The dialog will put auto-save on hold. If the user accepts the dialog, if the field is part of dedup rules we evaluate that before allowing the value to be cahnged. If dedup validation passes or the field is not concerned by dedup rules, the field change is made, and auto-save resumes, otherwise the change is cancel as well as auto-save.
   > **WIP - Software Engineer**
-- ck-48: 
+- ck-48:
   -For line item groups rows, with the `MP_IS_REHEAT` field set to `Yes`, the `Ingredient Needed` button does not need to be shown because these type of meals do not need for the cook to retrieve ingredients from the pantry. Logically we must hide Ingredients needed unless there is at least one row with a recipe selection and the value `No` on the `MP_IS_REHEAT` field. To define this generically we should create a feature where visibility of top level fields, including buttons shown in edit view, is impacted by logic that looks at nested line item and subgroups.
-  - When 
+  - When
   > **WIP - Cursor**
+- ck-49:
+  - Assess if we can apply option filter to data coming from dataSource, based on values from current record fields. The specific use case to enable is: we are setting recipies on a different form, these records are defined by a multi-select field that contains the dietary applicability of the recipe and the values are being saved in the sever as strings separated by commas. In the meal production form we are defining a single dietary applicability for the meal to be preparead and we require the cook to select the recipe that will be used, therefore we need to define an option filter to will exclude the recipies that are not compatible with the dietary applicability of the meal. Please follow guidelines defined in AGENT.md.
+  > **WIP - Codex**

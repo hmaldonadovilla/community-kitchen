@@ -212,18 +212,24 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__actions,
         .webform-overlay .ck-line-item-table__actions {
           width: 1%;
+          min-width: 40px;
           white-space: nowrap;
           text-align: right;
         }
+        .ck-line-item-table__remove-button,
         .form-card .ck-line-item-table__remove-button,
         .webform-overlay .ck-line-item-table__remove-button {
-          border: 1px solid var(--border);
-          background: #ffffff;
-          color: var(--text);
+          border: 1px solid var(--border) !important;
+          background: #ffffff !important;
+          color: var(--text) !important;
           border-radius: 10px;
-          width: 38px;
-          height: 38px;
-          padding: 0;
+          width: 40px !important;
+          height: 40px !important;
+          min-width: 40px !important;
+          min-height: 40px !important;
+          padding: 0 !important;
+          box-sizing: border-box;
+          line-height: 0;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -515,6 +521,7 @@ export const FORM_VIEW_STYLES = `
         }
         /* Progressive row title (auto addMode anchor): render as plain label text, not a disabled input. */
         .ck-row-title {
+          display: block;
           font-size: var(--ck-font-group-title);
           font-weight: 900;
           color: var(--text);
@@ -1129,6 +1136,10 @@ export const FORM_VIEW_STYLES = `
           display: flex;
           flex-direction: column;
           gap: 10px;
+          max-height: min(70vh, 520px);
+          min-height: 0;
+          overflow: hidden;
+          touch-action: pan-y;
         }
         .webform-overlay .ck-line-item-multiadd {
           display: flex;
@@ -1141,19 +1152,24 @@ export const FORM_VIEW_STYLES = `
           margin-top: 6px;
           flex: 1;
           min-height: 0;
+          max-height: min(70vh, 100%);
+          overflow: hidden;
+          touch-action: pan-y;
         }
         .form-card .ck-line-item-multiadd__options,
         .webform-overlay .ck-line-item-multiadd__options {
-          max-height: 320px;
           overflow: auto;
           display: flex;
           flex-direction: column;
           gap: 8px;
+          flex: 1;
+          min-height: 0;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-y;
         }
         .webform-overlay .ck-line-item-multiadd__options {
           max-height: none;
-          flex: 1;
-          min-height: 0;
         }
         .form-card .ck-line-item-multiadd__option,
         .webform-overlay .ck-line-item-multiadd__option {
@@ -1194,6 +1210,7 @@ export const FORM_VIEW_STYLES = `
           justify-content: flex-end;
           gap: 10px;
           padding-top: 6px;
+          padding-bottom: calc(6px + env(safe-area-inset-bottom));
           border-top: 1px solid rgba(226, 232, 240, 0.9);
         }
         .ck-searchable-select > input {
@@ -1534,6 +1551,12 @@ export const FORM_VIEW_STYLES = `
           background: rgba(118, 118, 128, 0.06);
           border-top-left-radius: 10px;
           border-top-right-radius: 10px;
+        }
+        .line-item-row .ck-row-header-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          flex: 0 0 auto;
         }
         .ck-row-toggle:active .ck-progress-pill {
           transform: translateY(1px);
