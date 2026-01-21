@@ -752,6 +752,11 @@ components:
         visibility:
           $ref: '#/components/schemas/VisibilityConfig'
           description: Show/hide logic for this line item field based on another value.
+        changeDialog:
+          $ref: '#/components/schemas/FieldChangeDialogConfig'
+          description: |
+            Optional field-level guarded change dialog for this line item field.
+            When configured, the edit view will prompt the user before applying changes that satisfy `changeDialog.when`.
         dataSource:
           $ref: '#/components/schemas/DataSourceConfig'
           description: Optional data source for CHOICE/CHECKBOX line-item fields. When present, options are hydrated just like top-level questions.
@@ -1301,6 +1306,88 @@ components:
           Yogurt: [Milk]
           Pesto: [Milk, Peanuts]
           "*": [None]
+
+    FieldChangeDialogTarget:
+      type: object
+      properties:
+        scope:
+          type: string
+          enum: [top, row, parent, effect]
+          description: |
+            Target scope for the dialog input.
+            - top: top-level field on the record
+            - row: current line-item row
+            - parent: parent row (subgroup) or top-level (non-subgroup)
+            - effect: selection-effect-created row (requires effectId)
+        fieldId:
+          type: string
+          description: Field id to update on confirm.
+        effectId:
+          type: string
+          description: SelectionEffect.id used to locate the effect-created row(s).
+      required: [scope, fieldId]
+
+    FieldChangeDialogInput:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique input id within the dialog.
+        label:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Optional label override (defaults to the target field label).
+        placeholder:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Optional placeholder for the dialog input.
+        type:
+          type: string
+          enum: [TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, DATE]
+          description: Optional explicit input type (defaults to the target field type).
+        required:
+          type: boolean
+        target:
+          $ref: '#/components/schemas/FieldChangeDialogTarget'
+      required: [id, target]
+
+    FieldChangeDialogConfig:
+      type: object
+      properties:
+        when:
+          $ref: '#/components/schemas/WhenClause'
+        title:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        message:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        confirmLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        cancelLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        dedupMode:
+          type: string
+          enum: [auto, always, never]
+          description: |
+            Controls the dedup precheck when confirming the change.
+            - auto (default): run when the changed field participates in a reject dedup rule
+            - always: always run the dedup precheck
+            - never: skip the dedup precheck
+        inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldChangeDialogInput'
+          description: Optional dialog input fields that update other targets on confirm.
+      required: [when]
 
     DerivedValueConfig:
       oneOf:
