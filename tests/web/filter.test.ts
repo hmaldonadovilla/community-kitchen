@@ -84,6 +84,38 @@ describe('computeAllowedOptions', () => {
     const allowed = computeAllowedOptions(dataSourceFilter as any, options as any, ['Vegan']);
     expect(allowed).toEqual(['A', 'C']);
   });
+
+  it('bypasses optionMap filtering when dependency value matches bypassValues', () => {
+    const bypassFilter = {
+      dependsOn: 'x',
+      optionMap: {
+        A: ['A'],
+        '*': ['B']
+      },
+      bypassValues: ['All']
+    };
+    const allowed = computeAllowedOptions(bypassFilter as any, options as any, ['All']);
+    expect(allowed).toEqual(options.en);
+  });
+
+  it('bypasses dataSource filtering when dependency value matches bypassValues', () => {
+    const dataSourceFilter = {
+      dependsOn: 'diet',
+      dataSourceField: 'dietary',
+      dataSourceDelimiter: ',',
+      bypassValues: ['All']
+    };
+    const options = {
+      en: ['A', 'B', 'C'],
+      raw: [
+        { __ckOptionValue: 'A', dietary: 'Vegan, Vegetarian' },
+        { __ckOptionValue: 'B', dietary: 'No-salt' },
+        { __ckOptionValue: 'C', dietary: 'Vegan' }
+      ]
+    };
+    const allowed = computeAllowedOptions(dataSourceFilter as any, options as any, ['All']);
+    expect(allowed).toEqual(options.en);
+  });
 });
 
 describe('computeNonMatchOptionKeys', () => {

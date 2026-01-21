@@ -1237,6 +1237,13 @@ components:
           description: |
             Optional delimiter for dataSourceField values stored in a single cell (defaults to comma/semicolon/newline splitting).
             Use "none" to disable splitting.
+        bypassValues:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional dependency values that bypass option filtering entirely (returns the full option list).
+            If any selected dependency value matches, filtering is skipped.
         matchMode:
           type: string
           enum: [and, or]

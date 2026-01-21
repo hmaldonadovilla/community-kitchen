@@ -27,6 +27,7 @@ const splitMultiValue = (raw: string): string[] =>
 
 const DEFAULT_SPLIT_REGEX = /[,;\n]/;
 const loggedDataSourceFilters = new Set<string>();
+const loggedBypassFilters = new Set<string>();
 
 const splitDelimitedValues = (raw: string, delimiter?: string): string[] => {
   const trimmed = raw.trim();
@@ -90,6 +91,22 @@ const normalizeDependencyTokens = (dependencyValues: (string | number | null | u
   return tokens;
 };
 
+const normalizeBypassValues = (raw: any): string[] => {
+  if (raw === undefined || raw === null) return [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  return list
+    .map(entry => normalize(entry).trim())
+    .filter(Boolean);
+};
+
+const resolveBypassTokens = (dependencyValues: (string | number | null | undefined)[]): string[] => {
+  const tokens = normalizeDependencyTokens(dependencyValues);
+  const normalized = dependencyValues.map(dep => normalize(dep)).filter(Boolean);
+  normalized.forEach(value => tokens.push(value));
+  if (normalized.length > 1) tokens.push(normalized.join('||'));
+  return Array.from(new Set(tokens));
+};
+
 const computeAllowedFromDataSource = (
   filter: OptionFilter,
   options: OptionSet,
@@ -146,6 +163,27 @@ export function computeAllowedOptions(
   dependencyValues: (string | number | null | undefined)[]
 ): string[] {
   if (!filter) return options.en || [];
+
+  const bypassValues = normalizeBypassValues((filter as any).bypassValues);
+  if (bypassValues.length) {
+    const bypassSet = new Set(bypassValues);
+    const tokens = resolveBypassTokens(dependencyValues);
+    const matched = tokens.find(token => bypassSet.has(token));
+    if (matched) {
+      const logKey = `${Array.isArray(filter.dependsOn) ? filter.dependsOn.join('||') : filter.dependsOn}::${tokens.join('|')}`;
+      if (!loggedBypassFilters.has(logKey)) {
+        loggedBypassFilters.add(logKey);
+        if (typeof console !== 'undefined' && typeof console.info === 'function') {
+          console.info('[ReactForm]', 'optionFilter.bypass', {
+            dependsOn: filter.dependsOn,
+            tokens,
+            bypassValues
+          });
+        }
+      }
+      return options.en || [];
+    }
+  }
 
   const dataSourceAllowed = computeAllowedFromDataSource(filter, options, dependencyValues);
   if (dataSourceAllowed) return dataSourceAllowed;
@@ -210,6 +248,12 @@ export function computeNonMatchOptionKeys(args: {
   const { filter, dependencyValues, selectedValue } = args;
   const optionMap = filter?.optionMap;
   if (!filter || !optionMap || filter.dataSourceField) return [];
+  const bypassValues = normalizeBypassValues((filter as any).bypassValues);
+  if (bypassValues.length) {
+    const tokens = resolveBypassTokens(dependencyValues);
+    const bypassSet = new Set(bypassValues);
+    if (tokens.some(token => bypassSet.has(token))) return [];
+  }
   const matchMode = normalizeMatchMode((filter as any).matchMode);
   if (matchMode !== 'or') return [];
 

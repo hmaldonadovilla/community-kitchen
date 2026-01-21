@@ -964,6 +964,17 @@ This project uses TypeScript. You need to build the script before using it in Go
         }
         ```
 
+      - Bypass values: if any `dependsOn` value matches `bypassValues`, option filtering is skipped and the full option list is shown.
+
+        ```json
+        {
+          "optionFilter": {
+            "dependsOn": "MEAL_TYPE",
+            "bypassValues": ["All"]
+          }
+        }
+        ```
+
       - Composite filters and cross-scope dependencies:
         - `dependsOn` can be a single ID or an array (for multi-field filters). When you provide an array, join dependency values with `||` in `optionMap` keys, plus `*` as a fallback.
         - Line-item filters can depend on top-level fields; reference the parent field ID directly.

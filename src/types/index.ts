@@ -606,6 +606,10 @@ export interface OptionFilter {
    */
   dataSourceDelimiter?: string;
   /**
+   * Optional dependency values that bypass filtering (returns the full option list).
+   */
+  bypassValues?: string[];
+  /**
    * When a dependency resolves to multiple values (e.g., multi-select checkbox),
    * control whether allowed options are intersected (and) or unioned (or).
    */

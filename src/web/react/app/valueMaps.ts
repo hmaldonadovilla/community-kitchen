@@ -1,4 +1,4 @@
-import { FieldValue, OptionFilter, WebFormDefinition } from '../../types';
+import { FieldValue, ValueMapConfig, WebFormDefinition } from '../../types';
 import { LineItemState } from '../types';
 import { resolveSubgroupKey } from './lineItems';
 import { isEmptyValue } from '../utils/values';
@@ -243,7 +243,7 @@ const computeCopyValue = (args: { config: any; current: FieldValue; source: Fiel
   return source;
 };
 
-export const resolveValueMapValue = (valueMap: OptionFilter, getValue: (fieldId: string) => FieldValue): string => {
+export const resolveValueMapValue = (valueMap: ValueMapConfig, getValue: (fieldId: string) => FieldValue): string => {
   if (!valueMap?.optionMap || !valueMap.dependsOn) return '';
   const dependsOn = Array.isArray(valueMap.dependsOn) ? valueMap.dependsOn : [valueMap.dependsOn];
   const depValues = dependsOn.map(dep => {
