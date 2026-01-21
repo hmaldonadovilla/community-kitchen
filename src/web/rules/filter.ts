@@ -25,19 +25,117 @@ const splitMultiValue = (raw: string): string[] =>
     .map(part => part.trim())
     .filter(Boolean);
 
+const DEFAULT_SPLIT_REGEX = /[,;\n]/;
+const loggedDataSourceFilters = new Set<string>();
+
+const splitDelimitedValues = (raw: string, delimiter?: string): string[] => {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (delimiter && delimiter.toString().trim().toLowerCase() === 'none') return [trimmed];
+  if (delimiter && delimiter.toString().trim()) {
+    return raw
+      .split(delimiter)
+      .map(part => part.trim())
+      .filter(Boolean);
+  }
+  return raw
+    .split(DEFAULT_SPLIT_REGEX)
+    .map(part => part.trim())
+    .filter(Boolean);
+};
+
 const buildOrAllowed = (filter: OptionFilter, keys: string[]): string[] => {
-  if (!keys.length) return filter.optionMap['*'] || [];
+  const optionMap = filter.optionMap;
+  if (!optionMap) return [];
+  if (!keys.length) return optionMap['*'] || [];
   const allowed = new Set<string>();
   let matched = false;
   keys.forEach(key => {
-    const list = filter.optionMap[key];
+    const list = optionMap[key];
     if (!list) return;
     matched = true;
     list.forEach(v => allowed.add(v));
   });
   if (!matched) {
-    const fallback = filter.optionMap['*'] || [];
+    const fallback = optionMap['*'] || [];
     fallback.forEach(v => allowed.add(v));
+  }
+  return Array.from(allowed);
+};
+
+const resolveOptionValue = (row: any): string => {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return '';
+  const candidate =
+    row.__ckOptionValue ??
+    row.value ??
+    row.id ??
+    row.label ??
+    row.optionEn ??
+    row.option ??
+    '';
+  return normalizeValue(candidate);
+};
+
+const normalizeDependencyTokens = (dependencyValues: (string | number | null | undefined)[]): string[] => {
+  const tokens: string[] = [];
+  dependencyValues.forEach(dep => {
+    const normalized = normalize(dep);
+    if (!normalized) return;
+    if (normalized.includes('|')) {
+      tokens.push(...splitMultiValue(normalized));
+    } else {
+      tokens.push(normalized);
+    }
+  });
+  return tokens;
+};
+
+const computeAllowedFromDataSource = (
+  filter: OptionFilter,
+  options: OptionSet,
+  dependencyValues: (string | number | null | undefined)[]
+): string[] | null => {
+  const dataSourceField = filter.dataSourceField?.toString().trim();
+  const raw = options.raw;
+  if (!dataSourceField || !Array.isArray(raw) || !raw.length) return null;
+
+  const tokens = normalizeDependencyTokens(dependencyValues);
+  if (!tokens.length) return options.en || [];
+  const logKey = `${dataSourceField}::${tokens.join('|')}`;
+  if (!loggedDataSourceFilters.has(logKey)) {
+    loggedDataSourceFilters.add(logKey);
+    if (typeof console !== 'undefined' && typeof console.info === 'function') {
+      console.info('[ReactForm]', 'optionFilter.dataSource.apply', {
+        dataSourceField,
+        tokens,
+        optionCount: options.en?.length ?? 0
+      });
+    }
+  }
+  const matchMode = normalizeMatchMode((filter as any).matchMode);
+  const allowed = new Set<string>();
+
+  raw.forEach(row => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return;
+    const optionValue = resolveOptionValue(row);
+    if (!optionValue) return;
+    const rawValue = (row as any)[dataSourceField];
+    const rowTokens = Array.isArray(rawValue)
+      ? rawValue.map(val => normalizeValue(val)).filter(Boolean)
+      : rawValue === null || rawValue === undefined
+        ? []
+        : splitDelimitedValues(rawValue.toString(), filter.dataSourceDelimiter);
+    if (!rowTokens.length) return;
+    const matches =
+      matchMode === 'or'
+        ? tokens.some(token => rowTokens.includes(token))
+        : tokens.every(token => rowTokens.includes(token));
+    if (matches) allowed.add(optionValue);
+  });
+
+  if (!allowed.size) return [];
+  if (options.en && options.en.length) {
+    return options.en.filter(value => allowed.has(value));
   }
   return Array.from(allowed);
 };
@@ -49,6 +147,10 @@ export function computeAllowedOptions(
 ): string[] {
   if (!filter) return options.en || [];
 
+  const dataSourceAllowed = computeAllowedFromDataSource(filter, options, dependencyValues);
+  if (dataSourceAllowed) return dataSourceAllowed;
+
+  if (!filter.optionMap) return options.en || [];
   const depValues = dependencyValues.map(v => normalize(v));
   const matchMode = normalizeMatchMode((filter as any).matchMode);
 
@@ -95,7 +197,7 @@ export function computeAllowedOptions(
   depValues.filter(Boolean).forEach(v => candidateKeys.push(v));
   candidateKeys.push('*');
 
-  const match = candidateKeys.reduce<string[] | undefined>((acc, key) => acc || filter.optionMap[key], undefined);
+  const match = candidateKeys.reduce<string[] | undefined>((acc, key) => acc || filter.optionMap?.[key], undefined);
   if (match) return match;
   return [];
 }
@@ -106,7 +208,8 @@ export function computeNonMatchOptionKeys(args: {
   selectedValue: string | number | null | undefined;
 }): string[] {
   const { filter, dependencyValues, selectedValue } = args;
-  if (!filter) return [];
+  const optionMap = filter?.optionMap;
+  if (!filter || !optionMap || filter.dataSourceField) return [];
   const matchMode = normalizeMatchMode((filter as any).matchMode);
   if (matchMode !== 'or') return [];
 
@@ -118,9 +221,9 @@ export function computeNonMatchOptionKeys(args: {
     depValues.length === 1 && depValues[0]?.includes('|') ? splitMultiValue(depValues[0]) : depValues.filter(Boolean);
   if (!keys.length) return [];
 
-  const fallback = filter.optionMap['*'] || [];
+  const fallback = optionMap['*'] || [];
   return keys.filter(key => {
-    const allowed = filter.optionMap[key] || fallback;
+    const allowed = optionMap[key] || fallback;
     return !allowed.includes(selected);
   });
 }

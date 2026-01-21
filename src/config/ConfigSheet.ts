@@ -1019,6 +1019,11 @@ export class ConfigSheet {
       return { ...(raw as any), dependsOn, optionMap: resolved, optionMapRef: refCfg } as OptionFilter;
     }
 
+    const dataSourceField = (raw as any).dataSourceField;
+    if (typeof dataSourceField === 'string' && dataSourceField.trim()) {
+      return { ...(raw as any), dependsOn, dataSourceField: dataSourceField.trim() } as OptionFilter;
+    }
+
     return undefined;
   }
 

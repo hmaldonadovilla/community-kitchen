@@ -66,6 +66,24 @@ describe('computeAllowedOptions', () => {
     const allowed = computeAllowedOptions(multi as any, { en: ['Rice', 'Beans', 'Salt'] } as any, ['Vegan|No-salt']);
     expect(allowed).toEqual(['Rice', 'Beans']);
   });
+
+  it('filters dataSource-backed options using dataSourceField', () => {
+    const dataSourceFilter = {
+      dependsOn: 'diet',
+      dataSourceField: 'dietary',
+      dataSourceDelimiter: ','
+    };
+    const options = {
+      en: ['A', 'B', 'C'],
+      raw: [
+        { __ckOptionValue: 'A', dietary: 'Vegan, Vegetarian' },
+        { __ckOptionValue: 'B', dietary: 'No-salt' },
+        { __ckOptionValue: 'C', dietary: 'Vegan' }
+      ]
+    };
+    const allowed = computeAllowedOptions(dataSourceFilter as any, options as any, ['Vegan']);
+    expect(allowed).toEqual(['A', 'C']);
+  });
 });
 
 describe('computeNonMatchOptionKeys', () => {
