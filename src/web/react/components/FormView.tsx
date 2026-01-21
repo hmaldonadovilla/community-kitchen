@@ -48,6 +48,7 @@ import {
   PlusIcon,
   RequiredStar,
   srOnly,
+  TrashIcon,
   withDisabled
 } from './form/ui';
 import { FileOverlay } from './form/overlays/FileOverlay';
@@ -58,6 +59,7 @@ import { DateInput } from './form/DateInput';
 import { SearchableSelect } from './form/SearchableSelect';
 import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
+import { LineItemTable } from './form/LineItemTable';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { PairedRowGrid } from './form/PairedRowGrid';
 import { PageSection } from './form/PageSection';
@@ -74,9 +76,12 @@ import {
   buildLineItemDedupKey,
   cascadeRemoveLineItemRows,
   computeRowNonMatchOptions,
+  parseRowHideRemove,
   parseRowNonMatchOptions,
+  parseRowSource,
   parseSubgroupKey,
   recomputeLineItemNonMatchOptions,
+  ROW_HIDE_REMOVE_KEY,
   ROW_NON_MATCH_OPTIONS_KEY,
   ROW_SOURCE_KEY,
   resolveSubgroupKey,
@@ -91,7 +96,7 @@ import {
 } from '../app/paragraphDisclaimer';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 import { validateRules } from '../../rules/validation';
-import { matchesWhenClause } from '../../rules/visibility';
+import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
 import { validateForm } from '../app/submission';
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
@@ -3462,6 +3467,14 @@ const FormView: React.FC<FormViewProps> = ({
     [guidedVirtualState, lineItems, recordMeta, values]
   );
 
+  const topVisibilityCtx = useMemo(
+    () => ({
+      getValue: (fieldId: string) => resolveVisibilityValue(fieldId),
+      getLineItems: (groupId: string) => lineItems[groupId] || []
+    }),
+    [lineItems, resolveVisibilityValue]
+  );
+
   const getTopValueNoScan = useCallback(
     (fieldId: string): FieldValue | undefined => {
       const direct = (values as any)[fieldId];
@@ -3472,6 +3485,64 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [recordMeta, values]
   );
+
+  const lineItemVisibilityTargets = useMemo(() => {
+    const questions = definition.questions || [];
+    return questions
+      .filter(q => q?.visibility && (containsLineItemsClause(q.visibility.showWhen) || containsLineItemsClause(q.visibility.hideWhen)))
+      .map(q => ({ id: q.id, visibility: q.visibility }));
+  }, [definition.questions]);
+
+  const parentScopedVisibilityTargets = useMemo(() => {
+    const questions = definition.questions || [];
+    return questions
+      .filter(
+        q =>
+          q?.visibility &&
+          (containsParentLineItemsClause(q.visibility.showWhen) || containsParentLineItemsClause(q.visibility.hideWhen))
+      )
+      .map(q => q.id)
+      .filter(Boolean);
+  }, [definition.questions]);
+
+  useEffect(() => {
+    if (!onDiagnostic || !lineItemVisibilityTargets.length) return;
+    const fields = lineItemVisibilityTargets.map(target => target.id).filter(Boolean);
+    onDiagnostic('visibility.lineItems.enabled', { count: fields.length, fields: fields.slice(0, 10) });
+  }, [lineItemVisibilityTargets, onDiagnostic]);
+
+  useEffect(() => {
+    if (!onDiagnostic || !parentScopedVisibilityTargets.length) return;
+    onDiagnostic('visibility.lineItems.parentScope.enabled', {
+      count: parentScopedVisibilityTargets.length,
+      fields: parentScopedVisibilityTargets.slice(0, 10)
+    });
+  }, [onDiagnostic, parentScopedVisibilityTargets]);
+
+  const lineItemVisibilityState = useMemo<Record<string, boolean>>(() => {
+    if (!lineItemVisibilityTargets.length) return {};
+    const next: Record<string, boolean> = {};
+    lineItemVisibilityTargets.forEach(target => {
+      next[target.id] = shouldHideField(target.visibility, topVisibilityCtx);
+    });
+    return next;
+  }, [lineItemVisibilityTargets, topVisibilityCtx]);
+
+  const lineItemVisibilityRef = useRef<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!onDiagnostic || !lineItemVisibilityTargets.length) return;
+    const prev = lineItemVisibilityRef.current || {};
+    const isInit = Object.keys(prev).length === 0;
+    lineItemVisibilityTargets.forEach(target => {
+      const hidden = lineItemVisibilityState[target.id];
+      if (hidden === undefined) return;
+      if (isInit || prev[target.id] !== hidden) {
+        onDiagnostic('visibility.lineItems.state', { fieldId: target.id, hidden, reason: isInit ? 'init' : 'update' });
+      }
+    });
+    lineItemVisibilityRef.current = lineItemVisibilityState;
+  }, [lineItemVisibilityState, lineItemVisibilityTargets, onDiagnostic]);
 
   const orderedEntryErrors = useMemo(() => {
     if (!orderedEntryEnabled) return null;
@@ -4200,12 +4271,7 @@ const FormView: React.FC<FormViewProps> = ({
     const groups = (groupSections || []).filter(s => s && !s.isHeader && s.collapsible);
     return groups
       .map(section => {
-        const visible = (section.questions || []).filter(
-          q =>
-            !shouldHideField(q.visibility, {
-              getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
-            })
-        );
+        const visible = (section.questions || []).filter(q => !shouldHideField(q.visibility, topVisibilityCtx));
         if (!visible.length) return null;
 
         const requiredQs = visible.filter(q => !!q.required);
@@ -4215,7 +4281,7 @@ const FormView: React.FC<FormViewProps> = ({
         return { key: section.key, complete, totalRequired, requiredComplete };
       })
       .filter(Boolean) as Array<{ key: string; complete: boolean; totalRequired: number; requiredComplete: number }>;
-  }, [collapsedRows, groupSections, language, lineItems, recordMeta, resolveVisibilityValue, values]);
+  }, [collapsedRows, groupSections, language, lineItems, recordMeta, topVisibilityCtx, values]);
 
   const prevGroupCompleteRef = useRef<Record<string, boolean>>({});
   const pendingAutoCollapseRef = useRef<string[]>([]);
@@ -4417,9 +4483,7 @@ const FormView: React.FC<FormViewProps> = ({
     const allowedWithCurrent =
       currentVal && typeof currentVal === 'string' && !allowed.includes(currentVal) ? [...allowed, currentVal] : allowed;
     const opts = buildLocalizedOptions(optionSet, allowedWithCurrent, language, { sort: optionSortFor(q) });
-    const hidden = shouldHideField(q.visibility, {
-      getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
-    });
+    const hidden = shouldHideField(q.visibility, topVisibilityCtx);
     if (hidden) return null;
     const forceStackedLabel = q.ui?.labelLayout === 'stacked';
     const hideFieldLabel = q.ui?.hideLabel === true;
@@ -4472,13 +4536,14 @@ const FormView: React.FC<FormViewProps> = ({
         const label = resolveLabel(q, language);
         const busyThis = !!reportBusy && reportBusyId === q.id;
         const disabled = submitting || !onReportButton || !!reportBusy;
+        const buttonLabelStyle = inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly;
         return (
           <div
             key={q.id}
-            className="field inline-field ck-full-width"
+            className={`field inline-field${inGrid ? '' : ' ck-full-width'}`}
             data-field-path={q.id}
           >
-            <label style={srOnly}>{label}</label>
+            <label style={buttonLabelStyle}>{label}</label>
             <button
               type="button"
               onClick={() => onReportButton?.(q.id)}
@@ -5770,6 +5835,12 @@ const FormView: React.FC<FormViewProps> = ({
     const subConfig = parsed
       ? parentGroup?.lineItemConfig?.subGroups?.find(sub => resolveSubgroupKey(sub) === parsed.subGroupId)
       : undefined;
+    const subUi = (subConfig as any)?.ui as any;
+    const subUiMode = (subUi?.mode || 'default').toString().trim().toLowerCase();
+    const isSubTableMode = subUiMode === 'table';
+    const subAnchorFieldId =
+      subConfig?.anchorFieldId !== undefined && subConfig?.anchorFieldId !== null ? subConfig.anchorFieldId.toString() : '';
+    const subHideUntilAnchor = subUi?.tableHideUntilAnchor !== false;
     const subLabel = parsed
       ? resolveLocalizedString(subConfig?.label, language, parsed.subGroupId)
       : resolveLocalizedString({ en: 'Subgroup', fr: 'Sous-groupe', nl: 'Subgroep' }, language, 'Subgroup');
@@ -6138,12 +6209,345 @@ const FormView: React.FC<FormViewProps> = ({
             <div className="error">
               Unable to load subgroup editor (missing group/subgroup configuration for <code>{subKey}</code>).
             </div>
+          ) : isSubTableMode ? (
+            <div className="ck-line-item-table__scroll">
+              <LineItemTable
+                columns={[
+                  ...((() => {
+                    const subColumnWidths = subUi?.tableColumnWidths;
+                    const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined => {
+                      if (!subColumnWidths || typeof subColumnWidths !== 'object' || Array.isArray(subColumnWidths)) return undefined;
+                      const widthCandidates =
+                        columnId === '__remove'
+                          ? [columnId, 'remove', '__actions', 'actions']
+                          : [columnId, columnId.toLowerCase()];
+                      const rawWidth = widthCandidates.reduce<any>(
+                        (acc, key) => (acc !== undefined ? acc : (subColumnWidths as any)[key]),
+                        undefined
+                      );
+                      if (rawWidth === undefined || rawWidth === null) return undefined;
+                      if (typeof rawWidth === 'number') return { width: `${rawWidth}%` };
+                      const widthValue = rawWidth.toString().trim();
+                      return widthValue ? { width: widthValue } : undefined;
+                    };
+
+                    const subColumnIdsRaw = Array.isArray(subUi?.tableColumns) ? subUi.tableColumns : [];
+                    const subColumnIds = subColumnIdsRaw
+                      .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
+                      .filter(Boolean);
+                    const subFields = (subConfig?.fields || []) as any[];
+                    const visibleFields = (subColumnIds.length ? subColumnIds : subFields.map(f => f.id))
+                      .map((fid: string) => subFields.find(f => f.id === fid))
+                      .filter(Boolean) as any[];
+
+                    const renderSubTableField = (field: any, subRow: any) => {
+                      const groupCtx: VisibilityContext = {
+                        getValue: fid => values[fid],
+                        getLineValue: (_rowId, fid) => subRow.values[fid]
+                      };
+                      const hideField = shouldHideField(field.visibility, groupCtx, { rowId: subRow.id, linePrefix: subKey });
+                      if (hideField) return <span className="muted">—</span>;
+
+                      const anchorValue = subAnchorFieldId ? subRow.values[subAnchorFieldId] : undefined;
+                      if (subHideUntilAnchor && subAnchorFieldId && field.id !== subAnchorFieldId && isEmptyValue(anchorValue as any)) {
+                        return <span className="muted">—</span>;
+                      }
+
+                      ensureLineOptions(subKey, field);
+                      const optionSetField: OptionSet =
+                        optionState[optionKey(field.id, subKey)] || {
+                          en: field.options || [],
+                          fr: (field as any).optionsFr || [],
+                          nl: (field as any).optionsNl || [],
+                          raw: (field as any).optionsRaw
+                        };
+                      const dependencyIds = (
+                        Array.isArray(field.optionFilter?.dependsOn)
+                          ? field.optionFilter?.dependsOn
+                          : [field.optionFilter?.dependsOn || '']
+                      ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                      const allowedField = computeAllowedOptions(
+                        field.optionFilter,
+                        optionSetField,
+                        dependencyIds.map((dep: string) => {
+                          const selectorFallback = subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
+                          return toDependencyValue(subRow.values[dep] ?? values[dep] ?? parentRowValues[dep] ?? selectorFallback);
+                        })
+                      );
+
+                      const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
+                      const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+                      const renderErrors = () => (
+                        <>
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </>
+                      );
+
+                      if (field.type === 'CHOICE') {
+                        const rawVal = subRow.values[field.id];
+                        const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                        const allowedWithCurrent =
+                          choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
+                            ? [...allowedField, choiceVal]
+                            : allowedField;
+                        const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
+                        if (renderAsLabel) {
+                          const selected = optsField.find(opt => opt.value === choiceVal);
+                          return <div className="ck-line-item-table__value">{selected?.label || choiceVal || '—'}</div>;
+                        }
+                        return (
+                          <div className="ck-line-item-table__control">
+                            {renderChoiceControl({
+                              fieldPath,
+                              value: choiceVal || '',
+                              options: optsField,
+                              required: !!field.required,
+                              searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? subUi?.choiceSearchEnabled,
+                              override: (field as any)?.ui?.control,
+                              disabled: submitting || (field as any)?.readOnly === true,
+                              onChange: next => handleLineFieldChange(subGroupDef, subRow.id, field, next)
+                            })}
+                            {renderErrors()}
+                          </div>
+                        );
+                      }
+
+                      if (field.type === 'CHECKBOX') {
+                        const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
+                        const allowedWithSelected = selected.reduce((acc, val) => {
+                          if (val && !acc.includes(val)) acc.push(val);
+                          return acc;
+                        }, [...allowedField]);
+                        const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
+                        if (renderAsLabel) {
+                          const labels = selected
+                            .map(val => optsField.find(opt => opt.value === val)?.label || val)
+                            .filter(Boolean);
+                          return <div className="ck-line-item-table__value">{labels.length ? labels.join(', ') : '—'}</div>;
+                        }
+                        const controlOverride = ((field as any)?.ui?.control || '').toString().trim().toLowerCase();
+                        const renderAsMultiSelect = controlOverride === 'select';
+                        return (
+                          <div className="ck-line-item-table__control">
+                            {renderAsMultiSelect ? (
+                              <select
+                                multiple
+                                value={selected}
+                                disabled={submitting || (field as any)?.readOnly === true}
+                                onChange={e => {
+                                  if (submitting || (field as any)?.readOnly === true) return;
+                                  const next = Array.from(e.currentTarget.selectedOptions)
+                                    .map(opt => opt.value)
+                                    .filter(Boolean);
+                                  handleLineFieldChange(subGroupDef, subRow.id, field, next);
+                                }}
+                              >
+                                {optsField.map(opt => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="inline-options">
+                                {optsField.map(opt => (
+                                  <label key={opt.value} className="inline">
+                                    <input
+                                      type="checkbox"
+                                      checked={selected.includes(opt.value)}
+                                      disabled={submitting || (field as any)?.readOnly === true}
+                                      onChange={e => {
+                                        if (submitting || (field as any)?.readOnly === true) return;
+                                        const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
+                                        handleLineFieldChange(subGroupDef, subRow.id, field, next);
+                                      }}
+                                    />
+                                    <span>{opt.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                            {renderErrors()}
+                          </div>
+                        );
+                      }
+
+                      if (field.type === 'FILE_UPLOAD') {
+                        const items = toUploadItems(subRow.values[field.id]);
+                        const count = items.length;
+                        if (renderAsLabel) {
+                          return <div className="ck-line-item-table__value">{count ? `${count}` : '—'}</div>;
+                        }
+                        return (
+                          <div className="ck-line-item-table__control">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (submitting) return;
+                                openFileOverlay({
+                                  scope: 'line',
+                                  title: resolveFieldLabel(field, language, field.id),
+                                  group: subGroupDef,
+                                  rowId: subRow.id,
+                                  field,
+                                  fieldPath
+                                });
+                              }}
+                              style={buttonStyles.secondary}
+                              disabled={submitting}
+                            >
+                              {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
+                            </button>
+                            {renderErrors()}
+                          </div>
+                        );
+                      }
+
+                      const mapped = field.valueMap
+                        ? resolveValueMapValue(
+                            field.valueMap,
+                            fid => {
+                              if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fid)) return subRow.values[fid];
+                              if (Object.prototype.hasOwnProperty.call(parentRowValues || {}, fid)) return parentRowValues[fid];
+                              return values[fid];
+                            },
+                            { language, targetOptions: toOptionSet(field) }
+                          )
+                        : undefined;
+                      const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
+                      const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                      const numberText =
+                        field.type === 'NUMBER'
+                          ? fieldValue === undefined || fieldValue === null
+                            ? ''
+                            : (fieldValue as any).toString()
+                          : '';
+                      if (renderAsLabel) {
+                        const display =
+                          field.type === 'NUMBER'
+                            ? numberText
+                            : field.type === 'DATE'
+                              ? fieldValue
+                              : fieldValue;
+                        return <div className="ck-line-item-table__value">{display || '—'}</div>;
+                      }
+                      if (field.type === 'NUMBER') {
+                        return (
+                          <div className="ck-line-item-table__control">
+                            <NumberStepper
+                              value={numberText}
+                              disabled={submitting}
+                              readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                              ariaLabel={resolveFieldLabel(field, language, field.id)}
+                              onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
+                            />
+                            {renderErrors()}
+                          </div>
+                        );
+                      }
+                      if (field.type === 'PARAGRAPH') {
+                        return (
+                          <div className="ck-line-item-table__control">
+                            <textarea
+                              className="ck-paragraph-input"
+                              value={fieldValue}
+                              onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
+                              readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                              rows={(field as any)?.ui?.paragraphRows || 3}
+                            />
+                            {renderErrors()}
+                          </div>
+                        );
+                      }
+                      if (field.type === 'DATE') {
+                        return (
+                          <div className="ck-line-item-table__control">
+                            <DateInput
+                              value={fieldValue}
+                              language={language}
+                              readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                              ariaLabel={resolveFieldLabel(field, language, field.id)}
+                              onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
+                            />
+                            {renderErrors()}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="ck-line-item-table__control">
+                          <input
+                            type="text"
+                            value={fieldValue}
+                            onChange={e => handleLineFieldChange(subGroupDef, subRow.id, field, e.target.value)}
+                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                          />
+                          {renderErrors()}
+                        </div>
+                      );
+                    };
+
+                    return [
+                      ...visibleFields.map(field => ({
+                        id: field.id,
+                        label: resolveFieldLabel(field, language, field.id),
+                        style: resolveSubColumnStyle(field.id),
+                        renderCell: (subRow: any) => renderSubTableField(field, subRow)
+                      })),
+                      {
+                        id: '__remove',
+                        label: <span style={srOnly}>{tSystem('lineItems.remove', language, 'Remove')}</span>,
+                        className: 'ck-line-item-table__actions',
+                        style: resolveSubColumnStyle('__remove'),
+                        renderCell: (subRow: any) => {
+                          const subRowSource = parseRowSource((subRow.values as any)?.[ROW_SOURCE_KEY]);
+                          const subHideRemoveButton = parseRowHideRemove((subRow.values as any)?.[ROW_HIDE_REMOVE_KEY]);
+                          const allowRemoveAutoSubRows = subUi?.allowRemoveAutoRows !== false;
+                          const canRemoveSubRow = !subHideRemoveButton && (allowRemoveAutoSubRows || subRowSource !== 'auto');
+                          if (!canRemoveSubRow) return null;
+                          return (
+                            <button
+                              type="button"
+                              className="ck-line-item-table__remove-button"
+                              onClick={() => removeLineRow(subKey, subRow.id)}
+                              aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                              title={tSystem('lineItems.remove', language, 'Remove')}
+                            >
+                              <TrashIcon size={40} />
+                            </button>
+                          );
+                        }
+                      }
+                    ];
+                  })())
+                ]}
+                rows={orderedRows}
+                emptyText={'No items yet. Use "Add line(s)" to start.'}
+                rowClassName={(_row, idx) => (idx % 2 === 0 ? 'ck-line-item-table__row--even' : 'ck-line-item-table__row--odd')}
+                renderRowMessage={row => {
+                  const rowValues = ((row as any)?.values || {}) as Record<string, FieldValue>;
+                  const isAutoRow = !!(row as any)?.autoGenerated || parseRowSource((rowValues as any)?.[ROW_SOURCE_KEY]) === 'auto';
+                  const rowDisclaimerText = resolveRowDisclaimerText({
+                    ui: subConfig?.ui as any,
+                    language,
+                    rowValues,
+                    autoGenerated: isAutoRow,
+                    getValue: (fid: string) => {
+                      if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
+                      if (Object.prototype.hasOwnProperty.call(parentRowValues || {}, fid)) return (parentRowValues as any)[fid];
+                      return resolveVisibilityValue(fid);
+                    }
+                  });
+                  if (!rowDisclaimerText) return null;
+                  return <div className="ck-row-disclaimer">{rowDisclaimerText}</div>;
+                }}
+              />
+            </div>
           ) : orderedRows.length ? (
             orderedRows.map((subRow, subIdx) => {
               const isAutoRow =
                 !!subRow.autoGenerated || (subRow.values && (subRow.values as any)[ROW_SOURCE_KEY] === 'auto');
-              const anchorFieldId =
-                subConfig?.anchorFieldId !== undefined && subConfig?.anchorFieldId !== null ? subConfig.anchorFieldId.toString() : '';
+              const anchorFieldId = subAnchorFieldId;
               const anchorField = anchorFieldId ? (subConfig?.fields || []).find(f => f.id === anchorFieldId) : undefined;
               const anchorRawValue = anchorFieldId ? (subRow.values || {})[anchorFieldId] : undefined;
               const anchorHasValue = !!anchorFieldId && !isEmptyValue(anchorRawValue as any);
@@ -7564,6 +7968,84 @@ const FormView: React.FC<FormViewProps> = ({
       );
     };
 
+    const renderTargetsWithPairing = (targets: any[], keyPrefix: string): React.ReactNode[] => {
+      type TargetItem =
+        | { type: 'question'; q: WebQuestionDefinition; key: string }
+        | { type: 'node'; node: React.ReactNode; key: string };
+
+      const items = targets
+        .map((target, idx): TargetItem | null => {
+          if (!target || typeof target !== 'object') return null;
+          const kind = (target.kind || '').toString().trim();
+          const id = (target.id || '').toString().trim();
+          if (!kind || !id) return null;
+          if (kind === 'question') {
+            const q = definition.questions.find(q2 => q2.id === id);
+            if (!q) return null;
+            if (shouldHideField(q.visibility, topVisibilityCtx)) return null;
+            return { type: 'question', q, key: `${keyPrefix}:q:${q.id}:${idx}` };
+          }
+          const node = renderTarget(target, `${keyPrefix}:${idx}`);
+          if (!node) return null;
+          return { type: 'node', node, key: `${keyPrefix}:node:${id}:${idx}` };
+        })
+        .filter(Boolean) as TargetItem[];
+
+      const isPairable = (q: WebQuestionDefinition): boolean => {
+        if (!q.pair) return false;
+        if (q.type === 'LINE_ITEM_GROUP') return false;
+        if (q.type === 'PARAGRAPH') return false;
+        return true;
+      };
+
+      const used = new Set<string>();
+      const rows: React.ReactNode[] = [];
+
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        if (item.type === 'node') {
+          rows.push(<React.Fragment key={item.key}>{item.node}</React.Fragment>);
+          continue;
+        }
+        if (used.has(item.key)) continue;
+        const pairKey = item.q.pair ? item.q.pair.toString() : '';
+        if (!pairKey || !isPairable(item.q)) {
+          used.add(item.key);
+          rows.push(<React.Fragment key={item.key}>{renderQuestion(item.q)}</React.Fragment>);
+          continue;
+        }
+        const group: Array<TargetItem & { type: 'question' }> = [item];
+        for (let j = i + 1; j < items.length; j += 1) {
+          const cand = items[j];
+          if (cand.type !== 'question') continue;
+          if (used.has(cand.key)) continue;
+          if ((cand.q.pair ? cand.q.pair.toString() : '') === pairKey && isPairable(cand.q)) {
+            group.push(cand);
+          }
+        }
+        group.forEach(entry => used.add(entry.key));
+        const maxPerRow = 3;
+        for (let k = 0; k < group.length; k += maxPerRow) {
+          const slice = group.slice(k, k + maxPerRow);
+          if (slice.length === 1) {
+            rows.push(<React.Fragment key={`${item.key}:${k}`}>{renderQuestion(slice[0].q)}</React.Fragment>);
+            continue;
+          }
+          const hasDate = slice.some(entry => entry.q.type === 'DATE');
+          const colsClass = slice.length === 3 ? ' ck-pair-grid--3' : '';
+          rows.push(
+            <PairedRowGrid key={`${item.key}:${k}`} className={`ck-pair-grid${colsClass}${hasDate ? ' ck-pair-has-date' : ''}`}>
+              {slice.map(entry => (
+                <React.Fragment key={entry.key}>{renderQuestion(entry.q, { inGrid: true })}</React.Fragment>
+              ))}
+            </PairedRowGrid>
+          );
+        }
+      }
+
+      return rows;
+    };
+
     const stepsBarNode = (
       <StepsBar
         language={language}
@@ -7666,8 +8148,8 @@ const FormView: React.FC<FormViewProps> = ({
               {stepHelpText}
             </div>
           ) : null}
-          {headerTargets.map(t => renderTarget(t, 'header'))}
-          {stepTargets.map(t => renderTarget(t, `step:${activeGuidedStepId}`))}
+          {renderTargetsWithPairing(headerTargets, 'header')}
+          {renderTargetsWithPairing(stepTargets, `step:${activeGuidedStepId}`)}
         </div>
       </div>
     );
@@ -7771,12 +8253,7 @@ const FormView: React.FC<FormViewProps> = ({
               type GroupSection = (typeof groupSections)[number];
 
               const renderGroupSection = (section: GroupSection): React.ReactNode => {
-                const visible = (section.questions || []).filter(
-                  q =>
-                    !shouldHideField(q.visibility, {
-                      getValue: (fieldId: string) => resolveVisibilityValue(fieldId)
-                    })
-                );
+                const visible = (section.questions || []).filter(q => !shouldHideField(q.visibility, topVisibilityCtx));
                 if (!visible.length) return null;
 
                 const isCollapsed = section.collapsible ? !!collapsedGroups[section.key] : false;

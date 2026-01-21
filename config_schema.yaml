@@ -2988,18 +2988,51 @@ components:
           type: boolean
           description: If true, condition matches when the field has any value other than empty/blank/null. If false, condition matches when the field is empty.
 
+    LineItemWhenClause:
+      type: object
+      required: [lineItems]
+      properties:
+        lineItems:
+          type: object
+          required: [groupId]
+          properties:
+            groupId:
+              type: string
+              description: Line item group question id whose rows should be evaluated.
+            subGroupId:
+              type: string
+              description: Optional subgroup id to evaluate (scans all parent rows).
+            match:
+              type: string
+              enum: [any, all]
+              description: Row matching mode; defaults to `any`.
+            when:
+              $ref: '#/components/schemas/WhenClause'
+              description: Row-level condition applied within each row (evaluated against row/subgroup values only).
+            parentWhen:
+              $ref: '#/components/schemas/WhenClause'
+              description: Optional condition evaluated against the parent row (subgroup only).
+            parentMatch:
+              type: string
+              enum: [any, all]
+              description: Parent-row matching mode; defaults to `any`.
+          additionalProperties: false
+      additionalProperties: false
+
     WhenClause:
       description: |
         Condition clause used by visibility, validation, rowDisclaimer, and guided-step row filters.
 
         Supports both:
         - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `notEmpty`
+        - Line-item conditions: `lineItems: { groupId, subGroupId?, when?, match? }`
         - Compound conditions:
           - `all`: AND (every entry must match)
           - `any`: OR (at least one entry must match)
           - `not`: NOT (negates a nested clause; useful for "not in" patterns)
       oneOf:
         - $ref: '#/components/schemas/VisibilityCondition'
+        - $ref: '#/components/schemas/LineItemWhenClause'
         - type: object
           required: [all]
           properties:

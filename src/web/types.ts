@@ -19,6 +19,7 @@ import {
   LineItemGroupUiConfig,
   LineItemDedupRule,
   LineItemSelectorConfig,
+  LineItemRowState,
   LocalizedString,
   OptionFilter,
   ParagraphDisclaimerConfig,
@@ -101,6 +102,7 @@ export interface ValidationError {
 export interface VisibilityContext {
   getValue: (fieldId: string) => FieldValue;
   getLineValue?: (rowId: string, fieldId: string) => FieldValue;
+  getLineItems?: (groupId: string) => LineItemRowState[];
 }
 
 export interface FilterContext {

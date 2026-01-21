@@ -1681,6 +1681,46 @@ export class ConfigSheet {
       return nested ? { not: nested } : undefined;
     }
 
+    const lineItemsRaw = (raw as any).lineItems ?? (raw as any).lineItem;
+    if (lineItemsRaw && typeof lineItemsRaw === 'object') {
+      const groupIdRaw =
+        (lineItemsRaw as any).groupId ??
+        (lineItemsRaw as any).group ??
+        (lineItemsRaw as any).lineGroupId ??
+        (lineItemsRaw as any).lineGroup;
+      const groupId = groupIdRaw !== undefined && groupIdRaw !== null ? groupIdRaw.toString().trim() : '';
+      if (!groupId) return undefined;
+
+      const subGroupRaw = (lineItemsRaw as any).subGroupId ?? (lineItemsRaw as any).subGroup;
+      const subGroupId = subGroupRaw !== undefined && subGroupRaw !== null ? subGroupRaw.toString().trim() : '';
+
+      const whenRaw = (lineItemsRaw as any).when;
+      const when = this.normalizeWhenClause(whenRaw);
+
+      const parentWhenRaw =
+        (lineItemsRaw as any).parentWhen ??
+        (lineItemsRaw as any).parent ??
+        (lineItemsRaw as any).parentRowWhen;
+      const parentWhen = this.normalizeWhenClause(parentWhenRaw);
+
+      const matchRaw = (lineItemsRaw as any).match ?? (lineItemsRaw as any).mode;
+      const matchStr = typeof matchRaw === 'string' ? matchRaw.trim().toLowerCase() : '';
+      const match = matchStr === 'all' || matchStr === 'any' ? (matchStr as 'all' | 'any') : undefined;
+
+      const parentMatchRaw = (lineItemsRaw as any).parentMatch ?? (lineItemsRaw as any).parentMode;
+      const parentMatchStr = typeof parentMatchRaw === 'string' ? parentMatchRaw.trim().toLowerCase() : '';
+      const parentMatch =
+        parentMatchStr === 'all' || parentMatchStr === 'any' ? (parentMatchStr as 'all' | 'any') : undefined;
+
+      const cfg: any = { groupId };
+      if (subGroupId) cfg.subGroupId = subGroupId;
+      if (when) cfg.when = when;
+      if (parentWhen) cfg.parentWhen = parentWhen;
+      if (match) cfg.match = match;
+      if (parentMatch) cfg.parentMatch = parentMatch;
+      return { lineItems: cfg } as any;
+    }
+
     const fieldIdRaw = (raw as any).fieldId ?? (raw as any).field ?? (raw as any).id;
     if (!fieldIdRaw) return undefined;
     const fieldId = fieldIdRaw.toString();

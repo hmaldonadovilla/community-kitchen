@@ -641,6 +641,7 @@ export interface VisibilityCondition {
  *   - all: AND (every entry must match)
  *   - any: OR (at least one entry must match)
  *   - not: NOT (negates a nested condition)
+ * - Line-item conditions allow matching rows in a group/subgroup using `lineItems`.
  *
  * Notes:
  * - This shape is supported for visibility rules, validation rules, row disclaimers, and guided-step row filters.
@@ -655,7 +656,42 @@ export interface WhenAnyClause {
 export interface WhenNotClause {
   not: WhenClause;
 }
-export type WhenClause = VisibilityCondition | WhenAllClause | WhenAnyClause | WhenNotClause;
+
+export interface LineItemWhenClause {
+  /**
+   * Evaluate conditions against line-item rows (and optional subgroups).
+   */
+  lineItems: {
+    /**
+     * Line item group question id.
+     */
+    groupId: string;
+    /**
+     * Optional subgroup id to evaluate (scans all parent rows).
+     */
+    subGroupId?: string;
+    /**
+     * Row-level condition applied within each row.
+     * When omitted, any row counts as a match.
+     */
+    when?: WhenClause;
+    /**
+     * Optional condition evaluated against the parent row when `subGroupId` is provided.
+     * This lets you scope subgroup matching to parent rows that satisfy their own criteria.
+     */
+    parentWhen?: WhenClause;
+    /**
+     * Row matching mode (default: "any").
+     */
+    match?: 'any' | 'all';
+    /**
+     * Parent-row matching mode (default: "any") when `parentWhen` is set.
+     */
+    parentMatch?: 'any' | 'all';
+  };
+}
+
+export type WhenClause = VisibilityCondition | WhenAllClause | WhenAnyClause | WhenNotClause | LineItemWhenClause;
 
 export interface VisibilityConfig {
   showWhen?: WhenClause;
