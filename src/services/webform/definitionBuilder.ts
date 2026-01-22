@@ -72,6 +72,7 @@ export class DefinitionBuilder {
       derivedValue: q.derivedValue,
       validationRules: q.validationRules,
       visibility: q.visibility,
+      changeDialog: q.changeDialog,
       clearOnChange: q.clearOnChange,
       selectionEffects: q.selectionEffects,
       listViewSort: q.listViewSort,

@@ -1,72 +1,93 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { FieldValue } from '../../types';
 
-export type ConfirmDialogState = {
+export type FieldChangeDialogInputOption = { value: string; label: string };
+
+export type FieldChangeDialogInputState = {
+  id: string;
+  label: string;
+  placeholder?: string;
+  type: 'text' | 'paragraph' | 'number' | 'choice' | 'checkbox' | 'date';
+  required?: boolean;
+  options?: FieldChangeDialogInputOption[];
+  multiple?: boolean;
+};
+
+export type FieldChangeDialogState = {
   open: boolean;
   title: string;
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  inputs: FieldChangeDialogInputState[];
+  values: Record<string, FieldValue>;
   kind?: string;
   refId?: string;
 };
 
-export type ConfirmDialogOpenArgs = {
+export type FieldChangeDialogOpenArgs = {
   title: string;
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  inputs: FieldChangeDialogInputState[];
+  values?: Record<string, FieldValue>;
   kind?: string;
   refId?: string;
-  onConfirm: () => void;
+  onConfirm: (values: Record<string, FieldValue>) => void;
   onCancel?: () => void;
 };
 
-/**
- * useConfirmDialog
- * ----------------
- * Small UI-state hook for confirm/cancel dialogs.
- *
- * - Stores the confirm callback in a ref to avoid stale closure issues.
- * - Supports auto-close when `closeOnKey` changes (e.g., navigation/view changes).
- * - Supports Escape-to-close.
- *
- * Owner: WebForm UI (React)
- */
-export const useConfirmDialog = (opts?: {
+export const useFieldChangeDialog = (opts?: {
   closeOnKey?: unknown;
   eventPrefix?: string;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }) => {
-  const eventPrefix = (opts?.eventPrefix || 'ui.confirmDialog').toString();
-  const [state, setState] = useState<ConfirmDialogState>({
+  const eventPrefix = (opts?.eventPrefix || 'ui.fieldChangeDialog').toString();
+  const [state, setState] = useState<FieldChangeDialogState>({
     open: false,
     title: '',
     message: '',
     confirmLabel: '',
     cancelLabel: '',
+    inputs: [],
+    values: {},
     kind: undefined,
     refId: undefined
   });
-  const confirmRef = useRef<(() => void) | null>(null);
+  const confirmRef = useRef<((values: Record<string, FieldValue>) => void) | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
   const openedOnKeyRef = useRef<unknown>(undefined);
+
+  const setInputValue = useCallback((id: string, value: FieldValue) => {
+    setState(prev => {
+      if (!prev.open) return prev;
+      const next = { ...prev.values, [id]: value };
+      return { ...prev, values: next };
+    });
+  }, []);
 
   const cancel = useCallback(() => {
     const handler = cancelRef.current;
     setState(prev => (prev.open ? { ...prev, open: false } : prev));
-    confirmRef.current = null;
-    cancelRef.current = null;
-    openedOnKeyRef.current = undefined;
     opts?.onDiagnostic?.(`${eventPrefix}.cancel`, { kind: state.kind || null, refId: state.refId || null });
     try {
       handler?.();
-    } catch (_) {
-      // ignore
+    } catch (err: any) {
+      opts?.onDiagnostic?.(`${eventPrefix}.cancel.exception`, {
+        kind: state.kind || null,
+        refId: state.refId || null,
+        message: err?.message || err || 'unknown'
+      });
     }
+    confirmRef.current = null;
+    cancelRef.current = null;
+    openedOnKeyRef.current = undefined;
   }, [eventPrefix, opts, state.kind, state.refId]);
 
   const confirm = useCallback(() => {
-    const fn = confirmRef.current;
+    const handler = confirmRef.current;
+    const values = state.values;
     const meta = { kind: state.kind || null, refId: state.refId || null };
     setState(prev => (prev.open ? { ...prev, open: false } : prev));
     confirmRef.current = null;
@@ -74,20 +95,21 @@ export const useConfirmDialog = (opts?: {
     openedOnKeyRef.current = undefined;
     opts?.onDiagnostic?.(`${eventPrefix}.confirm`, meta);
     try {
-      fn?.();
+      handler?.(values);
     } catch (err: any) {
       opts?.onDiagnostic?.(`${eventPrefix}.confirm.exception`, { ...meta, message: err?.message || err || 'unknown' });
     }
-  }, [eventPrefix, opts, state.kind, state.refId]);
+  }, [eventPrefix, opts, state.kind, state.refId, state.values]);
 
-  const openConfirm = useCallback(
-    (args: ConfirmDialogOpenArgs) => {
+  const open = useCallback(
+    (args: FieldChangeDialogOpenArgs) => {
       const title = (args?.title || '').toString();
       const message = (args?.message || '').toString();
       const confirmLabel = (args?.confirmLabel || '').toString();
       const cancelLabel = (args?.cancelLabel || '').toString();
       const kind = (args?.kind || '').toString() || undefined;
       const refId = (args?.refId || '').toString() || undefined;
+      const values = args?.values ? { ...args.values } : {};
       confirmRef.current = args?.onConfirm || null;
       cancelRef.current = args?.onCancel || null;
       openedOnKeyRef.current = opts?.closeOnKey;
@@ -97,6 +119,8 @@ export const useConfirmDialog = (opts?: {
         message,
         confirmLabel,
         cancelLabel,
+        inputs: Array.isArray(args.inputs) ? args.inputs : [],
+        values,
         kind,
         refId
       });
@@ -105,7 +129,6 @@ export const useConfirmDialog = (opts?: {
     [eventPrefix, opts]
   );
 
-  // Escape closes the dialog.
   useEffect(() => {
     if (!state.open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -118,7 +141,6 @@ export const useConfirmDialog = (opts?: {
     return () => globalThis.removeEventListener?.('keydown', onKeyDown as any);
   }, [cancel, eventPrefix, opts, state.kind, state.open, state.refId]);
 
-  // Auto-close when the key changes (e.g., view navigation).
   useEffect(() => {
     if (!state.open) return;
     if (openedOnKeyRef.current === undefined) return;
@@ -127,6 +149,5 @@ export const useConfirmDialog = (opts?: {
     cancel();
   }, [cancel, eventPrefix, opts?.closeOnKey, opts, state.kind, state.open, state.refId]);
 
-  return { state, openConfirm, cancel, confirm } as const;
+  return { state, open, cancel, confirm, setInputValue } as const;
 };
-

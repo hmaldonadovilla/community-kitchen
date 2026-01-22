@@ -2,12 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   loadOptionsFromDataSource,
   optionKey,
-  normalizeLanguage
+  normalizeLanguage,
+  toOptionSet,
+  buildLocalizedOptions
 } from '../core';
 import {
   FieldValue,
+  FieldChangeDialogConfig,
   LangCode,
   LocalizedString,
+  SelectionEffect,
   WebQuestionDefinition,
   WebFormSubmission
 } from '../types';
@@ -48,6 +52,8 @@ import { BlockingOverlay } from './features/overlays/BlockingOverlay';
 import { ConfirmDialogOverlay } from './features/overlays/ConfirmDialogOverlay';
 import { useBlockingOverlay } from './features/overlays/useBlockingOverlay';
 import { useConfirmDialog } from './features/overlays/useConfirmDialog';
+import { FieldChangeDialogOverlay } from './features/fieldChangeDialog/FieldChangeDialogOverlay';
+import { FieldChangeDialogInputState, useFieldChangeDialog } from './features/fieldChangeDialog/useFieldChangeDialog';
 import { runUpdateRecordAction } from './features/customActions/updateRecord/runUpdateRecordAction';
 import {
   buildDraftPayload,
@@ -63,9 +69,16 @@ import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectio
 import { detectDebug } from './app/utils';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import {
+  applyFieldChangeDialogTargets,
+  evaluateFieldChangeDialogWhen,
+  resolveFieldChangeDialogSource,
+  resolveTargetFieldConfig
+} from './app/fieldChangeDialog';
+import {
   buildInitialLineItems,
   buildSubgroupKey,
   clearAutoIncrementFields,
+  parseSubgroupKey,
   parseRowNonMatchOptions,
   resolveSubgroupKey,
   ROW_NON_MATCH_OPTIONS_KEY
@@ -77,7 +90,7 @@ import { buildListViewLegendItems } from './app/listViewLegend';
 import { upsertListCacheRowPure } from './app/listCache';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
-import { resolveLabel } from './utils/labels';
+import { resolveFieldLabel, resolveLabel } from './utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from './utils/valueDisplay';
 import { SYSTEM_FONT_STACK } from '../../constants/typography';
 import { tSystem } from '../systemStrings';
@@ -103,6 +116,24 @@ type SubmissionMeta = {
 };
 
 type DraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused';
+
+type FieldChangePending = {
+  fieldPath: string;
+  scope: 'top' | 'line';
+  fieldId: string;
+  groupId?: string;
+  rowId?: string;
+  dialog: FieldChangeDialogConfig;
+  effectQuestion?: WebQuestionDefinition;
+  selectionEffects?: SelectionEffect[];
+  prevSnapshot: { values: Record<string, FieldValue>; lineItems: LineItemState };
+  nextValue: FieldValue;
+  autoSaveSnapshot: {
+    dirty: boolean;
+    queued: boolean;
+    lastSeen: { values: Record<string, FieldValue>; lineItems: LineItemState } | null;
+  };
+};
 
 const computeDedupSignatureFromValues = (rulesRaw: any, values: Record<string, any>): string => {
   const rules: any[] = Array.isArray(rulesRaw) ? rulesRaw : [];
@@ -424,6 +455,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
   // Feature overlays (kept out of App.tsx as much as possible; App only wires them).
   const customConfirm = useConfirmDialog({ closeOnKey: view, eventPrefix: 'ui.customConfirm', onDiagnostic: logEvent });
+  const fieldChangeDialog = useFieldChangeDialog({ closeOnKey: view, eventPrefix: 'ui.fieldChangeDialog', onDiagnostic: logEvent });
   const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
   const navigateHomeBusy = useBlockingOverlay({ eventPrefix: 'navigate.home.busy', onDiagnostic: logEvent });
   const updateRecordBusyOpen = updateRecordBusy.state.open;
@@ -431,6 +463,366 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     const key = (formKey || '').toString().trim() || 'default';
     return `ck.autosaveNotice.${key}`;
   }, [formKey]);
+
+  const fieldChangePendingRef = useRef<Record<string, FieldChangePending>>({});
+  const fieldChangeActiveRef = useRef<FieldChangePending | null>(null);
+
+  const resolveOptionGroupKey = (args: {
+    targetScope: 'top' | 'row' | 'parent' | 'effect';
+    contextGroupId?: string;
+    effectGroupId?: string;
+  }): string | undefined => {
+    const contextGroupId = (args.contextGroupId || '').toString().trim();
+    if (args.targetScope === 'top') return undefined;
+    if (args.targetScope === 'effect' && args.effectGroupId) {
+      const effectGroupId = args.effectGroupId.toString().trim();
+      if (effectGroupId.includes('::')) return effectGroupId;
+      if (!contextGroupId) return effectGroupId || undefined;
+      const parsed = parseSubgroupKey(contextGroupId);
+      if (parsed) return `${parsed.parentGroupId}::${effectGroupId}`;
+      return effectGroupId || undefined;
+    }
+    if (!contextGroupId) return undefined;
+    const parsed = parseSubgroupKey(contextGroupId);
+    if (!parsed) return contextGroupId;
+    if (args.targetScope === 'parent') return parsed.parentGroupId;
+    return `${parsed.parentGroupId}::${parsed.subGroupId}`;
+  };
+
+  const buildFieldChangeDialogInputs = useCallback(
+    (pending: FieldChangePending): { inputs: FieldChangeDialogInputState[]; values: Record<string, FieldValue> } => {
+      const inputs: FieldChangeDialogInputState[] = [];
+      const values: Record<string, FieldValue> = {};
+      const dialogInputs = pending.dialog?.inputs || [];
+      const selectionEffects = pending.selectionEffects || [];
+      const context = { scope: pending.scope, groupId: pending.groupId };
+
+      const resolveTargetValue = (target: any): FieldValue | undefined => {
+        if (!target) return undefined;
+        if (target.scope === 'top') return valuesRef.current[target.fieldId];
+        if (target.scope === 'row') {
+          const rows = pending.groupId ? lineItemsRef.current[pending.groupId] || [] : [];
+          const row = rows.find(r => r.id === pending.rowId);
+          return row?.values?.[target.fieldId] as FieldValue;
+        }
+        if (target.scope === 'parent') {
+          const parsed = pending.groupId ? parseSubgroupKey(pending.groupId) : null;
+          if (parsed) {
+            const parentRows = lineItemsRef.current[parsed.parentGroupId] || [];
+            const parentRow = parentRows.find(r => r.id === parsed.parentRowId);
+            return parentRow?.values?.[target.fieldId] as FieldValue;
+          }
+          return valuesRef.current[target.fieldId];
+        }
+        return undefined;
+      };
+
+      dialogInputs.forEach(inputCfg => {
+        const inputId = (inputCfg?.id || '').toString().trim();
+        if (!inputId || !inputCfg?.target) return;
+        const target = inputCfg.target as any;
+        const effect =
+          target.scope === 'effect'
+            ? selectionEffects.find(effectEntry => (effectEntry?.id || '').toString().trim() === (target.effectId || '').toString().trim())
+            : undefined;
+        const { question, field } = resolveTargetFieldConfig({
+          definition,
+          target,
+          context,
+          selectionEffects
+        });
+        const typeRaw = (
+          (inputCfg as any).type ||
+          (question as any)?.type ||
+          (field as any)?.type ||
+          'TEXT'
+        )
+          .toString()
+          .trim()
+          .toUpperCase();
+        const type =
+          typeRaw === 'PARAGRAPH'
+            ? 'paragraph'
+            : typeRaw === 'NUMBER'
+              ? 'number'
+              : typeRaw === 'CHOICE'
+                ? 'choice'
+                : typeRaw === 'CHECKBOX'
+                  ? 'checkbox'
+                  : typeRaw === 'DATE'
+                    ? 'date'
+                    : 'text';
+        const fallbackLabel = question
+          ? resolveLabel(question, languageRef.current)
+          : resolveFieldLabel(field, languageRef.current, inputId);
+        const label = resolveLocalizedString((inputCfg as any).label, languageRef.current, fallbackLabel || inputId).toString();
+        const placeholder = resolveLocalizedString((inputCfg as any).placeholder, languageRef.current, '').toString().trim() || undefined;
+
+        let options: FieldChangeDialogInputState['options'] = undefined;
+        if (type === 'choice' || type === 'checkbox') {
+          const optionGroupKey = resolveOptionGroupKey({
+            targetScope: target.scope,
+            contextGroupId: pending.groupId,
+            effectGroupId: effect?.groupId
+          });
+          const optionSet =
+            question
+              ? optionState[optionKey(question.id)] || toOptionSet(question as any)
+              : field
+                ? optionState[optionKey(field.id, optionGroupKey)] || toOptionSet(field as any)
+                : undefined;
+          if (optionSet && optionSet.en) {
+            const items = buildLocalizedOptions(optionSet as any, optionSet.en as any, languageRef.current);
+            options = items.map(item => ({ value: item.value, label: item.label }));
+          }
+        }
+
+        inputs.push({
+          id: inputId,
+          label,
+          placeholder,
+          type,
+          required: (inputCfg as any).required === true,
+          options
+        });
+        const initial = resolveTargetValue(target);
+        if (initial !== undefined) {
+          values[inputId] = initial;
+        }
+      });
+
+      return { inputs, values };
+    },
+    [definition, optionState, resolveOptionGroupKey]
+  );
+
+  const revertFieldChangePending = useCallback(
+    (pending: FieldChangePending, reason: string, extra?: Record<string, unknown>) => {
+      setValues(pending.prevSnapshot.values);
+      setLineItems(pending.prevSnapshot.lineItems);
+      valuesRef.current = pending.prevSnapshot.values;
+      lineItemsRef.current = pending.prevSnapshot.lineItems;
+      dedupHoldRef.current = false;
+      autoSaveDirtyRef.current = pending.autoSaveSnapshot.dirty;
+      autoSaveQueuedRef.current = pending.autoSaveSnapshot.queued;
+      setDraftSave({ phase: autoSaveDirtyRef.current ? 'dirty' : 'idle' });
+      fieldChangeActiveRef.current = null;
+      delete fieldChangePendingRef.current[pending.fieldPath];
+      logEvent('fieldChangeDialog.reverted', {
+        reason,
+        fieldPath: pending.fieldPath,
+        fieldId: pending.fieldId,
+        groupId: pending.groupId || null,
+        rowId: pending.rowId || null,
+        ...extra
+      });
+    },
+    [logEvent, setLineItems, setValues]
+  );
+
+  const handleFieldChangeDialogConfirm = useCallback(
+    async (inputValues: Record<string, FieldValue>) => {
+      const pending = fieldChangeActiveRef.current;
+      if (!pending) return;
+      const dialogCfg = pending.dialog;
+      const baseTargetScope = pending.scope === 'top' ? 'top' : 'row';
+      const updates = [
+        {
+          target: { scope: baseTargetScope, fieldId: pending.fieldId },
+          value: pending.nextValue
+        }
+      ];
+      (dialogCfg.inputs || []).forEach(inputCfg => {
+        const inputId = (inputCfg?.id || '').toString().trim();
+        if (!inputId) return;
+        if (!inputCfg?.target) return;
+        const value = inputValues[inputId];
+        if (value === undefined) return;
+        updates.push({ target: inputCfg.target, value });
+      });
+
+      const applied = applyFieldChangeDialogTargets({
+        values: valuesRef.current,
+        lineItems: lineItemsRef.current,
+        updates,
+        context: { scope: pending.scope, groupId: pending.groupId, rowId: pending.rowId }
+      });
+      const mapped = applyValueMapsToForm(definition, applied.values, applied.lineItems, { mode: 'change' });
+
+      const dedupMode = (dialogCfg.dedupMode || 'auto') as 'auto' | 'always' | 'never';
+      const hasDedupKeyUpdate = updates.some(update => {
+        if (update.target.scope !== 'top') return false;
+        const fid = (update.target.fieldId || '').toString();
+        if (!fid) return false;
+        return Boolean(dedupKeyFieldIdsRef.current[fid] || dedupKeyFieldIdsRef.current[fid.toLowerCase()]);
+      });
+      const shouldRunFieldDedup = dedupMode === 'always' || (dedupMode === 'auto' && hasDedupKeyUpdate);
+
+      if (shouldRunFieldDedup) {
+        const signature = computeDedupSignatureFromValues((definition as any)?.dedupRules, mapped.values as any);
+        if (signature) {
+          const startedAt = Date.now();
+          setDedupChecking(true);
+          logEvent('dedup.fieldChange.check.start', {
+            source: 'fieldChangeDialog',
+            fieldId: pending.fieldId,
+            signatureLen: signature.length
+          });
+          try {
+            const payload = buildDraftPayload({
+              definition,
+              formKey,
+              language: languageRef.current,
+              values: mapped.values,
+              lineItems: mapped.lineItems
+            }) as any;
+            const res = await checkDedupConflictApi(payload);
+            if (res?.success) {
+              const conflict: any = (res as any)?.conflict || null;
+              if (conflict?.existingRecordId) {
+                const info: DedupConflictInfo = {
+                  ruleId: conflict.ruleId,
+                  message: conflict.message,
+                  existingRecordId: conflict.existingRecordId,
+                  existingRowNumber: conflict.existingRowNumber
+                };
+                setDedupNotice(info);
+                setDedupConflict(info);
+                setDedupChecking(false);
+                logEvent('dedup.fieldChange.rejected', {
+                  fieldPath: pending.fieldPath,
+                  fieldId: pending.fieldId,
+                  ruleId: info.ruleId || null,
+                  existingRecordId: info.existingRecordId || null
+                });
+                revertFieldChangePending(pending, 'dedupConflict', { ruleId: info.ruleId || null });
+                return;
+              }
+            }
+            logEvent('dedup.fieldChange.check.ok', { source: 'fieldChangeDialog', fieldId: pending.fieldId });
+          } catch (err: any) {
+            const msg = (err?.message || err?.toString?.() || 'Failed').toString();
+            logEvent('dedup.fieldChange.check.exception', {
+              source: 'fieldChangeDialog',
+              fieldId: pending.fieldId,
+              message: msg
+            });
+          } finally {
+            setDedupChecking(false);
+            logEvent('dedup.fieldChange.check.end', {
+              source: 'fieldChangeDialog',
+              durationMs: Date.now() - startedAt
+            });
+          }
+        }
+      }
+
+      setValues(mapped.values);
+      setLineItems(mapped.lineItems);
+      valuesRef.current = mapped.values;
+      lineItemsRef.current = mapped.lineItems;
+      dedupHoldRef.current = false;
+      autoSaveDirtyRef.current = true;
+      setDraftSave({ phase: 'dirty' });
+
+      const selectionEffects = pending.selectionEffects || [];
+      if (selectionEffects.length && pending.effectQuestion) {
+        const lineItemContext =
+          pending.scope === 'line' && pending.groupId && pending.rowId
+            ? {
+                groupId: pending.groupId,
+                rowId: pending.rowId,
+                rowValues:
+                  (mapped.lineItems[pending.groupId] || []).find(r => r.id === pending.rowId)?.values ||
+                  (lineItemsRef.current[pending.groupId] || []).find(r => r.id === pending.rowId)?.values ||
+                  {}
+              }
+            : undefined;
+        runSelectionEffectsHelper({
+          definition,
+          question: pending.effectQuestion,
+          value: pending.nextValue,
+          language,
+          values: mapped.values,
+          setValues,
+          setLineItems,
+          logEvent,
+          opts: lineItemContext ? { lineItem: lineItemContext } : undefined,
+          effectOverrides: applied.effectOverrides,
+          onRowAppended: ({ anchor, targetKey, rowId, source }) => {
+            setExternalScrollAnchor(anchor);
+            logEvent('ui.selectionEffect.rowAppended', { anchor, targetKey, rowId, source: source || null });
+          }
+        });
+      }
+
+      fieldChangeActiveRef.current = null;
+      delete fieldChangePendingRef.current[pending.fieldPath];
+      logEvent('fieldChangeDialog.applied', {
+        fieldPath: pending.fieldPath,
+        fieldId: pending.fieldId,
+        groupId: pending.groupId || null,
+        rowId: pending.rowId || null
+      });
+    },
+    [definition, formKey, language, logEvent, revertFieldChangePending, setExternalScrollAnchor, setLineItems, setValues]
+  );
+
+  const handleFieldChangeDialogCancel = useCallback(() => {
+    const pending = fieldChangeActiveRef.current;
+    if (!pending) return;
+    revertFieldChangePending(pending, 'cancel');
+  }, [revertFieldChangePending]);
+
+  const openFieldChangeDialog = useCallback(
+    (pending: FieldChangePending) => {
+      if (!pending || fieldChangeDialog.state.open) return;
+      fieldChangeActiveRef.current = pending;
+      const dialogCfg = pending.dialog;
+      const title = resolveLocalizedString(
+        dialogCfg.title,
+        languageRef.current,
+        tSystem('fieldChangeDialog.title', languageRef.current, 'Confirm change')
+      );
+      const message = resolveLocalizedString(
+        dialogCfg.message,
+        languageRef.current,
+        tSystem('fieldChangeDialog.message', languageRef.current, 'Review this change before continuing.')
+      );
+      const confirmLabel = resolveLocalizedString(
+        dialogCfg.confirmLabel,
+        languageRef.current,
+        tSystem('common.confirm', languageRef.current, 'Confirm')
+      );
+      const cancelLabel = resolveLocalizedString(
+        dialogCfg.cancelLabel,
+        languageRef.current,
+        tSystem('common.cancel', languageRef.current, 'Cancel')
+      );
+
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      dedupHoldRef.current = true;
+      setDraftSave({ phase: 'paused' });
+
+      const resolvedInputs = buildFieldChangeDialogInputs(pending);
+      fieldChangeDialog.open({
+        title,
+        message,
+        confirmLabel,
+        cancelLabel,
+        inputs: resolvedInputs.inputs,
+        values: resolvedInputs.values,
+        kind: 'fieldChange',
+        refId: pending.fieldPath,
+        onConfirm: handleFieldChangeDialogConfirm,
+        onCancel: handleFieldChangeDialogCancel
+      });
+    },
+    [buildFieldChangeDialogInputs, fieldChangeDialog, handleFieldChangeDialogCancel, handleFieldChangeDialogConfirm]
+  );
 
   const handleUserEdit = useCallback(
     (args: {
@@ -442,10 +834,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       event?: 'change' | 'blur';
       tag?: string;
       inputType?: string;
+      nextValue?: FieldValue;
     }) => {
       try {
         const fieldPath = (args?.fieldPath || '').toString();
         const fieldId = (args?.fieldId || '').toString();
+        const fieldKey = fieldPath || fieldId;
+        const autoSaveDirtyBefore = autoSaveDirtyRef.current;
+        const autoSaveQueuedBefore = autoSaveQueuedRef.current;
         // Clear stale dedup notice on any new user edit.
         if (dedupNotice) setDedupNotice(null);
 
@@ -465,6 +861,100 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         // For top-level dedup keys (reject rules): hold autosave; run dedup check on blur only.
         const isDedupKey =
           (fieldId && dedupKeyFieldIdsRef.current[fieldId]) || (fieldPath && dedupKeyFieldIdsRef.current[fieldPath]);
+
+        // Field-level guarded change dialog (ck-47)
+        if (args?.event === 'change' && fieldKey && args.nextValue !== undefined) {
+          const source = resolveFieldChangeDialogSource({
+            definition,
+            scope: args.scope,
+            fieldId,
+            groupId: args.groupId
+          });
+          const dialogCfg = source?.dialog;
+          if (dialogCfg?.when) {
+            const shouldTrigger = evaluateFieldChangeDialogWhen({
+              when: dialogCfg.when,
+              scope: args.scope,
+              fieldId,
+              groupId: args.groupId,
+              rowId: args.rowId,
+              nextValue: args.nextValue,
+              values: valuesRef.current,
+              lineItems: lineItemsRef.current
+            });
+            if (shouldTrigger) {
+              const existing = fieldChangePendingRef.current[fieldKey];
+              const prevSnapshot = existing?.prevSnapshot || {
+                values: valuesRef.current,
+                lineItems: lineItemsRef.current
+              };
+              const pending: FieldChangePending = {
+                fieldPath: fieldKey,
+                scope: args.scope,
+                fieldId,
+                groupId: args.groupId,
+                rowId: args.rowId,
+                dialog: dialogCfg,
+                effectQuestion: source?.question || (source?.field as any) || undefined,
+                selectionEffects: (source?.question || source?.field)?.selectionEffects || [],
+                prevSnapshot,
+                nextValue: args.nextValue,
+                autoSaveSnapshot: {
+                  dirty: autoSaveDirtyBefore,
+                  queued: autoSaveQueuedBefore,
+                  lastSeen: lastAutoSaveSeenRef.current
+                }
+              };
+              fieldChangePendingRef.current[fieldKey] = pending;
+              logEvent('fieldChangeDialog.pending', {
+                fieldPath: fieldKey,
+                fieldId,
+                groupId: args.groupId || null,
+                rowId: args.rowId || null
+              });
+              const changeType = (source?.question?.type || source?.field?.type || '').toString().toUpperCase();
+              const openOnChange =
+                changeType === 'CHOICE' || changeType === 'CHECKBOX' || changeType === 'DATE' || changeType === 'FILE_UPLOAD';
+              if (openOnChange) {
+                openFieldChangeDialog(pending);
+              }
+            } else if (fieldChangePendingRef.current[fieldKey]) {
+              delete fieldChangePendingRef.current[fieldKey];
+              logEvent('fieldChangeDialog.pending.cleared', { fieldPath: fieldKey, fieldId });
+            }
+          } else if (fieldChangePendingRef.current[fieldKey]) {
+            delete fieldChangePendingRef.current[fieldKey];
+          }
+        }
+
+        if (args?.event === 'blur' && fieldKey) {
+          const pending = fieldChangePendingRef.current[fieldKey];
+          if (pending) {
+            const stillValid = evaluateFieldChangeDialogWhen({
+              when: pending.dialog?.when,
+              scope: pending.scope,
+              fieldId: pending.fieldId,
+              groupId: pending.groupId,
+              rowId: pending.rowId,
+              nextValue: pending.nextValue,
+              values: valuesRef.current,
+              lineItems: lineItemsRef.current
+            });
+            if (!stillValid) {
+              delete fieldChangePendingRef.current[fieldKey];
+              logEvent('fieldChangeDialog.pending.cleared', { fieldPath: fieldKey, fieldId });
+              return;
+            }
+            openFieldChangeDialog(pending);
+            return;
+          }
+        }
+
+        if (fieldKey && fieldChangePendingRef.current[fieldKey]) {
+          // Skip standard dedup blur logic while a guarded change is pending.
+          return;
+        }
+
         if (args?.scope === 'top' && isDedupKey) {
           if (dedupConflictRef.current) {
             dedupConflictRef.current = null;
@@ -542,7 +1032,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         // ignore
       }
     },
-    [dedupNotice, definition, logEvent]
+    [dedupNotice, definition, logEvent, openFieldChangeDialog]
   );
 
   useEffect(() => {
@@ -4497,8 +4987,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       lineItem?: { groupId: string; rowId: string; rowValues: any };
       contextId?: string;
       forceContextReset?: boolean;
-    }
+    },
+    effectOverrides?: Record<string, Record<string, FieldValue>>,
+    ignorePending?: boolean
   ) {
+    const fieldPath = opts?.lineItem
+      ? `${opts.lineItem.groupId}__${question.id}__${opts.lineItem.rowId}`
+      : question.id;
+    const pending = fieldChangePendingRef.current[fieldPath];
+    if (pending && !ignorePending) {
+      logEvent('fieldChangeDialog.selectionEffect.deferred', {
+        fieldPath,
+        fieldId: question.id,
+        groupId: opts?.lineItem?.groupId || null,
+        rowId: opts?.lineItem?.rowId || null
+      });
+      return;
+    }
     runSelectionEffectsHelper({
       definition,
       question,
@@ -4509,6 +5014,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       setLineItems,
       logEvent,
       opts,
+      effectOverrides,
       onRowAppended: ({ anchor, targetKey, rowId, source }) => {
         setExternalScrollAnchor(anchor);
         logEvent('ui.selectionEffect.rowAppended', { anchor, targetKey, rowId, source: source || null });
@@ -5688,6 +6194,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         zIndex={12010}
         onCancel={() => dismissAutoSaveNotice('cancel')}
         onConfirm={() => dismissAutoSaveNotice('confirm')}
+      />
+
+      <FieldChangeDialogOverlay
+        open={fieldChangeDialog.state.open}
+        title={fieldChangeDialog.state.title || tSystem('common.confirm', language, 'Confirm')}
+        message={fieldChangeDialog.state.message || ''}
+        confirmLabel={fieldChangeDialog.state.confirmLabel || tSystem('common.confirm', language, 'Confirm')}
+        cancelLabel={fieldChangeDialog.state.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
+        inputs={fieldChangeDialog.state.inputs}
+        values={fieldChangeDialog.state.values}
+        onValueChange={fieldChangeDialog.setInputValue}
+        onCancel={fieldChangeDialog.cancel}
+        onConfirm={fieldChangeDialog.confirm}
+        zIndex={12015}
       />
 
       <ConfirmDialogOverlay

@@ -35,6 +35,8 @@ Meal Production (Steps UI) | Recipes (Home Page) | Storage and cleaning checks (
 
 ### Data, rules, and configuration
 
+- **Field-level guarded changes (ck-47)**: Configure per-field `changeDialog` rules (top-level or line-item fields) to pause autosave and confirm edits when `changeDialog.when` matches after a change. You can add dialog `inputs` to update peer fields, parent fields, or selection-effect rows (`target.scope: "row" | "parent" | "top" | "effect"` with `effectId`). On confirm, a dedup precheck runs for reject-rule keys (or `dedupMode: "always"`); on cancel/conflict, the change is reverted and autosave resumes.
+
 - **Dynamic Options & Rules**: Option filtering based on another field plus cross-field validation rules (main form and line items), including non-blocking warning rules (`level: "warning"`).
 - **Line-item aware visibility**: `visibility` supports `lineItems` clauses to show/hide top-level fields or BUTTONs based on row-level conditions in line-item groups or subgroups, with optional parent-scoped matching via `parentWhen` (for example, only show an Ingredients button when a non-reheat parent row has a manual ingredient entry).
 - **Localized Sorting & Tooltips**: All option lists sort alphabetically per language; options can show tooltips from data sources (with inline fallback).
