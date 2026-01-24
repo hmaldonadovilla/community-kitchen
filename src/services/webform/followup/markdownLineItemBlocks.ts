@@ -1,4 +1,5 @@
 import { QuestionConfig } from '../../../types';
+import type { DataSourceService } from '../dataSources';
 import { replaceLineItemPlaceholders, resolveLineItemTokenValue } from './lineItemPlaceholders';
 import { applyOrderBy, consolidateConsolidatedTableRows } from './tableConsolidation';
 import { extractLineItemPlaceholders, parseExcludeWhenClauses, parseOrderByKeys } from './tableDirectives';
@@ -54,6 +55,62 @@ const extractConsolidatedTableFromText = (text: string): { groupId: string; subG
   return { groupId: (m[1] || '').toString().toUpperCase(), subGroupId: (m[2] || '').toString().toUpperCase() };
 };
 
+const resolveSubPath = (
+  group: QuestionConfig,
+  token: string
+): { config: SubGroupConfig; keyPath: string[]; token: string } | null => {
+  if (!group || !token) return null;
+  const pathTokens = token
+    .toString()
+    .split('.')
+    .map(seg => seg.trim().toUpperCase())
+    .filter(Boolean);
+  if (!pathTokens.length) return null;
+  let current: any = (group as any).lineItemConfig;
+  const keyPath: string[] = [];
+  let lastMatch: SubGroupConfig | null = null;
+  for (let i = 0; i < pathTokens.length; i += 1) {
+    const target = pathTokens[i];
+    const subs = (current?.subGroups || []) as any[];
+    const match = subs.find((sub: any) => {
+      const key = resolveSubgroupKey(sub as any);
+      const normalizedKey = (key || '').toString().toUpperCase();
+      const slugKey = slugifyPlaceholder(key || '');
+      return normalizedKey === target || slugKey === target;
+    });
+    if (!match) return null;
+    const resolvedKey = resolveSubgroupKey(match as any);
+    if (!resolvedKey) return null;
+    keyPath.push(resolvedKey);
+    lastMatch = match as SubGroupConfig;
+    if (i === pathTokens.length - 1) {
+      return { config: lastMatch, keyPath, token: keyPath.join('.') };
+    }
+    current = match;
+  }
+  return null;
+};
+
+const flattenSubRows = (rows: any[], keyPath: string[]): any[] => {
+  if (!rows || !rows.length || !keyPath.length) return [];
+  const flattened: any[] = [];
+  rows.forEach(parentRow => {
+    let currentRows: any[] = [parentRow];
+    keyPath.forEach(key => {
+      const next: any[] = [];
+      currentRows.forEach(row => {
+        const children = Array.isArray((row || {})[key]) ? (row as any)[key] : [];
+        children.forEach((child: any) => next.push(child || {}));
+      });
+      currentRows = next;
+    });
+    currentRows.forEach((child: any) => {
+      flattened.push({ __parent: parentRow, ...(parentRow || {}), ...(child || {}) });
+    });
+  });
+  return flattened;
+};
+
 /**
  * Apply line-item row expansion directives to Markdown templates.
  *
@@ -71,8 +128,10 @@ export const applyMarkdownLineItemBlocks = (args: {
   markdown: string;
   questions: QuestionConfig[];
   lineItemRows: Record<string, any[]>;
+  dataSources?: DataSourceService;
+  language?: string;
 }): string => {
-  const { markdown, questions, lineItemRows } = args;
+  const { markdown, questions, lineItemRows, dataSources, language } = args;
   const raw = (markdown || '').toString();
   if (!raw.trim()) return raw;
 
@@ -143,18 +202,22 @@ export const applyMarkdownLineItemBlocks = (args: {
     }
 
     const subTokens = Array.from(new Set(allPlaceholders.map(p => p.subGroupId).filter(Boolean))) as string[];
-    const targetSubToken = subTokens.length === 1 ? (subTokens[0] || '').toString().toUpperCase() : '';
-    if (subTokens.length > 1) {
+    const resolvedSubTokens = subTokens
+      .map(token => resolveSubPath(group, token))
+      .filter(Boolean) as Array<{ config: SubGroupConfig; keyPath: string[]; token: string }>;
+    if (resolvedSubTokens.length > 1) {
       blockLines.forEach(bl => out.push(stripDirectiveTokens(bl)));
       i = j;
       continue;
     }
+    const resolvedSub = resolvedSubTokens.length ? resolvedSubTokens[0] : null;
+    const targetSubToken = (resolvedSub?.token || '').toString().toUpperCase();
 
     // Only expand blocks that look like they intend row expansion:
     // - subgroup placeholders (GROUP.SUBGROUP.FIELD), or
     // - explicit directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE)
     const hasDirective = /{{\s*(ORDER_BY|EXCLUDE_WHEN|CONSOLIDATED_TABLE)\s*\(/i.test(blockText);
-    const hasSubPlaceholder = allPlaceholders.some(p => Boolean(p.subGroupId));
+    const hasSubPlaceholder = resolvedSubTokens.length > 0;
     if (!hasDirective && !hasSubPlaceholder) {
       // Treat GROUP.FIELD placeholders as "aggregated" (handled by applyPlaceholders later).
       blockLines.forEach(bl => out.push(stripDirectiveTokens(bl)));
@@ -164,55 +227,10 @@ export const applyMarkdownLineItemBlocks = (args: {
 
     const sourceRows = (lineItemRows || {})[group.id] || [];
     let rows: any[] = Array.isArray(sourceRows) ? sourceRows.slice() : [];
-    let subConfig: SubGroupConfig | undefined;
+    const subConfig: SubGroupConfig | undefined = resolvedSub?.config;
 
-    if (targetSubToken && (group as any)?.lineItemConfig?.subGroups?.length) {
-      const pathTokens = targetSubToken.split('.').map(seg => seg.trim().toUpperCase()).filter(Boolean);
-      const resolveSubPath = (path: string[]): { config: SubGroupConfig; keyPath: string[] } | null => {
-        let current: any = (group as any).lineItemConfig;
-        const keyPath: string[] = [];
-        for (let i = 0; i < path.length; i += 1) {
-          const token = path[i];
-          const subs = (current?.subGroups || []) as any[];
-          const match = subs.find((sub: any) => {
-            const key = resolveSubgroupKey(sub as any);
-            const normalizedKey = (key || '').toString().toUpperCase();
-            const slugKey = slugifyPlaceholder(key || '');
-            return normalizedKey === token || slugKey === token;
-          });
-          if (!match) return null;
-          const resolvedKey = resolveSubgroupKey(match as any);
-          if (!resolvedKey) return null;
-          keyPath.push(resolvedKey);
-          if (i === path.length - 1) {
-            return { config: match as SubGroupConfig, keyPath };
-          }
-          current = match;
-        }
-        return null;
-      };
-      const resolved = resolveSubPath(pathTokens);
-      subConfig = resolved?.config;
-      if (subConfig && resolved) {
-        const flattened: any[] = [];
-        (rows || []).forEach(parentRow => {
-          let currentRows: any[] = [parentRow];
-          resolved.keyPath.forEach(key => {
-            const next: any[] = [];
-            currentRows.forEach(row => {
-              const children = Array.isArray((row || {})[key]) ? (row as any)[key] : [];
-              children.forEach((child: any) => next.push(child || {}));
-            });
-            currentRows = next;
-          });
-          currentRows.forEach((child: any) => {
-            flattened.push({ __parent: parentRow, ...(parentRow || {}), ...(child || {}) });
-          });
-        });
-        rows = flattened;
-      } else {
-        rows = [];
-      }
+    if (resolvedSub && resolvedSub.keyPath.length) {
+      rows = flattenSubRows(rows, resolvedSub.keyPath);
     }
 
     const excludeWhen = extractExcludeWhenFromText(blockText);
@@ -229,7 +247,9 @@ export const applyMarkdownLineItemBlocks = (args: {
             group,
             rowData: dataRow,
             subGroup: subConfig as any,
-            subGroupToken: targetSubToken
+            subGroupToken: targetSubToken,
+            dataSources,
+            language
           });
           const current = normalizeText(rendered).toLowerCase();
           if (!current) return false;
@@ -248,7 +268,9 @@ export const applyMarkdownLineItemBlocks = (args: {
           rowData: dataRow,
           subGroup: subConfig as any,
           subGroupToken: targetSubToken,
-          lineItemRows
+          lineItemRows,
+          dataSources,
+          language
         });
         return !shouldExclude;
       });
@@ -269,7 +291,9 @@ export const applyMarkdownLineItemBlocks = (args: {
           placeholders: placeholdersForKey,
           group,
           subConfig: subConfig as any,
-          targetSubGroupId: targetSubToken
+          targetSubGroupId: targetSubToken,
+          dataSources,
+          language
         });
       }
     }
@@ -291,7 +315,9 @@ export const applyMarkdownLineItemBlocks = (args: {
         out.push(
           replaceLineItemPlaceholders(tpl, group, dataRow, {
             subGroup: subConfig as any,
-            subGroupToken: targetSubToken
+            subGroupToken: targetSubToken,
+            dataSources,
+            language
           })
         );
       });

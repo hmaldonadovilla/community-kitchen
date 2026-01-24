@@ -230,6 +230,8 @@ components:
 
                 Placeholder helpers:
                 - `{{DEFAULT(KEY, "fallback")}}`: use a fallback value when the referenced placeholder is empty.
+                - Line-item data source columns can be referenced via `{{GROUP.FIELD.COLUMN_ID}}` or `{{GROUP.SUBGROUP.FIELD.COLUMN_ID}}`.
+                - `GROUP_TABLE` supports nested subgroup paths, e.g. `{{GROUP_TABLE(PARENT.SUBGROUP.FIELD)}}`.
             templateId:
               $ref: '#/components/schemas/TemplateIdMap'
               description: Google Drive file id config (string, language map, or `cases` selector) for the Markdown template.

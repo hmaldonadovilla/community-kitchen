@@ -1,7 +1,23 @@
 import { LineItemGroupConfig, QuestionConfig } from '../../../types';
+import type { DataSourceService } from '../dataSources';
 import { formatTemplateValue, slugifyPlaceholder, resolveSubgroupKey } from './utils';
 
 type SubGroupConfig = LineItemGroupConfig;
+
+const resolveDataSourceDetails = (args: {
+  field: any;
+  raw: unknown;
+  dataSources?: DataSourceService;
+  language?: string;
+}): Record<string, string> | null => {
+  const { field, raw, dataSources, language } = args;
+  if (!dataSources || !language) return null;
+  if (!field || !(field as any).dataSource) return null;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const value = raw.toString().trim();
+  if (!value) return null;
+  return dataSources.lookupDataSourceDetails(field as any, value, language);
+};
 
 /**
  * Resolve a line-item placeholder token to its raw (unformatted) value.
@@ -13,8 +29,10 @@ export const resolveLineItemTokenValue = (args: {
   rowData: Record<string, any>;
   subGroup?: SubGroupConfig;
   subGroupToken?: string;
+  dataSources?: DataSourceService;
+  language?: string;
 }): unknown => {
-  const { token, group, rowData, subGroup, subGroupToken } = args;
+  const { token, group, rowData, subGroup, subGroupToken, dataSources, language } = args;
   if (!token) return '';
   const normalizedToken = token.toString().toUpperCase().replace(/\s+/g, '');
   const normalizedGroupId = (group.id || '').toString().toUpperCase();
@@ -22,6 +40,17 @@ export const resolveLineItemTokenValue = (args: {
 
   const replacements: Record<string, unknown> = {};
   const parent = (rowData as any)?.__parent;
+  const addDataSourceTokens = (field: any, raw: unknown, bases: string[]): void => {
+    const details = resolveDataSourceDetails({ field, raw, dataSources, language });
+    if (!details) return;
+    Object.entries(details).forEach(([key, val]) => {
+      const dsKey = (key || '').toString().trim().toUpperCase();
+      if (!dsKey) return;
+      bases.forEach(base => {
+        replacements[`${base}.${dsKey}`] = val ?? '';
+      });
+    });
+  };
   const resolveGroupValue = (fieldId: string): unknown => {
     if (!fieldId) return '';
     const hasParent = parent && Object.prototype.hasOwnProperty.call(parent || {}, fieldId);
@@ -46,6 +75,7 @@ export const resolveLineItemTokenValue = (args: {
     tokens.forEach(t => {
       replacements[t] = raw;
     });
+    addDataSourceTokens(field, raw, tokens);
   });
 
   // Consolidated table pseudo-fields (computed by the renderer, not part of the form schema).
@@ -66,6 +96,7 @@ export const resolveLineItemTokenValue = (args: {
       tokens.forEach(t => {
         replacements[t] = raw;
       });
+      addDataSourceTokens(field, raw, tokens);
     });
   }
 
@@ -108,7 +139,13 @@ export const replaceLineItemPlaceholders = (
   template: string,
   group: QuestionConfig,
   rowData: Record<string, any>,
-  opts?: { subGroup?: SubGroupConfig; subGroupToken?: string; collapsedOnly?: boolean }
+  opts?: {
+    subGroup?: SubGroupConfig;
+    subGroupToken?: string;
+    collapsedOnly?: boolean;
+    dataSources?: DataSourceService;
+    language?: string;
+  }
 ): string => {
   if (!template) return '';
   const normalizedGroupId = group.id.toUpperCase();
@@ -128,6 +165,23 @@ export const replaceLineItemPlaceholders = (
   );
   const replacements: Record<string, string> = {};
   const parent = (rowData as any)?.__parent;
+  const addDataSourceTokens = (field: any, raw: unknown, bases: string[]): void => {
+    const details = resolveDataSourceDetails({
+      field,
+      raw,
+      dataSources: opts?.dataSources,
+      language: opts?.language
+    });
+    if (!details) return;
+    Object.entries(details).forEach(([key, val]) => {
+      const dsKey = (key || '').toString().trim().toUpperCase();
+      if (!dsKey) return;
+      const text = formatTemplateValue(val);
+      bases.forEach(base => {
+        replacements[`${base}.${dsKey}`] = text;
+      });
+    });
+  };
   const resolveGroupValue = (fieldId: string): any => {
     if (!fieldId) return '';
     const hasParent = parent && Object.prototype.hasOwnProperty.call(parent || {}, fieldId);
@@ -153,6 +207,9 @@ export const replaceLineItemPlaceholders = (
     tokens.forEach(token => {
       replacements[token] = text;
     });
+    if (include) {
+      addDataSourceTokens(field, raw, tokens);
+    }
   });
 
   // Consolidated table pseudo-fields (computed by the renderer, not part of the form schema).
@@ -190,6 +247,9 @@ export const replaceLineItemPlaceholders = (
       tokens.forEach(token => {
         replacements[token] = text;
       });
+      if (include) {
+        addDataSourceTokens(field, raw, tokens);
+      }
     });
   }
 

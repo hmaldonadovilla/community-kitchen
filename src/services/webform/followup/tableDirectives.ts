@@ -5,26 +5,37 @@ type SubGroupConfig = LineItemGroupConfig;
 
 export const extractTableRepeatDirective = (
   table: GoogleAppsScript.Document.Table
-): { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string } | null => {
+): { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string; subGroupId?: string } | null => {
   const text = table.getText && table.getText();
   if (!text) return null;
-  const match = text.match(/{{(GROUP_TABLE|ROW_TABLE)\(([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/i);
+  const match = text.match(/{{(GROUP_TABLE|ROW_TABLE)\(([A-Z0-9_]+)\.([A-Z0-9_]+(?:\.[A-Z0-9_]+)*)\)}}/i);
   if (!match) return null;
-  return {
+  const pathParts = (match[3] || '')
+    .toString()
+    .split('.')
+    .map(p => p.trim())
+    .filter(Boolean);
+  if (!pathParts.length) return null;
+  const fieldId = (pathParts[pathParts.length - 1] || '').toUpperCase();
+  const subGroupId = pathParts.length > 1 ? pathParts.slice(0, -1).join('.').toUpperCase() : undefined;
+  const directive: { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string; subGroupId?: string } = {
     kind: (match[1] || '').toUpperCase() as 'GROUP_TABLE' | 'ROW_TABLE',
     groupId: match[2].toUpperCase(),
-    fieldId: match[3].toUpperCase()
+    fieldId
   };
+  if (subGroupId) directive.subGroupId = subGroupId;
+  return directive;
 };
 
 export const replaceTableRepeatDirectivePlaceholders = (
   table: GoogleAppsScript.Document.Table,
-  directive: { groupId: string; fieldId: string },
+  directive: { groupId: string; fieldId: string; subGroupId?: string },
   replacementValue: string,
   directiveType: 'GROUP_TABLE' | 'ROW_TABLE'
 ): void => {
   // IMPORTANT: replaceText() uses regex. We must escape literal "(" / ")" / "." in the directive token.
-  const pattern = `(?i){{${directiveType}\\(${directive.groupId}\\.${directive.fieldId}\\)}}`;
+  const path = directive.subGroupId ? `${directive.subGroupId}.${directive.fieldId}` : directive.fieldId;
+  const pattern = `(?i){{${directiveType}\\(${escapeRegExp(directive.groupId)}\\.${escapeRegExp(path)}\\)}}`;
   for (let r = 0; r < table.getNumRows(); r++) {
     const tableRow = table.getRow(r);
     for (let c = 0; c < tableRow.getNumCells(); c++) {

@@ -5,7 +5,13 @@ import { StatusTransitionKey, resolveStatusTransitionKey } from '../../../domain
 import { applyHtmlLineItemBlocks } from '../../../services/webform/followup/htmlLineItemBlocks';
 import { addConsolidatedPlaceholders, collectLineItemRows } from '../../../services/webform/followup/placeholders';
 import { linkifyUploadedFileUrlsInHtml } from '../../../services/webform/followup/fileLinks';
-import { addPlaceholderVariants, applyPlaceholders, formatTemplateValueForHtml, slugifyPlaceholder } from '../../../services/webform/followup/utils';
+import {
+  addPlaceholderVariants,
+  applyPlaceholders,
+  formatTemplateValueForHtml,
+  resolveSubgroupKey,
+  slugifyPlaceholder
+} from '../../../services/webform/followup/utils';
 import { getBundledHtmlTemplateRaw, parseBundledHtmlTemplateId } from '../../../services/webform/followup/bundledHtmlTemplates';
 import { extractScriptTags, restoreScriptTags, stripScriptTags } from '../../../services/webform/followup/scriptTags';
 
@@ -18,6 +24,7 @@ const renderedBundleInflight = new Map<string, Promise<RenderHtmlTemplateResult>
 const MAX_DS_DETAILS_CACHE_ENTRIES = 80;
 const dsDetailsCache = new Map<string, Record<string, string> | null>();
 const dsDetailsInflight = new Map<string, Promise<Record<string, string> | null>>();
+const DS_PERSIST_VERSION = '1';
 const STATUS_PILL_KEYS: StatusTransitionKey[] = ['onClose', 'inProgress', 'reOpened'];
 
 const pruneMap = (map: Map<string, any>, max: number) => {
@@ -184,6 +191,35 @@ const buildLookupFields = (ds: DataSourceConfig | undefined): string[] => {
   return Array.from(new Set(fields.filter(Boolean).map(f => f.toString())));
 };
 
+const normalizeMatchValue = (value: any): string => {
+  if (value === undefined || value === null) return '';
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return '';
+  return value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+};
+
+const buildPersistKey = (id: string, language: string): string =>
+  `ck.ds.${id || 'default'}.${(language || 'EN').toString().toUpperCase()}.v${DS_PERSIST_VERSION}`;
+
+const loadPersistedDataSource = (id: string, language: string): any | null => {
+  if (typeof window === 'undefined') return null;
+  const readStorage = (storage: Storage | undefined | null): any | null => {
+    if (!storage) return null;
+    try {
+      const raw = storage.getItem(buildPersistKey(id, language));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  return readStorage(window.localStorage) || readStorage(window.sessionStorage);
+};
+
 const stringifyAny = (value: any): string => {
   if (value === undefined || value === null) return '';
   if (typeof value === 'string') return value;
@@ -210,7 +246,7 @@ const lookupDataSourceDetailsClient = async (args: {
   const { dataSource, selectedValue, language, limit } = args;
   const fetcher = args.fetchDataSource || fetchDataSourceApi;
   const rawSelected = (selectedValue || '').toString().trim();
-  const normalized = rawSelected.toLowerCase();
+  const normalized = normalizeMatchValue(rawSelected);
   if (!normalized) return null;
 
   const dsKey = JSON.stringify({
@@ -245,25 +281,55 @@ const lookupDataSourceDetailsClient = async (args: {
 
       const isRecord = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
       const rows = items.filter(isRecord);
+      const toDetails = (item: Record<string, any>): Record<string, string> => {
+        const out: Record<string, string> = {};
+        Object.entries(item).forEach(([k, v]) => {
+          if (v === undefined || v === null) return;
+          const text = stringifyAny(v);
+          if (!text) return;
+          const sanitizedKey = k.split(/\s+/).join('_').toUpperCase();
+          out[sanitizedKey] = text;
+        });
+        return out;
+      };
 
-      for (const item of rows) {
-        const matchField = lookupFields.find(f => Object.prototype.hasOwnProperty.call(item, f));
-        if (!matchField) continue;
-        const candidate = item[matchField];
-        if (candidate === undefined || candidate === null) continue;
-        if (candidate.toString().trim().toLowerCase() === normalized) {
-          const out: Record<string, string> = {};
-          Object.entries(item).forEach(([k, v]) => {
-            if (v === undefined || v === null) return;
-            const text = stringifyAny(v);
-            if (!text) return;
-            const sanitizedKey = k.split(/\s+/).join('_').toUpperCase();
-            out[sanitizedKey] = text;
-          });
-          dsDetailsCache.set(dsKey, out);
-          pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
-          return out;
+      const resolveFromRows = (inputRows: Record<string, any>[]): Record<string, string> | null => {
+        let fallback: Record<string, any> | null = null;
+        for (const item of inputRows) {
+          const matchField = lookupFields.find(f => Object.prototype.hasOwnProperty.call(item, f));
+          if (matchField && normalizeMatchValue(item[matchField]) === normalized) {
+            return toDetails(item);
+          }
+          if (!fallback) {
+            const values = Object.values(item);
+            if (values.some(val => normalizeMatchValue(val) === normalized)) {
+              fallback = item;
+            }
+          }
         }
+        if (fallback) return toDetails(fallback);
+        return null;
+      };
+
+      const persisted = loadPersistedDataSource(dataSource.id, language);
+      const persistedItems = Array.isArray((persisted as any)?.items)
+        ? (persisted as any).items
+        : Array.isArray(persisted)
+          ? persisted
+          : [];
+      const persistedRows = persistedItems.filter(isRecord);
+      const persistedDetails = persistedRows.length ? resolveFromRows(persistedRows) : null;
+      if (persistedDetails) {
+        dsDetailsCache.set(dsKey, persistedDetails);
+        pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
+        return persistedDetails;
+      }
+
+      const resolved = resolveFromRows(rows);
+      if (resolved) {
+        dsDetailsCache.set(dsKey, resolved);
+        pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
+        return resolved;
       }
 
       dsDetailsCache.set(dsKey, null);
@@ -393,8 +459,9 @@ const buildPlaceholderMapClient = (args: {
   questions: WebQuestionDefinition[];
   lineItemRows: Record<string, any[]>;
   dataSourceDetailsByFieldId: Record<string, Record<string, string> | null>;
+  lineItemDataSourceDetails?: Map<string, Record<string, string> | null>;
 }): Record<string, string> => {
-  const { record, questions, lineItemRows, dataSourceDetailsByFieldId } = args;
+  const { record, questions, lineItemRows, dataSourceDetailsByFieldId, lineItemDataSourceDetails } = args;
   const map: Record<string, string> = {};
 
   addPlaceholderVariants(map, 'RECORD_ID', record.id || '', undefined, formatTemplateValueForHtml);
@@ -425,7 +492,82 @@ const buildPlaceholderMapClient = (args: {
         const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
         addPlaceholderVariants(map, `${q.id}.${fieldSlug}`, joined, 'PARAGRAPH', formatTemplateValueForHtml);
       });
-      // Note: subgroup-specific tokens are handled by htmlLineItemBlocks expansion, not by the placeholder map.
+      (q.lineItemConfig?.fields || []).forEach((field: any) => {
+        if (!field?.dataSource || !lineItemDataSourceDetails) return;
+        const detailBuckets: Record<string, string[]> = {};
+        rows.forEach(row => {
+          const raw = (row as any)?.[field.id];
+          if (raw === undefined || raw === null || raw === '') return;
+          const key = buildLineItemDataSourceKey(field, raw.toString());
+          const details = lineItemDataSourceDetails.get(key) || null;
+          if (!details) return;
+          Object.entries(details).forEach(([k, v]) => {
+            if (v === undefined || v === null || v === '') return;
+            const dsKey = (k || '').toString().trim().toUpperCase();
+            if (!dsKey) return;
+            if (!detailBuckets[dsKey]) detailBuckets[dsKey] = [];
+            detailBuckets[dsKey].push(v.toString());
+          });
+        });
+        const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
+        Object.entries(detailBuckets).forEach(([dsKey, values]) => {
+          const joined = (values || []).filter(Boolean).join('\n');
+          if (!joined) return;
+          addPlaceholderVariants(map, `${q.id}.${field.id}.${dsKey}`, joined, 'PARAGRAPH', formatTemplateValueForHtml);
+          if (fieldSlug) {
+            addPlaceholderVariants(map, `${q.id}.${fieldSlug}.${dsKey}`, joined, 'PARAGRAPH', formatTemplateValueForHtml);
+          }
+        });
+      });
+
+      const resolveSubConfigByPath = (path: string[]): any | undefined => {
+        if (!path.length) return undefined;
+        let current: any = (q as any).lineItemConfig;
+        for (let i = 0; i < path.length; i += 1) {
+          const subId = path[i];
+          const subs = (current?.subGroups || []) as any[];
+          const match = subs.find(s => resolveSubgroupKey(s as any) === subId);
+          if (!match) return undefined;
+          if (i === path.length - 1) return match;
+          current = match;
+        }
+        return undefined;
+      };
+
+      Object.keys(lineItemRows)
+        .filter(key => key.startsWith(`${q.id}.`))
+        .forEach(key => {
+          const pathRaw = key.slice(q.id.length + 1);
+          const path = pathRaw.split('.').map(seg => seg.trim()).filter(Boolean);
+          if (!path.length) return;
+          const subCfg = resolveSubConfigByPath(path);
+          if (!subCfg) return;
+          const subRows = lineItemRows[key] || [];
+          subRows.forEach((subRow: any) => {
+            (subCfg.fields || []).forEach((field: any) => {
+              const raw = subRow?.[field.id];
+              if (raw === undefined || raw === null || raw === '') return;
+              const tokenPath = path.join('.');
+              addPlaceholderVariants(map, `${q.id}.${tokenPath}.${field.id}`, raw, (field as any)?.type, formatTemplateValueForHtml);
+              const slug = slugifyPlaceholder(field.labelEn || field.id);
+              addPlaceholderVariants(map, `${q.id}.${tokenPath}.${slug}`, raw, (field as any)?.type, formatTemplateValueForHtml);
+              if (field?.dataSource && lineItemDataSourceDetails) {
+                const dsKey = buildLineItemDataSourceKey(field, raw.toString());
+                const details = lineItemDataSourceDetails.get(dsKey) || null;
+                if (!details) return;
+                Object.entries(details).forEach(([k, v]) => {
+                  if (v === undefined || v === null || v === '') return;
+                  const detailKey = (k || '').toString().trim().toUpperCase();
+                  if (!detailKey) return;
+                  addPlaceholderVariants(map, `${q.id}.${tokenPath}.${field.id}.${detailKey}`, v, undefined, formatTemplateValueForHtml);
+                  if (slug) {
+                    addPlaceholderVariants(map, `${q.id}.${tokenPath}.${slug}.${detailKey}`, v, undefined, formatTemplateValueForHtml);
+                  }
+                });
+              }
+            });
+          });
+        });
       return;
     }
 
@@ -452,6 +594,82 @@ const buildPlaceholderMapClient = (args: {
   });
 
   return map;
+};
+
+const buildLineItemConfigMap = (questions: WebQuestionDefinition[]): Record<string, any> => {
+  const map: Record<string, any> = {};
+  (questions || []).forEach(q => {
+    if (!q || q.type !== 'LINE_ITEM_GROUP' || !q.id) return;
+    const baseKey = q.id.toString();
+    const cfg = (q as any).lineItemConfig;
+    if (cfg) map[baseKey] = cfg;
+    const walk = (parentKey: string, subs: any[]): void => {
+      (subs || []).forEach(sub => {
+        const subKey = resolveSubgroupKey(sub as any);
+        if (!subKey) return;
+        const nextKey = `${parentKey}.${subKey}`;
+        map[nextKey] = sub as any;
+        walk(nextKey, (sub as any)?.subGroups || []);
+      });
+    };
+    walk(baseKey, (cfg as any)?.subGroups || []);
+  });
+  return map;
+};
+
+const buildLineItemDataSourceKey = (field: any, rawValue: string): string => {
+  const value = (rawValue || '').toString().trim().toLowerCase();
+  return stableStringifyForKey({
+    id: (field?.id || '').toString(),
+    source: (field as any)?.dataSource?.id || '',
+    value
+  });
+};
+
+const collectLineItemDataSourceDetails = async (args: {
+  lineItemRows: Record<string, any[]>;
+  configMap: Record<string, any>;
+  language: string;
+  fetchDataSource?: typeof fetchDataSourceApi;
+}): Promise<Map<string, Record<string, string> | null>> => {
+  const { lineItemRows, configMap, language, fetchDataSource } = args;
+  const detailsByKey = new Map<string, Record<string, string> | null>();
+  const lookups: Array<{ key: string; field: any; value: string; limit?: number }> = [];
+
+  Object.entries(lineItemRows || {}).forEach(([pathKey, rows]) => {
+    const cfg = configMap[pathKey];
+    if (!cfg || !Array.isArray(cfg.fields)) return;
+    (cfg.fields || []).forEach((field: any) => {
+      if (!field?.dataSource) return;
+      (rows || []).forEach(row => {
+        const raw = row?.[field.id];
+        if (raw === undefined || raw === null || raw === '') return;
+        const value = raw.toString().trim();
+        if (!value) return;
+        const key = buildLineItemDataSourceKey(field, value);
+        if (detailsByKey.has(key)) return;
+        detailsByKey.set(key, null);
+        lookups.push({ key, field, value, limit: (field as any)?.dataSource?.limit });
+      });
+    });
+  });
+
+  if (!lookups.length) return detailsByKey;
+
+  await Promise.all(
+    lookups.map(async lookup => {
+      const details = await lookupDataSourceDetailsClient({
+        dataSource: (lookup.field as any).dataSource,
+        selectedValue: lookup.value,
+        language,
+        limit: lookup.limit,
+        fetchDataSource
+      });
+      detailsByKey.set(lookup.key, details);
+    })
+  );
+
+  return detailsByKey;
 };
 
 export const isBundledHtmlTemplateId = (templateId: string | undefined | null): boolean => {
@@ -541,11 +759,28 @@ export const renderBundledHtmlTemplateClient = async (args: {
       }
 
       const lineItemRows = collectLineItemRows(record as any, definition.questions as any);
+      const lineItemConfigMap = buildLineItemConfigMap(definition.questions || []);
+      const lineItemDataSourceDetails = await collectLineItemDataSourceDetails({
+        lineItemRows,
+        configMap: lineItemConfigMap,
+        language,
+        fetchDataSource: args.fetchDataSource
+      });
+      const lineItemDataSources =
+        lineItemDataSourceDetails.size > 0
+          ? {
+              lookupDataSourceDetails: (field: any, selectedValue: string) => {
+                const key = buildLineItemDataSourceKey(field, selectedValue || '');
+                return lineItemDataSourceDetails.get(key) || null;
+              }
+            }
+          : undefined;
       const placeholders = buildPlaceholderMapClient({
         record,
         questions: definition.questions || [],
         lineItemRows,
-        dataSourceDetailsByFieldId
+        dataSourceDetailsByFieldId,
+        lineItemDataSourceDetails
       });
       addConsolidatedPlaceholders(placeholders, definition.questions as any, lineItemRows);
       addFileIconPlaceholders(placeholders, definition.questions || [], record);
@@ -558,7 +793,13 @@ export const renderBundledHtmlTemplateClient = async (args: {
       // Bundled templates may include <script> tags, but we must still prevent script injection via user-entered values.
       // Extract template-authored scripts, strip any scripts introduced after placeholder replacement, then restore.
       const { html: rawNoScripts, extracted } = extractScriptTags(raw);
-      const withLineItems = applyHtmlLineItemBlocks({ html: rawNoScripts, questions: definition.questions as any, lineItemRows });
+      const withLineItems = applyHtmlLineItemBlocks({
+        html: rawNoScripts,
+        questions: definition.questions as any,
+        lineItemRows,
+        dataSources: lineItemDataSources as any,
+        language
+      });
       const withPlaceholders = applyPlaceholders(withLineItems, placeholders);
       const stripped = stripScriptTags(withPlaceholders);
       const linkified = linkifyUploadedFileUrlsInHtml(stripped, definition.questions as any, record as any);

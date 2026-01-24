@@ -1,4 +1,5 @@
 import { QuestionConfig, LineItemGroupConfig } from '../../../types';
+import type { DataSourceService } from '../dataSources';
 import { normalizeText, slugifyPlaceholder } from './utils';
 import { replaceLineItemPlaceholders } from './lineItemPlaceholders';
 import { resolveSubgroupKey } from './utils';
@@ -11,8 +12,10 @@ export const consolidateConsolidatedTableRows = (args: {
   group: QuestionConfig;
   subConfig: SubGroupConfig | undefined;
   targetSubGroupId: string;
+  dataSources?: DataSourceService;
+  language?: string;
 }): any[] => {
-  const { rows, placeholders, group, subConfig, targetSubGroupId } = args;
+  const { rows, placeholders, group, subConfig, targetSubGroupId, dataSources, language } = args;
   const source = rows || [];
   if (!source.length) return [];
   const normalizedGroupId = (group?.id || '').toString().toUpperCase();
@@ -59,7 +62,9 @@ export const consolidateConsolidatedTableRows = (args: {
       const key = normalizeText(
         replaceLineItemPlaceholders(keyTemplate, group, dataRow, {
           subGroup: subConfig,
-          subGroupToken: targetSubGroupId
+          subGroupToken: targetSubGroupId,
+          dataSources,
+          language
         })
       );
       if (!key) return;
@@ -114,7 +119,9 @@ export const consolidateConsolidatedTableRows = (args: {
       ? normalizeText(
           replaceLineItemPlaceholders(keyTemplate, group, dataRow, {
             subGroup: subConfig,
-            subGroupToken: targetSubGroupId
+            subGroupToken: targetSubGroupId,
+            dataSources,
+            language
           })
         )
       : 'ALL';

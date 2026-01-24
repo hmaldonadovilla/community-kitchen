@@ -42,7 +42,7 @@ export const renderDocCopyFromTemplate = (args: {
     addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
     const validationWarnings = collectValidationWarnings(questions, record);
     addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));
-    renderLineItemTables(doc, questions, lineItemRows);
+    renderLineItemTables(doc, questions, lineItemRows, { dataSources, language: record.language });
     const body = doc.getBody();
     const header = doc.getHeader();
     const footer = doc.getFooter();

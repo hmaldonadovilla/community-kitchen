@@ -69,7 +69,13 @@ export const renderMarkdownFromTemplate = (args: {
 
     // Apply Doc-like line-item directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE) for markdown blocks,
     // then apply normal placeholder replacement across the full document.
-    const withLineItems = applyMarkdownLineItemBlocks({ markdown: raw, questions, lineItemRows });
+    const withLineItems = applyMarkdownLineItemBlocks({
+      markdown: raw,
+      questions,
+      lineItemRows,
+      dataSources,
+      language: record.language
+    });
     const markdown = applyPlaceholders(withLineItems, placeholders);
     const fileName = `${namePrefix || form.title || 'Form'} - ${record.id || 'Preview'}.md`;
     debugLog('followup.markdown.ok', { templateId, mimeType, fileName });

@@ -1632,7 +1632,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - KEY can be a normal placeholder key (e.g., `COOK`, `MP_DISTRIBUTOR.EMAIL`) or even `{{COOK}}` (braces are tolerated).
   - Works in **Doc templates (PDF/email)** and also in **Markdown/HTML templates**.
 - **Line item tables**: Build a table row whose cells contain placeholders such as `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`. The service duplicates that row for every line item entry and replaces the placeholders per row. Empty groups simply clear the template row.
-- **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` anywhere inside the table you want duplicated per recipe. The renderer will:
+- **Line item data source fields**: if a line-item field uses a data source, you can reference its columns via `{{GROUP.FIELD.COLUMN_ID}}` or `{{GROUP.SUBGROUP.FIELD.COLUMN_ID}}` (nested subgroup paths supported).
+- **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` or `{{GROUP_TABLE(PARENT.SUBGROUP.FIELD)}}` anywhere inside the table you want duplicated per distinct value. The renderer will:
   1. Create a copy of the entire table for every distinct value of the referenced field (`RECIPE` in this example).
   2. Replace the directive placeholder with the group value (so you can show it in the heading).
   3. Populate the table rows with only the line items that belong to that recipe. If multiple line-item rows share the same recipe, the table’s placeholder rows will repeat for each matching row (e.g., you may see “Portions/Recipe/Core temp” repeated).

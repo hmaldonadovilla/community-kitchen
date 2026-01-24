@@ -94,6 +94,32 @@ export const buildPlaceholderMap = (args: {
         const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
         addPlaceholderVariants(map, `${q.id}.${fieldSlug}`, joined, 'PARAGRAPH', formatValue);
       });
+      (q.lineItemConfig?.fields || []).forEach(field => {
+        if (!(field as any)?.dataSource) return;
+        const detailBuckets: Record<string, string[]> = {};
+        rows.forEach(row => {
+          const raw = (row as any)?.[field.id];
+          if (raw === undefined || raw === null || raw === '') return;
+          const details = dataSources.lookupDataSourceDetails(field as any, raw.toString(), record.language);
+          if (!details) return;
+          Object.entries(details).forEach(([key, val]) => {
+            if (val === undefined || val === null || val === '') return;
+            const dsKey = (key || '').toString().trim().toUpperCase();
+            if (!dsKey) return;
+            if (!detailBuckets[dsKey]) detailBuckets[dsKey] = [];
+            detailBuckets[dsKey].push(val.toString());
+          });
+        });
+        const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
+        Object.entries(detailBuckets).forEach(([dsKey, values]) => {
+          const joined = (values || []).filter(Boolean).join('\n');
+          if (!joined) return;
+          addPlaceholderVariants(map, `${q.id}.${field.id}.${dsKey}`, joined, 'PARAGRAPH', formatValue);
+          if (fieldSlug) {
+            addPlaceholderVariants(map, `${q.id}.${fieldSlug}.${dsKey}`, joined, 'PARAGRAPH', formatValue);
+          }
+        });
+      });
 
       const resolveSubConfigByPath = (path: string[]): any | undefined => {
         if (!path.length) return undefined;
@@ -126,6 +152,19 @@ export const buildPlaceholderMap = (args: {
               addPlaceholderVariants(map, `${q.id}.${tokenPath}.${field.id}`, raw, (field as any).type, formatValue);
               const slug = slugifyPlaceholder(field.labelEn || field.id);
               addPlaceholderVariants(map, `${q.id}.${tokenPath}.${slug}`, raw, (field as any).type, formatValue);
+              if ((field as any)?.dataSource) {
+                const details = dataSources.lookupDataSourceDetails(field as any, raw.toString(), record.language);
+                if (!details) return;
+                Object.entries(details).forEach(([key, val]) => {
+                  if (val === undefined || val === null || val === '') return;
+                  const dsKey = (key || '').toString().trim().toUpperCase();
+                  if (!dsKey) return;
+                  addPlaceholderVariants(map, `${q.id}.${tokenPath}.${field.id}.${dsKey}`, val, undefined, formatValue);
+                  if (slug) {
+                    addPlaceholderVariants(map, `${q.id}.${tokenPath}.${slug}.${dsKey}`, val, undefined, formatValue);
+                  }
+                });
+              }
             });
           });
         });

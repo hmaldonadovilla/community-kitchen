@@ -5521,7 +5521,7 @@ const FormView: React.FC<FormViewProps> = ({
               overlayOpenActionResetDisabled
             )}
           >
-            <TrashIcon size={18} />
+            <TrashIcon size={40} />
           </button>
         </div>
         {errors[q.id] && <div className="error">{errors[q.id]}</div>}
@@ -7823,7 +7823,7 @@ const FormView: React.FC<FormViewProps> = ({
                                               style={actionButtonStyle}
                                               onClick={() => removeLineRow(subKey, subRow.id)}
                                             >
-                                              <TrashIcon size={20} />
+                                              <TrashIcon size={40} />
                                             </button>
                                           );
                                         }
@@ -8381,7 +8381,7 @@ const FormView: React.FC<FormViewProps> = ({
                                     style={actionButtonStyle}
                                     onClick={() => removeLineRow(subKey, subRow.id)}
                                   >
-                                    <TrashIcon size={20} />
+                                    <TrashIcon size={40} />
                                   </button>
                                 );
                               }
@@ -9630,7 +9630,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 style={actionButtonStyle}
                                 onClick={() => removeLineRow(groupId, row.id)}
                               >
-                                <TrashIcon size={20} />
+                                <TrashIcon size={40} />
                               </button>
                             );
                           }

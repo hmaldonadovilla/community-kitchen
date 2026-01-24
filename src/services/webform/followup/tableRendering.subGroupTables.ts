@@ -1,4 +1,5 @@
 import { LineItemGroupConfig, QuestionConfig } from '../../../types';
+import type { DataSourceService } from '../dataSources';
 import { resolveSubgroupKey, slugifyPlaceholder } from './utils';
 import {
   clearTableRow,
@@ -17,8 +18,11 @@ export const renderSubGroupTables = (
   templateTable: GoogleAppsScript.Document.Table,
   directive: { groupId: string; subGroupId: string },
   groupLookup: Record<string, QuestionConfig>,
-  lineItemRows: Record<string, any[]>
+  lineItemRows: Record<string, any[]>,
+  opts?: { dataSources?: DataSourceService; language?: string }
 ): number => {
+  const dataSources = opts?.dataSources;
+  const language = opts?.language;
   const group = groupLookup[directive.groupId];
   if (!group || !group.lineItemConfig?.subGroups?.length) {
     body.removeChild(templateTable);
@@ -102,7 +106,9 @@ export const renderSubGroupTables = (
           const text = cell.getText();
           const filled = replaceLineItemPlaceholders(text, group, parentRow || {}, {
             subGroup: undefined,
-            subGroupToken: undefined
+            subGroupToken: undefined,
+            dataSources,
+            language
           });
           cell.clear();
           cell.appendParagraph(filled || '');
@@ -133,7 +139,9 @@ export const renderSubGroupTables = (
           const text = cell.getText();
           const filled = replaceLineItemPlaceholders(text, group, dataRow, {
             subGroup: subConfig as any,
-            subGroupToken: directive.subGroupId
+          subGroupToken: directive.subGroupId,
+          dataSources,
+          language
           });
           while (cell.getNumChildren() > 0) {
             cell.removeChild(cell.getChild(0));

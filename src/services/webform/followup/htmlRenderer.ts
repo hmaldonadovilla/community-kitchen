@@ -163,7 +163,13 @@ export const renderHtmlFromHtmlTemplate = (args: {
     // Bundled templates may include <script> tags, but we must still prevent script injection via user-entered values.
     // Extract template-authored scripts, strip any scripts introduced after placeholder replacement, then restore.
     const { html: rawNoScripts, extracted } = isBundled ? extractScriptTags(raw) : { html: raw, extracted: [] };
-    const withLineItems = applyHtmlLineItemBlocks({ html: rawNoScripts, questions, lineItemRows });
+    const withLineItems = applyHtmlLineItemBlocks({
+      html: rawNoScripts,
+      questions,
+      lineItemRows,
+      dataSources,
+      language: record.language
+    });
     const withPlaceholders = applyPlaceholders(withLineItems, placeholders);
     const stripped = stripScriptTags(withPlaceholders);
     // For FILE_UPLOAD fields, render readable link labels instead of dumping raw Drive URLs.
