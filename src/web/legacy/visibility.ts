@@ -31,7 +31,8 @@ export function applyVisibility(options: ApplyVisibilityOptions): void {
     if (q.visibility) {
       const ctx = {
         getValue: (fieldId: string) => getValue(formEl, fieldId),
-        getLineItems: (groupId: string) => lineItemRowsByGroup[groupId] || []
+        getLineItems: (groupId: string) => lineItemRowsByGroup[groupId] || [],
+        getLineItemKeys: () => Object.keys(lineItemRowsByGroup)
       };
       const shouldHide = shouldHideField(q.visibility, ctx, { linePrefix: q.type === 'LINE_ITEM_GROUP' ? q.id : undefined });
       const holder = formEl.querySelector<HTMLElement>('[data-qid="' + q.id + '"]');

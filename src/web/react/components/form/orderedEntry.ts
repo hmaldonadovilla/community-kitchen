@@ -50,7 +50,8 @@ const resolveTopQuestionMissing = (args: {
   if (!question.required) return false;
   const hidden = shouldHideField(question.visibility, {
     getValue: resolveVisibilityValue,
-    getLineItems: (groupId: string) => lineItems[groupId] || []
+    getLineItems: (groupId: string) => lineItems[groupId] || [],
+    getLineItemKeys: () => Object.keys(lineItems)
   });
   if (hidden) return false;
   if (question.type === 'LINE_ITEM_GROUP') {
@@ -128,7 +129,7 @@ export const findOrderedEntryBlock = (args: {
   const targetTopId = (() => {
     if (target.scope === 'top') return target.questionId;
     const parsed = parseSubgroupKey(target.groupId);
-    return parsed?.parentGroupId || target.groupId;
+    return parsed?.rootGroupId || target.groupId;
   })();
   const targetIndex = topQuestions.findIndex((q: WebQuestionDefinition) => q.id === targetTopId);
   if (targetIndex > 0) {

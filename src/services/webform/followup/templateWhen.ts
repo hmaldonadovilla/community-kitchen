@@ -56,7 +56,8 @@ export const matchesTemplateWhenClause = (args: {
   const ctx: VisibilityContext = {
     getValue: resolveRowValue,
     getLineValue: (_rowId: string, fieldId: string) => resolveRowValue(fieldId),
-    getLineItems: (groupId: string) => (lineItemRows || {})[groupId] || []
+    getLineItems: (groupId: string) => (lineItemRows || {})[groupId] || [],
+    getLineItemKeys: () => Object.keys(lineItemRows || {})
   };
 
   return matchesWhenClause(when, ctx);

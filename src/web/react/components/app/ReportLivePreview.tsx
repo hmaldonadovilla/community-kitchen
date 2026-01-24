@@ -570,7 +570,8 @@ export const ReportLivePreview: React.FC<{
   const summaryCtx = useMemo(
     () => ({
       getValue: (fid: string) => resolveVisibilityValue(fid),
-      getLineItems: (groupId: string) => lineItems[groupId] || []
+      getLineItems: (groupId: string) => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [values, lineItems, recordMeta]

@@ -917,6 +917,13 @@ components:
             - When `true`, always use the searchable control (even for smaller lists)
             - When `false`, always use the native select (no search)
             - When omitted, the UI enables it automatically only for large option sets
+        overlayOpenActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemOverlayOpenActionConfig'
+          description: |
+            Optional field-driven overlay open actions. When configured, the field can render as a button
+            (after `when` matches) to open a line-item group overlay with optional row filters + UI overrides.
 
     ParagraphDisclaimerConfig:
       type: object
@@ -1031,9 +1038,9 @@ components:
               - type: string
               - type: number
           description: |
-            Optional per-column widths for table mode. Keys should match field ids, plus `__remove`
-            to target the remove button column. Values can be CSS widths (e.g., "50%", "120px")
-            or numbers (treated as percent).
+            Optional per-column widths for table mode. Keys should match field ids, plus action keys:
+            `__remove`, `__view`, `__edit` (action columns) and `_remove`, `_view`, `_edit` (overlay header aliases).
+            Values can be CSS widths (e.g., "50%", "120px") or numbers (treated as percent).
         nonMatchWarningMode:
           type: string
           enum: [descriptive, validation, both]
@@ -1054,6 +1061,11 @@ components:
             and the main form shows a compact "Open" card instead of rendering the full table inline.
 
             Default: false (render inline).
+        overlayDetail:
+          $ref: '#/components/schemas/LineItemOverlayDetailConfig'
+          description: |
+            Optional header/body overlay layout for full-page line item group overlays.
+            Requires `openInOverlay: true` to take effect.
         choiceSearchEnabled:
           type: boolean
           description: |
@@ -1124,6 +1136,190 @@ components:
         needsAttentionMessage:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional localized helper shown when this line item group or subgroup needs attention.
+
+    LineItemOverlayDetailConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: When true, enable header/body overlay layout for this group.
+        header:
+          $ref: '#/components/schemas/LineItemOverlayDetailHeaderConfig'
+        body:
+          $ref: '#/components/schemas/LineItemOverlayDetailBodyConfig'
+        rowActions:
+          $ref: '#/components/schemas/LineItemOverlayDetailRowActionsConfig'
+      additionalProperties: false
+
+    LineItemOverlayDetailHeaderConfig:
+      type: object
+      properties:
+        tableColumns:
+          type: array
+          items:
+            type: string
+          description: Optional ordered list of field ids to render as columns in the header table.
+        tableColumnWidths:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+          description: |
+            Optional per-column widths for the header table. Keys should match field ids plus action keys:
+            `__view`, `__edit`, `__remove` (and `_view`, `_edit`, `_remove` aliases).
+        addButtonPlacement:
+          type: string
+          enum: [top, bottom, both, hidden]
+          description: Controls where the Add button is shown for header rows.
+      additionalProperties: false
+
+    LineItemOverlayDetailBodyConfig:
+      type: object
+      required: [subGroupId]
+      properties:
+        subGroupId:
+          type: string
+          description: Subgroup id to render in the overlay body section.
+        edit:
+          $ref: '#/components/schemas/LineItemOverlayDetailBodyEditConfig'
+        view:
+          $ref: '#/components/schemas/LineItemOverlayDetailBodyViewConfig'
+      additionalProperties: false
+
+    LineItemOverlayDetailBodyEditConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [table]
+          description: Rendering mode for body edit view (table only).
+        tableColumns:
+          type: array
+          items:
+            type: string
+        tableColumnWidths:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+      additionalProperties: false
+
+    LineItemOverlayDetailBodyViewConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [html]
+          description: Rendering mode for body view (html template).
+        templateId:
+          $ref: '#/components/schemas/TemplateIdMap'
+      additionalProperties: false
+
+    LineItemOverlayDetailRowActionsConfig:
+      type: object
+      properties:
+        viewLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        editLabel:
+          $ref: '#/components/schemas/LocalizedString'
+      additionalProperties: false
+
+    LineItemOverlayRowFilter:
+      type: object
+      properties:
+        includeWhen:
+          $ref: '#/components/schemas/WhenClause'
+        excludeWhen:
+          $ref: '#/components/schemas/WhenClause'
+      additionalProperties: false
+
+    LineItemGroupConfigOverride:
+      type: object
+      description: |
+        Optional override for a line-item group's configuration when opening an overlay via a field action.
+        Any omitted fields fall back to the base group configuration.
+      properties:
+        id:
+          type: string
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+        ui:
+          $ref: '#/components/schemas/LineItemGroupUiConfig'
+        minRows:
+          type: integer
+        maxRows:
+          type: integer
+        addButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        anchorFieldId:
+          type: string
+        addMode:
+          type: string
+          enum: [overlay, selectorOverlay, inline, auto]
+        sectionSelector:
+          $ref: '#/components/schemas/LineItemSelectorConfig'
+        dedupRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemDedupRule'
+        totals:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemTotalConfig'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemFieldConfig'
+        subGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemGroupConfig'
+      additionalProperties: false
+
+    LineItemOverlayOpenActionConfig:
+      type: object
+      properties:
+        groupId:
+          type: string
+          description: Target line-item group id to open.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition to enable/activate this action.
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional button label override (defaults to the field label).
+        rowFilter:
+          $ref: '#/components/schemas/LineItemOverlayRowFilter'
+          description: Optional row filter applied to the overlay header rows.
+        groupOverride:
+          $ref: '#/components/schemas/LineItemGroupConfigOverride'
+          description: Optional override for the overlay view of this group.
+        hideInlineSubgroups:
+          type: boolean
+          description: When true, hide inline subgroups in the overlay body (header-only + body detail).
+        renderMode:
+          type: string
+          enum: [replace, inline]
+          description: |
+            Render mode for the field-triggered opener.
+            - replace: replace the field control with a button (default)
+            - inline: keep the control and show a separate button below
+        resetValue:
+          $ref: '#/components/schemas/DefaultValue'
+          description: |
+            Optional value to set on the source field when the trash/reset action is confirmed.
+            Use this to revert the field back to its original control by breaking the `when` condition.
+        flattenFields:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of line-item field ids to render inline in the parent view when the target group only allows one row.
+            Requires `maxRows: 1` on the target group (or `groupOverride`) to take effect.
+      required: [groupId]
+      additionalProperties: false
 
     RowDisclaimerRule:
       type: object
@@ -2903,6 +3099,15 @@ components:
         groupId:
           type: string
           description: Target LINE_ITEM_GROUP id where rows are added.
+        targetPath:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: |
+            Optional subgroup path for nested targets (dot-delimited string or array of subgroup ids).
+            When provided, this path is resolved relative to the triggering row for true nesting.
         preset:
           type: object
           additionalProperties:
@@ -3008,7 +3213,16 @@ components:
               description: Line item group question id whose rows should be evaluated.
             subGroupId:
               type: string
-              description: Optional subgroup id to evaluate (scans all parent rows).
+              description: Optional subgroup id to evaluate (scans all parent rows). Prefer `subGroupPath` for deep nesting.
+            subGroupPath:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+              description: |
+                Optional subgroup path to evaluate (dot-delimited string or array of subgroup ids).
+                Supports wildcards: "*" for one level, "**" for any depth (including zero levels).
             match:
               type: string
               enum: [any, all]
@@ -3018,11 +3232,15 @@ components:
               description: Row-level condition applied within each row (evaluated against row/subgroup values only).
             parentWhen:
               $ref: '#/components/schemas/WhenClause'
-              description: Optional condition evaluated against the parent row (subgroup only).
+              description: Optional condition evaluated against parent or ancestor rows when subgroup matching is used.
             parentMatch:
               type: string
               enum: [any, all]
               description: Parent-row matching mode; defaults to `any`.
+            parentScope:
+              type: string
+              enum: [immediate, ancestor]
+              description: When parentWhen is provided, controls whether to match only the direct parent or any ancestor.
           additionalProperties: false
       additionalProperties: false
 
@@ -3032,7 +3250,7 @@ components:
 
         Supports both:
         - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `notEmpty`
-        - Line-item conditions: `lineItems: { groupId, subGroupId?, when?, match? }`
+        - Line-item conditions: `lineItems: { groupId, subGroupId?, subGroupPath?, when?, match?, parentWhen?, parentScope?, parentMatch? }`
         - Compound conditions:
           - `all`: AND (every entry must match)
           - `any`: OR (at least one entry must match)

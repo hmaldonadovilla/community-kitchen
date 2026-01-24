@@ -409,6 +409,13 @@ export interface QuestionUiConfig {
    * editing the injected section directly in the textarea.
    */
   paragraphDisclaimer?: ParagraphDisclaimerConfig;
+  /**
+   * Optional field-driven overlay open actions.
+   *
+   * When configured, the field can render as a button (after `when` matches)
+   * to open a line-item group overlay with optional row filters + UI overrides.
+   */
+  overlayOpenActions?: LineItemOverlayOpenActionConfig[];
 }
 
 export interface ParagraphDisclaimerConfig {
@@ -672,15 +679,23 @@ export interface LineItemWhenClause {
     groupId: string;
     /**
      * Optional subgroup id to evaluate (scans all parent rows).
+     * Prefer `subGroupPath` for deep nesting and wildcard paths.
      */
     subGroupId?: string;
+    /**
+     * Optional subgroup path to evaluate (dot-delimited string or array of ids).
+     * Supports wildcards:
+     * - "*" matches a single subgroup level
+     * - "**" matches any depth (including zero levels)
+     */
+    subGroupPath?: string | string[];
     /**
      * Row-level condition applied within each row.
      * When omitted, any row counts as a match.
      */
     when?: WhenClause;
     /**
-     * Optional condition evaluated against the parent row when `subGroupId` is provided.
+     * Optional condition evaluated against the parent/ancestor rows when subgroup matching is used.
      * This lets you scope subgroup matching to parent rows that satisfy their own criteria.
      */
     parentWhen?: WhenClause;
@@ -692,6 +707,12 @@ export interface LineItemWhenClause {
      * Parent-row matching mode (default: "any") when `parentWhen` is set.
      */
     parentMatch?: 'any' | 'all';
+    /**
+     * Which ancestor scope to use for parentWhen.
+     * - immediate: direct parent row only (default)
+     * - ancestor: any ancestor row (root-to-parent chain)
+     */
+    parentScope?: 'immediate' | 'ancestor';
   };
 }
 
@@ -937,6 +958,11 @@ export interface LineItemGroupUiConfig {
    */
   openInOverlay?: boolean;
   /**
+   * Optional overlay detail layout (header/body) for full-page group overlays.
+   * Requires `openInOverlay: true` to take effect.
+   */
+  overlayDetail?: LineItemOverlayDetailConfig;
+  /**
    * Default CHOICE search behavior for all CHOICE fields in this group (and its subgroups when configured there),
    * unless a specific field overrides it via `field.ui.choiceSearchEnabled`.
    *
@@ -1006,6 +1032,40 @@ export interface LineItemGroupUiConfig {
    * When true, they are included in the saved record (useful when you want them to appear in downstream PDFs).
    */
   saveDisabledRows?: boolean;
+}
+
+export interface LineItemOverlayDetailConfig {
+  enabled?: boolean;
+  header?: LineItemOverlayDetailHeaderConfig;
+  body?: LineItemOverlayDetailBodyConfig;
+  rowActions?: LineItemOverlayDetailRowActionsConfig;
+}
+
+export interface LineItemOverlayDetailHeaderConfig {
+  tableColumns?: string[];
+  tableColumnWidths?: Record<string, string | number>;
+  addButtonPlacement?: 'top' | 'bottom' | 'both' | 'hidden';
+}
+
+export interface LineItemOverlayDetailBodyConfig {
+  /**
+   * Target subgroup id to render in the body section.
+   */
+  subGroupId: string;
+  edit?: {
+    mode?: 'table';
+    tableColumns?: string[];
+    tableColumnWidths?: Record<string, string | number>;
+  };
+  view?: {
+    mode?: 'html';
+    templateId: TemplateIdMap;
+  };
+}
+
+export interface LineItemOverlayDetailRowActionsConfig {
+  viewLabel?: LocalizedString | string;
+  editLabel?: LocalizedString | string;
 }
 
 export interface RowDisclaimerRule {
@@ -1165,6 +1225,74 @@ export interface LineItemGroupConfig {
   subGroups?: LineItemGroupConfig[]; // nested line item groups driven by this header group
 }
 
+export interface LineItemGroupConfigOverride {
+  id?: string;
+  label?: LocalizedString;
+  ui?: LineItemGroupUiConfig;
+  minRows?: number;
+  maxRows?: number;
+  addButtonLabel?: {
+    en?: string;
+    fr?: string;
+    nl?: string;
+  };
+  anchorFieldId?: string;
+  addMode?: 'overlay' | 'selectorOverlay' | 'inline' | 'auto';
+  sectionSelector?: LineItemSelectorConfig;
+  dedupRules?: LineItemDedupRule[];
+  totals?: LineItemTotalConfig[];
+  fields?: LineItemFieldConfig[];
+  subGroups?: LineItemGroupConfig[];
+}
+
+export interface LineItemOverlayRowFilter {
+  includeWhen?: WhenClause;
+  excludeWhen?: WhenClause;
+}
+
+export interface LineItemOverlayOpenActionConfig {
+  /**
+   * Target line-item group id to open.
+   */
+  groupId: string;
+  /**
+   * Optional condition to enable/activate this action.
+   */
+  when?: WhenClause;
+  /**
+   * Optional button label override (defaults to the field label).
+   */
+  label?: LocalizedString;
+  /**
+   * Optional row filter applied to the overlay header rows.
+   */
+  rowFilter?: LineItemOverlayRowFilter | null;
+  /**
+   * Optional override for the overlay view of this group.
+   */
+  groupOverride?: LineItemGroupConfigOverride;
+  /**
+   * When true, hide inline subgroups in the overlay body (header-only + body detail).
+   */
+  hideInlineSubgroups?: boolean;
+  /**
+   * Render mode for the field-triggered opener.
+   * - replace: replace the field control with a button (default)
+   * - inline: keep the control and show a separate button below
+   */
+  renderMode?: 'replace' | 'inline';
+  /**
+   * Optional value to set on the source field when the reset (trash) action is confirmed.
+   * Use this to revert the field back to its original control by breaking the `when` condition.
+   */
+  resetValue?: DefaultValue;
+  /**
+   * Optional list of line-item field ids to surface inline when the target group only allows one row.
+   * This keeps the data structure unchanged while flattening the UI for quick edits.
+   */
+  flattenFields?: string[];
+}
+
 export interface SelectionEffect {
   /**
    * Optional stable identifier for this selection effect rule.
@@ -1174,7 +1302,13 @@ export interface SelectionEffect {
    */
   id?: string;
   type: 'addLineItems' | 'addLineItemsFromDataSource' | 'deleteLineItems';
-  groupId: string; // target line item group
+  groupId: string; // target line item group (legacy or immediate subgroup id)
+  /**
+   * Optional subgroup path target for nested line item groups.
+   * - String uses dot notation: "SUB1.SUB2"
+   * - Array uses explicit ids: ["SUB1", "SUB2"]
+   */
+  targetPath?: string | string[];
   preset?: Record<string, PresetValue>; // preset field values for simple addLineItems (supports $row./$top. references)
   triggerValues?: string[]; // which choice/checkbox values trigger this effect (defaults to any)
   /**

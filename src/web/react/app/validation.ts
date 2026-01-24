@@ -9,7 +9,8 @@ export const buildValidationContext = (values: Record<string, FieldValue>, lineI
     const match = rows.find(r => r.id === rowId);
     return match?.values[fieldId.replace(`${groupId}__`, '')];
   },
-  getLineItems: (groupId: string) => lineItems[groupId] || []
+  getLineItems: (groupId: string) => lineItems[groupId] || [],
+  getLineItemKeys: () => Object.keys(lineItems)
 });
 
 

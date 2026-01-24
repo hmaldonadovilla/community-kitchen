@@ -282,6 +282,169 @@ export const validateForm = (args: {
     });
   };
 
+  const validateGroupRows = (args: {
+    groupCfg: any;
+    groupKey: string;
+    rows: LineItemRowState[];
+    contextValues: Record<string, FieldValue>;
+    rootGroupId: string;
+  }): {
+    eligibleRows: LineItemRowState[];
+    hasAnyRow: boolean;
+    hasAnyNonDisabledRow: boolean;
+    hasAnyValidEnabledRow: boolean;
+  } => {
+    const { groupCfg, groupKey, rows, contextValues, rootGroupId } = args;
+    const ui = (groupCfg as any)?.ui;
+    const isProgressive =
+      ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
+    const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
+    const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
+    const guidedRowFilter = (groupCfg as any)?._guidedRowFilter ?? null;
+    const expandGateFields = (((groupCfg as any)?._expandGateFields as any[]) || groupCfg?.fields || []) as any[];
+    const fields = (groupCfg?.fields || []) as any[];
+    const fieldIdSet = new Set(fields.map((f: any) => (f?.id !== undefined ? f.id.toString() : '')).filter(Boolean));
+    const normalizeFieldId = (rawId: string): string => {
+      const s = rawId !== undefined && rawId !== null ? rawId.toString() : '';
+      const prefix = `${groupKey}__`;
+      const rootPrefix = `${rootGroupId}__`;
+      if (s.startsWith(prefix)) return s.slice(prefix.length);
+      if (s.startsWith(rootPrefix)) return s.slice(rootPrefix.length);
+      return s;
+    };
+
+    let hasAnyRow = false;
+    let hasAnyNonDisabledRow = false;
+    let hasAnyValidEnabledRow = false;
+    const eligibleRows: LineItemRowState[] = [];
+
+    rows.forEach(row => {
+      const rowValues = (row as any)?.values || {};
+      if (guidedRowFilter && !isIncludedByRowFilter(rowValues, guidedRowFilter)) return;
+      hasAnyRow = true;
+      const collapseKey = `${groupKey}::${row.id}`;
+      const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
+      if (
+        isRowDisabledByExpandGate({
+          ui,
+          fields: expandGateFields,
+          row: row as any,
+          topValues: contextValues,
+          language,
+          linePrefix: groupKey,
+          rowCollapsed
+        })
+      ) {
+        return;
+      }
+      hasAnyNonDisabledRow = true;
+      eligibleRows.push(row as LineItemRowState);
+      let rowValid = true;
+      const groupCtx: VisibilityContext = {
+        getValue: fid => (contextValues as any)[fid],
+        getLineValue: (_rowId, fid) => row.values[fid]
+      };
+      const getRowValue = (fieldId: string): FieldValue => {
+        const localId = normalizeFieldId(fieldId);
+        if (Object.prototype.hasOwnProperty.call(row.values || {}, localId)) return (row.values || {})[localId];
+        if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
+        if (Object.prototype.hasOwnProperty.call(contextValues || {}, fieldId)) return (contextValues as any)[fieldId];
+        if (Object.prototype.hasOwnProperty.call(contextValues || {}, localId)) return (contextValues as any)[localId];
+        return (contextValues as any)[fieldId];
+      };
+
+      fields.forEach(field => {
+        if (field.validationRules && field.validationRules.length) {
+          const errs = validateRules(field.validationRules, {
+            ...groupCtx,
+            getValue: getRowValue,
+            language,
+            phase: 'submit',
+            isHidden: (fieldId: string) => {
+              const localId = normalizeFieldId(fieldId);
+              const target = fields.find((f: any) => f?.id?.toString?.() === localId) as any;
+              if (!target) return false;
+              return shouldHideField(target.visibility, groupCtx, { rowId: row.id, linePrefix: groupKey });
+            }
+          } as any);
+          errs.forEach(err => {
+            const targetIdRaw = err?.fieldId !== undefined && err?.fieldId !== null ? err.fieldId.toString() : field.id;
+            const targetId = normalizeFieldId(targetIdRaw);
+            const key = fieldIdSet.has(targetId) ? `${groupKey}__${targetId}__${row.id}` : targetId;
+            if (key) allErrors[key] = err.message;
+          });
+          if (errs.length) rowValid = false;
+        }
+
+        const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: groupKey });
+        if (hideField) return;
+
+        if ((field as any).type === 'FILE_UPLOAD') {
+          const fieldLabel = resolveFieldLabel(field, language, field.id);
+          const msg = validateUploadCounts({
+            value: row.values[field.id],
+            uploadConfig: (field as any).uploadConfig,
+            required: !!field.required,
+            requiredMessage: (field as any).requiredMessage,
+            language,
+            fieldLabel
+          });
+          if (msg) {
+            allErrors[`${groupKey}__${field.id}__${row.id}`] = msg;
+            rowValid = false;
+          }
+        } else if (field.required) {
+          const val = resolveRequiredValue(field, row.values[field.id]);
+          if (isEmptyValue(val as any)) {
+            const fieldLabel = resolveFieldLabel(field, language, field.id);
+            const custom = resolveLocalizedString((field as any)?.requiredMessage, language, '');
+            allErrors[`${groupKey}__${field.id}__${row.id}`] = custom
+              ? formatTemplate(custom, { field: fieldLabel })
+              : tSystem('validation.fieldRequired', language, '{field} is required.', { field: fieldLabel });
+            rowValid = false;
+          }
+        }
+      });
+
+      const subGroups = (groupCfg?.subGroups || []) as any[];
+      if (subGroups.length) {
+        const nextContext = { ...contextValues, ...(row.values || {}) };
+        subGroups.forEach(sub => {
+          const subId = resolveSubgroupKey(sub as any);
+          if (!subId) return;
+          const subKey = buildSubgroupKey(groupKey, row.id, subId);
+          const subRows = lineItems[subKey] || [];
+          const res = validateGroupRows({
+            groupCfg: sub,
+            groupKey: subKey,
+            rows: subRows,
+            contextValues: nextContext,
+            rootGroupId
+          });
+          const subDedupRules = normalizeLineItemDedupRules((sub as any)?.dedupRules);
+          applyLineItemDedupRules({
+            groupId: subKey,
+            rows: res.eligibleRows,
+            rules: subDedupRules,
+            buildFieldPath: (rowId: string, fieldId: string) => `${subKey}__${fieldId}__${rowId}`
+          });
+        });
+      }
+
+      if (rowValid) hasAnyValidEnabledRow = true;
+    });
+
+    const dedupRules = normalizeLineItemDedupRules((groupCfg as any)?.dedupRules);
+    applyLineItemDedupRules({
+      groupId: groupKey,
+      rows: eligibleRows,
+      rules: dedupRules,
+      buildFieldPath: (rowId: string, fieldId: string) => `${groupKey}__${fieldId}__${rowId}`
+    });
+
+    return { eligibleRows, hasAnyRow, hasAnyNonDisabledRow, hasAnyValidEnabledRow };
+  };
+
   definition.questions.forEach(q => {
     const questionHidden = shouldHideField(q.visibility, ctx);
 
@@ -313,255 +476,20 @@ export const validateForm = (args: {
       const isProgressive =
         ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
       const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
-      const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
-      const guidedRowFilter = ((q.lineItemConfig as any)?._guidedRowFilter ?? null) as any;
-      // In guided-step scoped definitions we may filter `fields`, but expandGate needs to evaluate against the full group field set.
-      const expandGateFields = (((q.lineItemConfig as any)?._expandGateFields as any[]) || q.lineItemConfig?.fields || []) as any[];
-      const lineFieldIdSet = new Set((q.lineItemConfig?.fields || []).map((f: any) => (f?.id !== undefined ? f.id.toString() : '')).filter(Boolean));
-      const normalizeLineFieldId = (rawId: string): string => {
-        const s = rawId !== undefined && rawId !== null ? rawId.toString() : '';
-        const prefix = `${q.id}__`;
-        return s.startsWith(prefix) ? s.slice(prefix.length) : s;
-      };
 
-      let hasAtLeastOneValidEnabledRow = false;
-      let hasAnyRow = false;
-      let hasAnyNonDisabledRow = false;
-      const eligibleRows: LineItemRowState[] = [];
-
-      rows.forEach(row => {
-        const rowValues = (row as any)?.values || {};
-        if (guidedRowFilter && !isIncludedByRowFilter(rowValues, guidedRowFilter)) return;
-        hasAnyRow = true;
-        const collapseKey = `${q.id}::${row.id}`;
-        const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
-        // Skip "disabled" rows: collapsed + progressive + expandGate=collapsedFieldsValid where collapsed fields aren't valid yet.
-        if (
-          isRowDisabledByExpandGate({
-            ui,
-            fields: expandGateFields,
-            row: row as any,
-            topValues: values,
-            language,
-            linePrefix: q.id,
-            rowCollapsed
-          })
-        ) {
-          return;
-        }
-        hasAnyNonDisabledRow = true;
-        eligibleRows.push(row as LineItemRowState);
-        let rowValid = true;
-        const groupCtx: VisibilityContext = {
-          getValue: fid => values[fid],
-          getLineValue: (_rowId, fid) => row.values[fid]
-        };
-        const getRowValue = (fieldId: string): FieldValue => {
-          const localId = normalizeLineFieldId(fieldId);
-          if (Object.prototype.hasOwnProperty.call(row.values || {}, localId)) return (row.values || {})[localId];
-          if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
-          if (Object.prototype.hasOwnProperty.call(values || {}, fieldId)) return (values as any)[fieldId];
-          if (Object.prototype.hasOwnProperty.call(values || {}, localId)) return (values as any)[localId];
-          return (values as any)[fieldId];
-        };
-
-        q.lineItemConfig?.fields.forEach(field => {
-          if (field.validationRules && field.validationRules.length) {
-            const errs = validateRules(field.validationRules, {
-              ...groupCtx,
-              getValue: getRowValue,
-              language,
-              phase: 'submit',
-              isHidden: (fieldId: string) => {
-                const localId = normalizeLineFieldId(fieldId);
-                const target = (q.lineItemConfig?.fields || []).find((f: any) => f?.id?.toString?.() === localId) as any;
-                if (!target) return false;
-                return shouldHideField(target.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
-              }
-            } as any);
-            errs.forEach(err => {
-              const targetIdRaw = err?.fieldId !== undefined && err?.fieldId !== null ? err.fieldId.toString() : field.id;
-              const targetId = normalizeLineFieldId(targetIdRaw);
-              const key = lineFieldIdSet.has(targetId) ? `${q.id}__${targetId}__${row.id}` : targetId;
-              if (key) allErrors[key] = err.message;
-            });
-            if (errs.length) rowValid = false;
-          }
-
-          const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
-          if (hideField) return;
-
-          if ((field as any).type === 'FILE_UPLOAD') {
-            const fieldLabel = resolveFieldLabel(field, language, field.id);
-            const msg = validateUploadCounts({
-              value: row.values[field.id],
-              uploadConfig: (field as any).uploadConfig,
-              required: !!field.required,
-              requiredMessage: (field as any).requiredMessage,
-              language,
-              fieldLabel
-            });
-            if (msg) {
-              allErrors[`${q.id}__${field.id}__${row.id}`] = msg;
-              rowValid = false;
-            }
-          } else if (field.required) {
-            const val = resolveRequiredValue(field, row.values[field.id]);
-            if (isEmptyValue(val as any)) {
-              const fieldLabel = resolveFieldLabel(field, language, field.id);
-              const custom = resolveLocalizedString((field as any)?.requiredMessage, language, '');
-              allErrors[`${q.id}__${field.id}__${row.id}`] = custom
-                ? formatTemplate(custom, { field: fieldLabel })
-                : tSystem('validation.fieldRequired', language, '{field} is required.', { field: fieldLabel });
-              rowValid = false;
-            }
-          }
-        });
-
-        // validate subgroups, if any
-        if (q.lineItemConfig?.subGroups?.length) {
-          q.lineItemConfig.subGroups.forEach(sub => {
-            const subId = resolveSubgroupKey(sub as any);
-            if (!subId) return;
-            const subKey = buildSubgroupKey(q.id, row.id, subId);
-            const subRows = lineItems[subKey] || [];
-          const eligibleSubRows: LineItemRowState[] = [];
-            const subUi = (sub as any)?.ui;
-            const isSubProgressive =
-              subUi?.mode === 'progressive' &&
-              Array.isArray(subUi?.collapsedFields) &&
-              (subUi?.collapsedFields || []).length > 0;
-            const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
-            const subFields = ((sub as any).fields || []) as any[];
-            const subGuidedRowFilter = ((sub as any)?._guidedRowFilter ?? null) as any;
-            const subExpandGateFields = (((sub as any)?._expandGateFields as any[]) || subFields) as any[];
-            const subFieldIdSet = new Set(subFields.map((f: any) => (f?.id !== undefined ? f.id.toString() : '')).filter(Boolean));
-            const normalizeSubFieldId = (rawId: string): string => {
-              const s = rawId !== undefined && rawId !== null ? rawId.toString() : '';
-              const subPrefix = `${subKey}__`;
-              const linePrefix = `${q.id}__`;
-              if (s.startsWith(subPrefix)) return s.slice(subPrefix.length);
-              if (s.startsWith(linePrefix)) return s.slice(linePrefix.length);
-              return s;
-            };
-            subRows.forEach(subRow => {
-              const subRowValues = (subRow as any)?.values || {};
-              if (subGuidedRowFilter && !isIncludedByRowFilter(subRowValues, subGuidedRowFilter)) return;
-              const subCollapseKey = `${subKey}::${subRow.id}`;
-              const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
-              // Skip disabled subgroup rows only when they are collapsed and gated.
-              if (
-                isRowDisabledByExpandGate({
-                  ui: subUi,
-                  fields: subExpandGateFields,
-                  row: subRow as any,
-                  topValues: { ...values, ...(row.values || {}) },
-                  language,
-                  linePrefix: subKey,
-                  rowCollapsed: subRowCollapsed
-                })
-              ) {
-                return;
-              }
-              eligibleSubRows.push(subRow as LineItemRowState);
-              const subCtx: VisibilityContext = {
-                getValue: fid => values[fid],
-                getLineValue: (_rowId, fid) => subRow.values[fid]
-              };
-              const getSubValue = (fieldId: string): FieldValue => {
-                const localId = normalizeSubFieldId(fieldId);
-                if (Object.prototype.hasOwnProperty.call(subRow.values || {}, localId)) return (subRow.values || {})[localId];
-                if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fieldId)) return (subRow.values || {})[fieldId];
-                if (Object.prototype.hasOwnProperty.call(row.values || {}, localId)) return (row.values || {})[localId];
-                if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
-                if (Object.prototype.hasOwnProperty.call(values || {}, fieldId)) return (values as any)[fieldId];
-                if (Object.prototype.hasOwnProperty.call(values || {}, localId)) return (values as any)[localId];
-                return (values as any)[fieldId];
-              };
-              subFields.forEach((field: any) => {
-                if (field.validationRules && field.validationRules.length) {
-                  const errs = validateRules(field.validationRules, {
-                    ...subCtx,
-                    getValue: getSubValue,
-                    language,
-                    phase: 'submit',
-                    isHidden: (fieldId: string) => {
-                      const localId = normalizeSubFieldId(fieldId);
-                      const target = subFields.find((f: any) => f?.id?.toString?.() === localId) as any;
-                      if (!target) return false;
-                      return shouldHideField(target.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
-                    }
-                  } as any);
-                  errs.forEach(err => {
-                    const targetIdRaw = err?.fieldId !== undefined && err?.fieldId !== null ? err.fieldId.toString() : field.id;
-                    const targetId = normalizeSubFieldId(targetIdRaw);
-                    const key = subFieldIdSet.has(targetId)
-                      ? `${subKey}__${targetId}__${subRow.id}`
-                      : lineFieldIdSet.has(targetId)
-                        ? `${q.id}__${targetId}__${row.id}`
-                        : targetId;
-                    if (key) allErrors[key] = err.message;
-                  });
-                  if (errs.length) rowValid = false;
-                }
-
-                const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
-                if (hide) return;
-
-                if ((field as any).type === 'FILE_UPLOAD') {
-                  const fieldLabel = resolveFieldLabel(field, language, field.id);
-                  const msg = validateUploadCounts({
-                    value: subRow.values[field.id],
-                    uploadConfig: (field as any).uploadConfig,
-                    required: !!field.required,
-                    requiredMessage: (field as any).requiredMessage,
-                    language,
-                    fieldLabel
-                  });
-                  if (msg) {
-                    allErrors[`${subKey}__${field.id}__${subRow.id}`] = msg;
-                    rowValid = false;
-                  }
-                } else if (field.required) {
-                  const val = resolveRequiredValue(field, subRow.values[field.id]);
-                  if (isEmptyValue(val as any)) {
-                    const fieldLabel = resolveFieldLabel(field, language, field.id);
-                    const custom = resolveLocalizedString((field as any)?.requiredMessage, language, '');
-                    allErrors[`${subKey}__${field.id}__${subRow.id}`] = custom
-                      ? formatTemplate(custom, { field: fieldLabel })
-                      : tSystem('validation.fieldRequired', language, '{field} is required.', { field: fieldLabel });
-                    rowValid = false;
-                  }
-                }
-              });
-            });
-
-            const subDedupRules = normalizeLineItemDedupRules((sub as any)?.dedupRules);
-            applyLineItemDedupRules({
-              groupId: subKey,
-              rows: eligibleSubRows,
-              rules: subDedupRules,
-              buildFieldPath: (rowId: string, fieldId: string) => `${subKey}__${fieldId}__${rowId}`
-            });
-          });
-        }
-
-        if (rowValid) hasAtLeastOneValidEnabledRow = true;
-      });
-
-      const dedupRules = normalizeLineItemDedupRules((q.lineItemConfig as any)?.dedupRules);
-      applyLineItemDedupRules({
-        groupId: q.id,
-        rows: eligibleRows,
-        rules: dedupRules,
-        buildFieldPath: (rowId: string, fieldId: string) => `${q.id}__${fieldId}__${rowId}`
+      const result = validateGroupRows({
+        groupCfg: q.lineItemConfig,
+        groupKey: q.id,
+        rows,
+        contextValues: values,
+        rootGroupId: q.id
       });
 
       // Required LINE_ITEM_GROUPs must have at least one enabled+valid row (disabled rows are ignored).
-      if ((q as any).required && !questionHidden && !hasAtLeastOneValidEnabledRow) {
+      if ((q as any).required && !questionHidden && !result.hasAnyValidEnabledRow) {
         allErrors[q.id] =
           isProgressive && expandGate === 'collapsedFieldsValid'
-            ? !hasAnyRow || !hasAnyNonDisabledRow
+            ? !result.hasAnyRow || !result.hasAnyNonDisabledRow
               ? tSystem(
                   'validation.completeAtLeastOneRowFillCollapsed',
                   language,
@@ -798,84 +726,73 @@ export const buildSubmissionPayload = async (args: {
   }
 
   for (const q of definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP')) {
-    const rows = recomputed.lineItems[q.id] || [];
-    const ui = (q.lineItemConfig as any)?.ui;
-    const isProgressive =
-      ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
-    const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
-    const saveDisabledRows = ui?.saveDisabledRows === true;
-    // By default, do not persist "disabled" rows:
-    // collapsed + progressive + expandGate=collapsedFieldsValid where collapsed fields aren't valid yet.
-    const rowsToSave = saveDisabledRows
-      ? rows
-      : rows.filter(row => {
-          const collapseKey = `${q.id}::${row.id}`;
-          const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
-          return !isRowDisabledByExpandGate({
-            ui,
-            fields: q.lineItemConfig?.fields || [],
-            row: row as any,
-            topValues: recomputed.values,
-            language,
-            linePrefix: q.id,
-            rowCollapsed
+    const serializeGroupRows = async (args: {
+      groupCfg: any;
+      groupKey: string;
+      rows: LineItemRowState[];
+      contextValues: Record<string, FieldValue>;
+    }): Promise<Record<string, any>[]> => {
+      const { groupCfg, groupKey, rows, contextValues } = args;
+      const ui = (groupCfg as any)?.ui;
+      const isProgressive =
+        ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
+      const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
+      const saveDisabledRows = ui?.saveDisabledRows === true;
+      const rowsToSave = saveDisabledRows
+        ? rows
+        : rows.filter(row => {
+            const collapseKey = `${groupKey}::${row.id}`;
+            const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
+            return !isRowDisabledByExpandGate({
+              ui,
+              fields: (groupCfg?.fields || []) as any[],
+              row: row as any,
+              topValues: contextValues,
+              language,
+              linePrefix: groupKey,
+              rowCollapsed
+            });
           });
-        });
-    const lineFields = q.lineItemConfig?.fields || [];
-    const lineFileFields = lineFields.filter(f => (f as any).type === 'FILE_UPLOAD');
-    const subGroups = q.lineItemConfig?.subGroups || [];
 
-    const serialized = await Promise.all(
-      rowsToSave.map(async row => {
-        const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
+      const fields = (groupCfg?.fields || []) as any[];
+      const fileFields = fields.filter((f: any) => f?.type === 'FILE_UPLOAD');
+      const subGroups = (groupCfg?.subGroups || []) as any[];
 
-        for (const f of lineFileFields) {
-          base[f.id] = await buildMaybeFilePayload(base[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
-        }
+      return Promise.all(
+        rowsToSave.map(async row => {
+          const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
 
-        for (const sub of subGroups) {
-          const key = resolveSubgroupKey(sub as any);
-          if (!key) continue;
-          const childKey = buildSubgroupKey(q.id, row.id, key);
-          const childRows = recomputed.lineItems[childKey] || [];
-          const subUi = (sub as any)?.ui;
-          const isSubProgressive =
-            subUi?.mode === 'progressive' &&
-            Array.isArray(subUi?.collapsedFields) &&
-            (subUi?.collapsedFields || []).length > 0;
-          const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
-          const saveDisabledSubRows = subUi?.saveDisabledRows === true;
-          const subRowsToSave = saveDisabledSubRows
-            ? childRows
-            : childRows.filter(cr => {
-                const subCollapseKey = `${childKey}::${cr.id}`;
-                const subRowCollapsed = isSubProgressive ? (collapsedRows?.[subCollapseKey] ?? subDefaultCollapsed) : false;
-                return !isRowDisabledByExpandGate({
-                  ui: subUi,
-                  fields: (sub as any).fields || [],
-                  row: cr as any,
-                  topValues: { ...(recomputed.values || {}), ...(row.values || {}) },
-                  language,
-                  linePrefix: childKey,
-                  rowCollapsed: subRowCollapsed
-                });
-              });
-          const subFields = (sub as any).fields || [];
-          const subFileFields = subFields.filter((f: any) => f?.type === 'FILE_UPLOAD');
-          base[key] = await Promise.all(
-            subRowsToSave.map(async cr => {
-              const child: Record<string, any> = { ...(cr.values || {}), [ROW_ID_KEY]: cr.id };
-              for (const f of subFileFields) {
-                child[f.id] = await buildMaybeFilePayload(child[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
-              }
-              return child;
-            })
-          );
-        }
+          for (const f of fileFields) {
+            base[f.id] = await buildMaybeFilePayload(base[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
+          }
 
-        return base;
-      })
-    );
+          const nextContext = { ...contextValues, ...(row.values || {}) };
+          for (const sub of subGroups) {
+            const key = resolveSubgroupKey(sub as any);
+            if (!key) continue;
+            const childKey = buildSubgroupKey(groupKey, row.id, key);
+            const childRows = recomputed.lineItems[childKey] || [];
+            const childSerialized = await serializeGroupRows({
+              groupCfg: sub,
+              groupKey: childKey,
+              rows: childRows,
+              contextValues: nextContext
+            });
+            base[key] = childSerialized;
+          }
+
+          return base;
+        })
+      );
+    };
+
+    const rows = recomputed.lineItems[q.id] || [];
+    const serialized = await serializeGroupRows({
+      groupCfg: q.lineItemConfig,
+      groupKey: q.id,
+      rows,
+      contextValues: recomputed.values
+    });
 
     payloadValues[q.id] = serialized;
     payloadValues[`${q.id}_json`] = JSON.stringify(serialized);
@@ -957,36 +874,32 @@ export const buildDraftPayload = (args: {
 
   // Serialize line item groups (and sanitize any nested FILE_UPLOAD fields to URL-only strings)
   for (const q of definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP')) {
-    const rows = recomputed.lineItems[q.id] || [];
-    const lineFields = q.lineItemConfig?.fields || [];
-    const lineFileFields = lineFields.filter(f => (f as any).type === 'FILE_UPLOAD');
-    const subGroups = q.lineItemConfig?.subGroups || [];
+    const serializeGroupRows = (args: { groupCfg: any; groupKey: string; rows: LineItemRowState[] }): Record<string, any>[] => {
+      const { groupCfg, groupKey, rows } = args;
+      const fields = (groupCfg?.fields || []) as any[];
+      const fileFields = fields.filter((f: any) => f?.type === 'FILE_UPLOAD');
+      const subGroups = (groupCfg?.subGroups || []) as any[];
 
-    const serialized = rows.map(row => {
-      const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
-      lineFileFields.forEach(f => {
-        base[f.id] = toUrlOnlyUploadString(base[f.id]);
-      });
-
-      for (const sub of subGroups) {
-        const key = resolveSubgroupKey(sub as any);
-        if (!key) continue;
-        const childKey = buildSubgroupKey(q.id, row.id, key);
-        const childRows = recomputed.lineItems[childKey] || [];
-        const subFields = (sub as any).fields || [];
-        const subFileFields = subFields.filter((f: any) => f?.type === 'FILE_UPLOAD');
-        base[key] = childRows.map(cr => {
-          const child: Record<string, any> = { ...(cr.values || {}), [ROW_ID_KEY]: cr.id };
-          subFileFields.forEach((f: any) => {
-            child[f.id] = toUrlOnlyUploadString(child[f.id]);
-          });
-          return child;
+      return rows.map(row => {
+        const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
+        fileFields.forEach((f: any) => {
+          base[f.id] = toUrlOnlyUploadString(base[f.id]);
         });
-      }
 
-      return base;
-    });
+        for (const sub of subGroups) {
+          const key = resolveSubgroupKey(sub as any);
+          if (!key) continue;
+          const childKey = buildSubgroupKey(groupKey, row.id, key);
+          const childRows = recomputed.lineItems[childKey] || [];
+          base[key] = serializeGroupRows({ groupCfg: sub, groupKey: childKey, rows: childRows });
+        }
 
+        return base;
+      });
+    };
+
+    const rows = recomputed.lineItems[q.id] || [];
+    const serialized = serializeGroupRows({ groupCfg: q.lineItemConfig, groupKey: q.id, rows });
     payloadValues[q.id] = serialized;
     payloadValues[`${q.id}_json`] = JSON.stringify(serialized);
   }

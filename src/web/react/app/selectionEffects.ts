@@ -39,35 +39,69 @@ export const runSelectionEffects = (args: {
   const { definition, question, value, language, values, setValues, setLineItems, logEvent, onRowAppended, opts } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
 
+  const resolveGroupConfigForKey = (groupKey: string): { root?: WebQuestionDefinition; group?: any } => {
+    const parsed = parseSubgroupKey(groupKey);
+    if (!parsed) {
+      const root = definition.questions.find(q => q.id === groupKey);
+      return { root, group: root?.lineItemConfig };
+    }
+    const root = definition.questions.find(q => q.id === parsed.rootGroupId);
+    if (!root) return { root };
+    let current: any = root;
+    for (let i = 0; i < parsed.path.length; i += 1) {
+      const subId = parsed.path[i];
+      const subs = (current?.lineItemConfig?.subGroups || current?.subGroups || []) as any[];
+      const match = subs.find(s => resolveSubgroupKey(s) === subId);
+      if (!match) break;
+      current = match;
+    }
+    return { root, group: current };
+  };
+
   const resolveTargetGroupKey = (targetGroupId: string, lineItemCtx?: { groupId: string; rowId?: string }): string => {
     if (!lineItemCtx?.groupId || !lineItemCtx?.rowId) return targetGroupId;
+    const rawTarget = (targetGroupId || '').toString();
+    const pathSegments = rawTarget.includes('.')
+      ? rawTarget
+          .split('.')
+          .map(seg => seg.trim())
+          .filter(Boolean)
+      : [];
     // If we're already operating inside a subgroup key, resolve subgroup ids relative to that parent row.
     const parsed = parseSubgroupKey(lineItemCtx.groupId);
+    const currentPath = parsed?.path || [];
+    const matchesCurrentPrefix =
+      pathSegments.length && currentPath.length
+        ? pathSegments.slice(0, currentPath.length).join('.') === currentPath.join('.')
+        : false;
+    const relativePath = pathSegments.length ? (matchesCurrentPrefix ? pathSegments.slice(currentPath.length) : pathSegments) : [];
+    const targetId = relativePath.length ? relativePath[0] : rawTarget;
     if (parsed) {
-      // same subgroup id -> current subgroup key
-      if (targetGroupId === parsed.subGroupId) return lineItemCtx.groupId;
-      const parentGroup = definition.questions.find(q => q.id === parsed.parentGroupId);
-      const subMatch = parentGroup?.lineItemConfig?.subGroups?.find(sub => {
+      // same subgroup path -> current subgroup key
+      if (!relativePath.length && pathSegments.length && matchesCurrentPrefix) return lineItemCtx.groupId;
+      if (targetId === parsed.subGroupId) return lineItemCtx.groupId;
+      const currentCfg = resolveGroupConfigForKey(lineItemCtx.groupId).group;
+      const subMatch = currentCfg?.subGroups?.find((sub: any) => {
         const key = resolveSubgroupKey(sub as any);
-        return key === targetGroupId;
+        return key === targetId;
       });
       if (subMatch) {
-        const key = resolveSubgroupKey(subMatch as any) || targetGroupId;
-        return buildSubgroupKey(parsed.parentGroupId, parsed.parentRowId, key);
+        const key = resolveSubgroupKey(subMatch as any) || targetId;
+        return buildSubgroupKey(lineItemCtx.groupId, lineItemCtx.rowId, key);
       }
-      if (targetGroupId === parsed.parentGroupId) return parsed.parentGroupId;
-      return targetGroupId;
+      if (targetId === parsed.rootGroupId) return parsed.rootGroupId;
+      return rawTarget;
     }
     const parentGroup = definition.questions.find(q => q.id === lineItemCtx.groupId);
     const subMatch = parentGroup?.lineItemConfig?.subGroups?.find(sub => {
       const key = resolveSubgroupKey(sub as any);
-      return key === targetGroupId;
+      return key === targetId;
     });
     if (subMatch) {
-      const key = resolveSubgroupKey(subMatch as any) || targetGroupId;
+      const key = resolveSubgroupKey(subMatch as any) || targetId;
       return buildSubgroupKey(lineItemCtx.groupId, lineItemCtx.rowId, key);
     }
-    return targetGroupId;
+    return rawTarget;
   };
 
   handleSelectionEffects(
@@ -319,9 +353,10 @@ export const runSelectionEffects = (args: {
           const next: LineItemState = { ...prev, [targetKey]: remaining };
           const subgroupInfo = parseSubgroupKey(targetKey);
           if (!subgroupInfo) {
+            const prefixes = Array.from(removedIds).map(id => `${targetKey}::${id}::`);
             Object.keys(next).forEach(key => {
-              const parsed = parseSubgroupKey(key);
-              if (parsed?.parentGroupId === targetKey && removedIds.has(parsed.parentRowId)) {
+              if (!key.startsWith(`${targetKey}::`)) return;
+              if (prefixes.some(prefix => key.startsWith(prefix))) {
                 delete (next as any)[key];
               }
             });

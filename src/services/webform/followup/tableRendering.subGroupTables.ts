@@ -24,25 +24,59 @@ export const renderSubGroupTables = (
     body.removeChild(templateTable);
     return 0;
   }
-  const subConfig = group.lineItemConfig.subGroups.find(sub => {
-    const key = resolveSubgroupKey(sub as any);
-    const normalizedKey = (key || '').toUpperCase();
-    const slugKey = slugifyPlaceholder(key || '');
-    return normalizedKey === directive.subGroupId || slugKey === directive.subGroupId;
-  });
+  const resolveSubPath = (pathTokens: string[]): { config: SubGroupConfig; keyPath: string[] } | null => {
+    let current: any = group.lineItemConfig;
+    const keyPath: string[] = [];
+    for (let i = 0; i < pathTokens.length; i += 1) {
+      const token = pathTokens[i];
+      const subs = (current?.subGroups || []) as any[];
+      const match = subs.find(sub => {
+        const key = resolveSubgroupKey(sub as any);
+        const normalizedKey = (key || '').toUpperCase();
+        const slugKey = slugifyPlaceholder(key || '');
+        return normalizedKey === token || slugKey === token;
+      });
+      if (!match) return null;
+      const resolvedKey = resolveSubgroupKey(match as any);
+      if (!resolvedKey) return null;
+      keyPath.push(resolvedKey);
+      if (i === pathTokens.length - 1) {
+        return { config: match as SubGroupConfig, keyPath };
+      }
+      current = match;
+    }
+    return null;
+  };
+
+  const pathTokens = directive.subGroupId.split('.').map(seg => seg.trim().toUpperCase()).filter(Boolean);
+  const resolved = resolveSubPath(pathTokens);
+  const subConfig = resolved?.config;
   if (!subConfig) {
     body.removeChild(templateTable);
     return 0;
   }
-  const subKey = resolveSubgroupKey(subConfig as any);
   const parentRows = lineItemRows[group.id] || [];
   const orderBy = extractOrderByDirective(templateTable);
   const preserved = templateTable.copy();
   body.removeChild(templateTable);
   let inserted = 0;
 
+  const collectChildren = (parentRow: any): any[] => {
+    if (!resolved?.keyPath.length) return [];
+    let current: any[] = [parentRow];
+    resolved.keyPath.forEach(key => {
+      const next: any[] = [];
+      current.forEach(row => {
+        const children = Array.isArray((row || {})[key]) ? (row as any)[key] : [];
+        children.forEach((child: any) => next.push(child || {}));
+      });
+      current = next;
+    });
+    return current;
+  };
+
   parentRows.forEach(parentRow => {
-    const children = Array.isArray((parentRow || {})[subKey]) ? (parentRow as any)[subKey] : [];
+    const children = collectChildren(parentRow);
     if (!children.length) return;
     const newTable = body.insertTable(childIndex + inserted, preserved.copy());
     if (orderBy && orderBy.keys.length) {
@@ -57,7 +91,9 @@ export const renderSubGroupTables = (
         rowTextParts.push(row.getCell(c).getText() || '');
       }
       const placeholders = extractLineItemPlaceholders(rowTextParts.join(' '));
-      const hasSubPlaceholders = placeholders.some(p => p.subGroupId && p.subGroupId.toUpperCase() === directive.subGroupId);
+      const hasSubPlaceholders = placeholders.some(
+        p => p.subGroupId && p.subGroupId.toUpperCase() === directive.subGroupId
+      );
 
       if (!hasSubPlaceholders) {
         // Parent-level row: replace placeholders once with parent data, keep formatting

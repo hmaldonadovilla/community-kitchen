@@ -89,7 +89,8 @@ export function computeGuidedStepsStatus(args: {
 
   const topCtx = {
     getValue: (fieldId: string) => (values as any)[fieldId],
-    getLineItems: (groupId: string) => (lineItems as any)[groupId] || []
+    getLineItems: (groupId: string) => (lineItems as any)[groupId] || [],
+    getLineItemKeys: () => Object.keys(lineItems || {})
   };
 
   const headerTargets: any[] = Array.isArray(stepsCfg.header?.include) ? stepsCfg.header!.include : [];

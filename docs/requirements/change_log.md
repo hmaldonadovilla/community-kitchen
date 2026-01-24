@@ -166,7 +166,16 @@
 - ck-48:
   -For line item groups rows, with the `MP_IS_REHEAT` field set to `Yes`, the `Ingredient Needed` button does not need to be shown because these type of meals do not need for the cook to retrieve ingredients from the pantry. Logically we must hide Ingredients needed unless there is at least one row with a recipe selection and the value `No` on the `MP_IS_REHEAT` field. To define this generically we should create a feature where visibility of top level fields, including buttons shown in edit view, is impacted by logic that looks at nested line item and subgroups.
   - When
-  > **WIP - Cursor**
+  > **DONE - Cursor**
 - ck-49:
   - Assess if we can apply option filter to data coming from dataSource, based on values from current record fields. The specific use case to enable is: we are setting recipies on a different form, these records are defined by a multi-select field that contains the dietary applicability of the recipe and the values are being saved in the sever as strings separated by commas. In the meal production form we are defining a single dietary applicability for the meal to be preparead and we require the cook to select the recipe that will be used, therefore we need to define an option filter to will exclude the recipies that are not compatible with the dietary applicability of the meal. Please follow guidelines defined in AGENT.md.
-  > **WIP - Codex**
+  > **DONE - Codex**
+- ck-50:
+  - we require true nesting design for line item groups and subgroups. Along with 2 level line item handling in full page overlays. Design is defined in `docs/true-nesting-design.md`.
+  > **WIP - Cursor**
+- ck-51:
+  - we need to be able to calculate fields using complex hierarchy. For example a line item group has two numeric field called `QTY` and `MP_TO_COOK`, and also contains a subgroup called `MP_TYPE_LI` that has a numeric field called `PREP_QTY` and a CHOICE field called `PREP_TYPE`. We need to be able to calculate the field `MP_TO_COOK` by doing {`QTY` - SUM(`MP_TYPE_LI.PREP_QTY`)} when `MP_TYPE_LI.PREP_TYPE` is `Full Dish`.
+  - then with the calculated field will use selection effects to add a new line item row in MP_TYPE_LI group that has the value of `PREP_QTY` = `MP_TO_COOK` (we will also assign the value of `PREP_TYPE` = `Cook` to avoid creating a loop). I think this last part we can do it with the existing selection effects functionality, please assess.
+  > **WIP - Cursor**
+- ck-52:
+  - Please adjust the functionality of GROUP_TABLE placeholder to support complex hierarchy. Review the configuration defined in `docs/templates/mp.ing_recipe.html`, the table grouping is not happening and check if the sorting is working as expected. Also we need to allow dataSource fields to appear in the template. The value of `MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE` is comming from a dataSource row and we are already using the RECIPE.REC_INST as the `tooltipField` value, in our use case we want to display the content of the `RECIPE.REC_INST` field in the `Instructions` tab of out html template.

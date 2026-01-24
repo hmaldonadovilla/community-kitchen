@@ -48,7 +48,7 @@ const extractExcludeWhenWhenFromText = (text: string): { when: any } | null => {
 
 const extractConsolidatedTableFromText = (text: string): { groupId: string; subGroupId: string } | null => {
   const m = (text || '').match(
-    /{{\s*CONSOLIDATED_TABLE\s*\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)(?:\s*\.\s*[A-Z0-9_]+)?\s*\)\s*}}/i
+    /{{\s*CONSOLIDATED_TABLE\s*\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+(?:\s*\.\s*[A-Z0-9_]+)*)\s*\)\s*}}/i
   );
   if (!m) return null;
   return { groupId: (m[1] || '').toString().toUpperCase(), subGroupId: (m[2] || '').toString().toUpperCase() };
@@ -167,18 +167,45 @@ export const applyMarkdownLineItemBlocks = (args: {
     let subConfig: SubGroupConfig | undefined;
 
     if (targetSubToken && (group as any)?.lineItemConfig?.subGroups?.length) {
-      subConfig = (group as any).lineItemConfig.subGroups.find((sub: any) => {
-        const key = resolveSubgroupKey(sub as any);
-        const normalizedKey = (key || '').toString().toUpperCase();
-        const slugKey = slugifyPlaceholder(key || '');
-        return normalizedKey === targetSubToken || slugKey === targetSubToken;
-      });
-      if (subConfig) {
-        const subKey = resolveSubgroupKey(subConfig as any);
+      const pathTokens = targetSubToken.split('.').map(seg => seg.trim().toUpperCase()).filter(Boolean);
+      const resolveSubPath = (path: string[]): { config: SubGroupConfig; keyPath: string[] } | null => {
+        let current: any = (group as any).lineItemConfig;
+        const keyPath: string[] = [];
+        for (let i = 0; i < path.length; i += 1) {
+          const token = path[i];
+          const subs = (current?.subGroups || []) as any[];
+          const match = subs.find((sub: any) => {
+            const key = resolveSubgroupKey(sub as any);
+            const normalizedKey = (key || '').toString().toUpperCase();
+            const slugKey = slugifyPlaceholder(key || '');
+            return normalizedKey === token || slugKey === token;
+          });
+          if (!match) return null;
+          const resolvedKey = resolveSubgroupKey(match as any);
+          if (!resolvedKey) return null;
+          keyPath.push(resolvedKey);
+          if (i === path.length - 1) {
+            return { config: match as SubGroupConfig, keyPath };
+          }
+          current = match;
+        }
+        return null;
+      };
+      const resolved = resolveSubPath(pathTokens);
+      subConfig = resolved?.config;
+      if (subConfig && resolved) {
         const flattened: any[] = [];
         (rows || []).forEach(parentRow => {
-          const children = Array.isArray((parentRow || {})[subKey]) ? (parentRow as any)[subKey] : [];
-          children.forEach((child: any) => {
+          let currentRows: any[] = [parentRow];
+          resolved.keyPath.forEach(key => {
+            const next: any[] = [];
+            currentRows.forEach(row => {
+              const children = Array.isArray((row || {})[key]) ? (row as any)[key] : [];
+              children.forEach((child: any) => next.push(child || {}));
+            });
+            currentRows = next;
+          });
+          currentRows.forEach((child: any) => {
             flattened.push({ __parent: parentRow, ...(parentRow || {}), ...(child || {}) });
           });
         });
@@ -232,16 +259,9 @@ export const applyMarkdownLineItemBlocks = (args: {
       const normalizedGroupId = (group.id || '').toString().toUpperCase();
       const matchesGroup = consolidatedDirective.groupId === normalizedGroupId;
       const wantsSub = consolidatedDirective.subGroupId;
-      const matchesSub =
-        wantsSub === targetSubToken ||
-        (subConfig
-          ? (() => {
-              const key = resolveSubgroupKey(subConfig as any);
-              const normalizedKey = (key || '').toString().toUpperCase();
-              const slugKey = slugifyPlaceholder(key || '');
-              return wantsSub === normalizedKey || wantsSub === slugKey;
-            })()
-          : false);
+      const normalizedTarget = targetSubToken.toUpperCase();
+      const slugTarget = slugifyPlaceholder(targetSubToken);
+      const matchesSub = wantsSub === normalizedTarget || (slugTarget && wantsSub === slugTarget);
       if (matchesGroup && matchesSub) {
         const placeholdersForKey = extractLineItemPlaceholders(blockText).filter(p => p.groupId === normalizedGroupId);
         rows = consolidateConsolidatedTableRows({

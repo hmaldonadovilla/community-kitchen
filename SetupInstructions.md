@@ -591,7 +591,9 @@ This project uses TypeScript. You need to build the script before using it in Go
           - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`). Search indexes include extra columns from `optionsRef`/data sources when available.
           - `ui.mode: "table"`: render line items as a compact table (also supported on subgroups)
           - `ui.tableColumns`: ordered list of field ids to show as table columns (defaults to the line-item field order)
-          - `ui.tableColumnWidths`: optional per-column widths map (e.g., `{ "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" }`)
+         - `ui.tableColumnWidths`: optional per-column widths map. Keys can be field ids plus action keys
+           (`__remove`, `__view`, `__edit` and `_remove`, `_view`, `_edit` for overlay header action columns).
+           Example: `{ "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" }`
           - `ui.nonMatchWarningMode`: choose how optionFilter non-match warnings show in the table legend (`descriptive`, `validation`, or `both`)
           - `ui.tableHideUntilAnchor`: when true (default), hide non-anchor columns until the anchor field has a value
           - `ui.needsAttentionMessage`: localized override for the “Needs attention” helper shown when this line item group or subgroup requires review
@@ -850,6 +852,7 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
       This will add a row to the `DELIVERY_LINES` line-item group when the value "Add lines" is selected, pre-filling the `ITEM_UNIT` field with "Crate".
+      - **Target nested subgroups**: Use `targetPath` to point to a nested subgroup relative to the triggering row (dot-delimited string or array). Example: `"targetPath": "INGREDIENTS"` or `"targetPath": ["INGREDIENTS"]`.
       - You can also **copy values** into the new row using reference strings in `preset`:
         - `$row.FIELD_ID` copies from the originating **line-item row** (when the effect is triggered inside a line item)
         - `$top.FIELD_ID` copies from **top-level** record values
@@ -1133,7 +1136,83 @@ This project uses TypeScript. You need to build the script before using it in Go
       - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
       - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; you can optionally hide the UI paging controls via `listView.paginationControlsEnabled: false`. Search runs client-side (keyword search by default, or date search via `listView.search`). Header sorting is enabled by default (click a column header to sort), and can be disabled with `listView.headerSortEnabled: false` (totalCount is capped at 200).
     - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
-    - **Line-item table mode**: To render line items as a compact table, set `"ui": { "mode": "table" }` in the line-item config (also supported for subgroups). You can control column order with `"ui": { "tableColumns": ["ING", "QTY", "UNIT"] }`, set column widths with `"ui": { "tableColumnWidths": { "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" } }`, and hide non-anchor columns until the anchor value is chosen with `"ui": { "tableHideUntilAnchor": true }` (default).
+    - **Line-item table mode**: To render line items as a compact table, set `"ui": { "mode": "table" }` in the line-item config (also supported for subgroups). You can control column order with `"ui": { "tableColumns": ["ING", "QTY", "UNIT"] }`, set column widths with `"ui": { "tableColumnWidths": { "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" } }` (action keys supported: `__remove`, `__view`, `__edit` and `_remove`, `_view`, `_edit`), and hide non-anchor columns until the anchor value is chosen with `"ui": { "tableHideUntilAnchor": true }` (default).
+    - **True nesting (subgroups inside subgroups)**: Line-item groups can contain subgroups, and subgroups can themselves contain nested subgroups. Reference nested groups with dot-delimited paths (example: `"MEALS.INGREDIENTS"`). For visibility rules, use `subGroupPath` with `*`/`**` wildcards when you need to match any depth.
+    - **Overlay detail layout (header + body)**: For full-page overlays, you can render a header table of parent rows and a body area for nested rows. Configure this inside the line-item group JSON:
+
+      ```json
+      {
+        "ui": {
+          "overlayDetail": {
+            "enabled": true,
+            "header": {
+              "tableColumns": ["TYPE", "RECIPE", "NOTES"],
+              "tableColumnWidths": { "TYPE": "25%", "RECIPE": "45%", "NOTES": "30%" },
+              "addButtonPlacement": "top"
+            },
+            "rowActions": {
+              "viewLabel": { "en": "View" },
+              "editLabel": { "en": "Edit" }
+            },
+            "body": {
+              "subGroupId": "INGREDIENTS",
+              "edit": { "mode": "table", "tableColumns": ["ING", "QTY", "UNIT"] },
+              "view": { "mode": "html", "templateId": { "en": "bundle:Leftovers_Detail" } }
+            }
+          }
+        }
+      }
+      ```
+
+      Notes:
+      - `subGroupId` currently targets the immediate subgroup only.
+      - `view.mode` requires a bundled HTML template id (`bundle:...`).
+      - `header.tableColumnWidths` supports action keys `__view`, `__edit`, `__remove` (and `_view`, `_edit`, `_remove` aliases) for fixed-width icon columns.
+    - **Field-driven overlay open actions**: Any question can act as an overlay opener by adding `ui.overlayOpenActions`.
+      When the `when` clause matches, the field renders as a button that opens the target line-item group overlay.
+      Use `rowFilter` to show only matching header rows, and `groupOverride` to customize columns, actions,
+      add buttons, or subgroups for this specific opener.
+
+      ```json
+      {
+        "id": "MP_IS_REHEAT",
+        "type": "CHOICE",
+        "qEn": "Reheat?",
+        "options": ["No", "Yes"],
+        "ui": {
+          "control": "select",
+          "overlayOpenActions": [
+            {
+              "groupId": "MP_TYPE_LI",
+              "when": { "fieldId": "MP_IS_REHEAT", "equals": "Yes" },
+              "label": { "en": "Open reheats" },
+              "rowFilter": { "includeWhen": { "fieldId": "PREP_TYPE", "equals": "Reheat" } },
+              "flattenFields": ["PREP_QTY", "RECIPE"],
+              "groupOverride": {
+                "minRows": 1,
+                "maxRows": 1,
+                "ui": {
+                  "overlayDetail": {
+                    "enabled": true,
+                    "header": {
+                      "tableColumns": ["PREP_TYPE", "PREP_QTY", "RECIPE"],
+                      "tableColumnWidths": { "PREP_TYPE": "20%", "PREP_QTY": "20%", "RECIPE": "60%", "_view": "44px", "_edit": "44px", "_remove": "44px" }
+                    }
+                  }
+                },
+                "addButtonLabel": { "en": "Add reheat" }
+              }
+            }
+          ]
+        }
+      }
+      ```
+
+      - `renderMode: "replace"` (default) replaces the field control with a button. Use `"inline"` to keep the control and show a separate button below.
+      - `resetValue` sets the field value when the trash/reset icon is confirmed, so the field reverts to its original control.
+      - `groupOverride.minRows` seeds blank rows when the overlay opens; `groupOverride.maxRows` disables the Add button (and selector overlay) once the limit is reached.
+      - `flattenFields` surfaces specific line-item fields inline when the target group is single-row (`maxRows: 1`).
+      - If multiple actions are provided, the first matching `when` clause is used.
     - **Quick recipe for the new features**:
       - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
 
@@ -1211,9 +1290,11 @@ This project uses TypeScript. You need to build the script before using it in Go
         }
         ```
 
-        Add `subGroupId` to scan subgroup rows (across all parent rows) with the same row-level `when` shape.
+        Add `subGroupPath` (or legacy `subGroupId` for a single level) to scan subgroup rows with the same row-level `when` shape.
+        `subGroupPath` supports dot-delimited paths (e.g., `"MEALS.INGREDIENTS"`) and wildcards (`*`, `**`) for any depth.
         Row-level `when` reads only row/subgroup values; put top-level conditions outside the `lineItems` clause.
-        To require both a parent row condition and a child row condition, use `parentWhen` (subgroup only):
+        To require both a parent row condition and a child row condition, use `parentWhen` (subgroup only).
+        Add `parentScope: "ancestor"` to match any ancestor in the path (default is immediate parent):
 
         ```json
         {

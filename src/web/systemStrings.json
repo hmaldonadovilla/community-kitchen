@@ -130,6 +130,16 @@
       "nl": "Vul verplichte velden in om te openen: {fields}"
     },
     "remove": { "en": "Remove", "fr": "Supprimer", "nl": "Verwijderen" },
+    "removeRowsTitle": {
+      "en": "Remove rows?",
+      "fr": "Supprimer les lignes ?",
+      "nl": "Rijen verwijderen?"
+    },
+    "removeRowsMessage": {
+      "en": "This will remove the matching rows.",
+      "fr": "Cela supprimera les lignes correspondantes.",
+      "nl": "Dit verwijdert de overeenkomende rijen."
+    },
     "addLine": { "en": "Add line", "fr": "Ajouter une ligne", "nl": "Regel toevoegen" },
     "addLines": { "en": "Add lines", "fr": "Ajouter des lignes", "nl": "Regels toevoegen" },
     "addSelected": { "en": "Add selected ({count})", "fr": "Ajouter la sélection ({count})", "nl": "Selectie toevoegen ({count})" },
@@ -221,7 +231,29 @@
   "overlay": {
     "row": { "en": "Row", "fr": "Ligne", "nl": "Rij" },
     "itemsOne": { "en": "{count} item", "fr": "{count} élément", "nl": "{count} item" },
-    "itemsMany": { "en": "{count} items", "fr": "{count} éléments", "nl": "{count} items" }
+    "itemsMany": { "en": "{count} items", "fr": "{count} éléments", "nl": "{count} items" },
+    "detail": {
+      "templateMissing": { "en": "Template not configured.", "fr": "Modèle non configuré.", "nl": "Sjabloon niet geconfigureerd." },
+      "templateBundleRequired": {
+        "en": "Template must be a bundled (bundle:...) HTML template.",
+        "fr": "Le modèle doit être un modèle HTML intégré (bundle:...).",
+        "nl": "Het sjabloon moet een gebundeld (bundle:...) HTML-sjabloon zijn."
+      },
+      "templateFailed": { "en": "Unable to render template.", "fr": "Impossible de rendre le modèle.", "nl": "Kan het sjabloon niet weergeven." },
+      "selected": { "en": "Selected", "fr": "Sélectionné", "nl": "Geselecteerd" },
+      "pathUnsupported": {
+        "en": "Nested paths beyond one level are not supported yet.",
+        "fr": "Les chemins imbriqués au-delà d’un niveau ne sont pas encore pris en charge.",
+        "nl": "Geneste paden dieper dan één niveau worden nog niet ondersteund."
+      },
+      "subgroupMissing": { "en": "Subgroup configuration not found.", "fr": "Configuration du sous-groupe introuvable.", "nl": "Subgroepconfiguratie niet gevonden." },
+      "selectRow": { "en": "Select a row to view details.", "fr": "Sélectionnez une ligne pour voir les détails.", "nl": "Selecteer een rij om details te bekijken." },
+      "viewModeUnsupported": { "en": "View mode is not supported.", "fr": "Le mode d’affichage n’est pas pris en charge.", "nl": "De weergavemodus wordt niet ondersteund." },
+      "editModeUnsupported": { "en": "Edit mode is not supported.", "fr": "Le mode d’édition n’est pas pris en charge.", "nl": "De bewerkingsmodus wordt niet ondersteund." },
+      "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
+      "empty": { "en": "No preview available.", "fr": "Aucun aperçu disponible.", "nl": "Geen voorbeeld beschikbaar." },
+      "selectedRow": { "en": "Selected row", "fr": "Ligne sélectionnée", "nl": "Geselecteerde rij" }
+    }
   },
   "files": {
     "title": { "en": "Photos", "fr": "Photos", "nl": "Foto's" },

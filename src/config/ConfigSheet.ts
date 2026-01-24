@@ -1481,6 +1481,25 @@ export class ConfigSheet {
         groupId: effect.groupId.toString()
       };
       {
+        const targetPathRaw =
+          effect.targetPath !== undefined
+            ? effect.targetPath
+            : effect.targetGroupPath !== undefined
+              ? effect.targetGroupPath
+              : effect.groupPath !== undefined
+                ? effect.groupPath
+                : undefined;
+        if (Array.isArray(targetPathRaw)) {
+          const path = targetPathRaw
+            .map((entry: any) => (entry !== undefined && entry !== null ? entry.toString().trim() : ''))
+            .filter(Boolean);
+          if (path.length) normalized.targetPath = path;
+        } else if (targetPathRaw !== undefined && targetPathRaw !== null) {
+          const path = targetPathRaw.toString().trim();
+          if (path) normalized.targetPath = path;
+        }
+      }
+      {
         const idCandidate =
           effect.id !== undefined
             ? effect.id
@@ -1741,6 +1760,13 @@ export class ConfigSheet {
 
       const subGroupRaw = (lineItemsRaw as any).subGroupId ?? (lineItemsRaw as any).subGroup;
       const subGroupId = subGroupRaw !== undefined && subGroupRaw !== null ? subGroupRaw.toString().trim() : '';
+      const subGroupPathRaw = (lineItemsRaw as any).subGroupPath ?? (lineItemsRaw as any).subGroupPathIds;
+      const subGroupPath =
+        Array.isArray(subGroupPathRaw)
+          ? subGroupPathRaw.map((entry: any) => (entry !== undefined && entry !== null ? entry.toString().trim() : '')).filter(Boolean)
+          : subGroupPathRaw !== undefined && subGroupPathRaw !== null
+            ? subGroupPathRaw.toString().trim()
+            : '';
 
       const whenRaw = (lineItemsRaw as any).when;
       const when = this.normalizeWhenClause(whenRaw);
@@ -1760,12 +1786,21 @@ export class ConfigSheet {
       const parentMatch =
         parentMatchStr === 'all' || parentMatchStr === 'any' ? (parentMatchStr as 'all' | 'any') : undefined;
 
+      const parentScopeRaw = (lineItemsRaw as any).parentScope ?? (lineItemsRaw as any).parentDepth;
+      const parentScopeStr = typeof parentScopeRaw === 'string' ? parentScopeRaw.trim().toLowerCase() : '';
+      const parentScope =
+        parentScopeStr === 'immediate' || parentScopeStr === 'ancestor'
+          ? (parentScopeStr as 'immediate' | 'ancestor')
+          : undefined;
+
       const cfg: any = { groupId };
       if (subGroupId) cfg.subGroupId = subGroupId;
+      if (subGroupPath) cfg.subGroupPath = subGroupPath;
       if (when) cfg.when = when;
       if (parentWhen) cfg.parentWhen = parentWhen;
       if (match) cfg.match = match;
       if (parentMatch) cfg.parentMatch = parentMatch;
+      if (parentScope) cfg.parentScope = parentScope;
       return { lineItems: cfg } as any;
     }
 
@@ -2129,6 +2164,17 @@ export class ConfigSheet {
         rawUi.paragraphDisclaimerConfig ??
         rawUi.paragraph_disclaimer_config
     );
+    const overlayOpenActionsRaw =
+      rawUi.overlayOpenActions ??
+      rawUi.overlayOpenAction ??
+      rawUi.overlayOpen ??
+      rawUi.overlayActions ??
+      rawUi.overlayAction;
+    const overlayOpenActions = Array.isArray(overlayOpenActionsRaw)
+      ? overlayOpenActionsRaw
+      : overlayOpenActionsRaw
+        ? [overlayOpenActionsRaw]
+        : undefined;
     const choiceSearchEnabled = normalizeBool(
       rawUi.choiceSearchEnabled ??
         rawUi.choiceSearch ??
@@ -2165,6 +2211,7 @@ export class ConfigSheet {
     if (paragraphRows) (cfg as any).paragraphRows = paragraphRows;
     if (paragraphDisclaimer) (cfg as any).paragraphDisclaimer = paragraphDisclaimer;
     if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
+    if (overlayOpenActions && overlayOpenActions.length) (cfg as any).overlayOpenActions = overlayOpenActions;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
@@ -2228,6 +2275,7 @@ export class ConfigSheet {
       rawUi.defaultCollapsed !== undefined && rawUi.defaultCollapsed !== null ? !!rawUi.defaultCollapsed : undefined;
 
     const rowDisclaimer = this.normalizeRowDisclaimer(rawUi.rowDisclaimer ?? rawUi.row_disclaimer ?? rawUi.disclaimer);
+    const overlayDetail = rawUi.overlayDetail ?? rawUi.overlay_detail ?? rawUi.overlayDetailLayout ?? rawUi.overlay_detail_layout;
 
     const tableColumnsRaw =
       rawUi.tableColumns ??
@@ -2380,6 +2428,7 @@ export class ConfigSheet {
     if (openInOverlay !== undefined) (cfg as any).openInOverlay = openInOverlay;
     if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
     if (nonMatchWarningMode !== undefined) (cfg as any).nonMatchWarningMode = nonMatchWarningMode;
+    if (overlayDetail !== undefined) (cfg as any).overlayDetail = overlayDetail;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
@@ -2781,6 +2830,17 @@ export class ConfigSheet {
       const refName = entry.ref.substring(4).trim();
       const refCfg = this.parseLineItemSheet(ss, refName);
       if (refCfg) {
+        const subGroups = Array.isArray(entry.subGroups)
+          ? entry.subGroups
+              .map((subEntry: any, idx: number) =>
+                this.normalizeSubGroupConfig(
+                  ss,
+                  subEntry,
+                  `${entry.id || refCfg.id || fallbackId || refName}_sub_${idx + 1}`
+                )
+              )
+              .filter(Boolean) as LineItemGroupConfig[]
+          : refCfg.subGroups;
         return {
           ...refCfg,
           id: entry.id ? entry.id.toString() : refCfg.id || fallbackId,
@@ -2793,7 +2853,8 @@ export class ConfigSheet {
           anchorFieldId: entry.anchorFieldId ?? refCfg.anchorFieldId,
           sectionSelector: entry.sectionSelector ? this.normalizeLineItemSelector(ss, entry.sectionSelector) : refCfg.sectionSelector,
           dedupRules: entry.dedupRules ? this.normalizeLineItemDedupRules(entry.dedupRules) : refCfg.dedupRules,
-          totals: entry.totals ? this.normalizeLineItemTotals(entry.totals) : refCfg.totals
+          totals: entry.totals ? this.normalizeLineItemTotals(entry.totals) : refCfg.totals,
+          subGroups
         };
       }
     }
@@ -2805,6 +2866,11 @@ export class ConfigSheet {
     const dedupRules = this.normalizeLineItemDedupRules(entry.dedupRules);
     const totals = this.normalizeLineItemTotals(entry.totals);
     const ui = this.normalizeLineItemUi(entry.ui);
+    const subGroups = Array.isArray(entry.subGroups)
+      ? entry.subGroups
+          .map((subEntry: any, idx: number) => this.normalizeSubGroupConfig(ss, subEntry, `${entry.id || fallbackId}_sub_${idx + 1}`))
+          .filter(Boolean) as LineItemGroupConfig[]
+      : undefined;
 
     return {
       id: entry.id ? entry.id.toString() : fallbackId,
@@ -2818,7 +2884,8 @@ export class ConfigSheet {
       sectionSelector,
       dedupRules,
       totals,
-      fields
+      fields,
+      subGroups
     };
   }
 

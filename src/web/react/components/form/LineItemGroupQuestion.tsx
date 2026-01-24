@@ -3,6 +3,7 @@ import {
   computeAllowedOptions,
   buildLocalizedOptions,
   shouldHideField,
+  matchesWhen,
   matchesWhenClause,
   validateRules,
   computeTotals,
@@ -16,12 +17,14 @@ import { tSystem } from '../../../systemStrings';
 import {
   FieldValue,
   LangCode,
+  LineItemGroupConfigOverride,
   OptionSet,
   ValidationRule,
   VisibilityContext,
   WebFormDefinition,
   WebQuestionDefinition
 } from '../../../types';
+import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { FormErrors, LineItemState, OptionState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
@@ -55,14 +58,16 @@ import { SearchableSelect } from './SearchableSelect';
 import { LineItemMultiAddSelect } from './LineItemMultiAddSelect';
 import { NumberStepper } from './NumberStepper';
 import { PairedRowGrid } from './PairedRowGrid';
-import { resolveValueMapValue } from './valueMaps';
+import { applyValueMapsToLineRow, resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorLabel, resolveSelectorPlaceholder } from './lineItemSelectors';
 import {
   ROW_HIDE_REMOVE_KEY,
   ROW_NON_MATCH_OPTIONS_KEY,
   ROW_SOURCE_AUTO,
   ROW_SOURCE_KEY,
+  cascadeRemoveLineItemRows,
   buildSubgroupKey,
+  resolveLineItemRowLimits,
   parseRowHideRemove,
   parseRowNonMatchOptions,
   parseRowSource,
@@ -125,9 +130,29 @@ export interface LineItemGroupQuestionCtx {
 
   openInfoOverlay: (title: string, text: string) => void;
   openFileOverlay: (args: OpenFileOverlayArgs) => void;
-  openSubgroupOverlay: (subKey: string) => void;
+  openSubgroupOverlay: (
+    subKey: string,
+    options?: {
+      source?: 'user' | 'system' | 'autoscroll' | 'navigate';
+      rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
+      groupOverride?: LineItemGroupConfigOverride;
+      hideInlineSubgroups?: boolean;
+    }
+  ) => void;
+  openLineItemGroupOverlay: (
+    groupOrId: string | WebQuestionDefinition,
+    options?: {
+      rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
+      hideInlineSubgroups?: boolean;
+      source?: 'user' | 'system' | 'autoscroll' | 'navigate';
+    }
+  ) => void;
 
-  addLineItemRowManual: (groupId: string, preset?: Record<string, any>) => void;
+  addLineItemRowManual: (
+    groupId: string,
+    preset?: Record<string, any>,
+    options?: { configOverride?: any; rowFilter?: { includeWhen?: any; excludeWhen?: any } | null }
+  ) => void;
   removeLineRow: (groupId: string, rowId: string) => void;
   handleLineFieldChange: (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => void;
 
@@ -151,6 +176,10 @@ export interface LineItemGroupQuestionCtx {
   decrementDrag: (key: string) => void;
   resetDrag: (key: string) => void;
   uploadAnnouncements: Record<string, string>;
+
+  openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
+  isOverlayOpenActionSuppressed?: (fieldPath: string) => boolean;
+  suppressOverlayOpenAction?: (fieldPath: string) => void;
 
   handleLineFileInputChange: (args: {
     group: WebQuestionDefinition;
@@ -210,6 +239,7 @@ export const LineItemGroupQuestion: React.FC<{
     openInfoOverlay,
     openFileOverlay,
     openSubgroupOverlay,
+    openLineItemGroupOverlay,
     addLineItemRowManual,
     removeLineRow,
     handleLineFieldChange,
@@ -262,6 +292,7 @@ export const LineItemGroupQuestion: React.FC<{
   const selectorOverlayLoggedRef = React.useRef<Set<string>>(new Set());
   const selectorLabelLoggedRef = React.useRef<Set<string>>(new Set());
   const warningModeLoggedRef = React.useRef<Set<string>>(new Set());
+  const overlayOpenActionLoggedRef = React.useRef<Set<string>>(new Set());
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
     const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
@@ -2020,6 +2051,11 @@ export const LineItemGroupQuestion: React.FC<{
               });
 
               const allFields = q.lineItemConfig?.fields || [];
+              const rowVisibilityValues = applyValueMapsToLineRow(allFields, row.values || {}, values, { mode: 'init' });
+              const overlayActionCtx: VisibilityContext = {
+                ...groupCtx,
+                getLineValue: (_rowId, fid) => (rowVisibilityValues as any)[fid]
+              };
               const subGroups = q.lineItemConfig?.subGroups || [];
               const subIdToLabel: Record<string, string> = {};
               subGroups.forEach(sub => {
@@ -2029,6 +2065,630 @@ export const LineItemGroupQuestion: React.FC<{
                 subIdToLabel[id] = label || id;
               });
               const subIds = Object.keys(subIdToLabel);
+              const normalizeOverlayOpenActions = (field: any): any[] => {
+                const raw =
+                  (field as any)?.ui?.overlayOpenActions ??
+                  (field as any)?.overlayOpenActions ??
+                  (field as any)?.ui?.overlayOpenAction ??
+                  (field as any)?.overlayOpenAction;
+                if (!raw) return [];
+                return Array.isArray(raw) ? raw : [raw];
+              };
+              const normalizeOverlayFieldList = (raw: any): string[] => {
+                if (raw === undefined || raw === null) return [];
+                const list = Array.isArray(raw) ? raw : [raw];
+                const seen = new Set<string>();
+                return list
+                  .map(entry => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+                  .filter(entry => {
+                    if (!entry || seen.has(entry)) return false;
+                    seen.add(entry);
+                    return true;
+                  });
+              };
+              const overlayOpenActionTargetsForField = (field: any): string[] => {
+                const actions = normalizeOverlayOpenActions(field);
+                return actions
+                  .map(action =>
+                    action?.groupId !== undefined && action?.groupId !== null ? action.groupId.toString() : ''
+                  )
+                  .filter(gid => !!gid && subIdToLabel[gid] !== undefined);
+              };
+              const logOverlayOpenActionOnce = (key: string, event: string, payload?: Record<string, unknown>) => {
+                if (!onDiagnostic || !key) return;
+                if (overlayOpenActionLoggedRef.current.has(key)) return;
+                overlayOpenActionLoggedRef.current.add(key);
+                onDiagnostic(event, payload);
+              };
+              const mergeOverlayDetailConfig = (base: any, override: any) => {
+                if (!base && !override) return undefined;
+                if (!base) return override;
+                if (!override) return base;
+                return {
+                  ...base,
+                  ...override,
+                  header: { ...(base.header || {}), ...(override.header || {}) },
+                  body: {
+                    ...(base.body || {}),
+                    ...(override.body || {}),
+                    edit: { ...(base.body?.edit || {}), ...(override.body?.edit || {}) },
+                    view: { ...(base.body?.view || {}), ...(override.body?.view || {}) }
+                  },
+                  rowActions: { ...(base.rowActions || {}), ...(override.rowActions || {}) }
+                };
+              };
+              const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupConfigOverride) => {
+                if (!baseConfig || !override || typeof override !== 'object') return baseConfig;
+                const mergedConfig = { ...baseConfig, ...override } as any;
+                mergedConfig.fields = Array.isArray(override.fields) && override.fields.length ? override.fields : baseConfig.fields;
+                if (override.subGroups !== undefined) mergedConfig.subGroups = override.subGroups;
+                const baseUi = baseConfig.ui || {};
+                const overrideUi = (override as any).ui || {};
+                const mergedUi = {
+                  ...baseUi,
+                  ...overrideUi
+                };
+                const mergedOverlayDetail = mergeOverlayDetailConfig(baseUi?.overlayDetail, overrideUi?.overlayDetail);
+                if (mergedOverlayDetail) {
+                  (mergedUi as any).overlayDetail = mergedOverlayDetail;
+                }
+                mergedConfig.ui = Object.keys(mergedUi).length ? mergedUi : undefined;
+                return mergedConfig;
+              };
+              const buildOverlayGroupOverride = (group: WebQuestionDefinition, override?: LineItemGroupConfigOverride) => {
+                if (!override || typeof override !== 'object') return undefined;
+                const baseConfig = group.lineItemConfig as any;
+                if (!baseConfig) return undefined;
+                const mergedConfig = applyLineItemGroupOverride(baseConfig, override);
+                return {
+                  ...group,
+                  id: group.id,
+                  lineItemConfig: mergedConfig
+                };
+              };
+              const resolveOverlayOpenActionTarget = (gid: string) => {
+                if (!gid) return null;
+                if (subIdToLabel[gid] !== undefined) return { kind: 'sub' as const };
+                const topGroup = definition.questions.find(q => q.id === gid && q.type === 'LINE_ITEM_GROUP') as
+                  | WebQuestionDefinition
+                  | undefined;
+                if (topGroup) return { kind: 'line' as const, group: topGroup };
+                return null;
+              };
+              const resolveOverlayOpenActionForField = (field: any, row: any, groupCtx: VisibilityContext) => {
+                const actions = normalizeOverlayOpenActions(field);
+                if (!actions.length) return null;
+                const extractSelfWhen = (when: any, fieldId: string): any | null => {
+                  if (!when || typeof when !== 'object') return null;
+                  if (Array.isArray(when)) return null;
+                  const list = (when as any).all ?? (when as any).and ?? (when as any).any ?? (when as any).or;
+                  if (Array.isArray(list)) {
+                    if (list.length !== 1) return null;
+                    return extractSelfWhen(list[0], fieldId);
+                  }
+                  if (Object.prototype.hasOwnProperty.call(when as any, 'not')) return null;
+                  if ((when as any).lineItems || (when as any).lineItem) return null;
+                  const whenFieldId = (when as any).fieldId;
+                  if (whenFieldId === undefined || whenFieldId === null) return null;
+                  return whenFieldId.toString().trim() === fieldId ? when : null;
+                };
+                const resolveSelfWhenValue = (fieldId: string): unknown => {
+                  const fromRowValues = (row?.values || {})[fieldId];
+                  const fromRowValuesScoped = (row?.values || {})[`${q.id}__${fieldId}`];
+                  const fromComputed = (rowVisibilityValues as any)[fieldId];
+                  const fromTop = values[fieldId];
+                  const candidates = [fromComputed, fromRowValues, fromRowValuesScoped, fromTop];
+                  const pick = candidates.find(val => val !== undefined && val !== null && !isEmptyValue(val as any));
+                  const chosen = pick !== undefined ? pick : candidates[0];
+                  if (typeof chosen === 'string') {
+                    const trimmed = chosen.trim();
+                    if (trimmed.includes(',') && !trimmed.includes('.')) {
+                      return trimmed.replace(',', '.');
+                    }
+                    return trimmed;
+                  }
+                  return chosen;
+                };
+                const match = actions.find(action => {
+                  const gid = action?.groupId !== undefined && action?.groupId !== null ? action.groupId.toString() : '';
+                  if (!gid) return false;
+                  const target = resolveOverlayOpenActionTarget(gid);
+                  if (!target) {
+                    const missKey = `${q.id}::${field?.id || ''}::overlayOpenAction::missing::${gid}`;
+                    logOverlayOpenActionOnce(missKey, 'ui.overlayOpenAction.missingGroup', {
+                      scope: 'line',
+                      parentGroupId: q.id,
+                      fieldId: field?.id,
+                      rowId: row?.id,
+                      groupId: gid
+                    });
+                    return false;
+                  }
+                  if (!action?.when) return true;
+                  const selfWhen = extractSelfWhen(action.when as any, (field?.id ?? '').toString());
+                  if (selfWhen) {
+                    const selfValue = resolveSelfWhenValue(field.id);
+                    return matchesWhen(selfValue, selfWhen);
+                  }
+                  return action?.when
+                    ? matchesWhenClause(action.when as any, groupCtx, { rowId: row.id, linePrefix: q.id })
+                    : true;
+                });
+                if (!match) return null;
+                const groupId = match.groupId.toString();
+                const target = resolveOverlayOpenActionTarget(groupId);
+                if (!target) return null;
+                const targetKind = target.kind;
+                const targetKey = targetKind === 'sub' ? buildSubgroupKey(q.id, row.id, groupId) : groupId;
+                const rowFilterRaw = (match as any).rowFilter ?? (match as any).rows ?? null;
+                const rowFilter = rowFilterRaw && typeof rowFilterRaw === 'object' ? rowFilterRaw : null;
+                const renderMode =
+                  (match.renderMode || 'replace').toString().trim().toLowerCase() === 'inline' ? 'inline' : 'replace';
+                const label = resolveLocalizedString(match.label, language, resolveFieldLabel(field, language, field.id));
+                const flattenFields = normalizeOverlayFieldList((match as any).flattenFields);
+                const overrideGroup =
+                  targetKind === 'line' && target.group ? buildOverlayGroupOverride(target.group, (match as any).groupOverride) : undefined;
+                const hasOverride = targetKind === 'line' ? !!overrideGroup : !!(match as any).groupOverride;
+                const logKey = `${q.id}::${field?.id || ''}::overlayOpenAction::${groupId}::${renderMode}::${targetKind}`;
+                logOverlayOpenActionOnce(logKey, 'ui.overlayOpenAction.available', {
+                  scope: 'line',
+                  parentGroupId: q.id,
+                  fieldId: field?.id,
+                  groupId,
+                  targetKind,
+                  renderMode,
+                  hasRowFilter: !!rowFilter,
+                  hasOverride,
+                  hasFlattenFields: flattenFields.length > 0
+                });
+                return {
+                  action: match,
+                  groupId,
+                  targetKind,
+                  targetKey,
+                  subKey: targetKind === 'sub' ? targetKey : '',
+                  rowFilter,
+                  groupOverride: (match as any).groupOverride,
+                  overrideGroup,
+                  hideInlineSubgroups: (match as any).hideInlineSubgroups === true,
+                  renderMode,
+                  label,
+                  flattenFields
+                };
+              };
+              const renderOverlayOpenFlattenedFieldsShared = (field: any, overlayOpenAction: any): React.ReactNode => {
+                if (!overlayOpenAction || !overlayOpenAction.flattenFields || overlayOpenAction.flattenFields.length === 0) return null;
+                const targetKey = overlayOpenAction.targetKey || overlayOpenAction.subKey || '';
+                if (!targetKey) return null;
+
+                const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
+                  if (!filter) return true;
+                  const includeWhen = (filter as any)?.includeWhen;
+                  const excludeWhen = (filter as any)?.excludeWhen;
+                  const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+                  const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+                  const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
+                  return includeOk && !excludeMatch;
+                };
+
+                const resolveTargetGroup = (): { group?: WebQuestionDefinition; config?: any; kind: 'line' | 'sub' } | null => {
+                  if (overlayOpenAction.targetKind === 'line') {
+                    const group =
+                      overlayOpenAction.overrideGroup ||
+                      (definition.questions.find(q => q.id === overlayOpenAction.groupId && q.type === 'LINE_ITEM_GROUP') as
+                        | WebQuestionDefinition
+                        | undefined);
+                    if (!group) return null;
+                    return { group, config: (group as any).lineItemConfig, kind: 'line' };
+                  }
+                  const subConfigBase = (subGroups || []).find(sub => resolveSubgroupKey(sub as any) === overlayOpenAction.groupId);
+                  if (!subConfigBase) return null;
+                  const subConfig = overlayOpenAction.groupOverride
+                    ? applyLineItemGroupOverride(subConfigBase, overlayOpenAction.groupOverride)
+                    : subConfigBase;
+                  const group: WebQuestionDefinition = {
+                    ...(q as any),
+                    id: targetKey,
+                    lineItemConfig: { ...(subConfig as any), fields: subConfig?.fields || [], subGroups: [] }
+                  };
+                  return { group, config: subConfig, kind: 'sub' };
+                };
+
+                const targetInfo = resolveTargetGroup();
+                if (!targetInfo?.group || !targetInfo.config) return null;
+                const { maxRows } = resolveLineItemRowLimits(targetInfo.config as any);
+                if (maxRows !== 1) {
+                  const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::maxRows`;
+                  logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
+                    scope: 'line',
+                    parentGroupId: q.id,
+                    fieldId: field.id,
+                    groupId: overlayOpenAction.groupId,
+                    reason: 'maxRows',
+                    maxRows: maxRows ?? null
+                  });
+                  return null;
+                }
+
+                const rowsAll = lineItems[targetKey] || [];
+                const rowsFiltered = overlayOpenAction.rowFilter
+                  ? rowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter))
+                  : rowsAll;
+                if (!rowsFiltered.length) {
+                  const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::noRow`;
+                  logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
+                    scope: 'line',
+                    parentGroupId: q.id,
+                    fieldId: field.id,
+                    groupId: overlayOpenAction.groupId,
+                    reason: 'noRow'
+                  });
+                  return null;
+                }
+                if (rowsFiltered.length > 1) {
+                  const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::multiRow`;
+                  logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
+                    scope: 'line',
+                    parentGroupId: q.id,
+                    fieldId: field.id,
+                    groupId: overlayOpenAction.groupId,
+                    reason: 'multipleRows',
+                    count: rowsFiltered.length
+                  });
+                  return null;
+                }
+
+                const targetRow = rowsFiltered[0];
+                const targetFieldsAll = (targetInfo.config?.fields || []) as any[];
+                const targetFields = overlayOpenAction.flattenFields
+                  .map((fid: string) => targetFieldsAll.find(f => f && f.id === fid))
+                  .filter(Boolean) as any[];
+                if (!targetFields.length) return null;
+
+                const targetChoiceSearchDefault = (targetInfo.config?.ui as any)?.choiceSearchEnabled;
+                const targetGroupCtx: VisibilityContext = {
+                  getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
+                  getLineValue: (_rowId, fid) => (targetRow?.values || {})[fid]
+                };
+                const resolveDependencyValue = (dep: string): FieldValue | undefined => {
+                  if (Object.prototype.hasOwnProperty.call(targetRow?.values || {}, dep)) return (targetRow?.values || {})[dep];
+                  if (targetInfo.kind === 'sub' && Object.prototype.hasOwnProperty.call(row.values || {}, dep)) return (row.values || {})[dep];
+                  return values[dep];
+                };
+                const renderFlattenedField = (flatField: any) => {
+                  const hideField = shouldHideField(flatField.visibility, targetGroupCtx, { rowId: targetRow.id, linePrefix: targetKey });
+                  if (hideField) return null;
+                  ensureLineOptions(targetKey, flatField);
+                  const fieldPath = `${targetKey}__${flatField.id}__${targetRow.id}`;
+                  const renderAsLabel = flatField?.ui?.renderAsLabel === true || flatField?.readOnly === true;
+                  const hideLabel = Boolean(flatField?.ui?.hideLabel);
+                  const labelStyle = hideLabel ? srOnly : undefined;
+                  const valueMapApplied = flatField.valueMap
+                    ? resolveValueMapValue(
+                        flatField.valueMap,
+                        fid => {
+                          if ((targetRow.values || {}).hasOwnProperty(fid)) return (targetRow.values || {})[fid];
+                          return values[fid];
+                        },
+                        { language, targetOptions: toOptionSet(flatField) }
+                      )
+                    : undefined;
+                  const fieldValueRaw = flatField.valueMap ? valueMapApplied : ((targetRow.values || {})[flatField.id] as any);
+                  const fieldValue = flatField.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                  const numberText =
+                    flatField.type === 'NUMBER'
+                      ? fieldValue === undefined || fieldValue === null
+                        ? ''
+                        : (fieldValue as any).toString()
+                      : '';
+                  const displayValue =
+                    flatField.type === 'NUMBER'
+                      ? numberText
+                      : flatField.type === 'DATE'
+                        ? fieldValue
+                        : fieldValue;
+                  const displayText = displayValue === undefined || displayValue === null ? '' : displayValue.toString();
+                  const renderErrors = () => (
+                    <>
+                      {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                      {renderWarnings(fieldPath)}
+                    </>
+                  );
+                  const readOnlyNode = <div className="ck-readonly-value">{displayText ? displayText : <span className="muted">—</span>}</div>;
+
+                  if (flatField.type === 'CHOICE') {
+                    const rawVal = (targetRow.values || {})[flatField.id];
+                    const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                    const optionSetField: OptionSet =
+                      optionState[optionKey(flatField.id, targetKey)] || {
+                        en: flatField.options || [],
+                        fr: (flatField as any).optionsFr || [],
+                        nl: (flatField as any).optionsNl || [],
+                        raw: (flatField as any).optionsRaw
+                      };
+                    const dependencyIds = (
+                      Array.isArray(flatField.optionFilter?.dependsOn)
+                        ? flatField.optionFilter?.dependsOn
+                        : [flatField.optionFilter?.dependsOn || '']
+                    ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                    const allowedField = computeAllowedOptions(
+                      flatField.optionFilter,
+                      optionSetField,
+                      dependencyIds.map((dep: string) => toDependencyValue(resolveDependencyValue(dep)))
+                    );
+                    const allowedWithCurrent =
+                      choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
+                        ? [...allowedField, choiceVal]
+                        : allowedField;
+                    const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(flatField) });
+                    const selected = optsField.find(opt => opt.value === choiceVal);
+                    return (
+                      <div
+                        key={flatField.id}
+                        className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={labelStyle}>
+                          {resolveFieldLabel(flatField, language, flatField.id)}
+                          {flatField.required && <RequiredStar />}
+                        </label>
+                        <div className="ck-control-row">
+                          {renderAsLabel ? (
+                            <div className="ck-readonly-value">{selected?.label || choiceVal || '—'}</div>
+                          ) : (
+                            renderChoiceControl({
+                              fieldPath,
+                              value: choiceVal || '',
+                              options: optsField,
+                              required: !!flatField.required,
+                              searchEnabled: flatField.ui?.choiceSearchEnabled ?? targetChoiceSearchDefault,
+                              override: flatField.ui?.control,
+                              disabled: submitting || flatField.readOnly === true,
+                              onChange: next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)
+                            })
+                          )}
+                        </div>
+                        {renderErrors()}
+                      </div>
+                    );
+                  }
+
+                  if (flatField.type === 'CHECKBOX') {
+                    const optionSetField: OptionSet =
+                      optionState[optionKey(flatField.id, targetKey)] || {
+                        en: flatField.options || [],
+                        fr: (flatField as any).optionsFr || [],
+                        nl: (flatField as any).optionsNl || [],
+                        raw: (flatField as any).optionsRaw
+                      };
+                    const dependencyIds = (
+                      Array.isArray(flatField.optionFilter?.dependsOn)
+                        ? flatField.optionFilter?.dependsOn
+                        : [flatField.optionFilter?.dependsOn || '']
+                    ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                    const allowedField = computeAllowedOptions(
+                      flatField.optionFilter,
+                      optionSetField,
+                      dependencyIds.map((dep: string) => toDependencyValue(resolveDependencyValue(dep)))
+                    );
+                    const hasAnyOption =
+                      !!((optionSetField.en && optionSetField.en.length) ||
+                        ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                        ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                    const isConsentCheckbox = !(flatField as any).dataSource && !hasAnyOption;
+                    const selected = Array.isArray(targetRow.values[flatField.id]) ? (targetRow.values[flatField.id] as string[]) : [];
+                    const allowedWithSelected = selected.reduce((acc, val) => {
+                      if (val && !acc.includes(val)) acc.push(val);
+                      return acc;
+                    }, [...allowedField]);
+                    const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(flatField) });
+                    if (isConsentCheckbox) {
+                      return (
+                        <div
+                          key={flatField.id}
+                          className={`field inline-field ck-consent-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                          data-field-path={fieldPath}
+                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                        >
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={!!targetRow.values[flatField.id]}
+                              disabled={submitting || flatField.readOnly === true}
+                              onChange={e => {
+                                if (submitting || flatField.readOnly === true) return;
+                                handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.checked);
+                              }}
+                            />
+                            <span className="ck-consent-text" style={labelStyle}>
+                              {resolveFieldLabel(flatField, language, flatField.id)}
+                              {flatField.required && <RequiredStar />}
+                            </span>
+                          </label>
+                          {renderErrors()}
+                        </div>
+                      );
+                    }
+                    const controlOverride = ((flatField as any)?.ui?.control || '').toString().trim().toLowerCase();
+                    const renderAsMultiSelect = controlOverride === 'select';
+                    return (
+                      <div
+                        key={flatField.id}
+                        className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={labelStyle}>
+                          {resolveFieldLabel(flatField, language, flatField.id)}
+                          {flatField.required && <RequiredStar />}
+                        </label>
+                        {renderAsLabel ? (
+                          readOnlyNode
+                        ) : renderAsMultiSelect ? (
+                          <select
+                            multiple
+                            value={selected}
+                            disabled={submitting || flatField.readOnly === true}
+                            onChange={e => {
+                              if (submitting || flatField.readOnly === true) return;
+                              const next = Array.from(e.currentTarget.selectedOptions).map(o => o.value);
+                              handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next);
+                            }}
+                          >
+                            {optsField.map(opt => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="inline-options">
+                            {optsField.map(opt => (
+                              <label key={opt.value} className="inline">
+                                <input
+                                  type="checkbox"
+                                  checked={selected.includes(opt.value)}
+                                  disabled={submitting || flatField.readOnly === true}
+                                  onChange={e => {
+                                    if (submitting || flatField.readOnly === true) return;
+                                    const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
+                                    handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next);
+                                  }}
+                                />
+                                <span>{opt.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        {renderErrors()}
+                      </div>
+                    );
+                  }
+
+                  if (flatField.type === 'FILE_UPLOAD') {
+                    const items = toUploadItems((targetRow.values || {})[flatField.id]);
+                    const count = items.length;
+                    return (
+                      <div
+                        key={flatField.id}
+                        className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={labelStyle}>
+                          {resolveFieldLabel(flatField, language, flatField.id)}
+                          {flatField.required && <RequiredStar />}
+                        </label>
+                        {renderAsLabel ? (
+                          <div className="ck-readonly-value">{count ? `${count}` : '—'}</div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (submitting) return;
+                              openFileOverlay({
+                                scope: 'line',
+                                title: resolveFieldLabel(flatField, language, flatField.id),
+                                group: targetInfo.group as WebQuestionDefinition,
+                                rowId: targetRow.id,
+                                field: flatField,
+                                fieldPath
+                              });
+                            }}
+                            style={buttonStyles.secondary}
+                            disabled={submitting}
+                          >
+                            {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
+                          </button>
+                        )}
+                        {renderErrors()}
+                      </div>
+                    );
+                  }
+
+                  if (renderAsLabel) {
+                    return (
+                      <div
+                        key={flatField.id}
+                        className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={labelStyle}>
+                          {resolveFieldLabel(flatField, language, flatField.id)}
+                          {flatField.required && <RequiredStar />}
+                        </label>
+                        <div className="ck-control-row">{readOnlyNode}</div>
+                        {renderErrors()}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={flatField.id}
+                      className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                      data-field-path={fieldPath}
+                      data-has-error={errors[fieldPath] ? 'true' : undefined}
+                      data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                    >
+                      <label style={labelStyle}>
+                        {resolveFieldLabel(flatField, language, flatField.id)}
+                        {flatField.required && <RequiredStar />}
+                      </label>
+                      <div className="ck-control-row">
+                        {flatField.type === 'PARAGRAPH' ? (
+                          <textarea
+                            className="ck-paragraph-input"
+                            value={fieldValue}
+                            onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
+                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            rows={(flatField as any)?.ui?.paragraphRows || 4}
+                          />
+                        ) : flatField.type === 'DATE' ? (
+                          <DateInput
+                            value={fieldValue}
+                            language={language}
+                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
+                            onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
+                          />
+                        ) : (
+                          <input
+                            type={flatField.type === 'DATE' ? 'date' : 'text'}
+                            value={fieldValue}
+                            onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
+                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                          />
+                        )}
+                        {renderErrors()}
+                      </div>
+                    </div>
+                  );
+                };
+
+                const logKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::render`;
+                logOverlayOpenActionOnce(logKey, 'ui.overlayOpenAction.flatten.render', {
+                  scope: 'line',
+                  parentGroupId: q.id,
+                  fieldId: field.id,
+                  groupId: overlayOpenAction.groupId,
+                  targetKey,
+                  fieldCount: targetFields.length
+                });
+
+                return (
+                  <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+                    {targetFields.map((flatField: any) => renderFlattenedField(flatField))}
+                  </div>
+                );
+              };
               const fieldTriggeredSubgroupIdSet =
                 !rowCollapsed && subIds.length > 0
                   ? allFields.reduce<Set<string>>((acc, field) => {
@@ -2039,6 +2699,7 @@ export const LineItemGroupQuestion: React.FC<{
                         const gid = e?.groupId ? e.groupId.toString() : '';
                         if (gid && subIdToLabel[gid] !== undefined) acc.add(gid);
                       });
+                      overlayOpenActionTargetsForField(field).forEach(gid => acc.add(gid));
                       return acc;
                     }, new Set<string>())
                   : new Set<string>();
@@ -2672,6 +3333,661 @@ export const LineItemGroupQuestion: React.FC<{
                 // Using `srOnly` (position:absolute) would remove the label from the grid and shift controls upward.
                 const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
                 const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+                const overlayActionSuppressed = ctx.isOverlayOpenActionSuppressed?.(fieldPath) === true;
+                const overlayOpenAction = overlayActionSuppressed ? null : resolveOverlayOpenActionForField(field, row, overlayActionCtx);
+                const overlayOpenRenderMode = overlayOpenAction?.renderMode === 'inline' ? 'inline' : 'replace';
+                const overlayOpenDisabled = submitting || rowLocked;
+                const overlayOpenButtonText = (displayValue?: string | null) => {
+                  if (!overlayOpenAction) return '';
+                  const baseLabel = overlayOpenAction.label || resolveFieldLabel(field, language, field.id);
+                  const display = displayValue ? displayValue.toString().trim() : '';
+                  return display ? `${display}: ${baseLabel}` : baseLabel;
+                };
+                const handleOverlayOpenAction = () => {
+                  if (!overlayOpenAction || overlayOpenDisabled) return;
+                  const hasOverride =
+                    overlayOpenAction.targetKind === 'line' ? !!overlayOpenAction.overrideGroup : !!overlayOpenAction.groupOverride;
+                  if (overlayOpenAction.targetKind === 'line') {
+                    if (!openLineItemGroupOverlay) {
+                      onDiagnostic?.('ui.overlayOpenAction.missingHandler', {
+                        scope: 'line',
+                        parentGroupId: q.id,
+                        fieldId: field.id,
+                        groupId: overlayOpenAction.groupId
+                      });
+                      return;
+                    }
+                    const groupOrId = overlayOpenAction.overrideGroup || overlayOpenAction.groupId;
+                    openLineItemGroupOverlay(groupOrId as any, {
+                      rowFilter: overlayOpenAction.rowFilter || null,
+                      hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
+                      source: 'user'
+                    });
+                    onDiagnostic?.('lineItemGroup.overlay.open.action', {
+                      parentGroupId: q.id,
+                      rowId: row.id,
+                      groupId: overlayOpenAction.groupId,
+                      sourceFieldId: field.id,
+                      hasRowFilter: !!overlayOpenAction.rowFilter,
+                      hasOverride
+                    });
+                    return;
+                  }
+                  if (!overlayOpenAction.subKey) return;
+                  openSubgroupOverlay(overlayOpenAction.subKey, {
+                    rowFilter: overlayOpenAction.rowFilter || null,
+                    groupOverride: overlayOpenAction.groupOverride,
+                    hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
+                    source: 'user'
+                  });
+                  onDiagnostic?.('subgroup.overlay.open.action', {
+                    groupId: q.id,
+                    rowId: row.id,
+                    subId: overlayOpenAction.groupId,
+                    sourceFieldId: field.id,
+                    hasRowFilter: !!overlayOpenAction.rowFilter,
+                    hasOverride
+                  });
+                };
+                const matchesOverlayRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
+                  if (!filter) return true;
+                  const includeWhen = (filter as any)?.includeWhen;
+                  const excludeWhen = (filter as any)?.excludeWhen;
+                  const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+                  const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+                  const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
+                  return includeOk && !excludeMatch;
+                };
+                const renderOverlayOpenFlattenedFields = (): React.ReactNode => {
+                  if (!overlayOpenAction || !overlayOpenAction.flattenFields || overlayOpenAction.flattenFields.length === 0) return null;
+                  const targetKey = overlayOpenAction.targetKey || overlayOpenAction.subKey || '';
+                  if (!targetKey) return null;
+
+                  const resolveTargetGroup = (): { group?: WebQuestionDefinition; config?: any; kind: 'line' | 'sub' } | null => {
+                    if (overlayOpenAction.targetKind === 'line') {
+                      const group =
+                        overlayOpenAction.overrideGroup ||
+                        (definition.questions.find(q => q.id === overlayOpenAction.groupId && q.type === 'LINE_ITEM_GROUP') as
+                          | WebQuestionDefinition
+                          | undefined);
+                      if (!group) return null;
+                      return { group, config: (group as any).lineItemConfig, kind: 'line' };
+                    }
+                    const subConfigBase = (subGroups || []).find(sub => resolveSubgroupKey(sub as any) === overlayOpenAction.groupId);
+                    if (!subConfigBase) return null;
+                    const subConfig = overlayOpenAction.groupOverride
+                      ? applyLineItemGroupOverride(subConfigBase, overlayOpenAction.groupOverride)
+                      : subConfigBase;
+                    const group: WebQuestionDefinition = {
+                      ...(q as any),
+                      id: targetKey,
+                      lineItemConfig: { ...(subConfig as any), fields: subConfig?.fields || [], subGroups: [] }
+                    };
+                    return { group, config: subConfig, kind: 'sub' };
+                  };
+
+                  const targetInfo = resolveTargetGroup();
+                  if (!targetInfo?.group || !targetInfo.config) return null;
+                  const { maxRows } = resolveLineItemRowLimits(targetInfo.config as any);
+                  if (maxRows !== 1) {
+                    const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::maxRows`;
+                    logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
+                      scope: 'line',
+                      parentGroupId: q.id,
+                      fieldId: field.id,
+                      groupId: overlayOpenAction.groupId,
+                      reason: 'maxRows',
+                      maxRows: maxRows ?? null
+                    });
+                    return null;
+                  }
+
+                  const rowsAll = lineItems[targetKey] || [];
+                  const rowsFiltered = overlayOpenAction.rowFilter
+                    ? rowsAll.filter(r => matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter))
+                    : rowsAll;
+                  if (!rowsFiltered.length) {
+                    const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::noRow`;
+                    logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
+                      scope: 'line',
+                      parentGroupId: q.id,
+                      fieldId: field.id,
+                      groupId: overlayOpenAction.groupId,
+                      reason: 'noRow'
+                    });
+                    return null;
+                  }
+                  if (rowsFiltered.length > 1) {
+                    const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::multiRow`;
+                    logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
+                      scope: 'line',
+                      parentGroupId: q.id,
+                      fieldId: field.id,
+                      groupId: overlayOpenAction.groupId,
+                      reason: 'multipleRows',
+                      count: rowsFiltered.length
+                    });
+                    return null;
+                  }
+
+                  const targetRow = rowsFiltered[0];
+                  const targetFieldsAll = (targetInfo.config?.fields || []) as any[];
+                  const targetFields = overlayOpenAction.flattenFields
+                    .map(fid => targetFieldsAll.find(f => f && f.id === fid))
+                    .filter(Boolean) as any[];
+                  if (!targetFields.length) return null;
+
+                  const targetChoiceSearchDefault = (targetInfo.config?.ui as any)?.choiceSearchEnabled;
+                  const targetGroupCtx: VisibilityContext = {
+                    getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
+                    getLineValue: (_rowId, fid) => (targetRow?.values || {})[fid]
+                  };
+                  const resolveDependencyValue = (dep: string): FieldValue | undefined => {
+                    if (Object.prototype.hasOwnProperty.call(targetRow?.values || {}, dep)) return (targetRow?.values || {})[dep];
+                    if (targetInfo.kind === 'sub' && Object.prototype.hasOwnProperty.call(row.values || {}, dep)) return (row.values || {})[dep];
+                    return values[dep];
+                  };
+                  const renderFlattenedField = (flatField: any) => {
+                    const hideField = shouldHideField(flatField.visibility, targetGroupCtx, { rowId: targetRow.id, linePrefix: targetKey });
+                    if (hideField) return null;
+                    ensureLineOptions(targetKey, flatField);
+                    const fieldPath = `${targetKey}__${flatField.id}__${targetRow.id}`;
+                    const renderAsLabel = flatField?.ui?.renderAsLabel === true || flatField?.readOnly === true;
+                    const hideLabel = Boolean(flatField?.ui?.hideLabel);
+                    const labelStyle = hideLabel ? srOnly : undefined;
+                    const valueMapApplied = flatField.valueMap
+                      ? resolveValueMapValue(
+                          flatField.valueMap,
+                          fid => {
+                            if ((targetRow.values || {}).hasOwnProperty(fid)) return (targetRow.values || {})[fid];
+                            return values[fid];
+                          },
+                          { language, targetOptions: toOptionSet(flatField) }
+                        )
+                      : undefined;
+                    const fieldValueRaw = flatField.valueMap ? valueMapApplied : ((targetRow.values || {})[flatField.id] as any);
+                    const fieldValue = flatField.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                    const numberText =
+                      flatField.type === 'NUMBER'
+                        ? fieldValue === undefined || fieldValue === null
+                          ? ''
+                          : (fieldValue as any).toString()
+                        : '';
+                    const displayValue =
+                      flatField.type === 'NUMBER'
+                        ? numberText
+                        : flatField.type === 'DATE'
+                          ? fieldValue
+                          : fieldValue;
+                    const displayText = displayValue === undefined || displayValue === null ? '' : displayValue.toString();
+                    const renderErrors = () => (
+                      <>
+                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                        {renderWarnings(fieldPath)}
+                      </>
+                    );
+                    const readOnlyNode = (
+                      <div className="ck-readonly-value">{displayText ? displayText : <span className="muted">—</span>}</div>
+                    );
+
+                    if (flatField.type === 'CHOICE') {
+                      const rawVal = (targetRow.values || {})[flatField.id];
+                      const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                      const optionSetField: OptionSet =
+                        optionState[optionKey(flatField.id, targetKey)] || {
+                          en: flatField.options || [],
+                          fr: (flatField as any).optionsFr || [],
+                          nl: (flatField as any).optionsNl || [],
+                          raw: (flatField as any).optionsRaw
+                        };
+                      const dependencyIds = (
+                        Array.isArray(flatField.optionFilter?.dependsOn)
+                          ? flatField.optionFilter?.dependsOn
+                          : [flatField.optionFilter?.dependsOn || '']
+                      ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                      const allowedField = computeAllowedOptions(
+                        flatField.optionFilter,
+                        optionSetField,
+                        dependencyIds.map((dep: string) => toDependencyValue(resolveDependencyValue(dep)))
+                      );
+                      const allowedWithCurrent =
+                        choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
+                          ? [...allowedField, choiceVal]
+                          : allowedField;
+                      const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(flatField) });
+                      const selected = optsField.find(opt => opt.value === choiceVal);
+                      return (
+                        <div
+                          key={flatField.id}
+                          className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                          data-field-path={fieldPath}
+                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                        >
+                          <label style={labelStyle}>
+                            {resolveFieldLabel(flatField, language, flatField.id)}
+                            {flatField.required && <RequiredStar />}
+                          </label>
+                          <div className="ck-control-row">
+                            {renderAsLabel ? (
+                              <div className="ck-readonly-value">{selected?.label || choiceVal || '—'}</div>
+                            ) : (
+                              renderChoiceControl({
+                                fieldPath,
+                                value: choiceVal || '',
+                                options: optsField,
+                                required: !!flatField.required,
+                                searchEnabled: flatField.ui?.choiceSearchEnabled ?? targetChoiceSearchDefault,
+                                override: flatField.ui?.control,
+                                disabled: submitting || flatField.readOnly === true,
+                                onChange: next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)
+                              })
+                            )}
+                          </div>
+                          {renderErrors()}
+                        </div>
+                      );
+                    }
+
+                    if (flatField.type === 'CHECKBOX') {
+                      const optionSetField: OptionSet =
+                        optionState[optionKey(flatField.id, targetKey)] || {
+                          en: flatField.options || [],
+                          fr: (flatField as any).optionsFr || [],
+                          nl: (flatField as any).optionsNl || [],
+                          raw: (flatField as any).optionsRaw
+                        };
+                      const dependencyIds = (
+                        Array.isArray(flatField.optionFilter?.dependsOn)
+                          ? flatField.optionFilter?.dependsOn
+                          : [flatField.optionFilter?.dependsOn || '']
+                      ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                      const allowedField = computeAllowedOptions(
+                        flatField.optionFilter,
+                        optionSetField,
+                        dependencyIds.map((dep: string) => toDependencyValue(resolveDependencyValue(dep)))
+                      );
+                      const hasAnyOption =
+                        !!((optionSetField.en && optionSetField.en.length) ||
+                          ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                          ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                      const isConsentCheckbox = !(flatField as any).dataSource && !hasAnyOption;
+                      const selected = Array.isArray(targetRow.values[flatField.id]) ? (targetRow.values[flatField.id] as string[]) : [];
+                      const allowedWithSelected = selected.reduce((acc, val) => {
+                        if (val && !acc.includes(val)) acc.push(val);
+                        return acc;
+                      }, [...allowedField]);
+                      const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(flatField) });
+                      if (isConsentCheckbox) {
+                        return (
+                          <div
+                            key={flatField.id}
+                            className={`field inline-field ck-consent-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                            data-field-path={fieldPath}
+                            data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                          >
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={!!targetRow.values[flatField.id]}
+                                disabled={submitting || flatField.readOnly === true}
+                                onChange={e => {
+                                  if (submitting || flatField.readOnly === true) return;
+                                  handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.checked);
+                                }}
+                              />
+                              <span className="ck-consent-text" style={labelStyle}>
+                                {resolveFieldLabel(flatField, language, flatField.id)}
+                                {flatField.required && <RequiredStar />}
+                              </span>
+                            </label>
+                            {renderErrors()}
+                          </div>
+                        );
+                      }
+                      const controlOverride = ((flatField as any)?.ui?.control || '').toString().trim().toLowerCase();
+                      const renderAsMultiSelect = controlOverride === 'select';
+                      return (
+                        <div
+                          key={flatField.id}
+                          className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                          data-field-path={fieldPath}
+                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                        >
+                          <label style={labelStyle}>
+                            {resolveFieldLabel(flatField, language, flatField.id)}
+                            {flatField.required && <RequiredStar />}
+                          </label>
+                          {renderAsLabel ? (
+                            readOnlyNode
+                          ) : renderAsMultiSelect ? (
+                            <select
+                              multiple
+                              value={selected}
+                              disabled={submitting || flatField.readOnly === true}
+                              onChange={e => {
+                                if (submitting || flatField.readOnly === true) return;
+                                const next = Array.from(e.currentTarget.selectedOptions).map(o => o.value);
+                                handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next);
+                              }}
+                            >
+                              {optsField.map(opt => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className="inline-options">
+                              {optsField.map(opt => (
+                                <label key={opt.value} className="inline">
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.includes(opt.value)}
+                                    disabled={submitting || flatField.readOnly === true}
+                                    onChange={e => {
+                                      if (submitting || flatField.readOnly === true) return;
+                                      const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
+                                      handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next);
+                                    }}
+                                  />
+                                  <span>{opt.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                          {renderErrors()}
+                        </div>
+                      );
+                    }
+
+                    if (flatField.type === 'FILE_UPLOAD') {
+                      const items = toUploadItems((targetRow.values || {})[flatField.id]);
+                      const count = items.length;
+                      return (
+                        <div
+                          key={flatField.id}
+                          className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                          data-field-path={fieldPath}
+                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                        >
+                          <label style={labelStyle}>
+                            {resolveFieldLabel(flatField, language, flatField.id)}
+                            {flatField.required && <RequiredStar />}
+                          </label>
+                          {renderAsLabel ? (
+                            <div className="ck-readonly-value">{count ? `${count}` : '—'}</div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (submitting) return;
+                                openFileOverlay({
+                                  scope: 'line',
+                                  title: resolveFieldLabel(flatField, language, flatField.id),
+                                  group: targetInfo.group as WebQuestionDefinition,
+                                  rowId: targetRow.id,
+                                  field: flatField,
+                                  fieldPath
+                                });
+                              }}
+                              style={buttonStyles.secondary}
+                              disabled={submitting}
+                            >
+                              {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
+                            </button>
+                          )}
+                          {renderErrors()}
+                        </div>
+                      );
+                    }
+
+                    if (renderAsLabel) {
+                      return (
+                        <div
+                          key={flatField.id}
+                          className={`${flatField.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                            flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
+                          }`}
+                          data-field-path={fieldPath}
+                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                        >
+                          <label style={labelStyle}>
+                            {resolveFieldLabel(flatField, language, flatField.id)}
+                            {flatField.required && <RequiredStar />}
+                          </label>
+                          {readOnlyNode}
+                          {renderErrors()}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={flatField.id}
+                        className={`${flatField.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                          flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
+                        }`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={labelStyle}>
+                          {resolveFieldLabel(flatField, language, flatField.id)}
+                          {flatField.required && <RequiredStar />}
+                        </label>
+                        {flatField.type === 'NUMBER' ? (
+                          <NumberStepper
+                            value={numberText}
+                            disabled={submitting}
+                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
+                            onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
+                          />
+                        ) : flatField.type === 'PARAGRAPH' ? (
+                          <textarea
+                            className="ck-paragraph-input"
+                            value={fieldValue}
+                            onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
+                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            rows={(flatField as any)?.ui?.paragraphRows || 4}
+                          />
+                        ) : flatField.type === 'DATE' ? (
+                          <DateInput
+                            value={fieldValue}
+                            language={language}
+                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
+                            onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
+                          />
+                        ) : (
+                          <input
+                            type={flatField.type === 'DATE' ? 'date' : 'text'}
+                            value={fieldValue}
+                            onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
+                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                          />
+                        )}
+                        {renderErrors()}
+                      </div>
+                    );
+                  };
+
+                  const logKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::render`;
+                  logOverlayOpenActionOnce(logKey, 'ui.overlayOpenAction.flatten.render', {
+                    scope: 'line',
+                    parentGroupId: q.id,
+                    fieldId: field.id,
+                    groupId: overlayOpenAction.groupId,
+                    targetKey,
+                    fieldCount: targetFields.length
+                  });
+
+                  return (
+                    <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+                      {targetFields.map(flatField => renderFlattenedField(flatField))}
+                    </div>
+                  );
+                };
+                const overlayOpenActionTargetKey = overlayOpenAction?.targetKey || overlayOpenAction?.subKey || '';
+                const overlayOpenActionRowsAll = overlayOpenActionTargetKey ? (lineItems[overlayOpenActionTargetKey] || []) : [];
+                const overlayOpenActionRowsFiltered =
+                  overlayOpenAction && overlayOpenAction.rowFilter
+                    ? overlayOpenActionRowsAll.filter(r =>
+                        matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter)
+                      )
+                    : overlayOpenActionRowsAll;
+                const overlayOpenActionResetDisabled = overlayOpenDisabled || overlayOpenActionRowsFiltered.length === 0;
+                const handleOverlayOpenActionReset = (event?: React.MouseEvent | React.KeyboardEvent) => {
+                  if (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }
+                  if (!overlayOpenAction || overlayOpenActionResetDisabled) return;
+                  if (!overlayOpenActionTargetKey) return;
+                  const hasResetValue =
+                    !!overlayOpenAction?.action &&
+                    Object.prototype.hasOwnProperty.call(overlayOpenAction.action as any, 'resetValue');
+                  const resetValue = hasResetValue ? (overlayOpenAction?.action as any)?.resetValue : undefined;
+                  const runReset = () => {
+                    const groupKey = overlayOpenActionTargetKey;
+                    setLineItems(prev => {
+                      const rowsAll = prev[groupKey] || [];
+                      const rowsToRemove =
+                        overlayOpenAction && overlayOpenAction.rowFilter
+                          ? rowsAll.filter(r =>
+                              matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter)
+                            )
+                          : rowsAll;
+                      if (!rowsToRemove.length) return prev;
+                      const cascade = cascadeRemoveLineItemRows({
+                        lineItems: prev,
+                        roots: rowsToRemove.map(r => ({ groupId: groupKey, rowId: r.id }))
+                      });
+                      let nextLineItems = cascade.lineItems;
+                      if (hasResetValue) {
+                        const groupRows = nextLineItems[q.id] || [];
+                        if (groupRows.length) {
+                          nextLineItems = {
+                            ...nextLineItems,
+                            [q.id]: groupRows.map(r =>
+                              r.id === row.id ? { ...r, values: { ...r.values, [field.id]: resetValue } } : r
+                            )
+                          };
+                        }
+                      }
+                      if (cascade.removedSubgroupKeys.length) {
+                        setSubgroupSelectors(prevSel => {
+                          const nextSel = { ...prevSel };
+                          cascade.removedSubgroupKeys.forEach(key => {
+                            delete (nextSel as any)[key];
+                          });
+                          return nextSel;
+                        });
+                      }
+                      onDiagnostic?.('ui.lineItems.remove.cascade', {
+                        groupId: groupKey,
+                        removedCount: cascade.removed.length,
+                        source: 'overlayOpenAction'
+                      });
+                      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+                        mode: 'init'
+                      });
+                      setValues(nextValues);
+                      return recomputed;
+                    });
+                    if (!hasResetValue) {
+                      ctx.suppressOverlayOpenAction?.(fieldPath);
+                    }
+                  };
+                  const title = tSystem('lineItems.removeRowsTitle', language, 'Remove rows?');
+                  const message = tSystem('lineItems.removeRowsMessage', language, 'This will remove the matching rows.');
+                  const confirmLabel = tSystem('lineItems.remove', language, 'Remove');
+                  const cancelLabel = tSystem('common.cancel', language, 'Cancel');
+                  if (!ctx.openConfirmDialog) {
+                    onDiagnostic?.('ui.overlayOpenAction.confirm.missing', { fieldId: field.id, rowId: row.id });
+                    return;
+                  }
+                  ctx.openConfirmDialog({
+                    title,
+                    message,
+                    confirmLabel,
+                    cancelLabel,
+                    kind: 'overlayOpenAction',
+                    refId: fieldPath,
+                    onConfirm: runReset
+                  });
+                };
+                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => (
+                  <div
+                    key={field.id}
+                    className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                      forceStackedLabel ? ' ck-label-stacked' : ''
+                    }`}
+                    data-field-path={fieldPath}
+                    data-has-error={errors[fieldPath] ? 'true' : undefined}
+                    data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                  >
+                    <label style={labelStyle}>
+                      {resolveFieldLabel(field, language, field.id)}
+                      {field.required && <RequiredStar />}
+                    </label>
+                    <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
+                      <button
+                        type="button"
+                        onClick={handleOverlayOpenAction}
+                        disabled={overlayOpenDisabled}
+                        style={withDisabled(
+                          { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' },
+                          overlayOpenDisabled
+                        )}
+                      >
+                        {overlayOpenButtonText(displayValue)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOverlayOpenActionReset}
+                        disabled={overlayOpenActionResetDisabled}
+                        aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                        style={withDisabled(
+                          {
+                            ...buttonStyles.secondary,
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
+                            padding: '0 14px',
+                            minWidth: 44
+                          },
+                          overlayOpenActionResetDisabled
+                        )}
+                      >
+                        <TrashIcon size={18} />
+                      </button>
+                    </div>
+                    {renderOverlayOpenFlattenedFields()}
+                    {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                    {renderWarnings(fieldPath)}
+                    {nonMatchWarningNode}
+                  </div>
+                );
+                const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
+                  if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
+                  return (
+                    <div style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        onClick={handleOverlayOpenAction}
+                        disabled={overlayOpenDisabled}
+                        style={withDisabled(buttonStyles.secondary, overlayOpenDisabled)}
+                      >
+                        {overlayOpenButtonText(displayValue)}
+                      </button>
+                    </div>
+                  );
+                };
                 const showNonMatchWarning =
                   useDescriptiveNonMatchWarnings &&
                   !!rowNonMatchWarning &&
@@ -2679,6 +3995,7 @@ export const LineItemGroupQuestion: React.FC<{
                   (field as any).optionFilter.matchMode === 'or';
                 const nonMatchWarningNode = showNonMatchWarning ? <div className="warning">{rowNonMatchWarning}</div> : null;
 
+                const overlayOpenTargets = overlayOpenActionTargetsForField(field);
                 const triggeredSubgroupIds = (() => {
                   if (rowCollapsed) return [] as string[];
                   if (!subIds.length) return [] as string[];
@@ -2693,7 +4010,8 @@ export const LineItemGroupQuestion: React.FC<{
                     const subRows = lineItems[subKey] || [];
                     return (Array.isArray(subRows) && subRows.length > 0) || hasSourceValue;
                   });
-                  return Array.from(new Set(filtered));
+                  const deduped = Array.from(new Set(filtered));
+                  return overlayOpenTargets.length ? deduped.filter(id => !overlayOpenTargets.includes(id)) : deduped;
                 })();
                 const fieldIsStacked = forceStackedLabel && labelStyle !== srOnly;
                 const subgroupOpenStack =
@@ -2733,9 +4051,12 @@ export const LineItemGroupQuestion: React.FC<{
                   case 'CHOICE': {
                     const rawVal = row.values[field.id];
                     const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                    const selected = optsField.find(opt => opt.value === choiceVal);
+                    const display = selected?.label || choiceVal || null;
+                    if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
+                      return renderOverlayOpenReplaceLine(display);
+                    }
                     if (renderAsLabel) {
-                      const selected = optsField.find(opt => opt.value === choiceVal);
-                      const display = selected?.label || choiceVal || null;
                       return renderReadOnlyLine(display);
                     }
                     return (
@@ -2771,8 +4092,8 @@ export const LineItemGroupQuestion: React.FC<{
                             disabled: submitting || (field as any)?.readOnly === true,
                             onChange: next => handleLineFieldChange(q, row.id, field, next)
                           })}
+                          {renderOverlayOpenInlineButton(display)}
                           {(() => {
-                            const selected = optsField.find(opt => opt.value === choiceVal);
                             const tooltipNode = selected?.tooltip ? (
                               <InfoTooltip
                                 text={selected.tooltip}
@@ -2807,17 +4128,21 @@ export const LineItemGroupQuestion: React.FC<{
                       return acc;
                     }, [...allowedField]);
                     const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
-                    if (renderAsLabel) {
+                    const display = (() => {
                       if (isConsentCheckbox) {
-                        const display = row.values[field.id]
+                        return row.values[field.id]
                           ? tSystem('common.yes', language, 'Yes')
                           : tSystem('common.no', language, 'No');
-                        return renderReadOnlyLine(display);
                       }
                       const labels = selected
                         .map(val => optsField.find(opt => opt.value === val)?.label || val)
                         .filter(Boolean);
-                      const display = labels.length ? labels.join(', ') : null;
+                      return labels.length ? labels.join(', ') : null;
+                    })();
+                    if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
+                      return renderOverlayOpenReplaceLine(display);
+                    }
+                    if (renderAsLabel) {
                       return renderReadOnlyLine(display);
                     }
                     if (isConsentCheckbox) {
@@ -2844,6 +4169,7 @@ export const LineItemGroupQuestion: React.FC<{
                               {field.required && <RequiredStar />}
                             </span>
                           </label>
+                      {renderOverlayOpenInlineButton(display)}
                           {subgroupOpenStack}
                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           {renderWarnings(fieldPath)}
@@ -2886,6 +4212,7 @@ export const LineItemGroupQuestion: React.FC<{
                             </select>
                             {selectedStr ? <span className="muted">{selectedStr}</span> : null}
                           </div>
+                          {renderOverlayOpenInlineButton(display)}
                           {subgroupOpenStack}
                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           {renderWarnings(fieldPath)}
@@ -2922,6 +4249,7 @@ export const LineItemGroupQuestion: React.FC<{
                             </label>
                           ))}
                         </div>
+                        {renderOverlayOpenInlineButton(display)}
                         {subgroupOpenStack}
                         {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                         {renderWarnings(fieldPath)}
@@ -3058,14 +4386,19 @@ export const LineItemGroupQuestion: React.FC<{
                           ? ''
                           : (fieldValue as any).toString()
                         : '';
+                    const displayValue =
+                      field.type === 'NUMBER'
+                        ? numberText
+                        : field.type === 'DATE'
+                          ? fieldValue
+                          : fieldValue;
+                    const displayText =
+                      displayValue === undefined || displayValue === null ? '' : displayValue.toString();
+                    if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
+                      return renderOverlayOpenReplaceLine(displayText || null);
+                    }
                     if (renderAsLabel) {
-                      const display =
-                        field.type === 'NUMBER'
-                          ? numberText
-                          : field.type === 'DATE'
-                            ? fieldValue
-                            : fieldValue;
-                      return renderReadOnlyLine(display || null);
+                      return renderReadOnlyLine(displayText || null);
                     }
                     return (
                       <div
@@ -3113,6 +4446,7 @@ export const LineItemGroupQuestion: React.FC<{
                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                           />
                         )}
+                        {renderOverlayOpenInlineButton(displayText || null)}
                         {subgroupOpenStack}
                         {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                         {renderWarnings(fieldPath)}
@@ -3161,6 +4495,7 @@ export const LineItemGroupQuestion: React.FC<{
                               // For consistency with edit rendering elsewhere, treat readOnly/renderAsLabel as "show plain text".
                               const titleAsLabel =
                                 titleLocked || (titleField as any)?.ui?.renderAsLabel === true || (titleField as any)?.readOnly === true;
+                              const overlayOpenTargets = overlayOpenActionTargetsForField(titleField);
                               const triggeredSubgroupIds = (() => {
                                 if (rowCollapsed) return [] as string[];
                                 if (!subIds.length) return [] as string[];
@@ -3177,7 +4512,8 @@ export const LineItemGroupQuestion: React.FC<{
                                   const subRows = lineItems[subKey] || [];
                                   return (Array.isArray(subRows) && subRows.length > 0) || hasSourceValue;
                                 });
-                                return Array.from(new Set(filtered));
+                                const deduped = Array.from(new Set(filtered));
+                                return overlayOpenTargets.length ? deduped.filter(id => !overlayOpenTargets.includes(id)) : deduped;
                               })();
                               const subgroupOpenStack = triggeredSubgroupIds.length
                                 ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: titleField.id })
@@ -3528,7 +4864,227 @@ export const LineItemGroupQuestion: React.FC<{
                       const inGrid = opts?.inGrid === true;
                       const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
                       const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+                      const overlayActionSuppressed = ctx.isOverlayOpenActionSuppressed?.(fieldPath) === true;
+                      const overlayOpenAction = overlayActionSuppressed ? null : resolveOverlayOpenActionForField(field, row, overlayActionCtx);
+                      const overlayOpenRenderMode = overlayOpenAction?.renderMode === 'inline' ? 'inline' : 'replace';
+                      const overlayOpenDisabled = submitting || rowLocked;
+                      const overlayOpenButtonText = (displayValue?: string | null) => {
+                        if (!overlayOpenAction) return '';
+                        const baseLabel = overlayOpenAction.label || resolveFieldLabel(field, language, field.id);
+                        const display = displayValue ? displayValue.toString().trim() : '';
+                        return display ? `${display}: ${baseLabel}` : baseLabel;
+                      };
+                      const handleOverlayOpenAction = () => {
+                        if (!overlayOpenAction || overlayOpenDisabled) return;
+                        const hasOverride =
+                          overlayOpenAction.targetKind === 'line' ? !!overlayOpenAction.overrideGroup : !!overlayOpenAction.groupOverride;
+                        if (overlayOpenAction.targetKind === 'line') {
+                          if (!openLineItemGroupOverlay) {
+                            onDiagnostic?.('ui.overlayOpenAction.missingHandler', {
+                              scope: 'line',
+                              parentGroupId: q.id,
+                              fieldId: field.id,
+                              groupId: overlayOpenAction.groupId
+                            });
+                            return;
+                          }
+                          const groupOrId = overlayOpenAction.overrideGroup || overlayOpenAction.groupId;
+                          openLineItemGroupOverlay(groupOrId as any, {
+                            rowFilter: overlayOpenAction.rowFilter || null,
+                            hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
+                            source: 'user'
+                          });
+                          onDiagnostic?.('lineItemGroup.overlay.open.action', {
+                            parentGroupId: q.id,
+                            rowId: row.id,
+                            groupId: overlayOpenAction.groupId,
+                            sourceFieldId: field.id,
+                            hasRowFilter: !!overlayOpenAction.rowFilter,
+                            hasOverride
+                          });
+                          return;
+                        }
+                        if (!overlayOpenAction.subKey) return;
+                        openSubgroupOverlay(overlayOpenAction.subKey, {
+                          rowFilter: overlayOpenAction.rowFilter || null,
+                          groupOverride: overlayOpenAction.groupOverride,
+                          hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
+                          source: 'user'
+                        });
+                        onDiagnostic?.('subgroup.overlay.open.action', {
+                          groupId: q.id,
+                          rowId: row.id,
+                          subId: overlayOpenAction.groupId,
+                          sourceFieldId: field.id,
+                          hasRowFilter: !!overlayOpenAction.rowFilter,
+                          hasOverride
+                        });
+                      };
+                      const matchesOverlayRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
+                        if (!filter) return true;
+                        const includeWhen = (filter as any)?.includeWhen;
+                        const excludeWhen = (filter as any)?.excludeWhen;
+                        const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+                        const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+                        const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
+                        return includeOk && !excludeMatch;
+                      };
+                      const overlayOpenActionTargetKey = overlayOpenAction?.targetKey || overlayOpenAction?.subKey || '';
+                      const overlayOpenActionRowsAll = overlayOpenActionTargetKey ? (lineItems[overlayOpenActionTargetKey] || []) : [];
+                      const overlayOpenActionRowsFiltered =
+                        overlayOpenAction && overlayOpenAction.rowFilter
+                          ? overlayOpenActionRowsAll.filter(r =>
+                              matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter)
+                            )
+                          : overlayOpenActionRowsAll;
+                      const overlayOpenActionResetDisabled = overlayOpenDisabled || overlayOpenActionRowsFiltered.length === 0;
+                      const handleOverlayOpenActionReset = (event?: React.MouseEvent | React.KeyboardEvent) => {
+                        if (event) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }
+                        if (!overlayOpenAction || overlayOpenActionResetDisabled) return;
+                        if (!overlayOpenActionTargetKey) return;
+                        const hasResetValue =
+                          !!overlayOpenAction?.action &&
+                          Object.prototype.hasOwnProperty.call(overlayOpenAction.action as any, 'resetValue');
+                        const resetValue = hasResetValue ? (overlayOpenAction?.action as any)?.resetValue : undefined;
+                        const runReset = () => {
+                          const groupKey = overlayOpenActionTargetKey;
+                          setLineItems(prev => {
+                            const rowsAll = prev[groupKey] || [];
+                            const rowsToRemove =
+                              overlayOpenAction && overlayOpenAction.rowFilter
+                                ? rowsAll.filter(r =>
+                                    matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter)
+                                  )
+                                : rowsAll;
+                            if (!rowsToRemove.length) return prev;
+                            const cascade = cascadeRemoveLineItemRows({
+                              lineItems: prev,
+                              roots: rowsToRemove.map(r => ({ groupId: groupKey, rowId: r.id }))
+                            });
+                            let nextLineItems = cascade.lineItems;
+                            if (hasResetValue) {
+                              const groupRows = nextLineItems[q.id] || [];
+                              if (groupRows.length) {
+                                nextLineItems = {
+                                  ...nextLineItems,
+                                  [q.id]: groupRows.map(r =>
+                                    r.id === row.id ? { ...r, values: { ...r.values, [field.id]: resetValue } } : r
+                                  )
+                                };
+                              }
+                            }
+                            if (cascade.removedSubgroupKeys.length) {
+                              setSubgroupSelectors(prevSel => {
+                                const nextSel = { ...prevSel };
+                                cascade.removedSubgroupKeys.forEach(key => {
+                                  delete (nextSel as any)[key];
+                                });
+                                return nextSel;
+                              });
+                            }
+                            onDiagnostic?.('ui.lineItems.remove.cascade', {
+                              groupId: groupKey,
+                              removedCount: cascade.removed.length,
+                              source: 'overlayOpenAction'
+                            });
+                            const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+                              mode: 'init'
+                            });
+                            setValues(nextValues);
+                            return recomputed;
+                          });
+                          if (!hasResetValue) {
+                            ctx.suppressOverlayOpenAction?.(fieldPath);
+                          }
+                        };
+                        const title = tSystem('lineItems.removeRowsTitle', language, 'Remove rows?');
+                        const message = tSystem('lineItems.removeRowsMessage', language, 'This will remove the matching rows.');
+                        const confirmLabel = tSystem('lineItems.remove', language, 'Remove');
+                        const cancelLabel = tSystem('common.cancel', language, 'Cancel');
+                        if (!ctx.openConfirmDialog) {
+                          onDiagnostic?.('ui.overlayOpenAction.confirm.missing', { fieldId: field.id, rowId: row.id });
+                          return;
+                        }
+                        ctx.openConfirmDialog({
+                          title,
+                          message,
+                          confirmLabel,
+                          cancelLabel,
+                          kind: 'overlayOpenAction',
+                          refId: fieldPath,
+                          onConfirm: runReset
+                        });
+                      };
+                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => (
+                        <div
+                          key={field.id}
+                          className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                            forceStackedLabel ? ' ck-label-stacked' : ''
+                          }`}
+                          data-field-path={fieldPath}
+                          data-has-error={errors[fieldPath] ? 'true' : undefined}
+                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                        >
+                          <label style={labelStyle}>
+                            {resolveFieldLabel(field, language, field.id)}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
+                            <button
+                              type="button"
+                              onClick={handleOverlayOpenAction}
+                              disabled={overlayOpenDisabled}
+                              style={withDisabled(
+                                { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' },
+                                overlayOpenDisabled
+                              )}
+                            >
+                              {overlayOpenButtonText(displayValue)}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleOverlayOpenActionReset}
+                              disabled={overlayOpenActionResetDisabled}
+                              aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                              style={withDisabled(
+                                {
+                                  ...buttonStyles.secondary,
+                                  borderTopLeftRadius: 0,
+                                  borderBottomLeftRadius: 0,
+                                  padding: '0 14px',
+                                  minWidth: 44
+                                },
+                                overlayOpenActionResetDisabled
+                              )}
+                            >
+                              <TrashIcon size={18} />
+                            </button>
+                          </div>
+                      {renderOverlayOpenFlattenedFieldsShared(field, overlayOpenAction)}
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                      const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
+                        if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
+                        return (
+                          <div style={{ marginTop: 8 }}>
+                            <button
+                              type="button"
+                              onClick={handleOverlayOpenAction}
+                              disabled={overlayOpenDisabled}
+                              style={withDisabled(buttonStyles.secondary, overlayOpenDisabled)}
+                            >
+                              {overlayOpenButtonText(displayValue)}
+                            </button>
+                          </div>
+                        );
+                      };
 
+                      const overlayOpenTargets = overlayOpenActionTargetsForField(field);
                       const triggeredSubgroupIds = (() => {
                         if (rowCollapsed) return [] as string[];
                         if (!subIds.length) return [] as string[];
@@ -3545,7 +5101,8 @@ export const LineItemGroupQuestion: React.FC<{
                           const subRows = lineItems[subKey] || [];
                           return (Array.isArray(subRows) && subRows.length > 0) || hasSourceValue;
                         });
-                        return Array.from(new Set(filtered));
+                        const deduped = Array.from(new Set(filtered));
+                        return overlayOpenTargets.length ? deduped.filter(id => !overlayOpenTargets.includes(id)) : deduped;
                       })();
                       const fieldIsStacked = forceStackedLabel && labelStyle !== srOnly;
                       const subgroupOpenStack = triggeredSubgroupIds.length && !fieldIsStacked
@@ -3594,9 +5151,12 @@ export const LineItemGroupQuestion: React.FC<{
                         const rawVal = row.values[field.id];
                         const choiceVal =
                           Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                        const selected = optsField.find(opt => opt.value === choiceVal);
+                        const display = selected?.label || choiceVal || null;
+                        if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
+                          return renderOverlayOpenReplaceLine(display);
+                        }
                         if (renderAsLabel) {
-                          const selected = optsField.find(opt => opt.value === choiceVal);
-                          const display = selected?.label || choiceVal || null;
                           return renderReadOnlyLine(display);
                         }
                         return (
@@ -3632,8 +5192,8 @@ export const LineItemGroupQuestion: React.FC<{
                                   disabled: submitting || (field as any)?.readOnly === true,
                                   onChange: next => handleLineFieldChange(q, row.id, field, next)
                                 })}
+                                {renderOverlayOpenInlineButton(display)}
                                 {(() => {
-                                  const selected = optsField.find(opt => opt.value === choiceVal);
                                   const tooltipNode = selected?.tooltip ? (
                                     <InfoTooltip
                                       text={selected.tooltip}
@@ -3667,17 +5227,21 @@ export const LineItemGroupQuestion: React.FC<{
                           return acc;
                         }, [...allowedField]);
                         const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
-                        if (renderAsLabel) {
+                        const display = (() => {
                           if (isConsentCheckbox) {
-                            const display = row.values[field.id]
+                            return row.values[field.id]
                               ? tSystem('common.yes', language, 'Yes')
                               : tSystem('common.no', language, 'No');
-                            return renderReadOnlyLine(display);
                           }
                           const labels = selected
                             .map(val => optsField.find(opt => opt.value === val)?.label || val)
                             .filter(Boolean);
-                          const display = labels.length ? labels.join(', ') : null;
+                          return labels.length ? labels.join(', ') : null;
+                        })();
+                        if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
+                          return renderOverlayOpenReplaceLine(display);
+                        }
+                        if (renderAsLabel) {
                           return renderReadOnlyLine(display);
                         }
                         if (isConsentCheckbox) {
@@ -3704,6 +5268,7 @@ export const LineItemGroupQuestion: React.FC<{
                                   {field.required && <RequiredStar />}
                                 </span>
                               </label>
+                              {renderOverlayOpenInlineButton(display)}
                               {subgroupOpenStack}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                               {renderWarnings(fieldPath)}
@@ -3939,27 +5504,35 @@ export const LineItemGroupQuestion: React.FC<{
                       }
                       default: {
                         const mapped = field.valueMap
-                          ? resolveValueMapValue(field.valueMap, fid => {
-                              if (row.values.hasOwnProperty(fid)) return row.values[fid];
-                              return values[fid];
-                            }, { language, targetOptions: toOptionSet(field) })
+                          ? resolveValueMapValue(
+                              field.valueMap,
+                              fid => {
+                                if (row.values.hasOwnProperty(fid)) return row.values[fid];
+                                return values[fid];
+                              },
+                              { language, targetOptions: toOptionSet(field) }
+                            )
                           : undefined;
-                          const fieldValueRaw = field.valueMap ? mapped : ((row.values[field.id] as any) ?? '');
-                          const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
-                          const numberText =
-                            field.type === 'NUMBER'
-                              ? fieldValue === undefined || fieldValue === null
-                                ? ''
-                                : (fieldValue as any).toString()
-                              : '';
+                        const fieldValueRaw = field.valueMap ? mapped : ((row.values[field.id] as any) ?? '');
+                        const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                        const numberText =
+                          field.type === 'NUMBER'
+                            ? fieldValue === undefined || fieldValue === null
+                              ? ''
+                              : (fieldValue as any).toString()
+                            : '';
+                        const displayValue =
+                          field.type === 'NUMBER'
+                            ? numberText
+                            : field.type === 'DATE'
+                              ? fieldValue
+                              : fieldValue;
+                        const displayText = displayValue === undefined || displayValue === null ? '' : displayValue.toString();
+                        if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
+                          return renderOverlayOpenReplaceLine(displayText || null);
+                        }
                         if (renderAsLabel) {
-                          const display =
-                            field.type === 'NUMBER'
-                              ? numberText
-                              : field.type === 'DATE'
-                                ? fieldValue
-                                : fieldValue;
-                          return renderReadOnlyLine(display || null);
+                          return renderReadOnlyLine(displayText || null);
                         }
                         return (
                             <div
@@ -4007,6 +5580,7 @@ export const LineItemGroupQuestion: React.FC<{
                                 readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                               />
                             )}
+                              {renderOverlayOpenInlineButton(displayText || null)}
                               {subgroupOpenStack}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                               {renderWarnings(fieldPath)}

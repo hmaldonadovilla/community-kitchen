@@ -64,18 +64,45 @@ export const renderTableRows = (
     let subConfig: SubGroupConfig | undefined;
 
     if (targetSubGroupId && group.lineItemConfig?.subGroups?.length) {
-      subConfig = group.lineItemConfig.subGroups.find(sub => {
-        const key = resolveSubgroupKey(sub as any);
-        const normalizedKey = (key || '').toUpperCase();
-        const slugKey = slugifyPlaceholder(key || '');
-        return normalizedKey === targetSubGroupId || slugKey === targetSubGroupId;
-      });
-      if (subConfig) {
-        const subKey = resolveSubgroupKey(subConfig as any);
+      const pathTokens = targetSubGroupId.split('.').map(seg => seg.trim().toUpperCase()).filter(Boolean);
+      const resolveSubPath = (path: string[]): { config: SubGroupConfig; keyPath: string[] } | null => {
+        let current: any = group.lineItemConfig;
+        const keyPath: string[] = [];
+        for (let i = 0; i < path.length; i += 1) {
+          const token = path[i];
+          const subs = (current?.subGroups || []) as any[];
+          const match = subs.find(sub => {
+            const key = resolveSubgroupKey(sub as any);
+            const normalizedKey = (key || '').toUpperCase();
+            const slugKey = slugifyPlaceholder(key || '');
+            return normalizedKey === token || slugKey === token;
+          });
+          if (!match) return null;
+          const resolvedKey = resolveSubgroupKey(match as any);
+          if (!resolvedKey) return null;
+          keyPath.push(resolvedKey);
+          if (i === path.length - 1) {
+            return { config: match as SubGroupConfig, keyPath };
+          }
+          current = match;
+        }
+        return null;
+      };
+      const resolved = resolveSubPath(pathTokens);
+      subConfig = resolved?.config;
+      if (subConfig && resolved) {
         rows = [];
         (sourceRows || []).forEach(parentRow => {
-          const children = Array.isArray((parentRow || {})[subKey]) ? (parentRow as any)[subKey] : [];
-          children.forEach((child: any) => {
+          let currentRows: any[] = [parentRow];
+          resolved.keyPath.forEach(key => {
+            const next: any[] = [];
+            currentRows.forEach(row => {
+              const children = Array.isArray((row || {})[key]) ? (row as any)[key] : [];
+              children.forEach((child: any) => next.push(child || {}));
+            });
+            currentRows = next;
+          });
+          currentRows.forEach((child: any) => {
             rows.push({ __parent: parentRow, ...(parentRow || {}), ...(child || {}) });
           });
         });
@@ -147,16 +174,9 @@ export const renderTableRows = (
     // Consolidated subgroup tables: dedupe rows by the placeholder combination in the template row.
     if (consolidatedDirective && targetSubGroupId && groupId === consolidatedDirective.groupId) {
       const wantsSub = consolidatedDirective.subGroupId;
-      const matchesSub =
-        wantsSub === targetSubGroupId ||
-        (subConfig
-          ? (() => {
-              const key = resolveSubgroupKey(subConfig as any);
-              const normalizedKey = (key || '').toUpperCase();
-              const slugKey = slugifyPlaceholder(key || '');
-              return wantsSub === normalizedKey || wantsSub === slugKey;
-            })()
-          : false);
+      const normalizedTarget = targetSubGroupId.toUpperCase();
+      const slugTarget = slugifyPlaceholder(targetSubGroupId);
+      const matchesSub = wantsSub === normalizedTarget || (slugTarget && wantsSub === slugTarget);
       if (matchesSub && rows && rows.length) {
         rows = consolidateConsolidatedTableRows({ rows, placeholders, group, subConfig: subConfig as any, targetSubGroupId });
       }
@@ -214,7 +234,7 @@ const hasAlwaysShowTokenForGroup = (rowText: string, groupId: string): boolean =
     if (!inner) continue;
 
     // ALWAYS_SHOW(CONSOLIDATED_ROW(GROUP.SUBGROUP.FIELD))
-    const consolidatedMatch = inner.match(/^CONSOLIDATED_ROW\(\s*([A-Z0-9_]+\.[A-Z0-9_]+\.[A-Z0-9_]+)\s*\)$/i);
+    const consolidatedMatch = inner.match(/^CONSOLIDATED_ROW\(\s*([A-Z0-9_]+(?:\.[A-Z0-9_]+)+)\s*\)$/i);
     const token = consolidatedMatch ? consolidatedMatch[1] : inner;
 
     const parts = token.toString().split('.').map(p => p.trim()).filter(Boolean);

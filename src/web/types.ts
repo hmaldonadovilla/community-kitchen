@@ -16,10 +16,10 @@ import {
   PaginatedResult,
   RecordMetadata,
   LineItemGroupConfig,
+  LineItemGroupConfigOverride,
   LineItemGroupUiConfig,
   LineItemDedupRule,
   LineItemSelectorConfig,
-  LineItemRowState,
   LocalizedString,
   OptionFilter,
   ValueMapConfig,
@@ -104,6 +104,7 @@ export interface VisibilityContext {
   getValue: (fieldId: string) => FieldValue;
   getLineValue?: (rowId: string, fieldId: string) => FieldValue;
   getLineItems?: (groupId: string) => LineItemRowState[];
+  getLineItemKeys?: () => string[];
 }
 
 export interface FilterContext {
@@ -145,6 +146,7 @@ export {
   ListViewRuleWhen,
   LineItemSelectorConfig,
   LineItemGroupUiConfig,
+  LineItemGroupConfigOverride,
   LineItemDedupRule,
   DedupRule,
   PaginatedResult,

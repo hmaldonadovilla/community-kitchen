@@ -54,7 +54,7 @@ export const resolveLineItemTokenValue = (args: {
 
   if (subGroup) {
     const subKeyRaw = resolveSubgroupKey(subGroup);
-    const subToken = subGroupToken || slugifyPlaceholder(subKeyRaw);
+    const subToken = subGroupToken || subKeyRaw;
     const normalizedSubKey = (subToken || '').toString().toUpperCase();
     replacements[`${normalizedGroupId}.${normalizedSubKey}.__COUNT`] = countRaw ?? '';
     (subGroup.fields || []).forEach((field: any) => {
@@ -77,7 +77,7 @@ export const resolveLineItemTokenValue = (args: {
     .toString()
     .trim()
     .split('.')
-    .map(p => p.trim())
+    .map((p: string) => p.trim())
     .filter(Boolean);
   if (parts.length < 2) return '';
   const groupToken = (parts[0] || '').toString().toUpperCase();
@@ -86,16 +86,16 @@ export const resolveLineItemTokenValue = (args: {
     return resolveGroupValue(parts[1] || '');
   }
   if (!subGroup) return '';
-  const subTokenRaw = (parts[1] || '').toString();
+  const subTokenRaw = parts.slice(1, -1).join('.');
   const subTokenUpper = subTokenRaw.toUpperCase();
-  const subKeyRaw = resolveSubgroupKey(subGroup);
+  const subKeyRaw = subGroupToken || resolveSubgroupKey(subGroup);
   const slugSubKey = slugifyPlaceholder(subKeyRaw || '');
   const allowedSubTokens = new Set<string>();
   if (subGroupToken) allowedSubTokens.add((subGroupToken || '').toString().toUpperCase());
   if (subKeyRaw) allowedSubTokens.add(subKeyRaw.toString().toUpperCase());
   if (slugSubKey) allowedSubTokens.add(slugSubKey.toString().toUpperCase());
   if (!allowedSubTokens.has(subTokenUpper)) return '';
-  return resolveSubGroupValue(parts[2] || '');
+  return resolveSubGroupValue(parts[parts.length - 1] || '');
 };
 
 /**
@@ -163,8 +163,8 @@ export const replaceLineItemPlaceholders = (
 
   if (opts?.subGroup) {
     const subKeyRaw = resolveSubgroupKey(opts.subGroup);
-    const subToken = opts.subGroupToken || slugifyPlaceholder(subKeyRaw);
-    const normalizedSubKey = subToken.toUpperCase();
+    const subToken = opts.subGroupToken || subKeyRaw;
+    const normalizedSubKey = (subToken || '').toString().toUpperCase();
     replacements[`${normalizedGroupId}.${normalizedSubKey}.__COUNT`] = countText;
     const subUi: any = (opts.subGroup as any)?.ui;
     const subCollapsedOnly =
@@ -195,12 +195,18 @@ export const replaceLineItemPlaceholders = (
 
   const replaced = template.replace(
     // Allow incidental spaces inside {{ ... }} and around "." to tolerate Markdown/text templates.
-    /{{\s*([A-Z0-9_]+)\s*(?:\.\s*([A-Z0-9_]+)\s*)?\.\s*([A-Z0-9_]+)\s*}}/gi,
-    (_, groupId, maybeSub, fieldKey) => {
+    /{{\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+(?:\s*\.\s*[A-Z0-9_]+)*)\s*}}/gi,
+    (_match, groupId, rest) => {
       if (groupId.toUpperCase() !== normalizedGroupId) return '';
-      const token = maybeSub
-        ? `${normalizedGroupId}.${maybeSub.toUpperCase()}.${fieldKey.toUpperCase()}`
-        : `${normalizedGroupId}.${fieldKey.toUpperCase()}`;
+      const parts = (rest || '')
+        .toString()
+        .split('.')
+        .map((p: string) => p.trim())
+        .filter(Boolean);
+      if (!parts.length) return '';
+      const fieldKey = parts[parts.length - 1].toUpperCase();
+      const subPath = parts.length > 1 ? parts.slice(0, -1).map((p: string) => p.toUpperCase()).join('.') : '';
+      const token = subPath ? `${normalizedGroupId}.${subPath}.${fieldKey}` : `${normalizedGroupId}.${fieldKey}`;
       return replacements[token] ?? '';
     }
   );
@@ -216,12 +222,12 @@ export const replaceLineItemPlaceholders = (
 
       // Allow ALWAYS_SHOW(CONSOLIDATED_ROW(...)) by unwrapping to the underlying token
       // and letting the existing CONSOLIDATED_ROW replacement handle it.
-      const consolidatedMatch = inner.match(/^CONSOLIDATED_ROW\(\s*([A-Z0-9_]+\.[A-Z0-9_]+\.[A-Z0-9_]+)\s*\)$/i);
+      const consolidatedMatch = inner.match(/^CONSOLIDATED_ROW\(\s*([A-Z0-9_]+(?:\.[A-Z0-9_]+)+)\s*\)$/i);
       if (consolidatedMatch) {
         return `{{CONSOLIDATED_ROW(${consolidatedMatch[1]})}}`;
       }
 
-      const parts = inner.split('.').map(p => p.trim()).filter(Boolean);
+      const parts = inner.split('.').map((p: string) => p.trim()).filter(Boolean);
       if (parts.length < 2) return '';
       const gid = (parts[0] || '').toString().toUpperCase();
       if (gid !== normalizedGroupId) return '';
@@ -229,9 +235,9 @@ export const replaceLineItemPlaceholders = (
         const field = (parts[1] || '').toString().toUpperCase();
         return replacements[`${normalizedGroupId}.${field}`] ?? '';
       }
-      if (parts.length === 3) {
-        const sub = (parts[1] || '').toString().toUpperCase();
-        const field = (parts[2] || '').toString().toUpperCase();
+      if (parts.length >= 3) {
+        const sub = parts.slice(1, -1).map((p: string) => p.toString().toUpperCase()).join('.');
+        const field = (parts[parts.length - 1] || '').toString().toUpperCase();
         return replacements[`${normalizedGroupId}.${sub}.${field}`] ?? '';
       }
       return '';
@@ -241,27 +247,53 @@ export const replaceLineItemPlaceholders = (
   // Row-scoped consolidated values for nested subgroups (useful inside ROW_TABLE blocks).
   // Example: {{CONSOLIDATED_ROW(MP_DISHES.INGREDIENTS.ALLERGEN)}}
   return withAlwaysShow.replace(
-    /{{\s*CONSOLIDATED_ROW\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\)\s*}}/gi,
-    (_m, groupIdRaw: string, subGroupIdRaw: string, fieldIdRaw: string) => {
+    /{{\s*CONSOLIDATED_ROW\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+(?:\s*\.\s*[A-Z0-9_]+)*)\s*\)\s*}}/gi,
+    (_m, groupIdRaw: string, restRaw: string) => {
       const groupId = (groupIdRaw || '').toString().toUpperCase();
       if (groupId !== normalizedGroupId) return '';
-      const subToken = (subGroupIdRaw || '').toString().toUpperCase();
-      const fieldToken = (fieldIdRaw || '').toString().toUpperCase();
+      const parts = (restRaw || '')
+        .toString()
+        .split('.')
+        .map((p: string) => p.trim())
+        .filter(Boolean);
+      if (parts.length < 2) return '';
+      const subToken = parts.slice(0, -1).map((p: string) => p.toUpperCase()).join('.');
+      const fieldToken = (parts[parts.length - 1] || '').toString().toUpperCase();
       if (!subToken || !fieldToken) return '';
 
       const parentRow = (rowData as any)?.__parent || rowData || {};
-      const subGroups = group.lineItemConfig?.subGroups || [];
-      const subConfig = subGroups.find(sub => {
-        const key = resolveSubgroupKey(sub as SubGroupConfig);
-        const normalizedKey = (key || '').toUpperCase();
-        const slugKey = slugifyPlaceholder(key || '');
-        return normalizedKey === subToken || slugKey === subToken;
-      });
-      if (!subConfig) return '';
-      const subKey = resolveSubgroupKey(subConfig as SubGroupConfig);
-      if (!subKey) return '';
+      const resolveSubConfigByPath = (path: string[]): SubGroupConfig | undefined => {
+        let current: any = group.lineItemConfig;
+        for (let i = 0; i < path.length; i += 1) {
+          const subId = path[i];
+          const subs = (current?.subGroups || []) as any[];
+          const match = subs.find(s => resolveSubgroupKey(s as SubGroupConfig).toUpperCase() === subId);
+          if (!match) return undefined;
+          if (i === path.length - 1) return match as SubGroupConfig;
+          current = match;
+        }
+        return undefined;
+      };
 
-      const children = Array.isArray((parentRow as any)[subKey]) ? (parentRow as any)[subKey] : [];
+      const subPath = parts.slice(0, -1).map((p: string) => p.toUpperCase());
+      const subConfig = resolveSubConfigByPath(subPath);
+      if (!subConfig) return '';
+
+      const collectChildren = (startRows: any[], path: string[]): any[] => {
+        let currentRows = startRows;
+        for (let i = 0; i < path.length; i += 1) {
+          const subId = path[i];
+          const next: any[] = [];
+          currentRows.forEach(row => {
+            const children = Array.isArray((row as any)[subId]) ? (row as any)[subId] : [];
+            children.forEach((child: any) => next.push(child || {}));
+          });
+          currentRows = next;
+        }
+        return currentRows;
+      };
+
+      const children = collectChildren([parentRow], subPath);
       if (!children.length) return 'None';
 
       const fields = (subConfig as any).fields || [];

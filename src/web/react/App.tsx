@@ -2276,7 +2276,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     };
     const visibilityCtx = {
       getValue: (fieldId: string) => resolveButtonVisibilityValue(fieldId),
-      getLineItems: (groupId: string) => lineItems[groupId] || []
+      getLineItems: (groupId: string) => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
     } as any;
     return definition.questions
       .map((q, idx) => ({ q, idx }))
@@ -5641,6 +5642,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           onDiagnostic={logEvent}
           onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
+          openConfirmDialog={customConfirm.openConfirm}
         />
       ) : null}
 

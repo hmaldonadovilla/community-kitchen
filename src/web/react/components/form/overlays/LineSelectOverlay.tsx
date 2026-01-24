@@ -18,7 +18,11 @@ export const LineSelectOverlay: React.FC<{
   language: LangCode;
   submitting: boolean;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
-  addLineItemRowManual: (groupId: string, preset?: Record<string, any>) => void;
+  addLineItemRowManual: (
+    groupId: string,
+    preset?: Record<string, any>,
+    options?: { configOverride?: any; rowFilter?: { includeWhen?: any; excludeWhen?: any } | null }
+  ) => void;
 }> = ({ overlay, setOverlay, language, submitting, onDiagnostic, addLineItemRowManual }) => {
   const [query, setQuery] = useState('');
   const selectedCount = (overlay.selected || []).length;

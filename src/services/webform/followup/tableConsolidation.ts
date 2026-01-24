@@ -201,9 +201,11 @@ export const applyOrderBy = (args: {
       }
     } else if (segs.length >= 3) {
       const g = segs[0];
-      const s = segs[1];
-      const f = segs[2];
-      if (g === normalizedGroupId && subConfig && (s === subToken || s === slugifyPlaceholder(resolveSubgroupKey(subConfig as any) || ''))) {
+      const f = segs[segs.length - 1];
+      const s = segs.slice(1, -1).join('.');
+      const slugPath = slugifyPlaceholder(s);
+      const slugSub = slugifyPlaceholder(subToken || '');
+      if (g === normalizedGroupId && subConfig && (s === subToken || s === slugSub || slugPath === subToken)) {
         fieldToken = f;
         fieldCfg = resolveFieldCfg(fieldToken, 'sub');
       } else if (g === normalizedGroupId) {

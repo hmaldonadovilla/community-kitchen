@@ -1,6 +1,6 @@
-import { FieldValue, ValueMapConfig, WebFormDefinition } from '../../types';
+import { FieldValue, LineItemRowState, ValueMapConfig, WebFormDefinition } from '../../types';
 import { LineItemState } from '../types';
-import { resolveSubgroupKey } from './lineItems';
+import { buildSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { isEmptyValue } from '../utils/values';
 
 export type ApplyValueMapsMode = 'change' | 'blur' | 'init' | 'submit';
@@ -458,29 +458,38 @@ export const applyValueMapsToForm = (
     }
 
     if (q.type === 'LINE_ITEM_GROUP' && q.lineItemConfig?.fields) {
-      const rows = lineItems[q.id] || [];
-      const updatedRows = rows.map(row => ({
-        ...row,
-        values: applyValueMapsToLineRow(q.lineItemConfig!.fields, row.values, values, options)
-      }));
-      lineItems = { ...lineItems, [q.id]: updatedRows };
+      const applyGroupValueMaps = (args: {
+        groupCfg: any;
+        groupKey: string;
+        rows: LineItemRowState[];
+        contextValues: Record<string, FieldValue>;
+      }) => {
+        const { groupCfg, groupKey, rows, contextValues } = args;
+        if (!groupCfg) return;
+        const fields = (groupCfg?.fields || []) as any[];
+        const updatedRows = rows.map(row => ({
+          ...row,
+          values: applyValueMapsToLineRow(fields, row.values, contextValues, options)
+        }));
+        lineItems = { ...lineItems, [groupKey]: updatedRows };
 
-      // handle nested subgroups
-      if (q.lineItemConfig.subGroups?.length) {
-        rows.forEach(row => {
-          q.lineItemConfig?.subGroups?.forEach(sub => {
-            const key = resolveSubgroupKey(sub as any);
-            if (!key) return;
-            const subgroupKey = `${q.id}::${row.id}::${key}`;
+        const subGroups = (groupCfg?.subGroups || []) as any[];
+        if (!subGroups.length) return;
+        updatedRows.forEach(row => {
+          const nextContext = { ...contextValues, ...(row.values || {}) };
+          subGroups.forEach(sub => {
+            const subId = resolveSubgroupKey(sub as any);
+            if (!subId) return;
+            const subgroupKey = buildSubgroupKey(groupKey, row.id, subId);
             const subRows = lineItems[subgroupKey] || [];
-            const updatedSubRows = subRows.map(subRow => ({
-              ...subRow,
-              values: applyValueMapsToLineRow((sub as any).fields || [], subRow.values, { ...values, ...row.values }, options)
-            }));
-            lineItems = { ...lineItems, [subgroupKey]: updatedSubRows };
+            if (!subRows.length) return;
+            applyGroupValueMaps({ groupCfg: sub, groupKey: subgroupKey, rows: subRows, contextValues: nextContext });
           });
         });
-      }
+      };
+
+      const rows = lineItems[q.id] || [];
+      applyGroupValueMaps({ groupCfg: q.lineItemConfig, groupKey: q.id, rows, contextValues: values });
     }
   });
 
