@@ -1573,6 +1573,58 @@ components:
               description: Informational flag to mark the field as system-managed/hidden in UI.
           description: Copy a field value from another field (typically for NUMBER defaults).
         - type: object
+          required: [op, expression]
+          properties:
+            op:
+              type: string
+              enum: [calc]
+              description: Compute a numeric expression using fields and line-item aggregates.
+            expression:
+              type: string
+              description: |
+                Numeric expression using `{FIELD_ID}` tokens and `SUM(GROUP.FIELD)` aggregates.
+                Example: "{QTY} - SUM(MP_TYPE_LI.PREP_QTY)".
+            lineItemFilters:
+              type: array
+              description: Optional filters applied to specific SUM(...) aggregates.
+              items:
+                type: object
+                required: [ref, when]
+                properties:
+                  ref:
+                    type: string
+                    description: Aggregate reference matching the SUM(...) token (e.g., "MP_TYPE_LI.PREP_QTY").
+                  when:
+                    $ref: '#/components/schemas/WhenClause'
+                    description: Row-level filter applied to aggregate rows.
+            applyOn:
+              type: string
+              enum: [change, blur]
+              description: |
+                When to apply the derived value during editing.
+                - change: apply on every onChange (default for calc)
+                - blur: apply only after the user leaves the input
+            when:
+              type: string
+              enum: [always, empty]
+              description: |
+                When to apply the derived value.
+                - always: recompute on every change (default for calc)
+                - empty: only set when the target field is empty (allows user overrides)
+            precision:
+              type: integer
+              description: Optional decimal precision to round to.
+            min:
+              type: number
+              description: Optional minimum clamp for the computed result.
+            max:
+              type: number
+              description: Optional maximum clamp for the computed result.
+            hidden:
+              type: boolean
+              description: Informational flag to mark the field as system-managed/hidden in UI.
+          description: Compute numeric fields from other fields and line-item aggregates.
+        - type: object
           required: [op, thresholds]
           properties:
             op:
@@ -3108,6 +3160,9 @@ components:
           description: |
             Optional subgroup path for nested targets (dot-delimited string or array of subgroup ids).
             When provided, this path is resolved relative to the triggering row for true nesting.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition that must match for the effect to run.
         preset:
           type: object
           additionalProperties:

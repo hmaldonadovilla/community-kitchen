@@ -110,6 +110,7 @@ export const runSelectionEffects = (args: {
     value as any,
     language,
     {
+      logEvent,
       addLineItemRow: (
         groupId: string,
         preset?: Record<string, any>,

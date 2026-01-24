@@ -2,6 +2,7 @@ import { FieldValue, LineItemRowState, ValueMapConfig, WebFormDefinition } from 
 import { LineItemState } from '../types';
 import { buildSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { isEmptyValue } from '../utils/values';
+import { matchesWhenClause } from '../../rules/visibility';
 
 export type ApplyValueMapsMode = 'change' | 'blur' | 'init' | 'submit';
 
@@ -107,7 +108,7 @@ const resolveDerivedWhen = (config: any): 'always' | 'empty' => {
   // - addDays: always (computed field)
   // - today/timeOfDayMap/copy: empty (prefill/default behavior)
   const op = (config?.op || '').toString();
-  return op === 'addDays' ? 'always' : 'empty';
+  return op === 'addDays' || op === 'calc' ? 'always' : 'empty';
 };
 
 const resolveDerivedApplyOn = (config: any): 'change' | 'blur' => {
@@ -216,6 +217,186 @@ const toFiniteNumber = (raw: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+const normalizeCalcRef = (raw: string): string => raw.replace(/\s+/g, '').toLowerCase();
+
+const buildCalcFilterMap = (raw: any): Map<string, any> => {
+  const map = new Map<string, any>();
+  if (!Array.isArray(raw)) return map;
+  raw.forEach(entry => {
+    if (!entry || typeof entry !== 'object') return;
+    const refRaw = (entry as any).ref ?? (entry as any).path ?? (entry as any).target;
+    const ref = refRaw !== undefined && refRaw !== null ? refRaw.toString().trim() : '';
+    if (!ref) return;
+    const when = (entry as any).when;
+    if (!when || typeof when !== 'object') return;
+    map.set(normalizeCalcRef(ref), when);
+  });
+  return map;
+};
+
+const buildCalcRowCtx = (args: {
+  rowValues: Record<string, FieldValue>;
+  parentValues?: Record<string, FieldValue>;
+  topValues: Record<string, FieldValue>;
+  lineItems: LineItemState;
+}): { getValue: (fieldId: string) => FieldValue | undefined; getLineItems?: (key: string) => any[]; getLineValue?: (_rowId: string, fieldId: string) => FieldValue | undefined } => {
+  const { rowValues, parentValues, topValues, lineItems } = args;
+  const resolveValue = (fieldId: string): FieldValue | undefined => {
+    if (Object.prototype.hasOwnProperty.call(rowValues || {}, fieldId)) return (rowValues as any)[fieldId] as FieldValue;
+    if (parentValues && Object.prototype.hasOwnProperty.call(parentValues || {}, fieldId)) return (parentValues as any)[fieldId] as FieldValue;
+    return topValues[fieldId];
+  };
+  return {
+    getValue: resolveValue,
+    getLineItems: key => {
+      const rows = (lineItems as any)[key];
+      return Array.isArray(rows) ? rows : [];
+    },
+    getLineValue: (_rowId: string, fieldId: string) => resolveValue(fieldId)
+  };
+};
+
+const collectLineItemPathRows = (args: {
+  groupKey?: string;
+  rowId?: string;
+  rowValues?: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  groupPath: string[];
+}): Array<{ groupKey: string; rowId: string; rowValues: Record<string, FieldValue>; parentValues: Record<string, FieldValue> | undefined }> => {
+  const { groupKey, rowId, rowValues, lineItems, groupPath } = args;
+  if (!groupPath.length) return [];
+
+  if (rowId && groupKey) {
+    let parents = [{ groupKey, rowId, rowValues: rowValues || {}, parentValues: undefined as Record<string, FieldValue> | undefined }];
+    groupPath.forEach(segment => {
+      const next: Array<{ groupKey: string; rowId: string; rowValues: Record<string, FieldValue>; parentValues: Record<string, FieldValue> | undefined }> =
+        [];
+      parents.forEach(parent => {
+        const subKey = buildSubgroupKey(parent.groupKey, parent.rowId, segment);
+        const rows = (lineItems[subKey] || []) as any[];
+        rows.forEach(row => {
+          next.push({
+            groupKey: subKey,
+            rowId: row.id,
+            rowValues: (row?.values || {}) as Record<string, FieldValue>,
+            parentValues: parent.rowValues
+          });
+        });
+      });
+      parents = next;
+    });
+    return parents;
+  }
+
+  // Top-level aggregation: start from groupPath[0] as a root line-item group id.
+  const [rootGroupId, ...rest] = groupPath;
+  const rootRows = (lineItems[rootGroupId] || []) as any[];
+  let parents = rootRows.map(row => ({
+    groupKey: rootGroupId,
+    rowId: row.id,
+    rowValues: (row?.values || {}) as Record<string, FieldValue>,
+    parentValues: undefined as Record<string, FieldValue> | undefined
+  }));
+  rest.forEach(segment => {
+    const next: Array<{ groupKey: string; rowId: string; rowValues: Record<string, FieldValue>; parentValues: Record<string, FieldValue> | undefined }> =
+      [];
+    parents.forEach(parent => {
+      const subKey = buildSubgroupKey(parent.groupKey, parent.rowId, segment);
+      const rows = (lineItems[subKey] || []) as any[];
+      rows.forEach(row => {
+        next.push({
+          groupKey: subKey,
+          rowId: row.id,
+          rowValues: (row?.values || {}) as Record<string, FieldValue>,
+          parentValues: parent.rowValues
+        });
+      });
+    });
+    parents = next;
+  });
+  return parents;
+};
+
+const safeEvalNumericExpression = (expr: string): number | null => {
+  const trimmed = expr.trim();
+  if (!trimmed) return null;
+  const illegal = /[^0-9+\-*/().\s]/.test(trimmed);
+  if (illegal) return null;
+  try {
+    const result = Function(`"use strict"; return (${trimmed});`)();
+    return Number.isFinite(result) ? (result as number) : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+const resolveDerivedCalcValue = (args: {
+  config: any;
+  rowValues: Record<string, FieldValue>;
+  topValues: Record<string, FieldValue>;
+  lineItems?: LineItemState;
+  groupKey?: string;
+  rowId?: string;
+}): FieldValue | undefined => {
+  const { config, rowValues, topValues, lineItems, groupKey, rowId } = args;
+  const expression = config?.expression !== undefined && config?.expression !== null ? config.expression.toString().trim() : '';
+  if (!expression) return undefined;
+  if (!lineItems) return undefined;
+
+  const filterMap = buildCalcFilterMap(config?.lineItemFilters ?? config?.aggregateFilters ?? config?.filters);
+
+  const resolveFieldToken = (rawId: string): number => {
+    const id = rawId.trim();
+    if (!id) return 0;
+    const raw = Object.prototype.hasOwnProperty.call(rowValues || {}, id) ? rowValues[id] : topValues[id];
+    const num = toFiniteNumber(raw);
+    return num === null ? 0 : num;
+  };
+
+  const resolveSumToken = (rawPath: string): number => {
+    const pathClean = rawPath.trim().replace(/\s+/g, '');
+    if (!pathClean) return 0;
+    const parts = pathClean.split('.').filter(Boolean);
+    if (parts.length < 2) return 0;
+    const fieldId = parts[parts.length - 1];
+    const groupPath = parts.slice(0, -1);
+    const rows = collectLineItemPathRows({ groupKey, rowId, rowValues, lineItems, groupPath });
+    if (!rows.length) return 0;
+    const filterWhen = filterMap.get(normalizeCalcRef(pathClean));
+    let sum = 0;
+    rows.forEach(row => {
+      if (filterWhen) {
+        const rowCtx = buildCalcRowCtx({
+          rowValues: row.rowValues,
+          parentValues: row.parentValues,
+          topValues,
+          lineItems
+        });
+        if (!matchesWhenClause(filterWhen as any, rowCtx)) return;
+      }
+      const num = toFiniteNumber((row.rowValues || {})[fieldId]);
+      if (num !== null) sum += num;
+    });
+    return sum;
+  };
+
+  const withFields = expression.replace(/\{([^}]+)\}/g, (_match: string, raw: string) => resolveFieldToken(raw).toString());
+  const withSums = withFields.replace(/SUM\s*\(([^)]+)\)/gi, (_match: string, raw: string) => resolveSumToken(raw).toString());
+  const result = safeEvalNumericExpression(withSums);
+  if (result === null) {
+    derivedLog('calc.invalid', { expression, resolved: withSums });
+    return undefined;
+  }
+  let computed = result;
+  if (typeof config?.min === 'number') computed = Math.max(computed, config.min);
+  if (typeof config?.max === 'number') computed = Math.min(computed, config.max);
+  if (typeof config?.precision === 'number') {
+    const factor = Math.pow(10, Math.max(0, Math.floor(config.precision)));
+    computed = Math.round(computed * factor) / factor;
+  }
+  return Number.isFinite(computed) ? computed : undefined;
+};
+
 const resolveCopyMode = (config: any): 'replace' | 'allowIncrease' | 'allowDecrease' => {
   const raw = (config?.copyMode || config?.mode || '').toString().trim();
   const key = raw.toLowerCase();
@@ -315,7 +496,8 @@ export const applyValueMapsToLineRow = (
   fields: any[],
   rowValues: Record<string, FieldValue>,
   topValues: Record<string, FieldValue>,
-  options?: ApplyValueMapsOptions
+  options?: ApplyValueMapsOptions,
+  context?: { groupKey?: string; rowId?: string; lineItems?: LineItemState }
 ): Record<string, FieldValue> => {
   const nextValues = { ...rowValues };
   const mode: ApplyValueMapsMode = options?.mode || 'change';
@@ -350,6 +532,22 @@ export const applyValueMapsToLineRow = (
               applyOn,
               copyMode: resolveCopyMode(field.derivedValue)
             });
+          }
+          return;
+        }
+        if (field.derivedValue?.op === 'calc') {
+          if (when === 'empty' && !isEmptyValue(nextValues[field.id])) return;
+          const derived = resolveDerivedCalcValue({
+            config: field.derivedValue,
+            rowValues: nextValues,
+            topValues,
+            lineItems: context?.lineItems,
+            groupKey: context?.groupKey,
+            rowId: context?.rowId
+          });
+          if (derived !== undefined && derived !== nextValues[field.id]) {
+            nextValues[field.id] = derived;
+            derivedLog('line.set', { fieldId: field.id, op: 'calc', when, applyOn });
           }
           return;
         }
@@ -427,17 +625,33 @@ export const applyValueMapsToForm = (
             derivedLog('top.set', { fieldId: q.id, op: 'copy', when, applyOn, copyMode: resolveCopyMode((q as any).derivedValue) });
           }
         }
-      } else {
-      const when = resolveDerivedWhen((q as any).derivedValue);
-      if (when === 'empty' && !isEmptyValue(values[q.id])) {
-        // allow user override / preserve stored values
-      } else {
-      const derived = resolveDerivedValue((q as any).derivedValue, fieldId => values[fieldId]);
-        if (derived !== undefined && derived !== values[q.id]) {
-          values[q.id] = derived;
-          derivedLog('top.set', { fieldId: q.id, op: (q as any).derivedValue?.op || null, when, applyOn });
+      } else if ((q as any).derivedValue?.op === 'calc') {
+        const when = resolveDerivedWhen((q as any).derivedValue);
+        if (when === 'empty' && !isEmptyValue(values[q.id])) {
+          // allow user override / preserve stored values
+        } else {
+          const derived = resolveDerivedCalcValue({
+            config: (q as any).derivedValue,
+            rowValues: {},
+            topValues: values,
+            lineItems
+          });
+          if (derived !== undefined && derived !== values[q.id]) {
+            values[q.id] = derived;
+            derivedLog('top.set', { fieldId: q.id, op: 'calc', when, applyOn });
+          }
         }
-      }
+      } else {
+        const when = resolveDerivedWhen((q as any).derivedValue);
+        if (when === 'empty' && !isEmptyValue(values[q.id])) {
+          // allow user override / preserve stored values
+        } else {
+          const derived = resolveDerivedValue((q as any).derivedValue, fieldId => values[fieldId]);
+          if (derived !== undefined && derived !== values[q.id]) {
+            values[q.id] = derived;
+            derivedLog('top.set', { fieldId: q.id, op: (q as any).derivedValue?.op || null, when, applyOn });
+          }
+        }
       }
     }
 
@@ -469,7 +683,11 @@ export const applyValueMapsToForm = (
         const fields = (groupCfg?.fields || []) as any[];
         const updatedRows = rows.map(row => ({
           ...row,
-          values: applyValueMapsToLineRow(fields, row.values, contextValues, options)
+          values: applyValueMapsToLineRow(fields, row.values, contextValues, options, {
+            groupKey,
+            rowId: row.id,
+            lineItems
+          })
         }));
         lineItems = { ...lineItems, [groupKey]: updatedRows };
 

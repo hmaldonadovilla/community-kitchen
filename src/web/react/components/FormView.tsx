@@ -74,7 +74,7 @@ import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey }
 import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorLabel, resolveSelectorPlaceholder } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
-import { applyValueMapsToForm, resolveValueMapValue } from './form/valueMaps';
+import { applyValueMapsToForm, applyValueMapsToLineRow, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
 import { findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
 import {
@@ -176,9 +176,60 @@ const hasSelectionEffects = (field: any): boolean =>
 const getSelectionEffects = (field: any): any[] =>
   Array.isArray(field?.selectionEffects) ? field.selectionEffects : [];
 
+const extractCalcExpressionDeps = (expression?: string): string[] => {
+  if (!expression) return [];
+  const matches = expression.match(/\{([^}]+)\}/g);
+  if (!matches) return [];
+  const seen = new Set<string>();
+  return matches
+    .map(raw => raw.replace(/[{}]/g, '').trim())
+    .filter(token => {
+      if (!token || token.includes('.')) return false;
+      if (seen.has(token)) return false;
+      seen.add(token);
+      return true;
+    });
+};
+
+const whenClauseDependsOnField = (when: any, targetFieldId: string): boolean => {
+  if (!when) return false;
+  if (Array.isArray(when)) return when.some(entry => whenClauseDependsOnField(entry, targetFieldId));
+  if (typeof when !== 'object') return false;
+  const allRaw = (when as any).all ?? (when as any).and;
+  if (Array.isArray(allRaw)) return allRaw.some(entry => whenClauseDependsOnField(entry, targetFieldId));
+  const anyRaw = (when as any).any ?? (when as any).or;
+  if (Array.isArray(anyRaw)) return anyRaw.some(entry => whenClauseDependsOnField(entry, targetFieldId));
+  if (Object.prototype.hasOwnProperty.call(when as any, 'not')) {
+    return whenClauseDependsOnField((when as any).not, targetFieldId);
+  }
+  const lineItems = (when as any).lineItems ?? (when as any).lineItem;
+  if (lineItems && typeof lineItems === 'object') {
+    if (whenClauseDependsOnField((lineItems as any).when, targetFieldId)) return true;
+    if (whenClauseDependsOnField((lineItems as any).parentWhen, targetFieldId)) return true;
+  }
+  const fidRaw = (when as any).fieldId ?? (when as any).field ?? (when as any).id;
+  const fid = fidRaw !== undefined && fidRaw !== null ? fidRaw.toString().trim() : '';
+  return fid === targetFieldId;
+};
+
 const selectionEffectDependsOnField = (field: any, targetFieldId: string): boolean => {
+  const derived = field?.derivedValue;
+  if (derived) {
+    const dependsOnRaw = derived.dependsOn;
+    const dependsOn = Array.isArray(dependsOnRaw) ? dependsOnRaw : dependsOnRaw ? [dependsOnRaw] : [];
+    if (dependsOn.some((dep: any) => dep !== undefined && dep !== null && dep.toString().trim() === targetFieldId)) {
+      return true;
+    }
+    if (derived.op === 'calc') {
+      const deps = extractCalcExpressionDeps(derived.expression);
+      if (deps.includes(targetFieldId)) return true;
+    }
+  }
   return getSelectionEffects(field).some(effect => {
     if (!effect) return false;
+    if (effect.when && whenClauseDependsOnField(effect.when, targetFieldId)) {
+      return true;
+    }
     if (effect.rowMultiplierFieldId && effect.rowMultiplierFieldId === targetFieldId) {
       return true;
     }
@@ -4075,24 +4126,24 @@ const FormView: React.FC<FormViewProps> = ({
         clearSelectionEffectsForRow(groupQuestion, targetRow);
       }
     }
-    setLineItems(prev => {
-      const cascade = cascadeRemoveLineItemRows({ lineItems: prev, roots: [{ groupId, rowId }] });
-      if (cascade.removedSubgroupKeys.length) {
-        setSubgroupSelectors(prevSel => {
-          const nextSel = { ...prevSel };
-          cascade.removedSubgroupKeys.forEach(key => {
-            delete (nextSel as any)[key];
-          });
-          return nextSel;
+    const prevLineItems = lineItems;
+    const cascade = cascadeRemoveLineItemRows({ lineItems: prevLineItems, roots: [{ groupId, rowId }] });
+    if (cascade.removedSubgroupKeys.length) {
+      setSubgroupSelectors(prevSel => {
+        const nextSel = { ...prevSel };
+        cascade.removedSubgroupKeys.forEach(key => {
+          delete (nextSel as any)[key];
         });
-      }
-      onDiagnostic?.('ui.lineItems.remove.cascade', { groupId, rowId, removedCount: cascade.removed.length });
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, cascade.lineItems, {
-        mode: 'init'
+        return nextSel;
       });
-      setValues(nextValues);
-      return recomputed;
+    }
+    onDiagnostic?.('ui.lineItems.remove.cascade', { groupId, rowId, removedCount: cascade.removed.length });
+    const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, cascade.lineItems, {
+      mode: 'init'
     });
+    setValues(nextValues);
+    setLineItems(recomputed);
+    runSelectionEffectsForAncestorRows(groupId, prevLineItems, recomputed);
   };
 
   const clearSelectionEffectsForRow = (groupQuestion: WebQuestionDefinition, row: LineItemRowState) => {
@@ -4555,6 +4606,120 @@ const FormView: React.FC<FormViewProps> = ({
     }
   };
 
+  const runSelectionEffectsForAncestorRows = (
+    sourceGroupKey: string,
+    prevLineItems: LineItemState,
+    nextLineItems: LineItemState
+  ) => {
+    if (!onSelectionEffect) return;
+
+    const areFieldValuesEqual = (a: FieldValue, b: FieldValue): boolean => {
+      if (a === b) return true;
+      if (Array.isArray(a) || Array.isArray(b)) {
+        const arrA = Array.isArray(a) ? a : [];
+        const arrB = Array.isArray(b) ? b : [];
+        if (arrA.length !== arrB.length) return false;
+        return arrA.every((val, idx) => val === arrB[idx]);
+      }
+      if (typeof a === 'object' || typeof b === 'object') {
+        try {
+          return JSON.stringify(a) === JSON.stringify(b);
+        } catch (_) {
+          return false;
+        }
+      }
+      return false;
+    };
+
+    const buildSelectionEffectRowValuesForKey = (groupKey: string, targetRowId: string): Record<string, FieldValue> => {
+      const rows = nextLineItems[groupKey] || [];
+      const row = rows.find(r => r.id === targetRowId);
+      const merged: Record<string, FieldValue> = { ...(row?.values || {}) };
+      const mergeMissing = (source?: Record<string, FieldValue>) => {
+        if (!source) return;
+        Object.entries(source).forEach(([key, val]) => {
+          if (Object.prototype.hasOwnProperty.call(merged, key)) return;
+          merged[key] = val;
+        });
+      };
+      let currentKey = groupKey;
+      let info = parseSubgroupKey(currentKey);
+      while (info) {
+        const currentInfo = info;
+        const parentRows = nextLineItems[currentInfo.parentGroupKey] || [];
+        const parentRow = parentRows.find(r => r.id === currentInfo.parentRowId);
+        mergeMissing((parentRow?.values || {}) as Record<string, FieldValue>);
+        currentKey = currentInfo.parentGroupKey;
+        info = parseSubgroupKey(currentKey);
+      }
+      return merged;
+    };
+
+    const resolveEffectFieldsForGroupKey = (groupKey: string): any[] => {
+      const parsed = parseSubgroupKey(groupKey);
+      if (!parsed) {
+        const root = definition.questions.find(q => q.id === groupKey);
+        return (root?.lineItemConfig?.fields || []) as any[];
+      }
+      const defs = resolveSubgroupDefs(groupKey);
+      return (defs?.sub?.fields || []) as any[];
+    };
+
+    const runSelectionEffectsForRow = (groupKey: string, targetRowId: string) => {
+      const prevRows = prevLineItems[groupKey] || [];
+      const nextRows = nextLineItems[groupKey] || [];
+      const prevRow = prevRows.find(r => r.id === targetRowId);
+      const nextRow = nextRows.find(r => r.id === targetRowId);
+      if (!nextRow) return;
+      const groupFields = resolveEffectFieldsForGroupKey(groupKey);
+      const effectFields = groupFields.filter(hasSelectionEffects);
+      if (!effectFields.length) return;
+      const prevComputed = prevRow
+        ? applyValueMapsToLineRow(groupFields, prevRow.values || {}, values, { mode: 'init' }, {
+            groupKey,
+            rowId: targetRowId,
+            lineItems: prevLineItems
+          })
+        : {};
+      const nextComputed = nextRow
+        ? applyValueMapsToLineRow(groupFields, nextRow.values || {}, values, { mode: 'init' }, {
+            groupKey,
+            rowId: targetRowId,
+            lineItems: nextLineItems
+          })
+        : {};
+      const rowValues = {
+        ...buildSelectionEffectRowValuesForKey(groupKey, targetRowId),
+        ...nextComputed
+      };
+      effectFields.forEach(effectField => {
+        const prevValue = (prevComputed as Record<string, FieldValue>)[effectField.id];
+        const nextValue = (nextComputed as Record<string, FieldValue>)[effectField.id];
+        if (areFieldValuesEqual(prevValue, nextValue)) return;
+        const contextId = buildLineContextId(groupKey, targetRowId, effectField.id);
+        const effectQuestion = effectField as unknown as WebQuestionDefinition;
+        onSelectionEffect(effectQuestion, nextValue ?? null, {
+          contextId,
+          lineItem: { groupId: groupKey, rowId: targetRowId, rowValues },
+          forceContextReset: true
+        });
+      });
+    };
+
+    const subgroupInfo = parseSubgroupKey(sourceGroupKey);
+    if (subgroupInfo?.parentGroupKey && subgroupInfo.parentRowId) {
+      let currentKey = subgroupInfo.parentGroupKey;
+      let currentRowId = subgroupInfo.parentRowId;
+      while (currentKey && currentRowId) {
+        runSelectionEffectsForRow(currentKey, currentRowId);
+        const nextInfo = parseSubgroupKey(currentKey);
+        if (!nextInfo?.parentGroupKey || !nextInfo.parentRowId) break;
+        currentKey = nextInfo.parentGroupKey;
+        currentRowId = nextInfo.parentRowId;
+      }
+    }
+  };
+
   const handleLineFieldChange = (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => {
     if (submitting) return;
     // Allow edits to proceed; readOnly/valueMap are enforced at the input level.
@@ -4759,6 +4924,8 @@ const FormView: React.FC<FormViewProps> = ({
           });
         });
       }
+
+      runSelectionEffectsForAncestorRows(group.id, lineItems, finalLineItems);
     }
   };
 
@@ -5261,41 +5428,41 @@ const FormView: React.FC<FormViewProps> = ({
       const runReset = () => {
         const groupKey = overlayOpenActionTargetKey;
         const groupQuestion = definition.questions.find(qDef => qDef.id === groupKey);
-        setLineItems(prev => {
-          const rowsAll = prev[groupKey] || [];
-          const rowsToRemove =
-            overlayOpenAction && overlayOpenAction.rowFilter
-              ? rowsAll.filter(row => matchesOverlayRowFilter(((row as any)?.values || {}) as any, overlayOpenAction.rowFilter))
-              : rowsAll;
-          if (!rowsToRemove.length) return prev;
-          if (groupQuestion) {
-            rowsToRemove.forEach(row => clearSelectionEffectsForRow(groupQuestion, row as any));
-          }
-          const cascade = cascadeRemoveLineItemRows({
-            lineItems: prev,
-            roots: rowsToRemove.map(row => ({ groupId: groupKey, rowId: row.id }))
-          });
-          if (cascade.removedSubgroupKeys.length) {
-            setSubgroupSelectors(prevSel => {
-              const nextSel = { ...prevSel };
-              cascade.removedSubgroupKeys.forEach(key => {
-                delete (nextSel as any)[key];
-              });
-              return nextSel;
-            });
-          }
-          onDiagnostic?.('ui.lineItems.remove.cascade', {
-            groupId: groupKey,
-            removedCount: cascade.removed.length,
-            source: 'overlayOpenAction'
-          });
-          const baseValues = hasResetValue ? { ...values, [q.id]: resetValue } : values;
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, baseValues, cascade.lineItems, {
-            mode: 'init'
-          });
-          setValues(nextValues);
-          return recomputed;
+        const prevLineItems = lineItems;
+        const rowsAll = prevLineItems[groupKey] || [];
+        const rowsToRemove =
+          overlayOpenAction && overlayOpenAction.rowFilter
+            ? rowsAll.filter(row => matchesOverlayRowFilter(((row as any)?.values || {}) as any, overlayOpenAction.rowFilter))
+            : rowsAll;
+        if (!rowsToRemove.length) return;
+        if (groupQuestion) {
+          rowsToRemove.forEach(row => clearSelectionEffectsForRow(groupQuestion, row as any));
+        }
+        const cascade = cascadeRemoveLineItemRows({
+          lineItems: prevLineItems,
+          roots: rowsToRemove.map(row => ({ groupId: groupKey, rowId: row.id }))
         });
+        if (cascade.removedSubgroupKeys.length) {
+          setSubgroupSelectors(prevSel => {
+            const nextSel = { ...prevSel };
+            cascade.removedSubgroupKeys.forEach(key => {
+              delete (nextSel as any)[key];
+            });
+            return nextSel;
+          });
+        }
+        onDiagnostic?.('ui.lineItems.remove.cascade', {
+          groupId: groupKey,
+          removedCount: cascade.removed.length,
+          source: 'overlayOpenAction'
+        });
+        const baseValues = hasResetValue ? { ...values, [q.id]: resetValue } : values;
+        const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, baseValues, cascade.lineItems, {
+          mode: 'init'
+        });
+        setValues(nextValues);
+        setLineItems(recomputed);
+        runSelectionEffectsForAncestorRows(groupKey, prevLineItems, recomputed);
         if (!hasResetValue) {
           suppressOverlayOpenAction(q.id);
         }
@@ -6218,7 +6385,8 @@ const FormView: React.FC<FormViewProps> = ({
               onDiagnostic,
               openConfirmDialog: openConfirmDialogResolved,
               isOverlayOpenActionSuppressed,
-              suppressOverlayOpenAction
+              suppressOverlayOpenAction,
+              runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
             }}
           />
         );
@@ -7822,7 +7990,8 @@ const FormView: React.FC<FormViewProps> = ({
                           onDiagnostic,
                           openConfirmDialog: openConfirmDialogResolved,
                           isOverlayOpenActionSuppressed,
-                          suppressOverlayOpenAction
+                          suppressOverlayOpenAction,
+                          runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
                         }}
                       />
                     );
@@ -9583,7 +9752,8 @@ const FormView: React.FC<FormViewProps> = ({
                             onDiagnostic,
                             openConfirmDialog: openConfirmDialogResolved,
                             isOverlayOpenActionSuppressed,
-                            suppressOverlayOpenAction
+                            suppressOverlayOpenAction,
+                            runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
                           }}
                         />
                       );
@@ -9650,7 +9820,8 @@ const FormView: React.FC<FormViewProps> = ({
                   onDiagnostic,
                   openConfirmDialog: openConfirmDialogResolved,
                   isOverlayOpenActionSuppressed,
-                  suppressOverlayOpenAction
+                  suppressOverlayOpenAction,
+                  runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
                 }}
               />
             )}
@@ -10070,7 +10241,8 @@ const FormView: React.FC<FormViewProps> = ({
             onDiagnostic,
             openConfirmDialog: openConfirmDialogResolved,
             isOverlayOpenActionSuppressed,
-            suppressOverlayOpenAction
+            suppressOverlayOpenAction,
+            runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
           }}
         />
       );

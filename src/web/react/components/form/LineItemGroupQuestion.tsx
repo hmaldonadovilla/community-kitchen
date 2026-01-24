@@ -154,6 +154,11 @@ export interface LineItemGroupQuestionCtx {
     options?: { configOverride?: any; rowFilter?: { includeWhen?: any; excludeWhen?: any } | null }
   ) => void;
   removeLineRow: (groupId: string, rowId: string) => void;
+  runSelectionEffectsForAncestors?: (
+    groupKey: string,
+    prevLineItems: LineItemState,
+    nextLineItems: LineItemState
+  ) => void;
   handleLineFieldChange: (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => void;
 
   collapsedGroups: Record<string, boolean>;
@@ -2051,7 +2056,11 @@ export const LineItemGroupQuestion: React.FC<{
               });
 
               const allFields = q.lineItemConfig?.fields || [];
-              const rowVisibilityValues = applyValueMapsToLineRow(allFields, row.values || {}, values, { mode: 'init' });
+              const rowVisibilityValues = applyValueMapsToLineRow(allFields, row.values || {}, values, { mode: 'init' }, {
+                groupKey: q.id,
+                rowId: row.id,
+                lineItems
+              });
               const overlayActionCtx: VisibilityContext = {
                 ...groupCtx,
                 getLineValue: (_rowId, fid) => (rowVisibilityValues as any)[fid]
@@ -3855,51 +3864,49 @@ export const LineItemGroupQuestion: React.FC<{
                   const resetValue = hasResetValue ? (overlayOpenAction?.action as any)?.resetValue : undefined;
                   const runReset = () => {
                     const groupKey = overlayOpenActionTargetKey;
-                    setLineItems(prev => {
-                      const rowsAll = prev[groupKey] || [];
-                      const rowsToRemove =
-                        overlayOpenAction && overlayOpenAction.rowFilter
-                          ? rowsAll.filter(r =>
-                              matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter)
-                            )
-                          : rowsAll;
-                      if (!rowsToRemove.length) return prev;
-                      const cascade = cascadeRemoveLineItemRows({
-                        lineItems: prev,
-                        roots: rowsToRemove.map(r => ({ groupId: groupKey, rowId: r.id }))
-                      });
-                      let nextLineItems = cascade.lineItems;
-                      if (hasResetValue) {
-                        const groupRows = nextLineItems[q.id] || [];
-                        if (groupRows.length) {
-                          nextLineItems = {
-                            ...nextLineItems,
-                            [q.id]: groupRows.map(r =>
-                              r.id === row.id ? { ...r, values: { ...r.values, [field.id]: resetValue } } : r
-                            )
-                          };
-                        }
-                      }
-                      if (cascade.removedSubgroupKeys.length) {
-                        setSubgroupSelectors(prevSel => {
-                          const nextSel = { ...prevSel };
-                          cascade.removedSubgroupKeys.forEach(key => {
-                            delete (nextSel as any)[key];
-                          });
-                          return nextSel;
-                        });
-                      }
-                      onDiagnostic?.('ui.lineItems.remove.cascade', {
-                        groupId: groupKey,
-                        removedCount: cascade.removed.length,
-                        source: 'overlayOpenAction'
-                      });
-                      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
-                        mode: 'init'
-                      });
-                      setValues(nextValues);
-                      return recomputed;
+                    const prevLineItems = lineItems;
+                    const rowsAll = prevLineItems[groupKey] || [];
+                    const rowsToRemove =
+                      overlayOpenAction && overlayOpenAction.rowFilter
+                        ? rowsAll.filter(r =>
+                            matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter)
+                          )
+                        : rowsAll;
+                    if (!rowsToRemove.length) return;
+                    const cascade = cascadeRemoveLineItemRows({
+                      lineItems: prevLineItems,
+                      roots: rowsToRemove.map(r => ({ groupId: groupKey, rowId: r.id }))
                     });
+                    let nextLineItems = cascade.lineItems;
+                    if (hasResetValue) {
+                      const groupRows = nextLineItems[q.id] || [];
+                      if (groupRows.length) {
+                        nextLineItems = {
+                          ...nextLineItems,
+                          [q.id]: groupRows.map(r => (r.id === row.id ? { ...r, values: { ...r.values, [field.id]: resetValue } } : r))
+                        };
+                      }
+                    }
+                    if (cascade.removedSubgroupKeys.length) {
+                      setSubgroupSelectors(prevSel => {
+                        const nextSel = { ...prevSel };
+                        cascade.removedSubgroupKeys.forEach(key => {
+                          delete (nextSel as any)[key];
+                        });
+                        return nextSel;
+                      });
+                    }
+                    onDiagnostic?.('ui.lineItems.remove.cascade', {
+                      groupId: groupKey,
+                      removedCount: cascade.removed.length,
+                      source: 'overlayOpenAction'
+                    });
+                    const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+                      mode: 'init'
+                    });
+                    setValues(nextValues);
+                    setLineItems(recomputed);
+                    ctx.runSelectionEffectsForAncestors?.(groupKey, prevLineItems, recomputed);
                     if (!hasResetValue) {
                       ctx.suppressOverlayOpenAction?.(fieldPath);
                     }
@@ -4951,51 +4958,51 @@ export const LineItemGroupQuestion: React.FC<{
                         const resetValue = hasResetValue ? (overlayOpenAction?.action as any)?.resetValue : undefined;
                         const runReset = () => {
                           const groupKey = overlayOpenActionTargetKey;
-                          setLineItems(prev => {
-                            const rowsAll = prev[groupKey] || [];
-                            const rowsToRemove =
-                              overlayOpenAction && overlayOpenAction.rowFilter
-                                ? rowsAll.filter(r =>
-                                    matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter)
-                                  )
-                                : rowsAll;
-                            if (!rowsToRemove.length) return prev;
-                            const cascade = cascadeRemoveLineItemRows({
-                              lineItems: prev,
-                              roots: rowsToRemove.map(r => ({ groupId: groupKey, rowId: r.id }))
-                            });
-                            let nextLineItems = cascade.lineItems;
-                            if (hasResetValue) {
-                              const groupRows = nextLineItems[q.id] || [];
-                              if (groupRows.length) {
-                                nextLineItems = {
-                                  ...nextLineItems,
-                                  [q.id]: groupRows.map(r =>
-                                    r.id === row.id ? { ...r, values: { ...r.values, [field.id]: resetValue } } : r
-                                  )
-                                };
-                              }
-                            }
-                            if (cascade.removedSubgroupKeys.length) {
-                              setSubgroupSelectors(prevSel => {
-                                const nextSel = { ...prevSel };
-                                cascade.removedSubgroupKeys.forEach(key => {
-                                  delete (nextSel as any)[key];
-                                });
-                                return nextSel;
-                              });
-                            }
-                            onDiagnostic?.('ui.lineItems.remove.cascade', {
-                              groupId: groupKey,
-                              removedCount: cascade.removed.length,
-                              source: 'overlayOpenAction'
-                            });
-                            const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
-                              mode: 'init'
-                            });
-                            setValues(nextValues);
-                            return recomputed;
+                          const prevLineItems = lineItems;
+                          const rowsAll = prevLineItems[groupKey] || [];
+                          const rowsToRemove =
+                            overlayOpenAction && overlayOpenAction.rowFilter
+                              ? rowsAll.filter(r =>
+                                  matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter)
+                                )
+                              : rowsAll;
+                          if (!rowsToRemove.length) return;
+                          const cascade = cascadeRemoveLineItemRows({
+                            lineItems: prevLineItems,
+                            roots: rowsToRemove.map(r => ({ groupId: groupKey, rowId: r.id }))
                           });
+                          let nextLineItems = cascade.lineItems;
+                          if (hasResetValue) {
+                            const groupRows = nextLineItems[q.id] || [];
+                            if (groupRows.length) {
+                              nextLineItems = {
+                                ...nextLineItems,
+                                [q.id]: groupRows.map(r =>
+                                  r.id === row.id ? { ...r, values: { ...r.values, [field.id]: resetValue } } : r
+                                )
+                              };
+                            }
+                          }
+                          if (cascade.removedSubgroupKeys.length) {
+                            setSubgroupSelectors(prevSel => {
+                              const nextSel = { ...prevSel };
+                              cascade.removedSubgroupKeys.forEach(key => {
+                                delete (nextSel as any)[key];
+                              });
+                              return nextSel;
+                            });
+                          }
+                          onDiagnostic?.('ui.lineItems.remove.cascade', {
+                            groupId: groupKey,
+                            removedCount: cascade.removed.length,
+                            source: 'overlayOpenAction'
+                          });
+                          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+                            mode: 'init'
+                          });
+                          setValues(nextValues);
+                          setLineItems(recomputed);
+                          ctx.runSelectionEffectsForAncestors?.(groupKey, prevLineItems, recomputed);
                           if (!hasResetValue) {
                             ctx.suppressOverlayOpenAction?.(fieldPath);
                           }

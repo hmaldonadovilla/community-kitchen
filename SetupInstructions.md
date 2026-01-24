@@ -856,6 +856,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       - You can also **copy values** into the new row using reference strings in `preset`:
         - `$row.FIELD_ID` copies from the originating **line-item row** (when the effect is triggered inside a line item)
         - `$top.FIELD_ID` copies from **top-level** record values
+      - **Optional condition gating**: Use `when` to gate effects with visibility-style conditions (e.g., numeric comparisons for NUMBER fields).
 
       ```json
       {
@@ -868,6 +869,28 @@ This project uses TypeScript. You need to build the script before using it in Go
               "MEAL_TYPE": "$row.MEAL_TYPE",
               "SERVICE_DATE": "$top.MEAL_DATE"
             }
+          }
+        ]
+      }
+      ```
+
+      Example: keep a single auto row in a subgroup while a NUMBER is > 0, and clear it when the value is 0:
+
+      ```json
+      {
+        "selectionEffects": [
+          {
+            "id": "mp_to_cook_sync",
+            "type": "deleteLineItems",
+            "groupId": "MP_TYPE_LI"
+          },
+          {
+            "id": "mp_to_cook_sync",
+            "type": "addLineItems",
+            "groupId": "MP_TYPE_LI",
+            "when": { "fieldId": "MP_TO_COOK", "greaterThan": 0 },
+            "preset": { "PREP_QTY": "$row.MP_TO_COOK", "PREP_TYPE": "Cook" },
+            "hideRemoveButton": true
           }
         ]
       }
@@ -1058,6 +1081,8 @@ This project uses TypeScript. You need to build the script before using it in Go
             - `copy`: copy another field’s value into the target. Defaults to `"when": "empty"` (behaves like a default; allows user overrides) and applies on `"applyOn": "blur"` (so it doesn’t change mid-typing).
               - Optional: `"applyOn": "change"` to apply on every keystroke/change.
               - Optional: `"copyMode": "allowIncrease" | "allowDecrease"` (only with `"when": "always"`) to allow operator overrides in one direction and clamp back to the source value on blur.
+            - `calc`: compute numeric expressions using `{FIELD_ID}` tokens and `SUM(GROUP.FIELD)` aggregates. Defaults to `"when": "always"`.
+              - Optional: `"lineItemFilters"` to filter rows included in a specific aggregate.
 
           - Example: prefill a DATE field with today (local):
 
@@ -1093,6 +1118,20 @@ This project uses TypeScript. You need to build the script before using it in Go
 
             ```json
             { "derivedValue": { "op": "copy", "dependsOn": "QTY", "when": "always", "copyMode": "allowIncrease" } }
+            ```
+
+          - Example: compute a line-item field using a subgroup sum with a filter:
+
+            ```json
+            {
+              "derivedValue": {
+                "op": "calc",
+                "expression": "{QTY} - SUM(MP_TYPE_LI.PREP_QTY)",
+                "lineItemFilters": [
+                  { "ref": "MP_TYPE_LI.PREP_QTY", "when": { "fieldId": "PREP_TYPE", "equals": ["Full Dish"] } }
+                ]
+              }
+            }
             ```
 
       - Example: cross-field numeric validation (B must be >= A):

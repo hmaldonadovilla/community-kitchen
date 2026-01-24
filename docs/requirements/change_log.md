@@ -179,3 +179,16 @@
   > **WIP - Cursor**
 - ck-52:
   - Please adjust the functionality of GROUP_TABLE placeholder to support complex hierarchy. Review the configuration defined in `docs/templates/mp.ing_recipe.html`, the table grouping is not happening and check if the sorting is working as expected. Also we need to allow dataSource fields to appear in the template. The value of `MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE` is comming from a dataSource row and we are already using the RECIPE.REC_INST as the `tooltipField` value, in our use case we want to display the content of the `RECIPE.REC_INST` field in the `Instructions` tab of out html template.
+  > **WIP - Cursor**
+- ck-53:
+  - for the `flattenFields` feature we need to be able to control the placement of the field in the parent view, either to the right, left or below the parent field that is controlling the overlay open action.
+  - we need to allow up to 3 fields to be displayed in the row header in steps UI, when `"collapsedFieldsInHeader": true`, if there are more fields defined in the step, those will appear in the row body.
+  - we need to trigger error validation on field focus out same as we already do for warning validation.
+  - remove all item counts from all views, this is unnecessary and add congnitive load to the user.
+  - define control to hide the trash can icon on the `overlayOpenActions` config.
+  > **WIP - Cursor**
+- ck-54: create the custom html bundled template for the meal production form.
+  > **WIP - Cursor**
+- ck-55: on the full page overlay, when adding lines manually the header section is being hidden and only the body is visible. After we close the overlay and open again it renders correctly, this only happens when adding lines manually, including from `selectorOverlay`. Rows comming from selection effects are working as expected. Error message: `Unable to load subgroup editor (missing group/subgroup configuration for MP_MEALS_REQUEST::MP_MEALS_REQUEST_04ccba0471eba::MP_TYPE_LI::MP_MEALS_REQUEST::MP_MEALS_REQUEST_04ccba0471eba::MP_TYPE_LI_083db004c1b6e::MP_INGREDIENTS_LI).`
+  > **WIP - Cursor**
+- ck-56: add `updateLineItems` selection effect to update the line items.

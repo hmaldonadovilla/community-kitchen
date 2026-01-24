@@ -1519,6 +1519,11 @@ export class ConfigSheet {
           .filter(Boolean);
         if (triggers.length) normalized.triggerValues = triggers;
       }
+      {
+        const whenRaw = effect.when ?? effect.condition ?? effect.whenClause;
+        const normalizedWhen = this.normalizeWhenClause(whenRaw);
+        if (normalizedWhen) normalized.when = normalizedWhen;
+      }
       if (effect.hideRemoveButton !== undefined) {
         normalized.hideRemoveButton = Boolean(effect.hideRemoveButton);
       }
@@ -2898,12 +2903,13 @@ export class ConfigSheet {
 
   private static normalizeDerivedValue(raw: any): DerivedValueConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
-    const op = raw.op ? raw.op.toString() : 'addDays';
+    const opRaw = raw.op ? raw.op.toString().trim() : 'addDays';
+    const op = opRaw.toLowerCase();
     const whenRaw = raw.when !== undefined && raw.when !== null ? raw.when.toString().trim().toLowerCase() : '';
     const when = whenRaw === 'empty' || whenRaw === 'always' ? (whenRaw as any) : undefined;
     const hidden = raw.hidden !== undefined ? Boolean(raw.hidden) : undefined;
 
-    if (op === 'addDays') {
+    if (op === 'adddays' || opRaw === 'addDays') {
       const dependsOn = raw.dependsOn ? raw.dependsOn.toString().trim() : '';
       if (!dependsOn) return undefined;
       const cfg: any = { op: 'addDays', dependsOn };
@@ -2923,7 +2929,7 @@ export class ConfigSheet {
       return cfg as DerivedValueConfig;
     }
 
-    if (op === 'timeOfDayMap') {
+    if (op === 'timeofdaymap' || opRaw === 'timeOfDayMap') {
       const dependsOn = raw.dependsOn ? raw.dependsOn.toString().trim() : '';
       const thresholdsRaw = raw.thresholds ?? raw.map ?? raw.mapping ?? raw.timeMap;
       if (!Array.isArray(thresholdsRaw)) return undefined;
@@ -2987,6 +2993,46 @@ export class ConfigSheet {
       }
       if (when) cfg.when = when;
       if (hidden !== undefined) cfg.hidden = hidden;
+      return cfg as DerivedValueConfig;
+    }
+
+    if (op === 'calc' || op === 'calculate' || op === 'formula') {
+      const expressionRaw = raw.expression ?? raw.formula ?? raw.expr ?? raw.expressionText;
+      const expression = expressionRaw !== undefined && expressionRaw !== null ? expressionRaw.toString().trim() : '';
+      if (!expression) return undefined;
+      const cfg: any = { op: 'calc', expression };
+      const applyOnRaw = raw.applyOn !== undefined && raw.applyOn !== null ? raw.applyOn.toString().trim().toLowerCase() : '';
+      if (applyOnRaw === 'change' || applyOnRaw === 'blur') cfg.applyOn = applyOnRaw;
+      if (when) cfg.when = when;
+      if (hidden !== undefined) cfg.hidden = hidden;
+      const precisionRaw = raw.precision ?? raw.round ?? raw.decimals;
+      if (precisionRaw !== undefined && precisionRaw !== null) {
+        const num = Number(precisionRaw);
+        if (!isNaN(num)) cfg.precision = Math.max(0, Math.floor(num));
+      }
+      if (raw.min !== undefined && raw.min !== null) {
+        const num = Number(raw.min);
+        if (!isNaN(num)) cfg.min = num;
+      }
+      if (raw.max !== undefined && raw.max !== null) {
+        const num = Number(raw.max);
+        if (!isNaN(num)) cfg.max = num;
+      }
+      const filtersRaw = raw.lineItemFilters ?? raw.aggregateFilters ?? raw.filters;
+      if (Array.isArray(filtersRaw)) {
+        const lineItemFilters = filtersRaw
+          .map((entry: any) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const refRaw = entry.ref ?? entry.path ?? entry.target;
+            const ref = refRaw !== undefined && refRaw !== null ? refRaw.toString().trim() : '';
+            if (!ref) return null;
+            const whenClause = entry.when;
+            if (!whenClause || typeof whenClause !== 'object') return null;
+            return { ref, when: whenClause };
+          })
+          .filter(Boolean);
+        if (lineItemFilters.length) cfg.lineItemFilters = lineItemFilters;
+      }
       return cfg as DerivedValueConfig;
     }
 

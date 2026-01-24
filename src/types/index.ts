@@ -897,11 +897,58 @@ export interface DerivedValueCopyConfig {
   hidden?: boolean;
 }
 
+export interface DerivedValueCalcFilterConfig {
+  /**
+   * Reference to the aggregate in the expression (e.g., "MP_TYPE_LI.PREP_QTY").
+   */
+  ref: string;
+  /**
+   * When-clause applied to each row included in the aggregate.
+   */
+  when: WhenClause;
+}
+
+export interface DerivedValueCalcConfig {
+  op: 'calc';
+  /**
+   * Numeric expression using `{FIELD_ID}` tokens and `SUM(GROUP.FIELD)` aggregates.
+   * Example: "{QTY} - SUM(MP_TYPE_LI.PREP_QTY)".
+   */
+  expression: string;
+  /**
+   * Optional per-aggregate filters for SUM(...) tokens.
+   */
+  lineItemFilters?: DerivedValueCalcFilterConfig[];
+  /**
+   * When to apply the derived value:
+   * - always: recompute on every change (default for calc)
+   * - empty: only set when the target field is empty (allows user overrides)
+   */
+  when?: DerivedValueWhen;
+  /**
+   * Control when the derived value is applied during editing.
+   * - change: apply on every onChange (default for calc)
+   * - blur: apply only after the user leaves the input
+   */
+  applyOn?: 'change' | 'blur';
+  /**
+   * Optional numeric precision (decimal places) applied to the computed result.
+   */
+  precision?: number;
+  /**
+   * Optional clamp bounds for the computed result.
+   */
+  min?: number;
+  max?: number;
+  hidden?: boolean;
+}
+
 export type DerivedValueConfig =
   | DerivedValueAddDaysConfig
   | DerivedValueTodayConfig
   | DerivedValueTimeOfDayMapConfig
-  | DerivedValueCopyConfig;
+  | DerivedValueCopyConfig
+  | DerivedValueCalcConfig;
 
 export interface AutoIncrementConfig {
   prefix?: string;
@@ -1309,6 +1356,10 @@ export interface SelectionEffect {
    * - Array uses explicit ids: ["SUB1", "SUB2"]
    */
   targetPath?: string | string[];
+  /**
+   * Optional conditional gate for the effect (evaluated against the current row/top-level values).
+   */
+  when?: WhenClause;
   preset?: Record<string, PresetValue>; // preset field values for simple addLineItems (supports $row./$top. references)
   triggerValues?: string[]; // which choice/checkbox values trigger this effect (defaults to any)
   /**

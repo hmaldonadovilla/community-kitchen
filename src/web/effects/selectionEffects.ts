@@ -1,7 +1,8 @@
 import { PresetValue, SelectionEffect, WebFormDefinition, WebQuestionDefinition } from '../../types';
-import { LangCode } from '../types';
+import { LangCode, VisibilityContext } from '../types';
 import { fetchDataSource } from '../data/dataSources';
 import { computeAllowedOptions } from '../rules/filter';
+import { matchesWhenClause } from '../rules/visibility';
 
 interface EffectContext {
   addLineItemRow: (
@@ -19,6 +20,7 @@ interface EffectContext {
     groupId: string,
     meta?: { effectId?: string; parentGroupId?: string; parentRowId?: string }
   ) => void;
+  logEvent?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
 export interface SelectionEffectOptions {
@@ -27,12 +29,36 @@ export interface SelectionEffectOptions {
    * Snapshot of current top-level form values (used for preset references like `$top.FIELD_ID`).
    */
   topValues?: Record<string, any>;
+  /**
+   * Optional line-item state snapshot for when-clause evaluation (lineItems clauses).
+   */
+  lineItems?: Record<string, any[]>;
   lineItem?: {
     groupId: string;
     rowId?: string;
     rowValues?: Record<string, any>;
   };
   forceContextReset?: boolean;
+}
+
+function buildEffectWhenContext(options?: SelectionEffectOptions): VisibilityContext {
+  const rowValues = (options?.lineItem?.rowValues || {}) as Record<string, any>;
+  const topValues = (options?.topValues || {}) as Record<string, any>;
+  const lineItems = options?.lineItems;
+  return {
+    getValue: (fieldId: string) => {
+      if (Object.prototype.hasOwnProperty.call(rowValues, fieldId)) return rowValues[fieldId];
+      if (Object.prototype.hasOwnProperty.call(topValues, fieldId)) return topValues[fieldId];
+      return undefined;
+    },
+    getLineItems: lineItems
+      ? (groupId: string) => {
+          const rows = lineItems[groupId];
+          return Array.isArray(rows) ? rows : [];
+        }
+      : undefined,
+    getLineItemKeys: lineItems ? () => Object.keys(lineItems) : undefined
+  };
 }
 
 function applies(effect: SelectionEffect, value: string | string[] | null | undefined): boolean {
@@ -62,6 +88,7 @@ export function handleSelectionEffects(
   const contextId = options?.contextId || '__global__';
   const normalizedSelections = normalizeSelectionValues(value);
   const diffPreview = previewSelectionDiff(question, contextId, normalizedSelections, options?.forceContextReset);
+  const whenCtx = buildEffectWhenContext(options);
   const resolveEffectTargetGroupId = (effect: SelectionEffect): string => {
     const rawPath = (effect as any)?.targetPath;
     if (rawPath === undefined || rawPath === null || rawPath === '') return effect.groupId;
@@ -89,6 +116,7 @@ export function handleSelectionEffects(
   question.selectionEffects.forEach(effect => {
     const targetGroupId = resolveEffectTargetGroupId(effect);
     const match = applies(effect, value);
+    const whenMatch = effect.when ? matchesWhenClause(effect.when as any, whenCtx) : true;
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] effect check', {
         questionId: question.id,
@@ -96,10 +124,30 @@ export function handleSelectionEffects(
         groupId: effect.groupId,
         targetGroupId,
         match,
+        whenMatch,
         triggerValues: effect.triggerValues
       });
     }
     if (!match) return;
+    if (!whenMatch) {
+      ctx.logEvent?.('selectionEffects.when.skip', {
+        questionId: question.id,
+        effectType: effect.type,
+        groupId: effect.groupId,
+        targetGroupId,
+        when: effect.when || null
+      });
+      if (debug && typeof console !== 'undefined') {
+        console.info('[SelectionEffects] effect skipped (when)', {
+          questionId: question.id,
+          effectType: effect.type,
+          groupId: effect.groupId,
+          targetGroupId,
+          when: effect.when || null
+        });
+      }
+      return;
+    }
     if (effect.type === 'addLineItems') {
       const resolvedPreset = resolveAddLineItemsPreset(effect.preset as any, options);
       const effectId = normalizeEffectId(effect);
