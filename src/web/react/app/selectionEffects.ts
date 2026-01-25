@@ -1,7 +1,7 @@
 import { handleSelectionEffects } from '../../core';
 import { FieldValue, LangCode, LineItemRowState, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LineItemState } from '../types';
-import { applyValueMapsToForm } from './valueMaps';
+import { applyValueMapsToForm, hasBlurDerivedValues, mergeBlurDerivedValues } from './valueMaps';
 import {
   ROW_SOURCE_AUTO,
   ROW_SOURCE_KEY,
@@ -38,6 +38,19 @@ export const runSelectionEffects = (args: {
 }) => {
   const { definition, question, value, language, values, setValues, setLineItems, logEvent, onRowAppended, opts } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
+  const blurDerivedEnabled = hasBlurDerivedValues(definition);
+
+  const applyValueMapsWithBlurDerived = (nextLineItems: LineItemState) => {
+    const base = applyValueMapsToForm(definition, values, nextLineItems, { mode: 'change' });
+    if (!blurDerivedEnabled) return base;
+    const blur = applyValueMapsToForm(definition, base.values, base.lineItems, { mode: 'blur' });
+    return mergeBlurDerivedValues(definition, base.values, base.lineItems, blur.values, blur.lineItems);
+  };
+
+  const resolveRowIdPrefix = (groupKey: string): string => {
+    const parsed = parseSubgroupKey(groupKey);
+    return parsed?.subGroupId || groupKey;
+  };
 
   const resolveGroupConfigForKey = (groupKey: string): { root?: WebQuestionDefinition; group?: any } => {
     const parsed = parseSubgroupKey(groupKey);
@@ -151,8 +164,9 @@ export const runSelectionEffects = (args: {
           if (selectorId && selectorValue !== undefined && selectorValue !== null && presetValues[selectorId] === undefined) {
             presetValues[selectorId] = selectorValue;
           }
+          const rowIdPrefix = resolveRowIdPrefix(targetKey);
           const newRow: LineItemRowState = {
-            id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
+            id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
             values: { ...presetValues, [ROW_ID_KEY]: '' }, // filled below; keeps the ID persisted in row values
             parentId: opts?.lineItem?.rowId,
             parentGroupId: opts?.lineItem?.groupId,
@@ -187,9 +201,7 @@ export const runSelectionEffects = (args: {
           let nextLineItems = { ...prev, [targetKey]: nextRows };
           // Important: do NOT auto-seed subgroup default rows for selection-effect-created rows.
           // Selection effects should only create what they explicitly preset; otherwise it produces "phantom" empty rows.
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
-            mode: 'change'
-          });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
           setValues(nextValues);
           if (appended) {
             const anchor = `${targetKey}__${newRow.id}`;
@@ -246,6 +258,7 @@ export const runSelectionEffects = (args: {
           });
 
           // Rebuild auto rows for this context from scratch so recipe changes fully replace them
+          const rowIdPrefix = resolveRowIdPrefix(targetKey);
           const rebuiltAuto: LineItemRowState[] = presets.map(preset => {
             const values: Record<string, FieldValue> = { ...preset };
             meta.numericTargets.forEach(fid => {
@@ -263,7 +276,7 @@ export const runSelectionEffects = (args: {
               values[ROW_PARENT_ROW_ID_KEY] = opts.lineItem.rowId;
             }
             return {
-              id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
+              id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
               values,
               parentId: opts?.lineItem?.rowId,
               parentGroupId: opts?.lineItem?.groupId,
@@ -273,9 +286,7 @@ export const runSelectionEffects = (args: {
           });
 
           const next: LineItemState = { ...prev, [targetKey]: [...keepRows, ...rebuiltAuto] };
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
-            mode: 'change'
-          });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
           setValues(nextValues);
           return recomputed;
         });
@@ -318,9 +329,7 @@ export const runSelectionEffects = (args: {
           if (!roots.length) return prev;
 
           const cascade = cascadeRemoveLineItemRows({ lineItems: prev, roots });
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, cascade.lineItems, {
-            mode: 'change'
-          });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(cascade.lineItems);
           setValues(nextValues);
           logEvent?.('selectionEffects.deleteLineItems', {
             groupId,
@@ -362,9 +371,7 @@ export const runSelectionEffects = (args: {
               }
             });
           }
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
-            mode: 'change'
-          });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
           setValues(nextValues);
           return recomputed;
         });
@@ -374,5 +381,3 @@ export const runSelectionEffects = (args: {
     opts ? { ...opts, topValues: values } : { topValues: values }
   );
 };
-
-

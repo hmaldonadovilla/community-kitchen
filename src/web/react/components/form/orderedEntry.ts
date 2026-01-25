@@ -162,7 +162,9 @@ export const findOrderedEntryBlock = (args: {
 
   const groupCtx: VisibilityContext = {
     getValue: (fid: string) => resolveVisibilityValue(fid),
-    getLineValue: (_rowId: string, fid: string) => rowValues[fid]
+    getLineValue: (_rowId: string, fid: string) => rowValues[fid],
+    getLineItems: (groupId: string) => lineItems[groupId] || [],
+    getLineItemKeys: () => Object.keys(lineItems || {})
   };
 
   for (let idx = 0; idx < targetFieldIndex; idx += 1) {

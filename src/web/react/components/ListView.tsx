@@ -887,9 +887,9 @@ const ListView: React.FC<ListViewProps> = ({
       .join(' · ');
     const suffix = raw.length > 3 ? ` … +${raw.length - 3}` : '';
     if (preview) return `${preview}${suffix}`;
-    const key = raw.length === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany';
-    const fallback = raw.length === 1 ? `${raw.length} item` : `${raw.length} items`;
-    return tSystem(key, language, fallback, { count: raw.length });
+    return raw.length === 1
+      ? tSystem('overlay.itemsOne', language, 'Item')
+      : tSystem('overlay.itemsMany', language, 'Items');
   };
 
   const tryParseJson = (raw: string): unknown | null => {

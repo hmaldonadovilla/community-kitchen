@@ -196,7 +196,7 @@ export const LineSelectOverlay: React.FC<{
             disabled={submitting || selectedCount === 0}
             style={withDisabled(buttonStyles.primary, submitting || selectedCount === 0)}
           >
-            {tSystem('lineItems.addSelected', language, 'Add selected ({count})', { count: selectedCount })}
+            {tSystem('lineItems.addSelected', language, 'Add selected')}
           </button>
         </div>
       </div>

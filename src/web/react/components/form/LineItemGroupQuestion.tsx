@@ -111,6 +111,10 @@ export interface LineItemGroupQuestionCtx {
    * When provided, `visibility.showWhen/hideWhen` can reference system/meta fields (e.g. STATUS) reliably.
    */
   resolveVisibilityValue?: (fieldId: string) => FieldValue | undefined;
+  /**
+   * Optional top-level resolver that avoids scanning line items (row-scoped visibility).
+   */
+  getTopValue?: (fieldId: string) => FieldValue | undefined;
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
   lineItems: LineItemState;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
@@ -133,10 +137,11 @@ export interface LineItemGroupQuestionCtx {
   openSubgroupOverlay: (
     subKey: string,
     options?: {
-      source?: 'user' | 'system' | 'autoscroll' | 'navigate';
+      source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
       rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
       groupOverride?: LineItemGroupConfigOverride;
       hideInlineSubgroups?: boolean;
+      label?: string;
     }
   ) => void;
   openLineItemGroupOverlay: (
@@ -144,7 +149,8 @@ export interface LineItemGroupQuestionCtx {
     options?: {
       rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
       hideInlineSubgroups?: boolean;
-      source?: 'user' | 'system' | 'autoscroll' | 'navigate';
+      source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
+      label?: string;
     }
   ) => void;
 
@@ -231,6 +237,7 @@ export const LineItemGroupQuestion: React.FC<{
     language,
     values,
     resolveVisibilityValue,
+    getTopValue: getTopValueFromCtx,
     setValues,
     lineItems,
     setLineItems,
@@ -270,6 +277,12 @@ export const LineItemGroupQuestion: React.FC<{
     setOverlay,
     onDiagnostic
   } = ctx;
+
+  const resolveTopValue = (fieldId: string): FieldValue | undefined => {
+    if (getTopValueFromCtx) return getTopValueFromCtx(fieldId);
+    if (resolveVisibilityValue) return resolveVisibilityValue(fieldId);
+    return values[fieldId];
+  };
 
   const isIncludedByRowFilter = React.useCallback(
     (rowValues: Record<string, FieldValue>): boolean => {
@@ -1088,7 +1101,6 @@ export const LineItemGroupQuestion: React.FC<{
         const liUi = q.lineItemConfig?.ui;
         const uiMode = (liUi?.mode || 'default').toString().trim().toLowerCase();
         const isTableMode = uiMode === 'table';
-        const showItemPill = liUi?.showItemPill !== undefined ? !!liUi.showItemPill : true;
         const addButtonPlacement = (liUi?.addButtonPlacement || 'both').toString().toLowerCase();
         const showAddTop =
           !canUseSelectorOverlay &&
@@ -1111,11 +1123,10 @@ export const LineItemGroupQuestion: React.FC<{
 
         React.useEffect(() => {
           if (!onDiagnostic) return;
-          if (liUi?.showItemPill === false) onDiagnostic('ui.lineItems.itemPill.disabled', { groupId: q.id });
           if (liUi?.addButtonPlacement && liUi.addButtonPlacement !== 'both') {
             onDiagnostic('ui.lineItems.addButtonPlacement', { groupId: q.id, value: liUi.addButtonPlacement });
           }
-        }, [onDiagnostic, liUi?.addButtonPlacement, liUi?.showItemPill, q.id]);
+        }, [onDiagnostic, liUi?.addButtonPlacement, q.id]);
 
         const nonMatchWarningModeRaw = (liUi as any)?.nonMatchWarningMode;
         const nonMatchWarningModeCandidate =
@@ -1201,8 +1212,7 @@ export const LineItemGroupQuestion: React.FC<{
             });
           };
 
-          const getTopValue = (fid: string): FieldValue | undefined =>
-            resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid];
+          const getTopValue = (fid: string): FieldValue | undefined => resolveTopValue(fid);
 
           const isRequiredFieldFilled = (field: any, raw: any): boolean => {
             if (field?.type === 'FILE_UPLOAD') {
@@ -1222,7 +1232,9 @@ export const LineItemGroupQuestion: React.FC<{
 
             const groupCtx: VisibilityContext = {
               getValue: fid => getTopValue(fid),
-              getLineValue: (_rowId, fid) => (row?.values || {})[fid]
+              getLineValue: (_rowId, fid) => (row?.values || {})[fid],
+              getLineItems: groupId => lineItems?.[groupId] || [],
+              getLineItemKeys: () => Object.keys(lineItems || {})
             };
             const isHidden = (fieldId: string) => {
               const target = (allFields || []).find((f: any) => f?.id === fieldId) as any;
@@ -1268,7 +1280,9 @@ export const LineItemGroupQuestion: React.FC<{
             const rowValues = (row?.values || {}) as Record<string, FieldValue>;
             const groupCtx: VisibilityContext = {
               getValue: fid => getTopValue(fid),
-              getLineValue: (_rowId, fid) => rowValues[fid]
+              getLineValue: (_rowId, fid) => rowValues[fid],
+              getLineItems: groupId => lineItems?.[groupId] || [],
+              getLineItemKeys: () => Object.keys(lineItems || {})
             };
 
             for (const field of allFields) {
@@ -1304,7 +1318,9 @@ export const LineItemGroupQuestion: React.FC<{
                     if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
                     return getTopValue(fid);
                   },
-                  getLineValue: (_rowId, fid) => subRowValues[fid]
+                  getLineValue: (_rowId, fid) => subRowValues[fid],
+                  getLineItems: groupId => lineItems?.[groupId] || [],
+                  getLineItemKeys: () => Object.keys(lineItems || {})
                 };
                 for (const field of subFields) {
                   if (!field?.required) continue;
@@ -1351,6 +1367,7 @@ export const LineItemGroupQuestion: React.FC<{
           lineItems,
           values,
           resolveVisibilityValue,
+          getTopValueFromCtx,
           language
         ]);
         React.useEffect(() => {
@@ -1494,8 +1511,10 @@ export const LineItemGroupQuestion: React.FC<{
 
           const renderTableField = (field: any, row: any, rowIdx: number) => {
             const groupCtx: VisibilityContext = {
-              getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
-              getLineValue: (_rowId, fid) => row.values[fid]
+              getValue: fid => resolveTopValue(fid),
+              getLineValue: (_rowId, fid) => row.values[fid],
+              getLineItems: groupId => lineItems?.[groupId] || [],
+              getLineItemKeys: () => Object.keys(lineItems || {})
             };
             const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
             if (hideField) return <span className="muted">—</span>;
@@ -1910,16 +1929,6 @@ export const LineItemGroupQuestion: React.FC<{
             >
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                 <h3 style={hideGroupLabel ? { ...srOnly, margin: 0 } : { margin: 0 }}>{resolveLabel(q, language)}</h3>
-                {showItemPill ? (
-                  <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
-                    {tSystem(
-                      parentCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
-                      language,
-                      parentCount === 1 ? '{count} item' : '{count} items',
-                      { count: parentCount }
-                    )}
-                  </span>
-                ) : null}
               </div>
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
               {renderWarnings(q.id)}
@@ -2010,16 +2019,6 @@ export const LineItemGroupQuestion: React.FC<{
             >
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <h3 style={hideGroupLabel ? { ...srOnly, margin: 0 } : { margin: 0 }}>{resolveLabel(q, language)}</h3>
-              {showItemPill ? (
-                <span className="pill" style={{ background: '#e2e8f0', color: '#334155' }}>
-                  {tSystem(
-                    parentCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
-                    language,
-                    parentCount === 1 ? '{count} item' : '{count} items',
-                    { count: parentCount }
-                  )}
-                </span>
-              ) : null}
             </div>
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
               {renderWarnings(q.id)}
@@ -2033,8 +2032,10 @@ export const LineItemGroupQuestion: React.FC<{
             ) : null}
             {parentRows.map((row, rowIdx) => {
               const groupCtx: VisibilityContext = {
-                getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
-                getLineValue: (_rowId, fid) => row.values[fid]
+                getValue: fid => resolveTopValue(fid),
+                getLineValue: (_rowId, fid) => row.values[fid],
+                getLineItems: groupId => lineItems?.[groupId] || [],
+                getLineItemKeys: () => Object.keys(lineItems || {})
               };
               const ui = q.lineItemConfig?.ui;
               const guidedCollapsedFieldsInHeader = Boolean((ui as any)?.guidedCollapsedFieldsInHeader);
@@ -2044,6 +2045,7 @@ export const LineItemGroupQuestion: React.FC<{
               const collapseKey = `${q.id}::${row.id}`;
               const rowCollapsedBase = isProgressive ? (collapsedRows[collapseKey] ?? defaultCollapsed) : false;
               const rowCollapsed = guidedCollapsedFieldsInHeader ? false : rowCollapsedBase;
+              const showRowHeader = isProgressive || guidedCollapsedFieldsInHeader;
 
               const collapsedFieldConfigs = isProgressive ? ui?.collapsedFields || [] : [];
               const collapsedLabelMap: Record<string, boolean> = {};
@@ -2094,6 +2096,11 @@ export const LineItemGroupQuestion: React.FC<{
                     seen.add(entry);
                     return true;
                   });
+              };
+              const normalizeOverlayFlattenPlacement = (raw: any): 'left' | 'right' | 'below' => {
+                const placement = (raw || '').toString().trim().toLowerCase();
+                if (placement === 'left' || placement === 'right') return placement;
+                return 'below';
               };
               const overlayOpenActionTargetsForField = (field: any): string[] => {
                 const actions = normalizeOverlayOpenActions(field);
@@ -2235,6 +2242,7 @@ export const LineItemGroupQuestion: React.FC<{
                   (match.renderMode || 'replace').toString().trim().toLowerCase() === 'inline' ? 'inline' : 'replace';
                 const label = resolveLocalizedString(match.label, language, resolveFieldLabel(field, language, field.id));
                 const flattenFields = normalizeOverlayFieldList((match as any).flattenFields);
+                const flattenPlacement = normalizeOverlayFlattenPlacement((match as any).flattenPlacement);
                 const overrideGroup =
                   targetKind === 'line' && target.group ? buildOverlayGroupOverride(target.group, (match as any).groupOverride) : undefined;
                 const hasOverride = targetKind === 'line' ? !!overrideGroup : !!(match as any).groupOverride;
@@ -2248,7 +2256,9 @@ export const LineItemGroupQuestion: React.FC<{
                   renderMode,
                   hasRowFilter: !!rowFilter,
                   hasOverride,
-                  hasFlattenFields: flattenFields.length > 0
+                  hasFlattenFields: flattenFields.length > 0,
+                  flattenPlacement,
+                  hideTrashIcon: (match as any).hideTrashIcon === true
                 });
                 return {
                   action: match,
@@ -2262,19 +2272,32 @@ export const LineItemGroupQuestion: React.FC<{
                   hideInlineSubgroups: (match as any).hideInlineSubgroups === true,
                   renderMode,
                   label,
-                  flattenFields
+                  flattenFields,
+                  flattenPlacement,
+                  hideTrashIcon: (match as any).hideTrashIcon === true
                 };
               };
-              const renderOverlayOpenFlattenedFieldsShared = (field: any, overlayOpenAction: any): React.ReactNode => {
+              const renderOverlayOpenFlattenedFieldsShared = (
+                field: any,
+                overlayOpenAction: any,
+                placementOverride?: 'left' | 'right' | 'below',
+                options?: { asGridItems?: boolean; forceStackedLabel?: boolean }
+              ): React.ReactNode => {
                 if (!overlayOpenAction || !overlayOpenAction.flattenFields || overlayOpenAction.flattenFields.length === 0) return null;
                 const targetKey = overlayOpenAction.targetKey || overlayOpenAction.subKey || '';
                 if (!targetKey) return null;
+                const flattenPlacement = normalizeOverlayFlattenPlacement(placementOverride ?? overlayOpenAction.flattenPlacement);
+                const forceStackedLabel = options?.forceStackedLabel === true;
 
                 const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
                   if (!filter) return true;
                   const includeWhen = (filter as any)?.includeWhen;
                   const excludeWhen = (filter as any)?.excludeWhen;
-                  const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+                  const rowCtx: VisibilityContext = {
+                    getValue: fid => (rowValues as any)[fid],
+                    getLineItems: groupId => lineItems?.[groupId] || [],
+                    getLineItemKeys: () => Object.keys(lineItems || {})
+                  };
                   const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
                   const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
                   return includeOk && !excludeMatch;
@@ -2356,8 +2379,10 @@ export const LineItemGroupQuestion: React.FC<{
 
                 const targetChoiceSearchDefault = (targetInfo.config?.ui as any)?.choiceSearchEnabled;
                 const targetGroupCtx: VisibilityContext = {
-                  getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
-                  getLineValue: (_rowId, fid) => (targetRow?.values || {})[fid]
+                  getValue: fid => resolveTopValue(fid),
+                  getLineValue: (_rowId, fid) => (targetRow?.values || {})[fid],
+                  getLineItems: groupId => lineItems?.[groupId] || [],
+                  getLineItemKeys: () => Object.keys(lineItems || {})
                 };
                 const resolveDependencyValue = (dep: string): FieldValue | undefined => {
                   if (Object.prototype.hasOwnProperty.call(targetRow?.values || {}, dep)) return (targetRow?.values || {})[dep];
@@ -2371,7 +2396,8 @@ export const LineItemGroupQuestion: React.FC<{
                   const fieldPath = `${targetKey}__${flatField.id}__${targetRow.id}`;
                   const renderAsLabel = flatField?.ui?.renderAsLabel === true || flatField?.readOnly === true;
                   const hideLabel = Boolean(flatField?.ui?.hideLabel);
-                  const labelStyle = hideLabel ? srOnly : undefined;
+                  const useStackedLabel = forceStackedLabel || flatField.ui?.labelLayout === 'stacked';
+                  const labelStyle = hideLabel ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : undefined;
                   const valueMapApplied = flatField.valueMap
                     ? resolveValueMapValue(
                         flatField.valueMap,
@@ -2433,8 +2459,8 @@ export const LineItemGroupQuestion: React.FC<{
                     const selected = optsField.find(opt => opt.value === choiceVal);
                     return (
                       <div
-                        key={flatField.id}
-                        className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                        key={fieldPath}
+                        className={`field inline-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                         data-field-path={fieldPath}
                         data-has-error={errors[fieldPath] ? 'true' : undefined}
                         data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -2496,8 +2522,8 @@ export const LineItemGroupQuestion: React.FC<{
                     if (isConsentCheckbox) {
                       return (
                         <div
-                          key={flatField.id}
-                          className={`field inline-field ck-consent-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                          key={fieldPath}
+                          className={`field inline-field ck-consent-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                           data-field-path={fieldPath}
                           data-has-error={errors[fieldPath] ? 'true' : undefined}
                           data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -2525,8 +2551,8 @@ export const LineItemGroupQuestion: React.FC<{
                     const renderAsMultiSelect = controlOverride === 'select';
                     return (
                       <div
-                        key={flatField.id}
-                        className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                        key={fieldPath}
+                        className={`field inline-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                         data-field-path={fieldPath}
                         data-has-error={errors[fieldPath] ? 'true' : undefined}
                         data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -2583,8 +2609,8 @@ export const LineItemGroupQuestion: React.FC<{
                     const count = items.length;
                     return (
                       <div
-                        key={flatField.id}
-                        className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                        key={fieldPath}
+                        className={`field inline-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                         data-field-path={fieldPath}
                         data-has-error={errors[fieldPath] ? 'true' : undefined}
                         data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -2623,8 +2649,8 @@ export const LineItemGroupQuestion: React.FC<{
                   if (renderAsLabel) {
                     return (
                       <div
-                        key={flatField.id}
-                        className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                        key={fieldPath}
+                        className={`field inline-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                         data-field-path={fieldPath}
                         data-has-error={errors[fieldPath] ? 'true' : undefined}
                         data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -2641,8 +2667,8 @@ export const LineItemGroupQuestion: React.FC<{
 
                   return (
                     <div
-                      key={flatField.id}
-                      className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                      key={fieldPath}
+                      className={`field inline-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                       data-field-path={fieldPath}
                       data-has-error={errors[fieldPath] ? 'true' : undefined}
                       data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -2689,14 +2715,19 @@ export const LineItemGroupQuestion: React.FC<{
                   fieldId: field.id,
                   groupId: overlayOpenAction.groupId,
                   targetKey,
-                  fieldCount: targetFields.length
+                  fieldCount: targetFields.length,
+                  flattenPlacement
                 });
 
-                return (
-                  <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
-                    {targetFields.map((flatField: any) => renderFlattenedField(flatField))}
-                  </div>
-                );
+                const rendered = targetFields.map((flatField: any) => renderFlattenedField(flatField)).filter(Boolean);
+                if (!rendered.length) return null;
+                if (options?.asGridItems) return rendered;
+                const gridClassName = `ck-pair-grid${rendered.length >= 3 ? ' ck-pair-grid--3' : ''}`;
+                const grid = <PairedRowGrid className={gridClassName}>{rendered}</PairedRowGrid>;
+                if (flattenPlacement === 'below') {
+                  return <div style={{ marginTop: 8 }}>{grid}</div>;
+                }
+                return grid;
               };
               const fieldTriggeredSubgroupIdSet =
                 !rowCollapsed && subIds.length > 0
@@ -2752,8 +2783,10 @@ export const LineItemGroupQuestion: React.FC<{
                         if (!subRowCollapsed) return false;
 
                         const groupCtx2: VisibilityContext = {
-                          getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
-                          getLineValue: (_rowId, fid) => (subRow?.values || {})[fid]
+                          getValue: fid => resolveTopValue(fid),
+                          getLineValue: (_rowId, fid) => (subRow?.values || {})[fid],
+                          getLineItems: groupId => lineItems?.[groupId] || [],
+                          getLineItemKeys: () => Object.keys(lineItems || {})
                         };
                         const isHidden2 = (fieldId: string) => {
                           const target = (subFields || []).find((f: any) => f?.id === fieldId) as any;
@@ -2801,8 +2834,10 @@ export const LineItemGroupQuestion: React.FC<{
                           if (isSubRowDisabledByExpandGate(subRow)) continue;
                           hasAnyEnabledRow = true;
                           const subCtx: VisibilityContext = {
-                            getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
-                            getLineValue: (_rowId, fid) => (subRow?.values || {})[fid]
+                            getValue: fid => resolveTopValue(fid),
+                            getLineValue: (_rowId, fid) => (subRow?.values || {})[fid],
+                            getLineItems: groupId => lineItems?.[groupId] || [],
+                            getLineItemKeys: () => Object.keys(lineItems || {})
                           };
                           for (const field of subFields) {
                             if (!field?.required) continue;
@@ -2814,7 +2849,7 @@ export const LineItemGroupQuestion: React.FC<{
                                   (fid: string) => {
                                     if ((subRow?.values || {}).hasOwnProperty(fid)) return (subRow?.values || {})[fid];
                                     if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
-                                    return resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid];
+                                    return resolveTopValue(fid);
                                   },
                                   { language, targetOptions: toOptionSet(field) }
                                 )
@@ -3094,7 +3129,7 @@ export const LineItemGroupQuestion: React.FC<{
                         field.valueMap,
                         (fid: string) => {
                           if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
-                          return resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid];
+                          return resolveTopValue(fid);
                         },
                         { language, targetOptions: toOptionSet(field) }
                       )
@@ -3113,8 +3148,10 @@ export const LineItemGroupQuestion: React.FC<{
                   const subFields = ((sub as any)?.fields || []) as any[];
                   subRows.forEach(subRow => {
                     const subCtx: VisibilityContext = {
-                      getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
-                      getLineValue: (_rowId, fid) => (subRow?.values || {})[fid]
+                      getValue: fid => resolveTopValue(fid),
+                      getLineValue: (_rowId, fid) => (subRow?.values || {})[fid],
+                      getLineItems: groupId => lineItems?.[groupId] || [],
+                      getLineItemKeys: () => Object.keys(lineItems || {})
                     };
                     subFields.forEach((field: any) => {
                       const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
@@ -3128,7 +3165,7 @@ export const LineItemGroupQuestion: React.FC<{
                             (fid: string) => {
                               if ((subRow?.values || {}).hasOwnProperty(fid)) return (subRow?.values || {})[fid];
                               if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
-                              return resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid];
+                              return resolveTopValue(fid);
                             },
                             { language, targetOptions: toOptionSet(field) }
                           )
@@ -3202,6 +3239,17 @@ export const LineItemGroupQuestion: React.FC<{
                 </button>
               ) : null;
               const buildHeaderRows = (fields: any[]): any[][] => {
+                if (!fields.length) return [];
+                if (fields.length <= 3) {
+                  const seen = new Set<string>();
+                  const unique = fields.filter(f => {
+                    const id = (f?.id ?? '').toString();
+                    if (!id || seen.has(id)) return false;
+                    seen.add(id);
+                    return true;
+                  });
+                  return unique.length ? [unique] : [];
+                }
                 const used = new Set<string>();
                 const rows: any[][] = [];
                 const isPairable = (field: any): boolean => {
@@ -3255,26 +3303,24 @@ export const LineItemGroupQuestion: React.FC<{
                 return rows;
               };
 
+              const headerCollapsedFieldsBase = guidedCollapsedFieldsInHeader
+                ? ((collapsedFieldsOrdered.length ? collapsedFieldsOrdered : fieldsToRender) || []).filter((f: any) => {
+                    const fid = f?.id !== undefined && f?.id !== null ? f.id.toString() : '';
+                    if (!fid) return false;
+                    // In guided-header mode we may show the anchor as a standalone row title. Don't also render it in the grid.
+                    if (showAnchorTitleAsHeaderTitle && fid === anchorFieldId) return false;
+                    if (showTitleControlInHeader && fid === titleFieldId) return false;
+                    return true;
+                  })
+                : [];
+              const headerCollapsedFieldsToRender = guidedCollapsedFieldsInHeader ? headerCollapsedFieldsBase.slice(0, 3) : [];
               const headerCollapsedFieldIdSet = new Set<string>(
-                guidedCollapsedFieldsInHeader && isProgressive
-                  ? (collapsedFieldsOrdered || [])
-                      .map((f: any) => (f?.id !== undefined && f?.id !== null ? f.id.toString() : ''))
-                      .filter(Boolean)
-                  : []
+                headerCollapsedFieldsToRender
+                  .map((f: any) => (f?.id !== undefined && f?.id !== null ? f.id.toString() : ''))
+                  .filter(Boolean)
               );
-              const headerCollapsedFieldsToRender =
-                guidedCollapsedFieldsInHeader && isProgressive
-                  ? (collapsedFieldsOrdered || []).filter((f: any) => {
-                      const fid = f?.id !== undefined && f?.id !== null ? f.id.toString() : '';
-                      if (!fid) return false;
-                      // In guided-header mode we may show the anchor as a standalone row title. Don't also render it in the grid.
-                      if (showAnchorTitleAsHeaderTitle && fid === anchorFieldId) return false;
-                      if (showTitleControlInHeader && fid === titleFieldId) return false;
-                      return true;
-                    })
-                  : [];
               const bodyFieldsToRenderBase =
-                guidedCollapsedFieldsInHeader && isProgressive
+                guidedCollapsedFieldsInHeader
                   ? (fieldsToRender || []).filter((f: any) => !headerCollapsedFieldIdSet.has((f?.id || '').toString()))
                   : fieldsToRender;
               const canHoistSingleBodyFieldIntoHeader =
@@ -3370,7 +3416,8 @@ export const LineItemGroupQuestion: React.FC<{
                     openLineItemGroupOverlay(groupOrId as any, {
                       rowFilter: overlayOpenAction.rowFilter || null,
                       hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
-                      source: 'user'
+                      label: overlayOpenAction.label,
+                      source: 'overlayOpenAction'
                     });
                     onDiagnostic?.('lineItemGroup.overlay.open.action', {
                       parentGroupId: q.id,
@@ -3387,7 +3434,8 @@ export const LineItemGroupQuestion: React.FC<{
                     rowFilter: overlayOpenAction.rowFilter || null,
                     groupOverride: overlayOpenAction.groupOverride,
                     hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
-                    source: 'user'
+                    label: overlayOpenAction.label,
+                    source: 'overlayOpenAction'
                   });
                   onDiagnostic?.('subgroup.overlay.open.action', {
                     groupId: q.id,
@@ -3402,15 +3450,24 @@ export const LineItemGroupQuestion: React.FC<{
                   if (!filter) return true;
                   const includeWhen = (filter as any)?.includeWhen;
                   const excludeWhen = (filter as any)?.excludeWhen;
-                  const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+                  const rowCtx: VisibilityContext = {
+                    getValue: fid => (rowValues as any)[fid],
+                    getLineItems: groupId => lineItems?.[groupId] || [],
+                    getLineItemKeys: () => Object.keys(lineItems || {})
+                  };
                   const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
                   const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
                   return includeOk && !excludeMatch;
                 };
-                const renderOverlayOpenFlattenedFields = (): React.ReactNode => {
+                const renderOverlayOpenFlattenedFields = (
+                  placementOverride?: 'left' | 'right' | 'below',
+                  options?: { asGridItems?: boolean; forceStackedLabel?: boolean }
+                ): React.ReactNode => {
                   if (!overlayOpenAction || !overlayOpenAction.flattenFields || overlayOpenAction.flattenFields.length === 0) return null;
                   const targetKey = overlayOpenAction.targetKey || overlayOpenAction.subKey || '';
                   if (!targetKey) return null;
+                  const flattenPlacement = normalizeOverlayFlattenPlacement(placementOverride ?? overlayOpenAction.flattenPlacement);
+                  const forceStackedLabel = options?.forceStackedLabel === true;
 
                   const resolveTargetGroup = (): { group?: WebQuestionDefinition; config?: any; kind: 'line' | 'sub' } | null => {
                     if (overlayOpenAction.targetKind === 'line') {
@@ -3488,8 +3545,10 @@ export const LineItemGroupQuestion: React.FC<{
 
                   const targetChoiceSearchDefault = (targetInfo.config?.ui as any)?.choiceSearchEnabled;
                   const targetGroupCtx: VisibilityContext = {
-                    getValue: fid => (resolveVisibilityValue ? resolveVisibilityValue(fid) : values[fid]),
-                    getLineValue: (_rowId, fid) => (targetRow?.values || {})[fid]
+                    getValue: fid => resolveTopValue(fid),
+                    getLineValue: (_rowId, fid) => (targetRow?.values || {})[fid],
+                    getLineItems: groupId => lineItems?.[groupId] || [],
+                    getLineItemKeys: () => Object.keys(lineItems || {})
                   };
                   const resolveDependencyValue = (dep: string): FieldValue | undefined => {
                     if (Object.prototype.hasOwnProperty.call(targetRow?.values || {}, dep)) return (targetRow?.values || {})[dep];
@@ -3503,7 +3562,8 @@ export const LineItemGroupQuestion: React.FC<{
                     const fieldPath = `${targetKey}__${flatField.id}__${targetRow.id}`;
                     const renderAsLabel = flatField?.ui?.renderAsLabel === true || flatField?.readOnly === true;
                     const hideLabel = Boolean(flatField?.ui?.hideLabel);
-                    const labelStyle = hideLabel ? srOnly : undefined;
+                    const useStackedLabel = forceStackedLabel || flatField.ui?.labelLayout === 'stacked';
+                    const labelStyle = hideLabel ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : undefined;
                     const valueMapApplied = flatField.valueMap
                       ? resolveValueMapValue(
                           flatField.valueMap,
@@ -3567,8 +3627,8 @@ export const LineItemGroupQuestion: React.FC<{
                       const selected = optsField.find(opt => opt.value === choiceVal);
                       return (
                         <div
-                          key={flatField.id}
-                          className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                          key={fieldPath}
+                          className={`field inline-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                           data-field-path={fieldPath}
                           data-has-error={errors[fieldPath] ? 'true' : undefined}
                           data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -3630,8 +3690,8 @@ export const LineItemGroupQuestion: React.FC<{
                       if (isConsentCheckbox) {
                         return (
                           <div
-                            key={flatField.id}
-                            className={`field inline-field ck-consent-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                            key={fieldPath}
+                            className={`field inline-field ck-consent-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                             data-field-path={fieldPath}
                             data-has-error={errors[fieldPath] ? 'true' : undefined}
                             data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -3659,8 +3719,8 @@ export const LineItemGroupQuestion: React.FC<{
                       const renderAsMultiSelect = controlOverride === 'select';
                       return (
                         <div
-                          key={flatField.id}
-                          className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                          key={fieldPath}
+                          className={`field inline-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                           data-field-path={fieldPath}
                           data-has-error={errors[fieldPath] ? 'true' : undefined}
                           data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -3716,9 +3776,9 @@ export const LineItemGroupQuestion: React.FC<{
                       const items = toUploadItems((targetRow.values || {})[flatField.id]);
                       const count = items.length;
                       return (
-                        <div
-                          key={flatField.id}
-                          className={`field inline-field${flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
+                      <div
+                        key={fieldPath}
+                          className={`field inline-field${useStackedLabel ? ' ck-label-stacked' : ''}`}
                           data-field-path={fieldPath}
                           data-has-error={errors[fieldPath] ? 'true' : undefined}
                           data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
@@ -3757,9 +3817,9 @@ export const LineItemGroupQuestion: React.FC<{
                     if (renderAsLabel) {
                       return (
                         <div
-                          key={flatField.id}
+                          key={fieldPath}
                           className={`${flatField.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                            flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
+                            useStackedLabel ? ' ck-label-stacked' : ''
                           }`}
                           data-field-path={fieldPath}
                           data-has-error={errors[fieldPath] ? 'true' : undefined}
@@ -3776,10 +3836,10 @@ export const LineItemGroupQuestion: React.FC<{
                     }
 
                     return (
-                      <div
-                        key={flatField.id}
+                        <div
+                          key={fieldPath}
                         className={`${flatField.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                          flatField.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
+                          useStackedLabel ? ' ck-label-stacked' : ''
                         }`}
                         data-field-path={fieldPath}
                         data-has-error={errors[fieldPath] ? 'true' : undefined}
@@ -3833,14 +3893,19 @@ export const LineItemGroupQuestion: React.FC<{
                     fieldId: field.id,
                     groupId: overlayOpenAction.groupId,
                     targetKey,
-                    fieldCount: targetFields.length
+                    fieldCount: targetFields.length,
+                    flattenPlacement
                   });
 
-                  return (
-                    <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
-                      {targetFields.map(flatField => renderFlattenedField(flatField))}
-                    </div>
-                  );
+                  const rendered = targetFields.map(flatField => renderFlattenedField(flatField)).filter(Boolean);
+                  if (!rendered.length) return null;
+                  if (options?.asGridItems) return rendered;
+                  const gridClassName = `ck-pair-grid${rendered.length >= 3 ? ' ck-pair-grid--3' : ''}`;
+                  const grid = <PairedRowGrid className={gridClassName}>{rendered}</PairedRowGrid>;
+                  if (flattenPlacement === 'below') {
+                    return <div style={{ marginTop: 8 }}>{grid}</div>;
+                  }
+                  return grid;
                 };
                 const overlayOpenActionTargetKey = overlayOpenAction?.targetKey || overlayOpenAction?.subKey || '';
                 const overlayOpenActionRowsAll = overlayOpenActionTargetKey ? (lineItems[overlayOpenActionTargetKey] || []) : [];
@@ -3929,57 +3994,129 @@ export const LineItemGroupQuestion: React.FC<{
                     onConfirm: runReset
                   });
                 };
-                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => (
-                  <div
-                    key={field.id}
-                    className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                      forceStackedLabel ? ' ck-label-stacked' : ''
-                    }`}
-                    data-field-path={fieldPath}
-                    data-has-error={errors[fieldPath] ? 'true' : undefined}
-                    data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                  >
-                    <label style={labelStyle}>
-                      {resolveFieldLabel(field, language, field.id)}
-                      {field.required && <RequiredStar />}
-                    </label>
+                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
+                  const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
+                  const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
+                  const actionButtonStyle = showResetButton
+                    ? { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
+                    : buttonStyles.secondary;
+                  const actionRow = (
                     <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
                       <button
                         type="button"
                         onClick={handleOverlayOpenAction}
                         disabled={overlayOpenDisabled}
-                        style={withDisabled(
-                          { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' },
-                          overlayOpenDisabled
-                        )}
+                        style={withDisabled(actionButtonStyle, overlayOpenDisabled)}
                       >
                         {overlayOpenButtonText(displayValue)}
                       </button>
-                      <button
-                        type="button"
-                        onClick={handleOverlayOpenActionReset}
-                        disabled={overlayOpenActionResetDisabled}
-                        aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                        style={withDisabled(
-                          {
-                            ...buttonStyles.secondary,
-                            borderTopLeftRadius: 0,
-                            borderBottomLeftRadius: 0,
-                            padding: '0 14px',
-                            minWidth: 44
-                          },
-                          overlayOpenActionResetDisabled
-                        )}
-                      >
-                        <TrashIcon size={18} />
-                      </button>
+                      {showResetButton ? (
+                        <button
+                          type="button"
+                          onClick={handleOverlayOpenActionReset}
+                          disabled={overlayOpenActionResetDisabled}
+                          aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                          style={withDisabled(
+                            {
+                              ...buttonStyles.secondary,
+                              borderTopLeftRadius: 0,
+                              borderBottomLeftRadius: 0,
+                              padding: '0 14px',
+                              minWidth: 44
+                            },
+                            overlayOpenActionResetDisabled
+                          )}
+                        >
+                          <TrashIcon size={18} />
+                        </button>
+                      ) : null}
                     </div>
-                    {renderOverlayOpenFlattenedFields()}
-                    {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                    {renderWarnings(fieldPath)}
-                    {nonMatchWarningNode}
-                  </div>
-                );
+                  );
+                  const flattenedGridItems =
+                    flattenPlacement !== 'below'
+                      ? renderOverlayOpenFlattenedFields(flattenPlacement, { asGridItems: true, forceStackedLabel: true })
+                      : null;
+                  const gridItems = Array.isArray(flattenedGridItems) ? flattenedGridItems : null;
+                  if (gridItems && gridItems.length) {
+                    const gridLabelStyle =
+                      labelStyle === srOnly ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : labelStyle;
+                    const actionField = (
+                      <div
+                        key={`${fieldPath}::overlayOpenAction`}
+                        className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+                        data-field-path={fieldPath}
+                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                      >
+                        <label style={gridLabelStyle}>
+                          {resolveFieldLabel(field, language, field.id)}
+                          {field.required && <RequiredStar />}
+                        </label>
+                        <div className="ck-control-row">{actionRow}</div>
+                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                        {renderWarnings(fieldPath)}
+                        {nonMatchWarningNode}
+                      </div>
+                    );
+                    const items = flattenPlacement === 'left' ? [...gridItems, actionField] : [actionField, ...gridItems];
+                    const gridClassName = `ck-pair-grid${items.length >= 3 ? ' ck-pair-grid--3' : ''}`;
+                    return (
+                      <div
+                        key={field.id}
+                        className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                          forceStackedLabel ? ' ck-label-stacked' : ''
+                        }`}
+                      >
+                        <label style={srOnly} aria-hidden="true">
+                          {resolveFieldLabel(field, language, field.id)}
+                          {field.required && <RequiredStar />}
+                        </label>
+                        <PairedRowGrid className={gridClassName}>{items}</PairedRowGrid>
+                      </div>
+                    );
+                  }
+                  const flattenedFields = renderOverlayOpenFlattenedFields(flattenPlacement, { forceStackedLabel });
+                  const actionBlock =
+                    flattenPlacement !== 'below' && flattenedFields ? (
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                          gap: 12,
+                          alignItems: 'start'
+                        }}
+                      >
+                        {flattenPlacement === 'left' ? flattenedFields : null}
+                        <div>{actionRow}</div>
+                        {flattenPlacement === 'right' ? flattenedFields : null}
+                      </div>
+                    ) : (
+                      <>
+                        {actionRow}
+                        {flattenedFields}
+                      </>
+                    );
+                  return (
+                    <div
+                      key={field.id}
+                      className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                        forceStackedLabel ? ' ck-label-stacked' : ''
+                      }`}
+                      data-field-path={fieldPath}
+                      data-has-error={errors[fieldPath] ? 'true' : undefined}
+                      data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                    >
+                      <label style={labelStyle}>
+                        {resolveFieldLabel(field, language, field.id)}
+                        {field.required && <RequiredStar />}
+                      </label>
+                      {actionBlock}
+                      {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                      {renderWarnings(fieldPath)}
+                      {nonMatchWarningNode}
+                    </div>
+                  );
+                };
                 const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
                   if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
                   return (
@@ -4486,7 +4623,7 @@ export const LineItemGroupQuestion: React.FC<{
                     marginBottom: 10
                   }}
                 >
-                  {isProgressive ? (
+                  {showRowHeader ? (
                     <div className="ck-row-header">
                       <div style={{ minWidth: 0, flex: 1 }}>
                         {/* Row numbering intentionally hidden in all UI modes (requested by product). */}
@@ -4525,6 +4662,14 @@ export const LineItemGroupQuestion: React.FC<{
                               const subgroupOpenStack = triggeredSubgroupIds.length
                                 ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: titleField.id })
                                 : null;
+                              const titleFieldPath = errorKey;
+                              const titleOverlayActionSuppressed = ctx.isOverlayOpenActionSuppressed?.(titleFieldPath) === true;
+                              const titleOverlayOpenAction = titleOverlayActionSuppressed
+                                ? null
+                                : resolveOverlayOpenActionForField(titleField, row, overlayActionCtx);
+                              if (titleOverlayOpenAction) {
+                                return renderLineItemField(titleField, { showLabel: false, forceStackedLabel: true });
+                              }
 
                               if (titleField.type === 'CHOICE') {
                                 const optionSetField: OptionSet =
@@ -4899,7 +5044,8 @@ export const LineItemGroupQuestion: React.FC<{
                           openLineItemGroupOverlay(groupOrId as any, {
                             rowFilter: overlayOpenAction.rowFilter || null,
                             hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
-                            source: 'user'
+                            label: overlayOpenAction.label,
+                            source: 'overlayOpenAction'
                           });
                           onDiagnostic?.('lineItemGroup.overlay.open.action', {
                             parentGroupId: q.id,
@@ -4916,7 +5062,8 @@ export const LineItemGroupQuestion: React.FC<{
                           rowFilter: overlayOpenAction.rowFilter || null,
                           groupOverride: overlayOpenAction.groupOverride,
                           hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
-                          source: 'user'
+                          label: overlayOpenAction.label,
+                          source: 'overlayOpenAction'
                         });
                         onDiagnostic?.('subgroup.overlay.open.action', {
                           groupId: q.id,
@@ -4931,7 +5078,11 @@ export const LineItemGroupQuestion: React.FC<{
                         if (!filter) return true;
                         const includeWhen = (filter as any)?.includeWhen;
                         const excludeWhen = (filter as any)?.excludeWhen;
-                        const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+                        const rowCtx: VisibilityContext = {
+                          getValue: fid => (rowValues as any)[fid],
+                          getLineItems: groupId => lineItems?.[groupId] || [],
+                          getLineItemKeys: () => Object.keys(lineItems || {})
+                        };
                         const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
                         const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
                         return includeOk && !excludeMatch;
@@ -5025,56 +5176,132 @@ export const LineItemGroupQuestion: React.FC<{
                           onConfirm: runReset
                         });
                       };
-                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => (
-                        <div
-                          key={field.id}
-                          className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                            forceStackedLabel ? ' ck-label-stacked' : ''
-                          }`}
-                          data-field-path={fieldPath}
-                          data-has-error={errors[fieldPath] ? 'true' : undefined}
-                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                        >
-                          <label style={labelStyle}>
-                            {resolveFieldLabel(field, language, field.id)}
-                            {field.required && <RequiredStar />}
-                          </label>
+                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
+                        const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
+                        const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
+                        const actionButtonStyle = showResetButton
+                          ? { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
+                          : buttonStyles.secondary;
+                        const actionRow = (
                           <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
                             <button
                               type="button"
                               onClick={handleOverlayOpenAction}
                               disabled={overlayOpenDisabled}
-                              style={withDisabled(
-                                { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' },
-                                overlayOpenDisabled
-                              )}
+                              style={withDisabled(actionButtonStyle, overlayOpenDisabled)}
                             >
                               {overlayOpenButtonText(displayValue)}
                             </button>
-                            <button
-                              type="button"
-                              onClick={handleOverlayOpenActionReset}
-                              disabled={overlayOpenActionResetDisabled}
-                              aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                              style={withDisabled(
-                                {
-                                  ...buttonStyles.secondary,
-                                  borderTopLeftRadius: 0,
-                                  borderBottomLeftRadius: 0,
-                                  padding: '0 14px',
-                                  minWidth: 44
-                                },
-                                overlayOpenActionResetDisabled
-                              )}
-                            >
-                              <TrashIcon size={18} />
-                            </button>
+                            {showResetButton ? (
+                              <button
+                                type="button"
+                                onClick={handleOverlayOpenActionReset}
+                                disabled={overlayOpenActionResetDisabled}
+                                aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                                style={withDisabled(
+                                  {
+                                    ...buttonStyles.secondary,
+                                    borderTopLeftRadius: 0,
+                                    borderBottomLeftRadius: 0,
+                                    padding: '0 14px',
+                                    minWidth: 44
+                                  },
+                                  overlayOpenActionResetDisabled
+                                )}
+                              >
+                                <TrashIcon size={18} />
+                              </button>
+                            ) : null}
                           </div>
-                      {renderOverlayOpenFlattenedFieldsShared(field, overlayOpenAction)}
-                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                          {renderWarnings(fieldPath)}
-                        </div>
-                      );
+                        );
+                        const flattenedGridItems =
+                          flattenPlacement !== 'below'
+                            ? renderOverlayOpenFlattenedFieldsShared(field, overlayOpenAction, flattenPlacement, {
+                                asGridItems: true,
+                                forceStackedLabel: true
+                              })
+                            : null;
+                        const gridItems = Array.isArray(flattenedGridItems) ? flattenedGridItems : null;
+                        if (gridItems && gridItems.length) {
+                          const gridLabelStyle =
+                            labelStyle === srOnly ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : labelStyle;
+                          const actionField = (
+                            <div
+                              key={`${fieldPath}::overlayOpenAction`}
+                              className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+                              data-field-path={fieldPath}
+                              data-has-error={errors[fieldPath] ? 'true' : undefined}
+                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                            >
+                              <label style={gridLabelStyle}>
+                                {resolveFieldLabel(field, language, field.id)}
+                                {field.required && <RequiredStar />}
+                              </label>
+                              <div className="ck-control-row">{actionRow}</div>
+                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                              {renderWarnings(fieldPath)}
+                            </div>
+                          );
+                          const items = flattenPlacement === 'left' ? [...gridItems, actionField] : [actionField, ...gridItems];
+                          const gridClassName = `ck-pair-grid${items.length >= 3 ? ' ck-pair-grid--3' : ''}`;
+                          return (
+                            <div
+                              key={field.id}
+                              className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                                forceStackedLabel ? ' ck-label-stacked' : ''
+                              }`}
+                            >
+                              <label style={srOnly} aria-hidden="true">
+                                {resolveFieldLabel(field, language, field.id)}
+                                {field.required && <RequiredStar />}
+                              </label>
+                              <PairedRowGrid className={gridClassName}>{items}</PairedRowGrid>
+                            </div>
+                          );
+                        }
+                        const flattenedFields = renderOverlayOpenFlattenedFieldsShared(field, overlayOpenAction, flattenPlacement, {
+                          forceStackedLabel
+                        });
+                        const actionBlock =
+                          flattenPlacement !== 'below' && flattenedFields ? (
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                                gap: 12,
+                                alignItems: 'start'
+                              }}
+                            >
+                              {flattenPlacement === 'left' ? flattenedFields : null}
+                              <div>{actionRow}</div>
+                              {flattenPlacement === 'right' ? flattenedFields : null}
+                            </div>
+                          ) : (
+                            <>
+                              {actionRow}
+                              {flattenedFields}
+                            </>
+                          );
+                        return (
+                          <div
+                            key={field.id}
+                            className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
+                              forceStackedLabel ? ' ck-label-stacked' : ''
+                            }`}
+                            data-field-path={fieldPath}
+                            data-has-error={errors[fieldPath] ? 'true' : undefined}
+                            data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                          >
+                            <label style={labelStyle}>
+                              {resolveFieldLabel(field, language, field.id)}
+                              {field.required && <RequiredStar />}
+                            </label>
+                            {actionBlock}
+                            {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                            {renderWarnings(fieldPath)}
+                          </div>
+                        );
+                      };
                       const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
                         if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
                         return (
@@ -6012,20 +6239,6 @@ export const LineItemGroupQuestion: React.FC<{
                         >
                           <div style={{ textAlign: 'center', fontWeight: 700 }}>
                             {subLabelResolved || subId}
-                            {(() => {
-                              const subShowItemPill = subUi?.showItemPill !== undefined ? !!subUi.showItemPill : true;
-                              if (!subShowItemPill) return null;
-                              return (
-                                <span className="pill" style={{ marginLeft: 8, background: '#e2e8f0', color: '#334155' }}>
-                                  {tSystem(
-                                    subCount === 1 ? 'overlay.itemsOne' : 'overlay.itemsMany',
-                                    language,
-                                    subCount === 1 ? '{count} item' : '{count} items',
-                                    { count: subCount }
-                                  )}
-                                </span>
-                              );
-                            })()}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
@@ -6155,7 +6368,9 @@ export const LineItemGroupQuestion: React.FC<{
                                   const renderSubTableField = (field: any, subRow: any) => {
                                     const groupCtx: VisibilityContext = {
                                       getValue: fid => values[fid],
-                                      getLineValue: (_rowId, fid) => subRow.values[fid]
+                                      getLineValue: (_rowId, fid) => subRow.values[fid],
+                                      getLineItems: groupId => lineItems?.[groupId] || [],
+                                      getLineItemKeys: () => Object.keys(lineItems || {})
                                     };
                                     const hideField = shouldHideField(field.visibility, groupCtx, { rowId: subRow.id, linePrefix: subKey });
                                     if (hideField) return <span className="muted">—</span>;
@@ -6436,7 +6651,9 @@ export const LineItemGroupQuestion: React.FC<{
                         orderedSubRows.map((subRow, subIdx) => {
                           const subCtx: VisibilityContext = {
                             getValue: fid => values[fid],
-                            getLineValue: (_rowId, fid) => subRow.values[fid]
+                            getLineValue: (_rowId, fid) => subRow.values[fid],
+                            getLineItems: groupId => lineItems?.[groupId] || [],
+                            getLineItemKeys: () => Object.keys(lineItems || {})
                           };
                           const subGroupDef: WebQuestionDefinition = {
                             ...(q as any),

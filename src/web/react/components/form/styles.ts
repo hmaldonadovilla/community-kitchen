@@ -773,6 +773,9 @@ export const FORM_VIEW_STYLES = `
           /* Paired rows: keep control rows aligned by matching the tallest label in the pair (computed per row). */
           min-height: var(--ck-pair-label-min-height, 0px);
         }
+        .ck-pair-grid > .field.inline-field > .ck-label-row {
+          min-height: var(--ck-pair-label-min-height, 0px);
+        }
         .form-card .field[data-has-warning="true"]:not([data-has-error="true"]),
         .webform-overlay .field[data-has-warning="true"]:not([data-has-error="true"]),
         .ck-form-sections .field[data-has-warning="true"]:not([data-has-error="true"]) {

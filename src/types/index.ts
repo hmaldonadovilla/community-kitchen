@@ -1334,10 +1334,21 @@ export interface LineItemOverlayOpenActionConfig {
    */
   resetValue?: DefaultValue;
   /**
+   * When true, hide the trash/reset icon on the overlay opener button.
+   */
+  hideTrashIcon?: boolean;
+  /**
    * Optional list of line-item field ids to surface inline when the target group only allows one row.
    * This keeps the data structure unchanged while flattening the UI for quick edits.
    */
   flattenFields?: string[];
+  /**
+   * Placement for `flattenFields` relative to the opener field.
+   * - left: render flattened fields to the left
+   * - right: render flattened fields to the right
+   * - below: render flattened fields beneath the opener (default)
+   */
+  flattenPlacement?: 'left' | 'right' | 'below';
 }
 
 export interface SelectionEffect {

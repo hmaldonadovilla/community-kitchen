@@ -49,10 +49,16 @@ export function matchesWhen(value: unknown, when?: VisibilityCondition | any): b
   };
 
   const wantsNotEmpty = (when as any).notEmpty;
-  if (typeof wantsNotEmpty === 'boolean') {
+  const wantsEmpty = (when as any).isEmpty;
+  if (typeof wantsNotEmpty === 'boolean' || typeof wantsEmpty === 'boolean') {
     const hasAny = normalized.some(isNonEmpty);
-    if (wantsNotEmpty && !hasAny) return false;
-    if (!wantsNotEmpty && hasAny) return false;
+    if (typeof wantsNotEmpty === 'boolean') {
+      if (wantsNotEmpty && !hasAny) return false;
+      if (!wantsNotEmpty && hasAny) return false;
+    } else if (typeof wantsEmpty === 'boolean') {
+      if (wantsEmpty && hasAny) return false;
+      if (!wantsEmpty && !hasAny) return false;
+    }
   }
 
   if (when.equals !== undefined) {
@@ -328,7 +334,7 @@ export const matchesWhenClause = (
 
   const lineItemsClause = pickLineItemsClause(when);
   if (lineItemsClause) {
-    return matchesLineItemsClause(lineItemsClause, ctx);
+    return matchesLineItemsClause(lineItemsClause, ctx, options);
   }
 
   // Leaf condition
@@ -340,7 +346,11 @@ export const matchesWhenClause = (
   return matchesWhen(value, leaf as any);
 };
 
-const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
+const matchesLineItemsClause = (
+  raw: any,
+  ctx: VisibilityContext,
+  options?: { rowId?: string; linePrefix?: string }
+): boolean => {
   if (!raw || typeof raw !== 'object') return true;
   if (typeof ctx.getLineItems !== 'function') return false;
 
@@ -359,10 +369,43 @@ const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
   const parentScope = typeof parentScopeRaw === 'string' && parentScopeRaw.trim().toLowerCase() === 'ancestor' ? 'ancestor' : 'immediate';
   const hasExplicitPath = subGroupPathRaw !== undefined && subGroupPathRaw !== null;
   const hasWildcard = subGroupPath.some(seg => seg === '*' || seg === '**');
+  const scope = (() => {
+    const scopedRowId = normalizeLineItemId(options?.rowId);
+    const scopedPrefix = options?.linePrefix ? options.linePrefix.toString().trim() : '';
+    if (!scopedRowId || !scopedPrefix) return null;
+    const parsed = parseGroupKeyPath(scopedPrefix);
+    if (!parsed.rootId) return null;
+    return {
+      rootId: parsed.rootId,
+      chain: [...parsed.parentChain, { groupKey: scopedPrefix, rowId: scopedRowId }]
+    };
+  })();
+  const normalizeScopeKey = (raw: string): string => normalizeLineItemId(raw).toUpperCase();
+  const scopeRoot = scope ? normalizeScopeKey(scope.rootId) : '';
+  const scopedToRow = Boolean(scope && scopeRoot && scopeRoot === normalizeScopeKey(groupId));
 
   const getRows = (key: string): any[] => {
     const rows = ctx.getLineItems?.(key);
     return Array.isArray(rows) ? rows : [];
+  };
+  const scopedRows = (rows: any[]): any[] => {
+    if (!scopedToRow || !scope?.chain.length) return rows;
+    const targetRowId = normalizeScopeKey(scope.chain[0].rowId);
+    return rows.filter(row => normalizeScopeKey((row as any)?.id) === targetRowId);
+  };
+  const isKeyInScope = (key: string): boolean => {
+    if (!scopedToRow || !scope?.chain.length) return true;
+    const parsed = parseGroupKeyPath(key);
+    if (normalizeScopeKey(parsed.rootId) !== scopeRoot) return false;
+    if (parsed.parentChain.length < scope.chain.length) return false;
+    for (let idx = 0; idx < scope.chain.length; idx += 1) {
+      const expected = scope.chain[idx];
+      const actual = parsed.parentChain[idx];
+      if (!actual) return false;
+      if (normalizeScopeKey(actual.groupKey) !== normalizeScopeKey(expected.groupKey)) return false;
+      if (normalizeScopeKey(actual.rowId) !== normalizeScopeKey(expected.rowId)) return false;
+    }
+    return true;
   };
 
   const buildRowCtx = (
@@ -407,7 +450,7 @@ const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
   };
 
   if (!subGroupId && !subGroupPath.length) {
-    const rows = getRows(groupId);
+    const rows = scopedRows(getRows(groupId));
     if (!rows.length) return false;
     const clause = when || parentWhen;
     const mode = matchRaw !== undefined ? matchMode : parentMatchMode || matchMode;
@@ -417,7 +460,7 @@ const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
 
   const useLegacySubgroup = !hasExplicitPath && subGroupId && !hasWildcard && parentScope === 'immediate';
   if (useLegacySubgroup) {
-    const parentRows = getRows(groupId);
+    const parentRows = scopedRows(getRows(groupId));
     if (!parentRows.length) return false;
 
     let hasAnyParentCandidate = false;
@@ -444,7 +487,7 @@ const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
     return effectiveParentMatchMode === 'all' ? hasAnyParentCandidate : false;
   }
 
-  const candidateKeys = resolveMatchingGroupKeys(groupId, subGroupPath, ctx);
+  const candidateKeys = resolveMatchingGroupKeys(groupId, subGroupPath, ctx).filter(isKeyInScope);
   if (!candidateKeys.length) return false;
 
   const effectiveParentMatchMode =

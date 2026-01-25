@@ -181,19 +181,42 @@
   - Please adjust the functionality of GROUP_TABLE placeholder to support complex hierarchy. Review the configuration defined in `docs/templates/mp.ing_recipe.html`, the table grouping is not happening and check if the sorting is working as expected. Also we need to allow dataSource fields to appear in the template. The value of `MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE` is comming from a dataSource row and we are already using the RECIPE.REC_INST as the `tooltipField` value, in our use case we want to display the content of the `RECIPE.REC_INST` field in the `Instructions` tab of out html template.
   > **DONE - Cursor**
 - ck-53:
-  - for the `flattenFields` feature we need to be able to control the placement of the field in the parent view, either to the right, left or below the parent field that is controlling the overlay open action.
+  - for the `flattenFields` feature we need to be able to control the placement of the field in the parent view, either to the right, left or below the parent field that is controlling the overlay open action. DONE
   - we need to allow up to 3 fields to be displayed in the row header in steps UI, when `"collapsedFieldsInHeader": true`, if there are more fields defined in the step, those will appear in the row body.
-  - we need to trigger error validation on field focus out same as we already do for warning validation.
-  - remove all item counts from all views, this is unnecessary and add congnitive load to the user.
-  - define control to hide the trash can icon on the `overlayOpenActions` config.
-  - on the `overlayOpenActions` overlay we need to select the first row by default when the overlay is opened, if the view action is available, active it for the first row, if the view action is not available, active the edit action for the first row.
+  - we need to trigger error validation on field focus out same as we already do for warning validation. DONE
+  - remove all item counts from all views, this is unnecessary and add congnitive load to the user, including selection notices and breadcrumbs.
+  - define control to hide the trash can icon on the `overlayOpenActions` config. DONE
+  - on the `overlayOpenActions` overlay we need to select the first row by default when the overlay is opened, if the view action is available, active it for the first row, if the view action is not available, active the edit action for the first row. DONE
   > **WIP - Cursor**
+- ck-bug-13: when you open the overlay the view or edit rendered needs to be triggered only after all fields in the header row are completed and valid. You only need to trigger the view or edit action once. I'm currently seeing multiple triggers of the action even if I'm already in the view or edit mode.
+
+   ```text
+  [ReactForm] lineItems.overlayDetail.view.rendered
+  {groupId: 'MP_MEALS_REQUEST', rowId:   'MP_MEALS_REQUEST::MP_MEALS_REQUEST_780077aaf68098::MP_TYPE_LI_e7be55f11e3c8', templateId:   'bundle:mp.ing_recipe.html'}
+  groupId
+  :
+  "MP_MEALS_REQUEST"
+  rowId
+  :
+  "MP_MEALS_REQUEST::MP_MEALS_REQUEST_780077aaf68098::MP_TYPE_LI_e7be55f11e3c8"
+  templateId
+  :
+  "bundle:mp.ing_recipe.html"
+  [[Prototype]]
+  :
+  Object
+  ```
+  > **WIP - Codex**
 - ck-54: create the custom html bundled template for the meal production form.
-  > **WIP - Cursor**
+  > **WIP - Codex**
 - ck-55: on the full page overlay, when adding lines manually the header section is being hidden and only the body is visible. After we close the overlay and open again it renders correctly, this only happens when adding lines manually, including from `selectorOverlay`. Rows comming from selection effects are working as expected. Error message: `Unable to load subgroup editor (missing group/subgroup configuration for MP_MEALS_REQUEST::MP_MEALS_REQUEST_04ccba0471eba::MP_TYPE_LI::MP_MEALS_REQUEST::MP_MEALS_REQUEST_04ccba0471eba::MP_TYPE_LI_083db004c1b6e::MP_INGREDIENTS_LI).`
-  > **WIP - Cursor**
+  > **WIP - Codex**
 - ck-56: add `updateLineItems` selection effect to update the line items.
 - ck-57:
   - for listView rule columns, please allow multiple actions per row, by only showing icons, instead of icons and text.
   - enable search preset buttons in view.mode:table of list view.
 - ck-58: when fetching paginated data from server on first load, we need to fetch data sorted by multiple fields in order, for example `MP_PREP_DATE` desc, `MP_DISTRIBUTOR` asc and MP_SERVICE source order. This way we make sure that the first page of results is always the most releveant to the user. Also call the different pages in parallel so we can fetch the data faster, this goes as well for retrieving the bundle, I've notices that after page load we are making sequential calls to the for the different components which is not efficient. Also I thought we were caching the bundle but this takes more than 2 seconds to be retrieved after page load
+- ck-60:
+  - we need to control the width of columns in the grid on edit view. Specially on the steps UI as we often need to provide more space to choice fields than to number fields, buttons, etc. Also need need to be able to overide in the steps UI per step.
+  - when we make a field read only we need to remove the `*` from the field label and remove the input control box as it takes space. Take a look at the screenshot to see a mock of the expected view when fields are read only or `renderAsLabel` is true.
+  - also in the steps UI we need to be able to hide the field label in the context of a step.

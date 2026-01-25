@@ -24,9 +24,16 @@ export const PairedRowGrid: React.FC<{ children: React.ReactNode; className?: st
         node => node instanceof HTMLElement && node.classList.contains('field') && node.classList.contains('inline-field')
       ) as HTMLElement[];
       fieldEls.forEach(fieldEl => {
+        const labelRow = Array.from(fieldEl.children).find(
+          ch => ch instanceof HTMLElement && ch.classList.contains('ck-label-row')
+        ) as HTMLElement | undefined;
         const directLabel = Array.from(fieldEl.children).find(
           ch => ch instanceof HTMLElement && ch.tagName === 'LABEL'
         ) as HTMLElement | undefined;
+        if (labelRow) {
+          labels.push(labelRow);
+          return;
+        }
         if (directLabel) labels.push(directLabel);
       });
       return labels;
@@ -85,6 +92,5 @@ export const PairedRowGrid: React.FC<{ children: React.ReactNode; className?: st
     </div>
   );
 };
-
 
 

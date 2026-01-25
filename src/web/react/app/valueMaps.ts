@@ -1,6 +1,6 @@
 import { FieldValue, LineItemRowState, ValueMapConfig, WebFormDefinition } from '../../types';
 import { LineItemState } from '../types';
-import { buildSubgroupKey, resolveSubgroupKey } from './lineItems';
+import { buildSubgroupKey, parseSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { isEmptyValue } from '../utils/values';
 import { matchesWhenClause } from '../../rules/visibility';
 
@@ -118,6 +118,119 @@ const resolveDerivedApplyOn = (config: any): 'change' | 'blur' => {
   // - copy: blur (avoid mid-typing churn)
   // - everything else: change
   return (config?.op || '').toString() === 'copy' ? 'blur' : 'change';
+};
+
+const isBlurDerivedValue = (derived?: any): boolean => resolveDerivedApplyOn(derived) === 'blur';
+
+const shallowEqualFieldValue = (a: FieldValue, b: FieldValue): boolean => {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const aa = Array.isArray(a) ? a : [a];
+    const bb = Array.isArray(b) ? b : [b];
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i += 1) {
+      if ((aa[i] as any) !== (bb[i] as any)) return false;
+    }
+    return true;
+  }
+  return false;
+};
+
+const resolveLineItemFieldsForKey = (definition: WebFormDefinition, groupKey: string): any[] => {
+  const parsed = parseSubgroupKey(groupKey);
+  if (!parsed) {
+    const root = definition.questions.find(q => q.id === groupKey && q.type === 'LINE_ITEM_GROUP');
+    return (root?.lineItemConfig?.fields || []) as any[];
+  }
+  const root = definition.questions.find(q => q.id === parsed.rootGroupId && q.type === 'LINE_ITEM_GROUP');
+  if (!root) return [];
+  let current: any = root;
+  for (let i = 0; i < parsed.path.length; i += 1) {
+    const subId = parsed.path[i];
+    const subs = (current?.lineItemConfig?.subGroups || current?.subGroups || []) as any[];
+    const match = subs.find(s => resolveSubgroupKey(s) === subId);
+    if (!match) return [];
+    current = match;
+  }
+  return (current?.fields || current?.lineItemConfig?.fields || []) as any[];
+};
+
+export const hasBlurDerivedValues = (definition: WebFormDefinition): boolean => {
+  const hasInFields = (fields: any[]): boolean =>
+    Array.isArray(fields) && fields.some(f => f && f.derivedValue && isBlurDerivedValue(f.derivedValue));
+  const hasInSubGroups = (subs: any[]): boolean => {
+    for (const sub of subs || []) {
+      if (hasInFields((sub as any)?.fields || [])) return true;
+      if (hasInSubGroups((sub as any)?.subGroups || [])) return true;
+    }
+    return false;
+  };
+
+  return (definition.questions || []).some(q => {
+    if ((q as any).derivedValue && isBlurDerivedValue((q as any).derivedValue)) return true;
+    if (q.type !== 'LINE_ITEM_GROUP') return false;
+    if (hasInFields((q as any).lineItemConfig?.fields || [])) return true;
+    return hasInSubGroups((q as any).lineItemConfig?.subGroups || []);
+  });
+};
+
+export const mergeBlurDerivedValues = (
+  definition: WebFormDefinition,
+  baseValues: Record<string, FieldValue>,
+  baseLineItems: LineItemState,
+  blurValues: Record<string, FieldValue>,
+  blurLineItems: LineItemState
+): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
+  let values = baseValues;
+  const topBlurFields = (definition.questions || [])
+    .filter(q => (q as any).derivedValue && isBlurDerivedValue((q as any).derivedValue))
+    .map(q => q.id)
+    .filter(Boolean);
+  if (topBlurFields.length) {
+    topBlurFields.forEach(fid => {
+      const nextVal = (blurValues as any)[fid];
+      const prevVal = (baseValues as any)[fid];
+      if (shallowEqualFieldValue(prevVal, nextVal)) return;
+      if (values === baseValues) values = { ...baseValues };
+      (values as any)[fid] = nextVal;
+    });
+  }
+
+  let lineItems = baseLineItems;
+  Object.keys(baseLineItems || {}).forEach(groupKey => {
+    const fields = resolveLineItemFieldsForKey(definition, groupKey);
+    const blurDerivedIds = (fields || [])
+      .filter((f: any) => f?.derivedValue && isBlurDerivedValue(f.derivedValue))
+      .map((f: any) => (f?.id !== undefined && f?.id !== null ? f.id.toString() : ''))
+      .filter(Boolean);
+    if (!blurDerivedIds.length) return;
+    const rows = baseLineItems[groupKey] || [];
+    const blurRows = blurLineItems[groupKey] || [];
+    if (!rows.length || !blurRows.length) return;
+    const blurRowMap = new Map(blurRows.map(r => [r.id, r]));
+    let changed = false;
+    const nextRows = rows.map(row => {
+      const blurRow = blurRowMap.get(row.id);
+      if (!blurRow) return row;
+      let rowChanged = false;
+      const nextRowValues = { ...(row.values || {}) } as Record<string, FieldValue>;
+      blurDerivedIds.forEach(fid => {
+        const nextVal = (blurRow.values || {})[fid];
+        const prevVal = nextRowValues[fid];
+        if (shallowEqualFieldValue(prevVal, nextVal)) return;
+        nextRowValues[fid] = nextVal;
+        rowChanged = true;
+      });
+      if (!rowChanged) return row;
+      changed = true;
+      return { ...row, values: nextRowValues };
+    });
+    if (!changed) return;
+    if (lineItems === baseLineItems) lineItems = { ...baseLineItems };
+    lineItems[groupKey] = nextRows;
+  });
+
+  return { values, lineItems };
 };
 
 const coerceConsentBoolean = (raw: any): boolean => {
@@ -723,6 +836,5 @@ export const applyValueMapsToForm = (
 
   return { values, lineItems };
 };
-
 
 

@@ -181,11 +181,12 @@ const isRowDisabledByExpandGate = (args: {
   fields: any[];
   row: { id: string; values: Record<string, FieldValue> };
   topValues: Record<string, FieldValue>;
+  lineItems: LineItemState;
   language: LangCode;
   linePrefix: string;
   rowCollapsed: boolean;
 }): boolean => {
-  const { ui, fields, row, topValues, language, linePrefix, rowCollapsed } = args;
+  const { ui, fields, row, topValues, lineItems, language, linePrefix, rowCollapsed } = args;
   const isProgressive = ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
   const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
   const collapsedFieldConfigs = isProgressive ? (ui?.collapsedFields || []) : [];
@@ -196,7 +197,9 @@ const isRowDisabledByExpandGate = (args: {
 
   const groupCtx: VisibilityContext = {
     getValue: fid => topValues[fid],
-    getLineValue: (_rowId, fid) => (row?.values || {})[fid]
+    getLineValue: (_rowId, fid) => (row?.values || {})[fid],
+    getLineItems: groupId => lineItems[groupId] || [],
+    getLineItemKeys: () => Object.keys(lineItems || {})
   };
 
   const isHidden = (fieldId: string) => {
@@ -330,6 +333,7 @@ export const validateForm = (args: {
           fields: expandGateFields,
           row: row as any,
           topValues: contextValues,
+          lineItems,
           language,
           linePrefix: groupKey,
           rowCollapsed
@@ -342,7 +346,9 @@ export const validateForm = (args: {
       let rowValid = true;
       const groupCtx: VisibilityContext = {
         getValue: fid => (contextValues as any)[fid],
-        getLineValue: (_rowId, fid) => row.values[fid]
+        getLineValue: (_rowId, fid) => row.values[fid],
+        getLineItems: groupId => lineItems[groupId] || [],
+        getLineItemKeys: () => Object.keys(lineItems || {})
       };
       const getRowValue = (fieldId: string): FieldValue => {
         const localId = normalizeFieldId(fieldId);
@@ -616,7 +622,9 @@ export const collectValidationWarnings = (args: {
       void idx;
       const groupCtx: VisibilityContext = {
         getValue: fid => values[fid],
-        getLineValue: (_rowId, fid) => row.values[fid]
+        getLineValue: (_rowId, fid) => row.values[fid],
+        getLineItems: groupId => lineItems[groupId] || [],
+        getLineItemKeys: () => Object.keys(lineItems || {})
       };
       const getRowValue = (fieldId: string): FieldValue => {
         if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
@@ -661,7 +669,9 @@ export const collectValidationWarnings = (args: {
             void sIdx;
             const subCtx: VisibilityContext = {
               getValue: fid => values[fid],
-              getLineValue: (_rowId, fid) => subRow.values[fid]
+              getLineValue: (_rowId, fid) => subRow.values[fid],
+              getLineItems: groupId => lineItems[groupId] || [],
+              getLineItemKeys: () => Object.keys(lineItems || {})
             };
             const getSubValue = (fieldId: string): FieldValue => {
               if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fieldId)) return (subRow.values || {})[fieldId];
@@ -748,6 +758,7 @@ export const buildSubmissionPayload = async (args: {
               fields: (groupCfg?.fields || []) as any[],
               row: row as any,
               topValues: contextValues,
+              lineItems,
               language,
               linePrefix: groupKey,
               rowCollapsed
@@ -958,5 +969,3 @@ export const resolveExistingRecordId = (args: {
   const { selectedRecordId, selectedRecordSnapshot, lastSubmissionMetaId } = args;
   return selectedRecordId || selectedRecordSnapshot?.id || lastSubmissionMetaId || undefined;
 };
-
-

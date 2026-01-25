@@ -205,7 +205,7 @@ export const LineItemMultiAddSelect: React.FC<{
               style={withDisabled(buttonStyles.primary, !!disabled || selectedCount === 0)}
               onClick={handleAddSelected}
             >
-              {tSystem('lineItems.addSelected', language, 'Add selected ({count})', { count: selectedCount })}
+              {tSystem('lineItems.addSelected', language, 'Add selected')}
             </button>
           </div>
         </div>

@@ -209,7 +209,9 @@ export function computeGuidedStepsStatus(args: {
 
       const groupCtx = {
         getValue: (fieldId: string) => (values as any)[fieldId],
-        getLineValue: (_rowId: string, fieldId: string) => (rowValues as any)[fieldId]
+        getLineValue: (_rowId: string, fieldId: string) => (rowValues as any)[fieldId],
+        getLineItems: (groupId: string) => (lineItems as any)[groupId] || [],
+        getLineItemKeys: () => Object.keys(lineItems || {})
       };
 
       const getRowValue = (fieldId: string): FieldValue => {
@@ -380,7 +382,9 @@ export function computeGuidedStepsStatus(args: {
 
           const subCtx = {
             getValue: (fieldId: string) => (values as any)[fieldId],
-            getLineValue: (_rowId: string, fieldId: string) => (subRowValues as any)[fieldId]
+            getLineValue: (_rowId: string, fieldId: string) => (subRowValues as any)[fieldId],
+            getLineItems: (groupId: string) => (lineItems as any)[groupId] || [],
+            getLineItemKeys: () => Object.keys(lineItems || {})
           };
 
           const getSubValue = (fieldId: string): FieldValue => {
@@ -527,4 +531,3 @@ export function computeGuidedStepsStatus(args: {
 
   return { steps, maxCompleteIndex, maxValidIndex };
 }
-

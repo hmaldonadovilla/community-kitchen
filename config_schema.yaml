@@ -1080,7 +1080,7 @@ components:
         showItemPill:
           type: boolean
           description: |
-            Controls whether the "N items" pill is shown in the line item group header.
+            Controls whether the items pill is shown in the line item group header.
             Default: true.
         addButtonPlacement:
           type: string
@@ -1282,6 +1282,9 @@ components:
 
     LineItemOverlayOpenActionConfig:
       type: object
+      description: |
+        Field-driven overlay opener configuration.
+        When overlay detail is enabled, completing all header fields auto-opens the detail panel (view if available; otherwise edit).
       properties:
         groupId:
           type: string
@@ -1313,6 +1316,10 @@ components:
           description: |
             Optional value to set on the source field when the trash/reset action is confirmed.
             Use this to revert the field back to its original control by breaking the `when` condition.
+        hideTrashIcon:
+          type: boolean
+          description: |
+            When true, hide the trash/reset icon on the overlay opener button.
         flattenFields:
           type: array
           items:
@@ -1320,6 +1327,14 @@ components:
           description: |
             Optional list of line-item field ids to render inline in the parent view when the target group only allows one row.
             Requires `maxRows: 1` on the target group (or `groupOverride`) to take effect.
+        flattenPlacement:
+          type: string
+          enum: [left, right, below]
+          description: |
+            Placement for `flattenFields` relative to the opener field.
+            - left: render flattened fields to the left of the opener
+            - right: render flattened fields to the right of the opener
+            - below: render flattened fields beneath the opener (default)
       required: [groupId]
       additionalProperties: false
 
@@ -3256,6 +3271,10 @@ components:
         notEmpty:
           type: boolean
           description: If true, condition matches when the field has any value other than empty/blank/null. If false, condition matches when the field is empty.
+        isEmpty:
+          type: boolean
+          description: |
+            Alias for `notEmpty: false`. If true, condition matches when the field is empty; if false, matches when non-empty.
 
     LineItemWhenClause:
       type: object
@@ -3306,7 +3325,7 @@ components:
         Condition clause used by visibility, validation, rowDisclaimer, and guided-step row filters.
 
         Supports both:
-        - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `notEmpty`
+        - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `notEmpty`, `isEmpty`
         - Line-item conditions: `lineItems: { groupId, subGroupId?, subGroupPath?, when?, match?, parentWhen?, parentScope?, parentMatch? }`
         - Compound conditions:
           - `all`: AND (every entry must match)

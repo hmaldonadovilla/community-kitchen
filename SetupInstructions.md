@@ -585,7 +585,7 @@ This project uses TypeScript. You need to build the script before using it in Go
     - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
         - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.
         - Header controls:
-          - `ui.showItemPill`: show/hide the “N items” pill in the line-item header (default: true)
+          - `ui.showItemPill`: show/hide the items pill in the line-item header (default: true)
           - `ui.addButtonPlacement`: where the Add button appears (`top`, `bottom`, `both`, `hidden`; default: `both`)
           - `ui.openInOverlay`: when `true`, the line-item group editor opens in a **full-page overlay** (like subgroup overlays) and the main form shows a compact “Open” card instead of rendering the full table inline
           - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`). Search indexes include extra columns from `optionsRef`/data sources when available.
@@ -1251,6 +1251,10 @@ This project uses TypeScript. You need to build the script before using it in Go
       - `resetValue` sets the field value when the trash/reset icon is confirmed, so the field reverts to its original control.
       - `groupOverride.minRows` seeds blank rows when the overlay opens; `groupOverride.maxRows` disables the Add button (and selector overlay) once the limit is reached.
       - `flattenFields` surfaces specific line-item fields inline when the target group is single-row (`maxRows: 1`).
+      - `flattenPlacement` controls where flattened fields render relative to the opener: `"left" | "right" | "below"` (default).
+      - `hideTrashIcon: true` hides the reset icon on the opener button.
+      - When the overlay detail view is enabled, overlayOpenActions auto-select the first row (view mode if available; otherwise edit).
+      - When overlay detail is enabled, completing all header fields auto-opens the detail panel (view if available; otherwise edit).
       - If multiple actions are provided, the first matching `when` clause is used.
     - **Quick recipe for the new features**:
       - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:

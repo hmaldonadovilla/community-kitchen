@@ -142,7 +142,7 @@
     },
     "addLine": { "en": "Add line", "fr": "Ajouter une ligne", "nl": "Regel toevoegen" },
     "addLines": { "en": "Add lines", "fr": "Ajouter des lignes", "nl": "Regels toevoegen" },
-    "addSelected": { "en": "Add selected ({count})", "fr": "Ajouter la sélection ({count})", "nl": "Selectie toevoegen ({count})" },
+    "addSelected": { "en": "Add selected", "fr": "Ajouter la sélection", "nl": "Selectie toevoegen" },
     "selectLinesTitle": { "en": "Select lines", "fr": "Sélectionner des lignes", "nl": "Regels selecteren" },
     "selectLinesSearch": { "en": "Search items", "fr": "Rechercher des éléments", "nl": "Zoek items" },
     "noOptionsAvailable": { "en": "No options available.", "fr": "Aucune option disponible.", "nl": "Geen opties beschikbaar." }
@@ -230,8 +230,8 @@
   },
   "overlay": {
     "row": { "en": "Row", "fr": "Ligne", "nl": "Rij" },
-    "itemsOne": { "en": "{count} item", "fr": "{count} élément", "nl": "{count} item" },
-    "itemsMany": { "en": "{count} items", "fr": "{count} éléments", "nl": "{count} items" },
+    "itemsOne": { "en": "Item", "fr": "Élément", "nl": "Item" },
+    "itemsMany": { "en": "Items", "fr": "Éléments", "nl": "Items" },
     "detail": {
       "templateMissing": { "en": "Template not configured.", "fr": "Modèle non configuré.", "nl": "Sjabloon niet geconfigureerd." },
       "templateBundleRequired": {
