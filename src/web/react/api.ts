@@ -1,5 +1,11 @@
-import { PaginatedResult, WebFormSubmission } from '../../types';
-import { DataSourceConfig, FollowupActionResult, WebFormDefinition } from '../../types';
+import {
+  DataSourceConfig,
+  FollowupActionResult,
+  FormConfigExport,
+  PaginatedResult,
+  WebFormDefinition,
+  WebFormSubmission
+} from '../../types';
 import { LangCode } from '../types';
 import { normalizeLanguage } from '../core/options';
 import { tSystem } from '../systemStrings';
@@ -500,3 +506,6 @@ export interface BootstrapContext {
 
 export const fetchBootstrapContextApi = (formKey?: string | null): Promise<BootstrapContext> =>
   runAppsScript<BootstrapContext>('fetchBootstrapContext', formKey ?? null);
+
+export const fetchFormConfigApi = (formKey?: string | null): Promise<FormConfigExport> =>
+  runAppsScript<FormConfigExport>('fetchFormConfig', formKey ?? null);

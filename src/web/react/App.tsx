@@ -366,7 +366,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         event.startsWith('steps.') ||
         event.startsWith('validation.navigate.') ||
         event.startsWith('optionFilter.') ||
-        event.startsWith('paragraphDisclaimer.');
+        event.startsWith('paragraphDisclaimer.') ||
+        event.startsWith('selectionEffects.');
       if ((!debugEnabled && !alwaysLog) || typeof console === 'undefined' || typeof console.info !== 'function') return;
       try {
         console.info('[ReactForm]', event, payload || {});
@@ -4506,6 +4507,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       value,
       language,
       values,
+      lineItems,
       setValues,
       setLineItems,
       logEvent,

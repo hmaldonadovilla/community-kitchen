@@ -1,0 +1,145 @@
+<!--
+  Community Kitchen - Meal Production (Summary HTML Template)
+
+  Notes:
+  - Keep placeholders intact (e.g., {{FIELD_ID}}).
+  - Designed for in-app summary; minimal styles.
+-->
+
+<style>
+  .ck-summary-template {
+    font-family: system-ui;
+    font-size: 0.95em;
+    line-height: 1.4;
+    margin: -8px;
+  }
+
+  .ck-summary-template * {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  .ck-meta-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    column-gap: 12px;
+    row-gap: 6px;
+  }
+
+  .ck-meta-label {
+    font-weight: 500;
+  }
+
+  .ck-meta-value {
+    font-weight: 400;
+  }
+
+  .ck-section {
+    margin-top: 16px;
+  }
+
+  .ck-section-title {
+    font-weight: 600;
+    margin: 12px 0 6px;
+  }
+
+  .ck-meal-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .ck-meal-table caption {
+    text-align: left;
+    font-weight: 600;
+    margin: 12px 0 6px;
+  }
+
+  .ck-meal-table th {
+    text-align: left;
+    font-weight: 500;
+    padding: 4px 0;
+    vertical-align: top;
+  }
+
+  .ck-meal-table td {
+    padding: 4px 0;
+  }
+
+  .ck-note {
+    margin: 4px 0;
+  }
+
+  .ck-muted {
+    opacity: 0.7;
+  }
+
+  @media (max-width: 600px) {
+    .ck-meta-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="ck-summary-template" data-ck-template="meal-production-summary">
+  <div class="ck-meta-grid">
+    <div class="ck-meta-label">Customer</div>
+    <div class="ck-meta-value">{{MP_DISTRIBUTOR.DIST_NAME}}</div>
+
+    <div class="ck-meta-label">Production date</div>
+    <div class="ck-meta-value">{{MP_PREP_DATE}}</div>
+
+    <div class="ck-meta-label">Expiration date</div>
+    <div class="ck-meta-value">{{MP_EXP_DATE}}</div>
+
+    <div class="ck-meta-label">Batch</div>
+    <div class="ck-meta-value">{{MP_ID}}</div>
+
+    <div class="ck-meta-label">Responsible</div>
+    <div class="ck-meta-value">{{MP_COOK_NAME}}</div>
+
+    <div class="ck-meta-label">Service</div>
+    <div class="ck-meta-value">{{MP_SERVICE}}</div>
+  </div>
+
+  <div class="ck-section">
+    <table class="ck-meal-table">
+      {{ROW_TABLE(MP_MEALS_REQUEST.MEAL_TYPE)}}
+      <caption>Meal: {{MP_MEALS_REQUEST.MEAL_TYPE}}</caption>
+      <tbody>
+        <tr>
+          <th scope="row">Portions</th>
+          <td>{{ALWAYS_SHOW(MP_MEALS_REQUEST.FINAL_QTY)}}</td>
+        </tr>
+        <tr>
+          <th scope="row">Core temperature</th>
+          <td>{{MP_MEALS_REQUEST.MP_COOK_TEMP}} &deg;C</td>
+        </tr>
+        <tr>
+          <th scope="row">Recipe</th>
+          <td>{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE}}</td>
+          {{EXCLUDE_WHEN_WHEN({"any":[{"fieldId":"RECIPE","isEmpty":true},{"all":[{"not":{"fieldId":"PREP_TYPE","equals":"Cook"}},{"fieldId":"PREP_QTY","equals":0}]}]})}}
+        </tr>
+        <tr data-recipe="{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE}}">
+          <th scope="row">Ingredients</th>
+          <td>{{CONSOLIDATED_ROW(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING)}}</td>
+          {{EXCLUDE_WHEN_WHEN({"any":[{"fieldId":"RECIPE","isEmpty":true},{"all":[{"not":{"fieldId":"PREP_TYPE","equals":"Cook"}},{"fieldId":"PREP_QTY","equals":0}]}]})}}
+        </tr>
+        <tr data-recipe="{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE}}">
+          <th scope="row">Allergens</th>
+          <td>{{CONSOLIDATED_ROW(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN)}}</td>
+          {{EXCLUDE_WHEN_WHEN({"any":[{"fieldId":"RECIPE","isEmpty":true},{"all":[{"not":{"fieldId":"PREP_TYPE","equals":"Cook"}},{"fieldId":"PREP_QTY","equals":0}]}]})}}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="ck-section">
+    <div class="ck-section-title">Total portions</div>
+    <div>{{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
+  </div>
+
+  <div class="ck-section">
+    <div class="ck-note">Serving: Serve hot. If reheating is required, reheat thoroughly.</div>
+    <div class="ck-note">Storage: Keep refrigerated at &le; 4&deg;C.</div>
+  </div>
+</div>

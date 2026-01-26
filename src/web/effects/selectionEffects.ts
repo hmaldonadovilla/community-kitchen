@@ -20,6 +20,7 @@ interface EffectContext {
     groupId: string,
     meta?: { effectId?: string; parentGroupId?: string; parentRowId?: string }
   ) => void;
+  setValue?: (args: { fieldId: string; value: PresetValue | null; lineItem?: SelectionEffectOptions['lineItem'] }) => void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
@@ -89,7 +90,7 @@ export function handleSelectionEffects(
   const normalizedSelections = normalizeSelectionValues(value);
   const diffPreview = previewSelectionDiff(question, contextId, normalizedSelections, options?.forceContextReset);
   const whenCtx = buildEffectWhenContext(options);
-  const resolveEffectTargetGroupId = (effect: SelectionEffect): string => {
+  const resolveEffectTargetGroupId = (effect: SelectionEffect): string | undefined => {
     const rawPath = (effect as any)?.targetPath;
     if (rawPath === undefined || rawPath === null || rawPath === '') return effect.groupId;
     if (Array.isArray(rawPath)) {
@@ -149,6 +150,7 @@ export function handleSelectionEffects(
       return;
     }
     if (effect.type === 'addLineItems') {
+      if (!targetGroupId) return;
       const resolvedPreset = resolveAddLineItemsPreset(effect.preset as any, options);
       const effectId = normalizeEffectId(effect);
       const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
@@ -190,6 +192,7 @@ export function handleSelectionEffects(
     }
     if (effect.type === 'deleteLineItems') {
       if (!ctx.deleteLineItemRows) return;
+      if (!targetGroupId) return;
       const effectId = normalizeString((effect as any)?.targetEffectId) || normalizeEffectId(effect);
       ctx.deleteLineItemRows(targetGroupId, {
         effectId: effectId || undefined,
@@ -206,7 +209,36 @@ export function handleSelectionEffects(
       }
       return;
     }
+    if (effect.type === 'setValue') {
+      if (!ctx.setValue) return;
+      const fieldId = normalizeString((effect as any)?.fieldId);
+      if (!fieldId) return;
+      const rawValue = (effect as any)?.value;
+      const explicitNull = rawValue === null;
+      if (!explicitNull && !Object.prototype.hasOwnProperty.call(effect as any, 'value')) return;
+      const resolved = explicitNull ? null : resolvePresetValue(rawValue, options);
+      if (!explicitNull && resolved === undefined) return;
+      ctx.setValue({ fieldId, value: explicitNull ? null : (resolved as PresetValue), lineItem: options?.lineItem });
+      ctx.logEvent?.('selectionEffects.setValue', {
+        questionId: question.id,
+        effectId: normalizeEffectId(effect) || null,
+        fieldId,
+        value: explicitNull ? null : resolved,
+        lineItem: options?.lineItem
+          ? { groupId: options.lineItem.groupId, rowId: options.lineItem.rowId || null }
+          : null
+      });
+      if (debug && typeof console !== 'undefined') {
+        console.info('[SelectionEffects] setValue dispatched', {
+          fieldId,
+          value: explicitNull ? null : resolved,
+          lineItem: options?.lineItem || null
+        });
+      }
+      return;
+    }
     if (effect.type === 'addLineItemsFromDataSource') {
+      if (!targetGroupId) return;
       populateLineItemsFromDataSource({
         effect,
         targetGroupId,

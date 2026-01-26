@@ -30,18 +30,33 @@ export const runSelectionEffects = (args: {
   value: FieldValue;
   language: LangCode;
   values: Record<string, FieldValue>;
+  lineItems: LineItemState;
   setValues: (next: Record<string, FieldValue> | ((prev: Record<string, FieldValue>) => Record<string, FieldValue>)) => void;
   setLineItems: (next: LineItemState | ((prev: LineItemState) => LineItemState)) => void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
   onRowAppended?: (args: { anchor: string; targetKey: string; rowId: string; source?: { groupId: string; rowId: string } }) => void;
   opts?: SelectionEffectOpts;
 }) => {
-  const { definition, question, value, language, values, setValues, setLineItems, logEvent, onRowAppended, opts } = args;
+  const { definition, question, value, language, values, lineItems, setValues, setLineItems, logEvent, onRowAppended, opts } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
   const blurDerivedEnabled = hasBlurDerivedValues(definition);
 
   const applyValueMapsWithBlurDerived = (nextLineItems: LineItemState) => {
     const base = applyValueMapsToForm(definition, values, nextLineItems, { mode: 'change' });
+    if (!blurDerivedEnabled) return base;
+    const blur = applyValueMapsToForm(definition, base.values, base.lineItems, { mode: 'blur' });
+    return mergeBlurDerivedValues(definition, base.values, base.lineItems, blur.values, blur.lineItems);
+  };
+
+  const applyValueMapsWithBlurDerivedForValues = (
+    nextValues: Record<string, FieldValue>,
+    nextLineItems: LineItemState,
+    lockedTopFields?: string[]
+  ) => {
+    const base = applyValueMapsToForm(definition, nextValues, nextLineItems, {
+      mode: 'change',
+      lockedTopFields
+    });
     if (!blurDerivedEnabled) return base;
     const blur = applyValueMapsToForm(definition, base.values, base.lineItems, { mode: 'blur' });
     return mergeBlurDerivedValues(definition, base.values, base.lineItems, blur.values, blur.lineItems);
@@ -339,17 +354,37 @@ export const runSelectionEffects = (args: {
             parentGroupId: parentGroupId || null,
             parentRowId: parentRowId || null
           });
-          if (typeof console !== 'undefined') {
-            console.info('[SelectionEffects] deleteLineItems removed rows', {
-              groupId,
-              targetKey,
-              removedCount: cascade.removed.length,
-              effectId: effectId || null,
-              parentGroupId: parentGroupId || null,
-              parentRowId: parentRowId || null
-            });
-          }
           return recomputed;
+        });
+      },
+      setValue: ({ fieldId, value, lineItem }) => {
+        const target = lineItem || opts?.lineItem;
+        if (target?.groupId && target?.rowId) {
+          setLineItems(prev => {
+            const groupKey = target.groupId;
+            const rows = prev[groupKey] || [];
+            const idx = rows.findIndex(r => r.id === target.rowId);
+            if (idx < 0) return prev;
+            const baseRow = rows[idx];
+            const nextRowValues = { ...(baseRow.values || {}), [fieldId]: value as FieldValue };
+            const nextRows = [...rows];
+            nextRows[idx] = { ...baseRow, values: nextRowValues };
+            const nextLineItems = { ...prev, [groupKey]: nextRows };
+            const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
+            setValues(nextValues);
+            return recomputed;
+          });
+          return;
+        }
+        setValues(prev => {
+          const nextValues = { ...prev, [fieldId]: value as FieldValue };
+          const { values: appliedValues, lineItems: recomputed } = applyValueMapsWithBlurDerivedForValues(
+            nextValues,
+            lineItems,
+            [fieldId]
+          );
+          setLineItems(recomputed);
+          return appliedValues;
         });
       },
       clearLineItems: (groupId: string, contextId?: string) => {

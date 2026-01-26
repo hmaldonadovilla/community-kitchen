@@ -26,6 +26,7 @@ import {
   QuestionUiConfig,
   QuestionConfig,
   QuestionType,
+  PresetValue,
   SelectionEffect,
   ValidationRule,
   VisibilityCondition,
@@ -1469,17 +1470,28 @@ export class ConfigSheet {
     }
   }
 
+  private static normalizeSelectionEffectValue(raw: any): PresetValue | null | undefined {
+    if (raw === null) return null;
+    return this.normalizeDefaultValue(raw) as PresetValue | undefined;
+  }
+
   private static normalizeSelectionEffects(rawEffects: any): SelectionEffect[] | undefined {
     if (!Array.isArray(rawEffects)) return undefined;
     const effects: SelectionEffect[] = [];
     rawEffects.forEach((effect: any) => {
-      if (!effect || !effect.groupId) return;
+      if (!effect) return;
       const type = (effect.type || 'addLineItems').toString();
-      if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource' && type !== 'deleteLineItems') return;
+      if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource' && type !== 'deleteLineItems' && type !== 'setValue') {
+        return;
+      }
       const normalized: SelectionEffect = {
-        type: type as SelectionEffect['type'],
-        groupId: effect.groupId.toString()
+        type: type as SelectionEffect['type']
       };
+      if (effect.groupId !== undefined && effect.groupId !== null) {
+        const groupId = effect.groupId.toString().trim();
+        if (groupId) normalized.groupId = groupId;
+      }
+      if (type !== 'setValue' && !normalized.groupId) return;
       {
         const targetPathRaw =
           effect.targetPath !== undefined
@@ -1526,6 +1538,18 @@ export class ConfigSheet {
       }
       if (effect.hideRemoveButton !== undefined) {
         normalized.hideRemoveButton = Boolean(effect.hideRemoveButton);
+      }
+      if (type === 'setValue') {
+        const fieldIdCandidate = effect.fieldId ?? effect.targetFieldId ?? effect.fieldRef;
+        const fieldId = fieldIdCandidate !== undefined && fieldIdCandidate !== null ? fieldIdCandidate.toString().trim() : '';
+        if (!fieldId) return;
+        normalized.fieldId = fieldId;
+        if (Object.prototype.hasOwnProperty.call(effect, 'value')) {
+          const value = this.normalizeSelectionEffectValue(effect.value);
+          if (value !== undefined || effect.value === null) {
+            normalized.value = value as PresetValue | null;
+          }
+        }
       }
       {
         const targetCandidate =

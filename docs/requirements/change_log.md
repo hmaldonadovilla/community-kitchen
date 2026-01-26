@@ -211,6 +211,8 @@
   > **WIP - Codex**
 - ck-55: on the full page overlay, when adding lines manually the header section is being hidden and only the body is visible. After we close the overlay and open again it renders correctly, this only happens when adding lines manually, including from `selectorOverlay`. Rows comming from selection effects are working as expected. Error message: `Unable to load subgroup editor (missing group/subgroup configuration for MP_MEALS_REQUEST::MP_MEALS_REQUEST_04ccba0471eba::MP_TYPE_LI::MP_MEALS_REQUEST::MP_MEALS_REQUEST_04ccba0471eba::MP_TYPE_LI_083db004c1b6e::MP_INGREDIENTS_LI).`
   > **WIP - Codex**
+- ck-59: Step row flow (rowFlow) progressive prompts + overlay detail body actions / tab hiding.
+  > **DONE - Codex**
 - ck-56: add `updateLineItems` selection effect to update the line items.
 - ck-57:
   - for listView rule columns, please allow multiple actions per row, by only showing icons, instead of icons and text.
@@ -220,3 +222,4 @@
   - we need to control the width of columns in the grid on edit view. Specially on the steps UI as we often need to provide more space to choice fields than to number fields, buttons, etc. Also need need to be able to overide in the steps UI per step.
   - when we make a field read only we need to remove the `*` from the field label and remove the input control box as it takes space. Take a look at the screenshot to see a mock of the expected view when fields are read only or `renderAsLabel` is true.
   - also in the steps UI we need to be able to hide the field label in the context of a step.
+- ck-61: set values automatically, add selectionEffects: [{ type: "setValue", ... }]

@@ -483,6 +483,26 @@ This project uses TypeScript. You need to build the script before using it in Go
         - show the configured `lineItemConfig.ui.collapsedFields` in the **row header**
         - keep rows **always expanded** (no toggle/pill indicator)
         - hide the row body when the step only includes collapsed fields (row disclaimer shows as a footer)
+      - **Row flow (steps)**: Use `rowFlow` on a step line-group target to render an output line + a single active prompt per row.
+
+        ```json
+        {
+          "kind": "lineGroup",
+          "id": "MP_MEALS_REQUEST",
+          "rowFlow": {
+            "output": { "segments": [{ "fieldRef": "MEAL_TYPE" }, { "fieldRef": "QTY" }] },
+            "prompts": [{ "id": "reheat", "fieldRef": "MP_IS_REHEAT", "hideWhenFilled": true }]
+          }
+        }
+        ```
+
+        - `output.segments` defines the text line (supports labels, list formatting, and `showWhen`).
+        - `prompts` controls the input order (`completedWhen`, `hideWhenFilled`, `keepVisibleWhenFilled`), allows label overrides via `input.label`, and supports `input.labelLayout` (`stacked` | `inline` | `hidden`).
+        - `onCompleteActions` triggers action ids once a prompt becomes complete (useful to auto-open overlays after a selection).
+        - `actionsLayout` controls prompt action placement (`below` | `inline`) to keep prompts on a single row.
+        - `actions` can edit values, delete rows, or open overlays.
+        - `openOverlay` effects accept the same options as `LineItemOverlayOpenActionConfig` (row filters, overrides, flattening, rowFlow override) plus `overlayContextHeader` for per-action headers.
+        - `rowFlow.overlayContextHeader.fields` shows a default context line in overlays opened from row flow actions.
       - Navigation/back labels and controls:
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
@@ -874,6 +894,16 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+      - **Set values directly**: Use `type: "setValue"` to update a field in the current line-item row (when triggered inside a line item) or at the top level. `value` supports literals, `$row.FIELD_ID`, `$top.FIELD_ID`, and `null` to clear the field.
+
+      ```json
+      {
+        "selectionEffects": [
+          { "type": "setValue", "fieldId": "LEFTOVER_INFO", "value": "No left over" }
+        ]
+      }
+      ```
+
       Example: keep a single auto row in a subgroup while a NUMBER is > 0, and clear it when the value is 0:
 
       ```json
@@ -1191,12 +1221,17 @@ This project uses TypeScript. You need to build the script before using it in Go
             },
             "rowActions": {
               "viewLabel": { "en": "View" },
-              "editLabel": { "en": "Edit" }
+              "editLabel": { "en": "Edit" },
+              "editPlacement": "body"
             },
             "body": {
               "subGroupId": "INGREDIENTS",
               "edit": { "mode": "table", "tableColumns": ["ING", "QTY", "UNIT"] },
-              "view": { "mode": "html", "templateId": { "en": "bundle:Leftovers_Detail" } }
+              "view": {
+                "mode": "html",
+                "templateId": { "en": "bundle:Leftovers_Detail" },
+                "hideTabTargets": ["instructions"]
+              }
             }
           }
         }
@@ -1206,6 +1241,8 @@ This project uses TypeScript. You need to build the script before using it in Go
       Notes:
       - `subGroupId` currently targets the immediate subgroup only.
       - `view.mode` requires a bundled HTML template id (`bundle:...`).
+      - `rowActions.editPlacement: "body"` hides the header Edit action; add a button in the HTML template with `data-ck-action="edit"` to switch to edit mode.
+      - `body.view.hideTabTargets` hides tab targets in bundled HTML templates that use `data-tab-target`/`data-tab-panel`.
       - `header.tableColumnWidths` supports action keys `__view`, `__edit`, `__remove` (and `_view`, `_edit`, `_remove` aliases) for fixed-width icon columns.
     - **Field-driven overlay open actions**: Any question can act as an overlay opener by adding `ui.overlayOpenActions`.
       When the `when` clause matches, the field renders as a button that opens the target line-item group overlay.
@@ -1619,6 +1656,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 - `doGet` now returns a **minimal shell**; the full form definition is fetched client-side via `fetchBootstrapContext`. Ensure that function is included in the deployment and that `warmDefinitions` is scheduled (recommended) to avoid cold-start delays.
 - **Operational note**: run `createAllForms()` and `warmDefinitions()` **only after config/dashboard changes**. For code-only changes, rebuild + re-deploy the bundle; no need to re-run those functions.
 - Optional: add `?app=<bundleKey>` to pick an app-specific React bundle (defaults to `full`). Bundle keys come from filenames you add under `src/web/react/entrypoints` (converted to kebab-case). If no entrypoints exist, only the `full` bundle is available.
+- Optional: add `?config=1` to the web app URL to return the full form configuration as JSON (includes dashboard config, questions including archived, dedup rules, and the computed `WebFormDefinition`).
+- Optional: in DevTools, run `window.__CK_EXPORT_FORM_CONFIG__()` to fetch the same export and store it in `window.__CK_FORM_CONFIG_JSON__` for easy copy (pass `{ logJson: true }` to print it).
 - **Destination “Responses” headers (stable keys)**: The destination tab stores field columns using the convention **`Label [ID]`** (example: `Meal Number [Q5]`). The bracket token is the canonical key, so labels can repeat and can be renamed without breaking storage.
 - The web app supports list views (paginated) and edit-in-place. The frontenduses `fetchSubmissions` and `fetchSubmissionById` to open existing records with`createdAt`/`updatedAt`. Save calls `saveSubmissionWithId` (or client helper`submitWithDedup`), which enforces dedup rules and returns any conflictmessages to display.
 - Validation errors surface in-context: the first invalid field is highlightedand auto-scrolled into view, and a red banner appears under the submit buttonon long forms.

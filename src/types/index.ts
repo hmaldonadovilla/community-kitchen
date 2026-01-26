@@ -1107,12 +1107,18 @@ export interface LineItemOverlayDetailBodyConfig {
   view?: {
     mode?: 'html';
     templateId: TemplateIdMap;
+    /**
+     * Optional list of tab targets to hide in HTML templates that use data-tab-target/data-tab-panel.
+     */
+    hideTabTargets?: string[];
   };
 }
 
 export interface LineItemOverlayDetailRowActionsConfig {
   viewLabel?: LocalizedString | string;
   editLabel?: LocalizedString | string;
+  viewPlacement?: 'header' | 'body' | 'hidden';
+  editPlacement?: 'header' | 'body' | 'hidden';
 }
 
 export interface RowDisclaimerRule {
@@ -1349,6 +1355,10 @@ export interface LineItemOverlayOpenActionConfig {
    * - below: render flattened fields beneath the opener (default)
    */
   flattenPlacement?: 'left' | 'right' | 'below';
+  /**
+   * Optional row-flow override to use when rendering the overlay editor for this group.
+   */
+  rowFlow?: RowFlowConfig;
 }
 
 export interface SelectionEffect {
@@ -1359,8 +1369,13 @@ export interface SelectionEffect {
    * so you can reference the originating effect in visibility/validation/disclaimer rules.
    */
   id?: string;
-  type: 'addLineItems' | 'addLineItemsFromDataSource' | 'deleteLineItems';
-  groupId: string; // target line item group (legacy or immediate subgroup id)
+  type: 'addLineItems' | 'addLineItemsFromDataSource' | 'deleteLineItems' | 'setValue';
+  // target line item group (legacy or immediate subgroup id); required for add/delete effects
+  groupId?: string;
+  // target field id for setValue effects (uses current row context when triggered inside line items)
+  fieldId?: string;
+  // value to set for setValue effects (supports $row./$top. references; null clears)
+  value?: PresetValue | null;
   /**
    * Optional subgroup path target for nested line item groups.
    * - String uses dot notation: "SUB1.SUB2"
@@ -1839,6 +1854,16 @@ export interface FormConfig {
   summaryButtonLabel?: LocalizedString;
 }
 
+export interface FormConfigExport {
+  formKey: string;
+  generatedAt: string;
+  form: FormConfig;
+  questions: QuestionConfig[];
+  dedupRules: DedupRule[];
+  definition: WebFormDefinition;
+  validationErrors: string[];
+}
+
 export interface AppHeaderConfig {
   /**
    * Optional logo image shown in the app header.
@@ -1966,6 +1991,168 @@ export interface StepRowFilterConfig {
   excludeWhen?: WhenClause;
 }
 
+export interface RowFlowConfig {
+  /**
+   * Step-scoped row flow mode (currently only "progressive").
+   */
+  mode?: 'progressive';
+  /**
+   * Optional references to child line item groups for prompts/outputs/actions.
+   */
+  references?: Record<string, RowFlowReferenceConfig>;
+  /**
+   * Output row configuration.
+   */
+  output?: RowFlowOutputConfig;
+  /**
+   * Input prompt definitions (one active at a time).
+   */
+  prompts?: RowFlowPromptConfig[];
+  /**
+   * Action definitions referenced by prompts/segments.
+   */
+  actions?: RowFlowActionConfig[];
+  /**
+   * Optional context header for overlays opened from this row flow.
+   */
+  overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
+}
+
+export interface RowFlowReferenceConfig {
+  /**
+   * Target line item group id.
+   */
+  groupId: string;
+  /**
+   * Optional parent reference (for nested subgroups).
+   */
+  parentRef?: string;
+  /**
+   * Row matching strategy when multiple rows are present.
+   */
+  match?: 'first' | 'any' | 'all';
+  /**
+   * Optional row filter applied when resolving this reference.
+   */
+  rowFilter?: StepRowFilterConfig;
+}
+
+export interface RowFlowOverlayContextHeaderConfig {
+  fields: RowFlowOverlayContextFieldConfig[];
+}
+
+export interface RowFlowOverlayContextFieldConfig {
+  fieldRef: string;
+  /**
+   * Optional label/template for this value (supports {{value}} placeholder).
+   */
+  label?: LocalizedString;
+}
+
+export interface RowFlowOutputConfig {
+  separator?: string;
+  hideEmpty?: boolean;
+  segments?: RowFlowOutputSegmentConfig[];
+  actions?: RowFlowActionRef[];
+}
+
+export interface RowFlowOutputSegmentFormatConfig {
+  type?: 'text' | 'list';
+  listDelimiter?: string;
+}
+
+export interface RowFlowOutputSegmentConfig {
+  fieldRef: string;
+  label?: LocalizedString;
+  showWhen?: WhenClause;
+  format?: RowFlowOutputSegmentFormatConfig;
+  renderAs?: 'value' | 'control';
+  editAction?: string;
+}
+
+export interface RowFlowPromptInputConfig {
+  kind?: 'field' | 'selectorOverlay';
+  targetRef?: string;
+  label?: LocalizedString;
+  /**
+   * Layout for the prompt label when rendering a field prompt.
+   * - stacked: label above the control (default)
+   * - inline: label rendered inline with the control
+   * - hidden: hide the visual label (screen-reader label is preserved)
+   */
+  labelLayout?: 'stacked' | 'inline' | 'hidden';
+  placeholder?: LocalizedString;
+}
+
+export interface RowFlowPromptConfig {
+  id: string;
+  fieldRef?: string;
+  input?: RowFlowPromptInputConfig;
+  showWhen?: WhenClause;
+  completedWhen?: WhenClause;
+  hideWhenFilled?: boolean;
+  keepVisibleWhenFilled?: boolean;
+  /**
+   * Optional action ids to trigger once when this prompt transitions to complete.
+   */
+  onCompleteActions?: string[];
+  /**
+   * Layout for prompt actions relative to the input control.
+   * - below: render actions on a separate row (default)
+   * - inline: render actions alongside the prompt control
+   */
+  actionsLayout?: 'below' | 'inline';
+  actions?: RowFlowActionRef[];
+}
+
+export interface RowFlowActionRef {
+  id: string;
+  position?: 'start' | 'end';
+  showWhen?: WhenClause;
+}
+
+export interface RowFlowActionConfirmConfig {
+  title?: LocalizedString;
+  body?: LocalizedString;
+  confirmLabel?: LocalizedString;
+  cancelLabel?: LocalizedString;
+  showCancel?: boolean;
+  kind?: string;
+}
+
+export type RowFlowActionEffect =
+  | {
+      type: 'setValue';
+      fieldRef: string;
+      value?: DefaultValue;
+    }
+  | {
+      type: 'deleteLineItems';
+      targetRef?: string;
+      groupId?: string;
+      rowFilter?: StepRowFilterConfig;
+    }
+  | (Omit<LineItemOverlayOpenActionConfig, 'groupId'> & {
+      type: 'openOverlay';
+      targetRef?: string;
+      groupId?: string;
+      /**
+       * Optional overlay context header override for this action.
+       */
+      overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
+    });
+
+export interface RowFlowActionConfig {
+  id: string;
+  label?: LocalizedString;
+  icon?: 'edit' | 'remove' | 'add' | 'back';
+  variant?: 'button' | 'icon';
+  tone?: 'primary' | 'secondary';
+  showWhen?: WhenClause;
+  confirm?: RowFlowActionConfirmConfig;
+  effects?: RowFlowActionEffect[];
+}
+
 export interface StepSubGroupTargetConfig {
   /**
    * Subgroup id (stable identifier, not a label).
@@ -2025,6 +2212,10 @@ export interface StepLineGroupTargetConfig {
    * - liftedRowFields: render selected row fields as top-level step content (repeated per row).
    */
   presentation?: 'groupEditor' | 'liftedRowFields';
+  /**
+   * Optional step-scoped row flow configuration for progressive input/output per row.
+   */
+  rowFlow?: RowFlowConfig;
   /**
    * Allowlist of visible parent row fields for this step.
    */

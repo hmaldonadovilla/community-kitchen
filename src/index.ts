@@ -81,6 +81,20 @@ export function doGet(
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   const formKey = params.form;
+  const configParam = (params.config || params.export || '').toString().trim().toLowerCase();
+  const wantsConfig =
+    configParam === '1' ||
+    configParam === 'true' ||
+    configParam === 'yes' ||
+    configParam === 'config' ||
+    configParam === 'full' ||
+    configParam === 'export';
+  if (wantsConfig) {
+    const config = service.fetchFormConfig(formKey);
+    const output = ContentService.createTextOutput(JSON.stringify(config, null, 2));
+    output.setMimeType(ContentService.MimeType.JSON);
+    return output;
+  }
   return service.renderForm(formKey, params);
 }
 
@@ -94,6 +108,12 @@ export function fetchBootstrapContext(formKey?: string): { definition: WebFormDe
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.fetchBootstrapContext(formKey);
+}
+
+export function fetchFormConfig(formKey?: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchFormConfig(formKey);
 }
 
 // New endpoints (scaffolding)

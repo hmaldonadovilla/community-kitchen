@@ -60,6 +60,7 @@ describe('selectionEffects when', () => {
       value: 0,
       language: 'EN' as any,
       values,
+      lineItems,
       setValues,
       setLineItems,
       opts: { lineItem: { groupId: 'MP_MEALS_REQUEST', rowId: 'p1', rowValues: { MP_TO_COOK: 0 } } }
@@ -79,6 +80,7 @@ describe('selectionEffects when', () => {
       value: 5,
       language: 'EN' as any,
       values,
+      lineItems,
       setValues,
       setLineItems,
       opts: { lineItem: { groupId: 'MP_MEALS_REQUEST', rowId: 'p1', rowValues: { MP_TO_COOK: 5 } } }

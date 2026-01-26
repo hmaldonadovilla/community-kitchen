@@ -57,6 +57,7 @@ describe('selectionEffects respects optionFilter when generating rows', () => {
       value: 'Yes',
       language: 'EN' as any,
       values,
+      lineItems,
       setValues,
       setLineItems
     });
@@ -153,6 +154,7 @@ describe('selectionEffects respects optionFilter when generating rows', () => {
       value: 'R1',
       language: 'EN' as any,
       values,
+      lineItems,
       setValues,
       setLineItems,
       opts: { lineItem: { groupId: 'MEALS', rowId: 'p1', rowValues: { MEAL_TYPE: 'No-salt', RECIPE: 'R1' } }, forceContextReset: true }
@@ -167,4 +169,3 @@ describe('selectionEffects respects optionFilter when generating rows', () => {
     expect(rows.some((r: any) => (r.values as any).ING === 'Salt')).toBe(false);
   });
 });
-

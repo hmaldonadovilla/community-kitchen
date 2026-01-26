@@ -18,7 +18,10 @@ import {
   FieldValue,
   LangCode,
   LineItemGroupConfigOverride,
+  LineItemRowState,
   OptionSet,
+  RowFlowConfig,
+  RowFlowOverlayContextHeaderConfig,
   ValidationRule,
   VisibilityContext,
   WebFormDefinition,
@@ -42,10 +45,12 @@ import {
   CameraIcon,
   CheckIcon,
   EyeIcon,
+  PencilIcon,
   TrashIcon,
   PaperclipIcon,
   PlusIcon,
   RequiredStar,
+  XIcon,
   srOnly,
   withDisabled
 } from './ui';
@@ -67,6 +72,7 @@ import {
   ROW_SOURCE_KEY,
   cascadeRemoveLineItemRows,
   buildSubgroupKey,
+  parseSubgroupKey,
   resolveLineItemRowLimits,
   parseRowHideRemove,
   parseRowNonMatchOptions,
@@ -74,6 +80,17 @@ import {
   resolveSubgroupKey
 } from '../../app/lineItems';
 import { applyValueMapsToForm } from '../../app/valueMaps';
+import {
+  resolveRowFlowActionPlan,
+  resolveRowFlowFieldTarget,
+  normalizeValueList,
+  resolveRowFlowState,
+  type RowFlowResolvedEffect,
+  type RowFlowResolvedPrompt,
+  type RowFlowResolvedRow,
+  type RowFlowResolvedSegment,
+  type RowFlowResolvedState
+} from '../../features/steps/domain/rowFlow';
 
 export interface ErrorIndex {
   rowErrors: Set<string>;
@@ -142,6 +159,7 @@ export interface LineItemGroupQuestionCtx {
       groupOverride?: LineItemGroupConfigOverride;
       hideInlineSubgroups?: boolean;
       label?: string;
+      contextHeader?: string;
     }
   ) => void;
   openLineItemGroupOverlay: (
@@ -151,6 +169,8 @@ export interface LineItemGroupQuestionCtx {
       hideInlineSubgroups?: boolean;
       source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
       label?: string;
+      contextHeader?: string;
+      rowFlow?: RowFlowConfig;
     }
   ) => void;
 
@@ -220,6 +240,10 @@ export const LineItemGroupQuestion: React.FC<{
   q: WebQuestionDefinition;
   ctx: LineItemGroupQuestionCtx;
   /**
+   * Optional step-scoped row flow configuration for progressive input/output.
+   */
+  rowFlow?: RowFlowConfig;
+  /**
    * Optional rendering-only row filter for the parent group. Does not delete stored rows.
    */
   rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
@@ -231,7 +255,7 @@ export const LineItemGroupQuestion: React.FC<{
    * When true, suppress the top/bottom add/selector toolbars (used by overlay headers).
    */
   hideToolbars?: boolean;
-}> = ({ q, ctx, rowFilter, hideInlineSubgroups, hideToolbars }) => {
+}> = ({ q, ctx, rowFlow, rowFilter, hideInlineSubgroups, hideToolbars }) => {
   const {
     definition,
     language,
@@ -297,6 +321,11 @@ export const LineItemGroupQuestion: React.FC<{
     [rowFilter]
   );
 
+  const renderRowsAll = lineItems[q.id] || [];
+  const parentRows = rowFilter
+    ? renderRowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any))
+    : renderRowsAll;
+
   const groupChoiceSearchDefault = (q.lineItemConfig?.ui as any)?.choiceSearchEnabled;
 
   const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
@@ -311,11 +340,487 @@ export const LineItemGroupQuestion: React.FC<{
   const selectorLabelLoggedRef = React.useRef<Set<string>>(new Set());
   const warningModeLoggedRef = React.useRef<Set<string>>(new Set());
   const overlayOpenActionLoggedRef = React.useRef<Set<string>>(new Set());
+  const rowFlowLoggedRef = React.useRef<Set<string>>(new Set());
+  const rowFlowPromptRef = React.useRef<Record<string, string>>({});
+  const rowFlowPromptCompleteRef = React.useRef<Record<string, Record<string, boolean>>>({});
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
     const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
     return s === 'source' ? 'source' : 'alphabetical';
   };
+
+  const rowFlowEnabled = Boolean(
+    rowFlow &&
+      ((rowFlow.mode || '').toString().trim().toLowerCase() === '' ||
+        (rowFlow.mode || '').toString().trim().toLowerCase() === 'progressive')
+  );
+  const rowFlowSubGroupIds = (q.lineItemConfig?.subGroups || [])
+    .map(sub => resolveSubgroupKey(sub as any))
+    .filter(Boolean);
+  const rowFlowActionById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    if (!rowFlow?.actions) return map;
+    rowFlow.actions.forEach(action => {
+      const id = (action?.id || '').toString().trim();
+      if (!id) return;
+      map.set(id, action);
+    });
+    return map;
+  }, [rowFlow]);
+  const parentRowById = React.useMemo(() => {
+    const map = new Map<string, LineItemRowState>();
+    parentRows.forEach(row => {
+      map.set(row.id, row);
+    });
+    return map;
+  }, [parentRows]);
+  const rowFlowStateByRowId = React.useMemo(() => {
+    const map = new Map<string, RowFlowResolvedState>();
+    if (!rowFlowEnabled) return map;
+    parentRows.forEach(row => {
+      const state = resolveRowFlowState({
+        config: rowFlow as RowFlowConfig,
+        groupId: q.id,
+        rowId: row.id,
+        rowValues: (row.values || {}) as Record<string, FieldValue>,
+        lineItems,
+        topValues: values,
+        subGroupIds: rowFlowSubGroupIds
+      });
+      if (state) map.set(row.id, state);
+    });
+    return map;
+  }, [lineItems, parentRows, q.id, rowFlow, rowFlowEnabled, rowFlowSubGroupIds, values]);
+
+  const resolveRowFlowGroupConfig = (groupKey: string): { groupId: string; config: any } | null => {
+    if (!groupKey) return null;
+    if (groupKey === q.id) return { groupId: q.id, config: q.lineItemConfig };
+    const parsed = parseSubgroupKey(groupKey);
+    if (!parsed || parsed.rootGroupId !== q.id) return null;
+    let cfg: any = q.lineItemConfig;
+    parsed.path.forEach(subId => {
+      if (!cfg) return;
+      const next = (cfg.subGroups || []).find((sub: any) => resolveSubgroupKey(sub as any) === subId);
+      cfg = next;
+    });
+    if (!cfg) return null;
+    return { groupId: groupKey, config: cfg };
+  };
+
+  const resolveRowFlowFieldConfig = (groupKey: string, fieldId: string): any | null => {
+    if (!groupKey || !fieldId) return null;
+    const info = resolveRowFlowGroupConfig(groupKey);
+    if (!info?.config) return null;
+    return (info.config.fields || []).find((field: any) => field?.id === fieldId) || null;
+  };
+
+  const buildRowFlowFieldCtx = React.useCallback(
+    (args: { rowValues: Record<string, FieldValue>; parentValues?: Record<string, FieldValue> }): VisibilityContext => ({
+      getValue: fid =>
+        (args.rowValues as any)[fid] ??
+        (args.parentValues as any)?.[fid] ??
+        resolveTopValue(fid),
+      getLineValue: (_rowId, fid) =>
+        (args.rowValues as any)[fid] ??
+        (args.parentValues as any)?.[fid] ??
+        resolveTopValue(fid),
+      getLineItems: groupId => lineItems?.[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems || {})
+    }),
+    [lineItems, resolveTopValue]
+  );
+
+  const resolveRowFlowDisplayValue = React.useCallback(
+    (
+      segment: RowFlowResolvedSegment,
+      targetGroupKey: string,
+      field: any,
+      parentValues?: Record<string, FieldValue>
+    ): { text: string; hasValue: boolean } => {
+      const valuesForField = segment.values;
+      const formatType = segment.config?.format?.type === 'list' ? 'list' : 'text';
+      const listDelimiter = segment.config?.format?.listDelimiter || ', ';
+      const rowValues = segment.target?.primaryRow?.row?.values || {};
+      const mapped = field?.valueMap
+        ? resolveValueMapValue(
+            field.valueMap,
+            (fid: string) => (rowValues as any)[fid] ?? (parentValues as any)?.[fid] ?? resolveTopValue(fid),
+            { language, targetOptions: toOptionSet(field as any) }
+          )
+        : undefined;
+      const rawValues = field?.valueMap ? normalizeValueList(mapped as FieldValue) : valuesForField;
+      if (!rawValues.length) return { text: '', hasValue: false };
+
+      if (field?.type === 'CHOICE' || field?.type === 'CHECKBOX') {
+        ensureLineOptions(targetGroupKey, field);
+        const optionSetField: OptionSet =
+          optionState[optionKey(field.id, targetGroupKey)] || {
+            en: field.options || [],
+            fr: (field as any).optionsFr || [],
+            nl: (field as any).optionsNl || [],
+            raw: (field as any).optionsRaw
+          };
+        const localized = buildLocalizedOptions(optionSetField, optionSetField.en || [], language, {
+          sort: optionSortFor(field)
+        });
+        const labels = rawValues.map(val => {
+          const raw = Array.isArray(val) ? val[0] : val;
+          const match = localized.find(opt => opt.value === raw);
+          return (match?.label || raw || '').toString();
+        });
+        const text = formatType === 'list' ? labels.filter(Boolean).join(listDelimiter) : labels[0] || '';
+        return { text, hasValue: text.trim() !== '' };
+      }
+
+      const labels = rawValues.map(val => {
+        if (val === undefined || val === null) return '';
+        if (field?.type === 'DATE') return toDateInputValue(val) || val.toString();
+        if (typeof val === 'boolean') {
+          return val ? tSystem('common.yes', language, 'Yes') : tSystem('common.no', language, 'No');
+        }
+        return val.toString();
+      });
+      const text = formatType === 'list' ? labels.filter(Boolean).join(listDelimiter) : labels[0] || '';
+      return { text, hasValue: text.trim() !== '' };
+    },
+    [ensureLineOptions, language, optionState, optionSortFor, resolveTopValue]
+  );
+
+  const buildRowFlowContextHeader = React.useCallback(
+    (args: {
+      config?: RowFlowOverlayContextHeaderConfig;
+      rowId: string;
+      rowValues: Record<string, FieldValue>;
+      rowFlowState: RowFlowResolvedState;
+    }): string => {
+      const fields = args.config?.fields || [];
+      if (!fields.length) return '';
+      const parts = fields
+        .map(entry => {
+          const fieldRef = (entry?.fieldRef || '').toString().trim();
+          if (!fieldRef) return '';
+          const target = resolveRowFlowFieldTarget({
+            fieldRef,
+            groupId: q.id,
+            rowId: args.rowId,
+            rowValues: args.rowValues || {},
+            references: args.rowFlowState.references
+          });
+          if (!target?.fieldId) return '';
+          const valuesForField = (target.rows || []).flatMap(entry =>
+            normalizeValueList((entry.row?.values || {})[target.fieldId])
+          );
+          if (!valuesForField.length) return '';
+          const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
+          const format =
+            valuesForField.length > 1 ? { type: 'list' as const, listDelimiter: ', ' } : undefined;
+          const display = field
+            ? resolveRowFlowDisplayValue(
+                {
+                  id: fieldRef,
+                  config: { fieldRef, format },
+                  target,
+                  values: valuesForField
+                } as RowFlowResolvedSegment,
+                target.groupKey,
+                field,
+                target.parentValues
+              )
+            : { text: valuesForField.map(val => (val ?? '').toString()).filter(Boolean).join(', '), hasValue: true };
+          if (!display.text) return '';
+          const label = resolveLocalizedString(entry?.label, language, '');
+          if (!label) return display.text;
+          return label.includes('{{value}}')
+            ? label.replace('{{value}}', display.text)
+            : `${label}: ${display.text}`;
+        })
+        .filter(Boolean);
+      return parts.join(' ');
+    },
+    [language, q.id, resolveRowFlowDisplayValue, resolveRowFlowFieldConfig]
+  );
+
+  const mergeOverlayDetailConfig = (base: any, override: any) => {
+    if (!base && !override) return undefined;
+    if (!base) return override;
+    if (!override) return base;
+    return {
+      ...base,
+      ...override,
+      header: { ...(base.header || {}), ...(override.header || {}) },
+      body: {
+        ...(base.body || {}),
+        ...(override.body || {}),
+        edit: { ...(base.body?.edit || {}), ...(override.body?.edit || {}) },
+        view: { ...(base.body?.view || {}), ...(override.body?.view || {}) }
+      },
+      rowActions: { ...(base.rowActions || {}), ...(override.rowActions || {}) }
+    };
+  };
+
+  const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupConfigOverride) => {
+    if (!baseConfig || !override || typeof override !== 'object') return baseConfig;
+    const mergedConfig = { ...baseConfig, ...override } as any;
+    mergedConfig.fields = Array.isArray(override.fields) && override.fields.length ? override.fields : baseConfig.fields;
+    if (override.subGroups !== undefined) mergedConfig.subGroups = override.subGroups;
+    const baseUi = baseConfig.ui || {};
+    const overrideUi = (override as any).ui || {};
+    const mergedUi = {
+      ...baseUi,
+      ...overrideUi
+    };
+    const mergedOverlayDetail = mergeOverlayDetailConfig(baseUi?.overlayDetail, overrideUi?.overlayDetail);
+    if (mergedOverlayDetail) {
+      (mergedUi as any).overlayDetail = mergedOverlayDetail;
+    }
+    mergedConfig.ui = Object.keys(mergedUi).length ? mergedUi : undefined;
+    return mergedConfig;
+  };
+
+  const buildOverlayGroupOverride = (group: WebQuestionDefinition, override?: LineItemGroupConfigOverride) => {
+    if (!override || typeof override !== 'object') return undefined;
+    const baseConfig = group.lineItemConfig as any;
+    if (!baseConfig) return undefined;
+    const mergedConfig = applyLineItemGroupOverride(baseConfig, override);
+    return {
+      ...group,
+      id: group.id,
+      lineItemConfig: mergedConfig
+    };
+  };
+
+  const runRowFlowActionWithContext = React.useCallback(
+    (args: { actionId: string; row: LineItemRowState; rowFlowState: RowFlowResolvedState }) => {
+      const { actionId, row, rowFlowState } = args;
+      const plan = resolveRowFlowActionPlan({
+        actionId,
+        config: rowFlow as RowFlowConfig,
+        state: rowFlowState,
+        groupId: q.id,
+        rowId: row.id,
+        rowValues: row.values || {},
+        lineItems,
+        topValues: values,
+        subGroupIds: rowFlowSubGroupIds
+      });
+      if (!plan) return;
+
+      const resolveOverlayContextHeader = (effect: RowFlowResolvedEffect): string => {
+        if (effect.type !== 'openOverlay') return '';
+        const headerConfig = effect.overlayContextHeader || rowFlow?.overlayContextHeader;
+        if (!headerConfig) return '';
+        return buildRowFlowContextHeader({
+          config: headerConfig,
+          rowId: row.id,
+          rowValues: (row.values || {}) as Record<string, FieldValue>,
+          rowFlowState
+        });
+      };
+
+      const logActionRun = () => {
+        onDiagnostic?.('lineItems.rowFlow.action.run', {
+          groupId: q.id,
+          rowId: row.id,
+          actionId: plan.action.id,
+          effectCount: plan.effects.length
+        });
+      };
+      const applyEffects = () => {
+        const deleteRoots: Array<{ groupId: string; rowId: string }> = [];
+        const setEffects = plan.effects.filter(effect => effect.type === 'setValue');
+        const deleteEffects = plan.effects.filter(effect => effect.type === 'deleteLineItems');
+        const openEffects = plan.effects.filter(effect => effect.type === 'openOverlay');
+
+        deleteEffects.forEach(effect => {
+          effect.rowIds.forEach(rowId => deleteRoots.push({ groupId: effect.groupKey, rowId }));
+        });
+
+        if (openEffects.length) {
+          openEffects.forEach(effect => {
+            const contextHeader = resolveOverlayContextHeader(effect);
+            const hasContextHeader = Boolean(contextHeader);
+            if (effect.targetKind === 'line') {
+              const baseGroup = definition.questions.find(q => q.id === effect.key && q.type === 'LINE_ITEM_GROUP') as
+                | WebQuestionDefinition
+                | undefined;
+              const overrideGroup =
+                baseGroup && effect.groupOverride ? buildOverlayGroupOverride(baseGroup, effect.groupOverride) : undefined;
+              if (!baseGroup && effect.groupOverride) {
+                onDiagnostic?.('lineItems.rowFlow.overlay.missingGroup', {
+                  groupId: q.id,
+                  rowId: row.id,
+                  targetKey: effect.key
+                });
+              }
+              const groupOrId = overrideGroup || effect.key;
+              openLineItemGroupOverlay(groupOrId, {
+                rowFilter: effect.rowFilter || null,
+                hideInlineSubgroups: effect.hideInlineSubgroups,
+                source: 'overlayOpenAction',
+                label: resolveLocalizedString(effect.label as any, language, ''),
+                contextHeader: contextHeader || undefined,
+                rowFlow: effect.rowFlow
+              });
+              onDiagnostic?.('lineItems.rowFlow.overlay.open', {
+                groupId: q.id,
+                rowId: row.id,
+                targetKey: effect.key,
+                targetKind: effect.targetKind,
+                hasOverride: !!effect.groupOverride,
+                hasRowFlow: !!effect.rowFlow,
+                hasContextHeader
+              });
+              return;
+            }
+            openSubgroupOverlay(effect.key, {
+              rowFilter: effect.rowFilter || null,
+              hideInlineSubgroups: effect.hideInlineSubgroups,
+              groupOverride: effect.groupOverride,
+              source: 'overlayOpenAction',
+              label: resolveLocalizedString(effect.label as any, language, ''),
+              contextHeader: contextHeader || undefined
+            });
+            onDiagnostic?.('lineItems.rowFlow.overlay.open', {
+              groupId: q.id,
+              rowId: row.id,
+              targetKey: effect.key,
+              targetKind: effect.targetKind,
+              hasOverride: !!effect.groupOverride,
+              hasRowFlow: !!effect.rowFlow,
+              hasContextHeader
+            });
+          });
+        }
+
+        if (!setEffects.length && !deleteRoots.length) {
+          logActionRun();
+          return;
+        }
+
+        setLineItems(prev => {
+          let next = prev;
+          let changed = false;
+          setEffects.forEach(effect => {
+            const rows = next[effect.groupKey] || [];
+            const idx = rows.findIndex(r => r.id === effect.rowId);
+            if (idx < 0) return;
+            const base = rows[idx];
+            const nextRowValues = { ...(base.values || {}), [effect.fieldId]: effect.value };
+            const nextRow = { ...base, values: nextRowValues };
+            const nextRows = [...rows];
+            nextRows[idx] = nextRow;
+            if (next === prev) next = { ...prev };
+            next[effect.groupKey] = nextRows;
+            changed = true;
+          });
+
+          if (deleteRoots.length) {
+            const cascade = cascadeRemoveLineItemRows({ lineItems: next, roots: deleteRoots });
+            if (cascade.removedSubgroupKeys.length) {
+              setSubgroupSelectors(prevSel => {
+                const nextSel = { ...prevSel };
+                cascade.removedSubgroupKeys.forEach(key => {
+                  delete (nextSel as any)[key];
+                });
+                return nextSel;
+              });
+            }
+            next = cascade.lineItems;
+            changed = true;
+          }
+
+          if (!changed) return prev;
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
+            mode: 'init'
+          });
+          setValues(nextValues);
+          const touchedKeys = new Set<string>();
+          setEffects.forEach(effect => touchedKeys.add(effect.groupKey));
+          deleteEffects.forEach(effect => touchedKeys.add(effect.groupKey));
+          touchedKeys.forEach(groupKey => {
+            ctx.runSelectionEffectsForAncestors?.(groupKey, prev, recomputed);
+          });
+          return recomputed;
+        });
+        logActionRun();
+      };
+
+      const confirm = plan.action.confirm;
+      if (confirm && ctx.openConfirmDialog) {
+        const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+        const message = resolveLocalizedString(confirm.body, language, '');
+        const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
+        const cancelLabel = resolveLocalizedString(confirm.cancelLabel, language, tSystem('common.cancel', language, 'Cancel'));
+        ctx.openConfirmDialog({
+          title,
+          message,
+          confirmLabel,
+          cancelLabel,
+          showCancel: confirm.showCancel !== false,
+          kind: confirm.kind || 'rowFlow',
+          refId: `${q.id}::${row.id}::${plan.action.id}`,
+          onConfirm: applyEffects
+        });
+        return;
+      }
+      applyEffects();
+    },
+    [
+      buildOverlayGroupOverride,
+      buildRowFlowContextHeader,
+      definition,
+      language,
+      lineItems,
+      onDiagnostic,
+      openLineItemGroupOverlay,
+      openSubgroupOverlay,
+      q.id,
+      rowFlow,
+      rowFlowSubGroupIds,
+      setLineItems,
+      setSubgroupSelectors,
+      setValues,
+      values
+    ]
+  );
+
+  React.useEffect(() => {
+    if (!rowFlowEnabled) return;
+    rowFlowStateByRowId.forEach((state, rowId) => {
+      const row = parentRowById.get(rowId);
+      if (!row) return;
+      state.prompts.forEach(prompt => {
+        const autoActions = prompt.config.onCompleteActions || [];
+        if (!autoActions.length) return;
+        const tracker = rowFlowPromptCompleteRef.current[rowId] || {};
+        const wasComplete = tracker[prompt.id] === true;
+        const nowComplete = prompt.complete && prompt.showWhenOk !== false;
+        if (!wasComplete && nowComplete) {
+          autoActions.forEach(actionId => {
+            runRowFlowActionWithContext({ actionId, row, rowFlowState: state });
+            onDiagnostic?.('lineItems.rowFlow.prompt.autoAction', {
+              groupId: q.id,
+              rowId,
+              promptId: prompt.id,
+              actionId
+            });
+          });
+        }
+        tracker[prompt.id] = nowComplete;
+        rowFlowPromptCompleteRef.current[rowId] = tracker;
+      });
+    });
+  }, [onDiagnostic, parentRowById, q.id, rowFlowEnabled, rowFlowStateByRowId, runRowFlowActionWithContext]);
+
+  const buildRowFlowGroupDefinition = (groupKey: string, groupConfig: any): WebQuestionDefinition => ({
+    ...(q as any),
+    id: groupKey,
+    lineItemConfig: {
+      ...(groupConfig as any),
+      fields: groupConfig?.fields || [],
+      subGroups: groupConfig?.subGroups || []
+    }
+  });
 
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
@@ -933,8 +1438,6 @@ export const LineItemGroupQuestion: React.FC<{
           );
         };
 
-        const renderRowsAll = lineItems[q.id] || [];
-        const parentRows = rowFilter ? renderRowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any)) : renderRowsAll;
         const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: parentRows }, language);
         const parentCount = parentRows.length;
         const selectorSearchKey = selectorCfg ? `${q.id}::${selectorCfg.id}` : '';
@@ -2037,6 +2540,629 @@ export const LineItemGroupQuestion: React.FC<{
                 getLineItems: groupId => lineItems?.[groupId] || [],
                 getLineItemKeys: () => Object.keys(lineItems || {})
               };
+              const rowFlowState = rowFlowEnabled ? rowFlowStateByRowId.get(row.id) || null : null;
+
+              if (rowFlowEnabled && rowFlowState) {
+                const flowLogKey = `${q.id}::rowFlow`;
+                if (!rowFlowLoggedRef.current.has(flowLogKey)) {
+                  rowFlowLoggedRef.current.add(flowLogKey);
+                  onDiagnostic?.('lineItems.rowFlow.enabled', {
+                    groupId: q.id,
+                    promptCount: rowFlowState.prompts.length,
+                    segmentCount: rowFlowState.segments.length
+                  });
+                }
+                const activePromptId = rowFlowState.activePromptId || '';
+                if (activePromptId && rowFlowPromptRef.current[row.id] !== activePromptId) {
+                  rowFlowPromptRef.current[row.id] = activePromptId;
+                  onDiagnostic?.('lineItems.rowFlow.prompt.active', {
+                    groupId: q.id,
+                    rowId: row.id,
+                    promptId: activePromptId
+                  });
+                }
+
+                const runRowFlowAction = (actionId: string) => {
+                  runRowFlowActionWithContext({ actionId, row, rowFlowState });
+                };
+
+                const renderRowFlowActionControl = (actionId: string, opts?: { inline?: boolean }) => {
+                  const action = rowFlowActionById.get(actionId);
+                  if (!action) return null;
+                  const label = resolveLocalizedString(action.label, language, action.id);
+                  const iconKey = (action.icon || '').toString().trim().toLowerCase();
+                  const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
+                  const tone = (action.tone || 'secondary').toString().trim().toLowerCase();
+                  const disabled = submitting;
+                  const onClick = () => {
+                    if (disabled) return;
+                    runRowFlowAction(action.id);
+                  };
+
+                  if (variant === 'icon' || iconKey) {
+                    const iconNode =
+                      iconKey === 'remove' ? (
+                        <TrashIcon size={20} />
+                      ) : iconKey === 'add' ? (
+                        <PlusIcon />
+                      ) : iconKey === 'back' ? (
+                        <XIcon size={20} />
+                      ) : (
+                        <PencilIcon size={20} />
+                      );
+                    return (
+                      <button
+                        key={action.id}
+                        type="button"
+                        aria-label={label || action.id}
+                        title={label || action.id}
+                        onClick={onClick}
+                        disabled={disabled}
+                        style={withDisabled(buttonStyles.secondary, disabled)}
+                      >
+                        {iconNode}
+                      </button>
+                    );
+                  }
+
+                  const buttonStyle = tone === 'primary' ? buttonStyles.primary : buttonStyles.secondary;
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={onClick}
+                      disabled={disabled}
+                      style={withDisabled(buttonStyle, disabled)}
+                    >
+                      {label || action.id}
+                    </button>
+                  );
+                };
+
+
+                const resolvePromptTargets = (prompt: RowFlowResolvedPrompt) => {
+                  const target = prompt.target;
+                  if (!target || !target.primaryRow || !target.fieldId) return null;
+                  const rowEntry = target.primaryRow;
+                  const groupInfo = resolveRowFlowGroupConfig(rowEntry.groupKey);
+                  if (!groupInfo?.config) return null;
+                  const field = resolveRowFlowFieldConfig(rowEntry.groupKey, target.fieldId);
+                  if (!field) return null;
+                  const groupDef = buildRowFlowGroupDefinition(rowEntry.groupKey, groupInfo.config);
+                  return { field, groupDef, rowEntry, parentValues: target.parentValues };
+                };
+
+                const renderRowFlowField = (args: {
+                  field: any;
+                  groupDef: WebQuestionDefinition;
+                  rowEntry: RowFlowResolvedRow | null | undefined;
+                  parentValues?: Record<string, FieldValue>;
+                  showLabel?: boolean;
+                  labelOverride?: string;
+                }): React.ReactNode => {
+                  if (!args.rowEntry) return null;
+                  const rowValues = (args.rowEntry.row?.values || {}) as Record<string, FieldValue>;
+                  const groupKey = args.rowEntry.groupKey;
+                  const field = args.field;
+                  const fieldPath = `${groupKey}__${field.id}__${args.rowEntry.row.id}`;
+                  const showLabel = args.showLabel !== false;
+                  const labelStyle = showLabel ? undefined : srOnly;
+                  const labelText = args.labelOverride || resolveFieldLabel(field, language, field.id);
+                  const ctxForVisibility = buildRowFlowFieldCtx({ rowValues, parentValues: args.parentValues });
+                  if (shouldHideField(field.visibility, ctxForVisibility, { rowId: args.rowEntry.row.id, linePrefix: groupKey })) return null;
+
+                  const renderAsLabel = field?.ui?.renderAsLabel === true || field?.readOnly === true;
+                  const renderReadOnly = (display: React.ReactNode) => (
+                    <div className="field inline-field ck-readonly-field" data-field-path={fieldPath}>
+                      <label style={labelStyle}>
+                        {labelText}
+                        {field.required && <RequiredStar />}
+                      </label>
+                      <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
+                      {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                      {renderWarnings(fieldPath)}
+                    </div>
+                  );
+
+                  ensureLineOptions(groupKey, field);
+                  const optionSetField: OptionSet =
+                    optionState[optionKey(field.id, groupKey)] || {
+                      en: field.options || [],
+                      fr: (field as any).optionsFr || [],
+                      nl: (field as any).optionsNl || [],
+                      raw: (field as any).optionsRaw
+                    };
+                  const dependencyIds = (
+                    Array.isArray(field.optionFilter?.dependsOn)
+                      ? field.optionFilter?.dependsOn
+                      : [field.optionFilter?.dependsOn || '']
+                  ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                  const depVals = dependencyIds.map((dep: string) =>
+                    toDependencyValue(rowValues[dep] ?? (args.parentValues as any)?.[dep] ?? values[dep])
+                  );
+                  const allowedField = computeAllowedOptions(field.optionFilter, optionSetField, depVals);
+                  const currentVal = rowValues[field.id];
+                  const allowedWithCurrent =
+                    currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
+                      ? [...allowedField, currentVal]
+                      : allowedField;
+                  const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
+
+                  switch (field.type) {
+                    case 'CHOICE': {
+                      const rawVal = rowValues[field.id];
+                      const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                      const selected = optsField.find(opt => opt.value === choiceVal);
+                      const display = selected?.label || choiceVal || null;
+                      if (renderAsLabel) return renderReadOnly(display);
+                      return (
+                        <div className="field inline-field" data-field-path={fieldPath}>
+                          <label style={labelStyle}>
+                            {labelText}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          <div className="ck-control-row">
+                            {renderChoiceControl({
+                              fieldPath,
+                              value: choiceVal || '',
+                              options: optsField,
+                              required: !!field.required,
+                              searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
+                              override: (field as any)?.ui?.control,
+                              disabled: submitting,
+                              onChange: next => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, next)
+                            })}
+                          </div>
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                    case 'CHECKBOX': {
+                      const hasAnyOption =
+                        !!((optionSetField.en && optionSetField.en.length) ||
+                          ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                          ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                      const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
+                      const selected = Array.isArray(rowValues[field.id]) ? (rowValues[field.id] as string[]) : [];
+                      if (renderAsLabel) {
+                        const display = optsField
+                          .filter(opt => selected.includes(opt.value))
+                          .map(opt => opt.label)
+                          .filter(Boolean)
+                          .join(', ');
+                        return renderReadOnly(display || selected.join(', '));
+                      }
+                      return (
+                        <div className="field inline-field" data-field-path={fieldPath}>
+                          <label style={labelStyle}>
+                            {labelText}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          {isConsentCheckbox ? (
+                            <label className="inline">
+                              <input
+                                type="checkbox"
+                                checked={selected.length > 0}
+                                disabled={submitting}
+                                onChange={e => {
+                                  const next = e.target.checked ? ['true'] : [];
+                                  handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, next);
+                                }}
+                              />
+                              <span>{labelText}</span>
+                            </label>
+                          ) : (
+                            <div className="inline-options">
+                              {optsField.map(opt => (
+                                <label key={opt.value} className="inline">
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.includes(opt.value)}
+                                    disabled={submitting}
+                                    onChange={e => {
+                                      const next = e.target.checked
+                                        ? [...selected, opt.value]
+                                        : selected.filter(v => v !== opt.value);
+                                      handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, next);
+                                    }}
+                                  />
+                                  <span>{opt.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                    case 'NUMBER': {
+                      const raw = rowValues[field.id] as any;
+                      const numberText = raw === undefined || raw === null ? '' : raw.toString();
+                      if (renderAsLabel) return renderReadOnly(numberText || null);
+                      return (
+                        <div className="field inline-field" data-field-path={fieldPath}>
+                          <label style={labelStyle}>
+                            {labelText}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          <NumberStepper
+                            value={numberText}
+                            disabled={submitting}
+                            readOnly={field?.readOnly === true}
+                            ariaLabel={labelText}
+                            onChange={next => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, next)}
+                          />
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                    case 'DATE': {
+                      const raw = rowValues[field.id] as any;
+                      const dateValue = toDateInputValue(raw) || (raw || '').toString();
+                      if (renderAsLabel) return renderReadOnly(dateValue || null);
+                      return (
+                        <div className="field inline-field" data-field-path={fieldPath}>
+                          <label style={labelStyle}>
+                            {labelText}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          <DateInput
+                            value={dateValue}
+                            language={language}
+                            readOnly={field?.readOnly === true}
+                            ariaLabel={labelText}
+                            onChange={next => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, next)}
+                          />
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                    case 'PARAGRAPH': {
+                      const value = (rowValues[field.id] as any) || '';
+                      if (renderAsLabel) return renderReadOnly(value || null);
+                      return (
+                        <div className="field inline-field ck-full-width" data-field-path={fieldPath}>
+                          <label style={labelStyle}>
+                            {labelText}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          <textarea
+                            className="ck-paragraph-input"
+                            value={value}
+                            onChange={e => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, e.target.value)}
+                            readOnly={field?.readOnly === true}
+                            rows={(field as any)?.ui?.paragraphRows || 4}
+                          />
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                    case 'FILE_UPLOAD': {
+                      const uploadConfig = (field as any).uploadConfig || {};
+                      const items = toUploadItems(rowValues[field.id] as any);
+                      const count = items.length;
+                      const label = count
+                        ? tSystem('files.view', language, 'View photos')
+                        : tSystem('files.add', language, 'Add photo');
+                      return (
+                        <div className="field inline-field ck-full-width" data-field-path={fieldPath}>
+                          <label style={labelStyle}>
+                            {labelText}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          <button
+                            type="button"
+                            style={buttonStyles.secondary}
+                            onClick={() => {
+                              if (submitting) return;
+                              openFileOverlay({
+                                open: true,
+                                scope: 'line',
+                                group: args.groupDef,
+                                rowId: args.rowEntry!.row.id,
+                                field,
+                                fieldPath
+                              });
+                            }}
+                          >
+                            {label}
+                          </button>
+                          <input
+                            ref={el => {
+                              if (!el) return;
+                              fileInputsRef.current[fieldPath] = el;
+                            }}
+                            type="file"
+                            multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
+                            accept={uploadConfig.accept || undefined}
+                            style={{ display: 'none' }}
+                            onChange={e => handleLineFileInputChange({ group: args.groupDef, rowId: args.rowEntry!.row.id, field, fieldPath, list: e.target.files })}
+                          />
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                    default: {
+                      const value = rowValues[field.id] as any;
+                      if (renderAsLabel) return renderReadOnly(value || null);
+                      return (
+                        <div className="field inline-field" data-field-path={fieldPath}>
+                          <label style={labelStyle}>
+                            {labelText}
+                            {field.required && <RequiredStar />}
+                          </label>
+                          <input
+                            type="text"
+                            value={value || ''}
+                            onChange={e => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, e.target.value)}
+                            readOnly={field?.readOnly === true}
+                          />
+                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                          {renderWarnings(fieldPath)}
+                        </div>
+                      );
+                    }
+                  }
+                };
+
+                const renderRowFlowPrompt = (prompt: RowFlowResolvedPrompt) => {
+                  if (!prompt.visible) return null;
+                  const inputKind = (prompt.config.input?.kind || 'field').toString().trim().toLowerCase();
+                  if (inputKind === 'selectoroverlay') {
+                    const targetRef = prompt.config.input?.targetRef || '';
+                    if (!targetRef) return null;
+                    const target = resolveRowFlowFieldTarget({
+                      fieldRef: `${targetRef}.`,
+                      groupId: q.id,
+                      rowId: row.id,
+                      rowValues: row.values || {},
+                      references: rowFlowState.references
+                    });
+                    if (!target?.refId) return null;
+                    const targetInfo = target.primaryRow ? resolveRowFlowGroupConfig(target.primaryRow.groupKey) : null;
+                    if (!targetInfo?.config) return null;
+                    const anchorFieldId =
+                      targetInfo.config?.anchorFieldId !== undefined && targetInfo.config?.anchorFieldId !== null
+                        ? targetInfo.config.anchorFieldId.toString()
+                        : '';
+                    const anchorField = anchorFieldId
+                      ? (targetInfo.config?.fields || []).find((f: any) => f.id === anchorFieldId)
+                      : null;
+                    if (!anchorField || anchorField.type !== 'CHOICE') return null;
+                    ensureLineOptions(targetInfo.groupId, anchorField);
+                    const optionSetField: OptionSet =
+                      optionState[optionKey(anchorField.id, targetInfo.groupId)] || {
+                        en: anchorField.options || [],
+                        fr: (anchorField as any).optionsFr || [],
+                        nl: (anchorField as any).optionsNl || [],
+                        raw: (anchorField as any).optionsRaw
+                      };
+                    const depIds = (
+                      Array.isArray(anchorField.optionFilter?.dependsOn)
+                        ? anchorField.optionFilter?.dependsOn
+                        : [anchorField.optionFilter?.dependsOn || '']
+                    ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                    const depVals = depIds.map((dep: string) =>
+                      toDependencyValue(
+                        (row.values as any)[dep] ?? (target.parentValues as any)?.[dep] ?? values[dep]
+                      )
+                    );
+                    const allowed = computeAllowedOptions(anchorField.optionFilter, optionSetField, depVals);
+                    const localized = buildLocalizedOptions(optionSetField, allowed, language, { sort: optionSortFor(anchorField) });
+                    const seen = new Set<string>();
+                    const options = localized
+                      .map(opt => ({ value: opt.value, label: opt.label, searchText: opt.searchText }))
+                      .filter(opt => {
+                        const key = (opt.value || '').toString();
+                        if (!key || seen.has(key)) return false;
+                        seen.add(key);
+                        return true;
+                      });
+                    const label = resolveLocalizedString(prompt.config.input?.label, language, resolveLocalizedString(anchorField.label, language, anchorField.id));
+                    const placeholder =
+                      resolveLocalizedString(prompt.config.input?.placeholder, language, '') ||
+                      tSystem('lineItems.selectLinesSearch', language, 'Search items');
+                    return (
+                      <div className="field inline-field ck-full-width">
+                        <label>{label}</label>
+                        <LineItemMultiAddSelect
+                          label={label}
+                          language={language}
+                          options={options}
+                          disabled={submitting}
+                          placeholder={placeholder}
+                          emptyText={tSystem('common.noMatches', language, 'No matches.')}
+                          onDiagnostic={(event, payload) =>
+                            onDiagnostic?.(event, {
+                              scope: 'lineItems.rowFlow.selector',
+                              groupId: targetInfo.groupId,
+                              rowId: row.id,
+                              promptId: prompt.id,
+                              ...(payload || {})
+                            })
+                          }
+                          onAddSelected={valuesToAdd => {
+                            if (submitting) return;
+                            const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
+                            if (!deduped.length) return;
+                            deduped.forEach(val => addLineItemRowManual(targetInfo.groupId, { [anchorFieldId]: val }));
+                            onDiagnostic?.('lineItems.rowFlow.selector.add', {
+                              groupId: targetInfo.groupId,
+                              rowId: row.id,
+                              promptId: prompt.id,
+                              count: deduped.length
+                            });
+                          }}
+                        />
+                      </div>
+                    );
+                  }
+
+                  const promptTarget = resolvePromptTargets(prompt);
+                  if (!promptTarget) return null;
+                  const promptLabel = resolveLocalizedString(
+                    prompt.config.input?.label,
+                    language,
+                    resolveFieldLabel(promptTarget.field, language, promptTarget.field.id)
+                  );
+                  const labelLayout = (prompt.config.input?.labelLayout || 'stacked').toString().trim().toLowerCase();
+                  const actionsLayout = (prompt.config.actionsLayout || 'below').toString().trim().toLowerCase();
+                  const useInlineLabel = labelLayout === 'inline';
+                  const hideLabel = labelLayout === 'hidden';
+                  const fieldNode = renderRowFlowField({
+                    field: promptTarget.field,
+                    groupDef: promptTarget.groupDef,
+                    rowEntry: promptTarget.rowEntry,
+                    parentValues: promptTarget.parentValues,
+                    showLabel: !useInlineLabel && !hideLabel,
+                    labelOverride: promptLabel
+                  });
+                  const inlineLabelNode = useInlineLabel ? (
+                    <span style={{ fontWeight: 600 }}>{promptLabel}</span>
+                  ) : null;
+                  const inlineFieldRow = useInlineLabel ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+                      {inlineLabelNode}
+                      <div style={{ flex: 1, minWidth: 0 }}>{fieldNode}</div>
+                    </div>
+                  ) : (
+                    <div style={{ flex: 1, minWidth: 0 }}>{fieldNode}</div>
+                  );
+                  if (!prompt.config.actions?.length) return useInlineLabel ? inlineFieldRow : fieldNode;
+                  const startActions = prompt.config.actions.filter(a => (a.position || 'start') !== 'end');
+                  const endActions = prompt.config.actions.filter(a => (a.position || 'start') === 'end');
+                  const actionsInline = actionsLayout === 'inline';
+                  if (actionsInline) {
+                    return (
+                      <div className="ck-full-width" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        {startActions.map(action => renderRowFlowActionControl(action.id))}
+                        {inlineFieldRow}
+                        {endActions.map(action => renderRowFlowActionControl(action.id))}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {useInlineLabel ? inlineFieldRow : fieldNode}
+                      {(startActions.length || endActions.length) ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {startActions.map(action => renderRowFlowActionControl(action.id))}
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {endActions.map(action => renderRowFlowActionControl(action.id))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                };
+
+                const outputSegments = rowFlowState.segments.filter(segment => {
+                  const target = segment.target;
+                  if (!target?.fieldId) return false;
+                  const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
+                  if (!field) return false;
+                  const ctxForVisibility = buildRowFlowFieldCtx({
+                    rowValues: target.primaryRow?.row?.values || {},
+                    parentValues: target.parentValues
+                  });
+                  return !shouldHideField(field.visibility, ctxForVisibility, {
+                    rowId: target.primaryRow?.row?.id || row.id,
+                    linePrefix: target.groupKey
+                  });
+                });
+
+                const renderOutputSegment = (segment: RowFlowResolvedSegment) => {
+                  const target = segment.target;
+                  if (!target || !target.fieldId) return null;
+                  const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
+                  if (!field) return null;
+                  const label = segment.config.label
+                    ? resolveLocalizedString(segment.config.label, language, '')
+                    : '';
+                  if (segment.config.renderAs === 'control' && target.primaryRow) {
+                    const groupInfo = resolveRowFlowGroupConfig(target.primaryRow.groupKey);
+                    if (!groupInfo?.config) return null;
+                    const groupDef = buildRowFlowGroupDefinition(target.primaryRow.groupKey, groupInfo.config);
+                    return (
+                      <span key={segment.config.fieldRef} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        {label ? <span>{label}:</span> : null}
+                        {renderRowFlowField({
+                          field,
+                          groupDef,
+                          rowEntry: target.primaryRow,
+                          parentValues: target.parentValues,
+                          showLabel: false
+                        })}
+                        {segment.config.editAction ? renderRowFlowActionControl(segment.config.editAction) : null}
+                      </span>
+                    );
+                  }
+                  const display = resolveRowFlowDisplayValue(segment, target.groupKey, field, target.parentValues);
+                  const text = display.text || '—';
+                  const formatted = label ? `${label}: ${text}` : text;
+                  return (
+                    <span key={segment.config.fieldRef} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span>{formatted}</span>
+                      {segment.config.editAction ? renderRowFlowActionControl(segment.config.editAction) : null}
+                    </span>
+                  );
+                };
+
+                const separator = rowFlow?.output?.separator ?? ' | ';
+                const outputActionsStart = rowFlowState.outputActions.filter(a => (a.position || 'start') !== 'end');
+                const outputActionsEnd = rowFlowState.outputActions.filter(a => (a.position || 'start') === 'end');
+                const promptsToRender = rowFlowState.prompts.filter(
+                  prompt =>
+                    prompt.visible &&
+                    (prompt.id === activePromptId || (prompt.complete && prompt.config.keepVisibleWhenFilled === true))
+                );
+
+                return (
+                  <div
+                    key={row.id}
+                    className="line-item-row ck-row-flow"
+                    data-row-anchor={`${q.id}__${row.id}`}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      marginBottom: 14
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                        {outputActionsStart.map(action => renderRowFlowActionControl(action.id))}
+                        {outputSegments.map((segment, idx) => (
+                          <React.Fragment key={`${segment.config.fieldRef}-${idx}`}>
+                            {renderOutputSegment(segment)}
+                            {idx < outputSegments.length - 1 ? <span>{separator}</span> : null}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                      {outputActionsEnd.length ? (
+                        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                          {outputActionsEnd.map(action => renderRowFlowActionControl(action.id))}
+                        </div>
+                      ) : null}
+                    </div>
+                    {promptsToRender.length ? (
+                      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {promptsToRender.map(prompt => (
+                          <div key={prompt.id}>{renderRowFlowPrompt(prompt)}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              }
               const ui = q.lineItemConfig?.ui;
               const guidedCollapsedFieldsInHeader = Boolean((ui as any)?.guidedCollapsedFieldsInHeader);
               const isProgressive =
@@ -2115,52 +3241,6 @@ export const LineItemGroupQuestion: React.FC<{
                 if (overlayOpenActionLoggedRef.current.has(key)) return;
                 overlayOpenActionLoggedRef.current.add(key);
                 onDiagnostic(event, payload);
-              };
-              const mergeOverlayDetailConfig = (base: any, override: any) => {
-                if (!base && !override) return undefined;
-                if (!base) return override;
-                if (!override) return base;
-                return {
-                  ...base,
-                  ...override,
-                  header: { ...(base.header || {}), ...(override.header || {}) },
-                  body: {
-                    ...(base.body || {}),
-                    ...(override.body || {}),
-                    edit: { ...(base.body?.edit || {}), ...(override.body?.edit || {}) },
-                    view: { ...(base.body?.view || {}), ...(override.body?.view || {}) }
-                  },
-                  rowActions: { ...(base.rowActions || {}), ...(override.rowActions || {}) }
-                };
-              };
-              const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupConfigOverride) => {
-                if (!baseConfig || !override || typeof override !== 'object') return baseConfig;
-                const mergedConfig = { ...baseConfig, ...override } as any;
-                mergedConfig.fields = Array.isArray(override.fields) && override.fields.length ? override.fields : baseConfig.fields;
-                if (override.subGroups !== undefined) mergedConfig.subGroups = override.subGroups;
-                const baseUi = baseConfig.ui || {};
-                const overrideUi = (override as any).ui || {};
-                const mergedUi = {
-                  ...baseUi,
-                  ...overrideUi
-                };
-                const mergedOverlayDetail = mergeOverlayDetailConfig(baseUi?.overlayDetail, overrideUi?.overlayDetail);
-                if (mergedOverlayDetail) {
-                  (mergedUi as any).overlayDetail = mergedOverlayDetail;
-                }
-                mergedConfig.ui = Object.keys(mergedUi).length ? mergedUi : undefined;
-                return mergedConfig;
-              };
-              const buildOverlayGroupOverride = (group: WebQuestionDefinition, override?: LineItemGroupConfigOverride) => {
-                if (!override || typeof override !== 'object') return undefined;
-                const baseConfig = group.lineItemConfig as any;
-                if (!baseConfig) return undefined;
-                const mergedConfig = applyLineItemGroupOverride(baseConfig, override);
-                return {
-                  ...group,
-                  id: group.id,
-                  lineItemConfig: mergedConfig
-                };
               };
               const resolveOverlayOpenActionTarget = (gid: string) => {
                 if (!gid) return null;
@@ -2246,6 +3326,7 @@ export const LineItemGroupQuestion: React.FC<{
                 const overrideGroup =
                   targetKind === 'line' && target.group ? buildOverlayGroupOverride(target.group, (match as any).groupOverride) : undefined;
                 const hasOverride = targetKind === 'line' ? !!overrideGroup : !!(match as any).groupOverride;
+                const hasRowFlow = !!(match as any).rowFlow;
                 const logKey = `${q.id}::${field?.id || ''}::overlayOpenAction::${groupId}::${renderMode}::${targetKind}`;
                 logOverlayOpenActionOnce(logKey, 'ui.overlayOpenAction.available', {
                   scope: 'line',
@@ -2256,6 +3337,7 @@ export const LineItemGroupQuestion: React.FC<{
                   renderMode,
                   hasRowFilter: !!rowFilter,
                   hasOverride,
+                  hasRowFlow,
                   hasFlattenFields: flattenFields.length > 0,
                   flattenPlacement,
                   hideTrashIcon: (match as any).hideTrashIcon === true
@@ -2274,7 +3356,8 @@ export const LineItemGroupQuestion: React.FC<{
                   label,
                   flattenFields,
                   flattenPlacement,
-                  hideTrashIcon: (match as any).hideTrashIcon === true
+                  hideTrashIcon: (match as any).hideTrashIcon === true,
+                  rowFlow: (match as any).rowFlow as RowFlowConfig | undefined
                 };
               };
               const renderOverlayOpenFlattenedFieldsShared = (
@@ -3417,7 +4500,8 @@ export const LineItemGroupQuestion: React.FC<{
                       rowFilter: overlayOpenAction.rowFilter || null,
                       hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
                       label: overlayOpenAction.label,
-                      source: 'overlayOpenAction'
+                      source: 'overlayOpenAction',
+                      rowFlow: overlayOpenAction.rowFlow
                     });
                     onDiagnostic?.('lineItemGroup.overlay.open.action', {
                       parentGroupId: q.id,
@@ -5045,7 +6129,8 @@ export const LineItemGroupQuestion: React.FC<{
                             rowFilter: overlayOpenAction.rowFilter || null,
                             hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
                             label: overlayOpenAction.label,
-                            source: 'overlayOpenAction'
+                            source: 'overlayOpenAction',
+                            rowFlow: overlayOpenAction.rowFlow
                           });
                           onDiagnostic?.('lineItemGroup.overlay.open.action', {
                             parentGroupId: q.id,

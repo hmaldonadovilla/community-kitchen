@@ -1295,6 +1295,8 @@ export class Dashboard {
       if (collapsedFieldsInHeader) out.collapsedFieldsInHeader = true;
       const displayMode = normalizeDisplayMode((raw as any).displayMode);
       if (displayMode) out.displayMode = displayMode;
+      const rowFlowRaw = (raw as any).rowFlow;
+      if (rowFlowRaw && typeof rowFlowRaw === 'object') out.rowFlow = rowFlowRaw;
 
       const subGroupsRaw = (raw as any).subGroups;
       if (subGroupsRaw && typeof subGroupsRaw === 'object') {

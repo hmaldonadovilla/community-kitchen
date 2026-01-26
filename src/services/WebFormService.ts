@@ -1,7 +1,9 @@
 import { Dashboard } from '../config/Dashboard';
 import { ConfigSheet } from '../config/ConfigSheet';
+import { ConfigValidator } from '../config/ConfigValidator';
 import {
   FormConfig,
+  FormConfigExport,
   QuestionConfig,
   WebFormDefinition,
   WebFormSubmission,
@@ -116,6 +118,34 @@ export class WebFormService {
     const resolvedKey = (formKey || '').toString().trim() || def.title || '__DEFAULT__';
     debugLog('definition.fetch', { formKey: resolvedKey, questions: def.questions?.length || 0 });
     return { definition: def, formKey: resolvedKey };
+  }
+
+  public fetchFormConfig(formKey?: string): FormConfigExport {
+    const startedAt = Date.now();
+    const form = this.definitionBuilder.findForm(formKey);
+    const resolvedKey = (formKey || '').toString().trim() || form.configSheet || form.title || '__DEFAULT__';
+    const questions = ConfigSheet.getQuestions(this.ss, form.configSheet);
+    const activeQuestions = questions.filter(q => q.status === 'Active');
+    const dedupRules = loadDedupRules(this.ss, form.configSheet);
+    const validationErrors = ConfigValidator.validate(activeQuestions, form.configSheet);
+    const definition = this.definitionBuilder.buildDefinition(form.configSheet || form.title);
+    debugLog('config.export.ready', {
+      formKey: resolvedKey,
+      questions: questions.length,
+      activeQuestions: activeQuestions.length,
+      dedupRules: dedupRules.length,
+      validationErrors: validationErrors.length,
+      elapsedMs: Date.now() - startedAt
+    });
+    return {
+      formKey: resolvedKey,
+      generatedAt: new Date().toISOString(),
+      form,
+      questions,
+      dedupRules,
+      definition,
+      validationErrors
+    };
   }
 
   public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
