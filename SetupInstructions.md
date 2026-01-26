@@ -1370,6 +1370,39 @@ This project uses TypeScript. You need to build the script before using it in Go
         }
         ```
 
+        Example: show an "Ingredients needed" BUTTON when there is at least one `MP_TYPE_LI` row with `PREP_TYPE = "Cook"` **or** a `PREP_TYPE = "Full"` row that has at least one child `MP_INGREDIENTS_LI` subrow marked as manual:
+
+        ```json
+        {
+          "visibility": {
+            "showWhen": {
+              "any": [
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupId": "MP_TYPE_LI",
+                    "when": {
+                      "all": [
+                        { "fieldId": "PREP_TYPE", "equals": "Cook" },
+                        { "fieldId": "RECIPE", "notEmpty": true }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
+                    "parentWhen": { "fieldId": "PREP_TYPE", "equals": "Full" },
+                    "when": { "fieldId": "__ckRowSource", "equals": "manual" }
+                  }
+                }
+              ]
+            }
+          }
+        }
+        ```
+
         Add `subGroupPath` (or legacy `subGroupId` for a single level) to scan subgroup rows with the same row-level `when` shape.
         `subGroupPath` supports dot-delimited paths (e.g., `"MEALS.INGREDIENTS"`) and wildcards (`*`, `**`) for any depth.
         Row-level `when` reads only row/subgroup values; put top-level conditions outside the `lineItems` clause.

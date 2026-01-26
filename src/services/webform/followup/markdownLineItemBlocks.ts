@@ -100,7 +100,9 @@ const flattenSubRows = (rows: any[], keyPath: string[]): any[] => {
       const next: any[] = [];
       currentRows.forEach(row => {
         const children = Array.isArray((row || {})[key]) ? (row as any)[key] : [];
-        children.forEach((child: any) => next.push(child || {}));
+        children.forEach((child: any) => {
+          next.push({ ...(row || {}), ...(child || {}) });
+        });
       });
       currentRows = next;
     });
@@ -334,5 +336,4 @@ export const applyMarkdownLineItemBlocks = (args: {
     .replace(EXCLUDE_WHEN_WHEN_RE, '')
     .replace(CONSOLIDATED_TABLE_RE, '');
 };
-
 
