@@ -50,7 +50,7 @@ Select Recipe: [Pasta Tomato] [View/Edit]
 
 ### After Recipe [View/Edit] tap
 
-- We open the `MP_TYPE_LI` group overlay, since we are viewing a single row in the overlay that cannot be modify we only see the body section of the overlay that contains the ingredients and instructions for the recipe, which are `MP_INGREDIENTS_LI` a subgroup of `MP_TYPE_LI`. The view mode is `html` and the template id is `bundle:mp.ing_recipe.html`, which we already have defined in docs/templates/mp.ing_recipe.html. In the overlay we will no longer show the edit button on the header section but directly in the body section of the overlay, as a pencil icon on the `Ingredients` tab.
+- We open the `MP_TYPE_LI` group overlay, since we are viewing a single row in the overlay that cannot be modify we only see the body section of the overlay that contains the ingredients and instructions for the recipe, which are `MP_INGREDIENTS_LI` a subgroup of `MP_TYPE_LI`. The view mode is `html` and the template id is `bundle:mp.ing_recipe.html`, which we already have defined in docs/templates/mp.ing_recipe.html. In the overlay we will no longer show the edit button on the header section but directly in the body section of the overlay, as a pencil icon on the `Ingredients` tab. The overlay uses the existing close button on the top right corner as currently in place.
 
 ### After recipe selection the `Ingredients Needed` button appears at the end of all dietary type rows, it joins the rest of top level questions in the step
 
@@ -72,7 +72,7 @@ Will you used leftovers for this meal?: [Yes/No]
 
 ### After `Will you used leftovers for this meal?=Yes`
 
-- After tapping on Yes, without additional clicks the overlay opens showing the style of UI as for the `MP_MEALS_REQUEST` questions but this time it applies to the `MP_TYPE_LI` which is a child group of `MP_MEALS_REQUEST`. We are essentailly opening the same overlay as before but with a different groupOverride to focus on the `MP_TYPE_LI` rows where `PREP_TYPE` is `Entire dish` or `Part Dish`.
+- After tapping on Yes, without additional clicks the overlay opens showing the style of UI as for the `MP_MEALS_REQUEST` questions but this time it applies to the `MP_TYPE_LI` which is a child group of `MP_MEALS_REQUEST`. We are essentailly opening the same overlay as before but with a different groupOverride to focus on the `MP_TYPE_LI` rows where `PREP_TYPE` is `Entire dish` or `Part Dish`. Also this overlay has below the rows section a button to add a new rows on the right and button to go back on the left. The button to add rows is shown only when all the info for the 1st row has been completed.
 - Here we are adding rows to the `MP_TYPE_LI` group.
 - Since the group is empty, we see the 1st question and no output line yet.
 - input question: `PREP_TYPE`, this overlay uses `groupOverride` to limit the options of the input control to the values of `PREP_TYPE`.
@@ -123,7 +123,7 @@ row view
 
 ```text
 Entire dish | Select Recipe: [Pasta Tomato] [View/Edit] | 10 portions✏️    🗑️
-                                                          [+ another leftover]
+[BACK]                                                    [+ another leftover]
 ```
 
 ### Alternate lefovers flow, after `PREP_TYPE="Part Dish"`
@@ -152,3 +152,19 @@ row view
 Diabetic | 100 | Left over Yes🗑️ | To cook: 50
 Select Recipe: [{{RECIPE}}]
 ```
+
+## Apendix
+
+### Risk 1 — Overlay jump breaks context
+
+To mitigate the risk of breaking context when jumping to an overlay, we will use the following approach:
+
+- define the 2 fields from the parent `MP_MEALS_REQUEST` group as title of the overlay. I our use case we will use `MEAL_TYPE` and `QTY` fields as follows:
+
+```text
+Leftovers for: {{MEAL_TYPE}} (Requested: {{QTY}})
+```
+
+### Risk 2 — Transition back to main flow is unclear
+
+Show an informative dialog with a single Ok button to confirm the transition back to the main flow.
