@@ -14,9 +14,9 @@
         "en": "Please complete the highlighted fields before activating this recipe."
       }
     },
-    "listViewMetaColumns": [],
     "description": "Capture data of the Meal Production process",
     "listViewView": null,
+    "listViewMetaColumns": [],
     "createNewRecordEnabled": false,
     "appHeader": {
       "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
@@ -88,13 +88,13 @@
     },
     "listViewPageSize": 7,
     "defaultLanguage": "EN",
-    "listViewLegend": null,
     "groupBehavior": {
       "summaryExpandAll": null,
       "autoCollapseOnComplete": true,
       "autoScrollOnExpand": true,
       "autoOpenNextIncomplete": true
     },
+    "listViewLegend": null,
     "listViewSearch": {
       "mode": "date",
       "dateFieldId": "MP_PREP_DATE",
@@ -122,21 +122,21 @@
         "FR": "13VqfHfTHyQbvR2-h8HacTfqAG1kdmjIX4AS5qK_JTnc",
         "EN": "13VqfHfTHyQbvR2-h8HacTfqAG1kdmjIX4AS5qK_JTnc"
       },
+      "emailTemplateId": {
+        "FR": "1D5G0Ahi5U18oiAUgwLgmM_nkU-kWLLFmuBtDDgj2XRw",
+        "EN": "1D5G0Ahi5U18oiAUgwLgmM_nkU-kWLLFmuBtDDgj2XRw"
+      },
       "statusFieldId": "Status",
       "statusTransitions": {
         "onPdf": "PDF ready",
         "onEmail": "Emailed",
         "onClose": "Closed"
       },
-      "emailTemplateId": {
-        "FR": "1D5G0Ahi5U18oiAUgwLgmM_nkU-kWLLFmuBtDDgj2XRw",
-        "EN": "1D5G0Ahi5U18oiAUgwLgmM_nkU-kWLLFmuBtDDgj2XRw"
-      },
       "emailRecipients": [
         {
           "lookupField": "NICKNAME",
-          "type": "dataSource",
           "valueField": "DIST_EMAIL",
+          "type": "dataSource",
           "dataSource": {
             "projection": [
               "DIST_NAME",
@@ -213,10 +213,10 @@
         "en": "Back",
         "nl": "Terug"
       },
-      "showBackButton": true,
       "stateFields": {
         "prefix": "__ckStep"
       },
+      "showBackButton": true,
       "defaultForwardGate": "whenValid",
       "items": [
         {
@@ -246,10 +246,10 @@
             "autoAdvance": "onComplete",
             "forwardGate": "whenValid"
           },
+          "id": "orderInfo",
           "label": {
             "en": "Order info"
-          },
-          "id": "orderInfo"
+          }
         },
         {
           "include": [
@@ -289,6 +289,7 @@
           "include": [
             {
               "presentation": "liftedRowFields",
+              "kind": "lineGroup",
               "rowFlow": {
                 "mode": "progressive",
                 "output": {
@@ -323,8 +324,8 @@
                     },
                     {
                       "showWhen": {
-                        "fieldId": "MP_TO_COOK",
-                        "greaterThan": 0
+                        "greaterThan": 0,
+                        "fieldId": "MP_TO_COOK"
                       },
                       "fieldRef": "MP_TO_COOK",
                       "label": {
@@ -360,22 +361,6 @@
                     "groupId": "MP_TYPE_LI"
                   }
                 },
-                "overlayContextHeader": {
-                  "fields": [
-                    {
-                      "fieldRef": "MEAL_TYPE",
-                      "label": {
-                        "en": "Leftovers for {{value}}"
-                      }
-                    },
-                    {
-                      "fieldRef": "QTY",
-                      "label": {
-                        "en": "(Requested: {{value}})"
-                      }
-                    }
-                  ]
-                },
                 "actions": [
                   {
                     "icon": "edit",
@@ -383,6 +368,22 @@
                     "effects": [
                       {
                         "type": "openOverlay",
+                        "overlayContextHeader": {
+                          "fields": [
+                            {
+                              "fieldRef": "MEAL_TYPE",
+                              "label": {
+                                "en": "Cooking {{value}}"
+                              }
+                            },
+                            {
+                              "fieldRef": "QTY",
+                              "label": {
+                                "en": "(Requested: {{value}})"
+                              }
+                            }
+                          ]
+                        },
                         "rowFilter": {
                           "includeWhen": {
                             "equals": [
@@ -394,16 +395,32 @@
                         "groupId": "MP_TYPE_LI"
                       }
                     ],
+                    "id": "openCookOverlay",
                     "label": {
                       "en": "View/edit"
-                    },
-                    "id": "openCookOverlay"
+                    }
                   },
                   {
                     "variant": "button",
                     "effects": [
                       {
                         "type": "openOverlay",
+                        "overlayContextHeader": {
+                          "fields": [
+                            {
+                              "fieldRef": "MEAL_TYPE",
+                              "label": {
+                                "en": "Leftovers for {{value}}"
+                              }
+                            },
+                            {
+                              "fieldRef": "QTY",
+                              "label": {
+                                "en": "(Requested: {{value}})"
+                              }
+                            }
+                          ]
+                        },
                         "rowFilter": {
                           "includeWhen": {
                             "equals": [
@@ -412,6 +429,88 @@
                             ],
                             "fieldId": "PREP_TYPE"
                           }
+                        },
+                        "rowFlow": {
+                          "output": {
+                            "separator": " | ",
+                            "hideEmpty": true,
+                            "segments": [
+                              {
+                                "fieldRef": "PREP_TYPE"
+                              },
+                              {
+                                "showWhen": {
+                                  "equals": [
+                                    "Entire dish"
+                                  ],
+                                  "fieldId": "PREP_TYPE"
+                                },
+                                "fieldRef": "RECIPE",
+                                "editAction": "editLeftoverIngredients"
+                              },
+                              {
+                                "showWhen": {
+                                  "equals": [
+                                    "Entire dish"
+                                  ],
+                                  "fieldId": "PREP_TYPE"
+                                },
+                                "fieldRef": "PREP_QTY"
+                              }
+                            ]
+                          },
+                          "actions": [
+                            {
+                              "variant": "icon",
+                              "icon": "edit",
+                              "effects": [
+                                {
+                                  "type": "openOverlay",
+                                  "groupId": "MP_INGREDIENTS_LI"
+                                }
+                              ],
+                              "id": "editLeftoverIngredients",
+                              "overlayContextHeader": {
+                                "fields": [
+                                  {
+                                    "fieldRef": "MEAL_TYPE",
+                                    "label": {
+                                      "en": "Leftovers ingredients for {{value}}"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ],
+                          "prompts": [
+                            {
+                              "hideWhenFilled": true,
+                              "fieldRef": "PREP_TYPE",
+                              "id": "leftoverType"
+                            },
+                            {
+                              "showWhen": {
+                                "equals": [
+                                  "Entire dish"
+                                ],
+                                "fieldId": "PREP_TYPE"
+                              },
+                              "fieldRef": "RECIPE",
+                              "id": "leftoverRecipe",
+                              "hideWhenFilled": true
+                            },
+                            {
+                              "showWhen": {
+                                "equals": [
+                                  "Entire dish"
+                                ],
+                                "fieldId": "PREP_TYPE"
+                              },
+                              "fieldRef": "PREP_QTY",
+                              "id": "leftoverQty",
+                              "hideWhenFilled": true
+                            }
+                          ]
                         },
                         "hideInlineSubgroups": true,
                         "groupId": "MP_TYPE_LI"
@@ -430,11 +529,11 @@
                       "cancelLabel": {
                         "en": "Cancel"
                       },
-                      "body": {
-                        "en": "Changing this will clear the selected recipe. Continue?"
-                      },
                       "title": {
                         "en": "Change leftovers?"
+                      },
+                      "body": {
+                        "en": "Changing this will clear the selected recipe. Continue?"
                       },
                       "showCancel": true
                     },
@@ -475,8 +574,6 @@
                       },
                       "showCancel": false
                     },
-                    "icon": "remove",
-                    "variant": "icon",
                     "showWhen": {
                       "all": [
                         {
@@ -501,6 +598,8 @@
                         }
                       ]
                     },
+                    "variant": "icon",
+                    "icon": "remove",
                     "effects": [
                       {
                         "type": "deleteLineItems",
@@ -551,18 +650,14 @@
                       ],
                       "fieldId": "MP_IS_REHEAT"
                     },
-                    "fieldRef": "leftoverRows.PREP_TYPE",
-                    "id": "leftovers",
-                    "actions": [
-                      {
-                        "position": "end",
-                        "id": "openLeftoversOverlay"
-                      }
-                    ]
+                    "onCompleteActions": [
+                      "openLeftoversOverlay"
+                    ],
+                    "fieldRef": "cookRow.RECIPE",
+                    "id": "leftovers"
                   }
                 ]
               },
-              "kind": "lineGroup",
               "subGroups": {
                 "include": [
                   {
@@ -636,10 +731,6 @@
               "kind": "lineGroup",
               "collapsedFieldsInHeader": true,
               "id": "MP_MEALS_REQUEST",
-              "readOnlyFields": [
-                "MEAL_TYPE",
-                "QTY"
-              ],
               "fields": [
                 {
                   "renderAsLabel": true,
@@ -654,10 +745,14 @@
               ],
               "rows": {
                 "includeWhen": {
-                  "greaterThan": 0,
-                  "fieldId": "QTY"
+                  "fieldId": "QTY",
+                  "greaterThan": 0
                 }
               },
+              "readOnlyFields": [
+                "MEAL_TYPE",
+                "QTY"
+              ],
               "displayMode": "inline"
             }
           ],
@@ -683,17 +778,17 @@
                 "MEAL_TYPE",
                 "QTY"
               ],
+              "fields": [
+                "MEAL_TYPE",
+                "QTY",
+                "FINAL_QTY"
+              ],
               "rows": {
                 "includeWhen": {
                   "fieldId": "QTY",
                   "greaterThan": 0
                 }
               },
-              "fields": [
-                "MEAL_TYPE",
-                "QTY",
-                "FINAL_QTY"
-              ],
               "displayMode": "inline"
             },
             {
@@ -705,12 +800,12 @@
               "id": "MP_CONFIRM"
             }
           ],
-          "id": "portioning",
           "label": {
             "fr": "Portionnement",
             "en": "Portioning",
             "nl": "Portionering"
-          }
+          },
+          "id": "portioning"
         }
       ]
     },
@@ -726,13 +821,12 @@
     "copyCurrentRecordLabel": null
   },
   "formKey": "Config: Meal Production",
-  "generatedAt": "2026-01-26T17:46:33.451Z",
   "questions": [
     {
       "optionsNl": [],
       "type": "TEXT",
-      "required": true,
       "qNl": "Meal Production ID",
+      "required": true,
       "ui": {
         "summaryVisibility": "always"
       },
@@ -761,8 +855,8 @@
       },
       "optionsNl": [],
       "type": "CHOICE",
-      "required": true,
       "qNl": "Klant",
+      "required": true,
       "ui": {
         "labelLayout": "stacked"
       },
@@ -779,7 +873,6 @@
         "mapping": {
           "value": "NICKNAME"
         },
-        "id": "Distributor Data",
         "projection": [
           "DIST_NAME",
           "NICKNAME",
@@ -792,6 +885,7 @@
           "DIST_COUNTRY",
           "DIST_POST_CODE"
         ],
+        "id": "Distributor Data",
         "statusAllowList": [
           "Active"
         ]
@@ -822,8 +916,8 @@
         }
       ],
       "type": "CHOICE",
-      "qNl": "Dienst",
       "required": true,
+      "qNl": "Dienst",
       "listView": true,
       "options": [
         "Lunch",
@@ -967,8 +1061,8 @@
         "offsetDays": 2
       },
       "type": "DATE",
-      "required": false,
       "qNl": "Vervaldatum",
+      "required": false,
       "ui": {
         "summaryVisibility": "always"
       },
@@ -1005,16 +1099,16 @@
       "optionsRaw": [
         {
           "Label EN": "Dietary category",
-          "Required?": true,
           "Options (EN)": "REF:PortionTypeOptions",
-          "Option Filter (JSON)": "",
+          "Required?": true,
           "Validation Rules (JSON)": "",
+          "Option Filter (JSON)": "",
           "Label FR": "Catégorie alimentaire",
           "Options (FR)": "",
           "Type": "CHOICE",
           "Edit Options": "Edit",
-          "Options (NL)": "",
           "List View?": "",
+          "Options (NL)": "",
           "ID": "MEAL_TYPE",
           "Label NL": "Dieetcategorie",
           "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Standard\", \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
@@ -1022,33 +1116,33 @@
         },
         {
           "Label EN": "Requested",
-          "Options (EN)": "",
           "Required?": true,
-          "Validation Rules (JSON)": "",
+          "Options (EN)": "",
           "Option Filter (JSON)": "",
+          "Validation Rules (JSON)": "",
           "Label FR": "Portions demandées",
           "Options (FR)": "",
           "Type": "NUMBER",
           "Edit Options": "",
-          "Options (NL)": "",
           "List View?": "",
-          "Label NL": "Aantal",
+          "Options (NL)": "",
           "ID": "QTY",
+          "Label NL": "Aantal",
           "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"QTY\",\n                \"lessThan\": 1\n            },\n            \"then\": {\n                \"fieldId\": \"QTY\",\n                \"min\": 1\n            },\n            \"message\": {\n                \"en\": \"Please enter a quantity greater than 0\",\n                \"fr\": \"Veuillez entrer une quantité supérieure à 0\",\n                \"nl\": \"Voer een hoeveelheid in die groter is dan 0\"\n            },\n            \"phase\": \"submit\"\n        }\n    ]\n}",
           "__ckOptionValue": "QTY"
         },
         {
           "Label EN": "Will you use leftovers?",
-          "Required?": true,
           "Options (EN)": "REF:YesNoOptions",
-          "Option Filter (JSON)": "",
+          "Required?": true,
           "Validation Rules (JSON)": "",
+          "Option Filter (JSON)": "",
           "Label FR": "On utilise des restes réchauffés ?",
           "Options (FR)": "",
           "Type": "CHOICE",
           "Edit Options": "Edit",
-          "List View?": "",
           "Options (NL)": "",
+          "List View?": "",
           "Label NL": "Is dit gerecht opgewarmde rest ?",
           "ID": "MP_IS_REHEAT",
           "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"ui\": {\n    \"overlayOpenActions\": {\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_IS_REHEAT\",\n        \"equals\": \"Yes\"\n      },\n      \"label\": { \"en\": \"View/Edit\", \"fr\": \"Voir/Modifier\", \"nl\": \"Weergave/Bewerken\" },\n      \"rowFilter\": {\n        \"excludeWhen\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\"Cook\"]\n        }\n      },\n      \"renderMode\": \"replace\",\n      \"resetValue\": \"No\",\n      \"groupOverride\": {\n        \"id\": \"MP_TYPE_LI\",\n        \"minRows\": 0,\n        \"maxRows\": 50,\n        \"fields\": [\n          {\n            \"labelEn\": \"Type\",\n            \"labelFr\": \"Type\",\n            \"labelNl\": \"Type\",\n            \"id\": \"PREP_TYPE\",\n            \"type\": \"CHOICE\",\n            \"options\": [\"Entire dish\", \"Part Dish\"],\n            \"optionsFr\": [\"Plat entier\", \"Plat partiel\"],\n            \"optionsNl\": [\"Volledig gerecht\", \"Deel gerecht\"],\n            \"defaultValue\": \"Entire dish\",\n            \"ui\": {\n              \"control\": \"select\"\n            }\n          },\n          {\n            \"labelEn\": \"Quantity\",\n            \"labelFr\": \"Quantité\",\n            \"labelNl\": \"Hoeveelheid\",\n            \"id\": \"PREP_QTY\",\n            \"type\": \"NUMBER\",\n            \"required\": true,\n            \"visibility\": {\n              \"hideWhen\": {\n                \"fieldId\": \"PREP_TYPE\",\n                \"equals\": \"Part Dish\"\n              }\n            }\n          },\n          {\n            \"labelEn\": \"Recipe\",\n            \"labelFr\": \"Recette\",\n            \"labelNl\": \"Recept\",\n            \"id\": \"RECIPE\",\n            \"type\": \"CHOICE\",\n            \"required\": true,\n            \"visibility\": {\n              \"hideWhen\": {\n                \"fieldId\": \"PREP_TYPE\",\n                \"equals\": \"Part Dish\"\n              }\n            },\n            \"dataSource\": {\n              \"id\": \"Recipes Data\",\n              \"projection\": [\n                \"QFTD5RD2EM\",\"NUM_PORTIONS\",\"DISH_TYPE\",\"Q65ILNUSGL\",\"REC_INST\"\n              ],\n              \"mode\": \"options\",\n              \"tooltipField\": \"REC_INST\",\n              \"tooltipLabel\": { \"en\": \"Instructions\", \"fr\": \"Instructions\", \"nl\": \"Instructies\" },\n              \"statusAllowList\": [\"Active\"]\n            },\n            \"optionFilter\": {\n              \"dependsOn\": \"MEAL_TYPE\",\n              \"dataSourceField\": \"DISH_TYPE\",\n              \"dataSourceDelimiter\": \",\",\n              \"bypassValues\": [\"No-salt\"]\n            },\n            \"selectionEffects\": [\n              {\n                \"type\": \"addLineItemsFromDataSource\",\n                \"groupId\": \"MP_INGREDIENTS_LI\",\n                \"targetPath\": \"MP_INGREDIENTS_LI\",\n                \"lookupField\": \"QFTD5RD2EM\",\n                \"dataField\": \"Q65ILNUSGL\",\n                \"rowMultiplierFieldId\": \"PREP_QTY\",\n                \"dataSourceMultiplierField\": \"NUM_PORTIONS\",\n                \"scaleNumericFields\": [\n                  \"QTY\"\n                ],\n                \"lineItemMapping\": {\n                  \"ING\": \"ING\",\n                  \"QTY\": \"QTY\",\n                  \"UNIT\": \"UNIT\"\n                },\n                \"aggregateBy\": [\n                  \"ING\",\n                  \"UNIT\",\n                  \"RECIPE\"\n                ],\n                \"aggregateNumericFields\": [\n                  \"QTY\"\n                ]\n              }\n            ],\n            \"ui\": {\n              \"control\": \"select\"\n            }\n          }\n        ]\n      }\n    }\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"preset\": { \"PREP_QTY\": \"$row.MP_TO_COOK\", \"PREP_TYPE\": \"Cook\" },\n      \"hideRemoveButton\": true\n    },\n    {\n      \"id\": \"mp_left_overs_init\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"triggerValues\": [\"Yes\"],\n      \"preset\": { \"PREP_TYPE\": \"Entire dish\" }\n    }\n  ]\n}",
@@ -1056,10 +1150,10 @@
         },
         {
           "Label EN": "Leftover information",
-          "Required?": false,
           "Options (EN)": "No left over, Left over Yes",
-          "Validation Rules (JSON)": "",
+          "Required?": false,
           "Option Filter (JSON)": "",
+          "Validation Rules (JSON)": "",
           "Label FR": "Leftover information",
           "Options (FR)": "No left over, Left over Yes",
           "Type": "CHOICE",
@@ -1073,52 +1167,52 @@
         },
         {
           "Label EN": "To Cook",
-          "Required?": true,
           "Options (EN)": "",
-          "Option Filter (JSON)": "",
+          "Required?": true,
           "Validation Rules (JSON)": "",
+          "Option Filter (JSON)": "",
           "Label FR": "To Cook",
           "Options (FR)": "",
           "Type": "NUMBER",
           "Edit Options": "",
           "Options (NL)": "",
           "List View?": "",
-          "Label NL": "To Cook",
           "ID": "MP_TO_COOK",
+          "Label NL": "To Cook",
           "Config (JSON/REF)": "{\n  \"ui\": {\n    \"overlayOpenActions\": {\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"label\": {\n        \"en\": \"View/Edit\",\n        \"fr\": \"Voir/Modifier\",\n        \"nl\": \"Weergave/Bewerken\"\n      },\n      \"rowFilter\": {\n        \"excludeWhen\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Entire dish\",\n            \"Part Dish\"\n          ]\n        }\n      },\n      \"renderMode\": \"inline\",\n      \"hideTrashIcon\": true,\n      \"groupOverride\": {\n        \"id\": \"MP_TYPE_LI\",\n        \"minRows\": 0,\n        \"maxRows\": 1,\n        \"ui\": {\n          \"addButtonPlacement\": \"hidden\"\n        },\n        \"fields\": [\n          {\n            \"labelEn\": \"Type\",\n            \"labelFr\": \"Type\",\n            \"labelNl\": \"Type\",\n            \"id\": \"PREP_TYPE\",\n            \"type\": \"CHOICE\",\n            \"options\": [\n              \"Cook\"\n            ],\n            \"optionsFr\": [\n              \"Cuisiner\"\n            ],\n            \"optionsNl\": [\n              \"Koken\"\n            ],\n            \"defaultValue\": \"Cook\",\n            \"ui\": {\n              \"control\": \"select\"\n            },\n            \"readOnly\": true\n          },\n          {\n            \"labelEn\": \"Quantity\",\n            \"labelFr\": \"Quantité\",\n            \"labelNl\": \"Hoeveelheid\",\n            \"id\": \"PREP_QTY\",\n            \"type\": \"NUMBER\",\n            \"required\": true,\n            \"readOnly\": true\n          },\n          {\n            \"labelEn\": \"Recipe\",\n            \"labelFr\": \"Recette\",\n            \"labelNl\": \"Recept\",\n            \"id\": \"RECIPE\",\n            \"type\": \"CHOICE\",\n            \"required\": true,\n            \"dataSource\": {\n              \"id\": \"Recipes Data\",\n              \"projection\": [\n                \"QFTD5RD2EM\",\n                \"NUM_PORTIONS\",\n                \"DISH_TYPE\",\n                \"Q65ILNUSGL\",\n                \"REC_INST\"\n              ],\n              \"mode\": \"options\",\n              \"tooltipField\": \"REC_INST\",\n              \"tooltipLabel\": {\n                \"en\": \"Instructions\",\n                \"fr\": \"Instructions\",\n                \"nl\": \"Instructies\"\n              },\n              \"statusAllowList\": [\n                \"Active\"\n              ]\n            },\n            \"optionFilter\": {\n              \"dependsOn\": \"MEAL_TYPE\",\n              \"dataSourceField\": \"DISH_TYPE\",\n              \"dataSourceDelimiter\": \",\",\n              \"bypassValues\": [\n                \"No-salt\"\n              ]\n            },\n            \"selectionEffects\": [\n              {\n                \"type\": \"addLineItemsFromDataSource\",\n                \"groupId\": \"MP_INGREDIENTS_LI\",\n                \"targetPath\": \"MP_INGREDIENTS_LI\",\n                \"lookupField\": \"QFTD5RD2EM\",\n                \"dataField\": \"Q65ILNUSGL\",\n                \"rowMultiplierFieldId\": \"PREP_QTY\",\n                \"dataSourceMultiplierField\": \"NUM_PORTIONS\",\n                \"scaleNumericFields\": [\n                  \"QTY\"\n                ],\n                \"lineItemMapping\": {\n                  \"ING\": \"ING\",\n                  \"QTY\": \"QTY\",\n                  \"UNIT\": \"UNIT\"\n                },\n                \"aggregateBy\": [\n                  \"ING\",\n                  \"UNIT\",\n                  \"RECIPE\"\n                ],\n                \"aggregateNumericFields\": [\n                  \"QTY\"\n                ]\n              }\n            ],\n            \"ui\": {\n              \"control\": \"select\"\n            }\n          }\n        ],\n        \"label\": {\n          \"en\": \"Cook\",\n          \"fr\": \"Cuisiner\",\n          \"nl\": \"Koken\"\n        }\n      },\n      \"flattenFields\": [\n        \"RECIPE\"\n      ],\n      \"flattenPlacement\": \"left\"\n    }\n  },\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"applyOn\": \"blur\",\n    \"expression\": \"{QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Entire dish\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ],\n  \"visibility\": {\n    \"showWhen\": {\n      \"any\": [\n        {\n          \"fieldId\": \"MP_IS_REHEAT\",\n          \"equals\": [\"No\"]\n        },\n        {\n          \"all\": [\n            {\n              \"fieldId\": \"MP_IS_REHEAT\",\n              \"equals\": [\"Yes\"]\n            },\n            {\n              \"lineItems\": {\n                \"groupId\": \"MP_MEALS_REQUEST\",\n                \"subGroupPath\": [\"MP_TYPE_LI\", \"MP_INGREDIENTS_LI\"],\n                \"match\": \"any\"\n              }\n            }\n          ]\n        }\n      ]\n    }\n  }\n}",
           "__ckOptionValue": "MP_TO_COOK"
         },
         {
           "Label EN": "Core cooking temp. °C (min 63)",
-          "Options (EN)": "",
           "Required?": true,
+          "Options (EN)": "",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
           "Label FR": "Température à cœur °C (min 63)",
           "Options (FR)": "",
           "Type": "NUMBER",
           "Edit Options": "",
-          "Options (NL)": "",
           "List View?": "",
-          "Label NL": "Kernkooktemperatuur °C (min 63)",
+          "Options (NL)": "",
           "ID": "MP_COOK_TEMP",
+          "Label NL": "Kernkooktemperatuur °C (min 63)",
           "Config (JSON/REF)": "{\n    \"pair\": \"core_temp\",\n    \"validationRules\": [\n      {\n        \"when\": {\n          \"fieldId\": \"MP_COOK_TEMP\",\n          \"lessThan\": 63\n        },\n        \"then\": {\n          \"fieldId\": \"MP_COOK_TEMP\",\n          \"min\": 63\n        },\n        \"message\": {\n          \"en\": \"Ensure core temperature is at least 63°C.\",\n          \"fr\": \"Assurez-vous que la température interne est d'au moins 63°C.\",\n          \"nl\": \"Zorg ervoor dat de kerntemperatuur minimaal 63°C is.\"\n        }\n      }\n    ],\n    \"requiredMessage\": {\n        \"en\": \"Ensure core temperature is at least 63°C.\",\n        \"fr\": \"Assurez-vous que la température interne est d'au moins 63°C.\",\n        \"nl\": \"Zorg ervoor dat de kerntemperatuur minimaal 63°C is.\"\n    }\n  }",
           "__ckOptionValue": "MP_COOK_TEMP"
         },
         {
           "Label EN": "Evidence",
-          "Required?": true,
           "Options (EN)": "",
-          "Validation Rules (JSON)": "",
+          "Required?": true,
           "Option Filter (JSON)": "",
+          "Validation Rules (JSON)": "",
           "Label FR": "Preuve",
           "Options (FR)": "",
           "Type": "FILE_UPLOAD",
           "Edit Options": "",
-          "List View?": "",
           "Options (NL)": "",
-          "ID": "TEMP_EVD",
+          "List View?": "",
           "Label NL": "Bewijs",
+          "ID": "TEMP_EVD",
           "Config (JSON/REF)": "{\n    \"uploadConfig\": {\n        \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n        \"linkLabel\": {\n            \"en\": \"Photo {n}\",\n            \"fr\": \"Photo {n}\",\n            \"nl\": \"Foto {n}\"\n        },\n        \"minFiles\": 1,\n        \"maxFiles\": 5,\n        \"maxFileSizeMb\": 10,\n        \"allowedMimeTypes\": [\n            \"image/*\"\n        ],\n        \"errorMessages\": {\n            \"minFiles\": {\n                \"en\": \"One photo is required per cooking pot.\",\n                \"fr\": \"Une photo est requise par pot de cuisson.\",\n                \"nl\": \"Een foto is vereist per kookpot.\"\n            },\n            \"maxFiles\": {\n                \"en\": \"The maximum number of photos is {max}\",\n                \"fr\": \"Le nombre maximum de photos est de {max}\",\n                \"nl\": \"Het maximum aantal foto's is {max}\"\n            },\n            \"maxFileSizeMb\": {\n                \"en\": \"The maximum photo size is {mb}MB\",\n                \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n                \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n            }\n        },\n        \"compression\": {\n            \"images\": {\n                \"maxDimension\": 1600,\n                \"quality\": 0.82,\n                \"outputType\": \"keep\"\n            }\n        },\n        \"helperText\": {\n            \"remainingOne\": {\n                \"en\": \"You need to add {count} more photo\",\n                \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n                \"nl\": \"Je moet {count} foto toevoegen\"\n            },\n            \"remainingMany\": {\n                \"en\": \"You need to add {count} more photos\",\n                \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n                \"nl\": \"Je moet {count} foto's toevoegen\"\n            }\n        },\n        \"ui\": {\n            \"variant\": \"progressive\"\n        }\n    },\n    \"pair\": \"core_temp\",\n    \"requiredMessage\": {\n        \"en\": \"One photo is required per cooking pot.\",\n        \"fr\": \"Une photo est requise par pot de cuisson.\",\n        \"nl\": \"Een foto is vereist per kookpot.\"\n    }\n}",
           "__ckOptionValue": "TEMP_EVD"
         },
@@ -1165,9 +1259,9 @@
         },
         "maxRows": 200,
         "ui": {
-          "defaultCollapsed": true,
-          "mode": "progressive",
           "expandGate": "collapsedFieldsValid",
+          "mode": "progressive",
+          "defaultCollapsed": true,
           "addButtonPlacement": "hidden",
           "rowDisclaimer": {
             "cases": [
@@ -1232,6 +1326,12 @@
               "tableHideUntilAnchor": true,
               "overlayDetail": {
                 "header": {
+                  "tableColumns": [
+                    "PREP_TYPE",
+                    "PREP_QTY",
+                    "RECIPE"
+                  ],
+                  "addButtonPlacement": "top",
                   "tableColumnWidths": {
                     "PREP_TYPE": "20%",
                     "_edit": "44px",
@@ -1239,13 +1339,7 @@
                     "_view": "44px",
                     "__remove": "44px",
                     "RECIPE": "55%"
-                  },
-                  "addButtonPlacement": "top",
-                  "tableColumns": [
-                    "PREP_TYPE",
-                    "PREP_QTY",
-                    "RECIPE"
-                  ]
+                  }
                 },
                 "body": {
                   "edit": {
@@ -1290,12 +1384,12 @@
               {
                 "addMode": "selectorOverlay",
                 "minRows": 0,
-                "maxRows": 200,
                 "addButtonLabel": {
                   "fr": "Ajouter",
                   "en": "Add",
                   "nl": "Toevoegen"
                 },
+                "maxRows": 200,
                 "ui": {
                   "mode": "table",
                   "openInOverlay": true,
@@ -3254,8 +3348,8 @@
                     "pair": "qty_unt",
                     "optionsFr": [],
                     "options": [],
-                    "labelFr": "Quantité",
-                    "id": "QTY"
+                    "id": "QTY",
+                    "labelFr": "Quantité"
                   },
                   {
                     "optionsNl": [
@@ -3453,13 +3547,13 @@
                           "gr",
                           "piece"
                         ],
-                        "Parsley - dried": [
-                          "gr",
-                          "Tbsp"
-                        ],
                         "Bulgur": [
                           "kg",
                           "gr"
+                        ],
+                        "Parsley - dried": [
+                          "gr",
+                          "Tbsp"
                         ],
                         "Vinegar": [
                           "cl"
@@ -3501,15 +3595,15 @@
                           "gr",
                           "bucket"
                         ],
-                        "Couscous vegetables mix": [
-                          "kg",
-                          "gr",
-                          "bag"
-                        ],
                         "Chickpeas - tinned": [
                           "kg",
                           "gr",
                           "tin-2655gr"
+                        ],
+                        "Couscous vegetables mix": [
+                          "kg",
+                          "gr",
+                          "bag"
                         ],
                         "Green beans - tinned": [
                           "kg",
@@ -3774,14 +3868,14 @@
                           "gr",
                           "bag"
                         ],
+                        "Greek yogurt": [
+                          "kg",
+                          "gr"
+                        ],
                         "Green peas - frozen": [
                           "kg",
                           "gr",
                           "bag"
-                        ],
-                        "Greek yogurt": [
-                          "kg",
-                          "gr"
                         ],
                         "Mozzarella": [
                           "kg",
@@ -3807,15 +3901,15 @@
                           "gr",
                           "Tbsp"
                         ],
-                        "Carrots & peas - tinned": [
-                          "kg",
-                          "gr",
-                          "tin-530gr"
-                        ],
                         "Red beans - tinned": [
                           "kg",
                           "gr",
                           "tin-2505gr"
+                        ],
+                        "Carrots & peas - tinned": [
+                          "kg",
+                          "gr",
+                          "tin-530gr"
                         ],
                         "Leek": [
                           "kg",
@@ -3835,12 +3929,12 @@
                           "kg",
                           "gr"
                         ],
-                        "Oregano -fresh": [
+                        "Ginger paste": [
+                          "kg",
                           "gr",
                           "Tbsp"
                         ],
-                        "Ginger paste": [
-                          "kg",
+                        "Oregano -fresh": [
                           "gr",
                           "Tbsp"
                         ],
@@ -3874,14 +3968,14 @@
                           "gr",
                           "bag"
                         ],
-                        "Pasta": [
-                          "kg",
-                          "gr"
-                        ],
                         "Butternut": [
                           "kg",
                           "gr",
                           "bucket"
+                        ],
+                        "Pasta": [
+                          "kg",
+                          "gr"
                         ],
                         "Cayenne": [
                           "gr",
@@ -3953,8 +4047,8 @@
                       "Tin-250gr",
                       "Tin-265gr"
                     ],
-                    "id": "UNIT",
-                    "labelFr": "Unité"
+                    "labelFr": "Unité",
+                    "id": "UNIT"
                   },
                   {
                     "optionsNl": [
@@ -3973,14 +4067,14 @@
                       {
                         "en": "Fresh vegetables",
                         "fr": "Légumes frais",
-                        "__ckOptionValue": "Fresh vegetables",
-                        "nl": "Verse groenten"
+                        "nl": "Verse groenten",
+                        "__ckOptionValue": "Fresh vegetables"
                       },
                       {
                         "en": "Dry carbohydrates",
                         "fr": "Féculents secs",
-                        "nl": "Droge zetmeelproducten",
-                        "__ckOptionValue": "Dry carbohydrates"
+                        "__ckOptionValue": "Dry carbohydrates",
+                        "nl": "Droge zetmeelproducten"
                       },
                       {
                         "en": "Vegan protein",
@@ -3991,14 +4085,14 @@
                       {
                         "en": "Tins/Pots",
                         "fr": "Conserves / bocaux",
-                        "__ckOptionValue": "Tins/Pots",
-                        "nl": "Blik / potten"
+                        "nl": "Blik / potten",
+                        "__ckOptionValue": "Tins/Pots"
                       },
                       {
                         "en": "Dairy",
                         "fr": "Produits laitiers",
-                        "nl": "Zuivel",
-                        "__ckOptionValue": "Dairy"
+                        "__ckOptionValue": "Dairy",
+                        "nl": "Zuivel"
                       },
                       {
                         "en": "Animal protein Halal",
@@ -4021,8 +4115,8 @@
                       {
                         "en": "Oils",
                         "fr": "Huiles",
-                        "__ckOptionValue": "Oils",
-                        "nl": "Oliën"
+                        "nl": "Oliën",
+                        "__ckOptionValue": "Oils"
                       }
                     ],
                     "labelNl": "Categorie",
@@ -4069,11 +4163,11 @@
                         "Cordon bleu": [
                           "Animal protein Halal"
                         ],
-                        "Parsley - dried": [
-                          "Herbs - spices - condiments"
-                        ],
                         "Bulgur": [
                           "Dry carbohydrates"
+                        ],
+                        "Parsley - dried": [
+                          "Herbs - spices - condiments"
                         ],
                         "Vinegar": [
                           "Herbs - spices - condiments"
@@ -4102,11 +4196,11 @@
                         "Pleurotte mushroom": [
                           "Fresh vegetables"
                         ],
-                        "Chickpeas - tinned": [
-                          "Vegan protein"
-                        ],
                         "Couscous vegetables mix": [
                           "Frozen vegetables"
+                        ],
+                        "Chickpeas - tinned": [
+                          "Vegan protein"
                         ],
                         "Green beans - tinned": [
                           "Tins/Pots"
@@ -4144,11 +4238,11 @@
                         "Onion - frozen": [
                           "Frozen vegetables"
                         ],
-                        "Squash": [
-                          "Fresh vegetables"
-                        ],
                         "Coriander powder": [
                           "Herbs - spices - condiments"
+                        ],
+                        "Squash": [
+                          "Fresh vegetables"
                         ],
                         "Salt": [
                           "Herbs - spices - condiments"
@@ -4180,11 +4274,11 @@
                         "Corn - frozen": [
                           "Frozen vegetables"
                         ],
-                        "Pumpkin - frozen": [
-                          "Frozen vegetables"
-                        ],
                         "Cumin": [
                           "Herbs - spices - condiments"
+                        ],
+                        "Pumpkin - frozen": [
+                          "Frozen vegetables"
                         ],
                         "Mushroom": [
                           "Fresh vegetables"
@@ -4195,11 +4289,11 @@
                         "Chicken tenders": [
                           "Animal protein Halal"
                         ],
-                        "Olive oil": [
-                          "Herbs - spices - condiments"
-                        ],
                         "Tomato paste": [
                           "Tins/Pots"
+                        ],
+                        "Olive oil": [
+                          "Herbs - spices - condiments"
                         ],
                         "Pepper - frozen": [
                           "Frozen vegetables"
@@ -4303,11 +4397,11 @@
                         "Black pepper": [
                           "Herbs - spices - condiments"
                         ],
-                        "Red beans - tinned": [
-                          "Vegan protein"
-                        ],
                         "Carrots & peas - tinned": [
                           "Tins/Pots"
+                        ],
+                        "Red beans - tinned": [
+                          "Vegan protein"
                         ],
                         "Leek": [
                           "Fresh vegetables"
@@ -4348,11 +4442,11 @@
                         "Cauliflower - frozen": [
                           "Frozen vegetables"
                         ],
-                        "Butternut": [
-                          "Fresh vegetables"
-                        ],
                         "Pasta": [
                           "Dry carbohydrates"
+                        ],
+                        "Butternut": [
+                          "Fresh vegetables"
                         ],
                         "Cayenne": [
                           "Herbs - spices - condiments"
@@ -4373,7 +4467,6 @@
                       "Pinda's",
                       "Soja"
                     ],
-                    "labelEn": "Allergen",
                     "optionsRaw": [
                       {
                         "optionNl": "Geen allergeen",
@@ -4406,6 +4499,7 @@
                         "__ckOptionValue": "Soy"
                       }
                     ],
+                    "labelEn": "Allergen",
                     "labelNl": "Allergeen",
                     "readOnly": true,
                     "type": "TEXT",
@@ -4477,10 +4571,10 @@
                         "Pleurotte mushroom": [
                           "None"
                         ],
-                        "Chickpeas - tinned": [
+                        "Couscous vegetables mix": [
                           "None"
                         ],
-                        "Couscous vegetables mix": [
+                        "Chickpeas - tinned": [
                           "None"
                         ],
                         "Green beans - tinned": [
@@ -4492,10 +4586,10 @@
                         "Parsnip": [
                           "None"
                         ],
-                        "Spinach - frozen": [
+                        "Chickpeas - dry": [
                           "None"
                         ],
-                        "Chickpeas - dry": [
+                        "Spinach - frozen": [
                           "None"
                         ],
                         "Yellow curry": [
@@ -4678,10 +4772,10 @@
                         "Black pepper": [
                           "None"
                         ],
-                        "Red beans - tinned": [
+                        "Carrots & peas - tinned": [
                           "None"
                         ],
-                        "Carrots & peas - tinned": [
+                        "Red beans - tinned": [
                           "None"
                         ],
                         "Leek": [
@@ -4696,10 +4790,10 @@
                         "Rice": [
                           "None"
                         ],
-                        "Ginger paste": [
+                        "Oregano -fresh": [
                           "None"
                         ],
-                        "Oregano -fresh": [
+                        "Ginger paste": [
                           "None"
                         ],
                         "Green lentils": [
@@ -4738,12 +4832,13 @@
                         ]
                       }
                     },
-                    "labelFr": "Allergène",
-                    "id": "ALLERGEN"
+                    "id": "ALLERGEN",
+                    "labelFr": "Allergène"
                   }
                 ],
                 "sectionSelector": {
                   "placeholderEn": "Search name, category, dietary, supplier or allergen",
+                  "placeholderFr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
                   "optionsNl": [
                     "Kipreepjes",
                     "Kipblokjes",
@@ -4846,7 +4941,6 @@
                     "Rode linzen",
                     "Groene linzen"
                   ],
-                  "placeholderFr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
                   "optionsRaw": [
                     {
                       "Allergens": "None",
@@ -5949,6 +6043,7 @@
                       "__ckOptionValue": "Green lentils"
                     }
                   ],
+                  "labelEn": "Search and tap on `Add` button",
                   "optionFilter": {
                     "dependsOn": "MEAL_TYPE",
                     "optionMapRef": {
@@ -6433,7 +6528,6 @@
                       ]
                     }
                   },
-                  "labelEn": "Search and tap on `Add` button",
                   "labelNl": "Zoeken en klik op de knop `Toevoegen`.",
                   "placeholderNl": "Zoek op naam, categorie, diëtetische beperking, leverancier of allergie",
                   "required": true,
@@ -6642,13 +6736,13 @@
                     "Green lentils"
                   ],
                   "optionsRef": "REF:IngredientsOptions",
-                  "labelFr": "Rechercher et cliquer sur le bouton `Ajouter`",
-                  "id": "ITEM_FILTER",
                   "placeholder": {
                     "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
                     "en": "Search name, category, dietary, supplier or allergen",
                     "nl": "Zoek op naam, categorie, diëtetische beperking, leverancier of allergie"
                   },
+                  "labelFr": "Rechercher et cliquer sur le bouton `Ajouter`",
+                  "id": "ITEM_FILTER",
                   "hideLabel": true
                 }
               }
@@ -6683,8 +6777,8 @@
                   "Entire dish",
                   "Part Dish"
                 ],
-                "labelFr": "Type",
-                "id": "PREP_TYPE"
+                "id": "PREP_TYPE",
+                "labelFr": "Type"
               },
               {
                 "optionsNl": [],
@@ -6694,8 +6788,8 @@
                 "required": true,
                 "optionsFr": [],
                 "options": [],
-                "labelFr": "Quantity",
-                "id": "PREP_QTY"
+                "id": "PREP_QTY",
+                "labelFr": "Quantity"
               },
               {
                 "optionsNl": [],
@@ -6714,19 +6808,19 @@
                 "selectionEffects": [
                   {
                     "lookupField": "QFTD5RD2EM",
-                    "dataSourceMultiplierField": "NUM_PORTIONS",
                     "dataField": "Q65ILNUSGL",
+                    "dataSourceMultiplierField": "NUM_PORTIONS",
                     "scaleNumericFields": [
                       "QTY"
                     ],
-                    "rowMultiplierFieldId": "PREP_QTY",
                     "groupId": "MP_INGREDIENTS_LI",
-                    "targetPath": "MP_INGREDIENTS_LI",
+                    "rowMultiplierFieldId": "PREP_QTY",
                     "lineItemMapping": {
                       "ING": "ING",
                       "UNIT": "UNIT",
                       "QTY": "QTY"
                     },
+                    "targetPath": "MP_INGREDIENTS_LI",
                     "type": "addLineItemsFromDataSource",
                     "aggregateNumericFields": [
                       "QTY"
@@ -6743,15 +6837,16 @@
                 },
                 "optionsFr": [],
                 "options": [],
-                "id": "RECIPE",
                 "labelFr": "Recette",
+                "id": "RECIPE",
                 "dataSource": {
+                  "mode": "options",
                   "tooltipLabel": {
                     "fr": "Instructions",
                     "en": "Instructions",
                     "nl": "Instructies"
                   },
-                  "mode": "options",
+                  "id": "Recipes Data",
                   "projection": [
                     "QFTD5RD2EM",
                     "NUM_PORTIONS",
@@ -6759,7 +6854,6 @@
                     "Q65ILNUSGL",
                     "REC_INST"
                   ],
-                  "id": "Recipes Data",
                   "statusAllowList": [
                     "Active"
                   ],
@@ -6804,22 +6898,22 @@
             "optionsRaw": [
               {
                 "optionNl": "Standard_NL",
-                "Icon": "🍽",
                 "optionFr": "Standard",
+                "Icon": "🍽",
                 "optionEn": "Standard",
                 "__ckOptionValue": "Standard"
               },
               {
                 "optionNl": "Végétarien_NL",
-                "optionFr": "Végétarien",
                 "Icon": "🥕",
+                "optionFr": "Végétarien",
                 "optionEn": "Vegetarian",
                 "__ckOptionValue": "Vegetarian"
               },
               {
                 "optionNl": "Végan_NL",
-                "Icon": "🌱",
                 "optionFr": "Végan",
+                "Icon": "🌱",
                 "optionEn": "Vegan",
                 "__ckOptionValue": "Vegan"
               },
@@ -6850,15 +6944,15 @@
                   "Diabetic",
                   "No-salt"
                 ],
+                "HUB": [
+                  "Vegetarian"
+                ],
                 "Le Phare": [
                   "Standard",
                   "Vegetarian",
                   "Vegan",
                   "Diabetic",
                   "No-salt"
-                ],
-                "HUB": [
-                  "Vegetarian"
                 ],
                 "Belliard||Dinner": [
                   "Vegetarian",
@@ -6965,10 +7059,10 @@
                 "groupId": "MP_TYPE_LI"
               },
               {
+                "id": "mp_left_overs_init",
                 "preset": {
                   "PREP_TYPE": "Entire dish"
                 },
-                "id": "mp_left_overs_init",
                 "type": "addLineItems",
                 "triggerValues": [
                   "Yes"
@@ -7050,16 +7144,15 @@
                             ]
                           }
                         ],
-                        "ui": {
-                          "control": "select"
-                        },
                         "visibility": {
                           "hideWhen": {
                             "equals": "Part Dish",
                             "fieldId": "PREP_TYPE"
                           }
                         },
-                        "labelEn": "Recipe",
+                        "ui": {
+                          "control": "select"
+                        },
                         "optionFilter": {
                           "dataSourceField": "DISH_TYPE",
                           "dependsOn": "MEAL_TYPE",
@@ -7068,17 +7161,18 @@
                           ],
                           "dataSourceDelimiter": ","
                         },
+                        "labelEn": "Recipe",
                         "labelNl": "Recept",
                         "id": "RECIPE",
                         "labelFr": "Recette",
                         "type": "CHOICE",
                         "dataSource": {
+                          "mode": "options",
                           "tooltipLabel": {
                             "fr": "Instructions",
                             "en": "Instructions",
                             "nl": "Instructies"
                           },
-                          "mode": "options",
                           "id": "Recipes Data",
                           "projection": [
                             "QFTD5RD2EM",
@@ -7162,8 +7256,8 @@
               "No left over",
               "Left over Yes"
             ],
-            "id": "LEFTOVER_INFO",
-            "labelFr": "Leftover information"
+            "labelFr": "Leftover information",
+            "id": "LEFTOVER_INFO"
           },
           {
             "optionsNl": [],
@@ -7227,11 +7321,11 @@
                 "groupId": "MP_TYPE_LI"
               },
               {
+                "id": "mp_to_cook_sync",
                 "preset": {
                   "PREP_TYPE": "Cook",
                   "PREP_QTY": "$row.MP_TO_COOK"
                 },
-                "id": "mp_to_cook_sync",
                 "type": "addLineItems",
                 "when": {
                   "fieldId": "MP_TO_COOK",
@@ -7246,14 +7340,14 @@
                 {
                   "renderMode": "inline",
                   "groupOverride": {
-                    "minRows": 0,
                     "maxRows": 1,
-                    "id": "MP_TYPE_LI",
+                    "minRows": 0,
                     "label": {
                       "fr": "Cuisiner",
                       "en": "Cook",
                       "nl": "Koken"
                     },
+                    "id": "MP_TYPE_LI",
                     "ui": {
                       "addButtonPlacement": "hidden"
                     },
@@ -7268,23 +7362,23 @@
                         "optionsFr": [
                           "Cuisiner"
                         ],
-                        "labelEn": "Type",
                         "defaultValue": "Cook",
+                        "labelEn": "Type",
                         "options": [
                           "Cook"
                         ],
                         "labelNl": "Type",
                         "readOnly": true,
-                        "labelFr": "Type",
                         "id": "PREP_TYPE",
+                        "labelFr": "Type",
                         "type": "CHOICE"
                       },
                       {
                         "labelEn": "Quantity",
                         "labelNl": "Hoeveelheid",
                         "readOnly": true,
-                        "id": "PREP_QTY",
                         "labelFr": "Quantité",
+                        "id": "PREP_QTY",
                         "type": "NUMBER",
                         "required": true
                       },
@@ -7292,19 +7386,19 @@
                         "selectionEffects": [
                           {
                             "lookupField": "QFTD5RD2EM",
-                            "dataSourceMultiplierField": "NUM_PORTIONS",
                             "dataField": "Q65ILNUSGL",
+                            "dataSourceMultiplierField": "NUM_PORTIONS",
                             "scaleNumericFields": [
                               "QTY"
                             ],
                             "groupId": "MP_INGREDIENTS_LI",
                             "rowMultiplierFieldId": "PREP_QTY",
+                            "targetPath": "MP_INGREDIENTS_LI",
                             "lineItemMapping": {
-                              "UNIT": "UNIT",
                               "ING": "ING",
+                              "UNIT": "UNIT",
                               "QTY": "QTY"
                             },
-                            "targetPath": "MP_INGREDIENTS_LI",
                             "type": "addLineItemsFromDataSource",
                             "aggregateNumericFields": [
                               "QTY"
@@ -7329,17 +7423,16 @@
                           "dataSourceDelimiter": ","
                         },
                         "labelNl": "Recept",
-                        "labelFr": "Recette",
                         "id": "RECIPE",
+                        "labelFr": "Recette",
                         "type": "CHOICE",
                         "dataSource": {
+                          "mode": "options",
                           "tooltipLabel": {
                             "fr": "Instructions",
                             "en": "Instructions",
                             "nl": "Instructies"
                           },
-                          "mode": "options",
-                          "id": "Recipes Data",
                           "projection": [
                             "QFTD5RD2EM",
                             "NUM_PORTIONS",
@@ -7347,6 +7440,7 @@
                             "Q65ILNUSGL",
                             "REC_INST"
                           ],
+                          "id": "Recipes Data",
                           "statusAllowList": [
                             "Active"
                           ],
@@ -7358,14 +7452,14 @@
                   },
                   "groupId": "MP_TYPE_LI",
                   "hideTrashIcon": true,
-                  "flattenFields": [
-                    "RECIPE"
-                  ],
                   "label": {
                     "fr": "Voir/Modifier",
                     "en": "View/Edit",
                     "nl": "Weergave/Bewerken"
                   },
+                  "flattenFields": [
+                    "RECIPE"
+                  ],
                   "rowFilter": {
                     "excludeWhen": {
                       "equals": [
@@ -7385,8 +7479,8 @@
             },
             "optionsFr": [],
             "options": [],
-            "id": "MP_TO_COOK",
-            "labelFr": "To Cook"
+            "labelFr": "To Cook",
+            "id": "MP_TO_COOK"
           },
           {
             "optionsNl": [],
@@ -7414,8 +7508,8 @@
             "pair": "core_temp",
             "optionsFr": [],
             "options": [],
-            "labelFr": "Température à cœur °C (min 63)",
             "id": "MP_COOK_TEMP",
+            "labelFr": "Température à cœur °C (min 63)",
             "requiredMessage": {
               "fr": "Assurez-vous que la température interne est d'au moins 63°C.",
               "en": "Ensure core temperature is at least 63°C.",
@@ -7484,8 +7578,8 @@
             },
             "optionsFr": [],
             "options": [],
-            "id": "TEMP_EVD",
             "labelFr": "Preuve",
+            "id": "TEMP_EVD",
             "requiredMessage": {
               "fr": "Une photo est requise par pot de cuisson.",
               "en": "One photo is required per cooking pot.",
@@ -7550,8 +7644,8 @@
     {
       "optionsNl": [],
       "type": "BUTTON",
-      "qNl": "Benodigde ingrediënten",
       "required": false,
+      "qNl": "Benodigde ingrediënten",
       "button": {
         "templateId": {
           "FR": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
@@ -7585,8 +7679,8 @@
                     }
                   ]
                 },
-                "groupId": "MP_MEALS_REQUEST",
-                "subGroupId": "MP_TYPE_LI"
+                "subGroupId": "MP_TYPE_LI",
+                "groupId": "MP_MEALS_REQUEST"
               }
             },
             {
@@ -7596,11 +7690,11 @@
                   "fieldId": "__ckRowSource"
                 },
                 "groupId": "MP_MEALS_REQUEST",
-                "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
                 "parentWhen": {
                   "equals": "Full",
                   "fieldId": "PREP_TYPE"
-                }
+                },
+                "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI"
               }
             }
           ]
@@ -7708,8 +7802,8 @@
     {
       "optionsNl": [],
       "type": "CHECKBOX",
-      "required": true,
       "qNl": "Ik bevestig dat bovenstaande informatie correct is",
+      "required": true,
       "ui": {
         "labelLayout": "stacked"
       },
@@ -7727,8 +7821,8 @@
     {
       "optionsNl": [],
       "type": "BUTTON",
-      "required": false,
       "qNl": "Eindrapport",
+      "required": false,
       "button": {
         "action": "openUrlField",
         "placements": [
@@ -7757,12 +7851,12 @@
       "qNl": "Belliard",
       "button": {
         "action": "createRecordPreset",
-        "placements": [
-          "topBarList"
-        ],
         "presetValues": {
           "MP_DISTRIBUTOR": "Belliard"
-        }
+        },
+        "placements": [
+          "topBarList"
+        ]
       },
       "listView": false,
       "options": [],
@@ -7788,12 +7882,12 @@
       "required": false,
       "button": {
         "action": "createRecordPreset",
-        "placements": [
-          "topBarList"
-        ],
         "presetValues": {
           "MP_DISTRIBUTOR": "Hub"
-        }
+        },
+        "placements": [
+          "topBarList"
+        ]
       },
       "listView": false,
       "options": [],
@@ -7815,8 +7909,8 @@
     {
       "optionsNl": [],
       "type": "BUTTON",
-      "required": false,
       "qNl": "Le Phare",
+      "required": false,
       "button": {
         "action": "createRecordPreset",
         "presetValues": {
@@ -7846,8 +7940,8 @@
     {
       "optionsNl": [],
       "type": "BUTTON",
-      "qNl": "Procedure voor de maaltijdproductie",
       "required": false,
+      "qNl": "Procedure voor de maaltijdproductie",
       "button": {
         "templateId": {
           "FR": "bundle:procedure_meal_production.html",
@@ -7870,8 +7964,8 @@
     {
       "optionsNl": [],
       "type": "BUTTON",
-      "required": false,
       "qNl": "Hygiënereglement",
+      "required": false,
       "button": {
         "templateId": {
           "FR": "bundle:procedure_meal_production.html",
@@ -7894,8 +7988,8 @@
     {
       "optionsNl": [],
       "type": "BUTTON",
-      "required": false,
       "qNl": "Belliard – last 7 days",
+      "required": false,
       "button": {
         "mode": "advanced",
         "action": "listViewSearchPreset",
@@ -7914,8 +8008,8 @@
     {
       "optionsNl": [],
       "type": "BUTTON",
-      "qNl": "HUB – last 7 days",
       "required": false,
+      "qNl": "HUB – last 7 days",
       "button": {
         "mode": "advanced",
         "action": "listViewSearchPreset",
@@ -7934,8 +8028,8 @@
     {
       "optionsNl": [],
       "type": "BUTTON",
-      "qNl": "Le Phare – last 7 days",
       "required": false,
+      "qNl": "Le Phare – last 7 days",
       "button": {
         "mode": "advanced",
         "action": "listViewSearchPreset",
@@ -7952,6 +8046,7 @@
       "status": "Active"
     }
   ],
+  "generatedAt": "2026-01-26T20:48:17.035Z",
   "validationErrors": [],
   "definition": {
     "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
@@ -8013,6 +8108,7 @@
           "mapping": {
             "value": "NICKNAME"
           },
+          "id": "Distributor Data",
           "projection": [
             "DIST_NAME",
             "NICKNAME",
@@ -8025,7 +8121,6 @@
             "DIST_COUNTRY",
             "DIST_POST_CODE"
           ],
-          "id": "Distributor Data",
           "statusAllowList": [
             "Active"
           ]
@@ -8045,6 +8140,10 @@
         "required": true,
         "listView": true,
         "options": {
+          "en": [
+            "Lunch",
+            "Dinner"
+          ],
           "raw": [
             {
               "Options (NL)": "Lunch",
@@ -8058,10 +8157,6 @@
               "Options (EN)": "Dinner",
               "__ckOptionValue": "Dinner"
             }
-          ],
-          "en": [
-            "Lunch",
-            "Dinner"
           ],
           "fr": [
             "Service de midi",
@@ -8084,6 +8179,16 @@
         "required": true,
         "listView": false,
         "options": {
+          "en": [
+            "⁠Akkara",
+            "⁠Anjali",
+            "⁠Roya",
+            "⁠Saga",
+            "⁠Nezka",
+            "⁠Haven",
+            "⁠Ruby",
+            "⁠Aline"
+          ],
           "raw": [
             {
               "Options (NL)": "⁠Akkara",
@@ -8133,16 +8238,6 @@
               "Options (EN)": "⁠Aline",
               "__ckOptionValue": "⁠Aline"
             }
-          ],
-          "en": [
-            "⁠Akkara",
-            "⁠Anjali",
-            "⁠Roya",
-            "⁠Saga",
-            "⁠Nezka",
-            "⁠Haven",
-            "⁠Ruby",
-            "⁠Aline"
           ],
           "fr": [
             "⁠Akkara",
@@ -8202,8 +8297,8 @@
         },
         "derivedValue": {
           "op": "addDays",
-          "dependsOn": "MP_PREP_DATE",
           "hidden": true,
+          "dependsOn": "MP_PREP_DATE",
           "offsetDays": 2
         },
         "label": {
@@ -8260,10 +8355,10 @@
               "Options (FR)": "",
               "Type": "CHOICE",
               "Edit Options": "Edit",
-              "List View?": "",
               "Options (NL)": "",
-              "ID": "MEAL_TYPE",
+              "List View?": "",
               "Label NL": "Dieetcategorie",
+              "ID": "MEAL_TYPE",
               "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Standard\", \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
               "__ckOptionValue": "MEAL_TYPE"
             },
@@ -8277,8 +8372,8 @@
               "Options (FR)": "",
               "Type": "NUMBER",
               "Edit Options": "",
-              "List View?": "",
               "Options (NL)": "",
+              "List View?": "",
               "Label NL": "Aantal",
               "ID": "QTY",
               "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"QTY\",\n                \"lessThan\": 1\n            },\n            \"then\": {\n                \"fieldId\": \"QTY\",\n                \"min\": 1\n            },\n            \"message\": {\n                \"en\": \"Please enter a quantity greater than 0\",\n                \"fr\": \"Veuillez entrer une quantité supérieure à 0\",\n                \"nl\": \"Voer een hoeveelheid in die groter is dan 0\"\n            },\n            \"phase\": \"submit\"\n        }\n    ]\n}",
@@ -8286,16 +8381,16 @@
             },
             {
               "Label EN": "Will you use leftovers?",
-              "Required?": true,
               "Options (EN)": "REF:YesNoOptions",
-              "Validation Rules (JSON)": "",
+              "Required?": true,
               "Option Filter (JSON)": "",
+              "Validation Rules (JSON)": "",
               "Label FR": "On utilise des restes réchauffés ?",
               "Options (FR)": "",
               "Type": "CHOICE",
               "Edit Options": "Edit",
-              "List View?": "",
               "Options (NL)": "",
+              "List View?": "",
               "ID": "MP_IS_REHEAT",
               "Label NL": "Is dit gerecht opgewarmde rest ?",
               "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"ui\": {\n    \"overlayOpenActions\": {\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_IS_REHEAT\",\n        \"equals\": \"Yes\"\n      },\n      \"label\": { \"en\": \"View/Edit\", \"fr\": \"Voir/Modifier\", \"nl\": \"Weergave/Bewerken\" },\n      \"rowFilter\": {\n        \"excludeWhen\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\"Cook\"]\n        }\n      },\n      \"renderMode\": \"replace\",\n      \"resetValue\": \"No\",\n      \"groupOverride\": {\n        \"id\": \"MP_TYPE_LI\",\n        \"minRows\": 0,\n        \"maxRows\": 50,\n        \"fields\": [\n          {\n            \"labelEn\": \"Type\",\n            \"labelFr\": \"Type\",\n            \"labelNl\": \"Type\",\n            \"id\": \"PREP_TYPE\",\n            \"type\": \"CHOICE\",\n            \"options\": [\"Entire dish\", \"Part Dish\"],\n            \"optionsFr\": [\"Plat entier\", \"Plat partiel\"],\n            \"optionsNl\": [\"Volledig gerecht\", \"Deel gerecht\"],\n            \"defaultValue\": \"Entire dish\",\n            \"ui\": {\n              \"control\": \"select\"\n            }\n          },\n          {\n            \"labelEn\": \"Quantity\",\n            \"labelFr\": \"Quantité\",\n            \"labelNl\": \"Hoeveelheid\",\n            \"id\": \"PREP_QTY\",\n            \"type\": \"NUMBER\",\n            \"required\": true,\n            \"visibility\": {\n              \"hideWhen\": {\n                \"fieldId\": \"PREP_TYPE\",\n                \"equals\": \"Part Dish\"\n              }\n            }\n          },\n          {\n            \"labelEn\": \"Recipe\",\n            \"labelFr\": \"Recette\",\n            \"labelNl\": \"Recept\",\n            \"id\": \"RECIPE\",\n            \"type\": \"CHOICE\",\n            \"required\": true,\n            \"visibility\": {\n              \"hideWhen\": {\n                \"fieldId\": \"PREP_TYPE\",\n                \"equals\": \"Part Dish\"\n              }\n            },\n            \"dataSource\": {\n              \"id\": \"Recipes Data\",\n              \"projection\": [\n                \"QFTD5RD2EM\",\"NUM_PORTIONS\",\"DISH_TYPE\",\"Q65ILNUSGL\",\"REC_INST\"\n              ],\n              \"mode\": \"options\",\n              \"tooltipField\": \"REC_INST\",\n              \"tooltipLabel\": { \"en\": \"Instructions\", \"fr\": \"Instructions\", \"nl\": \"Instructies\" },\n              \"statusAllowList\": [\"Active\"]\n            },\n            \"optionFilter\": {\n              \"dependsOn\": \"MEAL_TYPE\",\n              \"dataSourceField\": \"DISH_TYPE\",\n              \"dataSourceDelimiter\": \",\",\n              \"bypassValues\": [\"No-salt\"]\n            },\n            \"selectionEffects\": [\n              {\n                \"type\": \"addLineItemsFromDataSource\",\n                \"groupId\": \"MP_INGREDIENTS_LI\",\n                \"targetPath\": \"MP_INGREDIENTS_LI\",\n                \"lookupField\": \"QFTD5RD2EM\",\n                \"dataField\": \"Q65ILNUSGL\",\n                \"rowMultiplierFieldId\": \"PREP_QTY\",\n                \"dataSourceMultiplierField\": \"NUM_PORTIONS\",\n                \"scaleNumericFields\": [\n                  \"QTY\"\n                ],\n                \"lineItemMapping\": {\n                  \"ING\": \"ING\",\n                  \"QTY\": \"QTY\",\n                  \"UNIT\": \"UNIT\"\n                },\n                \"aggregateBy\": [\n                  \"ING\",\n                  \"UNIT\",\n                  \"RECIPE\"\n                ],\n                \"aggregateNumericFields\": [\n                  \"QTY\"\n                ]\n              }\n            ],\n            \"ui\": {\n              \"control\": \"select\"\n            }\n          }\n        ]\n      }\n    }\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"preset\": { \"PREP_QTY\": \"$row.MP_TO_COOK\", \"PREP_TYPE\": \"Cook\" },\n      \"hideRemoveButton\": true\n    },\n    {\n      \"id\": \"mp_left_overs_init\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"triggerValues\": [\"Yes\"],\n      \"preset\": { \"PREP_TYPE\": \"Entire dish\" }\n    }\n  ]\n}",
@@ -8303,16 +8398,16 @@
             },
             {
               "Label EN": "Leftover information",
-              "Options (EN)": "No left over, Left over Yes",
               "Required?": false,
-              "Validation Rules (JSON)": "",
+              "Options (EN)": "No left over, Left over Yes",
               "Option Filter (JSON)": "",
+              "Validation Rules (JSON)": "",
               "Label FR": "Leftover information",
               "Options (FR)": "No left over, Left over Yes",
               "Type": "CHOICE",
               "Edit Options": "",
-              "Options (NL)": "No left over, Left over Yes",
               "List View?": "",
+              "Options (NL)": "No left over, Left over Yes",
               "Label NL": "Leftover information",
               "ID": "LEFTOVER_INFO",
               "Config (JSON/REF)": "{\n    \"optionFilter\": {\n        \"dependsOn\": [\n            \"MP_IS_REHEAT\"\n        ],\n        \"optionMap\": {\n            \"Yes\": [\n                \"Left over Yes\"\n            ],\n            \"No\": [\n                \"No left over\"\n            ]\n        }\n    },\n    \"ui\": {\n        \"hideLabel\": true\n    }\n}",
@@ -8320,8 +8415,8 @@
             },
             {
               "Label EN": "To Cook",
-              "Required?": true,
               "Options (EN)": "",
+              "Required?": true,
               "Validation Rules (JSON)": "",
               "Option Filter (JSON)": "",
               "Label FR": "To Cook",
@@ -8330,8 +8425,8 @@
               "Edit Options": "",
               "Options (NL)": "",
               "List View?": "",
-              "Label NL": "To Cook",
               "ID": "MP_TO_COOK",
+              "Label NL": "To Cook",
               "Config (JSON/REF)": "{\n  \"ui\": {\n    \"overlayOpenActions\": {\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"label\": {\n        \"en\": \"View/Edit\",\n        \"fr\": \"Voir/Modifier\",\n        \"nl\": \"Weergave/Bewerken\"\n      },\n      \"rowFilter\": {\n        \"excludeWhen\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Entire dish\",\n            \"Part Dish\"\n          ]\n        }\n      },\n      \"renderMode\": \"inline\",\n      \"hideTrashIcon\": true,\n      \"groupOverride\": {\n        \"id\": \"MP_TYPE_LI\",\n        \"minRows\": 0,\n        \"maxRows\": 1,\n        \"ui\": {\n          \"addButtonPlacement\": \"hidden\"\n        },\n        \"fields\": [\n          {\n            \"labelEn\": \"Type\",\n            \"labelFr\": \"Type\",\n            \"labelNl\": \"Type\",\n            \"id\": \"PREP_TYPE\",\n            \"type\": \"CHOICE\",\n            \"options\": [\n              \"Cook\"\n            ],\n            \"optionsFr\": [\n              \"Cuisiner\"\n            ],\n            \"optionsNl\": [\n              \"Koken\"\n            ],\n            \"defaultValue\": \"Cook\",\n            \"ui\": {\n              \"control\": \"select\"\n            },\n            \"readOnly\": true\n          },\n          {\n            \"labelEn\": \"Quantity\",\n            \"labelFr\": \"Quantité\",\n            \"labelNl\": \"Hoeveelheid\",\n            \"id\": \"PREP_QTY\",\n            \"type\": \"NUMBER\",\n            \"required\": true,\n            \"readOnly\": true\n          },\n          {\n            \"labelEn\": \"Recipe\",\n            \"labelFr\": \"Recette\",\n            \"labelNl\": \"Recept\",\n            \"id\": \"RECIPE\",\n            \"type\": \"CHOICE\",\n            \"required\": true,\n            \"dataSource\": {\n              \"id\": \"Recipes Data\",\n              \"projection\": [\n                \"QFTD5RD2EM\",\n                \"NUM_PORTIONS\",\n                \"DISH_TYPE\",\n                \"Q65ILNUSGL\",\n                \"REC_INST\"\n              ],\n              \"mode\": \"options\",\n              \"tooltipField\": \"REC_INST\",\n              \"tooltipLabel\": {\n                \"en\": \"Instructions\",\n                \"fr\": \"Instructions\",\n                \"nl\": \"Instructies\"\n              },\n              \"statusAllowList\": [\n                \"Active\"\n              ]\n            },\n            \"optionFilter\": {\n              \"dependsOn\": \"MEAL_TYPE\",\n              \"dataSourceField\": \"DISH_TYPE\",\n              \"dataSourceDelimiter\": \",\",\n              \"bypassValues\": [\n                \"No-salt\"\n              ]\n            },\n            \"selectionEffects\": [\n              {\n                \"type\": \"addLineItemsFromDataSource\",\n                \"groupId\": \"MP_INGREDIENTS_LI\",\n                \"targetPath\": \"MP_INGREDIENTS_LI\",\n                \"lookupField\": \"QFTD5RD2EM\",\n                \"dataField\": \"Q65ILNUSGL\",\n                \"rowMultiplierFieldId\": \"PREP_QTY\",\n                \"dataSourceMultiplierField\": \"NUM_PORTIONS\",\n                \"scaleNumericFields\": [\n                  \"QTY\"\n                ],\n                \"lineItemMapping\": {\n                  \"ING\": \"ING\",\n                  \"QTY\": \"QTY\",\n                  \"UNIT\": \"UNIT\"\n                },\n                \"aggregateBy\": [\n                  \"ING\",\n                  \"UNIT\",\n                  \"RECIPE\"\n                ],\n                \"aggregateNumericFields\": [\n                  \"QTY\"\n                ]\n              }\n            ],\n            \"ui\": {\n              \"control\": \"select\"\n            }\n          }\n        ],\n        \"label\": {\n          \"en\": \"Cook\",\n          \"fr\": \"Cuisiner\",\n          \"nl\": \"Koken\"\n        }\n      },\n      \"flattenFields\": [\n        \"RECIPE\"\n      ],\n      \"flattenPlacement\": \"left\"\n    }\n  },\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"applyOn\": \"blur\",\n    \"expression\": \"{QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Entire dish\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ],\n  \"visibility\": {\n    \"showWhen\": {\n      \"any\": [\n        {\n          \"fieldId\": \"MP_IS_REHEAT\",\n          \"equals\": [\"No\"]\n        },\n        {\n          \"all\": [\n            {\n              \"fieldId\": \"MP_IS_REHEAT\",\n              \"equals\": [\"Yes\"]\n            },\n            {\n              \"lineItems\": {\n                \"groupId\": \"MP_MEALS_REQUEST\",\n                \"subGroupPath\": [\"MP_TYPE_LI\", \"MP_INGREDIENTS_LI\"],\n                \"match\": \"any\"\n              }\n            }\n          ]\n        }\n      ]\n    }\n  }\n}",
               "__ckOptionValue": "MP_TO_COOK"
             },
@@ -8345,42 +8440,42 @@
               "Options (FR)": "",
               "Type": "NUMBER",
               "Edit Options": "",
-              "List View?": "",
               "Options (NL)": "",
-              "ID": "MP_COOK_TEMP",
+              "List View?": "",
               "Label NL": "Kernkooktemperatuur °C (min 63)",
+              "ID": "MP_COOK_TEMP",
               "Config (JSON/REF)": "{\n    \"pair\": \"core_temp\",\n    \"validationRules\": [\n      {\n        \"when\": {\n          \"fieldId\": \"MP_COOK_TEMP\",\n          \"lessThan\": 63\n        },\n        \"then\": {\n          \"fieldId\": \"MP_COOK_TEMP\",\n          \"min\": 63\n        },\n        \"message\": {\n          \"en\": \"Ensure core temperature is at least 63°C.\",\n          \"fr\": \"Assurez-vous que la température interne est d'au moins 63°C.\",\n          \"nl\": \"Zorg ervoor dat de kerntemperatuur minimaal 63°C is.\"\n        }\n      }\n    ],\n    \"requiredMessage\": {\n        \"en\": \"Ensure core temperature is at least 63°C.\",\n        \"fr\": \"Assurez-vous que la température interne est d'au moins 63°C.\",\n        \"nl\": \"Zorg ervoor dat de kerntemperatuur minimaal 63°C is.\"\n    }\n  }",
               "__ckOptionValue": "MP_COOK_TEMP"
             },
             {
               "Label EN": "Evidence",
-              "Options (EN)": "",
               "Required?": true,
-              "Option Filter (JSON)": "",
+              "Options (EN)": "",
               "Validation Rules (JSON)": "",
+              "Option Filter (JSON)": "",
               "Label FR": "Preuve",
               "Options (FR)": "",
               "Type": "FILE_UPLOAD",
               "Edit Options": "",
-              "List View?": "",
               "Options (NL)": "",
-              "Label NL": "Bewijs",
+              "List View?": "",
               "ID": "TEMP_EVD",
+              "Label NL": "Bewijs",
               "Config (JSON/REF)": "{\n    \"uploadConfig\": {\n        \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n        \"linkLabel\": {\n            \"en\": \"Photo {n}\",\n            \"fr\": \"Photo {n}\",\n            \"nl\": \"Foto {n}\"\n        },\n        \"minFiles\": 1,\n        \"maxFiles\": 5,\n        \"maxFileSizeMb\": 10,\n        \"allowedMimeTypes\": [\n            \"image/*\"\n        ],\n        \"errorMessages\": {\n            \"minFiles\": {\n                \"en\": \"One photo is required per cooking pot.\",\n                \"fr\": \"Une photo est requise par pot de cuisson.\",\n                \"nl\": \"Een foto is vereist per kookpot.\"\n            },\n            \"maxFiles\": {\n                \"en\": \"The maximum number of photos is {max}\",\n                \"fr\": \"Le nombre maximum de photos est de {max}\",\n                \"nl\": \"Het maximum aantal foto's is {max}\"\n            },\n            \"maxFileSizeMb\": {\n                \"en\": \"The maximum photo size is {mb}MB\",\n                \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n                \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n            }\n        },\n        \"compression\": {\n            \"images\": {\n                \"maxDimension\": 1600,\n                \"quality\": 0.82,\n                \"outputType\": \"keep\"\n            }\n        },\n        \"helperText\": {\n            \"remainingOne\": {\n                \"en\": \"You need to add {count} more photo\",\n                \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n                \"nl\": \"Je moet {count} foto toevoegen\"\n            },\n            \"remainingMany\": {\n                \"en\": \"You need to add {count} more photos\",\n                \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n                \"nl\": \"Je moet {count} foto's toevoegen\"\n            }\n        },\n        \"ui\": {\n            \"variant\": \"progressive\"\n        }\n    },\n    \"pair\": \"core_temp\",\n    \"requiredMessage\": {\n        \"en\": \"One photo is required per cooking pot.\",\n        \"fr\": \"Une photo est requise par pot de cuisson.\",\n        \"nl\": \"Een foto is vereist per kookpot.\"\n    }\n}",
               "__ckOptionValue": "TEMP_EVD"
             },
             {
               "Label EN": "Delivered Portions",
-              "Required?": false,
               "Options (EN)": "",
-              "Validation Rules (JSON)": "",
+              "Required?": false,
               "Option Filter (JSON)": "",
+              "Validation Rules (JSON)": "",
               "Label FR": "Portions livrées",
               "Options (FR)": "",
               "Type": "NUMBER",
               "Edit Options": "",
-              "Options (NL)": "",
               "List View?": "",
+              "Options (NL)": "",
               "ID": "FINAL_QTY",
               "Label NL": "Maaltijden",
               "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"QTY\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
@@ -8411,16 +8506,16 @@
         "id": "MP_MEALS_REQUEST",
         "lineItemConfig": {
           "addMode": "auto",
-          "maxRows": 200,
           "addButtonLabel": {
             "fr": "Ajouter des repas",
             "en": "Add meals",
             "nl": "Repas toevoegen"
           },
+          "maxRows": 200,
           "ui": {
             "expandGate": "collapsedFieldsValid",
-            "mode": "progressive",
             "defaultCollapsed": true,
+            "mode": "progressive",
             "addButtonPlacement": "hidden",
             "rowDisclaimer": {
               "cases": [
@@ -8473,18 +8568,19 @@
             {
               "minRows": 0,
               "addMode": "inline",
+              "maxRows": 200,
               "addButtonLabel": {
                 "fr": "Ajouter",
                 "en": "Add",
                 "nl": "Toevoegen"
               },
-              "maxRows": 200,
               "ui": {
                 "mode": "table",
                 "openInOverlay": true,
                 "tableHideUntilAnchor": true,
                 "overlayDetail": {
                   "header": {
+                    "addButtonPlacement": "top",
                     "tableColumns": [
                       "PREP_TYPE",
                       "PREP_QTY",
@@ -8497,23 +8593,22 @@
                       "_view": "44px",
                       "__remove": "44px",
                       "RECIPE": "55%"
-                    },
-                    "addButtonPlacement": "top"
+                    }
                   },
                   "body": {
                     "edit": {
                       "mode": "table",
+                      "tableColumnWidths": {
+                        "ING": "50%",
+                        "UNIT": "25%",
+                        "__remove": "44px",
+                        "QTY": "25%"
+                      },
                       "tableColumns": [
                         "ING",
                         "QTY",
                         "UNIT"
-                      ],
-                      "tableColumnWidths": {
-                        "UNIT": "25%",
-                        "ING": "50%",
-                        "__remove": "44px",
-                        "QTY": "25%"
-                      }
+                      ]
                     },
                     "view": {
                       "mode": "html",
@@ -8543,26 +8638,26 @@
                 {
                   "addMode": "selectorOverlay",
                   "minRows": 0,
+                  "maxRows": 200,
                   "addButtonLabel": {
                     "fr": "Ajouter",
                     "en": "Add",
                     "nl": "Toevoegen"
                   },
-                  "maxRows": 200,
                   "ui": {
                     "mode": "table",
+                    "openInOverlay": true,
                     "tableColumns": [
                       "ING",
                       "QTY",
                       "UNIT"
                     ],
                     "tableColumnWidths": {
-                      "ING": "50%",
                       "UNIT": "25%",
+                      "ING": "50%",
                       "__remove": "44px",
                       "QTY": "25%"
                     },
-                    "openInOverlay": true,
                     "rowDisclaimer": {
                       "cases": [
                         {
@@ -10495,8 +10590,8 @@
                         "Red lentils",
                         "Green lentils"
                       ],
-                      "labelFr": "Ingrédient",
-                      "id": "ING"
+                      "id": "ING",
+                      "labelFr": "Ingrédient"
                     },
                     {
                       "optionsNl": [],
@@ -10507,8 +10602,8 @@
                       "pair": "qty_unt",
                       "optionsFr": [],
                       "options": [],
-                      "id": "QTY",
-                      "labelFr": "Quantité"
+                      "labelFr": "Quantité",
+                      "id": "QTY"
                     },
                     {
                       "optionsNl": [
@@ -10692,27 +10787,27 @@
                           "lookupColumn": "allowedUnits"
                         },
                         "optionMap": {
+                          "Mint - fresh": [
+                            "gr",
+                            "Tbsp"
+                          ],
                           "Pepper": [
                             "kg",
                             "gr",
                             "bucket"
-                          ],
-                          "Mint - fresh": [
-                            "gr",
-                            "Tbsp"
                           ],
                           "Cordon bleu": [
                             "kg",
                             "gr",
                             "piece"
                           ],
-                          "Bulgur": [
-                            "kg",
-                            "gr"
-                          ],
                           "Parsley - dried": [
                             "gr",
                             "Tbsp"
+                          ],
+                          "Bulgur": [
+                            "kg",
+                            "gr"
                           ],
                           "Vinegar": [
                             "cl"
@@ -10779,14 +10874,14 @@
                             "gr",
                             "bucket"
                           ],
-                          "Chickpeas - dry": [
-                            "kg",
-                            "gr"
-                          ],
                           "Spinach - frozen": [
                             "kg",
                             "gr",
                             "bag"
+                          ],
+                          "Chickpeas - dry": [
+                            "kg",
+                            "gr"
                           ],
                           "Yellow curry": [
                             "kg",
@@ -10899,15 +10994,15 @@
                             "gr",
                             "piece"
                           ],
+                          "Olive oil": [
+                            "cl"
+                          ],
                           "Tomato paste": [
                             "kg",
                             "gr",
                             "tin-140gr",
                             "tin-2500gr",
                             "Tbsp"
-                          ],
-                          "Olive oil": [
-                            "cl"
                           ],
                           "Pepper - frozen": [
                             "kg",
@@ -11231,8 +11326,8 @@
                         {
                           "en": "Dry carbohydrates",
                           "fr": "Féculents secs",
-                          "__ckOptionValue": "Dry carbohydrates",
-                          "nl": "Droge zetmeelproducten"
+                          "nl": "Droge zetmeelproducten",
+                          "__ckOptionValue": "Dry carbohydrates"
                         },
                         {
                           "en": "Vegan protein",
@@ -11249,26 +11344,26 @@
                         {
                           "en": "Dairy",
                           "fr": "Produits laitiers",
-                          "nl": "Zuivel",
-                          "__ckOptionValue": "Dairy"
+                          "__ckOptionValue": "Dairy",
+                          "nl": "Zuivel"
                         },
                         {
                           "en": "Animal protein Halal",
                           "fr": "Protéines animales Halal",
-                          "nl": "Dierlijke eiwitten Halal",
-                          "__ckOptionValue": "Animal protein Halal"
+                          "__ckOptionValue": "Animal protein Halal",
+                          "nl": "Dierlijke eiwitten Halal"
                         },
                         {
                           "en": "Frozen vegetables",
                           "fr": "Légumes surgelés",
-                          "nl": "Diepvriesgroenten",
-                          "__ckOptionValue": "Frozen vegetables"
+                          "__ckOptionValue": "Frozen vegetables",
+                          "nl": "Diepvriesgroenten"
                         },
                         {
                           "en": "Spices",
                           "fr": "Épices",
-                          "__ckOptionValue": "Spices",
-                          "nl": "Kruiden"
+                          "nl": "Kruiden",
+                          "__ckOptionValue": "Spices"
                         },
                         {
                           "en": "Oils",
@@ -11313,11 +11408,11 @@
                           "lookupColumn": "Category"
                         },
                         "optionMap": {
-                          "Pepper": [
-                            "Fresh vegetables"
-                          ],
                           "Mint - fresh": [
                             "Herbs - spices - condiments"
+                          ],
+                          "Pepper": [
+                            "Fresh vegetables"
                           ],
                           "Cordon bleu": [
                             "Animal protein Halal"
@@ -11433,11 +11528,11 @@
                           "Corn - frozen": [
                             "Frozen vegetables"
                           ],
-                          "Cumin": [
-                            "Herbs - spices - condiments"
-                          ],
                           "Pumpkin - frozen": [
                             "Frozen vegetables"
+                          ],
+                          "Cumin": [
+                            "Herbs - spices - condiments"
                           ],
                           "Mushroom": [
                             "Fresh vegetables"
@@ -11532,11 +11627,11 @@
                           "Broccoli mix - frozen": [
                             "Frozen vegetables"
                           ],
-                          "Green peas - frozen": [
-                            "Frozen vegetables"
-                          ],
                           "Greek yogurt": [
                             "Dairy"
+                          ],
+                          "Green peas - frozen": [
+                            "Frozen vegetables"
                           ],
                           "Mozzarella": [
                             "Dairy"
@@ -11556,11 +11651,11 @@
                           "Black pepper": [
                             "Herbs - spices - condiments"
                           ],
-                          "Carrots & peas - tinned": [
-                            "Tins/Pots"
-                          ],
                           "Red beans - tinned": [
                             "Vegan protein"
+                          ],
+                          "Carrots & peas - tinned": [
+                            "Tins/Pots"
                           ],
                           "Leek": [
                             "Fresh vegetables"
@@ -11574,11 +11669,11 @@
                           "Rice": [
                             "Dry carbohydrates"
                           ],
-                          "Oregano -fresh": [
-                            "Herbs - spices - condiments"
-                          ],
                           "Ginger paste": [
                             "Tins/Pots"
+                          ],
+                          "Oregano -fresh": [
+                            "Herbs - spices - condiments"
                           ],
                           "Green lentils": [
                             "Vegan protein"
@@ -11601,11 +11696,11 @@
                           "Cauliflower - frozen": [
                             "Frozen vegetables"
                           ],
-                          "Pasta": [
-                            "Dry carbohydrates"
-                          ],
                           "Butternut": [
                             "Fresh vegetables"
+                          ],
+                          "Pasta": [
+                            "Dry carbohydrates"
                           ],
                           "Cayenne": [
                             "Herbs - spices - condiments"
@@ -11615,8 +11710,8 @@
                           ]
                         }
                       },
-                      "labelFr": "Catégorie",
-                      "id": "CAT"
+                      "id": "CAT",
+                      "labelFr": "Catégorie"
                     },
                     {
                       "optionsNl": [
@@ -11686,10 +11781,10 @@
                           "lookupColumn": "Allergens"
                         },
                         "optionMap": {
-                          "Mint - fresh": [
+                          "Pepper": [
                             "None"
                           ],
-                          "Pepper": [
+                          "Mint - fresh": [
                             "None"
                           ],
                           "Cordon bleu": [
@@ -11730,10 +11825,10 @@
                           "Pleurotte mushroom": [
                             "None"
                           ],
-                          "Chickpeas - tinned": [
+                          "Couscous vegetables mix": [
                             "None"
                           ],
-                          "Couscous vegetables mix": [
+                          "Chickpeas - tinned": [
                             "None"
                           ],
                           "Green beans - tinned": [
@@ -11823,10 +11918,10 @@
                           "Chicken tenders": [
                             "Gluten"
                           ],
-                          "Tomato paste": [
+                          "Olive oil": [
                             "None"
                           ],
-                          "Olive oil": [
+                          "Tomato paste": [
                             "None"
                           ],
                           "Pepper - frozen": [
@@ -11907,11 +12002,11 @@
                           "Broccoli mix - frozen": [
                             "None"
                           ],
-                          "Green peas - frozen": [
-                            "None"
-                          ],
                           "Greek yogurt": [
                             "Milk"
+                          ],
+                          "Green peas - frozen": [
+                            "None"
                           ],
                           "Mozzarella": [
                             "Milk"
@@ -11931,10 +12026,10 @@
                           "Black pepper": [
                             "None"
                           ],
-                          "Carrots & peas - tinned": [
+                          "Red beans - tinned": [
                             "None"
                           ],
-                          "Red beans - tinned": [
+                          "Carrots & peas - tinned": [
                             "None"
                           ],
                           "Leek": [
@@ -11949,10 +12044,10 @@
                           "Rice": [
                             "None"
                           ],
-                          "Ginger paste": [
+                          "Oregano -fresh": [
                             "None"
                           ],
-                          "Oregano -fresh": [
+                          "Ginger paste": [
                             "None"
                           ],
                           "Green lentils": [
@@ -11976,11 +12071,11 @@
                           "Cauliflower - frozen": [
                             "None"
                           ],
-                          "Pasta": [
-                            "Gluten"
-                          ],
                           "Butternut": [
                             "None"
+                          ],
+                          "Pasta": [
+                            "Gluten"
                           ],
                           "Cayenne": [
                             "None"
@@ -11997,7 +12092,6 @@
                   ],
                   "sectionSelector": {
                     "placeholderEn": "Search name, category, dietary, supplier or allergen",
-                    "placeholderFr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
                     "optionsNl": [
                       "Kipreepjes",
                       "Kipblokjes",
@@ -12100,490 +12194,8 @@
                       "Rode linzen",
                       "Groene linzen"
                     ],
-                    "optionFilter": {
-                      "dependsOn": "MEAL_TYPE",
-                      "optionMapRef": {
-                        "ref": "REF:IngredientsOptions",
-                        "keyColumn": "dietaryApplicability",
-                        "lookupColumn": "optionEn",
-                        "splitKey": true
-                      },
-                      "optionMap": {
-                        "Standard": [
-                          "Chicken stripes",
-                          "Chicken cubes",
-                          "Chicken wings",
-                          "Chicken tenders",
-                          "Cordon bleu",
-                          "Fishsticks",
-                          "Greek yogurt",
-                          "Mozzarella",
-                          "Rice",
-                          "Brown rice",
-                          "Basmati rice",
-                          "Couscous",
-                          "Bulgur",
-                          "Orzo",
-                          "Pasta",
-                          "Whole wheat pasta",
-                          "Onion",
-                          "Potato",
-                          "Broccoli",
-                          "Aubergine",
-                          "Carrot",
-                          "Tomato",
-                          "Pepper",
-                          "Cauliflower",
-                          "Squash",
-                          "Sweet potato",
-                          "Butternut",
-                          "Pumpkin",
-                          "Pleurotte mushroom",
-                          "Spaghetti squash",
-                          "Courgette",
-                          "Leek",
-                          "Mushroom",
-                          "Parsnip",
-                          "Turnip",
-                          "Green beans - frozen",
-                          "Chinese mix",
-                          "Corn - frozen",
-                          "Leek - frozen",
-                          "Mushroom - frozen",
-                          "Carrot - frozen",
-                          "Couscous vegetables mix",
-                          "Ratatouille mix",
-                          "Courgette - frozen",
-                          "Pumpkin - frozen",
-                          "Pepper - frozen",
-                          "Spinach - frozen",
-                          "Red Beans - frozen",
-                          "Onion - frozen",
-                          "Green peas - frozen",
-                          "Cauliflower - frozen",
-                          "Broccoli - frozen",
-                          "Broccoli mix - frozen",
-                          "Parsley - fresh",
-                          "Basil - fresh",
-                          "Dill - fresh",
-                          "Bouillon powder",
-                          "Salt",
-                          "Sugar",
-                          "Curry madras",
-                          "Coriander powder",
-                          "Cayenne",
-                          "Turmeric",
-                          "Black pepper",
-                          "Paprika",
-                          "Cumin",
-                          "Cinnamon",
-                          "Mint - fresh",
-                          "Oregano -fresh",
-                          "Parsley - dried",
-                          "Dill - dried",
-                          "Mint - dried",
-                          "Oregano - dried",
-                          "Bay leaf",
-                          "Nutmeg",
-                          "Basil - dried",
-                          "Soy sauce",
-                          "Miso paste",
-                          "Sunflower oil",
-                          "Olive oil",
-                          "Vinegar",
-                          "Tomato pulp",
-                          "Tomato paste",
-                          "Diced tomatoes",
-                          "Garlic paste",
-                          "Ginger paste",
-                          "Cream",
-                          "Yellow curry",
-                          "Coconut milk",
-                          "Oat milk",
-                          "Peanut butter",
-                          "Green beans - tinned",
-                          "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Mackerel - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "No-salt": [
-                          "Chicken stripes",
-                          "Chicken cubes",
-                          "Chicken wings",
-                          "Chicken tenders",
-                          "Cordon bleu",
-                          "Fishsticks",
-                          "Greek yogurt",
-                          "Mozzarella",
-                          "Rice",
-                          "Brown rice",
-                          "Basmati rice",
-                          "Couscous",
-                          "Bulgur",
-                          "Orzo",
-                          "Pasta",
-                          "Whole wheat pasta",
-                          "Onion",
-                          "Potato",
-                          "Broccoli",
-                          "Aubergine",
-                          "Carrot",
-                          "Tomato",
-                          "Pepper",
-                          "Cauliflower",
-                          "Squash",
-                          "Sweet potato",
-                          "Butternut",
-                          "Pumpkin",
-                          "Pleurotte mushroom",
-                          "Spaghetti squash",
-                          "Courgette",
-                          "Leek",
-                          "Mushroom",
-                          "Parsnip",
-                          "Turnip",
-                          "Green beans - frozen",
-                          "Chinese mix",
-                          "Corn - frozen",
-                          "Leek - frozen",
-                          "Mushroom - frozen",
-                          "Carrot - frozen",
-                          "Couscous vegetables mix",
-                          "Ratatouille mix",
-                          "Courgette - frozen",
-                          "Pumpkin - frozen",
-                          "Pepper - frozen",
-                          "Spinach - frozen",
-                          "Red Beans - frozen",
-                          "Onion - frozen",
-                          "Green peas - frozen",
-                          "Cauliflower - frozen",
-                          "Broccoli - frozen",
-                          "Broccoli mix - frozen",
-                          "Parsley - fresh",
-                          "Basil - fresh",
-                          "Dill - fresh",
-                          "Bouillon powder",
-                          "Sugar",
-                          "Curry madras",
-                          "Coriander powder",
-                          "Cayenne",
-                          "Turmeric",
-                          "Black pepper",
-                          "Paprika",
-                          "Cumin",
-                          "Cinnamon",
-                          "Mint - fresh",
-                          "Oregano -fresh",
-                          "Parsley - dried",
-                          "Dill - dried",
-                          "Mint - dried",
-                          "Oregano - dried",
-                          "Bay leaf",
-                          "Nutmeg",
-                          "Basil - dried",
-                          "Soy sauce",
-                          "Miso paste",
-                          "Sunflower oil",
-                          "Olive oil",
-                          "Vinegar",
-                          "Tomato pulp",
-                          "Tomato paste",
-                          "Diced tomatoes",
-                          "Garlic paste",
-                          "Ginger paste",
-                          "Cream",
-                          "Yellow curry",
-                          "Coconut milk",
-                          "Oat milk",
-                          "Peanut butter",
-                          "Green beans - tinned",
-                          "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Mackerel - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "Vegetarian": [
-                          "Greek yogurt",
-                          "Mozzarella",
-                          "Rice",
-                          "Brown rice",
-                          "Basmati rice",
-                          "Couscous",
-                          "Bulgur",
-                          "Orzo",
-                          "Pasta",
-                          "Whole wheat pasta",
-                          "Onion",
-                          "Potato",
-                          "Broccoli",
-                          "Aubergine",
-                          "Carrot",
-                          "Tomato",
-                          "Pepper",
-                          "Cauliflower",
-                          "Squash",
-                          "Sweet potato",
-                          "Butternut",
-                          "Pumpkin",
-                          "Pleurotte mushroom",
-                          "Spaghetti squash",
-                          "Courgette",
-                          "Leek",
-                          "Mushroom",
-                          "Parsnip",
-                          "Turnip",
-                          "Green beans - frozen",
-                          "Chinese mix",
-                          "Corn - frozen",
-                          "Leek - frozen",
-                          "Mushroom - frozen",
-                          "Carrot - frozen",
-                          "Couscous vegetables mix",
-                          "Ratatouille mix",
-                          "Courgette - frozen",
-                          "Pumpkin - frozen",
-                          "Pepper - frozen",
-                          "Spinach - frozen",
-                          "Red Beans - frozen",
-                          "Onion - frozen",
-                          "Green peas - frozen",
-                          "Cauliflower - frozen",
-                          "Broccoli - frozen",
-                          "Broccoli mix - frozen",
-                          "Parsley - fresh",
-                          "Basil - fresh",
-                          "Dill - fresh",
-                          "Bouillon powder",
-                          "Salt",
-                          "Sugar",
-                          "Curry madras",
-                          "Coriander powder",
-                          "Cayenne",
-                          "Turmeric",
-                          "Black pepper",
-                          "Paprika",
-                          "Cumin",
-                          "Cinnamon",
-                          "Mint - fresh",
-                          "Oregano -fresh",
-                          "Parsley - dried",
-                          "Dill - dried",
-                          "Mint - dried",
-                          "Oregano - dried",
-                          "Bay leaf",
-                          "Nutmeg",
-                          "Basil - dried",
-                          "Soy sauce",
-                          "Miso paste",
-                          "Sunflower oil",
-                          "Olive oil",
-                          "Vinegar",
-                          "Tomato pulp",
-                          "Tomato paste",
-                          "Diced tomatoes",
-                          "Garlic paste",
-                          "Ginger paste",
-                          "Cream",
-                          "Yellow curry",
-                          "Coconut milk",
-                          "Oat milk",
-                          "Peanut butter",
-                          "Green beans - tinned",
-                          "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "Vegan": [
-                          "Rice",
-                          "Brown rice",
-                          "Basmati rice",
-                          "Couscous",
-                          "Bulgur",
-                          "Orzo",
-                          "Pasta",
-                          "Whole wheat pasta",
-                          "Onion",
-                          "Potato",
-                          "Broccoli",
-                          "Aubergine",
-                          "Carrot",
-                          "Tomato",
-                          "Pepper",
-                          "Cauliflower",
-                          "Squash",
-                          "Sweet potato",
-                          "Butternut",
-                          "Pumpkin",
-                          "Pleurotte mushroom",
-                          "Spaghetti squash",
-                          "Courgette",
-                          "Leek",
-                          "Mushroom",
-                          "Parsnip",
-                          "Turnip",
-                          "Green beans - frozen",
-                          "Chinese mix",
-                          "Corn - frozen",
-                          "Leek - frozen",
-                          "Mushroom - frozen",
-                          "Carrot - frozen",
-                          "Couscous vegetables mix",
-                          "Ratatouille mix",
-                          "Courgette - frozen",
-                          "Pumpkin - frozen",
-                          "Pepper - frozen",
-                          "Spinach - frozen",
-                          "Red Beans - frozen",
-                          "Onion - frozen",
-                          "Green peas - frozen",
-                          "Cauliflower - frozen",
-                          "Broccoli - frozen",
-                          "Broccoli mix - frozen",
-                          "Parsley - fresh",
-                          "Basil - fresh",
-                          "Dill - fresh",
-                          "Bouillon powder",
-                          "Salt",
-                          "Sugar",
-                          "Curry madras",
-                          "Coriander powder",
-                          "Cayenne",
-                          "Turmeric",
-                          "Black pepper",
-                          "Paprika",
-                          "Cumin",
-                          "Cinnamon",
-                          "Mint - fresh",
-                          "Oregano -fresh",
-                          "Parsley - dried",
-                          "Dill - dried",
-                          "Mint - dried",
-                          "Oregano - dried",
-                          "Bay leaf",
-                          "Nutmeg",
-                          "Basil - dried",
-                          "Soy sauce",
-                          "Miso paste",
-                          "Sunflower oil",
-                          "Olive oil",
-                          "Vinegar",
-                          "Tomato pulp",
-                          "Tomato paste",
-                          "Diced tomatoes",
-                          "Garlic paste",
-                          "Ginger paste",
-                          "Yellow curry",
-                          "Coconut milk",
-                          "Oat milk",
-                          "Peanut butter",
-                          "Green beans - tinned",
-                          "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "Diabetic": [
-                          "Chicken stripes",
-                          "Chicken cubes",
-                          "Greek yogurt",
-                          "Mozzarella",
-                          "Brown rice",
-                          "Basmati rice",
-                          "Whole wheat pasta",
-                          "Onion",
-                          "Potato",
-                          "Broccoli",
-                          "Aubergine",
-                          "Tomato",
-                          "Pepper",
-                          "Cauliflower",
-                          "Squash",
-                          "Butternut",
-                          "Pumpkin",
-                          "Pleurotte mushroom",
-                          "Spaghetti squash",
-                          "Courgette",
-                          "Leek",
-                          "Mushroom",
-                          "Green beans - frozen",
-                          "Chinese mix",
-                          "Corn - frozen",
-                          "Leek - frozen",
-                          "Mushroom - frozen",
-                          "Couscous vegetables mix",
-                          "Ratatouille mix",
-                          "Courgette - frozen",
-                          "Pumpkin - frozen",
-                          "Pepper - frozen",
-                          "Spinach - frozen",
-                          "Red Beans - frozen",
-                          "Onion - frozen",
-                          "Green peas - frozen",
-                          "Cauliflower - frozen",
-                          "Broccoli - frozen",
-                          "Broccoli mix - frozen",
-                          "Parsley - fresh",
-                          "Basil - fresh",
-                          "Dill - fresh",
-                          "Salt",
-                          "Curry madras",
-                          "Coriander powder",
-                          "Cayenne",
-                          "Turmeric",
-                          "Black pepper",
-                          "Paprika",
-                          "Cumin",
-                          "Cinnamon",
-                          "Mint - fresh",
-                          "Oregano -fresh",
-                          "Parsley - dried",
-                          "Dill - dried",
-                          "Mint - dried",
-                          "Oregano - dried",
-                          "Bay leaf",
-                          "Nutmeg",
-                          "Basil - dried",
-                          "Soy sauce",
-                          "Miso paste",
-                          "Sunflower oil",
-                          "Olive oil",
-                          "Vinegar",
-                          "Tomato pulp",
-                          "Tomato paste",
-                          "Diced tomatoes",
-                          "Garlic paste",
-                          "Ginger paste",
-                          "Cream",
-                          "Coconut milk",
-                          "Oat milk",
-                          "Green beans - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Mackerel - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ]
-                      }
-                    },
+                    "placeholderFr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
+                    "labelEn": "Search and tap on `Add` button",
                     "optionsRaw": [
                       {
                         "Allergens": "None",
@@ -13686,7 +13298,490 @@
                         "__ckOptionValue": "Green lentils"
                       }
                     ],
-                    "labelEn": "Search and tap on `Add` button",
+                    "optionFilter": {
+                      "dependsOn": "MEAL_TYPE",
+                      "optionMapRef": {
+                        "ref": "REF:IngredientsOptions",
+                        "keyColumn": "dietaryApplicability",
+                        "lookupColumn": "optionEn",
+                        "splitKey": true
+                      },
+                      "optionMap": {
+                        "Standard": [
+                          "Chicken stripes",
+                          "Chicken cubes",
+                          "Chicken wings",
+                          "Chicken tenders",
+                          "Cordon bleu",
+                          "Fishsticks",
+                          "Greek yogurt",
+                          "Mozzarella",
+                          "Rice",
+                          "Brown rice",
+                          "Basmati rice",
+                          "Couscous",
+                          "Bulgur",
+                          "Orzo",
+                          "Pasta",
+                          "Whole wheat pasta",
+                          "Onion",
+                          "Potato",
+                          "Broccoli",
+                          "Aubergine",
+                          "Carrot",
+                          "Tomato",
+                          "Pepper",
+                          "Cauliflower",
+                          "Squash",
+                          "Sweet potato",
+                          "Butternut",
+                          "Pumpkin",
+                          "Pleurotte mushroom",
+                          "Spaghetti squash",
+                          "Courgette",
+                          "Leek",
+                          "Mushroom",
+                          "Parsnip",
+                          "Turnip",
+                          "Green beans - frozen",
+                          "Chinese mix",
+                          "Corn - frozen",
+                          "Leek - frozen",
+                          "Mushroom - frozen",
+                          "Carrot - frozen",
+                          "Couscous vegetables mix",
+                          "Ratatouille mix",
+                          "Courgette - frozen",
+                          "Pumpkin - frozen",
+                          "Pepper - frozen",
+                          "Spinach - frozen",
+                          "Red Beans - frozen",
+                          "Onion - frozen",
+                          "Green peas - frozen",
+                          "Cauliflower - frozen",
+                          "Broccoli - frozen",
+                          "Broccoli mix - frozen",
+                          "Parsley - fresh",
+                          "Basil - fresh",
+                          "Dill - fresh",
+                          "Bouillon powder",
+                          "Salt",
+                          "Sugar",
+                          "Curry madras",
+                          "Coriander powder",
+                          "Cayenne",
+                          "Turmeric",
+                          "Black pepper",
+                          "Paprika",
+                          "Cumin",
+                          "Cinnamon",
+                          "Mint - fresh",
+                          "Oregano -fresh",
+                          "Parsley - dried",
+                          "Dill - dried",
+                          "Mint - dried",
+                          "Oregano - dried",
+                          "Bay leaf",
+                          "Nutmeg",
+                          "Basil - dried",
+                          "Soy sauce",
+                          "Miso paste",
+                          "Sunflower oil",
+                          "Olive oil",
+                          "Vinegar",
+                          "Tomato pulp",
+                          "Tomato paste",
+                          "Diced tomatoes",
+                          "Garlic paste",
+                          "Ginger paste",
+                          "Cream",
+                          "Yellow curry",
+                          "Coconut milk",
+                          "Oat milk",
+                          "Peanut butter",
+                          "Green beans - tinned",
+                          "Carrots & peas - tinned",
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Mackerel - tinned",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ],
+                        "No-salt": [
+                          "Chicken stripes",
+                          "Chicken cubes",
+                          "Chicken wings",
+                          "Chicken tenders",
+                          "Cordon bleu",
+                          "Fishsticks",
+                          "Greek yogurt",
+                          "Mozzarella",
+                          "Rice",
+                          "Brown rice",
+                          "Basmati rice",
+                          "Couscous",
+                          "Bulgur",
+                          "Orzo",
+                          "Pasta",
+                          "Whole wheat pasta",
+                          "Onion",
+                          "Potato",
+                          "Broccoli",
+                          "Aubergine",
+                          "Carrot",
+                          "Tomato",
+                          "Pepper",
+                          "Cauliflower",
+                          "Squash",
+                          "Sweet potato",
+                          "Butternut",
+                          "Pumpkin",
+                          "Pleurotte mushroom",
+                          "Spaghetti squash",
+                          "Courgette",
+                          "Leek",
+                          "Mushroom",
+                          "Parsnip",
+                          "Turnip",
+                          "Green beans - frozen",
+                          "Chinese mix",
+                          "Corn - frozen",
+                          "Leek - frozen",
+                          "Mushroom - frozen",
+                          "Carrot - frozen",
+                          "Couscous vegetables mix",
+                          "Ratatouille mix",
+                          "Courgette - frozen",
+                          "Pumpkin - frozen",
+                          "Pepper - frozen",
+                          "Spinach - frozen",
+                          "Red Beans - frozen",
+                          "Onion - frozen",
+                          "Green peas - frozen",
+                          "Cauliflower - frozen",
+                          "Broccoli - frozen",
+                          "Broccoli mix - frozen",
+                          "Parsley - fresh",
+                          "Basil - fresh",
+                          "Dill - fresh",
+                          "Bouillon powder",
+                          "Sugar",
+                          "Curry madras",
+                          "Coriander powder",
+                          "Cayenne",
+                          "Turmeric",
+                          "Black pepper",
+                          "Paprika",
+                          "Cumin",
+                          "Cinnamon",
+                          "Mint - fresh",
+                          "Oregano -fresh",
+                          "Parsley - dried",
+                          "Dill - dried",
+                          "Mint - dried",
+                          "Oregano - dried",
+                          "Bay leaf",
+                          "Nutmeg",
+                          "Basil - dried",
+                          "Soy sauce",
+                          "Miso paste",
+                          "Sunflower oil",
+                          "Olive oil",
+                          "Vinegar",
+                          "Tomato pulp",
+                          "Tomato paste",
+                          "Diced tomatoes",
+                          "Garlic paste",
+                          "Ginger paste",
+                          "Cream",
+                          "Yellow curry",
+                          "Coconut milk",
+                          "Oat milk",
+                          "Peanut butter",
+                          "Green beans - tinned",
+                          "Carrots & peas - tinned",
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Mackerel - tinned",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ],
+                        "Vegetarian": [
+                          "Greek yogurt",
+                          "Mozzarella",
+                          "Rice",
+                          "Brown rice",
+                          "Basmati rice",
+                          "Couscous",
+                          "Bulgur",
+                          "Orzo",
+                          "Pasta",
+                          "Whole wheat pasta",
+                          "Onion",
+                          "Potato",
+                          "Broccoli",
+                          "Aubergine",
+                          "Carrot",
+                          "Tomato",
+                          "Pepper",
+                          "Cauliflower",
+                          "Squash",
+                          "Sweet potato",
+                          "Butternut",
+                          "Pumpkin",
+                          "Pleurotte mushroom",
+                          "Spaghetti squash",
+                          "Courgette",
+                          "Leek",
+                          "Mushroom",
+                          "Parsnip",
+                          "Turnip",
+                          "Green beans - frozen",
+                          "Chinese mix",
+                          "Corn - frozen",
+                          "Leek - frozen",
+                          "Mushroom - frozen",
+                          "Carrot - frozen",
+                          "Couscous vegetables mix",
+                          "Ratatouille mix",
+                          "Courgette - frozen",
+                          "Pumpkin - frozen",
+                          "Pepper - frozen",
+                          "Spinach - frozen",
+                          "Red Beans - frozen",
+                          "Onion - frozen",
+                          "Green peas - frozen",
+                          "Cauliflower - frozen",
+                          "Broccoli - frozen",
+                          "Broccoli mix - frozen",
+                          "Parsley - fresh",
+                          "Basil - fresh",
+                          "Dill - fresh",
+                          "Bouillon powder",
+                          "Salt",
+                          "Sugar",
+                          "Curry madras",
+                          "Coriander powder",
+                          "Cayenne",
+                          "Turmeric",
+                          "Black pepper",
+                          "Paprika",
+                          "Cumin",
+                          "Cinnamon",
+                          "Mint - fresh",
+                          "Oregano -fresh",
+                          "Parsley - dried",
+                          "Dill - dried",
+                          "Mint - dried",
+                          "Oregano - dried",
+                          "Bay leaf",
+                          "Nutmeg",
+                          "Basil - dried",
+                          "Soy sauce",
+                          "Miso paste",
+                          "Sunflower oil",
+                          "Olive oil",
+                          "Vinegar",
+                          "Tomato pulp",
+                          "Tomato paste",
+                          "Diced tomatoes",
+                          "Garlic paste",
+                          "Ginger paste",
+                          "Cream",
+                          "Yellow curry",
+                          "Coconut milk",
+                          "Oat milk",
+                          "Peanut butter",
+                          "Green beans - tinned",
+                          "Carrots & peas - tinned",
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ],
+                        "Vegan": [
+                          "Rice",
+                          "Brown rice",
+                          "Basmati rice",
+                          "Couscous",
+                          "Bulgur",
+                          "Orzo",
+                          "Pasta",
+                          "Whole wheat pasta",
+                          "Onion",
+                          "Potato",
+                          "Broccoli",
+                          "Aubergine",
+                          "Carrot",
+                          "Tomato",
+                          "Pepper",
+                          "Cauliflower",
+                          "Squash",
+                          "Sweet potato",
+                          "Butternut",
+                          "Pumpkin",
+                          "Pleurotte mushroom",
+                          "Spaghetti squash",
+                          "Courgette",
+                          "Leek",
+                          "Mushroom",
+                          "Parsnip",
+                          "Turnip",
+                          "Green beans - frozen",
+                          "Chinese mix",
+                          "Corn - frozen",
+                          "Leek - frozen",
+                          "Mushroom - frozen",
+                          "Carrot - frozen",
+                          "Couscous vegetables mix",
+                          "Ratatouille mix",
+                          "Courgette - frozen",
+                          "Pumpkin - frozen",
+                          "Pepper - frozen",
+                          "Spinach - frozen",
+                          "Red Beans - frozen",
+                          "Onion - frozen",
+                          "Green peas - frozen",
+                          "Cauliflower - frozen",
+                          "Broccoli - frozen",
+                          "Broccoli mix - frozen",
+                          "Parsley - fresh",
+                          "Basil - fresh",
+                          "Dill - fresh",
+                          "Bouillon powder",
+                          "Salt",
+                          "Sugar",
+                          "Curry madras",
+                          "Coriander powder",
+                          "Cayenne",
+                          "Turmeric",
+                          "Black pepper",
+                          "Paprika",
+                          "Cumin",
+                          "Cinnamon",
+                          "Mint - fresh",
+                          "Oregano -fresh",
+                          "Parsley - dried",
+                          "Dill - dried",
+                          "Mint - dried",
+                          "Oregano - dried",
+                          "Bay leaf",
+                          "Nutmeg",
+                          "Basil - dried",
+                          "Soy sauce",
+                          "Miso paste",
+                          "Sunflower oil",
+                          "Olive oil",
+                          "Vinegar",
+                          "Tomato pulp",
+                          "Tomato paste",
+                          "Diced tomatoes",
+                          "Garlic paste",
+                          "Ginger paste",
+                          "Yellow curry",
+                          "Coconut milk",
+                          "Oat milk",
+                          "Peanut butter",
+                          "Green beans - tinned",
+                          "Carrots & peas - tinned",
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ],
+                        "Diabetic": [
+                          "Chicken stripes",
+                          "Chicken cubes",
+                          "Greek yogurt",
+                          "Mozzarella",
+                          "Brown rice",
+                          "Basmati rice",
+                          "Whole wheat pasta",
+                          "Onion",
+                          "Potato",
+                          "Broccoli",
+                          "Aubergine",
+                          "Tomato",
+                          "Pepper",
+                          "Cauliflower",
+                          "Squash",
+                          "Butternut",
+                          "Pumpkin",
+                          "Pleurotte mushroom",
+                          "Spaghetti squash",
+                          "Courgette",
+                          "Leek",
+                          "Mushroom",
+                          "Green beans - frozen",
+                          "Chinese mix",
+                          "Corn - frozen",
+                          "Leek - frozen",
+                          "Mushroom - frozen",
+                          "Couscous vegetables mix",
+                          "Ratatouille mix",
+                          "Courgette - frozen",
+                          "Pumpkin - frozen",
+                          "Pepper - frozen",
+                          "Spinach - frozen",
+                          "Red Beans - frozen",
+                          "Onion - frozen",
+                          "Green peas - frozen",
+                          "Cauliflower - frozen",
+                          "Broccoli - frozen",
+                          "Broccoli mix - frozen",
+                          "Parsley - fresh",
+                          "Basil - fresh",
+                          "Dill - fresh",
+                          "Salt",
+                          "Curry madras",
+                          "Coriander powder",
+                          "Cayenne",
+                          "Turmeric",
+                          "Black pepper",
+                          "Paprika",
+                          "Cumin",
+                          "Cinnamon",
+                          "Mint - fresh",
+                          "Oregano -fresh",
+                          "Parsley - dried",
+                          "Dill - dried",
+                          "Mint - dried",
+                          "Oregano - dried",
+                          "Bay leaf",
+                          "Nutmeg",
+                          "Basil - dried",
+                          "Soy sauce",
+                          "Miso paste",
+                          "Sunflower oil",
+                          "Olive oil",
+                          "Vinegar",
+                          "Tomato pulp",
+                          "Tomato paste",
+                          "Diced tomatoes",
+                          "Garlic paste",
+                          "Ginger paste",
+                          "Cream",
+                          "Coconut milk",
+                          "Oat milk",
+                          "Green beans - tinned",
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Mackerel - tinned",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ]
+                      }
+                    },
                     "labelNl": "Zoeken en klik op de knop `Toevoegen`.",
                     "placeholderNl": "Zoek op naam, categorie, diëtetische beperking, leverancier of allergie",
                     "required": true,
@@ -13895,13 +13990,13 @@
                       "Green lentils"
                     ],
                     "optionsRef": "REF:IngredientsOptions",
+                    "labelFr": "Rechercher et cliquer sur le bouton `Ajouter`",
+                    "id": "ITEM_FILTER",
                     "placeholder": {
                       "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
                       "en": "Search name, category, dietary, supplier or allergen",
                       "nl": "Zoek op naam, categorie, diëtetische beperking, leverancier of allergie"
                     },
-                    "labelFr": "Rechercher et cliquer sur le bouton `Ajouter`",
-                    "id": "ITEM_FILTER",
                     "hideLabel": true
                   }
                 }
@@ -13947,8 +14042,8 @@
                   "required": true,
                   "optionsFr": [],
                   "options": [],
-                  "id": "PREP_QTY",
-                  "labelFr": "Quantity"
+                  "labelFr": "Quantity",
+                  "id": "PREP_QTY"
                 },
                 {
                   "optionsNl": [],
@@ -13974,12 +14069,12 @@
                       ],
                       "groupId": "MP_INGREDIENTS_LI",
                       "rowMultiplierFieldId": "PREP_QTY",
-                      "targetPath": "MP_INGREDIENTS_LI",
                       "lineItemMapping": {
                         "ING": "ING",
                         "UNIT": "UNIT",
                         "QTY": "QTY"
                       },
+                      "targetPath": "MP_INGREDIENTS_LI",
                       "type": "addLineItemsFromDataSource",
                       "aggregateNumericFields": [
                         "QTY"
@@ -13999,13 +14094,12 @@
                   "id": "RECIPE",
                   "labelFr": "Recette",
                   "dataSource": {
-                    "mode": "options",
                     "tooltipLabel": {
                       "fr": "Instructions",
                       "en": "Instructions",
                       "nl": "Instructies"
                     },
-                    "id": "Recipes Data",
+                    "mode": "options",
                     "projection": [
                       "QFTD5RD2EM",
                       "NUM_PORTIONS",
@@ -14013,6 +14107,7 @@
                       "Q65ILNUSGL",
                       "REC_INST"
                     ],
+                    "id": "Recipes Data",
                     "statusAllowList": [
                       "Active"
                     ],
@@ -14057,15 +14152,15 @@
               "optionsRaw": [
                 {
                   "optionNl": "Standard_NL",
-                  "optionFr": "Standard",
                   "Icon": "🍽",
+                  "optionFr": "Standard",
                   "optionEn": "Standard",
                   "__ckOptionValue": "Standard"
                 },
                 {
                   "optionNl": "Végétarien_NL",
-                  "Icon": "🥕",
                   "optionFr": "Végétarien",
+                  "Icon": "🥕",
                   "optionEn": "Vegetarian",
                   "__ckOptionValue": "Vegetarian"
                 },
@@ -14085,8 +14180,8 @@
                 },
                 {
                   "optionNl": "Sans sel_NL",
-                  "Icon": "svg:no_salt.min.svg",
                   "optionFr": "Sans sel",
+                  "Icon": "svg:no_salt.min.svg",
                   "optionEn": "No-salt",
                   "__ckOptionValue": "No-salt"
                 }
@@ -14173,8 +14268,8 @@
               "pair": "meal_qty",
               "optionsFr": [],
               "options": [],
-              "labelFr": "Portions demandées",
-              "id": "QTY"
+              "id": "QTY",
+              "labelFr": "Portions demandées"
             },
             {
               "optionsNl": [
@@ -14218,10 +14313,10 @@
                   "groupId": "MP_TYPE_LI"
                 },
                 {
+                  "id": "mp_left_overs_init",
                   "preset": {
                     "PREP_TYPE": "Entire dish"
                   },
-                  "id": "mp_left_overs_init",
                   "type": "addLineItems",
                   "triggerValues": [
                     "Yes"
@@ -14234,8 +14329,8 @@
                   {
                     "renderMode": "replace",
                     "groupOverride": {
-                      "minRows": 0,
                       "maxRows": 50,
+                      "minRows": 0,
                       "id": "MP_TYPE_LI",
                       "fields": [
                         {
@@ -14257,8 +14352,8 @@
                             "Part Dish"
                           ],
                           "labelNl": "Type",
-                          "id": "PREP_TYPE",
                           "labelFr": "Type",
+                          "id": "PREP_TYPE",
                           "type": "CHOICE"
                         },
                         {
@@ -14270,8 +14365,8 @@
                           },
                           "labelEn": "Quantity",
                           "labelNl": "Hoeveelheid",
-                          "labelFr": "Quantité",
                           "id": "PREP_QTY",
+                          "labelFr": "Quantité",
                           "type": "NUMBER",
                           "required": true
                         },
@@ -14279,8 +14374,8 @@
                           "selectionEffects": [
                             {
                               "lookupField": "QFTD5RD2EM",
-                              "dataSourceMultiplierField": "NUM_PORTIONS",
                               "dataField": "Q65ILNUSGL",
+                              "dataSourceMultiplierField": "NUM_PORTIONS",
                               "scaleNumericFields": [
                                 "QTY"
                               ],
@@ -14312,6 +14407,7 @@
                               "fieldId": "PREP_TYPE"
                             }
                           },
+                          "labelEn": "Recipe",
                           "optionFilter": {
                             "dataSourceField": "DISH_TYPE",
                             "dependsOn": "MEAL_TYPE",
@@ -14320,18 +14416,18 @@
                             ],
                             "dataSourceDelimiter": ","
                           },
-                          "labelEn": "Recipe",
                           "labelNl": "Recept",
-                          "labelFr": "Recette",
                           "id": "RECIPE",
+                          "labelFr": "Recette",
                           "type": "CHOICE",
                           "dataSource": {
+                            "mode": "options",
                             "tooltipLabel": {
                               "fr": "Instructions",
                               "en": "Instructions",
                               "nl": "Instructies"
                             },
-                            "mode": "options",
+                            "id": "Recipes Data",
                             "projection": [
                               "QFTD5RD2EM",
                               "NUM_PORTIONS",
@@ -14339,7 +14435,6 @@
                               "Q65ILNUSGL",
                               "REC_INST"
                             ],
-                            "id": "Recipes Data",
                             "statusAllowList": [
                               "Active"
                             ],
@@ -14355,10 +14450,6 @@
                       "en": "View/Edit",
                       "nl": "Weergave/Bewerken"
                     },
-                    "when": {
-                      "equals": "Yes",
-                      "fieldId": "MP_IS_REHEAT"
-                    },
                     "rowFilter": {
                       "excludeWhen": {
                         "equals": [
@@ -14366,6 +14457,10 @@
                         ],
                         "fieldId": "PREP_TYPE"
                       }
+                    },
+                    "when": {
+                      "equals": "Yes",
+                      "fieldId": "MP_IS_REHEAT"
                     },
                     "resetValue": "No"
                   }
@@ -14379,8 +14474,8 @@
                 "No",
                 "Yes"
               ],
-              "id": "MP_IS_REHEAT",
-              "labelFr": "On utilise des restes réchauffés ?"
+              "labelFr": "On utilise des restes réchauffés ?",
+              "id": "MP_IS_REHEAT"
             },
             {
               "optionsNl": [
@@ -14415,8 +14510,8 @@
                 "No left over",
                 "Left over Yes"
               ],
-              "id": "LEFTOVER_INFO",
-              "labelFr": "Leftover information"
+              "labelFr": "Leftover information",
+              "id": "LEFTOVER_INFO"
             },
             {
               "optionsNl": [],
@@ -14480,15 +14575,15 @@
                   "groupId": "MP_TYPE_LI"
                 },
                 {
+                  "id": "mp_to_cook_sync",
                   "preset": {
                     "PREP_TYPE": "Cook",
                     "PREP_QTY": "$row.MP_TO_COOK"
                   },
-                  "id": "mp_to_cook_sync",
                   "type": "addLineItems",
                   "when": {
-                    "greaterThan": 0,
-                    "fieldId": "MP_TO_COOK"
+                    "fieldId": "MP_TO_COOK",
+                    "greaterThan": 0
                   },
                   "hideRemoveButton": true,
                   "groupId": "MP_TYPE_LI"
@@ -14499,8 +14594,8 @@
                   {
                     "renderMode": "inline",
                     "groupOverride": {
-                      "maxRows": 1,
                       "minRows": 0,
+                      "maxRows": 1,
                       "id": "MP_TYPE_LI",
                       "label": {
                         "fr": "Cuisiner",
@@ -14528,16 +14623,16 @@
                           ],
                           "labelNl": "Type",
                           "readOnly": true,
-                          "id": "PREP_TYPE",
                           "labelFr": "Type",
+                          "id": "PREP_TYPE",
                           "type": "CHOICE"
                         },
                         {
                           "labelEn": "Quantity",
                           "labelNl": "Hoeveelheid",
                           "readOnly": true,
-                          "id": "PREP_QTY",
                           "labelFr": "Quantité",
+                          "id": "PREP_QTY",
                           "type": "NUMBER",
                           "required": true
                         },
@@ -14545,19 +14640,19 @@
                           "selectionEffects": [
                             {
                               "lookupField": "QFTD5RD2EM",
-                              "dataSourceMultiplierField": "NUM_PORTIONS",
                               "dataField": "Q65ILNUSGL",
+                              "dataSourceMultiplierField": "NUM_PORTIONS",
                               "scaleNumericFields": [
                                 "QTY"
                               ],
                               "groupId": "MP_INGREDIENTS_LI",
                               "rowMultiplierFieldId": "PREP_QTY",
-                              "targetPath": "MP_INGREDIENTS_LI",
                               "lineItemMapping": {
-                                "ING": "ING",
                                 "UNIT": "UNIT",
+                                "ING": "ING",
                                 "QTY": "QTY"
                               },
+                              "targetPath": "MP_INGREDIENTS_LI",
                               "type": "addLineItemsFromDataSource",
                               "aggregateNumericFields": [
                                 "QTY"
@@ -14582,8 +14677,8 @@
                           },
                           "labelEn": "Recipe",
                           "labelNl": "Recept",
-                          "id": "RECIPE",
                           "labelFr": "Recette",
+                          "id": "RECIPE",
                           "type": "CHOICE",
                           "dataSource": {
                             "tooltipLabel": {
@@ -14592,6 +14687,7 @@
                               "nl": "Instructies"
                             },
                             "mode": "options",
+                            "id": "Recipes Data",
                             "projection": [
                               "QFTD5RD2EM",
                               "NUM_PORTIONS",
@@ -14599,7 +14695,6 @@
                               "Q65ILNUSGL",
                               "REC_INST"
                             ],
-                            "id": "Recipes Data",
                             "statusAllowList": [
                               "Active"
                             ],
@@ -14619,6 +14714,10 @@
                     "flattenFields": [
                       "RECIPE"
                     ],
+                    "when": {
+                      "fieldId": "MP_TO_COOK",
+                      "greaterThan": 0
+                    },
                     "rowFilter": {
                       "excludeWhen": {
                         "equals": [
@@ -14628,18 +14727,14 @@
                         "fieldId": "PREP_TYPE"
                       }
                     },
-                    "when": {
-                      "fieldId": "MP_TO_COOK",
-                      "greaterThan": 0
-                    },
                     "flattenPlacement": "left"
                   }
                 ]
               },
               "optionsFr": [],
               "options": [],
-              "labelFr": "To Cook",
-              "id": "MP_TO_COOK"
+              "id": "MP_TO_COOK",
+              "labelFr": "To Cook"
             },
             {
               "optionsNl": [],
@@ -14713,7 +14808,6 @@
                 },
                 "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
                 "minFiles": 1,
-                "maxFileSizeMb": 10,
                 "compression": {
                   "images": {
                     "outputType": "keep",
@@ -14721,6 +14815,7 @@
                     "quality": 0.82
                   }
                 },
+                "maxFileSizeMb": 10,
                 "helperText": {
                   "remainingMany": {
                     "fr": "Vous devez ajouter {count} photos supplémentaires",
@@ -14777,8 +14872,8 @@
               "pair": "meal_qty",
               "optionsFr": [],
               "options": [],
-              "labelFr": "Portions livrées",
               "id": "FINAL_QTY",
+              "labelFr": "Portions livrées",
               "requiredMessage": {
                 "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
                 "en": "Delivered portions must be equal to or greater than requested portions.",
@@ -14817,11 +14912,11 @@
                     "fieldId": "__ckRowSource"
                   },
                   "groupId": "MP_MEALS_REQUEST",
-                  "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
                   "parentWhen": {
                     "equals": "Full",
                     "fieldId": "PREP_TYPE"
-                  }
+                  },
+                  "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI"
                 }
               }
             ]
@@ -14890,6 +14985,7 @@
           },
           "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
           "minFiles": 1,
+          "maxFileSizeMb": 10,
           "compression": {
             "images": {
               "outputType": "keep",
@@ -14897,7 +14993,6 @@
               "quality": 0.82
             }
           },
-          "maxFileSizeMb": 10,
           "helperText": {
             "remainingMany": {
               "fr": "Vous devez ajouter {count} photos supplémentaires",
@@ -15026,12 +15121,12 @@
         "required": false,
         "button": {
           "action": "createRecordPreset",
-          "presetValues": {
-            "MP_DISTRIBUTOR": "Hub"
-          },
           "placements": [
             "topBarList"
-          ]
+          ],
+          "presetValues": {
+            "MP_DISTRIBUTOR": "Hub"
+          }
         },
         "listView": false,
         "id": "HUB_BTN",
@@ -15055,12 +15150,12 @@
         "required": false,
         "button": {
           "action": "createRecordPreset",
-          "placements": [
-            "topBarList"
-          ],
           "presetValues": {
             "MP_DISTRIBUTOR": "Le Phare"
-          }
+          },
+          "placements": [
+            "topBarList"
+          ]
         },
         "listView": false,
         "id": "PHARE_BTN",
@@ -15172,12 +15267,12 @@
     "appHeader": {
       "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
     },
+    "title": "Meal Production",
     "autoSave": {
       "debounceMs": 2000,
       "enabled": true,
       "status": "In progress"
     },
-    "title": "Meal Production",
     "destinationTab": "Meal Production Data",
     "actionBars": {
       "top": {
@@ -15186,10 +15281,10 @@
             {
               "id": "create",
               "type": "system",
+              "menuBehavior": "inline",
               "actions": [
                 "createRecordPreset"
-              ],
-              "menuBehavior": "inline"
+              ]
             }
           ]
         }
@@ -15201,12 +15296,12 @@
             {
               "id": "actions",
               "type": "system",
+              "menuBehavior": "inline",
               "actions": [
                 "openUrlField",
                 "renderHtmlTemplate",
                 "renderMarkdownTemplate"
-              ],
-              "menuBehavior": "inline"
+              ]
             },
             "edit"
           ]
@@ -15242,12 +15337,12 @@
         "message": {
           "en": "This service is already exists for this customer and date."
         },
-        "onConflict": "reject",
         "keys": [
           "MP_DISTRIBUTOR",
           "MP_SERVICE",
           "MP_PREP_DATE"
         ],
+        "onConflict": "reject",
         "matchMode": "caseInsensitive",
         "scope": "form"
       }
@@ -15361,22 +15456,22 @@
     "createRecordPresetButtonsEnabled": null,
     "copyCurrentRecordEnabled": false,
     "steps": {
-      "mode": "guided",
-      "defaultAutoAdvance": "onValid",
       "stepSubmitLabel": {
         "fr": "Suivant",
         "en": "Next",
         "nl": "Volgende"
       },
+      "mode": "guided",
+      "defaultAutoAdvance": "onValid",
       "backButtonLabel": {
         "fr": "Retour",
         "en": "Back",
         "nl": "Terug"
       },
+      "showBackButton": true,
       "stateFields": {
         "prefix": "__ckStep"
       },
-      "showBackButton": true,
       "defaultForwardGate": "whenValid",
       "items": [
         {
@@ -15449,7 +15544,9 @@
           "include": [
             {
               "presentation": "liftedRowFields",
+              "kind": "lineGroup",
               "rowFlow": {
+                "mode": "progressive",
                 "output": {
                   "separator": " | ",
                   "hideEmpty": true,
@@ -15482,8 +15579,8 @@
                     },
                     {
                       "showWhen": {
-                        "fieldId": "MP_TO_COOK",
-                        "greaterThan": 0
+                        "greaterThan": 0,
+                        "fieldId": "MP_TO_COOK"
                       },
                       "fieldRef": "MP_TO_COOK",
                       "label": {
@@ -15492,7 +15589,6 @@
                     }
                   ]
                 },
-                "mode": "progressive",
                 "references": {
                   "cookRow": {
                     "match": "first",
@@ -15520,29 +15616,29 @@
                     "groupId": "MP_TYPE_LI"
                   }
                 },
-                "overlayContextHeader": {
-                  "fields": [
-                    {
-                      "fieldRef": "MEAL_TYPE",
-                      "label": {
-                        "en": "Leftovers for {{value}}"
-                      }
-                    },
-                    {
-                      "fieldRef": "QTY",
-                      "label": {
-                        "en": "(Requested: {{value}})"
-                      }
-                    }
-                  ]
-                },
                 "actions": [
                   {
-                    "icon": "edit",
                     "variant": "icon",
+                    "icon": "edit",
                     "effects": [
                       {
                         "type": "openOverlay",
+                        "overlayContextHeader": {
+                          "fields": [
+                            {
+                              "fieldRef": "MEAL_TYPE",
+                              "label": {
+                                "en": "Cooking {{value}}"
+                              }
+                            },
+                            {
+                              "fieldRef": "QTY",
+                              "label": {
+                                "en": "(Requested: {{value}})"
+                              }
+                            }
+                          ]
+                        },
                         "rowFilter": {
                           "includeWhen": {
                             "equals": [
@@ -15563,6 +15659,22 @@
                     "variant": "button",
                     "effects": [
                       {
+                        "overlayContextHeader": {
+                          "fields": [
+                            {
+                              "fieldRef": "MEAL_TYPE",
+                              "label": {
+                                "en": "Leftovers for {{value}}"
+                              }
+                            },
+                            {
+                              "fieldRef": "QTY",
+                              "label": {
+                                "en": "(Requested: {{value}})"
+                              }
+                            }
+                          ]
+                        },
                         "type": "openOverlay",
                         "rowFilter": {
                           "includeWhen": {
@@ -15572,6 +15684,88 @@
                             ],
                             "fieldId": "PREP_TYPE"
                           }
+                        },
+                        "rowFlow": {
+                          "output": {
+                            "separator": " | ",
+                            "hideEmpty": true,
+                            "segments": [
+                              {
+                                "fieldRef": "PREP_TYPE"
+                              },
+                              {
+                                "showWhen": {
+                                  "equals": [
+                                    "Entire dish"
+                                  ],
+                                  "fieldId": "PREP_TYPE"
+                                },
+                                "fieldRef": "RECIPE",
+                                "editAction": "editLeftoverIngredients"
+                              },
+                              {
+                                "showWhen": {
+                                  "equals": [
+                                    "Entire dish"
+                                  ],
+                                  "fieldId": "PREP_TYPE"
+                                },
+                                "fieldRef": "PREP_QTY"
+                              }
+                            ]
+                          },
+                          "actions": [
+                            {
+                              "variant": "icon",
+                              "icon": "edit",
+                              "effects": [
+                                {
+                                  "type": "openOverlay",
+                                  "groupId": "MP_INGREDIENTS_LI"
+                                }
+                              ],
+                              "id": "editLeftoverIngredients",
+                              "overlayContextHeader": {
+                                "fields": [
+                                  {
+                                    "fieldRef": "MEAL_TYPE",
+                                    "label": {
+                                      "en": "Leftovers ingredients for {{value}}"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ],
+                          "prompts": [
+                            {
+                              "hideWhenFilled": true,
+                              "fieldRef": "PREP_TYPE",
+                              "id": "leftoverType"
+                            },
+                            {
+                              "showWhen": {
+                                "equals": [
+                                  "Entire dish"
+                                ],
+                                "fieldId": "PREP_TYPE"
+                              },
+                              "fieldRef": "RECIPE",
+                              "id": "leftoverRecipe",
+                              "hideWhenFilled": true
+                            },
+                            {
+                              "showWhen": {
+                                "equals": [
+                                  "Entire dish"
+                                ],
+                                "fieldId": "PREP_TYPE"
+                              },
+                              "fieldRef": "PREP_QTY",
+                              "id": "leftoverQty",
+                              "hideWhenFilled": true
+                            }
+                          ]
                         },
                         "hideInlineSubgroups": true,
                         "groupId": "MP_TYPE_LI"
@@ -15598,7 +15792,6 @@
                       },
                       "showCancel": true
                     },
-                    "variant": "icon",
                     "showWhen": {
                       "equals": [
                         "No"
@@ -15606,6 +15799,7 @@
                       "fieldId": "MP_IS_REHEAT"
                     },
                     "icon": "edit",
+                    "variant": "icon",
                     "effects": [
                       {
                         "type": "setValue",
@@ -15653,14 +15847,14 @@
                               ],
                               "fieldId": "PREP_TYPE"
                             },
-                            "groupId": "MP_MEALS_REQUEST",
-                            "subGroupId": "MP_TYPE_LI"
+                            "subGroupId": "MP_TYPE_LI",
+                            "groupId": "MP_MEALS_REQUEST"
                           }
                         }
                       ]
                     },
-                    "variant": "icon",
                     "icon": "remove",
+                    "variant": "icon",
                     "effects": [
                       {
                         "type": "deleteLineItems",
@@ -15711,18 +15905,14 @@
                       ],
                       "fieldId": "MP_IS_REHEAT"
                     },
-                    "fieldRef": "leftoverRows.PREP_TYPE",
-                    "id": "leftovers",
-                    "actions": [
-                      {
-                        "id": "openLeftoversOverlay",
-                        "position": "end"
-                      }
-                    ]
+                    "onCompleteActions": [
+                      "openLeftoversOverlay"
+                    ],
+                    "fieldRef": "cookRow.RECIPE",
+                    "id": "leftovers"
                   }
                 ]
               },
-              "kind": "lineGroup",
               "subGroups": {
                 "include": [
                   {
@@ -15734,16 +15924,6 @@
               },
               "collapsedFieldsInHeader": true,
               "id": "MP_MEALS_REQUEST",
-              "readOnlyFields": [
-                "MEAL_TYPE",
-                "QTY"
-              ],
-              "rows": {
-                "includeWhen": {
-                  "greaterThan": 0,
-                  "fieldId": "QTY"
-                }
-              },
               "fields": [
                 {
                   "renderAsLabel": true,
@@ -15762,6 +15942,16 @@
                   "renderAsLabel": true,
                   "id": "MP_TO_COOK"
                 }
+              ],
+              "rows": {
+                "includeWhen": {
+                  "greaterThan": 0,
+                  "fieldId": "QTY"
+                }
+              },
+              "readOnlyFields": [
+                "MEAL_TYPE",
+                "QTY"
               ],
               "displayMode": "inline"
             },
@@ -15800,12 +15990,6 @@
                 "MEAL_TYPE",
                 "QTY"
               ],
-              "rows": {
-                "includeWhen": {
-                  "fieldId": "QTY",
-                  "greaterThan": 0
-                }
-              },
               "fields": [
                 {
                   "renderAsLabel": true,
@@ -15818,6 +16002,12 @@
                 "MP_COOK_TEMP",
                 "TEMP_EVD"
               ],
+              "rows": {
+                "includeWhen": {
+                  "fieldId": "QTY",
+                  "greaterThan": 0
+                }
+              },
               "displayMode": "inline"
             }
           ],
@@ -15839,12 +16029,6 @@
               "kind": "lineGroup",
               "collapsedFieldsInHeader": true,
               "id": "MP_MEALS_REQUEST",
-              "rows": {
-                "includeWhen": {
-                  "greaterThan": 0,
-                  "fieldId": "QTY"
-                }
-              },
               "fields": [
                 "MEAL_TYPE",
                 "QTY",
@@ -15854,6 +16038,12 @@
                 "MEAL_TYPE",
                 "QTY"
               ],
+              "rows": {
+                "includeWhen": {
+                  "fieldId": "QTY",
+                  "greaterThan": 0
+                }
+              },
               "displayMode": "inline"
             },
             {
@@ -15884,7 +16074,6 @@
         "FR": "13VqfHfTHyQbvR2-h8HacTfqAG1kdmjIX4AS5qK_JTnc",
         "EN": "13VqfHfTHyQbvR2-h8HacTfqAG1kdmjIX4AS5qK_JTnc"
       },
-      "statusFieldId": "Status",
       "emailTemplateId": {
         "FR": "1D5G0Ahi5U18oiAUgwLgmM_nkU-kWLLFmuBtDDgj2XRw",
         "EN": "1D5G0Ahi5U18oiAUgwLgmM_nkU-kWLLFmuBtDDgj2XRw"
@@ -15894,17 +16083,18 @@
         "onEmail": "Emailed",
         "onClose": "Closed"
       },
+      "statusFieldId": "Status",
       "emailRecipients": [
         {
           "lookupField": "NICKNAME",
-          "valueField": "DIST_EMAIL",
           "type": "dataSource",
+          "valueField": "DIST_EMAIL",
           "dataSource": {
-            "id": "Distributor Data",
             "projection": [
               "DIST_NAME",
               "DIST_EMAIL"
-            ]
+            ],
+            "id": "Distributor Data"
           },
           "recordFieldId": "MP_DISTRIBUTOR"
         }
