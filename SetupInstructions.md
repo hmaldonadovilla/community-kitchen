@@ -132,6 +132,38 @@ This project uses TypeScript. You need to build the script before using it in Go
         }
         ```
 
+    - **Field-level guarded changes (`changeDialog`)**: You can pause autosave and require confirmation before applying a change when a condition matches. This works on top-level questions and line-item fields. Optional `inputs` let you update peer fields, parent fields, or selection-effect rows.
+
+        ```json
+        {
+          "changeDialog": {
+            "when": { "fieldId": "STATUS", "equals": "Closed" },
+            "title": { "en": "Confirm close", "fr": "Confirmer la fermeture", "nl": "Sluiting bevestigen" },
+            "message": { "en": "Please review the related fields.", "fr": "Veuillez vérifier les champs liés.", "nl": "Controleer de gekoppelde velden." },
+            "dedupMode": "auto",
+            "inputs": [
+              {
+                "id": "close_note",
+                "label": { "en": "Close note", "fr": "Note de fermeture", "nl": "Sluitingsnotitie" },
+                "target": { "scope": "top", "fieldId": "CLOSE_NOTE" }
+              },
+              {
+                "id": "row_qty",
+                "target": { "scope": "row", "fieldId": "QTY" }
+              },
+              {
+                "id": "effect_qty",
+                "target": { "scope": "effect", "effectId": "add_ingredients", "fieldId": "QTY" }
+              }
+            ]
+          }
+        }
+        ```
+
+        Notes:
+        - `target.scope: "parent"` updates the parent row when used inside a subgroup (falls back to top-level for non-subgroups).
+        - `target.scope: "effect"` applies to rows created by the matching `selectionEffects[].id`.
+
     - **Summary view field visibility**: By default, the Summary view only shows fields that are currently visible in the Form view (i.e., not hidden by `visibility`). You can override this per field (and per line-item field/subgroup field) via `ui.summaryVisibility`:
 
         ```json

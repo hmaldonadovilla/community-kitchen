@@ -5,6 +5,7 @@ import {
   DataSourceConfig,
   DefaultValue,
   DerivedValueConfig,
+  FieldChangeDialogConfig,
   FileUploadConfig,
   LineItemFieldType,
   LineItemFieldConfig,
@@ -165,6 +166,7 @@ export class ConfigSheet {
       const validationRules = this.parseValidationRules(validationRaw);
       const valueMap = type === 'TEXT' ? this.parseValueMap(ss, rawConfig) : undefined;
       const visibility = this.parseVisibilityFromAny([rawConfig, optionFilterRaw, validationRaw]);
+      const changeDialog = this.parseChangeDialogFromAny([rawConfig, optionFilterRaw, validationRaw]);
       const clearOnChange = this.parseClearOnChange([rawConfig, optionFilterRaw, validationRaw]);
       const header = this.parseHeaderFlag([rawConfig, optionFilterRaw, validationRaw]);
       const requiredMessage = this.parseRequiredMessage([rawConfig, optionFilterRaw, validationRaw]);
@@ -219,6 +221,7 @@ export class ConfigSheet {
         optionFilter,
         validationRules,
         visibility,
+        changeDialog,
         clearOnChange,
         selectionEffects,
         listViewSort,
@@ -1875,6 +1878,91 @@ export class ConfigSheet {
     return undefined;
   }
 
+  private static parseChangeDialog(rawConfig: string): FieldChangeDialogConfig | undefined {
+    const parsed = this.safeParseObject(rawConfig);
+    if (!parsed) return undefined;
+    const cfgRaw = (parsed as any).changeDialog;
+    if (!cfgRaw || typeof cfgRaw !== 'object') return undefined;
+    return this.normalizeChangeDialog(cfgRaw);
+  }
+
+  private static parseChangeDialogFromAny(rawConfigs: Array<string | undefined>): FieldChangeDialogConfig | undefined {
+    for (const raw of rawConfigs) {
+      if (!raw) continue;
+      const cfg = this.parseChangeDialog(raw);
+      if (cfg) return cfg;
+    }
+    return undefined;
+  }
+
+  private static normalizeChangeDialogTarget(raw: any): { scope: 'top' | 'row' | 'parent' | 'effect'; fieldId: string; effectId?: string } | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const scopeRaw = raw.scope ?? raw.targetScope;
+    const scope = typeof scopeRaw === 'string' ? scopeRaw.trim().toLowerCase() : '';
+    if (scope !== 'top' && scope !== 'row' && scope !== 'parent' && scope !== 'effect') return undefined;
+    const fieldIdRaw = raw.fieldId ?? raw.field ?? raw.id;
+    if (fieldIdRaw === undefined || fieldIdRaw === null) return undefined;
+    const fieldId = fieldIdRaw.toString().trim();
+    if (!fieldId) return undefined;
+    const effectIdRaw = raw.effectId ?? raw.effect ?? raw.selectionEffectId;
+    const effectId = effectIdRaw !== undefined && effectIdRaw !== null ? effectIdRaw.toString().trim() : undefined;
+    return {
+      scope: scope as 'top' | 'row' | 'parent' | 'effect',
+      fieldId,
+      effectId: effectId || undefined
+    };
+  }
+
+  private static normalizeChangeDialog(raw: any): FieldChangeDialogConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const when = this.normalizeWhenClause(raw.when);
+    if (!when) return undefined;
+    const cfg: FieldChangeDialogConfig = { when };
+    if (raw.title !== undefined) cfg.title = raw.title as any;
+    if (raw.message !== undefined) cfg.message = raw.message as any;
+    if (raw.confirmLabel !== undefined) cfg.confirmLabel = raw.confirmLabel as any;
+    if (raw.cancelLabel !== undefined) cfg.cancelLabel = raw.cancelLabel as any;
+    const dedupModeRaw = raw.dedupMode;
+    if (typeof dedupModeRaw === 'string') {
+      const mode = dedupModeRaw.trim().toLowerCase();
+      if (mode === 'auto' || mode === 'always' || mode === 'never') {
+        cfg.dedupMode = mode as FieldChangeDialogConfig['dedupMode'];
+      }
+    }
+    if (Array.isArray(raw.inputs)) {
+      const inputs = raw.inputs.map((entry: any) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const idRaw = entry.id ?? entry.key;
+        if (idRaw === undefined || idRaw === null) return null;
+        const id = idRaw.toString().trim();
+        if (!id) return null;
+        const target = this.normalizeChangeDialogTarget(entry.target ?? entry.applyTo ?? entry.targetField);
+        if (!target) return null;
+        const typeRaw = entry.type !== undefined && entry.type !== null ? entry.type.toString().trim().toUpperCase() : '';
+        const type =
+          typeRaw === 'TEXT' ||
+          typeRaw === 'PARAGRAPH' ||
+          typeRaw === 'NUMBER' ||
+          typeRaw === 'CHOICE' ||
+          typeRaw === 'CHECKBOX' ||
+          typeRaw === 'DATE'
+            ? (typeRaw as any)
+            : undefined;
+        const input: any = {
+          id,
+          target
+        };
+        if (entry.label !== undefined) input.label = entry.label;
+        if (entry.placeholder !== undefined) input.placeholder = entry.placeholder;
+        if (type) input.type = type;
+        if (entry.required !== undefined) input.required = !!entry.required;
+        return input;
+      }).filter(Boolean) as FieldChangeDialogConfig['inputs'];
+      if (inputs && inputs.length) cfg.inputs = inputs;
+    }
+    return cfg;
+  }
+
   private static parseClearOnChange(rawConfigs: Array<string | undefined>): boolean | undefined {
     for (const raw of rawConfigs) {
       if (!raw) continue;
@@ -2727,6 +2815,7 @@ export class ConfigSheet {
         const optionFilter = this.parseOptionFilter(ss, rawConfig);
         const validationRules = this.parseValidationRules(rawConfig);
         const visibility = this.parseVisibility(rawConfig);
+        const changeDialog = this.parseChangeDialogFromAny([rawConfig]);
         const fieldType = (row[1] ? row[1].toString().toUpperCase() : 'TEXT') as LineItemFieldType;
         const dataSource = (fieldType === 'CHOICE' || fieldType === 'CHECKBOX')
           ? this.parseDataSource(rawConfig)
@@ -2767,6 +2856,7 @@ export class ConfigSheet {
         optionFilter,
         validationRules,
         visibility,
+        changeDialog,
         dataSource,
         selectionEffects,
         valueMap,
@@ -2793,6 +2883,7 @@ export class ConfigSheet {
     const optionFilter = this.normalizeOptionMapLike(ss, field?.optionFilter);
     const valueMap = this.normalizeValueMapLike(ss, field?.valueMap);
     const derivedValue = this.normalizeDerivedValue(field?.derivedValue);
+    const changeDialog = this.normalizeChangeDialog(field?.changeDialog);
     const ui = this.normalizeQuestionUi(field?.ui || field?.view || field?.layout);
     const group = this.normalizeQuestionGroup(field?.group || field?.section || field?.card);
     const readOnly = (() => {
@@ -2840,6 +2931,7 @@ export class ConfigSheet {
       optionFilter,
       validationRules: Array.isArray(field?.validationRules) ? field.validationRules : undefined,
       visibility: this.normalizeVisibility(field?.visibility),
+      changeDialog,
       dataSource,
       selectionEffects,
       valueMap,

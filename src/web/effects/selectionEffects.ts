@@ -13,7 +13,7 @@ interface EffectContext {
   clearLineItems?: (groupId: string, contextId?: string) => void;
   updateAutoLineItems?: (
     groupId: string,
-    presets: Array<Record<string, string | number>>,
+    presets: Array<Record<string, PresetValue>>,
     meta: { effectContextId: string; numericTargets: string[]; keyFields?: string[]; effectId?: string; hideRemoveButton?: boolean }
   ) => void;
   deleteLineItemRows?: (
@@ -30,6 +30,11 @@ export interface SelectionEffectOptions {
    * Snapshot of current top-level form values (used for preset references like `$top.FIELD_ID`).
    */
   topValues?: Record<string, any>;
+  /**
+   * Optional per-effect overrides applied to presets before row creation.
+   * Keys are SelectionEffect.id values.
+   */
+  effectOverrides?: Record<string, Record<string, PresetValue>>;
   /**
    * Optional line-item state snapshot for when-clause evaluation (lineItems clauses).
    */
@@ -75,6 +80,29 @@ function isDebug(): boolean {
     return false;
   }
 }
+
+const resolveEffectOverride = (
+  effect: SelectionEffect,
+  overrides?: Record<string, Record<string, PresetValue>>
+): Record<string, PresetValue> | undefined => {
+  if (!overrides) return undefined;
+  const effectId = normalizeEffectId(effect);
+  if (!effectId) return undefined;
+  return overrides[effectId];
+};
+
+const mergePresetOverrides = (
+  base: Record<string, PresetValue> | undefined,
+  override?: Record<string, PresetValue>
+): Record<string, PresetValue> => {
+  if (!override) return base ? { ...base } : {};
+  const merged: Record<string, PresetValue> = base ? { ...base } : {};
+  Object.entries(override).forEach(([key, value]) => {
+    if (value === undefined) return;
+    merged[key] = value;
+  });
+  return merged;
+};
 
 export function handleSelectionEffects(
   definition: WebFormDefinition,
@@ -152,6 +180,8 @@ export function handleSelectionEffects(
     if (effect.type === 'addLineItems') {
       if (!targetGroupId) return;
       const resolvedPreset = resolveAddLineItemsPreset(effect.preset as any, options);
+      const override = resolveEffectOverride(effect, options?.effectOverrides);
+      const mergedPreset = mergePresetOverrides(resolvedPreset as any, override);
       const effectId = normalizeEffectId(effect);
       const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
       const meta =
@@ -165,7 +195,7 @@ export function handleSelectionEffects(
       const allowed =
         !targetConfig || !targetConfig.fields.length
           ? true
-          : presetPassesOptionFilters(resolvedPreset as any, targetConfig.fields, {
+          : presetPassesOptionFilters(mergedPreset as any, targetConfig.fields, {
               rowValues: options?.lineItem?.rowValues,
               topValues: options?.topValues
             });
@@ -179,13 +209,13 @@ export function handleSelectionEffects(
         }
         return;
       }
-      if (meta) ctx.addLineItemRow(targetGroupId, resolvedPreset, meta as any);
-      else ctx.addLineItemRow(targetGroupId, resolvedPreset);
+      if (meta) ctx.addLineItemRow(targetGroupId, mergedPreset, meta as any);
+      else ctx.addLineItemRow(targetGroupId, mergedPreset);
       if (debug && typeof console !== 'undefined') {
         console.info('[SelectionEffects] addLineItems dispatched', {
           groupId: targetGroupId,
           preset: effect.preset,
-          resolvedPreset
+          resolvedPreset: mergedPreset
         });
       }
       return;
@@ -251,7 +281,8 @@ export function handleSelectionEffects(
         normalizedSelections,
         diff: diffPreview,
         lineItem: options?.lineItem,
-        topValues: options?.topValues
+        topValues: options?.topValues,
+        effectOverrides: options?.effectOverrides
       });
     }
   });
@@ -270,6 +301,7 @@ interface DataDrivenEffectParams {
   diff: SelectionDiffPreview;
   lineItem?: SelectionEffectOptions['lineItem'];
   topValues?: Record<string, any>;
+  effectOverrides?: Record<string, Record<string, PresetValue>>;
 }
 
 interface SelectionCacheEntry {
@@ -638,7 +670,8 @@ function populateLineItemsFromDataSource({
   normalizedSelections,
   diff,
   lineItem,
-  topValues
+  topValues,
+  effectOverrides
 }: DataDrivenEffectParams): void {
   const sourceConfig = effect.dataSource || question.dataSource;
   if (!sourceConfig) {
@@ -675,7 +708,8 @@ function populateLineItemsFromDataSource({
       cache,
       ctx,
       debug,
-      contextId
+      contextId,
+      effectOverrides
     });
     return;
   }
@@ -688,7 +722,8 @@ function populateLineItemsFromDataSource({
       cache,
       ctx,
       debug,
-      contextId
+      contextId,
+      effectOverrides
     });
     return;
   }
@@ -719,7 +754,8 @@ function populateLineItemsFromDataSource({
           cache,
           ctx,
           debug,
-          contextId
+          contextId,
+          effectOverrides
         });
         return;
       }
@@ -768,9 +804,11 @@ function populateLineItemsFromDataSource({
         const enrichedEntries = attachRowContext(scaledEntries, lineItem?.rowValues);
         const hasOptionFilters = targetConfig.fields.some((f: any) => !!(f as any)?.optionFilter);
         const lineFieldIds = targetConfig.fields.map((f: any) => (f?.id ?? '').toString()).filter(Boolean);
+        const override = resolveEffectOverride(effect, effectOverrides);
         const filteredEntries = hasOptionFilters
           ? enrichedEntries.filter(entry => {
-              const preset = buildPreset(entry, effect, lineFieldIds);
+              const presetBase = buildPreset(entry, effect, lineFieldIds);
+              const preset = mergePresetOverrides(presetBase as any, override);
               const rowCtx = getRowContext(entry) || lineItem?.rowValues;
               const keep = presetPassesOptionFilters(preset as any, targetConfig.fields, { rowValues: rowCtx, topValues });
               if (!keep && debug && typeof console !== 'undefined') {
@@ -795,7 +833,8 @@ function populateLineItemsFromDataSource({
         cache,
         ctx,
         debug,
-        contextId
+        contextId,
+        effectOverrides
       });
     })
     .catch(err => {
@@ -953,9 +992,10 @@ interface RenderParams {
   ctx: EffectContext;
   debug: boolean;
   contextId: string;
+  effectOverrides?: Record<string, Record<string, PresetValue>>;
 }
 
-function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx, debug, contextId }: RenderParams): void {
+function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx, debug, contextId, effectOverrides }: RenderParams): void {
   const entriesForAllSelections: any[] = [];
   const contextMap = getContextMap(cache, contextId);
   if (contextMap) {
@@ -980,10 +1020,14 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
     return;
   }
   const aggregatedPresets = aggregateEntries(entriesForAllSelections, effect, targetConfig.fields);
+  const override = resolveEffectOverride(effect, effectOverrides);
+  const mergedPresets = override
+    ? aggregatedPresets.map(preset => mergePresetOverrides(preset as any, override))
+    : aggregatedPresets;
   const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
 
   if (ctx.updateAutoLineItems) {
-    ctx.updateAutoLineItems(targetGroupId, aggregatedPresets, {
+    ctx.updateAutoLineItems(targetGroupId, mergedPresets, {
       effectContextId: contextId,
       numericTargets,
       keyFields: nonNumericFieldIds,
@@ -996,7 +1040,7 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
   if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
     ctx.clearLineItems(targetGroupId, contextId);
   }
-  aggregatedPresets.forEach(preset => {
+  mergedPresets.forEach(preset => {
     ctx.addLineItemRow(targetGroupId, preset, {
       effectContextId: contextId,
       auto: true,

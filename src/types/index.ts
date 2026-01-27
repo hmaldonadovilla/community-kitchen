@@ -598,6 +598,48 @@ export interface OptionMapRefConfig {
 
 export type OptionFilterMatchMode = 'and' | 'or';
 
+export type FieldChangeDialogTargetScope = 'top' | 'row' | 'parent' | 'effect';
+
+export interface FieldChangeDialogTarget {
+  scope: FieldChangeDialogTargetScope;
+  fieldId: string;
+  effectId?: string;
+}
+
+export interface FieldChangeDialogInput {
+  id: string;
+  label?: LocalizedString;
+  placeholder?: LocalizedString;
+  /**
+   * Optional explicit input type override (defaults to the target field type).
+   */
+  type?: 'TEXT' | 'PARAGRAPH' | 'NUMBER' | 'CHOICE' | 'CHECKBOX' | 'DATE';
+  required?: boolean;
+  target: FieldChangeDialogTarget;
+}
+
+export interface FieldChangeDialogConfig {
+  /**
+   * When true, show the dialog and hold autosave until the user confirms.
+   */
+  when: WhenClause;
+  title?: LocalizedString;
+  message?: LocalizedString;
+  confirmLabel?: LocalizedString;
+  cancelLabel?: LocalizedString;
+  /**
+   * Control whether dedup precheck should run for the change.
+   * - auto (default): run when the changed field participates in a reject dedup rule.
+   * - always: always run the dedup precheck.
+   * - never: skip dedup precheck.
+   */
+  dedupMode?: 'auto' | 'always' | 'never';
+  /**
+   * Optional dialog input fields that update other targets on confirm.
+   */
+  inputs?: FieldChangeDialogInput[];
+}
+
 export interface OptionFilter {
   dependsOn: string | string[]; // question/field ID(s) to watch (supports array for composite filters)
   optionMap?: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
@@ -1201,6 +1243,7 @@ export interface LineItemFieldConfig {
   optionFilter?: OptionFilter;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
+  changeDialog?: FieldChangeDialogConfig;
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];
   autoIncrement?: AutoIncrementConfig;
@@ -1647,6 +1690,7 @@ export interface QuestionConfig {
   derivedValue?: DerivedValueConfig;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
+  changeDialog?: FieldChangeDialogConfig;
   clearOnChange?: boolean;
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];
@@ -2385,6 +2429,7 @@ export interface WebQuestionDefinition {
   derivedValue?: DerivedValueConfig;
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
+  changeDialog?: FieldChangeDialogConfig;
   clearOnChange?: boolean;
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];

@@ -1,5 +1,5 @@
 import { handleSelectionEffects } from '../../core';
-import { FieldValue, LangCode, LineItemRowState, WebFormDefinition, WebQuestionDefinition } from '../../types';
+import { FieldValue, LangCode, LineItemRowState, PresetValue, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LineItemState } from '../types';
 import { applyValueMapsToForm, hasBlurDerivedValues, mergeBlurDerivedValues } from './valueMaps';
 import {
@@ -36,8 +36,9 @@ export const runSelectionEffects = (args: {
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
   onRowAppended?: (args: { anchor: string; targetKey: string; rowId: string; source?: { groupId: string; rowId: string } }) => void;
   opts?: SelectionEffectOpts;
+  effectOverrides?: Record<string, Record<string, FieldValue>>;
 }) => {
-  const { definition, question, value, language, values, lineItems, setValues, setLineItems, logEvent, onRowAppended, opts } = args;
+  const { definition, question, value, language, values, lineItems, setValues, setLineItems, logEvent, onRowAppended, opts, effectOverrides } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
   const blurDerivedEnabled = hasBlurDerivedValues(definition);
 
@@ -232,7 +233,7 @@ export const runSelectionEffects = (args: {
       },
       updateAutoLineItems: (
         groupId: string,
-        presets: Array<Record<string, string | number>>,
+        presets: Array<Record<string, PresetValue>>,
         meta: { effectContextId: string; numericTargets: string[]; keyFields?: string[]; effectId?: string; hideRemoveButton?: boolean }
       ) => {
         setLineItems(prev => {
@@ -413,6 +414,6 @@ export const runSelectionEffects = (args: {
         logEvent?.('lineItems.cleared', { groupId });
       }
     },
-    opts ? { ...opts, topValues: values } : { topValues: values }
+    opts ? { ...opts, topValues: values, effectOverrides: effectOverrides as any } : { topValues: values, effectOverrides: effectOverrides as any }
   );
 };

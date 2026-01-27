@@ -54,6 +54,14 @@
     "confirm": { "en": "Got it", "fr": "Compris", "nl": "Begrepen" },
     "cancel": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" }
   },
+  "fieldChangeDialog": {
+    "title": { "en": "Confirm change", "fr": "Confirmer la modification", "nl": "Wijziging bevestigen" },
+    "message": {
+      "en": "Review this change before continuing.",
+      "fr": "Vérifiez cette modification avant de continuer.",
+      "nl": "Controleer deze wijziging voordat u doorgaat."
+    }
+  },
   "record": {
     "checking": {
       "en": "Checking for updates…",

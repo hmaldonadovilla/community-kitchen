@@ -454,6 +454,7 @@ interface FormViewProps {
     event?: 'change' | 'blur';
     tag?: string;
     inputType?: string;
+    nextValue?: FieldValue;
   }) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   onFormValidityChange?: (isValid: boolean) => void;
@@ -5018,7 +5019,7 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
     guidedLastUserEditAtRef.current = Date.now();
-    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change' });
+    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue: value });
     clearOverlayOpenActionSuppression(q.id);
     if (onStatusClear) onStatusClear();
     const baseValues = { ...values, [q.id]: value };
@@ -5204,7 +5205,8 @@ const FormView: React.FC<FormViewProps> = ({
       fieldId: (field?.id || '').toString(),
       groupId: group.id,
       rowId,
-      event: 'change'
+      event: 'change',
+      nextValue: value
     });
     clearOverlayOpenActionSuppression(`${group.id}__${field?.id || ''}__${rowId}`);
     if (onStatusClear) onStatusClear();
