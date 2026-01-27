@@ -206,6 +206,7 @@
   :
   Object
   ```
+
   > **WIP - Codex**
 - ck-54: create the custom html bundled template for the meal production form.
   > **WIP - Codex**
@@ -223,3 +224,12 @@
   - when we make a field read only we need to remove the `*` from the field label and remove the input control box as it takes space. Take a look at the screenshot to see a mock of the expected view when fields are read only or `renderAsLabel` is true.
   - also in the steps UI we need to be able to hide the field label in the context of a step.
 - ck-61: set values automatically, add selectionEffects: [{ type: "setValue", ... }]
+- ck-62:
+  - I see a bug, when I enter the step and data has already been saved with at least one row that MP_IS_REHEAT = Yes, the leftoversInfo prompt is completed and it always opens the overlay, it should happen only when the value was set.
+  - Also my current configuration in configJson.json does not allow me to start the rowFlow on the openLeftoversOverlay it was previously working if I created the row with a preset, however I don't want to do that so the user can select the type of leftover from the start. I added minRows: 1 in the groupOverride but this is not working. Please suggest an adequate configuration.
+  - Also as shown on the requiremtens document progressive-step-ui.md we need a trash can icon to delete the row, which is shown on the far right of the output line. How do I set that one up
+  - Also, we need a dialog when returning from the overlays back to the steps ui, how do I set that one?
+  - I need a back button on the `editLeftoverIngredients` instead of close button
+  - the `derivedValue` calculation on the `MP_TO_COOK` is being triggered on every character change despite the `applyOn` is set to `blur`.
+  > **WIP - Codex**
+- ck-63: `ingredientsSelector` prompt is not working, nothing is shown on the input control line.

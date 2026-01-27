@@ -20,6 +20,7 @@ import {
   LineItemGroupConfigOverride,
   LineItemRowState,
   OptionSet,
+  RowFlowActionRef,
   RowFlowConfig,
   RowFlowOverlayContextHeaderConfig,
   ValidationRule,
@@ -27,6 +28,7 @@ import {
   WebFormDefinition,
   WebQuestionDefinition
 } from '../../../types';
+import type { RowFlowActionConfirmConfig } from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { FormErrors, LineItemState, OptionState } from '../../types';
@@ -158,8 +160,12 @@ export interface LineItemGroupQuestionCtx {
       rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
       groupOverride?: LineItemGroupConfigOverride;
       hideInlineSubgroups?: boolean;
+      hideCloseButton?: boolean;
+      closeButtonLabel?: string;
+      closeConfirm?: RowFlowActionConfirmConfig;
       label?: string;
       contextHeader?: string;
+      rowFlow?: RowFlowConfig;
     }
   ) => void;
   openLineItemGroupOverlay: (
@@ -168,6 +174,9 @@ export interface LineItemGroupQuestionCtx {
       rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
       hideInlineSubgroups?: boolean;
       source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
+      hideCloseButton?: boolean;
+      closeButtonLabel?: string;
+      closeConfirm?: RowFlowActionConfirmConfig;
       label?: string;
       contextHeader?: string;
       rowFlow?: RowFlowConfig;
@@ -211,6 +220,7 @@ export interface LineItemGroupQuestionCtx {
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
   isOverlayOpenActionSuppressed?: (fieldPath: string) => boolean;
   suppressOverlayOpenAction?: (fieldPath: string) => void;
+  closeOverlay?: () => void;
 
   handleLineFileInputChange: (args: {
     group: WebQuestionDefinition;
@@ -629,11 +639,24 @@ export const LineItemGroupQuestion: React.FC<{
         const deleteRoots: Array<{ groupId: string; rowId: string }> = [];
         const setEffects = plan.effects.filter(effect => effect.type === 'setValue');
         const deleteEffects = plan.effects.filter(effect => effect.type === 'deleteLineItems');
+        const deleteRowEffects = plan.effects.filter(effect => effect.type === 'deleteRow');
+        const addEffects = plan.effects.filter(effect => effect.type === 'addLineItems');
         const openEffects = plan.effects.filter(effect => effect.type === 'openOverlay');
+        const closeEffects = plan.effects.filter(effect => effect.type === 'closeOverlay');
 
         deleteEffects.forEach(effect => {
           effect.rowIds.forEach(rowId => deleteRoots.push({ groupId: effect.groupKey, rowId }));
         });
+        deleteRowEffects.forEach(effect => {
+          deleteRoots.push({ groupId: effect.groupKey, rowId: effect.rowId });
+        });
+        if (deleteRowEffects.length) {
+          onDiagnostic?.('lineItems.rowFlow.action.deleteRow', {
+            groupId: q.id,
+            rowId: row.id,
+            count: deleteRowEffects.length
+          });
+        }
 
         if (openEffects.length) {
           openEffects.forEach(effect => {
@@ -656,6 +679,9 @@ export const LineItemGroupQuestion: React.FC<{
               openLineItemGroupOverlay(groupOrId, {
                 rowFilter: effect.rowFilter || null,
                 hideInlineSubgroups: effect.hideInlineSubgroups,
+                hideCloseButton: effect.hideCloseButton,
+                closeButtonLabel: resolveLocalizedString(effect.closeButtonLabel as any, language, ''),
+                closeConfirm: effect.closeConfirm,
                 source: 'overlayOpenAction',
                 label: resolveLocalizedString(effect.label as any, language, ''),
                 contextHeader: contextHeader || undefined,
@@ -668,7 +694,8 @@ export const LineItemGroupQuestion: React.FC<{
                 targetKind: effect.targetKind,
                 hasOverride: !!effect.groupOverride,
                 hasRowFlow: !!effect.rowFlow,
-                hasContextHeader
+                hasContextHeader,
+                hideCloseButton: !!effect.hideCloseButton
               });
               return;
             }
@@ -676,9 +703,13 @@ export const LineItemGroupQuestion: React.FC<{
               rowFilter: effect.rowFilter || null,
               hideInlineSubgroups: effect.hideInlineSubgroups,
               groupOverride: effect.groupOverride,
+              hideCloseButton: effect.hideCloseButton,
+              closeButtonLabel: resolveLocalizedString(effect.closeButtonLabel as any, language, ''),
+              closeConfirm: effect.closeConfirm,
               source: 'overlayOpenAction',
               label: resolveLocalizedString(effect.label as any, language, ''),
-              contextHeader: contextHeader || undefined
+              contextHeader: contextHeader || undefined,
+              rowFlow: effect.rowFlow
             });
             onDiagnostic?.('lineItems.rowFlow.overlay.open', {
               groupId: q.id,
@@ -687,12 +718,33 @@ export const LineItemGroupQuestion: React.FC<{
               targetKind: effect.targetKind,
               hasOverride: !!effect.groupOverride,
               hasRowFlow: !!effect.rowFlow,
-              hasContextHeader
+              hasContextHeader,
+              hideCloseButton: !!effect.hideCloseButton
+            });
+          });
+        }
+
+        if (addEffects.length) {
+          addEffects.forEach(effect => {
+            const count = effect.count || 1;
+            for (let idx = 0; idx < count; idx += 1) {
+              addLineItemRowManual(effect.groupKey, effect.preset as Record<string, any> | undefined);
+            }
+            onDiagnostic?.('lineItems.rowFlow.action.addLineItems', {
+              groupId: q.id,
+              rowId: row.id,
+              targetKey: effect.groupKey,
+              count,
+              hasPreset: !!effect.preset
             });
           });
         }
 
         if (!setEffects.length && !deleteRoots.length) {
+          if (closeEffects.length && ctx.closeOverlay) {
+            ctx.closeOverlay();
+            onDiagnostic?.('lineItems.rowFlow.action.closeOverlay', { groupId: q.id, rowId: row.id });
+          }
           logActionRun();
           return;
         }
@@ -742,6 +794,10 @@ export const LineItemGroupQuestion: React.FC<{
           });
           return recomputed;
         });
+        if (closeEffects.length && ctx.closeOverlay) {
+          ctx.closeOverlay();
+          onDiagnostic?.('lineItems.rowFlow.action.closeOverlay', { groupId: q.id, rowId: row.id });
+        }
         logActionRun();
       };
 
@@ -784,6 +840,56 @@ export const LineItemGroupQuestion: React.FC<{
     ]
   );
 
+  const renderRowFlowActionControlWithContext = React.useCallback(
+    (args: { actionId: string; row: LineItemRowState; rowFlowState: RowFlowResolvedState }) => {
+      const action = rowFlowActionById.get(args.actionId);
+      if (!action) return null;
+      const label = resolveLocalizedString(action.label, language, action.id);
+      const iconKey = (action.icon || '').toString().trim().toLowerCase();
+      const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
+      const tone = (action.tone || 'secondary').toString().trim().toLowerCase();
+      const disabled = submitting;
+      const onClick = () => {
+        if (disabled) return;
+        runRowFlowActionWithContext({ actionId: action.id, row: args.row, rowFlowState: args.rowFlowState });
+      };
+
+      if (variant === 'icon' || iconKey) {
+        const iconNode =
+          iconKey === 'remove' ? (
+            <TrashIcon size={20} />
+          ) : iconKey === 'add' ? (
+            <PlusIcon />
+          ) : iconKey === 'back' ? (
+            <XIcon size={20} />
+          ) : (
+            <PencilIcon size={20} />
+          );
+        return (
+          <button
+            key={action.id}
+            type="button"
+            aria-label={label || action.id}
+            title={label || action.id}
+            onClick={onClick}
+            disabled={disabled}
+            style={withDisabled(buttonStyles.secondary, disabled)}
+          >
+            {iconNode}
+          </button>
+        );
+      }
+
+      const buttonStyle = tone === 'primary' ? buttonStyles.primary : buttonStyles.secondary;
+      return (
+        <button key={action.id} type="button" onClick={onClick} disabled={disabled} style={withDisabled(buttonStyle, disabled)}>
+          {label || action.id}
+        </button>
+      );
+    },
+    [language, rowFlowActionById, runRowFlowActionWithContext, submitting]
+  );
+
   React.useEffect(() => {
     if (!rowFlowEnabled) return;
     rowFlowStateByRowId.forEach((state, rowId) => {
@@ -793,8 +899,22 @@ export const LineItemGroupQuestion: React.FC<{
         const autoActions = prompt.config.onCompleteActions || [];
         if (!autoActions.length) return;
         const tracker = rowFlowPromptCompleteRef.current[rowId] || {};
+        const hasTracked = Object.prototype.hasOwnProperty.call(tracker, prompt.id);
         const wasComplete = tracker[prompt.id] === true;
         const nowComplete = prompt.complete && prompt.showWhenOk !== false;
+        if (!hasTracked) {
+          tracker[prompt.id] = nowComplete;
+          rowFlowPromptCompleteRef.current[rowId] = tracker;
+          if (nowComplete) {
+            onDiagnostic?.('lineItems.rowFlow.prompt.autoAction.skipInit', {
+              groupId: q.id,
+              rowId,
+              promptId: prompt.id,
+              actionCount: autoActions.length
+            });
+          }
+          return;
+        }
         if (!wasComplete && nowComplete) {
           autoActions.forEach(actionId => {
             runRowFlowActionWithContext({ actionId, row, rowFlowState: state });
@@ -1885,7 +2005,7 @@ export const LineItemGroupQuestion: React.FC<{
           onDiagnostic?.('ui.lineItems.autoExpand.firstAttention', { groupId: q.id, rowId: attentionRowId });
         }, [attentionRowId, q.id, setCollapsedRows, onDiagnostic]);
 
-        if (isTableMode) {
+        if (isTableMode && !rowFlowEnabled) {
           const tableFieldsAll = messageFieldsAll;
           const tableColumnIdsRaw = Array.isArray(liUi?.tableColumns) ? liUi?.tableColumns : [];
           const tableColumnIds = tableColumnIdsRaw
@@ -2512,6 +2632,58 @@ export const LineItemGroupQuestion: React.FC<{
           );
         }
 
+        const outputActionsLayout = rowFlow?.output?.actionsLayout === 'below' ? 'below' : 'inline';
+        const defaultActionScope = rowFlow?.output?.actionsScope === 'group' ? 'group' : 'row';
+        const resolveOutputActionScope = (action: RowFlowActionRef): 'row' | 'group' =>
+          action.scope === 'group' || action.scope === 'row' ? action.scope : defaultActionScope;
+        const hasGroupActions = (rowFlow?.output?.actions || []).some(action => resolveOutputActionScope(action) === 'group');
+        const groupActionRow = hasGroupActions ? parentRows[0] : null;
+        const groupActionState = groupActionRow && rowFlowEnabled ? rowFlowStateByRowId.get(groupActionRow.id) || null : null;
+        if (rowFlowEnabled && hasGroupActions) {
+          const scopeLogKey = `${q.id}::rowFlow::actionsScope`;
+          if (!rowFlowLoggedRef.current.has(scopeLogKey)) {
+            rowFlowLoggedRef.current.add(scopeLogKey);
+            onDiagnostic?.('lineItems.rowFlow.output.actionsScope', { groupId: q.id, scope: 'group' });
+          }
+        }
+        const renderGroupOutputActions = () => {
+          if (!groupActionRow || !groupActionState) return null;
+          const groupOutputActions = groupActionState.outputActions.filter(action => resolveOutputActionScope(action) === 'group');
+          const outputActionsStart = groupOutputActions.filter(a => (a.position || 'start') !== 'end');
+          const outputActionsEnd = groupOutputActions.filter(a => (a.position || 'start') === 'end');
+          if (!outputActionsStart.length && !outputActionsEnd.length) return null;
+          if (outputActionsLayout === 'inline') {
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {outputActionsStart.map(action =>
+                    renderRowFlowActionControlWithContext({ actionId: action.id, row: groupActionRow, rowFlowState: groupActionState })
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {outputActionsEnd.map(action =>
+                    renderRowFlowActionControlWithContext({ actionId: action.id, row: groupActionRow, rowFlowState: groupActionState })
+                  )}
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {outputActionsStart.map(action =>
+                  renderRowFlowActionControlWithContext({ actionId: action.id, row: groupActionRow, rowFlowState: groupActionState })
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {outputActionsEnd.map(action =>
+                  renderRowFlowActionControlWithContext({ actionId: action.id, row: groupActionRow, rowFlowState: groupActionState })
+                )}
+              </div>
+            </div>
+          );
+        };
+
         return (
             <div
               key={q.id}
@@ -2562,62 +2734,8 @@ export const LineItemGroupQuestion: React.FC<{
                   });
                 }
 
-                const runRowFlowAction = (actionId: string) => {
-                  runRowFlowActionWithContext({ actionId, row, rowFlowState });
-                };
-
-                const renderRowFlowActionControl = (actionId: string, opts?: { inline?: boolean }) => {
-                  const action = rowFlowActionById.get(actionId);
-                  if (!action) return null;
-                  const label = resolveLocalizedString(action.label, language, action.id);
-                  const iconKey = (action.icon || '').toString().trim().toLowerCase();
-                  const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
-                  const tone = (action.tone || 'secondary').toString().trim().toLowerCase();
-                  const disabled = submitting;
-                  const onClick = () => {
-                    if (disabled) return;
-                    runRowFlowAction(action.id);
-                  };
-
-                  if (variant === 'icon' || iconKey) {
-                    const iconNode =
-                      iconKey === 'remove' ? (
-                        <TrashIcon size={20} />
-                      ) : iconKey === 'add' ? (
-                        <PlusIcon />
-                      ) : iconKey === 'back' ? (
-                        <XIcon size={20} />
-                      ) : (
-                        <PencilIcon size={20} />
-                      );
-                    return (
-                      <button
-                        key={action.id}
-                        type="button"
-                        aria-label={label || action.id}
-                        title={label || action.id}
-                        onClick={onClick}
-                        disabled={disabled}
-                        style={withDisabled(buttonStyles.secondary, disabled)}
-                      >
-                        {iconNode}
-                      </button>
-                    );
-                  }
-
-                  const buttonStyle = tone === 'primary' ? buttonStyles.primary : buttonStyles.secondary;
-                  return (
-                    <button
-                      key={action.id}
-                      type="button"
-                      onClick={onClick}
-                      disabled={disabled}
-                      style={withDisabled(buttonStyle, disabled)}
-                    >
-                      {label || action.id}
-                    </button>
-                  );
-                };
+                const renderRowFlowActionControl = (actionId: string) =>
+                  renderRowFlowActionControlWithContext({ actionId, row, rowFlowState });
 
 
                 const resolvePromptTargets = (prompt: RowFlowResolvedPrompt) => {
@@ -3117,8 +3235,11 @@ export const LineItemGroupQuestion: React.FC<{
                 };
 
                 const separator = rowFlow?.output?.separator ?? ' | ';
-                const outputActionsStart = rowFlowState.outputActions.filter(a => (a.position || 'start') !== 'end');
-                const outputActionsEnd = rowFlowState.outputActions.filter(a => (a.position || 'start') === 'end');
+                const rowOutputActions = rowFlowState.outputActions.filter(action => resolveOutputActionScope(action) === 'row');
+                const outputActionsStart = rowOutputActions.filter(a => (a.position || 'start') !== 'end');
+                const outputActionsEnd = rowOutputActions.filter(a => (a.position || 'start') === 'end');
+                const hasOutputActions = outputActionsStart.length > 0 || outputActionsEnd.length > 0;
+                const hasOutputSegments = outputSegments.length > 0;
                 const promptsToRender = rowFlowState.prompts.filter(
                   prompt =>
                     prompt.visible &&
@@ -3139,7 +3260,9 @@ export const LineItemGroupQuestion: React.FC<{
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                        {outputActionsStart.map(action => renderRowFlowActionControl(action.id))}
+                        {outputActionsLayout === 'inline'
+                          ? outputActionsStart.map(action => renderRowFlowActionControl(action.id))
+                          : null}
                         {outputSegments.map((segment, idx) => (
                           <React.Fragment key={`${segment.config.fieldRef}-${idx}`}>
                             {renderOutputSegment(segment)}
@@ -3147,12 +3270,22 @@ export const LineItemGroupQuestion: React.FC<{
                           </React.Fragment>
                         ))}
                       </div>
-                      {outputActionsEnd.length ? (
+                      {outputActionsLayout === 'inline' && outputActionsEnd.length ? (
                         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                           {outputActionsEnd.map(action => renderRowFlowActionControl(action.id))}
                         </div>
                       ) : null}
                     </div>
+                    {outputActionsLayout === 'below' && hasOutputActions ? (
+                      <div style={{ marginTop: hasOutputSegments ? 8 : 0, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {outputActionsStart.map(action => renderRowFlowActionControl(action.id))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {outputActionsEnd.map(action => renderRowFlowActionControl(action.id))}
+                        </div>
+                      </div>
+                    ) : null}
                     {promptsToRender.length ? (
                       <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {promptsToRender.map(prompt => (
@@ -3340,7 +3473,10 @@ export const LineItemGroupQuestion: React.FC<{
                   hasRowFlow,
                   hasFlattenFields: flattenFields.length > 0,
                   flattenPlacement,
-                  hideTrashIcon: (match as any).hideTrashIcon === true
+                  hideTrashIcon: (match as any).hideTrashIcon === true,
+                  hideCloseButton: (match as any).hideCloseButton === true,
+                  hasCloseConfirm: !!(match as any).closeConfirm,
+                  hasCloseLabel: !!(match as any).closeButtonLabel
                 });
                 return {
                   action: match,
@@ -3352,6 +3488,9 @@ export const LineItemGroupQuestion: React.FC<{
                   groupOverride: (match as any).groupOverride,
                   overrideGroup,
                   hideInlineSubgroups: (match as any).hideInlineSubgroups === true,
+                  hideCloseButton: (match as any).hideCloseButton === true,
+                  closeButtonLabel: (match as any).closeButtonLabel,
+                  closeConfirm: (match as any).closeConfirm as RowFlowActionConfirmConfig | undefined,
                   renderMode,
                   label,
                   flattenFields,
@@ -4499,6 +4638,9 @@ export const LineItemGroupQuestion: React.FC<{
                     openLineItemGroupOverlay(groupOrId as any, {
                       rowFilter: overlayOpenAction.rowFilter || null,
                       hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
+                      hideCloseButton: overlayOpenAction.hideCloseButton,
+                      closeButtonLabel: resolveLocalizedString(overlayOpenAction.closeButtonLabel as any, language, ''),
+                      closeConfirm: overlayOpenAction.closeConfirm,
                       label: overlayOpenAction.label,
                       source: 'overlayOpenAction',
                       rowFlow: overlayOpenAction.rowFlow
@@ -4509,25 +4651,31 @@ export const LineItemGroupQuestion: React.FC<{
                       groupId: overlayOpenAction.groupId,
                       sourceFieldId: field.id,
                       hasRowFilter: !!overlayOpenAction.rowFilter,
-                      hasOverride
+                      hasOverride,
+                      hideCloseButton: !!overlayOpenAction.hideCloseButton
                     });
                     return;
                   }
                   if (!overlayOpenAction.subKey) return;
-                  openSubgroupOverlay(overlayOpenAction.subKey, {
-                    rowFilter: overlayOpenAction.rowFilter || null,
-                    groupOverride: overlayOpenAction.groupOverride,
-                    hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
-                    label: overlayOpenAction.label,
-                    source: 'overlayOpenAction'
-                  });
+                    openSubgroupOverlay(overlayOpenAction.subKey, {
+                      rowFilter: overlayOpenAction.rowFilter || null,
+                      groupOverride: overlayOpenAction.groupOverride,
+                      hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
+                      hideCloseButton: overlayOpenAction.hideCloseButton,
+                      closeButtonLabel: resolveLocalizedString(overlayOpenAction.closeButtonLabel as any, language, ''),
+                      closeConfirm: overlayOpenAction.closeConfirm,
+                      label: overlayOpenAction.label,
+                      source: 'overlayOpenAction',
+                      rowFlow: overlayOpenAction.rowFlow
+                    });
                   onDiagnostic?.('subgroup.overlay.open.action', {
                     groupId: q.id,
                     rowId: row.id,
                     subId: overlayOpenAction.groupId,
                     sourceFieldId: field.id,
                     hasRowFilter: !!overlayOpenAction.rowFilter,
-                    hasOverride
+                    hasOverride,
+                    hideCloseButton: !!overlayOpenAction.hideCloseButton
                   });
                 };
                 const matchesOverlayRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
@@ -6128,6 +6276,9 @@ export const LineItemGroupQuestion: React.FC<{
                           openLineItemGroupOverlay(groupOrId as any, {
                             rowFilter: overlayOpenAction.rowFilter || null,
                             hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
+                            hideCloseButton: overlayOpenAction.hideCloseButton,
+                            closeButtonLabel: resolveLocalizedString(overlayOpenAction.closeButtonLabel as any, language, ''),
+                            closeConfirm: overlayOpenAction.closeConfirm,
                             label: overlayOpenAction.label,
                             source: 'overlayOpenAction',
                             rowFlow: overlayOpenAction.rowFlow
@@ -6138,7 +6289,8 @@ export const LineItemGroupQuestion: React.FC<{
                             groupId: overlayOpenAction.groupId,
                             sourceFieldId: field.id,
                             hasRowFilter: !!overlayOpenAction.rowFilter,
-                            hasOverride
+                            hasOverride,
+                            hideCloseButton: !!overlayOpenAction.hideCloseButton
                           });
                           return;
                         }
@@ -6147,8 +6299,12 @@ export const LineItemGroupQuestion: React.FC<{
                           rowFilter: overlayOpenAction.rowFilter || null,
                           groupOverride: overlayOpenAction.groupOverride,
                           hideInlineSubgroups: overlayOpenAction.hideInlineSubgroups,
+                          hideCloseButton: overlayOpenAction.hideCloseButton,
+                          closeButtonLabel: resolveLocalizedString(overlayOpenAction.closeButtonLabel as any, language, ''),
+                          closeConfirm: overlayOpenAction.closeConfirm,
                           label: overlayOpenAction.label,
-                          source: 'overlayOpenAction'
+                          source: 'overlayOpenAction',
+                          rowFlow: overlayOpenAction.rowFlow
                         });
                         onDiagnostic?.('subgroup.overlay.open.action', {
                           groupId: q.id,
@@ -6156,7 +6312,8 @@ export const LineItemGroupQuestion: React.FC<{
                           subId: overlayOpenAction.groupId,
                           sourceFieldId: field.id,
                           hasRowFilter: !!overlayOpenAction.rowFilter,
-                          hasOverride
+                          hasOverride,
+                          hideCloseButton: !!overlayOpenAction.hideCloseButton
                         });
                       };
                       const matchesOverlayRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
@@ -8459,6 +8616,7 @@ export const LineItemGroupQuestion: React.FC<{
                 </div>
               );
             })}
+            {rowFlowEnabled && defaultActionScope === 'group' ? renderGroupOutputActions() : null}
             {shouldRenderBottomToolbar ? (
               <div className="line-item-toolbar">
                 {showSelectorBottom && selectorCfg ? (

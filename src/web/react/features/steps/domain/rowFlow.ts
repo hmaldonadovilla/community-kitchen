@@ -5,6 +5,7 @@ import type { LineItemState } from '../../../types';
 import type {
   LineItemGroupConfigOverride,
   RowFlowActionConfig,
+  RowFlowActionConfirmConfig,
   RowFlowActionEffect,
   RowFlowActionRef,
   RowFlowConfig,
@@ -71,12 +72,29 @@ export type RowFlowResolvedEffect =
       rowIds: string[];
     }
   | {
+      type: 'deleteRow';
+      groupKey: string;
+      rowId: string;
+    }
+  | {
+      type: 'addLineItems';
+      groupKey: string;
+      preset?: Record<string, FieldValue>;
+      count: number;
+    }
+  | {
+      type: 'closeOverlay';
+    }
+  | {
       type: 'openOverlay';
       targetKind: 'line' | 'sub';
       key: string;
       rowFilter?: StepRowFilterConfig;
       label?: unknown;
       hideInlineSubgroups?: boolean;
+      hideCloseButton?: boolean;
+      closeButtonLabel?: unknown;
+      closeConfirm?: RowFlowActionConfirmConfig;
       groupOverride?: LineItemGroupConfigOverride;
       rowFlow?: RowFlowConfig;
       overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
@@ -469,6 +487,43 @@ export const resolveRowFlowActionPlan = (args: {
       if (!rows.length) return;
       effects.push({ type: 'deleteLineItems', groupKey, rowIds: rows.map(r => r.id) });
     }
+    if (effect.type === 'deleteRow') {
+      if (!groupId || !rowId) return;
+      effects.push({ type: 'deleteRow', groupKey: groupId, rowId });
+    }
+    if (effect.type === 'addLineItems') {
+      const targetRefId = effect.targetRef ? effect.targetRef.toString().trim() : '';
+      const groupIdRaw = effect.groupId ? effect.groupId.toString().trim() : '';
+      const subgroupSet = new Set((subGroupIds || []).map(id => id.toString().trim()).filter(Boolean));
+      let groupKey = '';
+      if (targetRefId && references[targetRefId]) {
+        const ref = references[targetRefId];
+        groupKey = ref.rows[0]?.groupKey || '';
+        if (!groupKey) {
+          const refGroupId = ref.groupId ? ref.groupId.toString().trim() : '';
+          if (refGroupId) {
+            const isSubgroup = subgroupSet.has(refGroupId);
+            groupKey = isSubgroup ? buildSubgroupKey(groupId, rowId, refGroupId) : refGroupId;
+          }
+        }
+      } else if (groupIdRaw) {
+        const isSubgroup = subgroupSet.has(groupIdRaw);
+        groupKey = isSubgroup ? buildSubgroupKey(groupId, rowId, groupIdRaw) : groupIdRaw;
+      } else {
+        groupKey = groupId;
+      }
+      if (!groupKey) return;
+      const rawCount = typeof effect.count === 'number' && Number.isFinite(effect.count) ? Math.floor(effect.count) : 1;
+      const count = rawCount > 0 ? rawCount : 1;
+      const preset =
+        effect.preset && typeof effect.preset === 'object' && !Array.isArray(effect.preset)
+          ? (effect.preset as Record<string, FieldValue>)
+          : undefined;
+      effects.push({ type: 'addLineItems', groupKey, preset, count });
+    }
+    if (effect.type === 'closeOverlay') {
+      effects.push({ type: 'closeOverlay' });
+    }
     if (effect.type === 'openOverlay') {
       const whenOk = resolveWhenMatch({ when: effect.when, target: null, lineItems, topValues, fallbackRow });
       if (!whenOk) return;
@@ -491,6 +546,9 @@ export const resolveRowFlowActionPlan = (args: {
         rowFilter: effect.rowFilter as StepRowFilterConfig | undefined,
         label: effect.label,
         hideInlineSubgroups: effect.hideInlineSubgroups,
+        hideCloseButton: (effect as any).hideCloseButton === true,
+        closeButtonLabel: (effect as any).closeButtonLabel,
+        closeConfirm: (effect as any).closeConfirm as RowFlowActionConfirmConfig | undefined,
         groupOverride: (effect as any).groupOverride as LineItemGroupConfigOverride | undefined,
         rowFlow: (effect as any).rowFlow as RowFlowConfig | undefined,
         overlayContextHeader: (effect as any).overlayContextHeader as RowFlowOverlayContextHeaderConfig | undefined

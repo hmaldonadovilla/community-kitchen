@@ -200,4 +200,110 @@ describe('rowFlow domain', () => {
 
     expect(planWhenNo?.effects).toHaveLength(0);
   });
+
+  it('resolves addLineItems and closeOverlay effects', () => {
+    const lineItems: any = {
+      MEALS: [{ id: 'r1', values: { MP_IS_REHEAT: 'Yes' } }],
+      'MEALS::r1::TYPE': []
+    };
+
+    const rowFlow: any = {
+      actions: [
+        {
+          id: 'addLeftover',
+          effects: [
+            { type: 'addLineItems', groupId: 'TYPE', preset: { PREP_TYPE: 'Cook' }, count: 2 },
+            { type: 'closeOverlay' }
+          ]
+        }
+      ]
+    };
+
+    const state = resolveRowFlowState({
+      config: rowFlow,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { MP_IS_REHEAT: 'Yes' },
+      lineItems,
+      subGroupIds: ['TYPE']
+    });
+
+    const plan = resolveRowFlowActionPlan({
+      actionId: 'addLeftover',
+      config: rowFlow,
+      state,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { MP_IS_REHEAT: 'Yes' },
+      lineItems,
+      subGroupIds: ['TYPE']
+    });
+
+    expect(plan?.effects).toEqual([
+      { type: 'addLineItems', groupKey: 'MEALS::r1::TYPE', preset: { PREP_TYPE: 'Cook' }, count: 2 },
+      { type: 'closeOverlay' }
+    ]);
+  });
+
+  it('retains output actions when actionsScope is group', () => {
+    const lineItems: any = {
+      MEALS: [{ id: 'r1', values: { PREP_TYPE: 'Cook' } }]
+    };
+
+    const rowFlow: any = {
+      output: {
+        actionsScope: 'group',
+        actions: [{ id: 'addLeftover' }]
+      },
+      actions: [{ id: 'addLeftover', effects: [{ type: 'addLineItems' }] }]
+    };
+
+    const state = resolveRowFlowState({
+      config: rowFlow,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { PREP_TYPE: 'Cook' },
+      lineItems,
+      subGroupIds: []
+    });
+
+    expect(state?.outputActions.map(action => action.id)).toEqual(['addLeftover']);
+  });
+
+  it('resolves deleteRow effects for the current row', () => {
+    const lineItems: any = {
+      MEALS: [{ id: 'r1', values: { PREP_TYPE: 'Cook' } }]
+    };
+
+    const rowFlow: any = {
+      actions: [
+        {
+          id: 'removeRow',
+          effects: [{ type: 'deleteRow' }]
+        }
+      ]
+    };
+
+    const state = resolveRowFlowState({
+      config: rowFlow,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { PREP_TYPE: 'Cook' },
+      lineItems,
+      subGroupIds: []
+    });
+
+    const plan = resolveRowFlowActionPlan({
+      actionId: 'removeRow',
+      config: rowFlow,
+      state,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { PREP_TYPE: 'Cook' },
+      lineItems,
+      subGroupIds: []
+    });
+
+    expect(plan?.effects).toEqual([{ type: 'deleteRow', groupKey: 'MEALS', rowId: 'r1' }]);
+  });
 });

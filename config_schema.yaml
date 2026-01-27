@@ -1335,6 +1335,15 @@ components:
           type: boolean
           description: |
             When true, hide the trash/reset icon on the overlay opener button.
+        hideCloseButton:
+          type: boolean
+          description: When true, hide the close button in the overlay header.
+        closeButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional label override for the overlay close button.
+        closeConfirm:
+          $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+          description: Optional confirm dialog shown when closing the overlay.
         flattenFields:
           type: array
           items:
@@ -2322,6 +2331,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RowFlowActionRef'
+        actionsLayout:
+          type: string
+          enum: [inline, below]
+          description: |
+            Layout for output actions relative to the segments.
+            - inline: render actions on the same row (default)
+            - below: render actions on a separate row
+        actionsScope:
+          type: string
+          enum: [row, group]
+          description: |
+            Scope for output actions.
+            - row: render actions per row (default)
+            - group: render actions once after all rows
       additionalProperties: false
 
     RowFlowOutputSegmentFormatConfig:
@@ -2425,6 +2448,9 @@ components:
         position:
           type: string
           enum: [start, end]
+        scope:
+          type: string
+          enum: [row, group]
         showWhen:
           $ref: '#/components/schemas/WhenClause'
       required: [id]
@@ -2477,6 +2503,37 @@ components:
           properties:
             type:
               type: string
+              enum: [deleteRow]
+          required: [type]
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [addLineItems]
+            targetRef:
+              type: string
+            groupId:
+              type: string
+            preset:
+              type: object
+              description: Optional field/value map for new rows.
+            count:
+              type: integer
+              description: Number of rows to add (default 1).
+          required: [type]
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [closeOverlay]
+          required: [type]
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
               enum: [openOverlay]
             targetRef:
               type: string
@@ -2499,6 +2556,12 @@ components:
               $ref: '#/components/schemas/DefaultValue'
             hideTrashIcon:
               type: boolean
+            hideCloseButton:
+              type: boolean
+            closeButtonLabel:
+              $ref: '#/components/schemas/LocalizedString'
+            closeConfirm:
+              $ref: '#/components/schemas/RowFlowActionConfirmConfig'
             flattenFields:
               type: array
               items:

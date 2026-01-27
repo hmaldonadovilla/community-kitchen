@@ -26,7 +26,12 @@ import {
   WebFormDefinition,
   WebQuestionDefinition
 } from '../../types';
-import type { LineItemFieldConfig, LineItemGroupConfigOverride, LineItemOverlayOpenActionConfig } from '../../../types';
+import type {
+  LineItemFieldConfig,
+  LineItemGroupConfigOverride,
+  LineItemOverlayOpenActionConfig,
+  RowFlowActionConfirmConfig
+} from '../../../types';
 import { ConfirmDialogOverlay } from '../features/overlays/ConfirmDialogOverlay';
 import { useConfirmDialog } from '../features/overlays/useConfirmDialog';
 import type { ConfirmDialogOpenArgs } from '../features/overlays/useConfirmDialog';
@@ -127,8 +132,12 @@ interface SubgroupOverlayState {
   rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
   groupOverride?: LineItemGroupConfigOverride;
   hideInlineSubgroups?: boolean;
+  hideCloseButton?: boolean;
+  closeButtonLabel?: string;
+  closeConfirm?: RowFlowActionConfirmConfig;
   label?: string;
   contextHeader?: string;
+  rowFlow?: RowFlowConfig;
   source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
 }
 
@@ -139,6 +148,9 @@ interface LineItemGroupOverlayState {
   contextHeader?: string;
   rowFlow?: RowFlowConfig;
   source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
+  hideCloseButton?: boolean;
+  closeButtonLabel?: string;
+  closeConfirm?: RowFlowActionConfirmConfig;
   /**
    * Optional override for rendering the group inside the overlay (used by guided steps to
    * restrict fields/subgroups without mutating the base definition).
@@ -2702,6 +2714,33 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('subgroup.overlay.close');
   }, [onDiagnostic]);
 
+  const attemptCloseSubgroupOverlay = useCallback(
+    (source: 'button' | 'escape') => {
+      if (!subgroupOverlay.open) return;
+      const confirm = subgroupOverlay.closeConfirm;
+      if (confirm && openConfirmDialogResolved) {
+        const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+        const message = resolveLocalizedString(confirm.body, language, '');
+        const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
+        const cancelLabel = resolveLocalizedString(confirm.cancelLabel, language, tSystem('common.cancel', language, 'Cancel'));
+        openConfirmDialogResolved({
+          title,
+          message,
+          confirmLabel,
+          cancelLabel,
+          showCancel: confirm.showCancel !== false,
+          kind: confirm.kind || 'overlayClose',
+          refId: `${subgroupOverlay.subKey || ''}::close`,
+          onConfirm: closeSubgroupOverlay
+        });
+        onDiagnostic?.('subgroup.overlay.close.confirm.open', { source });
+        return;
+      }
+      closeSubgroupOverlay();
+    },
+    [closeSubgroupOverlay, language, onDiagnostic, openConfirmDialogResolved, subgroupOverlay.closeConfirm, subgroupOverlay.open, subgroupOverlay.subKey]
+  );
+
   const closeLineItemGroupOverlay = useCallback(() => {
     setLineItemGroupOverlay({ open: false });
     onDiagnostic?.('lineItemGroup.overlay.close');
@@ -2742,6 +2781,28 @@ const FormView: React.FC<FormViewProps> = ({
       if (!lineItemGroupOverlay.open) return;
       const nextErrors = validateLineItemGroupOverlay();
       if (!nextErrors || Object.keys(nextErrors).length === 0) {
+        const confirm = lineItemGroupOverlay.closeConfirm;
+        if (confirm && openConfirmDialogResolved) {
+          const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+          const message = resolveLocalizedString(confirm.body, language, '');
+          const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
+          const cancelLabel = resolveLocalizedString(confirm.cancelLabel, language, tSystem('common.cancel', language, 'Cancel'));
+          openConfirmDialogResolved({
+            title,
+            message,
+            confirmLabel,
+            cancelLabel,
+            showCancel: confirm.showCancel !== false,
+            kind: confirm.kind || 'overlayClose',
+            refId: `${lineItemGroupOverlay.groupId || ''}::close`,
+            onConfirm: () => {
+              closeLineItemGroupOverlay();
+              setErrors(prev => clearLineItemGroupErrors(prev, lineItemGroupOverlay.groupId || ''));
+            }
+          });
+          onDiagnostic?.('lineItemGroup.overlay.close.confirm.open', { source });
+          return;
+        }
         closeLineItemGroupOverlay();
         setErrors(prev => clearLineItemGroupErrors(prev, lineItemGroupOverlay.groupId || ''));
         return;
@@ -2771,8 +2832,12 @@ const FormView: React.FC<FormViewProps> = ({
         rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
         groupOverride?: LineItemGroupConfigOverride;
         hideInlineSubgroups?: boolean;
+        hideCloseButton?: boolean;
+        closeButtonLabel?: LocalizedString;
+        closeConfirm?: RowFlowActionConfirmConfig;
         label?: string;
         contextHeader?: string;
+        rowFlow?: RowFlowConfig;
       }
     ) => {
       if (!subKey) return;
@@ -2791,15 +2856,38 @@ const FormView: React.FC<FormViewProps> = ({
       const rowFilter = options?.rowFilter || null;
       const groupOverride = options?.groupOverride;
       const hideInlineSubgroups = options?.hideInlineSubgroups === true;
+      const hideCloseButton = options?.hideCloseButton === true;
+      const closeButtonLabel = resolveLocalizedString(options?.closeButtonLabel, language, '').trim();
+      const closeConfirm = options?.closeConfirm;
       const label = options?.label;
       const contextHeader = options?.contextHeader;
-      setSubgroupOverlay({ open: true, subKey, rowFilter, groupOverride, hideInlineSubgroups, source, label, contextHeader });
+      const rowFlow = options?.rowFlow;
+      setSubgroupOverlay({
+        open: true,
+        subKey,
+        rowFilter,
+        groupOverride,
+        hideInlineSubgroups,
+        hideCloseButton,
+        closeButtonLabel: closeButtonLabel || undefined,
+        closeConfirm: closeConfirm || undefined,
+        source,
+        label,
+        contextHeader,
+        rowFlow
+      });
       onDiagnostic?.('subgroup.overlay.open', {
         subKey,
         hasRowFilter: !!rowFilter,
         hasOverride: !!groupOverride,
-        hideInlineSubgroups
+        hideInlineSubgroups,
+        hideCloseButton,
+        hasCloseConfirm: !!closeConfirm,
+        hasCloseLabel: !!closeButtonLabel
       });
+      if (hideCloseButton) {
+        onDiagnostic?.('form.overlay.closeButton.hidden', { scope: 'subgroup', source });
+      }
     },
     [onDiagnostic, overlay.open]
   );
@@ -2811,6 +2899,9 @@ const FormView: React.FC<FormViewProps> = ({
         rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
         hideInlineSubgroups?: boolean;
         source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
+        hideCloseButton?: boolean;
+        closeButtonLabel?: LocalizedString;
+        closeConfirm?: RowFlowActionConfirmConfig;
         label?: string;
         contextHeader?: string;
         rowFlow?: RowFlowConfig;
@@ -2834,11 +2925,37 @@ const FormView: React.FC<FormViewProps> = ({
       const group = typeof groupOrId === 'string' ? undefined : (groupOrId as WebQuestionDefinition);
       const rowFilter = options?.rowFilter || null;
       const hideInlineSubgroups = options?.hideInlineSubgroups === true;
+      const hideCloseButton = options?.hideCloseButton === true;
+      const closeButtonLabel = resolveLocalizedString(options?.closeButtonLabel, language, '').trim();
+      const closeConfirm = options?.closeConfirm;
       const label = options?.label;
       const contextHeader = options?.contextHeader;
       const rowFlow = options?.rowFlow;
-      setLineItemGroupOverlay({ open: true, groupId: id, group, rowFilter, hideInlineSubgroups, source, label, contextHeader, rowFlow });
-      onDiagnostic?.('lineItemGroup.overlay.open', { groupId: id, mode: group ? 'override' : 'default', hasRowFilter: !!rowFilter });
+      setLineItemGroupOverlay({
+        open: true,
+        groupId: id,
+        group,
+        rowFilter,
+        hideInlineSubgroups,
+        hideCloseButton,
+        closeButtonLabel: closeButtonLabel || undefined,
+        closeConfirm: closeConfirm || undefined,
+        source,
+        label,
+        contextHeader,
+        rowFlow
+      });
+      onDiagnostic?.('lineItemGroup.overlay.open', {
+        groupId: id,
+        mode: group ? 'override' : 'default',
+        hasRowFilter: !!rowFilter,
+        hideCloseButton,
+        hasCloseConfirm: !!closeConfirm,
+        hasCloseLabel: !!closeButtonLabel
+      });
+      if (hideCloseButton) {
+        onDiagnostic?.('form.overlay.closeButton.hidden', { scope: 'lineItemGroup', source });
+      }
     },
     [onDiagnostic, overlay.open, subgroupOverlay.open]
   );
@@ -3670,7 +3787,7 @@ const FormView: React.FC<FormViewProps> = ({
           return;
         }
         if (subgroupOverlay.open) {
-          closeSubgroupOverlay();
+          attemptCloseSubgroupOverlay('escape');
           return;
         }
         attemptCloseLineItemGroupOverlay('escape');
@@ -3685,7 +3802,7 @@ const FormView: React.FC<FormViewProps> = ({
     closeFileOverlay,
     closeInfoOverlay,
     attemptCloseLineItemGroupOverlay,
-    closeSubgroupOverlay,
+    attemptCloseSubgroupOverlay,
     fileOverlay.open,
     infoOverlay.open,
     lineItemGroupOverlay.open,
@@ -5172,61 +5289,7 @@ const FormView: React.FC<FormViewProps> = ({
     const { values: nextValues, lineItems: finalLineItems } = applyValueMapsToForm(definition, values, updatedLineItems, {
       mode: 'change'
     });
-    let syncedLineItems = finalLineItems;
-    if (hasBlurDerived) {
-      const resolveFieldsForGroupKey = (groupKey: string): any[] => {
-        const parsed = parseSubgroupKey(groupKey);
-        if (!parsed) {
-          const groupQuestion = definition.questions.find(q => q.id === groupKey && q.type === 'LINE_ITEM_GROUP');
-          return (groupQuestion as any)?.lineItemConfig?.fields || [];
-        }
-        const defs = resolveSubgroupDefs(groupKey);
-        return (defs.sub?.fields || []) as any[];
-      };
-      const syncBlurDerivedRow = (groupKey: string, targetRowId: string) => {
-        const fields = resolveFieldsForGroupKey(groupKey);
-        if (!fields.length) return;
-        const blurDerivedFields = fields.filter((f: any) => f?.derivedValue && isBlurDerivedValue(f.derivedValue));
-        if (!blurDerivedFields.length) return;
-        const rows = syncedLineItems[groupKey] || [];
-        const idx = rows.findIndex(r => r.id === targetRowId);
-        if (idx < 0) return;
-        const baseRow = rows[idx];
-        const computed = applyValueMapsToLineRow(fields, baseRow.values || {}, nextValues, { mode: 'blur' }, {
-          groupKey,
-          rowId: baseRow.id,
-          lineItems: syncedLineItems
-        });
-        let rowChanged = false;
-        const nextRow = { ...(baseRow.values || {}) } as Record<string, FieldValue>;
-        blurDerivedFields.forEach((f: any) => {
-          const fid = (f?.id ?? '').toString();
-          if (!fid) return;
-          const computedValue = (computed as any)[fid] as FieldValue;
-          if (computedValue === undefined) return;
-          if (shallowEqualFieldValue(nextRow[fid], computedValue)) return;
-          nextRow[fid] = computedValue;
-          rowChanged = true;
-        });
-        if (!rowChanged) return;
-        const nextRows = [...rows];
-        nextRows[idx] = { ...baseRow, values: nextRow };
-        syncedLineItems = { ...syncedLineItems, [groupKey]: nextRows };
-      };
-      syncBlurDerivedRow(group.id, rowId);
-      const subgroupInfo = parseSubgroupKey(group.id);
-      if (subgroupInfo?.parentGroupKey && subgroupInfo.parentRowId) {
-        let currentKey = subgroupInfo.parentGroupKey;
-        let currentRowId = subgroupInfo.parentRowId;
-        while (currentKey && currentRowId) {
-          syncBlurDerivedRow(currentKey, currentRowId);
-          const nextInfo = parseSubgroupKey(currentKey);
-          if (!nextInfo?.parentGroupKey || !nextInfo.parentRowId) break;
-          currentKey = nextInfo.parentGroupKey;
-          currentRowId = nextInfo.parentRowId;
-        }
-      }
-    }
+    const syncedLineItems = finalLineItems;
     setLineItems(syncedLineItems);
     setValues(nextValues);
     const updatedRow = (syncedLineItems[group.id] || []).find(r => r.id === rowId);
@@ -7317,6 +7380,7 @@ const FormView: React.FC<FormViewProps> = ({
     const subKey = subgroupOverlay.subKey;
     const overlayRowFilter = subgroupOverlay.rowFilter || null;
     const overlayHideInlineSubgroups = subgroupOverlay.hideInlineSubgroups === true;
+    const overlayRowFlow = subgroupOverlay.rowFlow;
     const subgroupDefs = resolveSubgroupDefs(subKey);
     const parsed = subgroupDefs.info;
     const parentGroup = subgroupDefs.root;
@@ -7360,6 +7424,9 @@ const FormView: React.FC<FormViewProps> = ({
       : resolveLocalizedString({ en: 'Subgroup', fr: 'Sous-groupe', nl: 'Subgroep' }, language, 'Subgroup');
     const overlayHeaderLabel = subgroupOverlay.label ? subgroupOverlay.label.toString().trim() : '';
     const overlayContextHeader = subgroupOverlay.contextHeader ? subgroupOverlay.contextHeader.toString().trim() : '';
+    const overlayHideCloseButton = subgroupOverlay.hideCloseButton === true;
+    const overlayCloseButtonLabel =
+      subgroupOverlay.closeButtonLabel || tSystem('common.close', language, 'Close');
     const parentLabel = parentGroup ? resolveLabel(parentGroup, language) : (parsed?.rootGroupId || 'Group');
     const breadcrumbText = [parentLabel, subLabel].filter(Boolean).join(' / ');
 
@@ -7706,9 +7773,11 @@ const FormView: React.FC<FormViewProps> = ({
               <div style={srOnly}>{subLabel}</div>
             </div>
             <div style={{ justifySelf: 'end' }}>
-              <button type="button" onClick={closeSubgroupOverlay} style={buttonStyles.secondary}>
-                {tSystem('common.close', language, 'Close')}
-              </button>
+              {!overlayHideCloseButton ? (
+                <button type="button" onClick={() => attemptCloseSubgroupOverlay('button')} style={buttonStyles.secondary}>
+                  {overlayCloseButtonLabel}
+                </button>
+              ) : null}
             </div>
           </div>
           <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
@@ -7867,6 +7936,68 @@ const FormView: React.FC<FormViewProps> = ({
             <div className="error">
               Unable to load subgroup editor (missing group/subgroup configuration for <code>{subKey}</code>).
             </div>
+          ) : overlayRowFlow ? (
+            <LineItemGroupQuestion
+              key={subGroupDef.id}
+              q={subGroupDef as any}
+              rowFilter={overlayRowFilter}
+              hideInlineSubgroups={overlayHideInlineSubgroups}
+              hideToolbars
+              rowFlow={overlayRowFlow}
+              ctx={{
+                definition,
+                language,
+                values: { ...values, ...ancestorValues },
+                resolveVisibilityValue,
+                getTopValue: (fieldId: string) =>
+                  (ancestorValues as any)[fieldId] !== undefined ? (ancestorValues as any)[fieldId] : getTopValueNoScan(fieldId),
+                setValues,
+                lineItems,
+                setLineItems,
+                submitting: submitting || isFieldLockedByDedup(subKey),
+                errors,
+                setErrors,
+                warningByField,
+                optionState,
+                setOptionState,
+                ensureLineOptions,
+                renderChoiceControl,
+                openInfoOverlay,
+                openFileOverlay,
+                openSubgroupOverlay,
+                openLineItemGroupOverlay,
+                addLineItemRowManual,
+                removeLineRow,
+                handleLineFieldChange,
+                collapsedGroups,
+                toggleGroupCollapsed,
+                collapsedRows,
+                setCollapsedRows,
+                collapsedSubgroups,
+                setCollapsedSubgroups,
+                subgroupSelectors,
+                setSubgroupSelectors,
+                subgroupBottomRefs,
+                fileInputsRef,
+                dragState,
+                incrementDrag,
+                decrementDrag,
+                resetDrag,
+                uploadAnnouncements,
+                handleLineFileInputChange,
+                handleLineFileDrop,
+                removeLineFile,
+                clearLineFiles,
+                errorIndex,
+                setOverlay,
+                onDiagnostic,
+                openConfirmDialog: openConfirmDialogResolved,
+                isOverlayOpenActionSuppressed,
+                suppressOverlayOpenAction,
+                runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                closeOverlay: closeSubgroupOverlay
+              }}
+            />
           ) : overlayDetailEnabled ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 6px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -9562,6 +9693,9 @@ const FormView: React.FC<FormViewProps> = ({
     const title = resolveLabel(group, language);
     const overlayHeaderLabel = lineItemGroupOverlay.label ? lineItemGroupOverlay.label.toString().trim() : '';
     const overlayContextHeader = lineItemGroupOverlay.contextHeader ? lineItemGroupOverlay.contextHeader.toString().trim() : '';
+    const overlayHideCloseButton = lineItemGroupOverlay.hideCloseButton === true;
+    const overlayCloseButtonLabel =
+      lineItemGroupOverlay.closeButtonLabel || tSystem('common.close', language, 'Close');
     const overlayBreadcrumb = tSystem('lineItems.breadcrumbRoot', language, 'Line items');
     const breadcrumbText = `${overlayBreadcrumb} / ${title}`;
 
@@ -9887,9 +10021,11 @@ const FormView: React.FC<FormViewProps> = ({
               <div style={srOnly}>{title}</div>
             </div>
             <div style={{ justifySelf: 'end' }}>
-              <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
-                {tSystem('common.close', language, 'Close')}
-              </button>
+              {!overlayHideCloseButton ? (
+                <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
+                  {overlayCloseButtonLabel}
+                </button>
+              ) : null}
             </div>
           </div>
           <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
@@ -10339,7 +10475,8 @@ const FormView: React.FC<FormViewProps> = ({
                               openConfirmDialog: openConfirmDialogResolved,
                               isOverlayOpenActionSuppressed,
                               suppressOverlayOpenAction,
-                              runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
+                              runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                              closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                             }}
                           />
                         </div>
@@ -10405,7 +10542,8 @@ const FormView: React.FC<FormViewProps> = ({
                   openConfirmDialog: openConfirmDialogResolved,
                   isOverlayOpenActionSuppressed,
                   suppressOverlayOpenAction,
-                  runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
+                  runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                  closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                 }}
               />
             )}

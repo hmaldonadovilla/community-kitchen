@@ -1344,6 +1344,18 @@ export interface LineItemOverlayOpenActionConfig {
    */
   hideTrashIcon?: boolean;
   /**
+   * When true, hide the close button in the overlay header.
+   */
+  hideCloseButton?: boolean;
+  /**
+   * Optional label override for the overlay close button.
+   */
+  closeButtonLabel?: LocalizedString;
+  /**
+   * Optional confirm dialog shown when closing the overlay.
+   */
+  closeConfirm?: RowFlowActionConfirmConfig;
+  /**
    * Optional list of line-item field ids to surface inline when the target group only allows one row.
    * This keeps the data structure unchanged while flattening the UI for quick edits.
    */
@@ -2054,6 +2066,18 @@ export interface RowFlowOutputConfig {
   hideEmpty?: boolean;
   segments?: RowFlowOutputSegmentConfig[];
   actions?: RowFlowActionRef[];
+  /**
+   * Layout for output actions relative to the segments.
+   * - inline: render actions on the same row (default)
+   * - below: render actions on a separate row
+   */
+  actionsLayout?: 'inline' | 'below';
+  /**
+   * Scope for output actions.
+   * - row: render actions per row (default)
+   * - group: render actions once after all rows
+   */
+  actionsScope?: 'row' | 'group';
 }
 
 export interface RowFlowOutputSegmentFormatConfig {
@@ -2108,6 +2132,7 @@ export interface RowFlowPromptConfig {
 export interface RowFlowActionRef {
   id: string;
   position?: 'start' | 'end';
+  scope?: 'row' | 'group';
   showWhen?: WhenClause;
 }
 
@@ -2131,6 +2156,19 @@ export type RowFlowActionEffect =
       targetRef?: string;
       groupId?: string;
       rowFilter?: StepRowFilterConfig;
+    }
+  | {
+      type: 'deleteRow';
+    }
+  | {
+      type: 'addLineItems';
+      targetRef?: string;
+      groupId?: string;
+      preset?: Record<string, DefaultValue>;
+      count?: number;
+    }
+  | {
+      type: 'closeOverlay';
     }
   | (Omit<LineItemOverlayOpenActionConfig, 'groupId'> & {
       type: 'openOverlay';

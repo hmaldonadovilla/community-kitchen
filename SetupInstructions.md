@@ -497,11 +497,12 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```
 
         - `output.segments` defines the text line (supports labels, list formatting, and `showWhen`).
+        - `output.actions` lets you place row actions at the start/end of the output line; use `output.actionsLayout: "below"` to render them on a separate row. Use `output.actionsScope: "group"` (or per-action `scope: "group"`) to render actions once after all rows.
         - `prompts` controls the input order (`completedWhen`, `hideWhenFilled`, `keepVisibleWhenFilled`), allows label overrides via `input.label`, and supports `input.labelLayout` (`stacked` | `inline` | `hidden`).
         - `onCompleteActions` triggers action ids once a prompt becomes complete (useful to auto-open overlays after a selection).
         - `actionsLayout` controls prompt action placement (`below` | `inline`) to keep prompts on a single row.
-        - `actions` can edit values, delete rows, or open overlays.
-        - `openOverlay` effects accept the same options as `LineItemOverlayOpenActionConfig` (row filters, overrides, flattening, rowFlow override) plus `overlayContextHeader` for per-action headers.
+        - `actions` can edit values, delete rows (`deleteRow`), add rows, close overlays, or open overlays.
+        - `openOverlay` effects accept the same options as `LineItemOverlayOpenActionConfig` (row filters, overrides, flattening, rowFlow override, `hideCloseButton`, `closeButtonLabel`, `closeConfirm`) plus `overlayContextHeader` for per-action headers.
         - `rowFlow.overlayContextHeader.fields` shows a default context line in overlays opened from row flow actions.
       - Navigation/back labels and controls:
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
