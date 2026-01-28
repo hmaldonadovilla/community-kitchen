@@ -131,6 +131,37 @@ To export the full form configuration as a single JSON document for diagnostics 
 - Web app URL: append `?config=1` (returns JSON for the selected form).
 - DevTools: run `window.__CK_EXPORT_FORM_CONFIG__()` to fetch and store JSON in `window.__CK_FORM_CONFIG_JSON__` (pass `{ logJson: true }` to print it).
 
+### Bundled config exports (sheetless override)
+
+You can bundle a config export into the Apps Script build so the app reads config from JSON instead of sheets:
+
+1. Export a config file into the repo:
+   ```bash
+   npm run export:config -- --url "<appScriptWebAppUrl>" --form "Config: Meal Production"
+   ```
+   This saves a JSON export under `docs/config/exports/` (file name derived from `formKey`).
+   - Alternative: set `CK_APP_URL` and `CK_FORM_KEY` in `.env` (see `.env.example`) and run `npm run export:config`.
+2. Build as usual:
+   ```bash
+   npm run build
+   ```
+   The build embeds `docs/config/exports/*.json` into the Apps Script bundle.
+3. Deploy `dist/Code.js` to Apps Script. When a bundled export is present, the server logs `configSource: "bundled"` and the app no longer needs to read dashboard/config sheets for that form.
+
+### Optional: Apps Script CI/CD (clasp)
+
+This repo includes a deploy workflow using `clasp`, so you can deploy from GitHub Actions or locally:
+
+- Local:
+  - Copy `.clasp.json.example` → `.clasp.json` and set your scriptId.
+  - Run `npx clasp login` once to create `~/.clasprc.json`.
+  - Deploy with `npm run deploy:apps-script`.
+  - Optional: store deploy env vars in `.env.deploy` (see `.env.deploy.example`) to avoid exporting them each time.
+- GitHub Actions:
+  - Add secrets: `CLASP_SCRIPT_ID` and `CLASP_TOKEN` (the contents of `~/.clasprc.json`).
+  - Optionally add `CLASP_DEPLOYMENT_ID` to update a specific web app deployment.
+  - Run the **Deploy Apps Script** workflow (manual trigger).
+
 ## Setup
 
 1. **Install Dependencies**:

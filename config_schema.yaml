@@ -4157,6 +4157,8 @@ components:
       description: |
         Full form configuration export produced by fetchFormConfig(formKey) or by appending ?config=1 to the web app URL.
         Includes dashboard-level settings, all questions (active + archived), dedup rules, and the computed WebFormDefinition.
+        Save these exports under docs/config/exports to bundle them into the Apps Script build.
+        When a bundled export exists, the app can use it to override sheet-based configuration reads.
       properties:
         formKey:
           type: string

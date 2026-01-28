@@ -1946,6 +1946,8 @@ export interface FormConfig {
 }
 
 export interface FormConfigExport {
+  // Allow manual metadata tags in exported configs (e.g., local verification markers).
+  [key: string]: unknown;
   formKey: string;
   generatedAt: string;
   form: FormConfig;

@@ -3827,6 +3827,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     dedupSignatureRef.current = dedupSignature;
   }, [dedupSignature]);
 
+  const dedupSignatureValue = (dedupSignature || '').toString();
+  const dedupNavigationBlocked =
+    view === 'form' &&
+    (dedupChecking ||
+      !!dedupConflict ||
+      Boolean(dedupSignatureValue && lastDedupCheckedSignatureRef.current !== dedupSignatureValue));
+
   // Dedup precheck (server-side) so we can block duplicate creation early (before autosave/submit).
   useEffect(() => {
     // Only relevant while editing.
@@ -6255,7 +6262,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       : !formIsValid
     : false;
   const submitDisabledTooltip =
-    view === 'form' && orderedEntryEnabled && orderedSubmitDisabled && !dedupChecking && !dedupConflict
+    view === 'form' && orderedEntryEnabled && orderedSubmitDisabled && !dedupNavigationBlocked
       ? tSystem('actions.submitDisabledTooltip', language, 'Complete all required fields to activate.')
       : '';
 
@@ -6324,7 +6331,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
+        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
@@ -6394,6 +6401,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           onDiagnostic={logEvent}
           onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
+          dedupNavigationBlocked={dedupNavigationBlocked}
           openConfirmDialog={customConfirm.openConfirm}
         />
       ) : null}
@@ -6540,7 +6548,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
+        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}

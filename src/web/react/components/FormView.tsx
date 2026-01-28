@@ -586,6 +586,7 @@ interface FormViewProps {
     backLabel: string;
     stepSubmitLabel?: string | LocalizedString;
   } | null) => void;
+  dedupNavigationBlocked?: boolean;
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
 }
 
@@ -626,6 +627,7 @@ const FormView: React.FC<FormViewProps> = ({
   onDiagnostic,
   onFormValidityChange,
   onGuidedUiChange,
+  dedupNavigationBlocked,
   openConfirmDialog
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
@@ -852,7 +854,7 @@ const FormView: React.FC<FormViewProps> = ({
   );
   const guidedDefaultForwardGate = normalizeForwardGate((guidedStepsCfg as any)?.defaultForwardGate, 'whenValid');
   const guidedDefaultAutoAdvance = normalizeAutoAdvance((guidedStepsCfg as any)?.defaultAutoAdvance, 'onValid');
-  const maxReachableGuidedIndex = (() => {
+  const maxReachableGuidedIndexBase = (() => {
     if (!guidedEnabled) return -1;
     if (!guidedStepIds.length) return -1;
     if (!guidedStepsCfg) return -1;
@@ -886,6 +888,10 @@ const FormView: React.FC<FormViewProps> = ({
     }
     return reachable;
   })();
+  const maxReachableGuidedIndex =
+    dedupNavigationBlocked && activeGuidedStepIndex >= 0
+      ? Math.min(activeGuidedStepIndex, maxReachableGuidedIndexBase)
+      : maxReachableGuidedIndexBase;
 
   // Emit a one-time diagnostic when guided steps are enabled for this form.
   useEffect(() => {
@@ -1344,6 +1350,16 @@ const FormView: React.FC<FormViewProps> = ({
         return;
       }
 
+      if (dedupNavigationBlocked) {
+        onDiagnostic?.('steps.step.blocked', {
+          from: activeGuidedStepId,
+          to: nextId,
+          gate: 'dedup',
+          reason: 'dedupGate'
+        });
+        return;
+      }
+
       // Forward navigation: use computed reachability (contiguous gating).
       if (nextIdx > maxReachableGuidedIndex) {
         if (submitActionRef?.current) {
@@ -1369,6 +1385,7 @@ const FormView: React.FC<FormViewProps> = ({
       guidedStepIds,
       guidedStepsCfg,
       maxReachableGuidedIndex,
+      dedupNavigationBlocked,
       onDiagnostic,
       submitActionRef
     ]
@@ -1777,8 +1794,9 @@ const FormView: React.FC<FormViewProps> = ({
     const isFinal = activeGuidedStepIndex >= guidedStepIds.length - 1;
     const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
     const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
-    const forwardGateSatisfied =
+    const forwardGateSatisfiedBase =
       forwardGate === 'free' ? true : forwardGate === 'whenComplete' ? !!stepStatus?.complete : !!stepStatus?.valid;
+    const forwardGateSatisfied = forwardGateSatisfiedBase && !dedupNavigationBlocked;
     const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
     const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
     const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
@@ -1816,6 +1834,7 @@ const FormView: React.FC<FormViewProps> = ({
     guidedDefaultForwardGate,
     guidedStatus.steps,
     language,
+    dedupNavigationBlocked,
     onGuidedUiChange
   ]);
 

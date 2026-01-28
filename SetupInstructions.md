@@ -14,6 +14,58 @@ This project uses TypeScript. You need to build the script before using it in Go
 4. Run `npm run build` to compile the TypeScript code.
    - This will generate a `dist/Code.js` file.
 
+## 2b. Optional: Bundle a Config Export (sheetless override)
+
+If you want the Apps Script runtime to read config from JSON instead of the Sheets tabs:
+
+1. Export a config JSON from your deployed web app:
+
+   ```bash
+   npm run export:config -- --url "<appScriptWebAppUrl>" --form "Config: Meal Production"
+   ```
+
+   This writes a `FormConfigExport` JSON file under `docs/config/exports/`.
+   - Alternative: set `CK_APP_URL` and `CK_FORM_KEY` in `.env` (see `.env.example`) and run `npm run export:config`.
+
+2. Re-run the build:
+
+   ```bash
+   npm run build
+   ```
+
+   The build embeds `docs/config/exports/*.json` into `dist/Code.js`. When present, the bundled config overrides reading from the dashboard + config sheets.
+
+## 2c. Optional: Apps Script CI/CD (clasp)
+
+This repo can deploy to Apps Script automatically using `clasp` (locally or via GitHub Actions).
+
+Local (no GitHub compute):
+
+1. Copy `.clasp.json.example` → `.clasp.json` and set your Apps Script **scriptId**.
+2. Run `npx clasp login` once to generate `~/.clasprc.json` (clasp auth token).
+3. Deploy:
+
+   ```bash
+   npm run deploy:apps-script
+   ```
+   - To skip tests: `SKIP_TESTS=1 npm run deploy:apps-script`
+   - Optional: use `.env.deploy` to store local deploy variables (see `.env.deploy.example`).
+
+Local deploy env variables (optional):
+
+- `SKIP_TESTS=1` — skip unit tests
+- `CLASP_DEPLOYMENT_ID=...` — update a specific `/exec` deployment
+- `CLASP_CREATE_DEPLOYMENT=1` — create a new deployment if no ID is provided
+- `CLASP_DEPLOY_DESCRIPTION="..."` — custom deployment description
+
+CI (GitHub Actions):
+
+1. Add GitHub secrets:
+   - `CLASP_SCRIPT_ID` = your Apps Script scriptId
+   - `CLASP_TOKEN` = contents of `~/.clasprc.json`
+   - Optional: `CLASP_DEPLOYMENT_ID` to update a specific web app deployment
+2. Run the **Deploy Apps Script** workflow (manual `workflow_dispatch`).
+
 ## 3. Create a Google Sheet
 
 1. Go to [sheets.google.com](https://sheets.google.com) and create a new blank spreadsheet.

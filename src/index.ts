@@ -104,7 +104,7 @@ export function submitWebForm(formObject: any): { success: boolean; message: str
   return service.submitWebForm(formObject);
 }
 
-export function fetchBootstrapContext(formKey?: string): { definition: WebFormDefinition; formKey: string } {
+export function fetchBootstrapContext(formKey?: string): { definition: WebFormDefinition; formKey: string; configSource?: string } {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.fetchBootstrapContext(formKey);
