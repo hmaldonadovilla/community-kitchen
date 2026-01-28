@@ -65,7 +65,7 @@ output:
     - fieldRef: "MEAL_TYPE"
     - fieldRef: "QTY"
     - fieldRef: "LEFTOVER_INFO"
-      editAction: "editLeftovers"
+      editActions: ["editLeftovers", "removeRow"]
     - fieldRef: "MP_TO_COOK"
       label:
         en: "To cook"
@@ -81,6 +81,7 @@ Segment options:
   - type: "text" | "list"
   - listDelimiter: ", "
 - editAction: action id (see actions)
+- editActions: list of action ids (renders icons next to the segment)
 
 ### Prompts (Input Row)
 Prompts define the current input question. The first prompt whose conditions are met and not completed is shown.

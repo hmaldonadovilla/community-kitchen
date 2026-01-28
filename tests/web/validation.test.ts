@@ -16,6 +16,16 @@ describe('validation rules', () => {
     expect(checkRule('', { fieldId: 'x', max: 2 }, 'EN', undefined)).toBe('');
   });
 
+  it('validates integer-only rules', () => {
+    expect(checkRule('2', { fieldId: 'x', integer: true } as any, 'EN', undefined)).toBe('');
+    expect(checkRule('2.5', { fieldId: 'x', integer: true } as any, 'EN', undefined)).toContain('whole');
+  });
+
+  it('treats a bare minus sign as invalid when min is set', () => {
+    const msg = checkRule('-', { fieldId: 'x', min: 0 }, 'EN', { en: 'Enter 0 or more' });
+    expect(msg).toContain('0 or more');
+  });
+
   it('supports min/max derived from another field (minFieldId/maxFieldId)', () => {
     const msg = checkRule(
       '19',

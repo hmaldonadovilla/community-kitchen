@@ -129,6 +129,7 @@ export class DefinitionBuilder {
       submissionConfirmationTitle: form.submissionConfirmationTitle,
       submissionConfirmationConfirmLabel: form.submissionConfirmationConfirmLabel,
       submissionConfirmationCancelLabel: form.submissionConfirmationCancelLabel,
+      dedupDialog: form.dedupDialog,
       submitButtonLabel: form.submitButtonLabel,
       summaryButtonLabel: form.summaryButtonLabel
     };

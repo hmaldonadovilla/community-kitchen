@@ -640,6 +640,29 @@ export interface FieldChangeDialogConfig {
   inputs?: FieldChangeDialogInput[];
 }
 
+export interface DedupDialogConfig {
+  /**
+   * Dialog title shown when a duplicate record is detected.
+   */
+  title?: LocalizedString;
+  /**
+   * Intro line shown before the list of dedup key values.
+   */
+  intro?: LocalizedString;
+  /**
+   * Outro line shown after the list of dedup key values.
+   */
+  outro?: LocalizedString;
+  /**
+   * Label for the action that clears the dedup fields.
+   */
+  changeLabel?: LocalizedString;
+  /**
+   * Label for the action that opens the existing record.
+   */
+  openLabel?: LocalizedString;
+}
+
 export interface OptionFilter {
   dependsOn: string | string[]; // question/field ID(s) to watch (supports array for composite filters)
   optionMap?: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
@@ -799,6 +822,11 @@ export interface ValidationRule {
      * - If both `max` and `maxFieldId` are provided, `max` wins.
      */
     maxFieldId?: string;
+    /**
+     * When true, the target numeric value must be an integer (no decimals).
+     * Skips empty values unless required is also set.
+     */
+    integer?: boolean;
     allowed?: string[];
     disallowed?: string[];
   };
@@ -1896,6 +1924,13 @@ export interface FormConfig {
   submissionConfirmationCancelLabel?: LocalizedString;
 
   /**
+   * Optional duplicate-detection dialog copy overrides (dashboard-level).
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  dedupDialog?: DedupDialogConfig;
+
+  /**
    * Optional localized label override for the Submit button in the React web app.
    *
    * Configured via the dashboard “Follow-up Config (JSON)” column.
@@ -2136,11 +2171,17 @@ export interface RowFlowOutputSegmentConfig {
   format?: RowFlowOutputSegmentFormatConfig;
   renderAs?: 'value' | 'control';
   editAction?: string;
+  /**
+   * Optional action ids to render as icons next to this segment.
+   * When provided, these render alongside (or instead of) `editAction`.
+   */
+  editActions?: string[];
 }
 
 export interface RowFlowPromptInputConfig {
   kind?: 'field' | 'selectorOverlay';
   targetRef?: string;
+  groupOverride?: LineItemGroupConfigOverride;
   label?: LocalizedString;
   /**
    * Layout for the prompt label when rendering a field prompt.
@@ -2187,6 +2228,12 @@ export interface RowFlowActionConfirmConfig {
   cancelLabel?: LocalizedString;
   showCancel?: boolean;
   kind?: string;
+  /**
+   * When to show the confirmation dialog relative to the action.
+   * - before: open dialog first, then run the action on confirm (default)
+   * - after: run the action immediately, then show the dialog as an acknowledgement
+   */
+  timing?: 'before' | 'after';
 }
 
 export type RowFlowActionEffect =
@@ -2550,6 +2597,11 @@ export interface WebFormDefinition {
    * When omitted, the UI falls back to localized system strings (e.g. "Cancel").
    */
   submissionConfirmationCancelLabel?: LocalizedString;
+
+  /**
+   * Optional duplicate-detection dialog copy overrides.
+   */
+  dedupDialog?: DedupDialogConfig;
 
   /**
    * Optional localized label override for the Submit button in the React web app.

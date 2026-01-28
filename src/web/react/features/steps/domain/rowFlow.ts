@@ -53,7 +53,10 @@ export type RowFlowResolvedPrompt = {
   id: string;
   config: RowFlowPromptConfig;
   target: RowFlowResolvedFieldTarget | null;
+  // Raw completion state (used for auto-actions and effects).
   complete: boolean;
+  // Completion state used for prompting/visibility while a field is focused.
+  completeForPrompting: boolean;
   visible: boolean;
   showWhenOk: boolean;
 };
@@ -290,6 +293,27 @@ const resolveSegmentValues = (segment: RowFlowOutputSegmentConfig, target: RowFl
   return collectFieldValues(target.rows, fieldId);
 };
 
+export const resolveRowFlowSegmentActionIds = (segment?: RowFlowOutputSegmentConfig | null): string[] => {
+  if (!segment) return [];
+  const results: string[] = [];
+  const seen = new Set<string>();
+  const pushAction = (value?: unknown) => {
+    if (value === undefined || value === null) return;
+    const actionId = value.toString().trim();
+    if (!actionId || seen.has(actionId)) return;
+    seen.add(actionId);
+    results.push(actionId);
+  };
+  pushAction(segment.editAction);
+  const editActions = segment.editActions;
+  if (Array.isArray(editActions)) {
+    editActions.forEach(pushAction);
+  } else if (editActions !== undefined && editActions !== null) {
+    pushAction(editActions);
+  }
+  return results;
+};
+
 const resolveWhenMatch = (args: {
   when?: WhenClause;
   target: RowFlowResolvedFieldTarget | null;
@@ -329,6 +353,13 @@ const resolvePromptComplete = (args: {
   return !isEmptyValue(value as any);
 };
 
+const buildTargetFieldPath = (target: RowFlowResolvedFieldTarget | null): string => {
+  if (!target?.primaryRow || !target.fieldId) return '';
+  const rowId = target.primaryRow.row?.id;
+  if (!rowId) return '';
+  return `${target.primaryRow.groupKey}__${target.fieldId}__${rowId}`;
+};
+
 export const resolveRowFlowState = (args: {
   config?: RowFlowConfig;
   groupId: string;
@@ -337,8 +368,10 @@ export const resolveRowFlowState = (args: {
   lineItems: LineItemState;
   topValues?: Record<string, FieldValue>;
   subGroupIds?: string[];
+  activeFieldPath?: string;
+  activeFieldType?: string;
 }): RowFlowResolvedState | null => {
-  const { config, groupId, rowId, rowValues, lineItems, topValues, subGroupIds } = args;
+  const { config, groupId, rowId, rowValues, lineItems, topValues, subGroupIds, activeFieldPath, activeFieldType } = args;
   if (!config) return null;
   const references = resolveRowFlowReferences({ config, groupId, rowId, lineItems, subGroupIds });
   const segments = (config.output?.segments || [])
@@ -376,9 +409,9 @@ export const resolveRowFlowState = (args: {
             rowValues,
             references
           })
-        : fieldRef
-          ? resolveRowFlowFieldTarget({ fieldRef, groupId, rowId, rowValues, references })
-          : null;
+          : fieldRef
+            ? resolveRowFlowFieldTarget({ fieldRef, groupId, rowId, rowValues, references })
+            : null;
     const showWhenOk = resolveWhenMatch({
       when: prompt.showWhen,
       target,
@@ -386,21 +419,31 @@ export const resolveRowFlowState = (args: {
       topValues,
       fallbackRow: { groupKey: groupId, rowValues, rowId }
     });
-    const complete = resolvePromptComplete({ prompt, target, lineItems, topValues });
+    const activePath = (activeFieldPath || '').toString().trim();
+    const promptFieldPath = buildTargetFieldPath(target);
+    const isActivePromptField = !!activePath && !!promptFieldPath && activePath === promptFieldPath;
+    const activeType = (activeFieldType || '').toString().trim().toUpperCase();
+    const holdWhileActive = activeType === 'TEXT' || activeType === 'PARAGRAPH' || activeType === 'NUMBER';
+    const completeRaw = resolvePromptComplete({ prompt, target, lineItems, topValues });
+    // Do not treat the prompt as complete for prompting/visibility while its own field is focused;
+    // otherwise hideWhenFilled can remove the input after the first keystroke.
+    const completeForPrompting = isActivePromptField && holdWhileActive ? false : completeRaw;
     const hideWhenFilled = prompt.hideWhenFilled === true;
     const keepVisible = prompt.keepVisibleWhenFilled === true;
-    const visible = showWhenOk && !(complete && hideWhenFilled) && (!complete || keepVisible);
+    const visible =
+      showWhenOk && !(completeForPrompting && hideWhenFilled) && (!completeForPrompting || keepVisible);
     return {
       id: prompt.id,
       config: prompt,
       target,
-      complete,
+      complete: completeRaw,
+      completeForPrompting,
       visible,
       showWhenOk
     } as RowFlowResolvedPrompt;
   });
 
-  const activePrompt = prompts.find(p => p.visible && !p.complete);
+  const activePrompt = prompts.find(p => p.visible && !p.completeForPrompting);
   const outputActions = (config.output?.actions || []).filter(action =>
     resolveWhenMatch({ when: action.showWhen, target: null, lineItems, topValues, fallbackRow: { groupKey: groupId, rowValues, rowId } })
   );

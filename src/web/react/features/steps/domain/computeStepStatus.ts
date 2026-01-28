@@ -2,21 +2,7 @@ import { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '
 import { shouldHideField, matchesWhenClause } from '../../../../rules/visibility';
 import { validateRules } from '../../../../rules/validation';
 import { LineItemState } from '../../../types';
-import { isEmptyValue } from '../../../utils/values';
-
-// Step completion should block when step-visible fields are "unset", even if not marked required in the base definition.
-// Important: this differs from `isEmptyValue` (which treats boolean false as empty).
-const isUnsetForStep = (value: FieldValue | undefined): boolean => {
-  if (value === undefined || value === null) return true;
-  if (typeof value === 'string') return value.trim().length === 0;
-  if (Array.isArray(value)) return value.length === 0;
-  try {
-    if (typeof FileList !== 'undefined' && value instanceof FileList) return value.length === 0;
-  } catch (_) {
-    // ignore
-  }
-  return false;
-};
+import { isEmptyValue, isUnsetForStep } from '../../../utils/values';
 
 export type GuidedStepStatus = {
   id: string;
@@ -463,6 +449,22 @@ export function computeGuidedStepsStatus(args: {
       if (includedValidRowCount === 0) missingValid += 1;
       if (includedCompleteRowCount > 0 && !hasAnyCompleteRow) missingComplete += 1;
       if (includedValidRowCount > 0 && !hasAnyValidRow) missingValid += 1;
+    }
+
+    const groupRules = Array.isArray((q as any).validationRules) ? ((q as any).validationRules as any[]) : [];
+    if (groupRules.length) {
+      const errs = validateRules(groupRules as any, {
+        ...(topCtx as any),
+        language,
+        phase: 'submit',
+        isHidden: (fieldId: string) => {
+          if (fieldId === groupId) return groupHidden;
+          const target = questionById.get(fieldId);
+          if (!target) return false;
+          return shouldHideField(target.visibility, topCtx as any);
+        }
+      } as any);
+      errors += errs.length;
     }
 
     return { missingComplete, missingValid, errors };

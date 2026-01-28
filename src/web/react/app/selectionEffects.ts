@@ -1,7 +1,7 @@
 import { handleSelectionEffects } from '../../core';
 import { FieldValue, LangCode, LineItemRowState, PresetValue, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LineItemState } from '../types';
-import { applyValueMapsToForm, hasBlurDerivedValues, mergeBlurDerivedValues } from './valueMaps';
+import { applyValueMapsToForm } from './valueMaps';
 import {
   ROW_SOURCE_AUTO,
   ROW_SOURCE_KEY,
@@ -40,28 +40,18 @@ export const runSelectionEffects = (args: {
 }) => {
   const { definition, question, value, language, values, lineItems, setValues, setLineItems, logEvent, onRowAppended, opts, effectOverrides } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
-  const blurDerivedEnabled = hasBlurDerivedValues(definition);
-
-  const applyValueMapsWithBlurDerived = (nextLineItems: LineItemState) => {
-    const base = applyValueMapsToForm(definition, values, nextLineItems, { mode: 'change' });
-    if (!blurDerivedEnabled) return base;
-    const blur = applyValueMapsToForm(definition, base.values, base.lineItems, { mode: 'blur' });
-    return mergeBlurDerivedValues(definition, base.values, base.lineItems, blur.values, blur.lineItems);
-  };
+  const applyValueMapsWithBlurDerived = (nextLineItems: LineItemState) =>
+    applyValueMapsToForm(definition, values, nextLineItems, { mode: 'change' });
 
   const applyValueMapsWithBlurDerivedForValues = (
     nextValues: Record<string, FieldValue>,
     nextLineItems: LineItemState,
     lockedTopFields?: string[]
-  ) => {
-    const base = applyValueMapsToForm(definition, nextValues, nextLineItems, {
+  ) =>
+    applyValueMapsToForm(definition, nextValues, nextLineItems, {
       mode: 'change',
       lockedTopFields
     });
-    if (!blurDerivedEnabled) return base;
-    const blur = applyValueMapsToForm(definition, base.values, base.lineItems, { mode: 'blur' });
-    return mergeBlurDerivedValues(definition, base.values, base.lineItems, blur.values, blur.lineItems);
-  };
 
   const resolveRowIdPrefix = (groupKey: string): string => {
     const parsed = parseSubgroupKey(groupKey);

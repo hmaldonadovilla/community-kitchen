@@ -1,118 +1,47 @@
 <!--
-  Community Kitchen – Recipes (Summary HTML Template)
+  Community Kitchen - Recipe Detail (Overlay HTML Template)
 
   - Keep placeholders intact (e.g., {{FIELD_ID}}).
-  - Designed for in-app summary; minimal styles and one small script for tabs.
+  - Designed for in-app overlay detail view; minimal styles + tabs.
 -->
 
 <style>
   .ck-summary-template {
-    color: #0f172a;
-    font-size: 0.94em;
-    margin: -8px;
-    font-weight: 400;
-    font-family: var(--ck-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif);
+    font-family: var(--ck-font-family, system-ui);
+    font-size: var(--ck-font-control, 1rem);
+    line-height: 1.4;
+    margin: 0;
   }
 
   .ck-summary-template * {
     box-sizing: border-box;
-    max-width: 100%;
-    font-weight: inherit;
-  }
-
-  .ck-hero {
-    padding: 6px 0 10px;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.12);
-  }
-
-  .ck-hero-title {
-    font-size: 1.2em;
-    margin: 0 0 6px 0;
-    line-height: 1.1;
-  }
-
-  .ck-meta-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 18px;
-    padding: 0;
-    margin: 0;
-    list-style: none;
-  }
-
-  .ck-meta-item {
-    display: grid;
-    grid-template-columns: 1fr 3fr;
-    column-gap: 8px;
-    align-items: baseline;
-    color: #0f172a;
-    width: 100%;
-  }
-
-  .ck-meta-label {
-    font-size: 0.75em;
-    letter-spacing: 0.01em;
-    color: rgba(15, 23, 42, 0.55);
-  }
-
-  .ck-meta-value {
-    font-size: 0.98em;
-  }
-
-  .ck-status-pill {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
-    font-weight: 600;
-    font-size: 0.78em;
-    line-height: 1;
-    white-space: nowrap;
-  }
-  .ck-status-pill[data-status-key="onClose"] {
-    border-color: #94a3b8;
-    background: #e2e8f0;
-    color: #334155;
-  }
-  .ck-status-pill[data-status-key="reOpened"] {
-    border-color: #64748b;
-    background: #e5e7eb;
-    color: #1f2937;
+    font-weight: 400;
   }
 
   .ck-tabs {
-    margin-top: 10px;
+    margin-top: 4px;
   }
 
   .ck-tab-list {
     display: flex;
-    width: 100%;
-    gap: 8px;
-    margin: 0 0 10px 0;
-    padding: 4px 6px;
-    background: rgba(118, 118, 128, 0.06);
-    border-radius: 999px;
+    gap: 16px;
+    margin: 0 0 12px 0;
+    padding: 0 0 6px 0;
+    border-bottom: 1px solid var(--border);
   }
 
   .ck-tab {
-    flex: 1 1 0;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    background: transparent;
-    border-radius: 999px;
-    padding: 8px 12px;
-    letter-spacing: 0.02em;
-    text-align: center;
+    border: 0;
+    background: none;
+    padding: 6px 0;
+    font: inherit;
+    color: inherit;
     cursor: pointer;
-    transition: all 0.15s ease;
-    color: #0f172a;
   }
 
   .ck-tab.is-active {
-    background: rgba(148, 163, 184, 0.18);
-    border-color: rgba(148, 163, 184, 0.55);
+    font-weight: 600;
+    border-bottom: 2px solid currentColor;
   }
 
   .ck-tab-panel {
@@ -123,159 +52,160 @@
     display: block;
   }
 
-  .ck-panel-card {
-    padding: 6px 0 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border: none;
-    background: transparent;
-  }
-
   .ck-panel-actions {
     display: flex;
     justify-content: flex-end;
+    margin-bottom: 8px;
   }
 
   .ck-panel-action {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid rgba(15, 23, 42, 0.2);
+    border: 1px solid var(--border);
     background: transparent;
-    border-radius: 999px;
-    padding: 4px 10px;
+    padding: 6px 12px;
+    border-radius: var(--radius-control, 8px);
     font: inherit;
+    font-weight: 500;
     color: inherit;
     cursor: pointer;
   }
 
-  .ck-panel-action svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .ck-panel-title {
-    font-size: 1em;
-    margin: 0;
-    letter-spacing: 0.01em;
-  }
-
   .ck-ingredients-table {
     width: 100%;
-    table-layout: fixed;
     border-collapse: collapse;
-    margin: 0;
+    table-layout: auto;
   }
 
-  .ck-ingredients-table col.ck-col-ingredient {
-    width: 50%;
+  .ck-ingredients-table col.ck-col-name {
+    width: auto;
   }
 
-  .ck-ingredients-table col.ck-col-quantity {
-    width: 25%;
-  }
-
-  .ck-ingredients-table col.ck-col-allergens {
-    width: 25%;
+  .ck-ingredients-table col.ck-col-qty {
+    width: 10ch;
   }
 
   .ck-ingredients-table th,
   .ck-ingredients-table td {
     text-align: left;
-    padding: 6px 4px;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+    padding: 6px 0;
     vertical-align: top;
     overflow-wrap: anywhere;
   }
 
-  .ck-ingredients-table th {
-    font-size: 0.76em;
-    letter-spacing: 0.03em;
-    color: rgba(15, 23, 42, 0.65);
+  .ck-category-row th {
+    font-size: var(--ck-font-label, 0.95rem);
+    font-weight: 600;
+    padding-top: 12px;
   }
 
-  .ck-category-title {
-    margin: 12px 0 6px;
-    letter-spacing: 0.01em;
-    color: #0f172a;
+  .ck-ingredient-row td {
+    border-bottom: 1px solid var(--border);
   }
 
-  .ck-ingredients-table caption.ck-category-title {
-    text-align: left;
-    padding: 12px 0 6px;
-    margin: 0;
-    caption-side: top;
+  .ck-ingredient-name {
+    min-width: 0;
+  }
+
+  .ck-ingredient-qty {
+    white-space: nowrap;
+    text-align: right;
+    font-weight: 500;
+    padding-left: 12px;
+    min-width: 8ch;
+  }
+
+  .ck-ingredient-allergen {
+    opacity: 0.75;
+  }
+
+  .ck-ingredient-allergen:empty {
+    display: none;
+  }
+
+  .ck-ingredient-allergen:not(:empty)::before {
+    content: " (";
+  }
+
+  .ck-ingredient-allergen:not(:empty)::after {
+    content: ")";
   }
 
   .ck-instructions {
-    line-height: 1.35;
     white-space: pre-wrap;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 6px 0 0;
-  }
-
-  @media (max-width: 540px) {
-    .ck-meta-list {
-      flex-direction: column;
-      gap: 6px;
-    }
-    .ck-tab-list {
-      display: flex;
-    }
   }
 </style>
 
 <div class="ck-summary-template" data-ck-template="mp.ing_recipe">
-
   <div class="ck-tabs" data-ck-tabs>
     <div class="ck-tab-list" role="tablist" aria-label="Recipe details">
-      <button class="ck-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="ck-tab-ingredients" id="ck-tab-btn-ingredients" data-tab-target="ingredients">
+      <button
+        class="ck-tab is-active"
+        type="button"
+        role="tab"
+        aria-selected="true"
+        aria-controls="ck-tab-ingredients"
+        id="ck-tab-btn-ingredients"
+        data-tab-target="ingredients"
+      >
         Ingredients
       </button>
-      <button class="ck-tab" type="button" role="tab" aria-selected="false" aria-controls="ck-tab-instructions" id="ck-tab-btn-instructions" data-tab-target="instructions">
+      <button
+        class="ck-tab"
+        type="button"
+        role="tab"
+        aria-selected="false"
+        aria-controls="ck-tab-instructions"
+        id="ck-tab-btn-instructions"
+        data-tab-target="instructions"
+      >
         Instructions
       </button>
     </div>
 
-    <div class="ck-tab-panel is-active" role="tabpanel" aria-labelledby="ck-tab-btn-ingredients" id="ck-tab-ingredients" data-tab-panel="ingredients">
-      <div class="ck-panel-card">
-        <div class="ck-panel-actions">
-          <button class="ck-panel-action" type="button" data-ck-action="edit" aria-label="Edit recipe" title="Edit recipe">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 20h9"></path>
-              <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
-            </svg>
-            <span>Edit</span>
-          </button>
-        </div>
-        <table class="ck-ingredients-table" aria-label="Ingredients by category">
-          <colgroup>
-            <col class="ck-col-ingredient" />
-            <col class="ck-col-quantity" />
-            <col class="ck-col-allergens" data-ck-allergen-col />
-          </colgroup>
-          <thead>
-            <tr>
-              <th scope="col">{{GROUP_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT)}}{{ORDER_BY(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT ASC, MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING ASC)}}</th>
-              <th scope="col">Quantity</th>
-              <th scope="col" class="ck-allergen-header" data-ck-allergen-col>Allergens</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}</td>
-              <td>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.QTY}} {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.UNIT}}</td>
-              <td data-ck-allergen-cell>{{DEFAULT(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN, "None")}}</td>
-            </tr>
-          </tbody>
-        </table>
+    <div
+      class="ck-tab-panel is-active"
+      role="tabpanel"
+      aria-labelledby="ck-tab-btn-ingredients"
+      id="ck-tab-ingredients"
+      data-tab-panel="ingredients"
+    >
+      <div class="ck-panel-actions">
+        <button class="ck-panel-action" type="button" data-ck-action="edit" aria-label="Edit ingredients">
+          Edit ingredients
+        </button>
       </div>
+
+      <table class="ck-ingredients-table" aria-label="Ingredients by category">
+        <colgroup>
+          <col class="ck-col-name" />
+          <col class="ck-col-qty" />
+        </colgroup>
+        <tbody>
+          <tr class="ck-category-row">
+            <th scope="row" colspan="2">
+              {{GROUP_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT)}}{{ORDER_BY(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT ASC, MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING ASC)}}
+            </th>
+          </tr>
+          <tr class="ck-ingredient-row">
+            <td class="ck-ingredient-name">
+              {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}
+              <span class="ck-ingredient-allergen">{{DEFAULT(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN, "")}}</span>
+            </td>
+            <td class="ck-ingredient-qty">
+              {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.QTY}} {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.UNIT}}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="ck-tab-panel" role="tabpanel" aria-labelledby="ck-tab-btn-instructions" id="ck-tab-instructions" data-tab-panel="instructions" hidden>
+    <div
+      class="ck-tab-panel"
+      role="tabpanel"
+      aria-labelledby="ck-tab-btn-instructions"
+      id="ck-tab-instructions"
+      data-tab-panel="instructions"
+      hidden
+    >
       <div class="ck-instructions">{{DEFAULT(MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE.REC_INST, "No instructions provided.")}}</div>
     </div>
   </div>
@@ -306,6 +236,5 @@
         activate(tab.getAttribute('data-tab-target'));
       });
     });
-
   })();
 </script>

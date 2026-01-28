@@ -11,6 +11,7 @@ import {
   FollowupStatusConfig,
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
+  DedupDialogConfig,
   FormConfig,
   GroupBehaviorConfig,
   ListViewColumnConfig,
@@ -149,6 +150,7 @@ export class Dashboard {
       const submissionConfirmationTitle = dashboardConfig?.submissionConfirmationTitle;
       const submissionConfirmationConfirmLabel = dashboardConfig?.submissionConfirmationConfirmLabel;
       const submissionConfirmationCancelLabel = dashboardConfig?.submissionConfirmationCancelLabel;
+      const dedupDialog = dashboardConfig?.dedupDialog;
       const submitButtonLabel = dashboardConfig?.submitButtonLabel;
       const summaryButtonLabel = dashboardConfig?.summaryButtonLabel;
       const languages = dashboardConfig?.languages;
@@ -195,6 +197,7 @@ export class Dashboard {
           submissionConfirmationTitle,
           submissionConfirmationConfirmLabel,
           submissionConfirmationCancelLabel,
+          dedupDialog,
           submitButtonLabel,
           summaryButtonLabel,
           languages,
@@ -257,6 +260,7 @@ export class Dashboard {
     submissionConfirmationTitle?: LocalizedString;
     submissionConfirmationConfirmLabel?: LocalizedString;
     submissionConfirmationCancelLabel?: LocalizedString;
+    dedupDialog?: DedupDialogConfig;
     submitButtonLabel?: LocalizedString;
     summaryButtonLabel?: LocalizedString;
     languages?: Array<'EN' | 'FR' | 'NL'>;
@@ -854,6 +858,50 @@ export class Dashboard {
               : undefined;
     const submissionConfirmationCancelLabel = normalizeLocalized(submissionCancelLabelRaw);
 
+    const dedupDialogRaw =
+      parsed.dedupDialog !== undefined
+        ? parsed.dedupDialog
+        : parsed.dedupDialogConfig !== undefined
+          ? parsed.dedupDialogConfig
+          : parsed.duplicateDialog !== undefined
+            ? parsed.duplicateDialog
+            : parsed.dedup !== undefined && parsed.dedup !== null && typeof parsed.dedup === 'object'
+              ? (parsed.dedup.dialog ?? parsed.dedup.dialogConfig ?? parsed.dedup.dialogSettings)
+              : undefined;
+    const dedupDialogObj = dedupDialogRaw && typeof dedupDialogRaw === 'object' ? (dedupDialogRaw as any) : undefined;
+    const dedupDialogCandidate: DedupDialogConfig | undefined = dedupDialogObj
+      ? {
+          title: normalizeLocalized(dedupDialogObj.title ?? dedupDialogObj.header ?? dedupDialogObj.heading),
+          intro: normalizeLocalized(
+            dedupDialogObj.intro ?? dedupDialogObj.bodyIntro ?? dedupDialogObj.messageIntro ?? dedupDialogObj.bodyStart
+          ),
+          outro: normalizeLocalized(
+            dedupDialogObj.outro ??
+              dedupDialogObj.bodyOutro ??
+              dedupDialogObj.messageOutro ??
+              dedupDialogObj.bodyEnd ??
+              dedupDialogObj.footer ??
+              dedupDialogObj.prompt
+          ),
+          changeLabel: normalizeLocalized(
+            dedupDialogObj.changeLabel ??
+              dedupDialogObj.cancelLabel ??
+              dedupDialogObj.changeButtonLabel ??
+              dedupDialogObj.cancelButtonLabel
+          ),
+          openLabel: normalizeLocalized(
+            dedupDialogObj.openLabel ??
+              dedupDialogObj.confirmLabel ??
+              dedupDialogObj.openButtonLabel ??
+              dedupDialogObj.confirmButtonLabel
+          )
+        }
+      : undefined;
+    const dedupDialog =
+      dedupDialogCandidate && Object.values(dedupDialogCandidate).some(value => value !== undefined)
+        ? dedupDialogCandidate
+        : undefined;
+
     const submitButtonLabelRaw =
       parsed.submitButtonLabel !== undefined
         ? parsed.submitButtonLabel
@@ -923,6 +971,7 @@ export class Dashboard {
       !submissionConfirmationTitle &&
       !submissionConfirmationConfirmLabel &&
       !submissionConfirmationCancelLabel &&
+      !dedupDialog &&
       !submitButtonLabel &&
       !summaryButtonLabel &&
       !languages &&
@@ -963,6 +1012,7 @@ export class Dashboard {
       submissionConfirmationTitle,
       submissionConfirmationConfirmLabel,
       submissionConfirmationCancelLabel,
+      dedupDialog,
       submitButtonLabel,
       summaryButtonLabel,
       languages,

@@ -17,7 +17,8 @@ export const LineItemTable: React.FC<{
   className?: string;
   rowClassName?: (row: LineItemRowState, rowIndex: number) => string | undefined;
   renderRowMessage?: (row: LineItemRowState, rowIndex: number) => React.ReactNode;
-}> = ({ columns, rows, emptyText, className, rowClassName, renderRowMessage }) => {
+  footer?: React.ReactNode;
+}> = ({ columns, rows, emptyText, className, rowClassName, renderRowMessage, footer }) => {
   const colCount = columns.length || 1;
   const tableClass = ['ck-line-item-table', className].filter(Boolean).join(' ');
 
@@ -63,7 +64,7 @@ export const LineItemTable: React.FC<{
           </tr>
         )}
       </tbody>
+      {footer ? <tfoot>{footer}</tfoot> : null}
     </table>
   );
 };
-

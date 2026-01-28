@@ -28,8 +28,16 @@ export const isEmptyValue = (value: FieldValue): boolean => {
   return false;
 };
 
+// Step-completion semantics: explicit values count as "set" (false is allowed).
+export const isUnsetForStep = (value: FieldValue): boolean => {
+  if (value === undefined || value === null) return true;
+  if (typeof value === 'string') return value.trim().length === 0;
+  if (Array.isArray(value)) return value.length === 0;
+  if (hasFileListCtor() && value instanceof FileList) return value.length === 0;
+  return false;
+};
+
 export const toFileArray = (value: FieldValue): File[] => {
   if (!Array.isArray(value) || !hasFileCtor()) return [];
   return value.filter((item): item is File => item instanceof File);
 };
-

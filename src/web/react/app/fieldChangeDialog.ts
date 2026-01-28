@@ -31,6 +31,20 @@ const normalizeId = (raw: any): string => {
   return String(raw).trim();
 };
 
+const isDialogEmptyValue = (value: FieldValue): boolean => {
+  if (value === undefined || value === null) return true;
+  if (typeof value === 'string') return value.trim().length === 0;
+  if (Array.isArray(value)) return value.length === 0;
+  try {
+    if (typeof FileList !== 'undefined' && value instanceof FileList) {
+      return value.length === 0;
+    }
+  } catch (_) {
+    // ignore FileList detection failures
+  }
+  return false;
+};
+
 const resolveLineItemFieldConfig = (
   definition: WebFormDefinition,
   groupId: string,
@@ -102,6 +116,7 @@ export const evaluateFieldChangeDialogWhen = (args: {
   if (!when) return false;
   const normalizedFieldId = normalizeId(fieldId);
   if (!normalizedFieldId) return false;
+  if (isDialogEmptyValue(nextValue)) return false;
   if (scope === 'top') {
     const nextValues = { ...values, [normalizedFieldId]: nextValue };
     return matchesWhenClause(when, {

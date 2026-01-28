@@ -15,7 +15,15 @@ export const collectLineItemRows = (record: WebFormSubmission, questions: Questi
   const map: Record<string, any[]> = {};
   const normalizeRows = (raw: any): any[] => {
     if (Array.isArray(raw)) {
-      return raw.map(row => (row && typeof row === 'object' ? row : {}));
+      return raw.map((row, idx) => {
+        const base = row && typeof row === 'object' ? row : {};
+        const rowId = (base as any)?.id;
+        return {
+          ...(base || {}),
+          __rowIndex: idx,
+          __rowId: rowId ?? ''
+        };
+      });
     }
     return [];
   };
@@ -351,5 +359,4 @@ export const addConsolidatedPlaceholders = (
       });
   });
 };
-
 

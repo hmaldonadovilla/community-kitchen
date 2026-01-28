@@ -163,4 +163,60 @@ describe('applyHtmlLineItemBlocks', () => {
     expect(rendered).toContain('Gluten, Milk');
     expect(rendered).toContain('None');
   });
+
+  it('flattens deeper subgroups when ROW_TABLE already targets a parent subgroup', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'MEAL_TYPE', labelEn: 'Meal type', type: 'TEXT' } as any],
+        subGroups: [
+          {
+            id: 'MP_TYPE_LI',
+            fields: [{ id: 'RECIPE', labelEn: 'Recipe', type: 'TEXT' } as any],
+            subGroups: [
+              {
+                id: 'MP_INGREDIENTS_LI',
+                fields: [{ id: 'ING', labelEn: 'Ingredient', type: 'TEXT' } as any]
+              } as any
+            ]
+          } as any
+        ]
+      }
+    } as any;
+
+    const html = `
+      <table>
+        {{ROW_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE)}}
+        <tr>
+          <td>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}</td>
+        </tr>
+      </table>
+    `;
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          MEAL_TYPE: 'Dinner',
+          MP_TYPE_LI: [
+            {
+              RECIPE: 'Soup',
+              MP_INGREDIENTS_LI: [{ ING: 'Carrot' }, { ING: 'Onion' }]
+            }
+          ]
+        }
+      ]
+    };
+
+    const rendered = applyHtmlLineItemBlocks({ html, questions: [group], lineItemRows });
+
+    expect(rendered.match(/Carrot/gi)?.length).toBe(1);
+    expect(rendered.match(/Onion/gi)?.length).toBe(1);
+  });
 });

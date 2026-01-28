@@ -1629,6 +1629,42 @@ components:
           description: Optional dialog input fields that update other targets on confirm.
       required: [when]
 
+    DedupDialogConfig:
+      type: object
+      description: |
+        Optional copy overrides for the duplicate-record dialog.
+
+        The dialog message is composed as:
+        - `intro` (if provided)
+        - a list of dedup key labels + values
+        - `outro` (if provided)
+      properties:
+        title:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Dialog title shown when a duplicate record is detected.
+        intro:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Intro line shown before the list of dedup key values.
+        outro:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Outro line shown after the list of dedup key values.
+        changeLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Label for the action that clears the dedup fields.
+        openLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Label for the action that opens the existing record.
+
     DerivedValueConfig:
       oneOf:
         - type: object
@@ -1964,6 +2000,12 @@ components:
             Optional localized label for the **negative (cancel)** button in the submission confirmation dialog.
 
             When omitted, the UI falls back to localized system strings (e.g. "Cancel").
+        dedupDialog:
+          $ref: '#/components/schemas/DedupDialogConfig'
+          description: |
+            Optional copy overrides for the **duplicate record** dialog.
+
+            The dialog message automatically lists the dedup key labels + values between `intro` and `outro`.
         submitButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -2091,6 +2133,7 @@ components:
             Optional HTML template to fully replace the built-in Summary view UI.
 
             - When set, the Summary view renders this HTML template (Drive file) with placeholders.
+            - Line-item templates also expose system pseudo-fields `{{GROUP.__ROWINDEX}}` and `{{GROUP.__ROWID}}` in row contexts.
             - If rendering fails, the app falls back to the built-in Summary view.
         templateCacheTtlSeconds:
           type: number
@@ -2211,6 +2254,7 @@ components:
         - a stepper at the top of the edit view
         - step-scoped progressive disclosure (only show fields relevant to the active step)
         - configurable forward gating + auto-advance (defaults: `whenValid` + `onValid`)
+        - inline field-level validation feedback when a step is blocked (no step-level banner)
       properties:
         mode:
           type: string
@@ -2468,6 +2512,11 @@ components:
         editAction:
           type: string
           description: Action id to render as an edit icon next to this segment.
+        editActions:
+          type: array
+          items:
+            type: string
+          description: Action ids to render as icons next to this segment (renders alongside editAction when provided).
       required: [fieldRef]
       additionalProperties: false
 
@@ -2480,6 +2529,9 @@ components:
         targetRef:
           type: string
           description: Reference id for selector overlay prompts.
+        groupOverride:
+          $ref: '#/components/schemas/LineItemGroupConfigOverride'
+          description: Optional line-item group override applied for selector overlay prompts.
         label:
           $ref: '#/components/schemas/LocalizedString'
         labelLayout:
@@ -2564,6 +2616,10 @@ components:
           type: boolean
         kind:
           type: string
+        timing:
+          type: string
+          enum: [before, after]
+          description: When to show the dialog relative to the action. `before` opens first (default); `after` opens after the action completes.
       additionalProperties: false
 
     RowFlowActionEffectConfig:
@@ -3995,6 +4051,9 @@ components:
             maxFieldId:
               type: string
               description: Enforce target numeric value <= the numeric value of another field (skips if the referenced field is empty/non-numeric). If both `max` and `maxFieldId` are set, `max` wins.
+            integer:
+              type: boolean
+              description: When true, enforce the target numeric value is a whole number (no decimals). Skips empty values unless required is also set.
             allowed:
               type: array
               items:
@@ -4240,6 +4299,8 @@ components:
           $ref: '#/components/schemas/LocalizedString'
         submissionConfirmationCancelLabel:
           $ref: '#/components/schemas/LocalizedString'
+        dedupDialog:
+          $ref: '#/components/schemas/DedupDialogConfig'
         submitButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
         summaryButtonLabel:

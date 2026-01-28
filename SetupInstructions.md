@@ -511,6 +511,7 @@ This project uses TypeScript. You need to build the script before using it in Go
       - Line groups can be rendered **inline** or via a **full-page overlay** (`displayMode: "overlay"` or step `render.lineGroups.mode`).
       - You can filter visible rows per step using `rows.includeWhen` / `rows.excludeWhen` (e.g., `quantity > 0`) and scope subgroups via `subGroups.include`.
       - If you need to **show all rows** but only **validate/advance based on a subset** (e.g., ignore rows where `QTY < 1` while still displaying them), use `validationRows.includeWhen` / `validationRows.excludeWhen` on the step target.
+      - When a step is blocked, **field-level error messages** are shown inline; there is no step-level validation banner.
       - For **progressive** line item groups in guided steps, set `collapsedFieldsInHeader: true` on the step target to:
         - show the configured `lineItemConfig.ui.collapsedFields` in the **row header**
         - keep rows **always expanded** (no toggle/pill indicator)
@@ -529,6 +530,7 @@ This project uses TypeScript. You need to build the script before using it in Go
         ```
 
         - `output.segments` defines the text line (supports labels, list formatting, and `showWhen`).
+        - `output.segments[].editAction` (single) or `editActions` (array) renders one or more action icons next to a segment.
         - `output.actions` lets you place row actions at the start/end of the output line; use `output.actionsLayout: "below"` to render them on a separate row. Use `output.actionsScope: "group"` (or per-action `scope: "group"`) to render actions once after all rows.
         - `prompts` controls the input order (`completedWhen`, `hideWhenFilled`, `keepVisibleWhenFilled`), allows label overrides via `input.label`, and supports `input.labelLayout` (`stacked` | `inline` | `hidden`).
         - `onCompleteActions` triggers action ids once a prompt becomes complete (useful to auto-open overlays after a selection).
@@ -586,6 +588,30 @@ This project uses TypeScript. You need to build the script before using it in Go
       {
         "submissionConfirmationConfirmLabel": { "en": "Yes, submit" },
         "submissionConfirmationCancelLabel": { "en": "Not yet" }
+      }
+      ```
+
+    - Want to **customize the duplicate-record dialog** shown when dedup rules block a record? Set `dedupDialog` in the same dashboard JSON. The dialog body automatically lists the dedup key labels + values between `intro` and `outro`:
+
+      ```json
+      {
+        "dedupDialog": {
+          "title": {
+            "en": "Creating duplicate record for the same customer, service and date is not allowed."
+          },
+          "intro": {
+            "en": "A meal production record already exists for:"
+          },
+          "outro": {
+            "en": "What do you want to do?"
+          },
+          "changeLabel": {
+            "en": "Change customer, service or date"
+          },
+          "openLabel": {
+            "en": "Open existing record"
+          }
+        }
       }
       ```
 
@@ -1752,6 +1778,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   1. Create a copy of the entire table for each line-item row, preserving row order.
   2. Replace the directive placeholder with the current row’s field value (so you can show it in the heading).
   3. Populate the table rows using that single row (so “Portions/Recipe/Core temp” do **not** duplicate inside one section when titles repeat).
+- **System row identifiers (line items)**: Inside line-item expansion contexts you can reference the current row index/id via `{{GROUP.__ROWINDEX}}` and `{{GROUP.__ROWID}}` (also valid on subgroup paths like `{{GROUP.SUBGROUP.__ROWINDEX}}`).
+- **Deeper subgroup paths inside repeated subgroup tables**: When a table already repeats a parent subgroup (for example `{{ROW_TABLE(GROUP.SUBGROUP.FIELD)}}`), rows inside that same table can reference deeper subgroup paths (for example `{{GROUP.SUBGROUP.CHILD.FIELD}}`) and they will be flattened relative to the current repeated subgroup row.
 - **Nested subgroup tables (parent → child line items)**: To mirror Summary’s nested layout, add a table that uses `{{PARENT_ID.SUBGROUP_ID.FIELD_ID}}` placeholders inside the row cells (**IDs only**; subgroup `id` is required). The renderer will:
   - Insert one copy of the table per parent row that has children.
   - For each child row, duplicate the template row(s) and replace subgroup placeholders. You can also include parent fields in the same row via `{{PARENT_ID.FIELD_ID}}` if needed.

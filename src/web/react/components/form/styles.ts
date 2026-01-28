@@ -206,8 +206,8 @@ export const FORM_VIEW_STYLES = `
           position: sticky;
           top: 0;
           z-index: 2;
-          background: #f8fafc;
-          box-shadow: 0 2px 0 rgba(226, 232, 240, 0.9);
+          background: transparent;
+          box-shadow: none;
         }
         .form-card .ck-line-item-table__actions,
         .webform-overlay .ck-line-item-table__actions {
@@ -257,25 +257,40 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__value,
         .webform-overlay .ck-line-item-table__value {
           position: relative;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 0;
         }
         .form-card .ck-line-item-table__control[data-has-warning="true"],
         .form-card .ck-line-item-table__value[data-has-warning="true"],
         .webform-overlay .ck-line-item-table__control[data-has-warning="true"],
         .webform-overlay .ck-line-item-table__value[data-has-warning="true"] {
-          box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.55);
-          border-radius: 10px;
-          background: rgba(245, 158, 11, 0.08);
+          box-shadow: none;
+          border-radius: 0;
+          background: transparent;
         }
         .form-card .ck-line-item-table__control[data-has-error="true"],
         .form-card .ck-line-item-table__value[data-has-error="true"],
         .webform-overlay .ck-line-item-table__control[data-has-error="true"],
         .webform-overlay .ck-line-item-table__value[data-has-error="true"] {
-          box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.6);
-          border-radius: 10px;
-          background: rgba(239, 68, 68, 0.08);
+          box-shadow: 0 0 0 1px #b91c1c;
+          border-radius: 6px;
+          background: transparent;
         }
         .form-card .ck-line-item-table__value {
           font-size: var(--ck-font-control);
+        }
+        .form-card .ck-line-item-table__value-text,
+        .webform-overlay .ck-line-item-table__value-text {
+          display: inline;
+        }
+        .form-card .ck-line-item-table__cell-error,
+        .webform-overlay .ck-line-item-table__cell-error {
+          margin-top: 2px;
+          font-size: calc(var(--ck-font-label) * 0.85);
+          font-weight: 600;
+          line-height: 1.2;
         }
         .form-card .ck-line-item-table__empty {
           text-align: center;
@@ -291,19 +306,29 @@ export const FORM_VIEW_STYLES = `
           flex-direction: column;
           gap: 6px;
         }
+        .form-card .ck-line-item-table .error,
+        .webform-overlay .ck-line-item-table .error {
+          font-weight: 600;
+        }
+        .form-card .ck-line-item-table .warning,
+        .webform-overlay .ck-line-item-table .warning {
+          color: var(--text);
+          font-weight: 400;
+        }
         .form-card .ck-line-item-table__legend,
         .webform-overlay .ck-line-item-table__legend {
           margin-top: 10px;
-          padding: 0 60px;
-          border-radius: 12px;
-          border: 1px solid var(--border);
-          background: #ffffff;
+          padding: 8px 0;
+          border-radius: 0;
+          border: 0;
+          border-top: 1px solid var(--border);
+          background: transparent;
           color: var(--text);
           position: sticky;
           bottom: 0;
           z-index: 3;
-          box-shadow: 0 -8px 16px rgba(15, 23, 42, 0.08);
-          padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+          box-shadow: none;
+          padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
         }
         .form-card .ck-line-item-table__legend-title,
         .webform-overlay .ck-line-item-table__legend-title {
@@ -329,13 +354,13 @@ export const FORM_VIEW_STYLES = `
           width: 18px;
           height: 18px;
           border-radius: 999px;
-          border: 1px solid rgba(245, 158, 11, 0.55);
-          color: #b45309;
+          border: 1px solid var(--border);
+          color: var(--text);
           display: inline-flex;
           align-items: center;
           justify-content: center;
           font-size: 0.7em;
-          font-weight: 700;
+          font-weight: 600;
           line-height: 1;
           flex: 0 0 auto;
           margin-top: 1px;
@@ -361,13 +386,13 @@ export const FORM_VIEW_STYLES = `
           justify-content: center;
           margin-left: 6px;
           font-size: 0.7em;
-          font-weight: 700;
-          color: #b45309;
-          border: 1px solid rgba(245, 158, 11, 0.55);
+          font-weight: 600;
+          color: var(--text);
+          border: 1px solid var(--border);
           border-radius: 999px;
           padding: 0 4px;
           line-height: 1.2;
-          background: #ffffff;
+          background: transparent;
           pointer-events: none;
           vertical-align: middle;
         }
@@ -383,11 +408,34 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay .ck-line-item-table__scroll {
           overflow: visible;
         }
+        .form-card .ck-line-item-table__totals-row td,
+        .webform-overlay .ck-line-item-table__totals-row td {
+          border-top: 1px solid var(--border);
+          border-bottom: 0;
+          padding-top: 10px;
+          padding-bottom: 10px;
+          vertical-align: top;
+        }
+        .form-card .ck-line-item-group--table .line-item-totals,
+        .webform-overlay .ck-line-item-group--table .line-item-totals {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          font-size: var(--ck-font-label);
+          font-weight: 500;
+        }
+        .form-card .ck-line-item-table__total,
+        .webform-overlay .ck-line-item-table__total {
+          font-weight: 500;
+          font-size: var(--ck-font-label);
+          white-space: nowrap;
+        }
         .form-card .ck-line-item-table__row--even {
-          background: #ffffff;
+          background: transparent;
         }
         .form-card .ck-line-item-table__row--odd {
-          background: #f8fafc;
+          background: transparent;
         }
         .form-card .field.inline-field,
         .webform-overlay .field.inline-field {

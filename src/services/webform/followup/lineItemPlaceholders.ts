@@ -65,6 +65,8 @@ export const resolveLineItemTokenValue = (args: {
     if (parent && Object.prototype.hasOwnProperty.call(parent || {}, fieldId)) return (parent as any)[fieldId];
     return '';
   };
+  const systemRowIndex = (rowData as any)?.__rowIndex ?? (parent as any)?.__rowIndex;
+  const systemRowId = (rowData as any)?.__rowId ?? (rowData as any)?.id ?? (parent as any)?.__rowId ?? (parent as any)?.id;
 
   (group.lineItemConfig?.fields || []).forEach(field => {
     const raw = resolveGroupValue(field.id);
@@ -81,12 +83,16 @@ export const resolveLineItemTokenValue = (args: {
   // Consolidated table pseudo-fields (computed by the renderer, not part of the form schema).
   const countRaw = (rowData as any)?.__COUNT;
   replacements[`${normalizedGroupId}.__COUNT`] = countRaw ?? '';
+  replacements[`${normalizedGroupId}.__ROWINDEX`] = systemRowIndex ?? '';
+  replacements[`${normalizedGroupId}.__ROWID`] = systemRowId ?? '';
 
   if (subGroup) {
     const subKeyRaw = resolveSubgroupKey(subGroup);
     const subToken = subGroupToken || subKeyRaw;
     const normalizedSubKey = (subToken || '').toString().toUpperCase();
     replacements[`${normalizedGroupId}.${normalizedSubKey}.__COUNT`] = countRaw ?? '';
+    replacements[`${normalizedGroupId}.${normalizedSubKey}.__ROWINDEX`] = systemRowIndex ?? '';
+    replacements[`${normalizedGroupId}.${normalizedSubKey}.__ROWID`] = systemRowId ?? '';
     (subGroup.fields || []).forEach((field: any) => {
       const raw = resolveSubGroupValue(field.id);
       const tokens = [
@@ -196,6 +202,8 @@ export const replaceLineItemPlaceholders = (
     if (parent && Object.prototype.hasOwnProperty.call(parent || {}, fieldId)) return (parent as any)[fieldId];
     return '';
   };
+  const systemRowIndex = (rowData as any)?.__rowIndex ?? (parent as any)?.__rowIndex;
+  const systemRowId = (rowData as any)?.__rowId ?? (rowData as any)?.id ?? (parent as any)?.__rowId ?? (parent as any)?.id;
   (group.lineItemConfig?.fields || []).forEach(field => {
     const include = !groupCollapsedOnly || groupCollapsedFieldIds.has((field.id || '').toString().trim().toUpperCase());
     const raw = include ? resolveGroupValue(field.id) : '';
@@ -217,12 +225,20 @@ export const replaceLineItemPlaceholders = (
   const countRaw = (rowData as any)?.__COUNT;
   const countText = countRaw === undefined || countRaw === null ? '' : countRaw.toString();
   replacements[`${normalizedGroupId}.__COUNT`] = countText;
+  replacements[`${normalizedGroupId}.__ROWINDEX`] =
+    systemRowIndex === undefined || systemRowIndex === null ? '' : systemRowIndex.toString();
+  replacements[`${normalizedGroupId}.__ROWID`] =
+    systemRowId === undefined || systemRowId === null ? '' : systemRowId.toString();
 
   if (opts?.subGroup) {
     const subKeyRaw = resolveSubgroupKey(opts.subGroup);
     const subToken = opts.subGroupToken || subKeyRaw;
     const normalizedSubKey = (subToken || '').toString().toUpperCase();
     replacements[`${normalizedGroupId}.${normalizedSubKey}.__COUNT`] = countText;
+    replacements[`${normalizedGroupId}.${normalizedSubKey}.__ROWINDEX`] =
+      systemRowIndex === undefined || systemRowIndex === null ? '' : systemRowIndex.toString();
+    replacements[`${normalizedGroupId}.${normalizedSubKey}.__ROWID`] =
+      systemRowId === undefined || systemRowId === null ? '' : systemRowId.toString();
     const subUi: any = (opts.subGroup as any)?.ui;
     const subCollapsedOnly =
       collapseOnly &&
@@ -378,5 +394,3 @@ export const replaceLineItemPlaceholders = (
     }
   );
 };
-
-

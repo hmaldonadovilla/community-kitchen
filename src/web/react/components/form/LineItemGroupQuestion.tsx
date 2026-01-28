@@ -59,7 +59,7 @@ import {
 import { DateInput } from './DateInput';
 import { GroupedPairedFields } from './GroupedPairedFields';
 import { InfoTooltip } from './InfoTooltip';
-import { LineItemTable } from './LineItemTable';
+import { LineItemTable, type LineItemTableColumn } from './LineItemTable';
 import { LineOverlayState } from './overlays/LineSelectOverlay';
 import { SearchableSelect } from './SearchableSelect';
 import { LineItemMultiAddSelect } from './LineItemMultiAddSelect';
@@ -86,6 +86,7 @@ import {
   resolveRowFlowActionPlan,
   resolveRowFlowFieldTarget,
   normalizeValueList,
+  resolveRowFlowSegmentActionIds,
   resolveRowFlowState,
   type RowFlowResolvedEffect,
   type RowFlowResolvedPrompt,
@@ -384,6 +385,30 @@ export const LineItemGroupQuestion: React.FC<{
     });
     return map;
   }, [parentRows]);
+
+  function parseFieldPath(path: string): { groupKey: string; fieldId: string; rowId: string } | null {
+    if (!path) return null;
+    const parts = path.split('__');
+    if (parts.length < 3) return null;
+    const groupKey = (parts[0] || '').toString().trim();
+    const fieldId = (parts[1] || '').toString().trim();
+    const rowId = (parts[2] || '').toString().trim();
+    if (!groupKey || !fieldId || !rowId) return null;
+    return { groupKey, fieldId, rowId };
+  }
+
+  const activeFieldMeta = (() => {
+    if (typeof document === 'undefined') return { path: '', type: '' };
+    const active = document.activeElement as HTMLElement | null;
+    const path = ((active?.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath || '').toString();
+    const parsed = parseFieldPath(path);
+    if (!parsed) return { path: '', type: '' };
+    const groupInfo = resolveRowFlowGroupConfig(parsed.groupKey);
+    if (!groupInfo) return { path: '', type: '' };
+    const field = resolveRowFlowFieldConfig(parsed.groupKey, parsed.fieldId);
+    const type = field?.type ? field.type.toString().trim().toUpperCase() : '';
+    return { path, type };
+  })();
   const rowFlowStateByRowId = React.useMemo(() => {
     const map = new Map<string, RowFlowResolvedState>();
     if (!rowFlowEnabled) return map;
@@ -395,34 +420,69 @@ export const LineItemGroupQuestion: React.FC<{
         rowValues: (row.values || {}) as Record<string, FieldValue>,
         lineItems,
         topValues: values,
-        subGroupIds: rowFlowSubGroupIds
+        subGroupIds: rowFlowSubGroupIds,
+        activeFieldPath: activeFieldMeta.path,
+        activeFieldType: activeFieldMeta.type
       });
       if (state) map.set(row.id, state);
     });
     return map;
-  }, [lineItems, parentRows, q.id, rowFlow, rowFlowEnabled, rowFlowSubGroupIds, values]);
+  }, [activeFieldMeta.path, activeFieldMeta.type, lineItems, parentRows, q.id, rowFlow, rowFlowEnabled, rowFlowSubGroupIds, values]);
 
-  const resolveRowFlowGroupConfig = (groupKey: string): { groupId: string; config: any } | null => {
+  function resolveRowFlowGroupConfig(groupKey: string): { groupId: string; config: any } | null {
     if (!groupKey) return null;
-    if (groupKey === q.id) return { groupId: q.id, config: q.lineItemConfig };
-    const parsed = parseSubgroupKey(groupKey);
-    if (!parsed || parsed.rootGroupId !== q.id) return null;
-    let cfg: any = q.lineItemConfig;
-    parsed.path.forEach(subId => {
-      if (!cfg) return;
-      const next = (cfg.subGroups || []).find((sub: any) => resolveSubgroupKey(sub as any) === subId);
-      cfg = next;
-    });
-    if (!cfg) return null;
-    return { groupId: groupKey, config: cfg };
-  };
+    const baseParsed = parseSubgroupKey(q.id);
+    const baseRootId = baseParsed?.rootGroupId || q.id;
+    if (groupKey === q.id && q.lineItemConfig) {
+      return { groupId: q.id, config: q.lineItemConfig };
+    }
+    const rootQuestion = definition.questions.find(question => question.id === baseRootId);
+    const rootConfig =
+      baseRootId === q.id && q.lineItemConfig
+        ? q.lineItemConfig
+        : rootQuestion?.lineItemConfig;
+    if (!rootConfig) return null;
 
-  const resolveRowFlowFieldConfig = (groupKey: string, fieldId: string): any | null => {
+    const resolveFromRoot = (path: string[]): any | null => {
+      if (!path.length) return rootConfig;
+      let current: any = rootConfig;
+      for (let i = 0; i < path.length; i += 1) {
+        const subId = path[i];
+        const next = (current?.subGroups || []).find((sub: any) => resolveSubgroupKey(sub as any) === subId);
+        if (!next) return null;
+        current = next;
+      }
+      return current;
+    };
+
+    if (groupKey === baseRootId) {
+      return { groupId: baseRootId, config: rootConfig };
+    }
+
+    const parsed = parseSubgroupKey(groupKey);
+    if (parsed && parsed.rootGroupId === baseRootId) {
+      const cfg = resolveFromRoot(parsed.path);
+      return cfg ? { groupId: groupKey, config: cfg } : null;
+    }
+
+    if (groupKey === q.id && baseParsed?.path?.length) {
+      const cfg = resolveFromRoot(baseParsed.path);
+      return cfg ? { groupId: q.id, config: cfg } : null;
+    }
+
+    if (groupKey === q.id && !baseParsed) {
+      return { groupId: q.id, config: rootConfig };
+    }
+
+    return null;
+  }
+
+  function resolveRowFlowFieldConfig(groupKey: string, fieldId: string): any | null {
     if (!groupKey || !fieldId) return null;
     const info = resolveRowFlowGroupConfig(groupKey);
     if (!info?.config) return null;
     return (info.config.fields || []).find((field: any) => field?.id === fieldId) || null;
-  };
+  }
 
   const buildRowFlowFieldCtx = React.useCallback(
     (args: { rowValues: Record<string, FieldValue>; parentValues?: Record<string, FieldValue> }): VisibilityContext => ({
@@ -802,7 +862,12 @@ export const LineItemGroupQuestion: React.FC<{
       };
 
       const confirm = plan.action.confirm;
-      if (confirm && ctx.openConfirmDialog) {
+      const confirmTiming = (() => {
+        const rawTiming = (confirm as any)?.timing;
+        const timing = (rawTiming === undefined || rawTiming === null ? '' : rawTiming.toString()).trim().toLowerCase();
+        return timing === 'after' ? 'after' : 'before';
+      })();
+      if (confirm && confirmTiming === 'before' && ctx.openConfirmDialog) {
         const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
         const message = resolveLocalizedString(confirm.body, language, '');
         const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
@@ -820,6 +885,22 @@ export const LineItemGroupQuestion: React.FC<{
         return;
       }
       applyEffects();
+      if (confirm && confirmTiming === 'after' && ctx.openConfirmDialog) {
+        const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+        const message = resolveLocalizedString(confirm.body, language, '');
+        const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
+        ctx.openConfirmDialog({
+          title,
+          message,
+          confirmLabel,
+          cancelLabel: '',
+          showCancel: false,
+          kind: confirm.kind || 'rowFlow.after',
+          refId: `${q.id}::${row.id}::${plan.action.id}::after`,
+          onConfirm: () => {}
+        });
+        onDiagnostic?.('lineItems.rowFlow.action.confirm.after', { groupId: q.id, rowId: row.id, actionId: plan.action.id });
+      }
     },
     [
       buildOverlayGroupOverride,
@@ -1776,6 +1857,25 @@ export const LineItemGroupQuestion: React.FC<{
         }
 
         const messageFieldsAll = q.lineItemConfig?.fields || [];
+        const tableColumnIdsRaw = isTableMode && Array.isArray(liUi?.tableColumns) ? liUi?.tableColumns : [];
+        const tableColumnIds = tableColumnIdsRaw
+          .map(id => (id !== undefined && id !== null ? id.toString().trim() : ''))
+          .filter(Boolean);
+        const tableFieldsAll = messageFieldsAll;
+        const tableFields = isTableMode
+          ? (tableColumnIds.length ? tableColumnIds : tableFieldsAll.map(f => f.id))
+              .map(fid => tableFieldsAll.find(f => f.id === fid))
+              .filter((field): field is (typeof tableFieldsAll)[number] => Boolean(field))
+          : [];
+        const tableFieldIdSet = new Set(tableFields.map(field => field.id));
+        const tableTotals =
+          isTableMode && !rowFlowEnabled
+            ? groupTotals.filter(total => {
+                const key = (total.key || '').toString();
+                return key ? tableFieldIdSet.has(key) : false;
+              })
+            : [];
+        const toolbarTotals = isTableMode && !rowFlowEnabled ? [] : groupTotals;
         const genericNonMatchWarnings = (() => {
           const seen = new Set<string>();
           messageFieldsAll.forEach(field => {
@@ -1797,9 +1897,7 @@ export const LineItemGroupQuestion: React.FC<{
 
         const shouldRenderTopToolbar = !hideToolbars && (showSelectorTop || showAddTop);
         const shouldRenderBottomToolbar =
-          !hideToolbars &&
-          (parentRows.length > 0 || showAddBottom) &&
-          (showAddBottom || showSelectorBottom || groupTotals.length > 0);
+          !hideToolbars && (parentRows.length > 0 || showAddBottom) && (showAddBottom || showSelectorBottom || toolbarTotals.length > 0);
 
         // UX: in progressive/collapsible groups, auto-expand the first row that still needs attention
         // (errors/warnings or incomplete required fields), as long as the row is expandable.
@@ -2006,14 +2104,6 @@ export const LineItemGroupQuestion: React.FC<{
         }, [attentionRowId, q.id, setCollapsedRows, onDiagnostic]);
 
         if (isTableMode && !rowFlowEnabled) {
-          const tableFieldsAll = messageFieldsAll;
-          const tableColumnIdsRaw = Array.isArray(liUi?.tableColumns) ? liUi?.tableColumns : [];
-          const tableColumnIds = tableColumnIdsRaw
-            .map(id => (id !== undefined && id !== null ? id.toString().trim() : ''))
-            .filter(Boolean);
-          const tableFields = (tableColumnIds.length ? tableColumnIds : tableFieldsAll.map(f => f.id))
-            .map(fid => tableFieldsAll.find(f => f.id === fid))
-            .filter(Boolean) as any[];
           const messageFields = messageFieldsAll;
           const anchorFieldId =
             q.lineItemConfig?.anchorFieldId !== undefined && q.lineItemConfig?.anchorFieldId !== null
@@ -2071,6 +2161,7 @@ export const LineItemGroupQuestion: React.FC<{
           const collectRowErrors = (row: any): string[] => {
             const seen = new Set<string>();
             messageFields.forEach(field => {
+              if (tableFieldIdSet.has(field.id)) return;
               const fieldPath = `${q.id}__${field.id}__${row.id}`;
               const msg = errors[fieldPath];
               if (msg) seen.add(msg);
@@ -2176,7 +2267,8 @@ export const LineItemGroupQuestion: React.FC<{
               (field as any).optionFilter.matchMode === 'or';
             const fieldWarning = warningsFor(fieldPath);
             const hasFieldWarning = fieldWarning.length > 0 || showNonMatchWarning;
-            const hasFieldError = !!errors[fieldPath];
+            const fieldErrorText = errors[fieldPath];
+            const hasFieldError = !!fieldErrorText;
             const rowLabel = resolveRowLabel(row);
             const isEditable = !renderAsLabel && !(field as any)?.valueMap;
             const warningKeys = resolveWarningKeysForField({
@@ -2187,6 +2279,7 @@ export const LineItemGroupQuestion: React.FC<{
             });
             const warningFootnote = !isEditable ? renderWarningFootnote(warningKeys) : null;
             const showWarningHighlight = hasFieldWarning && isEditable;
+            const errorNode = fieldErrorText ? <div className="ck-line-item-table__cell-error error">{fieldErrorText}</div> : null;
 
             if (field.type === 'CHOICE') {
               const rawVal = row.values[field.id];
@@ -2201,17 +2294,22 @@ export const LineItemGroupQuestion: React.FC<{
                 return (
                   <div
                     className="ck-line-item-table__value"
+                    data-field-path={fieldPath}
                     data-has-warning={showWarningHighlight ? 'true' : undefined}
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
-                    {selected?.label || choiceVal || '—'}
-                    {warningFootnote}
+                    <span className="ck-line-item-table__value-text">
+                      {selected?.label || choiceVal || '—'}
+                      {warningFootnote}
+                    </span>
+                    {errorNode}
                   </div>
                 );
               }
               return (
                 <div
                   className="ck-line-item-table__control"
+                  data-field-path={fieldPath}
                   data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
@@ -2226,6 +2324,7 @@ export const LineItemGroupQuestion: React.FC<{
                     onChange: next => handleLineFieldChange(q, row.id, field, next)
                   })}
                   {warningFootnote}
+                  {errorNode}
                 </div>
               );
             }
@@ -2244,11 +2343,15 @@ export const LineItemGroupQuestion: React.FC<{
                 return (
                   <div
                     className="ck-line-item-table__value"
+                    data-field-path={fieldPath}
                     data-has-warning={showWarningHighlight ? 'true' : undefined}
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
-                    {labels.length ? labels.join(', ') : '—'}
-                    {warningFootnote}
+                    <span className="ck-line-item-table__value-text">
+                      {labels.length ? labels.join(', ') : '—'}
+                      {warningFootnote}
+                    </span>
+                    {errorNode}
                   </div>
                 );
               }
@@ -2257,6 +2360,7 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__control"
+                  data-field-path={fieldPath}
                   data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
@@ -2299,6 +2403,7 @@ export const LineItemGroupQuestion: React.FC<{
                     </div>
                   )}
                   {warningFootnote}
+                  {errorNode}
                 </div>
               );
             }
@@ -2306,43 +2411,142 @@ export const LineItemGroupQuestion: React.FC<{
             if (field.type === 'FILE_UPLOAD') {
               const items = toUploadItems(row.values[field.id]);
               const count = items.length;
+              const uploadConfig = (field as any).uploadConfig || {};
+              const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
+              const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{
+                size?: number;
+                style?: React.CSSProperties;
+                className?: string;
+              }>;
+              const minRequired = getUploadMinRequired({ uploadConfig, required: !!field.required });
+              const maxFiles = uploadConfig.maxFiles && uploadConfig.maxFiles > 0 ? uploadConfig.maxFiles : undefined;
+              const denom = maxFiles ?? (minRequired > 0 ? minRequired : undefined);
+              const displayCount = denom ? Math.min(items.length, denom) : items.length;
+              const maxed = maxFiles ? items.length >= maxFiles : false;
+              const isComplete = minRequired > 0 ? items.length >= minRequired : items.length > 0;
+              const isEmpty = items.length === 0;
+              const missing = minRequired > 0 ? Math.max(0, minRequired - items.length) : 0;
+              const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
+              const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
+              const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
+              const readOnly = (field as any)?.readOnly === true;
+              const viewMode = readOnly || maxed;
+              const LeftIcon = viewMode ? EyeIcon : SlotIcon;
+              const leftLabel = viewMode
+                ? tSystem('files.view', language, 'View photos')
+                : tSystem('files.add', language, 'Add photo');
+              const cameraStyleBase = viewMode ? buttonStyles.secondary : isEmpty ? buttonStyles.primary : buttonStyles.secondary;
+              const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+                ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+              );
+              const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
+                .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
+                .filter(Boolean);
+              const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
+
               if (renderAsLabel) {
                 return (
                   <div
                     className="ck-line-item-table__value"
+                    data-field-path={fieldPath}
                     data-has-warning={showWarningHighlight ? 'true' : undefined}
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
-                    {count ? `${count}` : '—'}
-                    {warningFootnote}
+                    <span className="ck-line-item-table__value-text">{count ? `${count}` : '—'}</span>
+                    {errorNode}
                   </div>
                 );
               }
               return (
                 <div
                   className="ck-line-item-table__control"
+                  data-field-path={fieldPath}
                   data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (submitting) return;
-                      openFileOverlay({
-                        scope: 'line',
-                        title: resolveFieldLabel(field, language, field.id),
-                        group: q,
-                        rowId: row.id,
-                        field,
-                        fieldPath
-                      });
+                  <div className="ck-upload-row">
+                    <button
+                      type="button"
+                      className="ck-upload-camera-btn"
+                      disabled={submitting}
+                      style={withDisabled(cameraStyleBase, submitting)}
+                      aria-label={leftLabel}
+                      title={leftLabel}
+                      onClick={() => {
+                        if (submitting) return;
+                        if (viewMode) {
+                          onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
+                          openFileOverlay({
+                            scope: 'line',
+                            title: resolveFieldLabel(field, language, field.id),
+                            group: q,
+                            rowId: row.id,
+                            field,
+                            fieldPath
+                          });
+                          return;
+                        }
+                        if (readOnly) return;
+                        onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
+                        fileInputsRef.current[fieldPath]?.click();
+                      }}
+                    >
+                      <LeftIcon style={{ width: '62%', height: '62%' }} />
+                    </button>
+                    <button
+                      type="button"
+                      className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
+                      aria-disabled={submitting ? 'true' : undefined}
+                      aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
+                        'files.title',
+                        language,
+                        'Photos'
+                      )} ${pillText}`}
+                      onClick={() => {
+                        if (submitting) return;
+                        openFileOverlay({
+                          scope: 'line',
+                          title: resolveFieldLabel(field, language, field.id),
+                          group: q,
+                          rowId: row.id,
+                          field,
+                          fieldPath
+                        });
+                      }}
+                    >
+                      {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
+                      <span>{pillText}</span>
+                      <span className="ck-progress-label">
+                        {tSystem('files.open', language, tSystem('common.open', language, 'Open'))}
+                      </span>
+                      <span className="ck-progress-caret">▸</span>
+                    </button>
+                    {maxed ? (
+                      <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
+                    ) : showMissingHelper ? (
+                      <div className="ck-upload-helper muted" aria-live="polite">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <SlotIcon style={{ width: '1.05em', height: '1.05em' }} />
+                          {tSystem('common.more', language, '+{count} more', { count: missing })}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div style={srOnly} aria-live="polite">
+                    {uploadAnnouncements[fieldPath] || ''}
+                  </div>
+                  <input
+                    ref={el => {
+                      if (!el) return;
+                      fileInputsRef.current[fieldPath] = el;
                     }}
-                    style={buttonStyles.secondary}
-                    disabled={submitting}
-                  >
-                    {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
-                  </button>
-                  {warningFootnote}
+                    type="file"
+                    multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
+                    accept={acceptAttr}
+                    style={{ display: 'none' }}
+                    onChange={e => handleLineFileInputChange({ group: q, rowId: row.id, field, fieldPath, list: e.target.files })}
+                  />
+                  {errorNode}
                 </div>
               );
             }
@@ -2375,11 +2579,15 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__value"
+                  data-field-path={fieldPath}
                   data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
-                  {display || '—'}
-                  {warningFootnote}
+                  <span className="ck-line-item-table__value-text">
+                    {display || '—'}
+                    {warningFootnote}
+                  </span>
+                  {errorNode}
                 </div>
               );
             }
@@ -2387,6 +2595,7 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__control"
+                  data-field-path={fieldPath}
                   data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
@@ -2398,6 +2607,7 @@ export const LineItemGroupQuestion: React.FC<{
                     onChange={next => handleLineFieldChange(q, row.id, field, next)}
                   />
                   {warningFootnote}
+                  {errorNode}
                 </div>
               );
             }
@@ -2405,6 +2615,7 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__control"
+                  data-field-path={fieldPath}
                   data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
@@ -2416,6 +2627,7 @@ export const LineItemGroupQuestion: React.FC<{
                     rows={(field as any)?.ui?.paragraphRows || 3}
                   />
                   {warningFootnote}
+                  {errorNode}
                 </div>
               );
             }
@@ -2423,6 +2635,7 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   className="ck-line-item-table__control"
+                  data-field-path={fieldPath}
                   data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
@@ -2434,12 +2647,14 @@ export const LineItemGroupQuestion: React.FC<{
                     onChange={next => handleLineFieldChange(q, row.id, field, next)}
                   />
                   {warningFootnote}
+                  {errorNode}
                 </div>
               );
             }
             return (
               <div
                 className="ck-line-item-table__control"
+                data-field-path={fieldPath}
                 data-has-warning={showWarningHighlight ? 'true' : undefined}
                 data-has-error={hasFieldError ? 'true' : undefined}
               >
@@ -2450,6 +2665,7 @@ export const LineItemGroupQuestion: React.FC<{
                   readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                 />
                 {warningFootnote}
+                {errorNode}
               </div>
             );
           };
@@ -2494,7 +2710,7 @@ export const LineItemGroupQuestion: React.FC<{
             return widthValue ? { width: widthValue } : undefined;
           };
 
-          const tableColumns = [
+          const tableColumns: LineItemTableColumn[] = [
             ...tableFields.map(field => ({
               id: field.id,
               label: resolveFieldLabel(field, language, field.id),
@@ -2503,6 +2719,24 @@ export const LineItemGroupQuestion: React.FC<{
             })),
             { ...removeColumn, style: resolveTableColumnStyle(removeColumn.id) }
           ];
+          const tableTotalsById = new Map(tableTotals.map(total => [total.key.toString(), total]));
+          const tableFooter =
+            tableTotals.length > 0 ? (
+              <tr className="ck-line-item-table__totals-row">
+                {tableColumns.map(col => {
+                  const total = col.id !== '__remove' ? tableTotalsById.get(col.id.toString()) : undefined;
+                  return (
+                    <td key={`total-${col.id}`} className={col.className} style={col.style}>
+                      {total ? (
+                        <span className="ck-line-item-table__total">
+                          {total.label}: {total.value.toFixed(total.decimalPlaces || 0)}
+                        </span>
+                      ) : null}
+                    </td>
+                  );
+                })}
+              </tr>
+            ) : null;
 
           const warningsLegend: Array<{ rowId: string; label: string; message: string; key: string }> = [];
           const seenRowMessage = new Set<string>();
@@ -2582,6 +2816,7 @@ export const LineItemGroupQuestion: React.FC<{
                       </div>
                     );
                   }}
+                  footer={tableFooter}
                 />
               </div>
               {warningsLegendVisible ? (
@@ -2616,10 +2851,10 @@ export const LineItemGroupQuestion: React.FC<{
                       {showSelectorBottom ? selectorControl : null}
                       {showAddBottom ? renderAddButton() : null}
                     </div>
-                    {groupTotals.length > 0 ? (
+                    {toolbarTotals.length > 0 ? (
                       <div className="line-item-totals">
-                        {groupTotals.map(t => (
-                          <span key={t.key} className="pill">
+                        {toolbarTotals.map(t => (
+                          <span key={t.key} className="ck-line-item-table__total">
                             {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
                           </span>
                         ))}
@@ -2637,13 +2872,54 @@ export const LineItemGroupQuestion: React.FC<{
         const resolveOutputActionScope = (action: RowFlowActionRef): 'row' | 'group' =>
           action.scope === 'group' || action.scope === 'row' ? action.scope : defaultActionScope;
         const hasGroupActions = (rowFlow?.output?.actions || []).some(action => resolveOutputActionScope(action) === 'group');
-        const groupActionRow = hasGroupActions ? parentRows[0] : null;
-        const groupActionState = groupActionRow && rowFlowEnabled ? rowFlowStateByRowId.get(groupActionRow.id) || null : null;
+        const syntheticGroupRow =
+          rowFlowEnabled && hasGroupActions && parentRows.length === 0
+            ? ({ id: '__rowFlowGroup__', values: {} as Record<string, FieldValue> } as LineItemRowState)
+            : null;
+        const syntheticGroupState =
+          syntheticGroupRow && rowFlow
+            ? resolveRowFlowState({
+                config: rowFlow as RowFlowConfig,
+                groupId: q.id,
+                rowId: syntheticGroupRow.id,
+                rowValues: syntheticGroupRow.values,
+                lineItems,
+                topValues: values,
+                subGroupIds: rowFlowSubGroupIds,
+                activeFieldPath: activeFieldMeta.path,
+                activeFieldType: activeFieldMeta.type
+              })
+            : null;
+        const groupActionRow = hasGroupActions ? parentRows[0] || syntheticGroupRow : null;
+        const groupActionState =
+          groupActionRow && rowFlowEnabled
+            ? parentRows.length
+              ? rowFlowStateByRowId.get(groupActionRow.id) || null
+              : syntheticGroupState
+            : null;
         if (rowFlowEnabled && hasGroupActions) {
           const scopeLogKey = `${q.id}::rowFlow::actionsScope`;
           if (!rowFlowLoggedRef.current.has(scopeLogKey)) {
             rowFlowLoggedRef.current.add(scopeLogKey);
             onDiagnostic?.('lineItems.rowFlow.output.actionsScope', { groupId: q.id, scope: 'group' });
+          }
+        }
+        if (rowFlowEnabled && (rowFlow?.output?.segments || []).length) {
+          const segmentLogKey = `${q.id}::rowFlow::segmentActions`;
+          if (!rowFlowLoggedRef.current.has(segmentLogKey)) {
+            const segmentActions = (rowFlow?.output?.segments || []).map(segment =>
+              resolveRowFlowSegmentActionIds(segment)
+            );
+            const segmentsWithActions = segmentActions.filter(ids => ids.length > 0);
+            if (segmentsWithActions.length) {
+              rowFlowLoggedRef.current.add(segmentLogKey);
+              const multiActionSegments = segmentActions.filter(ids => ids.length > 1).length;
+              onDiagnostic?.('lineItems.rowFlow.output.segmentActions', {
+                groupId: q.id,
+                segmentsWithActions: segmentsWithActions.length,
+                multiActionSegments
+              });
+            }
           }
         }
         const renderGroupOutputActions = () => {
@@ -3031,6 +3307,14 @@ export const LineItemGroupQuestion: React.FC<{
 
                 const renderRowFlowPrompt = (prompt: RowFlowResolvedPrompt) => {
                   if (!prompt.visible) return null;
+                  const splitPromptLabel = (rawLabel: string) => {
+                    const value = rawLabel || '';
+                    const parts = value.split(/\r?\n/);
+                    if (parts.length < 2) return { labelText: value, helperText: '' };
+                    const labelText = parts[0].trim() || value.trim();
+                    const helperText = parts.slice(1).join('\n').trim();
+                    return { labelText, helperText };
+                  };
                   const inputKind = (prompt.config.input?.kind || 'field').toString().trim().toLowerCase();
                   if (inputKind === 'selectoroverlay') {
                     const targetRef = prompt.config.input?.targetRef || '';
@@ -3043,14 +3327,24 @@ export const LineItemGroupQuestion: React.FC<{
                       references: rowFlowState.references
                     });
                     if (!target?.refId) return null;
-                    const targetInfo = target.primaryRow ? resolveRowFlowGroupConfig(target.primaryRow.groupKey) : null;
+                    const ref = rowFlowState.references[target.refId];
+                    const refGroupId = (ref?.groupId || target.groupId || '').toString().trim();
+                    const isSubgroupRef = !!refGroupId && rowFlowSubGroupIds.includes(refGroupId);
+                    const targetGroupKey =
+                      target.primaryRow?.groupKey ||
+                      (isSubgroupRef ? buildSubgroupKey(q.id, row.id, refGroupId) : refGroupId || target.groupKey);
+                    const targetInfo = targetGroupKey ? resolveRowFlowGroupConfig(targetGroupKey) : null;
                     if (!targetInfo?.config) return null;
+                    const promptGroupOverride = prompt.config.input?.groupOverride;
+                    const effectiveTargetConfig = promptGroupOverride
+                      ? applyLineItemGroupOverride(targetInfo.config, promptGroupOverride)
+                      : targetInfo.config;
                     const anchorFieldId =
-                      targetInfo.config?.anchorFieldId !== undefined && targetInfo.config?.anchorFieldId !== null
-                        ? targetInfo.config.anchorFieldId.toString()
+                      effectiveTargetConfig?.anchorFieldId !== undefined && effectiveTargetConfig?.anchorFieldId !== null
+                        ? effectiveTargetConfig.anchorFieldId.toString()
                         : '';
                     const anchorField = anchorFieldId
-                      ? (targetInfo.config?.fields || []).find((f: any) => f.id === anchorFieldId)
+                      ? (effectiveTargetConfig?.fields || []).find((f: any) => f.id === anchorFieldId)
                       : null;
                     if (!anchorField || anchorField.type !== 'CHOICE') return null;
                     ensureLineOptions(targetInfo.groupId, anchorField);
@@ -3082,15 +3376,20 @@ export const LineItemGroupQuestion: React.FC<{
                         seen.add(key);
                         return true;
                       });
-                    const label = resolveLocalizedString(prompt.config.input?.label, language, resolveLocalizedString(anchorField.label, language, anchorField.id));
+                    const resolvedLabel = resolveLocalizedString(
+                      prompt.config.input?.label,
+                      language,
+                      resolveLocalizedString(anchorField.label, language, anchorField.id)
+                    );
+                    const { labelText, helperText } = splitPromptLabel(resolvedLabel);
                     const placeholder =
                       resolveLocalizedString(prompt.config.input?.placeholder, language, '') ||
                       tSystem('lineItems.selectLinesSearch', language, 'Search items');
                     return (
                       <div className="field inline-field ck-full-width">
-                        <label>{label}</label>
+                        <label>{labelText}</label>
                         <LineItemMultiAddSelect
-                          label={label}
+                          label={labelText}
                           language={language}
                           options={options}
                           disabled={submitting}
@@ -3109,7 +3408,30 @@ export const LineItemGroupQuestion: React.FC<{
                             if (submitting) return;
                             const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
                             if (!deduped.length) return;
-                            deduped.forEach(val => addLineItemRowManual(targetInfo.groupId, { [anchorFieldId]: val }));
+                            const addRowOptions = promptGroupOverride
+                              ? { configOverride: effectiveTargetConfig }
+                              : undefined;
+                            deduped.forEach(val =>
+                              addLineItemRowManual(targetInfo.groupId, { [anchorFieldId]: val }, addRowOptions)
+                            );
+                            const shouldOpenOverlay =
+                              !!promptGroupOverride && !!(effectiveTargetConfig as any)?.ui?.openInOverlay;
+                            if (shouldOpenOverlay) {
+                              if (isSubgroupRef && targetGroupKey) {
+                                openSubgroupOverlay?.(targetGroupKey, { groupOverride: promptGroupOverride, source: 'system' });
+                              } else if (!isSubgroupRef) {
+                                const baseGroup = definition.questions.find(
+                                  question => question.id === targetInfo.groupId && question.type === 'LINE_ITEM_GROUP'
+                                ) as WebQuestionDefinition | undefined;
+                                const overrideGroup =
+                                  baseGroup && promptGroupOverride
+                                    ? buildOverlayGroupOverride(baseGroup, promptGroupOverride)
+                                    : undefined;
+                                if (overrideGroup) {
+                                  openLineItemGroupOverlay?.(overrideGroup, { source: 'system' });
+                                }
+                              }
+                            }
                             onDiagnostic?.('lineItems.rowFlow.selector.add', {
                               groupId: targetInfo.groupId,
                               rowId: row.id,
@@ -3118,17 +3440,23 @@ export const LineItemGroupQuestion: React.FC<{
                             });
                           }}
                         />
+                        {helperText ? (
+                          <div className="muted" style={{ marginTop: 4, whiteSpace: 'pre-line' }}>
+                            {helperText}
+                          </div>
+                        ) : null}
                       </div>
                     );
                   }
 
                   const promptTarget = resolvePromptTargets(prompt);
                   if (!promptTarget) return null;
-                  const promptLabel = resolveLocalizedString(
+                  const promptLabelRaw = resolveLocalizedString(
                     prompt.config.input?.label,
                     language,
                     resolveFieldLabel(promptTarget.field, language, promptTarget.field.id)
                   );
+                  const { labelText: promptLabel, helperText: promptHelperText } = splitPromptLabel(promptLabelRaw);
                   const labelLayout = (prompt.config.input?.labelLayout || 'stacked').toString().trim().toLowerCase();
                   const actionsLayout = (prompt.config.actionsLayout || 'below').toString().trim().toLowerCase();
                   const useInlineLabel = labelLayout === 'inline';
@@ -3152,22 +3480,39 @@ export const LineItemGroupQuestion: React.FC<{
                   ) : (
                     <div style={{ flex: 1, minWidth: 0 }}>{fieldNode}</div>
                   );
-                  if (!prompt.config.actions?.length) return useInlineLabel ? inlineFieldRow : fieldNode;
+                  const helperNode = promptHelperText ? (
+                    <div className="muted" style={{ marginTop: 4, whiteSpace: 'pre-line' }}>
+                      {promptHelperText}
+                    </div>
+                  ) : null;
+                  if (!prompt.config.actions?.length) {
+                    if (!helperNode) return useInlineLabel ? inlineFieldRow : fieldNode;
+                    return (
+                      <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {useInlineLabel ? inlineFieldRow : fieldNode}
+                        {helperNode}
+                      </div>
+                    );
+                  }
                   const startActions = prompt.config.actions.filter(a => (a.position || 'start') !== 'end');
                   const endActions = prompt.config.actions.filter(a => (a.position || 'start') === 'end');
                   const actionsInline = actionsLayout === 'inline';
                   if (actionsInline) {
                     return (
-                      <div className="ck-full-width" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        {startActions.map(action => renderRowFlowActionControl(action.id))}
-                        {inlineFieldRow}
-                        {endActions.map(action => renderRowFlowActionControl(action.id))}
+                      <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          {startActions.map(action => renderRowFlowActionControl(action.id))}
+                          {inlineFieldRow}
+                          {endActions.map(action => renderRowFlowActionControl(action.id))}
+                        </div>
+                        {helperNode}
                       </div>
                     );
                   }
                   return (
-                    <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: helperNode ? 6 : 10 }}>
                       {useInlineLabel ? inlineFieldRow : fieldNode}
+                      {helperNode}
                       {(startActions.length || endActions.length) ? (
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -3197,7 +3542,7 @@ export const LineItemGroupQuestion: React.FC<{
                   });
                 });
 
-                const renderOutputSegment = (segment: RowFlowResolvedSegment) => {
+                const renderOutputSegment = (segment: RowFlowResolvedSegment, idx: number, showSeparator: boolean) => {
                   const target = segment.target;
                   if (!target || !target.fieldId) return null;
                   const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
@@ -3205,13 +3550,32 @@ export const LineItemGroupQuestion: React.FC<{
                   const label = segment.config.label
                     ? resolveLocalizedString(segment.config.label, language, '')
                     : '';
+                  const segmentActionIds = resolveRowFlowSegmentActionIds(segment.config);
+                  const segmentActionNodes = segmentActionIds
+                    .map(actionId => renderRowFlowActionControl(actionId))
+                    .filter(Boolean) as React.ReactNode[];
+                  const segmentActions = segmentActionNodes.length ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {segmentActionNodes}
+                    </span>
+                  ) : null;
+                  const separatorNode = showSeparator ? (
+                    <span aria-hidden="true" style={{ marginLeft: 6, flexShrink: 0 }}>
+                      {separator}
+                    </span>
+                  ) : null;
                   if (segment.config.renderAs === 'control' && target.primaryRow) {
                     const groupInfo = resolveRowFlowGroupConfig(target.primaryRow.groupKey);
                     if (!groupInfo?.config) return null;
                     const groupDef = buildRowFlowGroupDefinition(target.primaryRow.groupKey, groupInfo.config);
                     return (
-                      <span key={segment.config.fieldRef} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                        {label ? <span>{label}:</span> : null}
+                      <span
+                        key={`${segment.config.fieldRef}-${idx}`}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
+                      >
+                        {label ? (
+                          <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{label}:</span>
+                        ) : null}
                         {renderRowFlowField({
                           field,
                           groupDef,
@@ -3219,7 +3583,8 @@ export const LineItemGroupQuestion: React.FC<{
                           parentValues: target.parentValues,
                           showLabel: false
                         })}
-                        {segment.config.editAction ? renderRowFlowActionControl(segment.config.editAction) : null}
+                        {segmentActions}
+                        {separatorNode}
                       </span>
                     );
                   }
@@ -3227,9 +3592,13 @@ export const LineItemGroupQuestion: React.FC<{
                   const text = display.text || '—';
                   const formatted = label ? `${label}: ${text}` : text;
                   return (
-                    <span key={segment.config.fieldRef} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span>{formatted}</span>
-                      {segment.config.editAction ? renderRowFlowActionControl(segment.config.editAction) : null}
+                    <span
+                      key={`${segment.config.fieldRef}-${idx}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
+                    >
+                      <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{formatted}</span>
+                      {segmentActions}
+                      {separatorNode}
                     </span>
                   );
                 };
@@ -3258,17 +3627,12 @@ export const LineItemGroupQuestion: React.FC<{
                       marginBottom: 14
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, rowGap: 6, alignItems: 'center', flex: 1, minWidth: 0 }}>
                         {outputActionsLayout === 'inline'
                           ? outputActionsStart.map(action => renderRowFlowActionControl(action.id))
                           : null}
-                        {outputSegments.map((segment, idx) => (
-                          <React.Fragment key={`${segment.config.fieldRef}-${idx}`}>
-                            {renderOutputSegment(segment)}
-                            {idx < outputSegments.length - 1 ? <span>{separator}</span> : null}
-                          </React.Fragment>
-                        ))}
+                        {outputSegments.map((segment, idx) => renderOutputSegment(segment, idx, idx < outputSegments.length - 1))}
                       </div>
                       {outputActionsLayout === 'inline' && outputActionsEnd.length ? (
                         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -7662,10 +8026,14 @@ export const LineItemGroupQuestion: React.FC<{
                                       });
                                       if (renderAsLabel) {
                                         const selected = optsField.find(opt => opt.value === choiceVal);
-                                        return <div className="ck-line-item-table__value">{selected?.label || choiceVal || '—'}</div>;
+                                        return (
+                                          <div className="ck-line-item-table__value" data-field-path={fieldPath}>
+                                            {selected?.label || choiceVal || '—'}
+                                          </div>
+                                        );
                                       }
                                       return (
-                                        <div className="ck-line-item-table__control">
+                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           {renderChoiceControl({
                                             fieldPath,
                                             value: choiceVal || '',
@@ -7692,12 +8060,16 @@ export const LineItemGroupQuestion: React.FC<{
                                         const labels = selected
                                           .map(val => optsField.find(opt => opt.value === val)?.label || val)
                                           .filter(Boolean);
-                                        return <div className="ck-line-item-table__value">{labels.length ? labels.join(', ') : '—'}</div>;
+                                        return (
+                                          <div className="ck-line-item-table__value" data-field-path={fieldPath}>
+                                            {labels.length ? labels.join(', ') : '—'}
+                                          </div>
+                                        );
                                       }
                                       const controlOverride = ((field as any)?.ui?.control || '').toString().trim().toLowerCase();
                                       const renderAsMultiSelect = controlOverride === 'select';
                                       return (
-                                        <div className="ck-line-item-table__control">
+                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           {renderAsMultiSelect ? (
                                             <select
                                               multiple
@@ -7745,10 +8117,14 @@ export const LineItemGroupQuestion: React.FC<{
                                       const items = toUploadItems(subRow.values[field.id]);
                                       const count = items.length;
                                       if (renderAsLabel) {
-                                        return <div className="ck-line-item-table__value">{count ? `${count}` : '—'}</div>;
+                                        return (
+                                          <div className="ck-line-item-table__value" data-field-path={fieldPath}>
+                                            {count ? `${count}` : '—'}
+                                          </div>
+                                        );
                                       }
                                       return (
-                                        <div className="ck-line-item-table__control">
+                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           <button
                                             type="button"
                                             onClick={() => {
@@ -7793,11 +8169,15 @@ export const LineItemGroupQuestion: React.FC<{
                                           : field.type === 'DATE'
                                             ? fieldValue
                                             : fieldValue;
-                                      return <div className="ck-line-item-table__value">{display || '—'}</div>;
+                                      return (
+                                        <div className="ck-line-item-table__value" data-field-path={fieldPath}>
+                                          {display || '—'}
+                                        </div>
+                                      );
                                     }
                                     if (field.type === 'NUMBER') {
                                       return (
-                                        <div className="ck-line-item-table__control">
+                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           <NumberStepper
                                             value={numberText}
                                             disabled={submitting}
@@ -7811,7 +8191,7 @@ export const LineItemGroupQuestion: React.FC<{
                                     }
                                     if (field.type === 'PARAGRAPH') {
                                       return (
-                                        <div className="ck-line-item-table__control">
+                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           <textarea
                                             className="ck-paragraph-input"
                                             value={fieldValue}
@@ -7825,7 +8205,7 @@ export const LineItemGroupQuestion: React.FC<{
                                     }
                                     if (field.type === 'DATE') {
                                       return (
-                                        <div className="ck-line-item-table__control">
+                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           <DateInput
                                             value={fieldValue}
                                             language={language}
@@ -7838,7 +8218,7 @@ export const LineItemGroupQuestion: React.FC<{
                                       );
                                     }
                                     return (
-                                      <div className="ck-line-item-table__control">
+                                      <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                         <input
                                           type="text"
                                           value={fieldValue}

@@ -144,24 +144,28 @@ const resolveSubPath = (
   return null;
 };
 
-const flattenSubRows = (rows: any[], keyPath: string[]): any[] => {
-  if (!rows || !rows.length || !keyPath.length) return [];
+const flattenSubRows = (rows: any[], keyPath: string[], startDepth = 0): any[] => {
+  if (!rows || !rows.length) return [];
+  if (!keyPath.length) return rows.slice();
+  const depth = Number.isFinite(startDepth) ? Math.max(0, Math.floor(startDepth)) : 0;
+  const path = keyPath.slice(depth);
+  if (!path.length) return rows.slice();
+
   const flattened: any[] = [];
   rows.forEach(parentRow => {
     let currentRows: any[] = [parentRow];
-    keyPath.forEach(key => {
+    path.forEach(key => {
       const next: any[] = [];
       currentRows.forEach(row => {
         const children = Array.isArray((row || {})[key]) ? (row as any)[key] : [];
         children.forEach((child: any) => {
-          next.push({ ...(row || {}), ...(child || {}) });
+          // Preserve an ancestor chain while merging parent fields down.
+          next.push({ __parent: row, ...(row || {}), ...(child || {}) });
         });
       });
       currentRows = next;
     });
-    currentRows.forEach((child: any) => {
-      flattened.push({ __parent: parentRow, ...(parentRow || {}), ...(child || {}) });
-    });
+    currentRows.forEach(child => flattened.push(child || {}));
   });
   return flattened;
 };
@@ -220,13 +224,38 @@ const expandBlock = (args: {
   const directiveSub = repeatDirective?.subGroupId ? resolveSubPath(group, repeatDirective.subGroupId) : null;
   const resolvedSub = resolvedSubTokens.length ? resolvedSubTokens[0] : directiveSub;
   const forcedResolved = forcedSubToken ? resolveSubPath(group, forcedSubToken) : null;
-  const activeSub = forcedResolved || resolvedSub;
+  const pathStartsWith = (full: string[], prefix: string[]): boolean => {
+    if (!prefix.length) return true;
+    if (full.length < prefix.length) return false;
+    for (let i = 0; i < prefix.length; i += 1) {
+      if ((full[i] || '').toString().toUpperCase() !== (prefix[i] || '').toString().toUpperCase()) return false;
+    }
+    return true;
+  };
+  const activeSub =
+    forcedResolved && resolvedSub
+      ? pathStartsWith(resolvedSub.keyPath || [], forcedResolved.keyPath || [])
+        ? resolvedSub
+        : forcedResolved
+      : forcedResolved || resolvedSub;
   const targetSubToken = (activeSub?.token || forcedSubToken || '').toString().toUpperCase();
-  const subConfig: SubGroupConfig | undefined = forcedSubConfig || activeSub?.config;
+  const preferActiveSubConfig =
+    Boolean(forcedResolved && activeSub && activeSub !== forcedResolved && pathStartsWith(activeSub.keyPath || [], forcedResolved.keyPath || []));
+  const subConfig: SubGroupConfig | undefined = preferActiveSubConfig ? activeSub?.config : forcedSubConfig || activeSub?.config;
   const keyPath = activeSub?.keyPath || [];
 
-  if (!rowsAreSubRows && targetSubToken && keyPath.length) {
-    rows = flattenSubRows(rows, keyPath);
+  if (targetSubToken && keyPath.length) {
+    const forcedDepth = forcedSubToken
+      ? forcedSubToken
+          .toString()
+          .split('.')
+          .map(seg => seg.trim())
+          .filter(Boolean).length
+      : 0;
+    const startDepth = rowsAreSubRows ? forcedDepth : 0;
+    if (keyPath.length > startDepth) {
+      rows = flattenSubRows(rows, keyPath, startDepth);
+    }
   }
 
   if (repeatDirective) {

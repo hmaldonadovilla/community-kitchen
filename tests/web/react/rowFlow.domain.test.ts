@@ -1,4 +1,8 @@
-import { resolveRowFlowActionPlan, resolveRowFlowState } from '../../../src/web/react/features/steps/domain/rowFlow';
+import {
+  resolveRowFlowActionPlan,
+  resolveRowFlowSegmentActionIds,
+  resolveRowFlowState
+} from '../../../src/web/react/features/steps/domain/rowFlow';
 
 describe('rowFlow domain', () => {
   it('resolves references and output segments for nested groups', () => {
@@ -305,5 +309,15 @@ describe('rowFlow domain', () => {
     });
 
     expect(plan?.effects).toEqual([{ type: 'deleteRow', groupKey: 'MEALS', rowId: 'r1' }]);
+  });
+
+  it('normalizes output segment action ids', () => {
+    const segment: any = {
+      fieldRef: 'LEFTOVER_INFO',
+      editAction: 'openOverlay',
+      editActions: ['deleteRow', 'openOverlay', '  ', null]
+    };
+
+    expect(resolveRowFlowSegmentActionIds(segment)).toEqual(['openOverlay', 'deleteRow']);
   });
 });

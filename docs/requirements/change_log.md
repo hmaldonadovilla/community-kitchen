@@ -231,5 +231,17 @@
   - Also, we need a dialog when returning from the overlays back to the steps ui, how do I set that one?
   - I need a back button on the `editLeftoverIngredients` instead of close button
   - the `derivedValue` calculation on the `MP_TO_COOK` is being triggered on every character change despite the `applyOn` is set to `blur`.
-  > **WIP - Codex**
+  > **DONE - Codex**
 - ck-63: `ingredientsSelector` prompt is not working, nothing is shown on the input control line.
+  > **DONE - Codex**
+- ck-64:
+  - the back button on the `editLeftoverIngredients` needs to go back to the previous `openLeftoversOverlay` where it came from. DONE
+  - For the concent dialog we need to be able to decide if the dialog opens before the action is triggered or after, when arriving to the target. The idea is to show the user a message when coming back from the overlays back to the steps ui. DONE
+  - When triggering the `removeLeftover` action it fails to complete if no rows exists and the user gets blocked. The row can no longer go back to the inital question. WIP
+- ck-65:
+  - on the `overlayDetail` where we have a header and a body, I've set validation rules for the fields in the body table `MP_INGREDIENTS_LI.QTY` and `MP_INGREDIENTS_LI.UNIT`. I expect these fields to be validated on blur and honoring `enforceFieldOrder` configuration. At the moment the user is not notified of the validation errors, only running submit/next button, the fields are highlighted.
+  - The `ingredientsSelector` prompt is using the `selectorOverlay` input control and when items are added it opens the overlay. I need to control the fields that are shown in the overlay table, for this use case I only need to show the `ING` field.
+- ck-66:
+  - Auto save is not working as expected, only when I enter a photo the auto save is triggered and it starts working again. When starting a new record and entering data does not trigger the auto save unless I file upload is made.
+  - "clearOnChange": true, is not working as expected, when changing the service the rest of the fields are not cleared.
+  - The `changeDialog` needs to be triggered when the value of the field changes, when the field is empty it should not trigger the dialog.

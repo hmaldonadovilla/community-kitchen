@@ -12,7 +12,7 @@ import {
 import { SubmissionPayload } from '../api';
 import { FormErrors, LineItemState } from '../types';
 import { resolveFieldLabel } from '../utils/labels';
-import { isEmptyValue } from '../utils/values';
+import { isEmptyValue, isUnsetForStep } from '../utils/values';
 import { tSystem } from '../../systemStrings';
 import { resolveLocalizedString } from '../../i18n';
 import { buildMaybeFilePayload } from './filePayload';
@@ -250,8 +250,11 @@ export const validateForm = (args: {
   lineItems: LineItemState;
   collapsedRows?: Record<string, boolean>;
   collapsedSubgroups?: Record<string, boolean>;
+  requiredMode?: 'configured' | 'stepComplete';
 }): FormErrors => {
   const { definition, language, values, lineItems, collapsedRows } = args;
+  const requiredMode = args.requiredMode === 'stepComplete' ? 'stepComplete' : 'configured';
+  const requireAllFields = requiredMode === 'stepComplete';
   const ctx = buildValidationContext(values, lineItems);
   const allErrors: FormErrors = {};
   const applyLineItemDedupRules = (args: {
@@ -326,7 +329,8 @@ export const validateForm = (args: {
       if (guidedRowFilter && !isIncludedByRowFilter(rowValues, guidedRowFilter)) return;
       hasAnyRow = true;
       const collapseKey = `${groupKey}::${row.id}`;
-      const rowCollapsed = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
+      const rowCollapsedBase = isProgressive ? (collapsedRows?.[collapseKey] ?? defaultCollapsed) : false;
+      const rowCollapsed = ui?.guidedCollapsedFieldsInHeader ? false : rowCollapsedBase;
       if (
         isRowDisabledByExpandGate({
           ui,
@@ -385,12 +389,15 @@ export const validateForm = (args: {
         const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: groupKey });
         if (hideField) return;
 
+        const requiredByConfig = !!field.required;
+        const requireField = requiredByConfig || requireAllFields;
+
         if ((field as any).type === 'FILE_UPLOAD') {
           const fieldLabel = resolveFieldLabel(field, language, field.id);
           const msg = validateUploadCounts({
             value: row.values[field.id],
             uploadConfig: (field as any).uploadConfig,
-            required: !!field.required,
+            required: requireField,
             requiredMessage: (field as any).requiredMessage,
             language,
             fieldLabel
@@ -399,9 +406,10 @@ export const validateForm = (args: {
             allErrors[`${groupKey}__${field.id}__${row.id}`] = msg;
             rowValid = false;
           }
-        } else if (field.required) {
+        } else if (requireField) {
           const val = resolveRequiredValue(field, row.values[field.id]);
-          if (isEmptyValue(val as any)) {
+          const missing = requiredByConfig ? isEmptyValue(val as any) : isUnsetForStep(val as any);
+          if (missing) {
             const fieldLabel = resolveFieldLabel(field, language, field.id);
             const custom = resolveLocalizedString((field as any)?.requiredMessage, language, '');
             allErrors[`${groupKey}__${field.id}__${row.id}`] = custom
@@ -453,6 +461,8 @@ export const validateForm = (args: {
 
   definition.questions.forEach(q => {
     const questionHidden = shouldHideField(q.visibility, ctx);
+    const requiredByConfig = !!(q as any).required;
+    const requireField = requiredByConfig || requireAllFields;
 
     if (q.validationRules && q.validationRules.length) {
       const errs = validateRules(q.validationRules, { ...ctx, language, phase: 'submit', isHidden: () => questionHidden });
@@ -466,7 +476,7 @@ export const validateForm = (args: {
       const msg = validateUploadCounts({
         value: values[q.id],
         uploadConfig: (q as any).uploadConfig,
-        required: !!(q as any).required,
+        required: requireField,
         requiredMessage: (q as any).requiredMessage,
         language,
         fieldLabel
@@ -504,9 +514,10 @@ export const validateForm = (args: {
               : tSystem('validation.completeAtLeastOneValidRow', language, 'Complete at least one valid row.')
             : tSystem('validation.atLeastOneLineItemRequired', language, 'At least one line item is required.');
       }
-    } else if ((q as any).required && q.type !== 'FILE_UPLOAD' && !questionHidden) {
+    } else if (requireField && q.type !== 'FILE_UPLOAD' && !questionHidden) {
       const requiredValue = resolveRequiredValue(q, values[q.id]);
-      if (!isEmptyValue(requiredValue as any)) return;
+      const missing = requiredByConfig ? isEmptyValue(requiredValue as any) : isUnsetForStep(requiredValue as any);
+      if (!missing) return;
       const fieldLabel = resolveFieldLabel(q as any, language, q.id);
       const custom = resolveLocalizedString((q as any)?.requiredMessage, language, '');
       allErrors[q.id] = custom

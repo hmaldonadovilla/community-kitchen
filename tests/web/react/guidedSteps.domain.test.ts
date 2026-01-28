@@ -201,6 +201,63 @@ describe('guidedSteps domain', () => {
     expect(outNone.steps[0].valid).toBe(false);
   });
 
+  it('honors line-group validationRules when computing step validity', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'G',
+          type: 'LINE_ITEM_GROUP',
+          required: false,
+          validationRules: [
+            {
+              when: {
+                not: {
+                  lineItems: {
+                    groupId: 'G',
+                    when: { fieldId: 'QTY', greaterThan: 0 },
+                    match: 'any'
+                  }
+                }
+              },
+              message: { en: 'Enter at least one quantity greater than 0.' }
+            }
+          ],
+          lineItemConfig: {
+            fields: [{ id: 'QTY', type: 'NUMBER', required: true, options: [], optionsFr: [], optionsNl: [] }]
+          }
+        }
+      ],
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'orderForm',
+            include: [{ kind: 'lineGroup', id: 'G', presentation: 'liftedRowFields', fields: ['QTY'] }]
+          }
+        ]
+      }
+    };
+
+    const outZero = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: {} as any,
+      lineItems: { G: [{ id: 'r1', values: { QTY: 0 } }] } as any
+    });
+
+    expect(outZero.steps[0].valid).toBe(false);
+    expect(outZero.steps[0].errorCount).toBeGreaterThan(0);
+
+    const outPositive = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: {} as any,
+      lineItems: { G: [{ id: 'r1', values: { QTY: 2 } }] } as any
+    });
+
+    expect(outPositive.steps[0].valid).toBe(true);
+  });
+
   it('treats progressive rows blocked by expandGate (collapsedFieldsValid) as blocking step completion/validity', () => {
     const definition: any = {
       questions: [
@@ -362,4 +419,3 @@ describe('guidedSteps domain', () => {
     expect(resolveVirtualStepField('__ckStepComplete_order', state as any)).toBe('false');
   });
 });
-

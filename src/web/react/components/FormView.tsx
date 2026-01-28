@@ -22,6 +22,7 @@ import {
   OptionSet,
   QuestionGroupConfig,
   RowFlowConfig,
+  RowFlowOutputSegmentConfig,
   VisibilityContext,
   WebFormDefinition,
   WebQuestionDefinition
@@ -80,9 +81,10 @@ import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey }
 import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorLabel, resolveSelectorPlaceholder } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
-import { applyValueMapsToForm, applyValueMapsToLineRow, resolveValueMapValue } from './form/valueMaps';
+import { applyValueMapsToForm, applyValueMapsToLineRow, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
 import { findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
+import { resolveRowFlowSegmentActionIds } from '../features/steps/domain/rowFlow';
 import {
   buildLineContextId,
   buildSubgroupKey,
@@ -103,9 +105,11 @@ import {
   resolveSubgroupKey,
   seedSubgroupDefaults
 } from '../app/lineItems';
+import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAncestors';
 import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app/bundledHtmlClientRenderer';
 import { resolveTemplateIdForRecord } from '../app/templateId';
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
+import { applyClearOnChange } from '../app/clearOnChange';
 import {
   buildParagraphDisclaimerSection,
   buildParagraphDisclaimerValue,
@@ -185,6 +189,10 @@ interface FileOverlayState {
   fieldPath?: string;
 }
 
+type OverlayStackEntry =
+  | { kind: 'subgroup'; state: SubgroupOverlayState }
+  | { kind: 'lineItem'; state: LineItemGroupOverlayState };
+
 // keep context ids consistent with App.tsx so auto-generated rows from selection effects
 // can be reconciled when loading existing records
 
@@ -192,6 +200,27 @@ type StatusTone = 'info' | 'success' | 'error';
 
 const hasSelectionEffects = (field: any): boolean =>
   Array.isArray(field?.selectionEffects) && field.selectionEffects.length > 0;
+
+const areFieldValuesEqual = (a: FieldValue, b: FieldValue): boolean => {
+  if (a === b) return true;
+  const arrayA = Array.isArray(a) ? a : null;
+  const arrayB = Array.isArray(b) ? b : null;
+  if (arrayA || arrayB) {
+    const arrA = arrayA || [];
+    const arrB = arrayB || [];
+    if (arrA.length !== arrB.length) return false;
+    return arrA.every((val, idx) => val === arrB[idx]);
+  }
+  if (typeof a === 'object' || typeof b === 'object') {
+    if (!a || !b) return false;
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch (_) {
+      return false;
+    }
+  }
+  return false;
+};
 
 const getSelectionEffects = (field: any): any[] =>
   Array.isArray(field?.selectionEffects) ? field.selectionEffects : [];
@@ -217,6 +246,91 @@ const isBlurDerivedValue = (derived?: any): boolean => {
   if (raw === 'blur') return true;
   if (raw === 'change') return false;
   return (derived.op || '').toString() === 'copy';
+};
+
+const normalizeDerivedTokenToFieldId = (token: string): string => {
+  const raw = (token || '').toString().trim();
+  if (!raw) return '';
+  const parts = raw.replace(/\s+/g, '').split('.').filter(Boolean);
+  return (parts[parts.length - 1] || raw).toString().trim();
+};
+
+const collectWhenFieldIds = (when: any, out: Set<string>) => {
+  if (!when) return;
+  if (Array.isArray(when)) {
+    when.forEach(entry => collectWhenFieldIds(entry, out));
+    return;
+  }
+  if (typeof when !== 'object') return;
+  const allRaw = (when as any).all ?? (when as any).and;
+  if (Array.isArray(allRaw)) {
+    allRaw.forEach(entry => collectWhenFieldIds(entry, out));
+  }
+  const anyRaw = (when as any).any ?? (when as any).or;
+  if (Array.isArray(anyRaw)) {
+    anyRaw.forEach(entry => collectWhenFieldIds(entry, out));
+  }
+  if (Object.prototype.hasOwnProperty.call(when as any, 'not')) {
+    collectWhenFieldIds((when as any).not, out);
+  }
+  const lineItemsClause = (when as any).lineItems ?? (when as any).lineItem;
+  if (lineItemsClause && typeof lineItemsClause === 'object') {
+    collectWhenFieldIds((lineItemsClause as any).when, out);
+    collectWhenFieldIds((lineItemsClause as any).parentWhen, out);
+  }
+  const fieldId = (when as any).fieldId;
+  if (fieldId !== undefined && fieldId !== null) {
+    const fid = fieldId.toString().trim();
+    if (fid) out.add(fid);
+  }
+};
+
+const collectExpressionFieldIds = (expression: any, out: Set<string>) => {
+  const expr = expression !== undefined && expression !== null ? expression.toString() : '';
+  if (!expr) return;
+  expr.replace(/\{([^}]+)\}/g, (_match: string, raw: string) => {
+    const fid = normalizeDerivedTokenToFieldId(raw);
+    if (fid) out.add(fid);
+    return '';
+  });
+  expr.replace(/SUM\s*\(([^)]+)\)/gi, (_match: string, raw: string) => {
+    const fid = normalizeDerivedTokenToFieldId(raw);
+    if (fid) out.add(fid);
+    return '';
+  });
+};
+
+const collectDerivedBlurDependencies = (derived: any, out: Set<string>) => {
+  if (!derived || !isBlurDerivedValue(derived)) return;
+  const dependsOn = derived.dependsOn !== undefined && derived.dependsOn !== null ? derived.dependsOn.toString().trim() : '';
+  if (dependsOn) {
+    out.add(normalizeDerivedTokenToFieldId(dependsOn));
+  }
+  collectExpressionFieldIds(derived.expression ?? derived.formula ?? derived.expr, out);
+  const filters = derived.lineItemFilters ?? derived.aggregateFilters ?? derived.filters;
+  if (Array.isArray(filters)) {
+    filters.forEach(filter => {
+      if (!filter || typeof filter !== 'object') return;
+      const ref = filter.ref ?? filter.path ?? filter.target;
+      if (ref !== undefined && ref !== null) {
+        const fid = normalizeDerivedTokenToFieldId(ref.toString());
+        if (fid) out.add(fid);
+      }
+      collectWhenFieldIds((filter as any).when, out);
+    });
+  }
+};
+
+const parseLineFieldPath = (
+  fieldPath: string
+): { groupId: string; fieldId: string; rowId: string } | null => {
+  const raw = (fieldPath || '').toString().trim();
+  if (!raw || !raw.includes('__')) return null;
+  const parts = raw.split('__');
+  if (parts.length < 3) return null;
+  const [groupId, fieldId, rowId] = parts;
+  if (!groupId || !fieldId || !rowId) return null;
+  return { groupId, fieldId, rowId };
 };
 
 const whenClauseDependsOnField = (when: any, targetFieldId: string): boolean => {
@@ -292,11 +406,13 @@ const isLineRowComplete = (group: WebQuestionDefinition, rowValues: Record<strin
 
 const resolveOverlayHeaderFields = (groupCfg: any, overlayDetail: any): LineItemFieldConfig[] => {
   if (!groupCfg) return [];
-  const raw = Array.isArray(overlayDetail?.header?.tableColumns) ? overlayDetail.header.tableColumns : [];
+  const headerColumnsExplicit = Array.isArray(overlayDetail?.header?.tableColumns);
+  const raw = headerColumnsExplicit ? overlayDetail.header.tableColumns : [];
   const fallback = Array.isArray(groupCfg?.ui?.tableColumns) ? groupCfg.ui.tableColumns : [];
   const ids = raw
     .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
     .filter(Boolean);
+  if (headerColumnsExplicit && !ids.length) return [];
   const fallbackIds = fallback
     .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
     .filter(Boolean);
@@ -604,11 +720,13 @@ const FormView: React.FC<FormViewProps> = ({
     rowId: string;
     mode: 'view' | 'edit';
   } | null>(null);
+  const overlayDetailHeaderCompleteRef = useRef<Map<string, boolean>>(new Map());
   const [overlayDetailHtml, setOverlayDetailHtml] = useState('');
   const [overlayDetailHtmlError, setOverlayDetailHtmlError] = useState('');
   const [overlayDetailHtmlLoading, setOverlayDetailHtmlLoading] = useState(false);
   const orderedEntryGateRef = useRef<(args: { targetQuestionId: string; source: string }) => boolean>(() => false);
   const [subgroupOverlay, setSubgroupOverlay] = useState<SubgroupOverlayState>({ open: false });
+  const overlayStackRef = useRef<OverlayStackEntry[]>([]);
   const [infoOverlay, setInfoOverlay] = useState<InfoOverlayState>({ open: false });
   const [fileOverlay, setFileOverlay] = useState<FileOverlayState>({ open: false });
   const [pendingScrollAnchor, setPendingScrollAnchor] = useState<string | null>(null);
@@ -773,6 +891,7 @@ const FormView: React.FC<FormViewProps> = ({
   useEffect(() => {
     if (!guidedEnabled) return;
     onDiagnostic?.('steps.enabled', { mode: 'guided', stepCount: guidedStepIds.length });
+    onDiagnostic?.('steps.validation.noticeMode', { mode: 'fieldOnly' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guidedEnabled]);
 
@@ -869,10 +988,39 @@ const FormView: React.FC<FormViewProps> = ({
     return targets;
   }, [guidedStepsCfg]);
 
+  const rowFlowSegmentActionTargets = useMemo(() => {
+    if (!guidedStepsCfg) return [];
+    const targets: Array<{ stepId: string; groupId: string; segmentsWithActions: number; multiActionSegments: number }> = [];
+    (guidedStepsCfg.items || []).forEach(step => {
+      const stepId = (step?.id || '').toString();
+      const includes = Array.isArray(step?.include) ? step.include : [];
+      includes.forEach((target: any) => {
+        if (!target || typeof target !== 'object') return;
+        const kind = (target.kind || '').toString().trim();
+        if (kind !== 'lineGroup') return;
+        const groupId = (target.id || '').toString().trim();
+        if (!groupId || !target.rowFlow) return;
+        const segments = (target.rowFlow?.output?.segments || []) as RowFlowOutputSegmentConfig[];
+        if (!segments.length) return;
+        const segmentActions: string[][] = segments.map(segment => resolveRowFlowSegmentActionIds(segment));
+        const segmentsWithActions = segmentActions.filter(ids => ids.length > 0);
+        if (!segmentsWithActions.length) return;
+        const multiActionSegments = segmentActions.filter(ids => ids.length > 1).length;
+        targets.push({ stepId, groupId, segmentsWithActions: segmentsWithActions.length, multiActionSegments });
+      });
+    });
+    return targets;
+  }, [guidedStepsCfg]);
+
   useEffect(() => {
     if (!rowFlowTargets.length) return;
     onDiagnostic?.('form.rowFlow.enabled', { targets: rowFlowTargets });
   }, [onDiagnostic, rowFlowTargets]);
+
+  useEffect(() => {
+    if (!rowFlowSegmentActionTargets.length) return;
+    onDiagnostic?.('form.rowFlow.output.segmentActions.enabled', { targets: rowFlowSegmentActionTargets });
+  }, [onDiagnostic, rowFlowSegmentActionTargets]);
 
   // Clamp/initialize the active step when step config or validity changes.
   useEffect(() => {
@@ -965,15 +1113,213 @@ const FormView: React.FC<FormViewProps> = ({
     return ordered.length ? ordered : definition.questions || [];
   }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepIds, guidedStepsCfg, orderedEntryEnabled]);
 
+  const buildGuidedStepDefinition = useCallback(
+    (stepId?: string): WebFormDefinition | null => {
+      if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return null;
+      const steps = guidedStepsCfg.items || [];
+      const resolvedStepId = (stepId || activeGuidedStepId || '').toString().trim();
+      const stepCfg =
+        (steps.find(s => (s?.id || '').toString().trim() === resolvedStepId) || steps[0]) as any;
+      if (!stepCfg) return null;
+
+      const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
+      const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
+
+      const topQuestionIds = new Set<string>();
+      const renderQuestionAsLabel = new Set<string>();
+      const lineTargetsById = new Map<string, any>();
+      const addTarget = (t: any) => {
+        if (!t || typeof t !== 'object') return;
+        const kind = (t.kind || '').toString().trim();
+        const id = (t.id || '').toString().trim();
+        if (!kind || !id) return;
+        if (kind === 'question') {
+          topQuestionIds.add(id);
+          if ((t as any)?.renderAsLabel === true) renderQuestionAsLabel.add(id);
+          return;
+        }
+        if (kind === 'lineGroup') {
+          if (!lineTargetsById.has(id)) lineTargetsById.set(id, t);
+        }
+      };
+      [...headerTargets, ...stepTargets].forEach(addTarget);
+
+      const normalizeLineFieldId = (groupId: string, rawId: any): string => {
+        const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
+        if (!s) return '';
+        const underscorePrefix = `${groupId}__`;
+        if (s.startsWith(underscorePrefix)) return s.slice(underscorePrefix.length);
+        const dotPrefix = `${groupId}.`;
+        if (s.startsWith(dotPrefix)) return s.slice(dotPrefix.length);
+        if (s.includes('.')) return s.split('.').pop() || s;
+        return s;
+      };
+
+      const parseStepFieldEntries = (
+        groupId: string,
+        raw: any
+      ): { allowed: Set<string> | null; renderAsLabel: Set<string> } => {
+        if (!raw) return { allowed: null, renderAsLabel: new Set() };
+
+        const entries: Array<{ id: string; renderAsLabel: boolean }> = [];
+        const pushEntry = (v: any) => {
+          if (v === undefined || v === null) return;
+          if (typeof v === 'object') {
+            const id = normalizeLineFieldId(groupId, (v as any).id ?? (v as any).fieldId ?? (v as any).field);
+            if (!id) return;
+            entries.push({ id, renderAsLabel: Boolean((v as any).renderAsLabel) });
+            return;
+          }
+          const id = normalizeLineFieldId(groupId, v);
+          if (!id) return;
+          entries.push({ id, renderAsLabel: false });
+        };
+
+        if (Array.isArray(raw)) {
+          raw.forEach(pushEntry);
+        } else {
+          raw
+            .toString()
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+            .forEach(pushEntry);
+        }
+
+        const ids = entries.map(e => e.id).filter(Boolean);
+        const roIds = entries.filter(e => e.renderAsLabel).map(e => e.id).filter(Boolean);
+        return { allowed: ids.length ? new Set(ids) : null, renderAsLabel: new Set(roIds) };
+      };
+
+      const scopedQuestions: WebQuestionDefinition[] = [];
+      (definition.questions || []).forEach(q => {
+        if (!q) return;
+        if (q.type !== 'LINE_ITEM_GROUP') {
+          if (topQuestionIds.has(q.id)) {
+            const asLabel = renderQuestionAsLabel.has(q.id);
+            scopedQuestions.push(
+              asLabel
+                ? ({ ...(q as any), ui: { ...((q as any).ui || {}), renderAsLabel: true } } as WebQuestionDefinition)
+                : q
+            );
+          }
+          return;
+        }
+
+        const t = lineTargetsById.get(q.id);
+        if (!t) return;
+        const groupId = q.id;
+        const lineCfg = (q as any).lineItemConfig || {};
+
+        const { allowed: allowedFieldIds, renderAsLabel: renderAsLabelFieldIdsFromFields } = parseStepFieldEntries(
+          groupId,
+          (t as any).fields
+        );
+        const readOnlyFieldIds = (() => {
+          const raw = (t as any).readOnlyFields;
+          const parsed = parseStepFieldEntries(groupId, raw);
+          const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
+          const merged = new Set<string>([...ids, ...Array.from(renderAsLabelFieldIdsFromFields)]);
+          return merged.size ? merged : null;
+        })();
+        const filteredFieldsBase = allowedFieldIds
+          ? ((lineCfg.fields || []) as any[]).filter((f: any) => {
+              const fid = normalizeLineFieldId(groupId, (f as any)?.id);
+              return fid && allowedFieldIds.has(fid);
+            })
+          : lineCfg.fields || [];
+        const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
+          const fid = normalizeLineFieldId(groupId, (f as any)?.id);
+          if (readOnlyFieldIds && fid && readOnlyFieldIds.has(fid)) {
+            return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
+          }
+          return f;
+        });
+
+        const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
+        const presentation: 'groupEditor' | 'liftedRowFields' =
+          presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
+
+        const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
+        const subIncludeRaw = subGroupsCfgPresent ? (t as any)?.subGroups?.include : undefined;
+        const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
+        const allowedSubIds = subIncludeList
+          .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
+          .filter(Boolean);
+        const allowedSubSet = allowedSubIds.length ? new Set(allowedSubIds) : null;
+        const filteredSubGroups = (() => {
+          const subs = (lineCfg.subGroups || []) as any[];
+          if (!subs.length) return subs;
+          // In guided steps, `liftedRowFields` should not validate subgroups unless explicitly configured.
+          if (!subGroupsCfgPresent && presentation === 'liftedRowFields') return [];
+          const kept = allowedSubSet
+            ? subs.filter(sub => {
+                const subId = resolveSubgroupKey(sub as any);
+                return subId && allowedSubSet.has(subId);
+              })
+            : subs;
+          return kept.map(sub => {
+            const subId = resolveSubgroupKey(sub as any);
+            const subTarget = subIncludeList.find(
+              s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId
+            );
+            const allowedSubFieldsRaw = subTarget?.fields;
+            const {
+              allowed: allowedSubFields,
+              renderAsLabel: renderAsLabelSubFieldIdsFromFields
+            } = parseStepFieldEntries(subId, allowedSubFieldsRaw);
+            const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
+            const readOnlySubFields = (() => {
+              const parsed = parseStepFieldEntries(subId, readOnlySubFieldsRaw);
+              const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
+              const merged = new Set<string>([...ids, ...Array.from(renderAsLabelSubFieldIdsFromFields)]);
+              return merged.size ? merged : null;
+            })();
+
+            const nextSub: any = { ...(sub as any) };
+            // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
+            nextSub._guidedRowFilter = subTarget?.validationRows ?? subTarget?.rows;
+            nextSub._expandGateFields = (sub as any).fields || [];
+
+            if (allowedSubFields && allowedSubFields.size) {
+              nextSub.fields = ((sub as any).fields || []).filter((f: any) => {
+                const fid = normalizeLineFieldId(subId, (f as any)?.id);
+                return fid && allowedSubFields.has(fid);
+              });
+            }
+            if (readOnlySubFields && readOnlySubFields.size) {
+              nextSub.fields = (nextSub.fields || (sub as any).fields || []).map((f: any) => {
+                const fid = normalizeLineFieldId(subId, (f as any)?.id);
+                if (fid && readOnlySubFields.has(fid)) {
+                  return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
+                }
+                return f;
+              });
+            }
+            return nextSub;
+          });
+        })();
+
+        const stepLineCfg: any = { ...(lineCfg as any), fields: filteredFields, subGroups: filteredSubGroups };
+        // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
+        stepLineCfg._guidedRowFilter = (t as any).validationRows ?? (t as any).rows;
+        stepLineCfg._expandGateFields = (lineCfg as any).fields || [];
+        if ((t as any).collapsedFieldsInHeader === true) {
+          stepLineCfg.ui = { ...(stepLineCfg.ui || {}), guidedCollapsedFieldsInHeader: true };
+        }
+        scopedQuestions.push({ ...(q as any), lineItemConfig: stepLineCfg } as WebQuestionDefinition);
+      });
+
+      return { ...(definition as any), questions: scopedQuestions } as WebFormDefinition;
+    },
+    [activeGuidedStepId, definition, guidedEnabled, guidedStepIds, guidedStepsCfg]
+  );
+
   const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
   const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const guidedAutoAdvanceStateRef = useRef<{ stepId: string; lastSatisfied: boolean; armed: boolean } | null>(null);
   const guidedAutoAdvanceAttemptRef = useRef<(() => void) | null>(null);
   const guidedLastUserEditAtRef = useRef<number>(0);
-  const [guidedStepAttempted, setGuidedStepAttempted] = useState<Record<string, boolean>>({});
-  const [guidedStepGateNotice, setGuidedStepGateNotice] = useState<{ stepId: string; tone: 'error' | 'warning'; message: string } | null>(
-    null
-  );
 
   const selectGuidedStep = useCallback(
     (nextStepId: string, reason: 'user' | 'auto' = 'user') => {
@@ -1000,8 +1346,9 @@ const FormView: React.FC<FormViewProps> = ({
 
       // Forward navigation: use computed reachability (contiguous gating).
       if (nextIdx > maxReachableGuidedIndex) {
-        // Mark the current step as "attempted" so we can surface step-level guidance.
-        setGuidedStepAttempted(prev => ({ ...(prev || {}), [activeGuidedStepId]: true }));
+        if (submitActionRef?.current) {
+          submitActionRef.current();
+        }
         onDiagnostic?.('steps.step.blocked', {
           from: activeGuidedStepId,
           to: nextId,
@@ -1022,7 +1369,8 @@ const FormView: React.FC<FormViewProps> = ({
       guidedStepIds,
       guidedStepsCfg,
       maxReachableGuidedIndex,
-      onDiagnostic
+      onDiagnostic,
+      submitActionRef
     ]
   );
 
@@ -1245,9 +1593,6 @@ const FormView: React.FC<FormViewProps> = ({
       // In guided steps, the bottom "Submit" action behaves like "Next" until the final step.
       // It should validate only the current step's visible targets (not the full form).
       if (guidedEnabled && guidedStepsCfg && guidedStepIds.length && !isGuidedFinalStep) {
-        // Mark this step as attempted (used to show step-level gate guidance).
-        setGuidedStepAttempted(prev => ({ ...(prev || {}), [activeGuidedStepId]: true }));
-
         const steps = guidedStepsCfg.items || [];
         const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
         const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
@@ -1260,18 +1605,43 @@ const FormView: React.FC<FormViewProps> = ({
         }
         guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: true, armed: false };
 
-        // For `whenComplete` steps: advancing is blocked ONLY by step completion (all step-visible fields set),
-        // even if the step is already valid or still has validation errors.
+        const stepDefinition = buildGuidedStepDefinition(activeGuidedStepId) || definition;
+
+        // For `whenComplete` steps: block advancement ONLY on missing step fields, but show inline errors.
         if (forwardGate === 'whenComplete' && !stepStatus?.complete) {
-          setGuidedStepGateNotice({
-            stepId: activeGuidedStepId,
-            tone: 'error',
-            message: tSystem('steps.completeToContinue', language, 'Complete all fields in this step to continue.')
+          const nextErrors = validateForm({
+            definition: stepDefinition,
+            language,
+            values,
+            lineItems,
+            collapsedRows,
+            collapsedSubgroups,
+            requiredMode: 'stepComplete'
           });
-          // Try to focus a likely missing field to reduce friction.
+          setErrors(nextErrors);
+          const errorCount = Object.keys(nextErrors).length;
+          onDiagnostic?.('steps.gate.blocked', {
+            stepId: activeGuidedStepId,
+            gate: forwardGate,
+            errorCount,
+            requiredMode: 'stepComplete'
+          });
+          if (errorCount) {
+            errorNavRequestRef.current += 1;
+            errorNavModeRef.current = 'focus';
+            onDiagnostic?.('validation.navigate.request', {
+              attempt: errorNavRequestRef.current,
+              scope: 'guidedStep',
+              mode: errorNavModeRef.current
+            });
+            return;
+          }
           const firstTarget = (Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [])
             .concat(Array.isArray(stepCfg?.include) ? stepCfg.include : [])
-            .find((t: any) => t && typeof t === 'object' && (t.kind || '').toString() === 'question' && (t.id || '').toString().trim());
+            .find(
+              (t: any) =>
+                t && typeof t === 'object' && (t.kind || '').toString() === 'question' && (t.id || '').toString().trim()
+            );
           if (firstTarget?.id) {
             try {
               navigateToFieldKey(firstTarget.id.toString());
@@ -1282,194 +1652,6 @@ const FormView: React.FC<FormViewProps> = ({
           return;
         }
 
-        const buildStepScopedDefinition = (): WebFormDefinition => {
-          const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
-          const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
-
-          const topQuestionIds = new Set<string>();
-          const renderQuestionAsLabel = new Set<string>();
-          const lineTargetsById = new Map<string, any>();
-          const addTarget = (t: any) => {
-            if (!t || typeof t !== 'object') return;
-            const kind = (t.kind || '').toString().trim();
-            const id = (t.id || '').toString().trim();
-            if (!kind || !id) return;
-            if (kind === 'question') {
-              topQuestionIds.add(id);
-              if ((t as any)?.renderAsLabel === true) renderQuestionAsLabel.add(id);
-              return;
-            }
-            if (kind === 'lineGroup') {
-              if (!lineTargetsById.has(id)) lineTargetsById.set(id, t);
-            }
-          };
-          [...headerTargets, ...stepTargets].forEach(addTarget);
-
-          const normalizeLineFieldId = (groupId: string, rawId: any): string => {
-            const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
-            if (!s) return '';
-            const underscorePrefix = `${groupId}__`;
-            if (s.startsWith(underscorePrefix)) return s.slice(underscorePrefix.length);
-            const dotPrefix = `${groupId}.`;
-            if (s.startsWith(dotPrefix)) return s.slice(dotPrefix.length);
-            if (s.includes('.')) return s.split('.').pop() || s;
-            return s;
-          };
-
-          const parseStepFieldEntries = (
-            groupId: string,
-            raw: any
-          ): { allowed: Set<string> | null; renderAsLabel: Set<string> } => {
-            if (!raw) return { allowed: null, renderAsLabel: new Set() };
-
-            const entries: Array<{ id: string; renderAsLabel: boolean }> = [];
-            const pushEntry = (v: any) => {
-              if (v === undefined || v === null) return;
-              if (typeof v === 'object') {
-                const id = normalizeLineFieldId(groupId, (v as any).id ?? (v as any).fieldId ?? (v as any).field);
-                if (!id) return;
-                entries.push({ id, renderAsLabel: Boolean((v as any).renderAsLabel) });
-                return;
-              }
-              const id = normalizeLineFieldId(groupId, v);
-              if (!id) return;
-              entries.push({ id, renderAsLabel: false });
-            };
-
-            if (Array.isArray(raw)) {
-              raw.forEach(pushEntry);
-            } else {
-              raw
-                .toString()
-                .split(',')
-                .map((s: string) => s.trim())
-                .filter(Boolean)
-                .forEach(pushEntry);
-            }
-
-            const ids = entries.map(e => e.id).filter(Boolean);
-            const roIds = entries.filter(e => e.renderAsLabel).map(e => e.id).filter(Boolean);
-            return { allowed: ids.length ? new Set(ids) : null, renderAsLabel: new Set(roIds) };
-          };
-
-          const scopedQuestions: WebQuestionDefinition[] = [];
-          (definition.questions || []).forEach(q => {
-            if (!q) return;
-            if (q.type !== 'LINE_ITEM_GROUP') {
-              if (topQuestionIds.has(q.id)) {
-                const asLabel = renderQuestionAsLabel.has(q.id);
-                scopedQuestions.push(
-                  asLabel ? ({ ...(q as any), ui: { ...((q as any).ui || {}), renderAsLabel: true } } as WebQuestionDefinition) : q
-                );
-              }
-              return;
-            }
-
-            const t = lineTargetsById.get(q.id);
-            if (!t) return;
-            const groupId = q.id;
-            const lineCfg = (q as any).lineItemConfig || {};
-
-            const { allowed: allowedFieldIds, renderAsLabel: renderAsLabelFieldIdsFromFields } = parseStepFieldEntries(
-              groupId,
-              (t as any).fields
-            );
-            const readOnlyFieldIds = (() => {
-              const raw = (t as any).readOnlyFields;
-              const parsed = parseStepFieldEntries(groupId, raw);
-              const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
-              const merged = new Set<string>([...ids, ...Array.from(renderAsLabelFieldIdsFromFields)]);
-              return merged.size ? merged : null;
-            })();
-            const filteredFieldsBase = allowedFieldIds
-              ? ((lineCfg.fields || []) as any[]).filter((f: any) => {
-                  const fid = normalizeLineFieldId(groupId, (f as any)?.id);
-                  return fid && allowedFieldIds.has(fid);
-                })
-              : lineCfg.fields || [];
-            const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
-              const fid = normalizeLineFieldId(groupId, (f as any)?.id);
-              if (readOnlyFieldIds && fid && readOnlyFieldIds.has(fid)) {
-                return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
-              }
-              return f;
-            });
-
-            const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
-            const presentation: 'groupEditor' | 'liftedRowFields' =
-              presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
-
-            const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
-            const subIncludeRaw = subGroupsCfgPresent ? (t as any)?.subGroups?.include : undefined;
-            const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
-            const allowedSubIds = subIncludeList
-              .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
-              .filter(Boolean);
-            const allowedSubSet = allowedSubIds.length ? new Set(allowedSubIds) : null;
-            const filteredSubGroups = (() => {
-              const subs = (lineCfg.subGroups || []) as any[];
-              if (!subs.length) return subs;
-              // In guided steps, `liftedRowFields` should not validate subgroups unless explicitly configured.
-              if (!subGroupsCfgPresent && presentation === 'liftedRowFields') return [];
-              const kept = allowedSubSet
-                ? subs.filter(sub => {
-                    const subId = resolveSubgroupKey(sub as any);
-                    return subId && allowedSubSet.has(subId);
-                  })
-                : subs;
-              return kept.map(sub => {
-                const subId = resolveSubgroupKey(sub as any);
-                const subTarget = subIncludeList.find(
-                  s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId
-                );
-                const allowedSubFieldsRaw = subTarget?.fields;
-                const {
-                  allowed: allowedSubFields,
-                  renderAsLabel: renderAsLabelSubFieldIdsFromFields
-                } = parseStepFieldEntries(subId, allowedSubFieldsRaw);
-                const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
-                const readOnlySubFields = (() => {
-                  const parsed = parseStepFieldEntries(subId, readOnlySubFieldsRaw);
-                  const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
-                  const merged = new Set<string>([...ids, ...Array.from(renderAsLabelSubFieldIdsFromFields)]);
-                  return merged.size ? merged : null;
-                })();
-
-                const nextSub: any = { ...(sub as any) };
-                // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
-                nextSub._guidedRowFilter = subTarget?.validationRows ?? subTarget?.rows;
-                nextSub._expandGateFields = (sub as any).fields || [];
-
-                if (allowedSubFields && allowedSubFields.size) {
-                  nextSub.fields = ((sub as any).fields || []).filter((f: any) => {
-                    const fid = normalizeLineFieldId(subId, (f as any)?.id);
-                    return fid && allowedSubFields.has(fid);
-                  });
-                }
-                if (readOnlySubFields && readOnlySubFields.size) {
-                  nextSub.fields = (nextSub.fields || (sub as any).fields || []).map((f: any) => {
-                    const fid = normalizeLineFieldId(subId, (f as any)?.id);
-                    if (fid && readOnlySubFields.has(fid)) {
-                      return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
-                    }
-                    return f;
-                  });
-                }
-                return nextSub;
-              });
-            })();
-
-            const stepLineCfg: any = { ...(lineCfg as any), fields: filteredFields, subGroups: filteredSubGroups };
-            // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
-            stepLineCfg._guidedRowFilter = (t as any).validationRows ?? (t as any).rows;
-            stepLineCfg._expandGateFields = (lineCfg as any).fields || [];
-            scopedQuestions.push({ ...(q as any), lineItemConfig: stepLineCfg } as WebQuestionDefinition);
-          });
-
-          return { ...(definition as any), questions: scopedQuestions } as WebFormDefinition;
-        };
-
-        const stepDefinition = buildStepScopedDefinition();
         const nextErrors = validateForm({
           definition: stepDefinition,
           language,
@@ -1481,10 +1663,11 @@ const FormView: React.FC<FormViewProps> = ({
         setErrors(nextErrors);
         // For `whenValid` steps: block advancement until the step has no validation errors.
         if (forwardGate !== 'whenComplete' && Object.keys(nextErrors).length) {
-          setGuidedStepGateNotice({
+          onDiagnostic?.('steps.gate.blocked', {
             stepId: activeGuidedStepId,
-            tone: 'error',
-            message: tSystem('steps.fixErrorsToContinue', language, 'Fix the highlighted errors in this step to continue.')
+            gate: forwardGate,
+            errorCount: Object.keys(nextErrors).length,
+            requiredMode: 'configured'
           });
           errorNavRequestRef.current += 1;
           errorNavModeRef.current = 'focus';
@@ -1499,7 +1682,6 @@ const FormView: React.FC<FormViewProps> = ({
         const nextId = guidedStepIds[activeGuidedStepIndex + 1];
         if (nextId) {
           setErrors({});
-          setGuidedStepGateNotice(null);
           onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason: 'submitNext' });
           selectGuidedStep(nextId, 'user');
         }
@@ -1535,9 +1717,11 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     activeGuidedStepId,
     activeGuidedStepIndex,
+    buildGuidedStepDefinition,
     collapsedRows,
     collapsedSubgroups,
     definition,
+    guidedDefaultForwardGate,
     guidedEnabled,
     guidedStepIds,
     guidedStepsCfg,
@@ -1647,6 +1831,36 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [definition.questions]);
 
+  const blurDerivedDependencyIds = useMemo(() => {
+    const deps = new Set<string>();
+    const collectFromFields = (fields: any[]) => {
+      (fields || []).forEach(field => {
+        if (field?.id && isBlurDerivedValue(field?.derivedValue)) {
+          deps.add(field.id.toString().trim());
+        }
+        collectDerivedBlurDependencies(field?.derivedValue, deps);
+      });
+    };
+    const walkSubGroups = (subGroups: any[]) => {
+      (subGroups || []).forEach(sub => {
+        collectFromFields((sub as any)?.fields || []);
+        if (Array.isArray((sub as any)?.subGroups) && (sub as any).subGroups.length) {
+          walkSubGroups((sub as any).subGroups);
+        }
+      });
+    };
+    (definition.questions || []).forEach(q => {
+      if (q.id && isBlurDerivedValue((q as any).derivedValue)) {
+        deps.add(q.id.toString().trim());
+      }
+      collectDerivedBlurDependencies((q as any).derivedValue, deps);
+      if (q.type !== 'LINE_ITEM_GROUP') return;
+      collectFromFields(q.lineItemConfig?.fields || []);
+      walkSubGroups(q.lineItemConfig?.subGroups || []);
+    });
+    return deps;
+  }, [definition.questions]);
+
   const hideLabelQuestionIds = useMemo(() => {
     return (definition.questions || []).filter(q => q.ui?.hideLabel === true).map(q => q.id);
   }, [definition.questions]);
@@ -1689,6 +1903,7 @@ const FormView: React.FC<FormViewProps> = ({
   }, [paragraphDisclaimerFieldIds]);
 
   const blurRecomputeTimerRef = useRef<number | null>(null);
+  const overlayDetailBlurTimerRef = useRef<number | null>(null);
 
   const shallowEqualFieldValue = (a: FieldValue, b: FieldValue): boolean => {
     if (a === b) return true;
@@ -1751,6 +1966,17 @@ const FormView: React.FC<FormViewProps> = ({
 
       if (changedFields.length) setValues(nextValues);
       if (lineChanged) setLineItems(nextLineItems);
+      const sourceGroupKey = (() => {
+        const fp = meta?.fieldPath || '';
+        if (!fp.includes('__')) return '';
+        return fp.split('__')[0] || '';
+      })();
+      if (sourceGroupKey) {
+        runSelectionEffectsForAncestorRows(sourceGroupKey, currentLineItems, nextLineItems, {
+          mode: 'blur',
+          topValues: nextValues
+        });
+      }
       onDiagnostic?.('derived.blur.apply', {
         fieldPath: meta?.fieldPath,
         tag: meta?.tag,
@@ -1814,14 +2040,23 @@ const FormView: React.FC<FormViewProps> = ({
             : isLine && subgroupOverlay.open && subgroupOverlay.subKey === groupId
               ? buildSubgroupOverlayValidationDefinition()
               : null;
-        const validationDefinition = overlayDefinition || definition;
+        const stepDefinition = !overlayDefinition && guidedEnabled ? buildGuidedStepDefinition(activeGuidedStepId) : null;
+        const validationDefinition = overlayDefinition || stepDefinition || definition;
+        const requiredMode = (() => {
+          if (overlayDefinition || !guidedEnabled || !guidedStepsCfg || !stepDefinition) return 'configured';
+          const steps = guidedStepsCfg.items || [];
+          const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+          const gate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+          return gate === 'whenComplete' ? 'stepComplete' : 'configured';
+        })();
         const nextErrors = validateForm({
           definition: validationDefinition,
           language,
           values: valuesRef.current,
           lineItems: lineItemsRef.current,
           collapsedRows: collapsedRowsRef.current,
-          collapsedSubgroups: collapsedSubgroupsRef.current
+          collapsedSubgroups: collapsedSubgroupsRef.current,
+          requiredMode
         });
         const nextMessage = nextErrors[fp];
         setErrors(prev => {
@@ -1875,7 +2110,12 @@ const FormView: React.FC<FormViewProps> = ({
     [
       buildLineItemGroupOverlayValidationDefinition,
       buildSubgroupOverlayValidationDefinition,
+      buildGuidedStepDefinition,
+      activeGuidedStepId,
       definition,
+      guidedDefaultForwardGate,
+      guidedEnabled,
+      guidedStepsCfg,
       language,
       lineItemGroupOverlay.groupId,
       lineItemGroupOverlay.open,
@@ -1885,72 +2125,6 @@ const FormView: React.FC<FormViewProps> = ({
       subgroupOverlay.subKey
     ]
   );
-
-  useEffect(() => {
-    const handler = (event: FocusEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-      const tag = target.tagName ? target.tagName.toLowerCase() : '';
-      if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
-      // Derived-value blur recompute should run for any field blur within the form content, including guided steps.
-      // Note: guided step content is not always wrapped in `.form-card`, so use `.ck-form-sections` as a stable root.
-      const root = target.closest('.ck-form-sections') || target.closest('.webform-overlay') || target.closest('.form-card');
-      if (!root) return;
-      const fieldPath = (target.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
-      const inputType = (target as any)?.type !== undefined && (target as any)?.type !== null ? String((target as any).type) : undefined;
-
-      // Surface blur events to the app shell (used for warning UX + telemetry).
-      if (onUserEdit && fieldPath) {
-        const fp = fieldPath.toString();
-        const parts = fp.split('__');
-        const isLine = parts.length >= 3;
-        onUserEdit({
-          scope: isLine ? 'line' : 'top',
-          fieldPath: fp,
-          fieldId: isLine ? parts[1] : fp,
-          groupId: isLine ? parts[0] : undefined,
-          rowId: isLine ? parts[2] : undefined,
-          event: 'blur',
-          tag,
-          inputType
-        });
-      }
-
-      if (fieldPath) {
-        validateErrorsOnBlur(fieldPath, { tag, inputType });
-      }
-
-      if (paragraphDisclaimerTimerRef.current !== null) {
-        window.clearTimeout(paragraphDisclaimerTimerRef.current);
-      }
-      paragraphDisclaimerTimerRef.current = window.setTimeout(() => {
-        paragraphDisclaimerTimerRef.current = null;
-        if (!paragraphDisclaimerPendingRef.current) return;
-        paragraphDisclaimerSyncRef.current?.('blur');
-      }, 0);
-
-      if (!hasBlurDerived) return;
-      if (blurRecomputeTimerRef.current !== null) {
-        window.clearTimeout(blurRecomputeTimerRef.current);
-      }
-      blurRecomputeTimerRef.current = window.setTimeout(() => {
-        blurRecomputeTimerRef.current = null;
-        recomputeDerivedOnBlur({ fieldPath, tag });
-      }, 0);
-    };
-    document.addEventListener('focusout', handler, true);
-    return () => {
-      document.removeEventListener('focusout', handler, true);
-      if (blurRecomputeTimerRef.current !== null) {
-        window.clearTimeout(blurRecomputeTimerRef.current);
-        blurRecomputeTimerRef.current = null;
-      }
-      if (paragraphDisclaimerTimerRef.current !== null) {
-        window.clearTimeout(paragraphDisclaimerTimerRef.current);
-        paragraphDisclaimerTimerRef.current = null;
-      }
-    };
-  }, [hasBlurDerived, onUserEdit, recomputeDerivedOnBlur, validateErrorsOnBlur]);
 
   const groupSections = useMemo(() => {
     type GroupSection = {
@@ -2151,6 +2325,231 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [definition.questions]
   );
+
+  const resolveLineItemGroupForKey = useCallback(
+    (groupKey: string): WebQuestionDefinition | null => {
+      if (!groupKey) return null;
+      const parsed = parseSubgroupKey(groupKey);
+      if (!parsed) {
+        const root = definition.questions.find(q => q.id === groupKey && q.type === 'LINE_ITEM_GROUP');
+        return root || null;
+      }
+      const defs = resolveSubgroupDefs(groupKey);
+      if (!defs.root || defs.root.type !== 'LINE_ITEM_GROUP') return null;
+      const subCfg = defs.sub;
+      if (!subCfg) return null;
+      return {
+        ...defs.root,
+        id: groupKey,
+        lineItemConfig: {
+          ...(subCfg as any),
+          fields: subCfg?.fields || [],
+          subGroups: subCfg?.subGroups || []
+        }
+      } as WebQuestionDefinition;
+    },
+    [definition.questions, resolveSubgroupDefs]
+  );
+
+  const attemptOverlayDetailAutoOpen = useCallback(
+    (args: {
+      group: WebQuestionDefinition;
+      rowId: string;
+      rowValues: Record<string, FieldValue>;
+      nextValues: Record<string, FieldValue>;
+      nextLineItems: LineItemState;
+      triggerFieldId?: string;
+      source: 'change' | 'blur';
+    }) => {
+      const { group, rowId, rowValues, nextValues, nextLineItems, triggerFieldId, source } = args;
+      if (!group?.id || !rowId) return;
+      const overlayTarget =
+        lineItemGroupOverlay.open &&
+        lineItemGroupOverlay.groupId === group.id &&
+        lineItemGroupOverlay.source === 'overlayOpenAction'
+          ? {
+              groupKey: lineItemGroupOverlay.groupId,
+              rowFilter: lineItemGroupOverlay.rowFilter || null,
+              groupCfg: group.lineItemConfig
+            }
+          : subgroupOverlay.open && subgroupOverlay.subKey === group.id && subgroupOverlay.source === 'overlayOpenAction'
+            ? {
+                groupKey: subgroupOverlay.subKey,
+                rowFilter: subgroupOverlay.rowFilter || null,
+                groupCfg: group.lineItemConfig
+              }
+            : null;
+      if (!overlayTarget?.groupCfg) return;
+      const overlayDetail = (overlayTarget.groupCfg as any)?.ui?.overlayDetail as any;
+      const overlayDetailEnabled = !!overlayDetail?.enabled && !!overlayDetail?.body?.subGroupId;
+      if (!overlayDetailEnabled) return;
+      const isIncluded = overlayTarget.rowFilter ? matchesOverlayRowFilter(rowValues, overlayTarget.rowFilter) : true;
+      if (!isIncluded) {
+        overlayDetailHeaderCompleteRef.current.set(`${overlayTarget.groupKey}::${rowId}`, false);
+        return;
+      }
+      const groupCtx: VisibilityContext = {
+        getValue: fid => (nextValues as any)[fid],
+        getLineValue: (_rowId, fid) => (rowValues as any)[fid],
+        getLineItems: groupId => nextLineItems[groupId] || [],
+        getLineItemKeys: () => Object.keys(nextLineItems)
+      };
+      const headerFields = resolveOverlayHeaderFields(overlayTarget.groupCfg, overlayDetail);
+      if (!headerFields.length) return;
+      const headerComplete = areOverlayHeaderFieldsComplete({
+        fields: headerFields,
+        rowValues,
+        ctx: groupCtx,
+        rowId,
+        linePrefix: group.id
+      });
+      const rowKey = `${overlayTarget.groupKey}::${rowId}`;
+      const prevComplete = overlayDetailHeaderCompleteRef.current.get(rowKey) === true;
+      overlayDetailHeaderCompleteRef.current.set(rowKey, headerComplete);
+      if (!headerComplete) return;
+      const headerFieldIds = headerFields.map(field => field.id);
+      const triggerIsHeaderField = !!triggerFieldId && headerFieldIds.includes(triggerFieldId);
+      if (!prevComplete && source === 'change' && triggerIsHeaderField) {
+        onDiagnostic?.('lineItems.overlayDetail.autoOpen.defer', {
+          groupId: overlayTarget.groupKey,
+          rowId,
+          triggerFieldId,
+          source
+        });
+        return;
+      }
+      const overlayDetailViewMode = (overlayDetail?.body?.view?.mode || 'html').toString().trim().toLowerCase();
+      const overlayDetailHasViewTemplate = !!overlayDetail?.body?.view?.templateId;
+      const overlayDetailCanView = overlayDetailViewMode === 'html' && overlayDetailHasViewTemplate;
+      const mode: 'view' | 'edit' = overlayDetailCanView ? 'view' : 'edit';
+      setOverlayDetailSelection(prev => {
+        if (prev && prev.groupId === overlayTarget.groupKey && prev.rowId === rowId && prev.mode === mode) return prev;
+        return { groupId: overlayTarget.groupKey, rowId, mode };
+      });
+      onDiagnostic?.('lineItems.overlayDetail.autoOpen', {
+        groupId: overlayTarget.groupKey,
+        rowId,
+        mode,
+        source: source === 'blur' ? 'headerComplete.blur' : 'headerComplete'
+      });
+    },
+    [lineItemGroupOverlay, onDiagnostic, subgroupOverlay]
+  );
+
+  useEffect(() => {
+    const handler = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const tag = target.tagName ? target.tagName.toLowerCase() : '';
+      if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
+      // Derived-value blur recompute should run for any field blur within the form content, including guided steps.
+      // Note: guided step content is not always wrapped in `.form-card`, so use `.ck-form-sections` as a stable root.
+      const root = target.closest('.ck-form-sections') || target.closest('.webform-overlay') || target.closest('.form-card');
+      if (!root) return;
+      const fieldPath = (target.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
+      const inputType = (target as any)?.type !== undefined && (target as any)?.type !== null ? String((target as any).type) : undefined;
+
+      // Surface blur events to the app shell (used for warning UX + telemetry).
+      if (onUserEdit && fieldPath) {
+        const fp = fieldPath.toString();
+        const parts = fp.split('__');
+        const isLine = parts.length >= 3;
+        onUserEdit({
+          scope: isLine ? 'line' : 'top',
+          fieldPath: fp,
+          fieldId: isLine ? parts[1] : fp,
+          groupId: isLine ? parts[0] : undefined,
+          rowId: isLine ? parts[2] : undefined,
+          event: 'blur',
+          tag,
+          inputType
+        });
+      }
+
+      if (fieldPath) {
+        validateErrorsOnBlur(fieldPath, { tag, inputType });
+      }
+
+      if (paragraphDisclaimerTimerRef.current !== null) {
+        window.clearTimeout(paragraphDisclaimerTimerRef.current);
+      }
+      paragraphDisclaimerTimerRef.current = window.setTimeout(() => {
+        paragraphDisclaimerTimerRef.current = null;
+        if (!paragraphDisclaimerPendingRef.current) return;
+        paragraphDisclaimerSyncRef.current?.('blur');
+      }, 0);
+
+      const lineField = fieldPath ? parseLineFieldPath(fieldPath.toString()) : null;
+      if (lineField) {
+        if (overlayDetailBlurTimerRef.current !== null) {
+          window.clearTimeout(overlayDetailBlurTimerRef.current);
+        }
+        overlayDetailBlurTimerRef.current = window.setTimeout(() => {
+          overlayDetailBlurTimerRef.current = null;
+          const groupDef = resolveLineItemGroupForKey(lineField.groupId);
+          if (!groupDef) return;
+          const rows = lineItemsRef.current[lineField.groupId] || [];
+          const row = rows.find(r => r.id === lineField.rowId);
+          if (!row) return;
+          attemptOverlayDetailAutoOpen({
+            group: groupDef,
+            rowId: lineField.rowId,
+            rowValues: (row.values || {}) as Record<string, FieldValue>,
+            nextValues: valuesRef.current,
+            nextLineItems: lineItemsRef.current,
+            triggerFieldId: lineField.fieldId,
+            source: 'blur'
+          });
+        }, 0);
+      }
+
+      if (!hasBlurDerived) return;
+      const blurredFieldId = (() => {
+        if (!fieldPath) return '';
+        const parts = fieldPath.split('__');
+        if (parts.length >= 2) return (parts[1] || '').toString().trim();
+        return fieldPath.toString().trim();
+      })();
+      const shouldRecomputeBlurDerived =
+        !blurDerivedDependencyIds.size || (blurredFieldId ? blurDerivedDependencyIds.has(blurredFieldId) : true);
+      if (!shouldRecomputeBlurDerived) {
+        onDiagnostic?.('derived.blur.skip', { fieldPath, blurredFieldId });
+        return;
+      }
+      if (blurRecomputeTimerRef.current !== null) {
+        window.clearTimeout(blurRecomputeTimerRef.current);
+      }
+      blurRecomputeTimerRef.current = window.setTimeout(() => {
+        blurRecomputeTimerRef.current = null;
+        recomputeDerivedOnBlur({ fieldPath, tag });
+      }, 0);
+    };
+    document.addEventListener('focusout', handler, true);
+    return () => {
+      document.removeEventListener('focusout', handler, true);
+      if (blurRecomputeTimerRef.current !== null) {
+        window.clearTimeout(blurRecomputeTimerRef.current);
+        blurRecomputeTimerRef.current = null;
+      }
+      if (overlayDetailBlurTimerRef.current !== null) {
+        window.clearTimeout(overlayDetailBlurTimerRef.current);
+        overlayDetailBlurTimerRef.current = null;
+      }
+      if (paragraphDisclaimerTimerRef.current !== null) {
+        window.clearTimeout(paragraphDisclaimerTimerRef.current);
+        paragraphDisclaimerTimerRef.current = null;
+      }
+    };
+  }, [
+    attemptOverlayDetailAutoOpen,
+    blurDerivedDependencyIds,
+    hasBlurDerived,
+    onDiagnostic,
+    onUserEdit,
+    recomputeDerivedOnBlur,
+    resolveLineItemGroupForKey,
+    validateErrorsOnBlur
+  ]);
 
   useEffect(() => {
     setCollapsedGroups(prev => {
@@ -2711,6 +3110,19 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const closeSubgroupOverlay = useCallback(() => {
+    const previous = overlayStackRef.current.pop();
+    if (previous) {
+      if (previous.kind === 'subgroup') {
+        setLineItemGroupOverlay({ open: false });
+        setSubgroupOverlay({ ...previous.state, open: true });
+      } else {
+        setSubgroupOverlay({ open: false });
+        setLineItemGroupOverlay({ ...previous.state, open: true });
+      }
+      onDiagnostic?.('overlay.stack.restore', { source: 'subgroup.close', kind: previous.kind });
+      return;
+    }
+    overlayStackRef.current = [];
     setSubgroupOverlay({ open: false });
     onDiagnostic?.('subgroup.overlay.close');
   }, [onDiagnostic]);
@@ -2718,6 +3130,10 @@ const FormView: React.FC<FormViewProps> = ({
   const attemptCloseSubgroupOverlay = useCallback(
     (source: 'button' | 'escape') => {
       if (!subgroupOverlay.open) return;
+      if (overlayStackRef.current.length) {
+        closeSubgroupOverlay();
+        return;
+      }
       const confirm = subgroupOverlay.closeConfirm;
       if (confirm && openConfirmDialogResolved) {
         const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
@@ -2739,10 +3155,31 @@ const FormView: React.FC<FormViewProps> = ({
       }
       closeSubgroupOverlay();
     },
-    [closeSubgroupOverlay, language, onDiagnostic, openConfirmDialogResolved, subgroupOverlay.closeConfirm, subgroupOverlay.open, subgroupOverlay.subKey]
+    [
+      closeSubgroupOverlay,
+      language,
+      onDiagnostic,
+      openConfirmDialogResolved,
+      subgroupOverlay.closeConfirm,
+      subgroupOverlay.open,
+      subgroupOverlay.subKey
+    ]
   );
 
   const closeLineItemGroupOverlay = useCallback(() => {
+    const previous = overlayStackRef.current.pop();
+    if (previous) {
+      if (previous.kind === 'subgroup') {
+        setLineItemGroupOverlay({ open: false });
+        setSubgroupOverlay({ ...previous.state, open: true });
+      } else {
+        setSubgroupOverlay({ open: false });
+        setLineItemGroupOverlay({ ...previous.state, open: true });
+      }
+      onDiagnostic?.('overlay.stack.restore', { source: 'lineItem.close', kind: previous.kind });
+      return;
+    }
+    overlayStackRef.current = [];
     setLineItemGroupOverlay({ open: false });
     onDiagnostic?.('lineItemGroup.overlay.close');
   }, [onDiagnostic]);
@@ -2780,6 +3217,36 @@ const FormView: React.FC<FormViewProps> = ({
   const attemptCloseLineItemGroupOverlay = useCallback(
     (source: 'button' | 'escape') => {
       if (!lineItemGroupOverlay.open) return;
+      if (source === 'button' && overlayDetailSelection?.mode === 'edit') {
+        const overlayGroupId = lineItemGroupOverlay.groupId || '';
+        if (overlayGroupId && overlayDetailSelection.groupId === overlayGroupId) {
+          const groupCfg = resolveLineItemGroupForKey(overlayGroupId);
+          const overlayDetail = (groupCfg?.lineItemConfig as any)?.ui?.overlayDetail as any;
+          const overlayDetailViewMode = (overlayDetail?.body?.view?.mode || 'html').toString().trim().toLowerCase();
+          const overlayDetailHasViewTemplate = !!overlayDetail?.body?.view?.templateId;
+          const overlayDetailCanView = overlayDetailViewMode === 'html' && overlayDetailHasViewTemplate;
+          if (overlayDetailCanView) {
+            setOverlayDetailSelection({
+              groupId: overlayDetailSelection.groupId,
+              rowId: overlayDetailSelection.rowId,
+              mode: 'view'
+            });
+            onDiagnostic?.('lineItems.overlayDetail.action', {
+              groupId: overlayDetailSelection.groupId,
+              rowId: overlayDetailSelection.rowId,
+              actionId: 'view',
+              mode: 'view',
+              source: 'overlayClose'
+            });
+            return;
+          }
+        }
+      }
+      if (overlayStackRef.current.length) {
+        closeLineItemGroupOverlay();
+        setErrors(prev => clearLineItemGroupErrors(prev, lineItemGroupOverlay.groupId || ''));
+        return;
+      }
       const nextErrors = validateLineItemGroupOverlay();
       if (!nextErrors || Object.keys(nextErrors).length === 0) {
         const confirm = lineItemGroupOverlay.closeConfirm;
@@ -2822,7 +3289,17 @@ const FormView: React.FC<FormViewProps> = ({
         errorCount: Object.keys(nextErrors).length
       });
     },
-    [closeLineItemGroupOverlay, lineItemGroupOverlay.groupId, lineItemGroupOverlay.open, onDiagnostic, setErrors, validateLineItemGroupOverlay]
+    [
+      closeLineItemGroupOverlay,
+      lineItemGroupOverlay.groupId,
+      lineItemGroupOverlay.open,
+      onDiagnostic,
+      overlayDetailSelection,
+      resolveLineItemGroupForKey,
+      setErrors,
+      setOverlayDetailSelection,
+      validateLineItemGroupOverlay
+    ]
   );
 
   const openSubgroupOverlay = useCallback(
@@ -2853,6 +3330,16 @@ const FormView: React.FC<FormViewProps> = ({
       // Close multi-add overlay if open to avoid stacking confusion.
       if (overlay.open) {
         setOverlay({ open: false, options: [], selected: [] });
+      }
+      overlayDetailHeaderCompleteRef.current.clear();
+      const shouldPushSubgroup = subgroupOverlay.open && subgroupOverlay.subKey && subgroupOverlay.subKey !== subKey;
+      if (lineItemGroupOverlay.open) {
+        overlayStackRef.current.push({ kind: 'lineItem', state: { ...lineItemGroupOverlay } });
+        setLineItemGroupOverlay({ open: false });
+        onDiagnostic?.('overlay.stack.push', { source: 'openSubgroupOverlay', kind: 'lineItem' });
+      } else if (shouldPushSubgroup) {
+        overlayStackRef.current.push({ kind: 'subgroup', state: { ...subgroupOverlay } });
+        onDiagnostic?.('overlay.stack.push', { source: 'openSubgroupOverlay', kind: 'subgroup' });
       }
       const rowFilter = options?.rowFilter || null;
       const groupOverride = options?.groupOverride;
@@ -2890,7 +3377,7 @@ const FormView: React.FC<FormViewProps> = ({
         onDiagnostic?.('form.overlay.closeButton.hidden', { scope: 'subgroup', source });
       }
     },
-    [onDiagnostic, overlay.open]
+    [language, lineItemGroupOverlay, onDiagnostic, overlay.open, subgroupOverlay]
   );
 
   const openLineItemGroupOverlay = useCallback(
@@ -2919,9 +3406,16 @@ const FormView: React.FC<FormViewProps> = ({
       if (overlay.open) {
         setOverlay({ open: false, options: [], selected: [] });
       }
+      overlayDetailHeaderCompleteRef.current.clear();
       // Avoid stacking full-page overlays.
       if (subgroupOverlay.open) {
+        overlayStackRef.current.push({ kind: 'subgroup', state: { ...subgroupOverlay } });
+        onDiagnostic?.('overlay.stack.push', { source: 'openLineItemGroupOverlay', kind: 'subgroup' });
         setSubgroupOverlay({ open: false });
+      }
+      if (lineItemGroupOverlay.open && lineItemGroupOverlay.groupId && lineItemGroupOverlay.groupId !== id) {
+        overlayStackRef.current.push({ kind: 'lineItem', state: { ...lineItemGroupOverlay } });
+        onDiagnostic?.('overlay.stack.push', { source: 'openLineItemGroupOverlay', kind: 'lineItem' });
       }
       const group = typeof groupOrId === 'string' ? undefined : (groupOrId as WebQuestionDefinition);
       const rowFilter = options?.rowFilter || null;
@@ -2958,7 +3452,7 @@ const FormView: React.FC<FormViewProps> = ({
         onDiagnostic?.('form.overlay.closeButton.hidden', { scope: 'lineItemGroup', source });
       }
     },
-    [onDiagnostic, overlay.open, subgroupOverlay.open]
+    [language, lineItemGroupOverlay, onDiagnostic, overlay.open, subgroupOverlay]
   );
 
   const buildOverlayGroupOverride = (
@@ -4089,7 +4583,33 @@ const FormView: React.FC<FormViewProps> = ({
     [lineItems, subgroupSelectors, values]
   );
 
-  const addLineItemRow = (groupId: string, preset?: Record<string, any>, rowIdOverride?: string) => {
+  const addLineItemRow = (
+    groupId: string,
+    preset?: Record<string, any>,
+    rowIdOverride?: string,
+    options?: { configOverride?: any }
+  ) => {
+    const applyLineDefaults = (fields: any[], rowValues: Record<string, FieldValue>): Record<string, FieldValue> => {
+      if (!Array.isArray(fields) || !fields.length) return rowValues;
+      const nextValues = { ...rowValues };
+      fields.forEach(field => {
+        if (!field || field.defaultValue === undefined) return;
+        if (Object.prototype.hasOwnProperty.call(nextValues, field.id)) return;
+        const hasAnyOption =
+          Array.isArray(field.options) ? field.options.length > 0 : !!(field.optionsEn?.length || field.optionsFr?.length || field.optionsNl?.length);
+        const coerced = coerceDefaultValue({
+          type: (field.type || '').toString(),
+          raw: field.defaultValue,
+          hasAnyOption,
+          hasDataSource: !!field.dataSource
+        });
+        if (coerced !== undefined) {
+          nextValues[field.id] = coerced;
+        }
+      });
+      return nextValues;
+    };
+
     setLineItems(prev => {
       const subgroupInfo = parseSubgroupKey(groupId);
       const subgroupDefs = subgroupInfo ? resolveSubgroupDefs(groupId) : null;
@@ -4097,34 +4617,44 @@ const FormView: React.FC<FormViewProps> = ({
       const parentDef = subgroupInfo ? subgroupDefs?.parent : undefined;
       const rootDef = subgroupInfo ? subgroupDefs?.root : undefined;
       const subDef = subgroupInfo ? subgroupDefs?.sub : undefined;
+      const baseConfig = subgroupInfo ? subDef : groupDef?.lineItemConfig;
+      const effectiveConfig = options?.configOverride || baseConfig;
       const current = prev[groupId] || [];
 
       // resolve selector for top-level or subgroup
       let selectorId: string | undefined;
       let selectorValue: FieldValue | undefined;
       if (subgroupInfo) {
-        selectorId = subDef?.sectionSelector?.id;
+        selectorId = effectiveConfig?.sectionSelector?.id;
         selectorValue = subgroupSelectors[groupId];
       } else {
-        selectorId = groupDef?.lineItemConfig?.sectionSelector?.id;
+        selectorId = effectiveConfig?.sectionSelector?.id;
         selectorValue = selectorId && values.hasOwnProperty(selectorId) ? (values[selectorId] as FieldValue) : undefined;
       }
 
-      const rowValues: Record<string, FieldValue> = sanitizePreset(preset);
-      if (selectorId && selectorValue !== undefined && selectorValue !== null && rowValues[selectorId] === undefined) {
-        rowValues[selectorId] = selectorValue;
+      const rowValuesBase: Record<string, FieldValue> = sanitizePreset(preset);
+      if (selectorId && selectorValue !== undefined && selectorValue !== null && rowValuesBase[selectorId] === undefined) {
+        rowValuesBase[selectorId] = selectorValue;
       }
+      const rowValues = applyLineDefaults(effectiveConfig?.fields || [], rowValuesBase);
       const rowIdPrefix = subgroupInfo?.subGroupId || groupId;
       const rowId = rowIdOverride || `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`;
-      const groupForNonMatch: WebQuestionDefinition | undefined = subgroupInfo
-        ? subDef
+      const baseGroupForNonMatch: WebQuestionDefinition | undefined = subgroupInfo
+        ? effectiveConfig
           ? ({
               ...(rootDef as any),
               id: groupId,
-              lineItemConfig: { ...(subDef as any), fields: subDef.fields || [], subGroups: [] }
+              lineItemConfig: { ...(effectiveConfig as any), fields: effectiveConfig.fields || [], subGroups: [] }
             } as WebQuestionDefinition)
           : undefined
         : groupDef;
+      const groupForNonMatch: WebQuestionDefinition | undefined =
+        !subgroupInfo && effectiveConfig && groupDef
+          ? ({
+              ...(groupDef as any),
+              lineItemConfig: { ...(effectiveConfig as any), fields: effectiveConfig.fields || [] }
+            } as WebQuestionDefinition)
+          : baseGroupForNonMatch;
       if (groupForNonMatch?.lineItemConfig?.fields?.length) {
         const nonMatchKeys = computeRowNonMatchKeys({
           group: groupForNonMatch,
@@ -4147,7 +4677,18 @@ const FormView: React.FC<FormViewProps> = ({
         parentGroupId: subgroupInfo?.parentGroupKey
       };
       const nextWithRow = { ...prev, [groupId]: [row, ...current] };
-      const nextLineItems = groupDef ? seedSubgroupDefaults(nextWithRow, groupDef, row.id) : nextWithRow;
+      const groupDefForDefaults =
+        !subgroupInfo && groupDef && effectiveConfig
+          ? ({
+              ...(groupDef as any),
+              lineItemConfig: {
+                ...(effectiveConfig as any),
+                fields: effectiveConfig.fields || [],
+                subGroups: effectiveConfig.subGroups || []
+              }
+            } as WebQuestionDefinition)
+          : groupDef;
+      const nextLineItems = groupDefForDefaults ? seedSubgroupDefaults(nextWithRow, groupDefForDefaults, row.id) : nextWithRow;
       const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
         mode: 'init'
       });
@@ -4329,7 +4870,7 @@ const FormView: React.FC<FormViewProps> = ({
     const anchor = `${groupId}__${rowId}`;
     onDiagnostic?.('ui.addRow.manual', { groupId, rowId, anchor, presetKeys: preset ? Object.keys(preset).slice(0, 10) : [] });
     setPendingScrollAnchor(anchor);
-    addLineItemRow(groupId, { ...(preset || {}), [ROW_SOURCE_KEY]: 'manual' }, rowId);
+    addLineItemRow(groupId, { ...(preset || {}), [ROW_SOURCE_KEY]: 'manual' }, rowId, { configOverride: effectiveConfig });
   };
 
   useEffect(() => {
@@ -4359,7 +4900,7 @@ const FormView: React.FC<FormViewProps> = ({
       addCount
     });
     for (let i = 0; i < addCount; i += 1) {
-      addLineItemRow(group.id);
+      addLineItemRow(group.id, undefined, undefined, { configOverride: groupCfg });
     }
   }, [
     addLineItemRow,
@@ -4402,7 +4943,7 @@ const FormView: React.FC<FormViewProps> = ({
       addCount
     });
     for (let i = 0; i < addCount; i += 1) {
-      addLineItemRow(subKey);
+      addLineItemRow(subKey, undefined, undefined, { configOverride: subConfig });
     }
   }, [
     addLineItemRow,
@@ -4569,7 +5110,7 @@ const FormView: React.FC<FormViewProps> = ({
     });
     setValues(nextValues);
     setLineItems(recomputed);
-    runSelectionEffectsForAncestorRows(groupId, prevLineItems, recomputed);
+    runSelectionEffectsForAncestorRows(groupId, prevLineItems, recomputed, { mode: 'init', topValues: nextValues });
   };
 
   const clearSelectionEffectsForRow = (groupQuestion: WebQuestionDefinition, row: LineItemRowState) => {
@@ -5022,6 +5563,34 @@ const FormView: React.FC<FormViewProps> = ({
     onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue: value });
     clearOverlayOpenActionSuppression(q.id);
     if (onStatusClear) onStatusClear();
+    if (
+      q.clearOnChange === true &&
+      !isEmptyValue(values[q.id]) &&
+      !isEmptyValue(value) &&
+      !areFieldValuesEqual(values[q.id], value)
+    ) {
+      const cleared = applyClearOnChange({
+        definition,
+        values,
+        lineItems,
+        fieldId: q.id,
+        nextValue: value
+      });
+      onDiagnostic?.('field.clearOnChange', {
+        fieldId: q.id,
+        clearedFieldCount: cleared.clearedFieldIds.length,
+        clearedGroupCount: cleared.clearedGroupKeys.length
+      });
+      setValues(cleared.values);
+      setLineItems(cleared.lineItems);
+      valuesRef.current = cleared.values;
+      lineItemsRef.current = cleared.lineItems;
+      setErrors({});
+      if (onSelectionEffect) {
+        onSelectionEffect(q, value);
+      }
+      return;
+    }
     const baseValues = { ...values, [q.id]: value };
     const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(definition, baseValues, lineItems, {
       mode: 'change',
@@ -5031,6 +5600,8 @@ const FormView: React.FC<FormViewProps> = ({
     if (nextLineItems !== lineItems) {
       setLineItems(nextLineItems);
     }
+    valuesRef.current = nextValues;
+    lineItemsRef.current = nextLineItems;
     setErrors(prev => {
       const next = { ...prev };
       delete next[q.id];
@@ -5041,119 +5612,23 @@ const FormView: React.FC<FormViewProps> = ({
     }
   };
 
-  const runSelectionEffectsForAncestorRows = (
+  function runSelectionEffectsForAncestorRows(
     sourceGroupKey: string,
     prevLineItems: LineItemState,
-    nextLineItems: LineItemState
-  ) => {
+    nextLineItems: LineItemState,
+    options?: { mode?: 'init' | 'change' | 'blur'; topValues?: Record<string, FieldValue> }
+  ) {
     if (!onSelectionEffect) return;
-
-    const areFieldValuesEqual = (a: FieldValue, b: FieldValue): boolean => {
-      if (a === b) return true;
-      if (Array.isArray(a) || Array.isArray(b)) {
-        const arrA = Array.isArray(a) ? a : [];
-        const arrB = Array.isArray(b) ? b : [];
-        if (arrA.length !== arrB.length) return false;
-        return arrA.every((val, idx) => val === arrB[idx]);
-      }
-      if (typeof a === 'object' || typeof b === 'object') {
-        try {
-          return JSON.stringify(a) === JSON.stringify(b);
-        } catch (_) {
-          return false;
-        }
-      }
-      return false;
-    };
-
-    const buildSelectionEffectRowValuesForKey = (groupKey: string, targetRowId: string): Record<string, FieldValue> => {
-      const rows = nextLineItems[groupKey] || [];
-      const row = rows.find(r => r.id === targetRowId);
-      const merged: Record<string, FieldValue> = { ...(row?.values || {}) };
-      const mergeMissing = (source?: Record<string, FieldValue>) => {
-        if (!source) return;
-        Object.entries(source).forEach(([key, val]) => {
-          if (Object.prototype.hasOwnProperty.call(merged, key)) return;
-          merged[key] = val;
-        });
-      };
-      let currentKey = groupKey;
-      let info = parseSubgroupKey(currentKey);
-      while (info) {
-        const currentInfo = info;
-        const parentRows = nextLineItems[currentInfo.parentGroupKey] || [];
-        const parentRow = parentRows.find(r => r.id === currentInfo.parentRowId);
-        mergeMissing((parentRow?.values || {}) as Record<string, FieldValue>);
-        currentKey = currentInfo.parentGroupKey;
-        info = parseSubgroupKey(currentKey);
-      }
-      return merged;
-    };
-
-    const resolveEffectFieldsForGroupKey = (groupKey: string): any[] => {
-      const parsed = parseSubgroupKey(groupKey);
-      if (!parsed) {
-        const root = definition.questions.find(q => q.id === groupKey);
-        return (root?.lineItemConfig?.fields || []) as any[];
-      }
-      const defs = resolveSubgroupDefs(groupKey);
-      return (defs?.sub?.fields || []) as any[];
-    };
-
-    const runSelectionEffectsForRow = (groupKey: string, targetRowId: string) => {
-      const prevRows = prevLineItems[groupKey] || [];
-      const nextRows = nextLineItems[groupKey] || [];
-      const prevRow = prevRows.find(r => r.id === targetRowId);
-      const nextRow = nextRows.find(r => r.id === targetRowId);
-      if (!nextRow) return;
-      const groupFields = resolveEffectFieldsForGroupKey(groupKey);
-      const effectFields = groupFields.filter(hasSelectionEffects);
-      if (!effectFields.length) return;
-      const prevComputed = prevRow
-        ? applyValueMapsToLineRow(groupFields, prevRow.values || {}, values, { mode: 'init' }, {
-            groupKey,
-            rowId: targetRowId,
-            lineItems: prevLineItems
-          })
-        : {};
-      const nextComputed = nextRow
-        ? applyValueMapsToLineRow(groupFields, nextRow.values || {}, values, { mode: 'init' }, {
-            groupKey,
-            rowId: targetRowId,
-            lineItems: nextLineItems
-          })
-        : {};
-      const rowValues = {
-        ...buildSelectionEffectRowValuesForKey(groupKey, targetRowId),
-        ...nextComputed
-      };
-      effectFields.forEach(effectField => {
-        const prevValue = (prevComputed as Record<string, FieldValue>)[effectField.id];
-        const nextValue = (nextComputed as Record<string, FieldValue>)[effectField.id];
-        if (areFieldValuesEqual(prevValue, nextValue)) return;
-        const contextId = buildLineContextId(groupKey, targetRowId, effectField.id);
-        const effectQuestion = effectField as unknown as WebQuestionDefinition;
-        onSelectionEffect(effectQuestion, nextValue ?? null, {
-          contextId,
-          lineItem: { groupId: groupKey, rowId: targetRowId, rowValues },
-          forceContextReset: true
-        });
-      });
-    };
-
-    const subgroupInfo = parseSubgroupKey(sourceGroupKey);
-    if (subgroupInfo?.parentGroupKey && subgroupInfo.parentRowId) {
-      let currentKey = subgroupInfo.parentGroupKey;
-      let currentRowId = subgroupInfo.parentRowId;
-      while (currentKey && currentRowId) {
-        runSelectionEffectsForRow(currentKey, currentRowId);
-        const nextInfo = parseSubgroupKey(currentKey);
-        if (!nextInfo?.parentGroupKey || !nextInfo.parentRowId) break;
-        currentKey = nextInfo.parentGroupKey;
-        currentRowId = nextInfo.parentRowId;
-      }
-    }
-  };
+    runSelectionEffectsForAncestors({
+      definition,
+      values,
+      onSelectionEffect,
+      sourceGroupKey,
+      prevLineItems,
+      nextLineItems,
+      options
+    });
+  }
 
   const handleLineFieldChange = (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => {
     if (submitting) return;
@@ -5294,65 +5769,19 @@ const FormView: React.FC<FormViewProps> = ({
     const syncedLineItems = finalLineItems;
     setLineItems(syncedLineItems);
     setValues(nextValues);
+    valuesRef.current = nextValues;
+    lineItemsRef.current = syncedLineItems;
     const updatedRow = (syncedLineItems[group.id] || []).find(r => r.id === rowId);
     const updatedRowValues = ((updatedRow?.values || nextRowValues) as Record<string, FieldValue>) || nextRowValues;
-    const overlayTarget =
-      lineItemGroupOverlay.open &&
-      lineItemGroupOverlay.groupId === group.id &&
-      lineItemGroupOverlay.source === 'overlayOpenAction'
-        ? {
-            groupKey: lineItemGroupOverlay.groupId,
-            rowFilter: lineItemGroupOverlay.rowFilter || null,
-            groupCfg: group.lineItemConfig
-          }
-        : subgroupOverlay.open && subgroupOverlay.subKey === group.id && subgroupOverlay.source === 'overlayOpenAction'
-          ? {
-              groupKey: subgroupOverlay.subKey,
-              rowFilter: subgroupOverlay.rowFilter || null,
-              groupCfg: group.lineItemConfig
-            }
-          : null;
-    if (overlayTarget?.groupCfg) {
-      const overlayDetail = (overlayTarget.groupCfg as any)?.ui?.overlayDetail as any;
-      const overlayDetailEnabled = !!overlayDetail?.enabled && !!overlayDetail?.body?.subGroupId;
-      if (overlayDetailEnabled) {
-        const isIncluded = overlayTarget.rowFilter
-          ? matchesOverlayRowFilter(updatedRowValues, overlayTarget.rowFilter)
-          : true;
-        if (isIncluded) {
-          const groupCtx: VisibilityContext = {
-            getValue: fid => (nextValues as any)[fid],
-            getLineValue: (_rowId, fid) => (updatedRowValues as any)[fid],
-            getLineItems: groupId => syncedLineItems[groupId] || [],
-            getLineItemKeys: () => Object.keys(syncedLineItems)
-          };
-          const headerFields = resolveOverlayHeaderFields(overlayTarget.groupCfg, overlayDetail);
-          const headerComplete = areOverlayHeaderFieldsComplete({
-            fields: headerFields,
-            rowValues: updatedRowValues,
-            ctx: groupCtx,
-            rowId,
-            linePrefix: group.id
-          });
-          if (headerComplete) {
-            const overlayDetailViewMode = (overlayDetail?.body?.view?.mode || 'html').toString().trim().toLowerCase();
-            const overlayDetailHasViewTemplate = !!overlayDetail?.body?.view?.templateId;
-            const overlayDetailCanView = overlayDetailViewMode === 'html' && overlayDetailHasViewTemplate;
-            const mode: 'view' | 'edit' = overlayDetailCanView ? 'view' : 'edit';
-            setOverlayDetailSelection(prev => {
-              if (prev && prev.groupId === overlayTarget.groupKey && prev.rowId === rowId && prev.mode === mode) return prev;
-              return { groupId: overlayTarget.groupKey, rowId, mode };
-            });
-            onDiagnostic?.('lineItems.overlayDetail.autoOpen', {
-              groupId: overlayTarget.groupKey,
-              rowId,
-              mode,
-              source: 'headerComplete'
-            });
-          }
-        }
-      }
-    }
+    attemptOverlayDetailAutoOpen({
+      group,
+      rowId,
+      rowValues: updatedRowValues,
+      nextValues,
+      nextLineItems: syncedLineItems,
+      triggerFieldId: (field?.id || '').toString(),
+      source: 'change'
+    });
     setErrors(prev => {
       const next = { ...prev };
       delete next[group.id];
@@ -5421,7 +5850,7 @@ const FormView: React.FC<FormViewProps> = ({
         });
       }
 
-      runSelectionEffectsForAncestorRows(group.id, lineItems, syncedLineItems);
+      runSelectionEffectsForAncestorRows(group.id, lineItems, syncedLineItems, { mode: 'change', topValues: nextValues });
     }
   };
 
@@ -5960,7 +6389,7 @@ const FormView: React.FC<FormViewProps> = ({
         });
         setValues(nextValues);
         setLineItems(recomputed);
-        runSelectionEffectsForAncestorRows(groupKey, prevLineItems, recomputed);
+        runSelectionEffectsForAncestorRows(groupKey, prevLineItems, recomputed, { mode: 'init', topValues: nextValues });
         if (!hasResetValue) {
           suppressOverlayOpenAction(q.id);
         }
@@ -7480,13 +7909,15 @@ const FormView: React.FC<FormViewProps> = ({
     const showOverlayDetailViewInHeader =
       overlayDetailCanView && overlayDetailViewPlacement !== 'hidden' && overlayDetailViewPlacement !== 'body';
     const showOverlayDetailEditInHeader = overlayDetailEditPlacement !== 'hidden' && overlayDetailEditPlacement !== 'body';
+    const overlayDetailHeaderExplicit = Array.isArray(overlayDetail?.header?.tableColumns);
     const overlayDetailHeaderColumns = (() => {
       if (!overlayDetailEnabled || !subConfig) return [];
-      const raw = Array.isArray(overlayDetail?.header?.tableColumns) ? overlayDetail.header.tableColumns : [];
+      const raw = overlayDetailHeaderExplicit ? overlayDetail.header.tableColumns : [];
       const fallback = Array.isArray((subUi as any)?.tableColumns) ? (subUi as any).tableColumns : [];
       const ids = raw
         .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
         .filter(Boolean);
+      if (overlayDetailHeaderExplicit && !ids.length) return [];
       const fallbackIds = fallback
         .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
         .filter(Boolean);
@@ -7494,6 +7925,7 @@ const FormView: React.FC<FormViewProps> = ({
       const finalIds = ids.length ? ids : fallbackIds.length ? fallbackIds : fields.map(f => f.id);
       return finalIds.map((id: string) => fields.find((f: LineItemFieldConfig) => f.id === id)).filter(Boolean);
     })();
+    const overlayDetailHeaderHidden = overlayDetailHeaderExplicit && overlayDetail.header.tableColumns.length === 0;
     const overlayDetailHeaderWidths = overlayDetail?.header?.tableColumnWidths || (subUi as any)?.tableColumnWidths;
     const resolveOverlayDetailHeaderStyle = (columnId: string): React.CSSProperties | undefined => {
       if (!overlayDetailHeaderWidths || typeof overlayDetailHeaderWidths !== 'object' || Array.isArray(overlayDetailHeaderWidths)) return undefined;
@@ -7770,7 +8202,7 @@ const FormView: React.FC<FormViewProps> = ({
           >
             <div />
             <div style={{ textAlign: 'center' }}>
-              {overlayContextHeader ? <div>{overlayContextHeader}</div> : null}
+              {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
               {overlayHeaderLabel ? <div>{overlayHeaderLabel}</div> : null}
               <div style={srOnly}>{subLabel}</div>
             </div>
@@ -8003,7 +8435,9 @@ const FormView: React.FC<FormViewProps> = ({
           ) : overlayDetailEnabled ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 6px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {(() => {
+                {overlayDetailHeaderHidden
+                  ? null
+                  : (() => {
                   const placement = (overlayDetail?.header?.addButtonPlacement || 'top').toString().trim().toLowerCase();
                   const showTop = placement === 'top' || placement === 'both';
                   const showBottom = placement === 'bottom' || placement === 'both';
@@ -9808,13 +10242,15 @@ const FormView: React.FC<FormViewProps> = ({
     const showOverlayDetailViewInHeader =
       overlayDetailCanView && overlayDetailViewPlacement !== 'hidden' && overlayDetailViewPlacement !== 'body';
     const showOverlayDetailEditInHeader = overlayDetailEditPlacement !== 'hidden' && overlayDetailEditPlacement !== 'body';
+    const overlayDetailHeaderExplicit = Array.isArray(overlayDetail?.header?.tableColumns);
     const overlayDetailHeaderColumns = (() => {
       if (!overlayDetailEnabled || !groupCfg) return [];
-      const raw = Array.isArray(overlayDetail?.header?.tableColumns) ? overlayDetail.header.tableColumns : [];
+      const raw = overlayDetailHeaderExplicit ? overlayDetail.header.tableColumns : [];
       const fallback = Array.isArray((groupCfg as any)?.ui?.tableColumns) ? (groupCfg as any).ui.tableColumns : [];
       const ids = raw
         .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
         .filter(Boolean);
+      if (overlayDetailHeaderExplicit && !ids.length) return [];
       const fallbackIds = fallback
         .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
         .filter(Boolean);
@@ -9822,6 +10258,7 @@ const FormView: React.FC<FormViewProps> = ({
       const finalIds = ids.length ? ids : fallbackIds.length ? fallbackIds : fields.map(f => f.id);
       return finalIds.map((id: string) => fields.find((f: LineItemFieldConfig) => f.id === id)).filter(Boolean);
     })();
+    const overlayDetailHeaderHidden = overlayDetailHeaderExplicit && overlayDetail.header.tableColumns.length === 0;
     const overlayDetailHeaderWidths = overlayDetail?.header?.tableColumnWidths || (groupCfg as any)?.ui?.tableColumnWidths;
     const resolveOverlayDetailHeaderStyle = (columnId: string): React.CSSProperties | undefined => {
       if (!overlayDetailHeaderWidths || typeof overlayDetailHeaderWidths !== 'object' || Array.isArray(overlayDetailHeaderWidths)) return undefined;
@@ -10018,7 +10455,7 @@ const FormView: React.FC<FormViewProps> = ({
           >
             <div />
             <div style={{ textAlign: 'center' }}>
-              {overlayContextHeader ? <div>{overlayContextHeader}</div> : null}
+              {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
               {overlayHeaderLabel ? <div>{overlayHeaderLabel}</div> : null}
               <div style={srOnly}>{title}</div>
             </div>
@@ -10190,117 +10627,119 @@ const FormView: React.FC<FormViewProps> = ({
             {overlayDetailEnabled ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 6px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {(() => {
-                    const placement = (overlayDetail?.header?.addButtonPlacement || 'top').toString().trim().toLowerCase();
-                    const showTop = placement === 'top' || placement === 'both';
-                    const showBottom = placement === 'bottom' || placement === 'both';
-                    const headerFields = overlayDetailHeaderColumns.length
-                      ? overlayDetailHeaderColumns
-                      : ((groupCfg?.fields || []) as any[]);
-                    const headerColumns = [
-                      ...headerFields.map((field: any) => ({
-                        id: field.id,
-                        label: resolveFieldLabel(field, language, field.id),
-                        style: resolveOverlayDetailHeaderStyle(field.id),
-                        renderCell: (row: LineItemRowState) => {
-                          const raw = row?.values?.[field.id];
-                          if (raw === undefined || raw === null || raw === '') return '—';
-                          if (field.type === 'FILE_UPLOAD') {
-                            const items = toUploadItems(raw);
-                            return items.length ? `${items.length}` : '—';
-                          }
-                          if (Array.isArray(raw)) return raw.join(', ');
-                          if (field.type === 'DATE') return toDateInputValue(raw) || raw.toString();
-                          return raw.toString();
-                        }
-                      })),
-                      ...(() => {
-                        const actionButtonStyle: React.CSSProperties = {
-                          ...buttonStyles.secondary,
-                          padding: 6,
-                          minHeight: 36,
-                          minWidth: 36,
-                          width: '100%'
-                        };
-                        const actionColumns: Array<any> = [];
-                        if (showOverlayDetailViewInHeader) {
-                          actionColumns.push({
-                            id: '__view',
-                            label: <span style={srOnly}>{overlayDetailViewLabel}</span>,
-                            style: resolveOverlayDetailHeaderStyle('__view'),
-                            renderCell: (row: LineItemRowState) => (
-                              <button
-                                type="button"
-                                aria-label={overlayDetailViewLabel}
-                                style={actionButtonStyle}
-                                onClick={() => {
-                                  setOverlayDetailSelection({ groupId, rowId: row.id, mode: 'view' });
-                                  onDiagnostic?.('lineItems.overlayDetail.select', { groupId, rowId: row.id, mode: 'view' });
-                                }}
-                              >
-                                <EyeIcon size={40} />
-                              </button>
-                            )
-                          });
-                        }
-                        if (showOverlayDetailEditInHeader) {
-                          actionColumns.push({
-                            id: '__edit',
-                            label: <span style={srOnly}>{overlayDetailEditLabel}</span>,
-                            style: resolveOverlayDetailHeaderStyle('__edit'),
-                            renderCell: (row: LineItemRowState) => (
-                              <button
-                                type="button"
-                                aria-label={overlayDetailEditLabel}
-                                style={actionButtonStyle}
-                                onClick={() => {
-                                  setOverlayDetailSelection({ groupId, rowId: row.id, mode: 'edit' });
-                                  onDiagnostic?.('lineItems.overlayDetail.select', { groupId, rowId: row.id, mode: 'edit' });
-                                }}
-                              >
-                                <PencilIcon size={40} />
-                              </button>
-                            )
-                          });
-                        }
-                        actionColumns.push({
-                          id: '__remove',
-                          label: <span style={srOnly}>{tSystem('lineItems.remove', language, 'Remove')}</span>,
-                          style: resolveOverlayDetailHeaderStyle('__remove'),
-                          renderCell: (row: LineItemRowState) => {
-                            const rowValues = row?.values || {};
-                            const rowSource = parseRowSource((rowValues as any)?.[ROW_SOURCE_KEY]);
-                            const hideRemoveButton = parseRowHideRemove((rowValues as any)?.[ROW_HIDE_REMOVE_KEY]);
-                            const allowRemoveAuto = (groupCfg?.ui as any)?.allowRemoveAutoRows !== false;
-                            const canRemove = !hideRemoveButton && (rowSource !== 'auto' || allowRemoveAuto);
-                            if (!canRemove) return null;
-                            return (
-                              <button
-                                type="button"
-                                aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                                style={actionButtonStyle}
-                                onClick={() => removeLineRow(groupId, row.id)}
-                              >
-                                <TrashIcon size={40} />
-                              </button>
-                            );
-                          }
-                        });
-                        return actionColumns;
-                      })()
-                    ];
-                    return (
-                      <div>
-                        {showTop ? <div style={{ marginBottom: 8 }}>{renderAddButton()}</div> : null}
-                        <LineItemTable
-                          columns={headerColumns}
-                          rows={rows}
-                          emptyText={tSystem('lineItems.empty', language, 'No items yet.')}
-                        />
-                        {showBottom ? <div style={{ marginTop: 8 }}>{renderAddButton()}</div> : null}
-                      </div>
-                    );
-                  })()}
+                  {overlayDetailHeaderHidden
+                    ? null
+                    : (() => {
+                        const placement = (overlayDetail?.header?.addButtonPlacement || 'top').toString().trim().toLowerCase();
+                        const showTop = placement === 'top' || placement === 'both';
+                        const showBottom = placement === 'bottom' || placement === 'both';
+                        const headerFields = overlayDetailHeaderColumns.length
+                          ? overlayDetailHeaderColumns
+                          : ((groupCfg?.fields || []) as any[]);
+                        const headerColumns = [
+                          ...headerFields.map((field: any) => ({
+                            id: field.id,
+                            label: resolveFieldLabel(field, language, field.id),
+                            style: resolveOverlayDetailHeaderStyle(field.id),
+                            renderCell: (row: LineItemRowState) => {
+                              const raw = row?.values?.[field.id];
+                              if (raw === undefined || raw === null || raw === '') return '—';
+                              if (field.type === 'FILE_UPLOAD') {
+                                const items = toUploadItems(raw);
+                                return items.length ? `${items.length}` : '—';
+                              }
+                              if (Array.isArray(raw)) return raw.join(', ');
+                              if (field.type === 'DATE') return toDateInputValue(raw) || raw.toString();
+                              return raw.toString();
+                            }
+                          })),
+                          ...(() => {
+                            const actionButtonStyle: React.CSSProperties = {
+                              ...buttonStyles.secondary,
+                              padding: 6,
+                              minHeight: 36,
+                              minWidth: 36,
+                              width: '100%'
+                            };
+                            const actionColumns: Array<any> = [];
+                            if (showOverlayDetailViewInHeader) {
+                              actionColumns.push({
+                                id: '__view',
+                                label: <span style={srOnly}>{overlayDetailViewLabel}</span>,
+                                style: resolveOverlayDetailHeaderStyle('__view'),
+                                renderCell: (row: LineItemRowState) => (
+                                  <button
+                                    type="button"
+                                    aria-label={overlayDetailViewLabel}
+                                    style={actionButtonStyle}
+                                    onClick={() => {
+                                      setOverlayDetailSelection({ groupId, rowId: row.id, mode: 'view' });
+                                      onDiagnostic?.('lineItems.overlayDetail.select', { groupId, rowId: row.id, mode: 'view' });
+                                    }}
+                                  >
+                                    <EyeIcon size={40} />
+                                  </button>
+                                )
+                              });
+                            }
+                            if (showOverlayDetailEditInHeader) {
+                              actionColumns.push({
+                                id: '__edit',
+                                label: <span style={srOnly}>{overlayDetailEditLabel}</span>,
+                                style: resolveOverlayDetailHeaderStyle('__edit'),
+                                renderCell: (row: LineItemRowState) => (
+                                  <button
+                                    type="button"
+                                    aria-label={overlayDetailEditLabel}
+                                    style={actionButtonStyle}
+                                    onClick={() => {
+                                      setOverlayDetailSelection({ groupId, rowId: row.id, mode: 'edit' });
+                                      onDiagnostic?.('lineItems.overlayDetail.select', { groupId, rowId: row.id, mode: 'edit' });
+                                    }}
+                                  >
+                                    <PencilIcon size={40} />
+                                  </button>
+                                )
+                              });
+                            }
+                            actionColumns.push({
+                              id: '__remove',
+                              label: <span style={srOnly}>{tSystem('lineItems.remove', language, 'Remove')}</span>,
+                              style: resolveOverlayDetailHeaderStyle('__remove'),
+                              renderCell: (row: LineItemRowState) => {
+                                const rowValues = row?.values || {};
+                                const rowSource = parseRowSource((rowValues as any)?.[ROW_SOURCE_KEY]);
+                                const hideRemoveButton = parseRowHideRemove((rowValues as any)?.[ROW_HIDE_REMOVE_KEY]);
+                                const allowRemoveAuto = (groupCfg?.ui as any)?.allowRemoveAutoRows !== false;
+                                const canRemove = !hideRemoveButton && (rowSource !== 'auto' || allowRemoveAuto);
+                                if (!canRemove) return null;
+                                return (
+                                  <button
+                                    type="button"
+                                    aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                                    style={actionButtonStyle}
+                                    onClick={() => removeLineRow(groupId, row.id)}
+                                  >
+                                    <TrashIcon size={40} />
+                                  </button>
+                                );
+                              }
+                            });
+                            return actionColumns;
+                          })()
+                        ];
+                        return (
+                          <div>
+                            {showTop ? <div style={{ marginBottom: 8 }}>{renderAddButton()}</div> : null}
+                            <LineItemTable
+                              columns={headerColumns}
+                              rows={rows}
+                              emptyText={tSystem('lineItems.empty', language, 'No items yet.')}
+                            />
+                            {showBottom ? <div style={{ marginTop: 8 }}>{renderAddButton()}</div> : null}
+                          </div>
+                        );
+                      })()}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {overlayDetailBodyPath.length > 1 ? (
@@ -10660,12 +11099,6 @@ const FormView: React.FC<FormViewProps> = ({
     const stepHelpText = stepCfg?.helpText ? resolveLocalizedString(stepCfg.helpText, language, '') : '';
     const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
     const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
-    const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
-    const stepForwardGate = normalizeForwardGate(
-      stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate,
-      guidedDefaultForwardGate
-    );
-    const attempted = Boolean((guidedStepAttempted || {})[activeGuidedStepId]);
 
     const renderTarget = (target: any, keyPrefix: string): React.ReactNode => {
       if (!target || typeof target !== 'object') return null;
@@ -11064,78 +11497,11 @@ const FormView: React.FC<FormViewProps> = ({
     const stepsBarPortal = stepsBarPortalEl ? createPortal(stepsBarNode, stepsBarPortalEl) : null;
     const stepsBarInline = stepsBarPortalEl ? null : stepsBarNode;
 
-    const stepGateNotice = (() => {
-      const explicit = guidedStepGateNotice && guidedStepGateNotice.stepId === activeGuidedStepId ? guidedStepGateNotice : null;
-      if (explicit) return explicit;
-      if (!attempted) return null;
-      const missingComplete = stepStatus?.missingRequiredCount || 0;
-      const missingValid = stepStatus?.missingValidCount || 0;
-      const ruleErrors = stepStatus?.errorCount || 0;
-      const hasValidationIssues = missingValid > 0 || ruleErrors > 0;
-
-      if (stepForwardGate === 'whenComplete' && !stepStatus?.complete) {
-        return {
-          stepId: activeGuidedStepId,
-          tone: 'error' as const,
-          message: tSystem(
-            'steps.completeToContinue',
-            language,
-            'Complete all fields in this step to continue. Missing: {count}',
-            { count: missingComplete }
-          )
-        };
-      }
-
-      if (stepForwardGate === 'whenValid' && !stepStatus?.valid) {
-        return {
-          stepId: activeGuidedStepId,
-          tone: 'error' as const,
-          message: tSystem(
-            'steps.fixErrorsToContinue',
-            language,
-            'Fix the highlighted errors in this step to continue. Issues: {count}',
-            { count: missingValid + ruleErrors }
-          )
-        };
-      }
-
-      // For non-blocking validation (e.g., forwardGate=whenComplete), still surface issues at the step level once attempted.
-      if (hasValidationIssues) {
-        return {
-          stepId: activeGuidedStepId,
-          tone: 'warning' as const,
-          message: tSystem(
-            'steps.validationIssues',
-            language,
-            'This step has validation issues. Issues: {count}',
-            { count: missingValid + ruleErrors }
-          )
-        };
-      }
-      return null;
-    })();
-
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {stepsBarPortal}
         {stepsBarInline}
         <div ref={guidedStepBodyRef} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {stepGateNotice ? (
-            <div
-              role={stepGateNotice.tone === 'error' ? 'alert' : 'status'}
-              style={{
-                padding: '12px 14px',
-                borderRadius: 14,
-                border:
-                  stepGateNotice.tone === 'error' ? '1px solid rgba(239,68,68,0.45)' : '1px solid rgba(245,158,11,0.45)',
-                background: stepGateNotice.tone === 'error' ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.12)',
-                color: '#0f172a',
-                fontWeight: 800
-              }}
-            >
-              {stepGateNotice.message}
-            </div>
-          ) : null}
           {stepHelpText ? (
             <div
               role="note"

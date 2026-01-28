@@ -388,6 +388,34 @@ describe('Dashboard', () => {
     expect(forms[0].submissionConfirmationCancelLabel).toEqual({ en: 'Not yet' });
   });
 
+  test('getForms parses dedup dialog config from dashboard config', () => {
+    const configJson = JSON.stringify({
+      dedupDialog: {
+        title: { EN: 'No duplicates allowed' },
+        intro: { EN: 'Record already exists for:' },
+        outro: { EN: 'What would you like to do?' },
+        changeLabel: { EN: 'Change details' },
+        openLabel: { EN: 'Open existing' }
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].dedupDialog).toEqual({
+      title: { en: 'No duplicates allowed' },
+      intro: { en: 'Record already exists for:' },
+      outro: { en: 'What would you like to do?' },
+      changeLabel: { en: 'Change details' },
+      openLabel: { en: 'Open existing' }
+    });
+  });
+
   test('getForms parses submit button label from dashboard config', () => {
     const configJson = JSON.stringify({
       submitButtonLabel: { EN: 'Send' }
