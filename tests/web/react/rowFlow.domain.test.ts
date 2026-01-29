@@ -152,7 +152,8 @@ describe('rowFlow domain', () => {
               label: { en: 'Edit' },
               groupOverride: { maxRows: 1 },
               rowFlow: { output: { segments: [{ fieldRef: 'PREP_TYPE' }] } },
-              overlayContextHeader: { fields: [{ fieldRef: 'MEAL_TYPE', label: { en: 'Meal {{value}}' } }] }
+              overlayContextHeader: { fields: [{ fieldRef: 'MEAL_TYPE', label: { en: 'Meal {{value}}' } }] },
+              overlayHelperText: { fields: [{ fieldRef: 'MEAL_TYPE', label: { en: 'Helper {{value}}' } }] }
             }
           ]
         }
@@ -188,7 +189,8 @@ describe('rowFlow domain', () => {
       label: { en: 'Edit' },
       groupOverride: { maxRows: 1 },
       rowFlow: { output: { segments: [{ fieldRef: 'PREP_TYPE' }] } },
-      overlayContextHeader: { fields: [{ fieldRef: 'MEAL_TYPE', label: { en: 'Meal {{value}}' } }] }
+      overlayContextHeader: { fields: [{ fieldRef: 'MEAL_TYPE', label: { en: 'Meal {{value}}' } }] },
+      overlayHelperText: { fields: [{ fieldRef: 'MEAL_TYPE', label: { en: 'Helper {{value}}' } }] }
     });
 
     const planWhenNo = resolveRowFlowActionPlan({

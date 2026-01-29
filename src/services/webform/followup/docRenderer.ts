@@ -1,8 +1,56 @@
 import { FollowupConfig, FormConfig, QuestionConfig, TemplateIdMap, WebFormSubmission } from '../../../types';
 import { DataSourceService } from '../dataSources';
 import { debugLog } from '../debug';
-import { renderDocCopyFromTemplate, resolveOutputFolder } from './docRenderer.copy';
+import { renderDocCopyFromTemplate, resolveOutputFolder, resolveRecordFileLabel } from './docRenderer.copy';
 import { exportDocFileToHtml } from './docRenderer.exportHtml';
+import { renderHtmlFromHtmlTemplate } from './htmlRenderer';
+import { buildMealProductionPdfPlaceholders } from './mealProductionPdfContent';
+import { parseBundledHtmlTemplateId } from './bundledHtmlTemplates';
+import { resolveTemplateId } from './recipients';
+
+function isBundledHtmlPdfTemplate(templateId: string | undefined | null): boolean {
+  const key = parseBundledHtmlTemplateId(templateId || '');
+  return Boolean(key && key.toLowerCase().endsWith('.pdf.html'));
+}
+
+function renderHtmlPdfArtifactFromTemplate(args: {
+  ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
+  dataSources: DataSourceService;
+  form: FormConfig;
+  questions: QuestionConfig[];
+  record: WebFormSubmission;
+  templateIdMap: TemplateIdMap;
+  folderId?: string;
+  namePrefix?: string;
+}): { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob } {
+  const { ss, dataSources, form, questions, record, templateIdMap, folderId, namePrefix } = args;
+  try {
+    const placeholders = buildMealProductionPdfPlaceholders({ form, questions, record });
+    const htmlResult = renderHtmlFromHtmlTemplate({
+      dataSources,
+      form,
+      questions,
+      record,
+      templateIdMap,
+      namePrefix,
+      extraPlaceholders: placeholders
+    });
+    if (!htmlResult.success || !htmlResult.html) {
+      return { success: false, message: htmlResult.message || 'Failed to render template.' };
+    }
+    const htmlOutput = HtmlService.createHtmlOutput(htmlResult.html);
+    const pdfBlob = htmlOutput.getAs('application/pdf');
+    const recordLabel = resolveRecordFileLabel(form, record);
+    const copyName = `${namePrefix || form.title || 'Form'} - ${recordLabel || 'Record'}`;
+    pdfBlob.setName(`${copyName}.pdf`);
+    const folder = resolveOutputFolder(ss, folderId, form.followupConfig);
+    const pdfFile = folder.createFile(pdfBlob).setName(`${copyName}.pdf`);
+    return { success: true, url: pdfFile.getUrl(), fileId: pdfFile.getId(), blob: pdfBlob };
+  } catch (err) {
+    debugLog('followup.htmlPdf.failed', { error: err ? err.toString() : 'unknown' });
+    return { success: false, message: 'Failed to generate PDF from HTML template.' };
+  }
+}
 
 /**
  * Google Doc template rendering + artifact generation for follow-up flows.
@@ -25,6 +73,22 @@ export const renderPdfArtifactFromTemplate = (args: {
   namePrefix?: string;
 }): { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob } => {
   const { ss, dataSources, form, questions, record, templateIdMap, folderId, namePrefix } = args;
+  const resolvedTemplateId = resolveTemplateId(templateIdMap, record);
+  if (!resolvedTemplateId) {
+    return { success: false, message: 'No template matched the record values/language.' };
+  }
+  if (isBundledHtmlPdfTemplate(resolvedTemplateId)) {
+    return renderHtmlPdfArtifactFromTemplate({
+      ss,
+      dataSources,
+      form,
+      questions,
+      record,
+      templateIdMap,
+      folderId,
+      namePrefix
+    });
+  }
   try {
     const folder = resolveOutputFolder(ss, folderId, form.followupConfig);
     const rendered = renderDocCopyFromTemplate({
@@ -41,6 +105,7 @@ export const renderPdfArtifactFromTemplate = (args: {
     }
     const pdfBlob = rendered.copy.getAs('application/pdf');
     const copyName = rendered.copyName;
+    pdfBlob.setName(`${copyName}.pdf`);
     const pdfFile = folder.createFile(pdfBlob).setName(`${copyName}.pdf`);
     rendered.copy.setTrashed(true);
     return { success: true, url: pdfFile.getUrl(), fileId: pdfFile.getId(), blob: pdfBlob };

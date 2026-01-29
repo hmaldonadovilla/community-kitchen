@@ -3,6 +3,7 @@ import { shouldHideField, matchesWhenClause } from '../../../../rules/visibility
 import { validateRules } from '../../../../rules/validation';
 import { LineItemState } from '../../../types';
 import { isEmptyValue, isUnsetForStep } from '../../../utils/values';
+import { isUploadValueComplete } from '../../../components/form/utils';
 
 export type GuidedStepStatus = {
   id: string;
@@ -87,7 +88,21 @@ export function computeGuidedStepsStatus(args: {
     let missingComplete = 0;
     let missingValid = 0;
     const raw = (values as any)[q.id] as FieldValue | undefined;
-    if ((q as any).required) {
+    if (q.type === 'FILE_UPLOAD') {
+      const complete = isUploadValueComplete({
+        value: raw as any,
+        uploadConfig: (q as any).uploadConfig,
+        required: !!(q as any).required
+      });
+      if ((q as any).required) {
+        if (!complete) {
+          missingValid += 1;
+          missingComplete += 1;
+        }
+      } else if (!complete) {
+        missingComplete += 1;
+      }
+    } else if ((q as any).required) {
       // Preserve "required checkbox must be checked" semantics.
       if (isEmptyValue(raw as any)) {
         missingValid += 1;

@@ -336,7 +336,7 @@ describe('ConfigSheet', () => {
         '',
         '',
         'Active',
-        '{"addMode":"selectorOverlay","anchorFieldId":"ING","sectionSelector":{"id":"ITEM_FILTER","labelEn":"Search"},"fields":[{"id":"ING","type":"CHOICE","labelEn":"Ingredient","options":["A"]},{"id":"QTY","type":"NUMBER","labelEn":"Qty"}]}',
+        '{"addMode":"selectorOverlay","anchorFieldId":"ING","sectionSelector":{"id":"ITEM_FILTER","labelEn":"Search","placeholder":{"en":"Search items"},"helperText":{"en":"Type to search"}},"fields":[{"id":"ING","type":"CHOICE","labelEn":"Ingredient","options":["A"]},{"id":"QTY","type":"NUMBER","labelEn":"Qty"}]}',
         '',
         '',
         ''
@@ -346,6 +346,38 @@ describe('ConfigSheet', () => {
 
     const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: LineItemSelectorOverlay');
     expect(questions[0].lineItemConfig?.addMode).toBe('selectorOverlay');
+    expect(questions[0].lineItemConfig?.sectionSelector?.placeholderEn).toBe('Search items');
+    expect(questions[0].lineItemConfig?.sectionSelector?.helperTextEn).toBe('Type to search');
+  });
+
+  test('getQuestions preserves addOverlay copy for line items', () => {
+    const configSheet = mockSS.insertSheet('Config: LineItemAddOverlayCopy');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q_LI3',
+        'LINE_ITEM_GROUP',
+        'Products',
+        'Produits',
+        'Producten',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"addMode":"overlay","anchorFieldId":"ITEM","addOverlay":{"title":{"en":"Select items"},"helperText":{"en":"Choose one or more items"},"placeholder":{"en":"Search items"}},"fields":[{"id":"ITEM","type":"CHOICE","labelEn":"Item","options":["A"]}]}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: LineItemAddOverlayCopy');
+    expect(questions[0].lineItemConfig?.addOverlay).toBeDefined();
+    expect((questions[0].lineItemConfig?.addOverlay as any)?.title?.en).toBe('Select items');
+    expect((questions[0].lineItemConfig?.addOverlay as any)?.helperText?.en).toBe('Choose one or more items');
+    expect((questions[0].lineItemConfig?.addOverlay as any)?.placeholder?.en).toBe('Search items');
   });
 
   test('getQuestions parses upload config JSON', () => {

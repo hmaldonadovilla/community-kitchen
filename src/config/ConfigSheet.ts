@@ -2675,6 +2675,7 @@ export class ConfigSheet {
           addButtonLabel: parsed.addButtonLabel,
           anchorFieldId: parsed.anchorFieldId,
           addMode: parsed.addMode,
+          addOverlay: parsed.addOverlay,
           sectionSelector,
           dedupRules,
           totals,
@@ -2732,6 +2733,15 @@ export class ConfigSheet {
       rawSelector.placeholderFr || (placeholderObj && placeholderObj.fr) || '';
     const placeholderNl =
       rawSelector.placeholderNl || (placeholderObj && placeholderObj.nl) || '';
+    const helperTextRaw = rawSelector.helperText ?? rawSelector.helper ?? rawSelector.helperLabel;
+    const helperTextObj = helperTextRaw && typeof helperTextRaw === 'object' ? helperTextRaw : null;
+    const helperTextStr = typeof helperTextRaw === 'string' ? helperTextRaw : '';
+    const helperTextEn =
+      rawSelector.helperTextEn || (helperTextObj && helperTextObj.en) || helperTextStr || '';
+    const helperTextFr =
+      rawSelector.helperTextFr || (helperTextObj && helperTextObj.fr) || '';
+    const helperTextNl =
+      rawSelector.helperTextNl || (helperTextObj && helperTextObj.nl) || '';
     const hideLabel = this.normalizeBoolean(rawSelector.hideLabel ?? rawSelector.hideLabelText ?? rawSelector.hideSelectorLabel);
 
     return {
@@ -2743,6 +2753,10 @@ export class ConfigSheet {
       placeholderEn: placeholderEn || undefined,
       placeholderFr: placeholderFr || undefined,
       placeholderNl: placeholderNl || undefined,
+      helperText: helperTextObj || (helperTextStr ? helperTextStr : undefined),
+      helperTextEn: helperTextEn || undefined,
+      helperTextFr: helperTextFr || undefined,
+      helperTextNl: helperTextNl || undefined,
       hideLabel: hideLabel === undefined ? undefined : hideLabel,
       required: !!rawSelector.required,
       options,
@@ -2972,6 +2986,7 @@ export class ConfigSheet {
           addMode: entry.addMode ?? refCfg.addMode,
           addButtonLabel: entry.addButtonLabel ?? refCfg.addButtonLabel,
           anchorFieldId: entry.anchorFieldId ?? refCfg.anchorFieldId,
+          addOverlay: entry.addOverlay ?? refCfg.addOverlay,
           sectionSelector: entry.sectionSelector ? this.normalizeLineItemSelector(ss, entry.sectionSelector) : refCfg.sectionSelector,
           dedupRules: entry.dedupRules ? this.normalizeLineItemDedupRules(entry.dedupRules) : refCfg.dedupRules,
           totals: entry.totals ? this.normalizeLineItemTotals(entry.totals) : refCfg.totals,
@@ -3002,6 +3017,7 @@ export class ConfigSheet {
       addButtonLabel: entry.addButtonLabel,
       anchorFieldId: entry.anchorFieldId,
       addMode: entry.addMode,
+      addOverlay: entry.addOverlay,
       sectionSelector,
       dedupRules,
       totals,

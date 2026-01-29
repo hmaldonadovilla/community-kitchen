@@ -33,6 +33,53 @@ describe('guidedSteps domain', () => {
     expect(out.maxValidIndex).toBe(-1);
   });
 
+  it('treats FILE_UPLOAD fields as incomplete until the upload minimum is satisfied', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'U',
+          type: 'FILE_UPLOAD',
+          required: true,
+          uploadConfig: { minFiles: 1 }
+        }
+      ],
+      steps: {
+        mode: 'guided',
+        items: [{ id: 's1', include: [{ kind: 'question', id: 'U' }] }]
+      }
+    };
+
+    const emptyOut = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: { U: [] } as any,
+      lineItems: {} as any
+    });
+
+    expect(emptyOut.steps[0].complete).toBe(false);
+    expect(emptyOut.steps[0].valid).toBe(false);
+
+    const placeholderOut = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: { U: [{}] } as any,
+      lineItems: {} as any
+    });
+
+    expect(placeholderOut.steps[0].complete).toBe(false);
+    expect(placeholderOut.steps[0].valid).toBe(false);
+
+    const filledOut = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: { U: ['https://example.com/file.jpg'] } as any,
+      lineItems: {} as any
+    });
+
+    expect(filledOut.steps[0].complete).toBe(true);
+    expect(filledOut.steps[0].valid).toBe(true);
+  });
+
   it('applies row filtering for lifted lineGroup fields (only evaluates included rows)', () => {
     const definition: any = {
       questions: [

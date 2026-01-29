@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import { buttonStyles, withDisabled } from '../ui';
 import type { LangCode } from '../../../../types';
+import type { LineItemAddResult } from '../../../types';
 import { tSystem } from '../../../../systemStrings';
 
 export interface LineOverlayState {
@@ -10,6 +11,9 @@ export interface LineOverlayState {
   groupId?: string;
   anchorFieldId?: string;
   selected?: string[];
+  title?: string;
+  helperText?: string;
+  placeholder?: string;
 }
 
 export const LineSelectOverlay: React.FC<{
@@ -22,14 +26,19 @@ export const LineSelectOverlay: React.FC<{
     groupId: string,
     preset?: Record<string, any>,
     options?: { configOverride?: any; rowFilter?: { includeWhen?: any; excludeWhen?: any } | null }
-  ) => void;
+  ) => LineItemAddResult | undefined;
 }> = ({ overlay, setOverlay, language, submitting, onDiagnostic, addLineItemRowManual }) => {
   const [query, setQuery] = useState('');
+  const [dedupMessage, setDedupMessage] = useState('');
   const selectedCount = (overlay.selected || []).length;
+  const resolvedTitle = (overlay.title || '').toString().trim();
+  const resolvedHelper = (overlay.helperText || '').toString().trim();
+  const resolvedPlaceholder = (overlay.placeholder || '').toString().trim();
 
   useEffect(() => {
     if (!overlay.open) return;
     setQuery('');
+    setDedupMessage('');
   }, [overlay.open]);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -41,8 +50,24 @@ export const LineSelectOverlay: React.FC<{
       return haystack.includes(normalizedQuery);
     });
   }, [hasQuery, normalizedQuery, overlay.open, overlay.options]);
+  const optionLabelByValue = useMemo(() => {
+    const map = new Map<string, string>();
+    overlay.options.forEach(opt => {
+      if (!opt.value) return;
+      map.set(opt.value, opt.label || opt.value);
+    });
+    return map;
+  }, [overlay.options]);
 
   if (!overlay.open) return null;
+  const helpId = 'line-select-help';
+  const titleText = resolvedTitle || tSystem('lineItems.selectLinesTitle', language, 'Select lines');
+  const helperText = resolvedHelper || tSystem(
+    'lineItems.selectLinesHelp',
+    language,
+    'Search and select one or more items. You can update quantities after you return.'
+  );
+  const placeholderText = resolvedPlaceholder || tSystem('lineItems.selectLinesSearch', language, 'Search items');
 
   return (
     <div
@@ -71,17 +96,22 @@ export const LineSelectOverlay: React.FC<{
           boxShadow: '0 18px 50px rgba(15,23,42,0.18)',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          minHeight: 0
         }}
       >
         <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 'var(--ck-font-group-title)', letterSpacing: -0.3 }}>
-          {tSystem('lineItems.selectLinesTitle', language, 'Select lines')}
+          {titleText}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div id={helpId} className="muted">
+            {helperText}
+          </div>
           <input
             type="text"
             value={query}
-            placeholder={tSystem('lineItems.selectLinesSearch', language, 'Search items')}
+            placeholder={placeholderText}
+            aria-describedby={helpId}
             onChange={e => {
               const next = e.target.value;
               const nextNormalized = next.trim().toLowerCase();
@@ -92,6 +122,7 @@ export const LineSelectOverlay: React.FC<{
                   }).length
                 : 0;
               setQuery(next);
+              setDedupMessage('');
               onDiagnostic?.('ui.lineItems.overlay.search', {
                 groupId: overlay.groupId,
                 queryLength: next.trim().length,
@@ -102,15 +133,21 @@ export const LineSelectOverlay: React.FC<{
             style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)' }}
           />
         </div>
+        {dedupMessage ? (
+          <div className="error" style={{ marginTop: 10 }}>
+            {dedupMessage}
+          </div>
+        ) : null}
         <div
           style={{
             flex: 1,
             minHeight: 0,
-            overflow: 'auto',
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
             gap: 10,
             marginTop: 10,
+            paddingBottom: 10,
             WebkitOverflowScrolling: 'touch',
             overscrollBehavior: 'contain',
             touchAction: 'pan-y'
@@ -144,6 +181,7 @@ export const LineSelectOverlay: React.FC<{
                     } else {
                       nextSelected.delete(opt.value);
                     }
+                    setDedupMessage('');
                     return { ...prev, selected: Array.from(nextSelected) };
                   });
                 }}
@@ -164,11 +202,13 @@ export const LineSelectOverlay: React.FC<{
             display: 'flex',
             gap: 10,
             justifyContent: 'flex-end',
-            marginTop: 12,
+            marginTop: 0,
             paddingTop: 10,
             paddingBottom: 'calc(6px + env(safe-area-inset-bottom))',
             borderTop: '1px solid var(--border)',
-            background: '#ffffff'
+            background: '#ffffff',
+            position: 'sticky',
+            bottom: 0
           }}
         >
           <button
@@ -176,16 +216,38 @@ export const LineSelectOverlay: React.FC<{
             onClick={() => setOverlay({ open: false, options: [], selected: [] })}
             style={buttonStyles.secondary}
           >
-            {tSystem('common.cancel', language, 'Cancel')}
+            {tSystem('common.back', language, 'Back')}
           </button>
           <button
             type="button"
             onClick={() => {
               if (submitting) return;
               if (overlay.groupId && overlay.anchorFieldId) {
-                (overlay.selected || []).forEach(val =>
-                  addLineItemRowManual(overlay.groupId!, { [overlay.anchorFieldId!]: val })
-                );
+                const duplicates: string[] = [];
+                let duplicateMessage = '';
+                (overlay.selected || []).forEach(val => {
+                  const result = addLineItemRowManual(overlay.groupId!, { [overlay.anchorFieldId!]: val });
+                  if (result?.status === 'duplicate') {
+                    duplicates.push(val);
+                    if (!duplicateMessage && result.message) {
+                      duplicateMessage = result.message;
+                    }
+                  }
+                });
+                if (duplicates.length) {
+                  const fallbackValue = optionLabelByValue.get(duplicates[0]) || duplicates[0];
+                  setDedupMessage(
+                    duplicateMessage ||
+                      tSystem(
+                        'lineItems.duplicateAdd',
+                        language,
+                        '{value} is already in the list, change the quantity',
+                        { value: fallbackValue }
+                      )
+                  );
+                  setOverlay(prev => ({ ...prev, selected: Array.from(new Set(duplicates)) }));
+                  return;
+                }
               }
               onDiagnostic?.('ui.lineItems.overlay.addSelected', {
                 groupId: overlay.groupId,

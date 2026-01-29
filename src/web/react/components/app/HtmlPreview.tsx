@@ -152,7 +152,7 @@ export const HtmlPreview: React.FC<{
         // ignore
       }
     },
-    [onDiagnostic, onOpenFiles]
+    [onAction, onDiagnostic, onOpenFiles]
   );
 
   return (
@@ -172,4 +172,3 @@ export const HtmlPreview: React.FC<{
     </div>
   );
 };
-

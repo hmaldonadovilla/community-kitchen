@@ -148,28 +148,52 @@ describe('validation rules', () => {
     const rules = [
       {
         level: 'warning',
-        when: { fieldId: 'MP_COOK_TEMP', lessThan: 63 },
+        when: { fieldId: 'STATUS', equals: 'warn' },
         message: {
-          en: 'Core temperature must be greater than 63°C'
+          en: 'Status triggered a warning.'
         }
       }
     ];
 
     const issues = evaluateRules(rules as any, {
       language: 'EN',
-      getValue: (id: string) => (id === 'MP_COOK_TEMP' ? 60 : ''),
+      getValue: (id: string) => (id === 'STATUS' ? 'warn' : ''),
       isHidden: () => false
     } as any);
     expect(issues.length).toBe(1);
-    expect(issues[0].fieldId).toBe('MP_COOK_TEMP');
+    expect(issues[0].fieldId).toBe('STATUS');
     expect((issues[0] as any).level).toBe('warning');
 
     const errorsOnly = validateRules(rules as any, {
       language: 'EN',
-      getValue: (id: string) => (id === 'MP_COOK_TEMP' ? 60 : ''),
+      getValue: (id: string) => (id === 'STATUS' ? 'warn' : ''),
       isHidden: () => false
     } as any);
     expect(errorsOnly.length).toBe(0);
+  });
+
+  it('treats required rules as needing true for boolean values', () => {
+    const rules = [
+      {
+        when: { fieldId: 'CONFIRM', isEmpty: true },
+        then: { fieldId: 'CONFIRM', required: true },
+        message: { en: 'Confirmation is required.' }
+      }
+    ];
+
+    const missing = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'CONFIRM' ? false : ''),
+      isHidden: () => false
+    } as any);
+    expect(missing.length).toBe(1);
+
+    const ok = validateRules(rules as any, {
+      language: 'EN',
+      getValue: (id: string) => (id === 'CONFIRM' ? true : ''),
+      isHidden: () => false
+    } as any);
+    expect(ok.length).toBe(0);
   });
 
   it('supports compound when clauses (all/any/not)', () => {

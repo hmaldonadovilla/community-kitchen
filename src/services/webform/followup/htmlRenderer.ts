@@ -99,8 +99,9 @@ export const renderHtmlFromHtmlTemplate = (args: {
   record: WebFormSubmission;
   templateIdMap: TemplateIdMap;
   namePrefix?: string;
+  extraPlaceholders?: Record<string, string>;
 }): { success: boolean; message?: string; html?: string; fileName?: string } => {
-  const { dataSources, form, questions, record, templateIdMap, namePrefix } = args;
+  const { dataSources, form, questions, record, templateIdMap, namePrefix, extraPlaceholders } = args;
   const templateId = resolveTemplateId(templateIdMap, record);
   if (!templateId) {
     return { success: false, message: 'No template matched the record values/language.' };
@@ -157,6 +158,14 @@ export const renderHtmlFromHtmlTemplate = (args: {
       keys: STATUS_PILL_KEYS
     });
     addPlaceholderVariants(placeholders, 'STATUS_KEY', statusKey || '', undefined, formatTemplateValueForHtml);
+    if (extraPlaceholders) {
+      Object.entries(extraPlaceholders).forEach(([key, val]) => {
+        const normalizedKey = key && key.trim() ? key.trim() : '';
+        if (!normalizedKey) return;
+        const token = normalizedKey.startsWith('{{') && normalizedKey.endsWith('}}') ? normalizedKey : `{{${normalizedKey}}}`;
+        placeholders[token] = val ?? '';
+      });
+    }
 
     // Apply Doc-like line-item directives (ORDER_BY / EXCLUDE_WHEN / CONSOLIDATED_TABLE) for HTML blocks,
     // then apply normal placeholder replacement across the full document.
@@ -184,5 +193,3 @@ export const renderHtmlFromHtmlTemplate = (args: {
     return { success: false, message: msg };
   }
 };
-
-

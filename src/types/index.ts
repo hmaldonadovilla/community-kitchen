@@ -1289,6 +1289,10 @@ export interface LineItemSelectorConfig {
   placeholderEn?: string;
   placeholderFr?: string;
   placeholderNl?: string;
+  helperText?: LocalizedString | string;
+  helperTextEn?: string;
+  helperTextFr?: string;
+  helperTextNl?: string;
   hideLabel?: boolean;
   options?: string[];
   optionsFr?: string[];
@@ -1309,6 +1313,12 @@ export interface LineItemSelectorConfig {
    * Useful for cascading selectors where available sections depend on other fields.
    */
   optionFilter?: OptionFilter;
+}
+
+export interface LineItemAddOverlayConfig {
+  title?: LocalizedString;
+  helperText?: LocalizedString;
+  placeholder?: LocalizedString;
 }
 
 export interface LineItemTotalConfig {
@@ -1342,6 +1352,7 @@ export interface LineItemGroupConfig {
   };
   anchorFieldId?: string; // field to drive overlay multi-add
   addMode?: 'overlay' | 'selectorOverlay' | 'inline' | 'auto';
+  addOverlay?: LineItemAddOverlayConfig;
   sectionSelector?: LineItemSelectorConfig;
   dedupRules?: LineItemDedupRule[];
   totals?: LineItemTotalConfig[];
@@ -1362,6 +1373,7 @@ export interface LineItemGroupConfigOverride {
   };
   anchorFieldId?: string;
   addMode?: 'overlay' | 'selectorOverlay' | 'inline' | 'auto';
+  addOverlay?: LineItemAddOverlayConfig;
   sectionSelector?: LineItemSelectorConfig;
   dedupRules?: LineItemDedupRule[];
   totals?: LineItemTotalConfig[];
@@ -1556,6 +1568,11 @@ export type EmailRecipientEntry = string | EmailRecipientDataSourceConfig;
 export interface FollowupConfig {
   pdfTemplateId?: TemplateIdMap;
   pdfFolderId?: string;
+  /**
+   * Optional field id used to name generated PDF files (question id or meta field).
+   * Supports meta fields: id, createdAt, updatedAt, status, pdfUrl.
+   */
+  pdfFileNameFieldId?: string;
   emailTemplateId?: TemplateIdMap;
   emailSubject?: LocalizedString | string;
   emailRecipients?: EmailRecipientEntry[];
@@ -2168,6 +2185,9 @@ export interface RowFlowOutputSegmentFormatConfig {
 
 export interface RowFlowOutputSegmentConfig {
   fieldRef: string;
+  /**
+   * Optional label/template for this value (supports {{value}} placeholder).
+   */
   label?: LocalizedString;
   showWhen?: WhenClause;
   format?: RowFlowOutputSegmentFormatConfig;
@@ -2193,6 +2213,7 @@ export interface RowFlowPromptInputConfig {
    */
   labelLayout?: 'stacked' | 'inline' | 'hidden';
   placeholder?: LocalizedString;
+  helperText?: LocalizedString;
 }
 
 export interface RowFlowPromptConfig {
@@ -2271,6 +2292,10 @@ export type RowFlowActionEffect =
        * Optional overlay context header override for this action.
        */
       overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
+      /**
+       * Optional overlay helper text override for this action.
+       */
+      overlayHelperText?: RowFlowOverlayContextHeaderConfig;
     });
 
 export interface RowFlowActionConfig {

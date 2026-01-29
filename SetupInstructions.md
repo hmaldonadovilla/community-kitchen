@@ -560,6 +560,7 @@ CI (GitHub Actions):
 
       **Notes:**
       - Steps can mix **top-level questions** and **line item groups**.
+      - Use `helpText` on a step to display guidance above the step content (e.g., food safety confirmation + per-pot photo instructions).
       - Line groups can be rendered **inline** or via a **full-page overlay** (`displayMode: "overlay"` or step `render.lineGroups.mode`).
       - You can filter visible rows per step using `rows.includeWhen` / `rows.excludeWhen` (e.g., `quantity > 0`) and scope subgroups via `subGroups.include`.
       - If you need to **show all rows** but only **validate/advance based on a subset** (e.g., ignore rows where `QTY < 1` while still displaying them), use `validationRows.includeWhen` / `validationRows.excludeWhen` on the step target.
@@ -588,7 +589,7 @@ CI (GitHub Actions):
         - `onCompleteActions` triggers action ids once a prompt becomes complete (useful to auto-open overlays after a selection).
         - `actionsLayout` controls prompt action placement (`below` | `inline`) to keep prompts on a single row.
         - `actions` can edit values, delete rows (`deleteRow`), add rows, close overlays, or open overlays.
-        - `openOverlay` effects accept the same options as `LineItemOverlayOpenActionConfig` (row filters, overrides, flattening, rowFlow override, `hideCloseButton`, `closeButtonLabel`, `closeConfirm`) plus `overlayContextHeader` for per-action headers.
+        - `openOverlay` effects accept the same options as `LineItemOverlayOpenActionConfig` (row filters, overrides, flattening, rowFlow override, `hideCloseButton`, `closeButtonLabel`, `closeConfirm`) plus `overlayContextHeader` for per-action headers and `overlayHelperText` for helper copy shown below the overlay list.
         - `rowFlow.overlayContextHeader.fields` shows a default context line in overlays opened from row flow actions.
       - Navigation/back labels and controls:
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
@@ -730,7 +731,7 @@ CI (GitHub Actions):
           - `ui.needsAttentionMessage`: localized override for the “Needs attention” helper shown when this line item group or subgroup requires review
           - `ui.allowRemoveAutoRows`: when `false`, hides the **Remove** button for rows marked `__ckRowSource: "auto"`
           - `ui.saveDisabledRows`: when `true`, includes disabled progressive rows in the submitted payload (so they can appear in downstream PDFs)
-        - `dedupRules`: optional row-level de-duplication rules for this group or subgroup. Each rule lists field ids that must be unique together; the check runs once all listed fields have values.
+        - `dedupRules`: optional row-level de-duplication rules for this group or subgroup. Each rule lists field ids that must be unique together; the check runs once all listed fields have values. The `message` supports a `{value}` placeholder (replaced with the first dedup field’s value).
           Example:
           ```json
           {
@@ -834,7 +835,12 @@ CI (GitHub Actions):
        ```
 
       Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
+      - Optional: customize the overlay copy per group (or via `groupOverride` on overlay openers) with:
+        - `addOverlay.title` (localized)
+        - `addOverlay.helperText` (localized)
+        - `addOverlay.placeholder` (localized)
    - Selector overlay add flow (search + multi-select): use `addMode: "selectorOverlay"` with `anchorFieldId` and a `sectionSelector` label. The selector becomes the search input + multi-select results list (no separate **Add** button), and search indexes include extra columns from `optionsRef` / data sources so typing a category or dietary label surfaces matching items.
+      - Optional: `sectionSelector.placeholder` and `sectionSelector.helperText` customize the search input placeholder and helper copy for the selector overlay.
     - Auto add flow (no overlay): use `addMode: "auto"` with `anchorFieldId` pointing to a CHOICE line-item field that has an `optionFilter.dependsOn` (one or more controlling fields). When all `dependsOn` fields are filled, the form will automatically create one row per allowed anchor option (same filtering logic as overlay). If the controlling fields change later, auto-generated rows are recomputed and overwritten; manual rows are preserved.
       - Progressive + expand gate: if you also set `"ui": { "mode": "progressive", "expandGate": "collapsedFieldsValid", "collapsedFields": [...] }` then:
         - Auto-generated rows treat the anchor field as the row title and it is not editable (it’s system-selected).
@@ -1700,6 +1706,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        "FR": "1PdfTemplateForFrench"
      },
      "pdfFolderId": "1FOLDERIDOptional",
+     "pdfFileNameFieldId": "MP_ID",
      "emailTemplateId": {
        "EN": "1EmailDocEn",
        "FR": "1EmailDocFr"
@@ -1755,6 +1762,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
      Use `{{FIELD_ID}}` tokens (or slugified labels) in the Doc; the runtime replaces them with the submitted values (line items render as bullet summaries).
    - `pdfFolderId` (optional): target Drive folder for generated PDFs; falls back to the spreadsheet’s parent folder.
+   - `pdfFileNameFieldId` (optional): field id used to name generated PDFs + email attachments. Supports question ids or meta fields (`id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`).
    - `emailTemplateId`: Google Doc containing the email body. Same structure as `pdfTemplateId` (string, language map, or `cases` selector). Tokens work the same as in the PDF template.
    - `emailRecipients`: list of addresses. Entries can be plain strings (placeholders allowed) or objects describing a data source lookup:
      - `recordFieldId`: the form/line-item field whose submitted value should be used as the lookup key.

@@ -101,6 +101,7 @@ export type RowFlowResolvedEffect =
       groupOverride?: LineItemGroupConfigOverride;
       rowFlow?: RowFlowConfig;
       overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
+      overlayHelperText?: RowFlowOverlayContextHeaderConfig;
     };
 
 export type RowFlowResolvedActionPlan = {
@@ -594,7 +595,8 @@ export const resolveRowFlowActionPlan = (args: {
         closeConfirm: (effect as any).closeConfirm as RowFlowActionConfirmConfig | undefined,
         groupOverride: (effect as any).groupOverride as LineItemGroupConfigOverride | undefined,
         rowFlow: (effect as any).rowFlow as RowFlowConfig | undefined,
-        overlayContextHeader: (effect as any).overlayContextHeader as RowFlowOverlayContextHeaderConfig | undefined
+        overlayContextHeader: (effect as any).overlayContextHeader as RowFlowOverlayContextHeaderConfig | undefined,
+        overlayHelperText: (effect as any).overlayHelperText as RowFlowOverlayContextHeaderConfig | undefined
       });
     }
   });

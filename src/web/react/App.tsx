@@ -3597,6 +3597,38 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     (fieldIdRaw: string) => {
       const fieldId = (fieldIdRaw || '').toString().trim();
       if (!fieldId) return;
+
+      if (fieldId.startsWith('urls:')) {
+        const payload = fieldId.slice(5);
+        const items = (() => {
+          if (!payload) return [];
+          try {
+            const decoded = decodeURIComponent(payload);
+            const parsed = JSON.parse(decoded);
+            if (Array.isArray(parsed)) {
+              return parsed.map(item => (item == null ? '' : item.toString())).filter(Boolean);
+            }
+          } catch (_) {
+            // fall back to pipe-separated payloads
+            try {
+              const decoded = decodeURIComponent(payload);
+              return decoded
+                .split('|')
+                .map(part => (part || '').toString().trim())
+                .filter(Boolean);
+            } catch (_) {
+              return [];
+            }
+          }
+          return [];
+        })();
+        if (!items.length) return;
+        const title = tSystem('files.title', languageRef.current, 'Photos');
+        setReadOnlyFilesOverlay({ open: true, fieldId, title, items, uploadConfig: undefined });
+        logEvent('filesOverlay.readOnly.open.inline', { fieldId: 'urls', count: items.length });
+        return;
+      }
+
       const q = definition.questions.find(qq => qq && qq.type === 'FILE_UPLOAD' && qq.id === fieldId) as any;
       if (!q) {
         logEvent('filesOverlay.readOnly.unknownField', { fieldId });
@@ -6419,6 +6451,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           recordLoadingId={recordLoadingId}
           currentRecord={currentRecord}
           onOpenFiles={openReadOnlyFilesOverlay}
+          onAction={handleCustomButton}
           onDiagnostic={logEvent}
         />
       )}

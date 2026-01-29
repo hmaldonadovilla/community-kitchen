@@ -1,0 +1,250 @@
+<!--
+  Community Kitchen – Meal Production (PDF template derived from the summary template)
+
+  Notes:
+  - Designed for server-side HTML-to-PDF rendering (no script tags).
+  - Placeholders mirror the meal production summary template plus custom blocks for the meal list.
+-->
+
+<style>
+  .ck-pdf-template {
+    font-family: var(--ck-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif);
+    font-size: 1rem;
+    line-height: 1.45;
+    color: #0f172a;
+    margin: 0;
+  }
+
+  .ck-pdf-template * {
+    box-sizing: border-box;
+  }
+
+  .ck-pdf-template img {
+    max-width: 120px;
+    height: auto;
+    display: block;
+  }
+
+  .ck-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .ck-header-left,
+  .ck-header-right {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ck-header-title {
+    font-size: 1.15em;
+    font-weight: 600;
+  }
+
+  .ck-prepared-label {
+    font-size: 0.85em;
+    letter-spacing: 0.05em;
+    color: rgba(15, 23, 42, 0.65);
+  }
+
+  .ck-prepared-value {
+    font-weight: 500;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .ck-section {
+    margin-bottom: 20px;
+  }
+
+  .ck-section-title {
+    margin: 0 0 8px 0;
+    font-size: 1em;
+    font-weight: 600;
+  }
+
+  .ck-production-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+  }
+
+  .ck-production-label {
+    font-weight: 500;
+    font-size: 0.85em;
+    color: rgba(15, 23, 42, 0.75);
+  }
+
+  .ck-production-value {
+    font-weight: 400;
+    word-break: break-word;
+  }
+
+  .ck-meal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .ck-meal-block {
+    border-top: 1px solid rgba(15, 23, 42, 0.15);
+    padding-top: 12px;
+  }
+
+  .ck-meal-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+
+  .ck-meal-type {
+    font-size: 1.05em;
+    font-weight: 600;
+  }
+
+  .ck-meal-portions {
+    font-weight: 500;
+    font-size: 0.95em;
+  }
+
+  .ck-recipe-block {
+    margin-top: 8px;
+    padding: 10px;
+    border: 1px solid rgba(15, 23, 42, 0.15);
+    border-radius: 8px;
+  }
+
+  .ck-recipe-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+
+  .ck-recipe-title {
+    font-weight: 600;
+    font-size: 1em;
+  }
+
+  .ck-recipe-details {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.92em;
+  }
+
+  .ck-recipe-detail-label {
+    font-weight: 600;
+  }
+
+  .ck-core-temp {
+    margin-top: 6px;
+    font-size: 0.85em;
+    color: rgba(15, 23, 42, 0.65);
+    font-weight: 500;
+  }
+
+  .ck-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 24px;
+  }
+
+  .ck-total-label {
+    font-weight: 500;
+    font-size: 0.85em;
+    color: rgba(15, 23, 42, 0.75);
+  }
+
+  .ck-total-value {
+    font-weight: 600;
+    font-size: 1.05em;
+  }
+
+  @media (max-width: 600px) {
+    .ck-header {
+      flex-direction: column;
+    }
+    .ck-production-grid {
+      grid-template-columns: 1fr;
+    }
+    .ck-totals {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="ck-pdf-template" data-ck-template="meal-production-pdf">
+  <header class="ck-header">
+    <div class="ck-header-left">
+      {{APP_HEADER_LOGO_HTML}}
+      <div class="ck-header-title">Community Kitchen</div>
+      <div>Rue Capitaine Crespel 29</div>
+      <div>1050 Brussels, Belgium</div>
+    </div>
+    <div class="ck-header-right">
+      <div class="ck-prepared-label">Prepared for</div>
+      <div class="ck-prepared-value">{{DEFAULT(MP_DISTRIBUTOR.DIST_NAME, "—")}}</div>
+      <div class="ck-prepared-value">{{DEFAULT(MP_DISTRIBUTOR.DIST_ADDR_1, "")}}</div>
+      <div class="ck-prepared-value">{{DEFAULT(MP_DISTRIBUTOR.DIST_ADDR_2, "")}}</div>
+      <div class="ck-prepared-value">
+        {{DEFAULT(MP_DISTRIBUTOR.DIST_POST_CODE, "")}} {{DEFAULT(MP_DISTRIBUTOR.DIST_CITY, "")}}, {{DEFAULT(MP_DISTRIBUTOR.DIST_COUNTRY, "")}}
+      </div>
+    </div>
+  </header>
+
+  <section class="ck-section">
+    <div class="ck-section-title">Production details</div>
+    <div class="ck-production-grid">
+      <div>
+        <div class="ck-production-label">Production date</div>
+        <div class="ck-production-value">{{MP_PREP_DATE}}</div>
+      </div>
+      <div>
+        <div class="ck-production-label">Expiration date</div>
+        <div class="ck-production-value">{{MP_EXP_DATE}}</div>
+      </div>
+      <div>
+        <div class="ck-production-label">Batch number</div>
+        <div class="ck-production-value">{{MP_ID}}</div>
+      </div>
+      <div>
+        <div class="ck-production-label">Responsible cook</div>
+        <div class="ck-production-value">{{MP_COOK_NAME}}</div>
+      </div>
+      <div>
+        <div class="ck-production-label">Volunteer cook</div>
+        <div class="ck-production-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ck-section">
+    <div class="ck-section-title">Meal details</div>
+    <div class="ck-meal-list">
+      {{MEAL_BLOCKS}}
+    </div>
+  </section>
+
+  <section class="ck-section">
+    <div class="ck-section-title">Totals</div>
+    <div class="ck-totals">
+      <div>
+        <div class="ck-total-label">Total requested</div>
+        <div class="ck-total-value">{{SUM(MP_MEALS_REQUEST.ORD_QTY)}}</div>
+      </div>
+      <div>
+        <div class="ck-total-label">Total delivered</div>
+        <div class="ck-total-value">{{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
+      </div>
+    </div>
+  </section>
+
+</div>

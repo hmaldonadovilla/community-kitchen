@@ -42,6 +42,7 @@ import {
   ParagraphDisclaimerConfig,
   QuestionGroupConfig,
   SummaryVisibility,
+  StepRowFilterConfig,
   WhenClause,
   ValidationRule,
   VisibilityConfig,
@@ -184,6 +185,7 @@ export {
   SelectionEffect,
   FieldChangeDialogTarget,
   PresetValue,
+  StepRowFilterConfig,
   WhenClause,
   WebFormSubmission
 };

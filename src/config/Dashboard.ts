@@ -1530,6 +1530,7 @@ export class Dashboard {
     const config: FollowupConfig = {};
     config.pdfTemplateId = this.normalizeTemplateId(source.pdfTemplateId);
     if (source.pdfFolderId) config.pdfFolderId = source.pdfFolderId;
+    if (source.pdfFileNameFieldId) config.pdfFileNameFieldId = source.pdfFileNameFieldId;
     config.emailTemplateId = this.normalizeTemplateId(source.emailTemplateId);
     if (source.emailSubject) config.emailSubject = source.emailSubject;
     if (source.emailRecipients) {

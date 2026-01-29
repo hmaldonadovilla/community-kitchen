@@ -31,7 +31,7 @@ import {
 import type { RowFlowActionConfirmConfig } from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
-import { FormErrors, LineItemState, OptionState } from '../../types';
+import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
 import {
   describeUploadItem,
@@ -66,7 +66,7 @@ import { LineItemMultiAddSelect } from './LineItemMultiAddSelect';
 import { NumberStepper } from './NumberStepper';
 import { PairedRowGrid } from './PairedRowGrid';
 import { applyValueMapsToLineRow, resolveValueMapValue } from './valueMaps';
-import { buildSelectorOptionSet, resolveSelectorLabel, resolveSelectorPlaceholder } from './lineItemSelectors';
+import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './lineItemSelectors';
 import {
   ROW_HIDE_REMOVE_KEY,
   ROW_NON_MATCH_OPTIONS_KEY,
@@ -166,6 +166,7 @@ export interface LineItemGroupQuestionCtx {
       closeConfirm?: RowFlowActionConfirmConfig;
       label?: string;
       contextHeader?: string;
+      helperText?: string;
       rowFlow?: RowFlowConfig;
     }
   ) => void;
@@ -180,6 +181,7 @@ export interface LineItemGroupQuestionCtx {
       closeConfirm?: RowFlowActionConfirmConfig;
       label?: string;
       contextHeader?: string;
+      helperText?: string;
       rowFlow?: RowFlowConfig;
     }
   ) => void;
@@ -188,7 +190,7 @@ export interface LineItemGroupQuestionCtx {
     groupId: string,
     preset?: Record<string, any>,
     options?: { configOverride?: any; rowFilter?: { includeWhen?: any; excludeWhen?: any } | null }
-  ) => void;
+  ) => LineItemAddResult | undefined;
   removeLineRow: (groupId: string, rowId: string) => void;
   runSelectionEffectsForAncestors?: (
     groupKey: string,
@@ -628,24 +630,37 @@ export const LineItemGroupQuestion: React.FC<{
     };
   };
 
-  const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupConfigOverride) => {
-    if (!baseConfig || !override || typeof override !== 'object') return baseConfig;
-    const mergedConfig = { ...baseConfig, ...override } as any;
-    mergedConfig.fields = Array.isArray(override.fields) && override.fields.length ? override.fields : baseConfig.fields;
-    if (override.subGroups !== undefined) mergedConfig.subGroups = override.subGroups;
+const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupConfigOverride) => {
+  if (!baseConfig || !override || typeof override !== 'object') return baseConfig;
+  const mergedConfig = { ...baseConfig, ...override } as any;
+  mergedConfig.fields = Array.isArray(override.fields) && override.fields.length ? override.fields : baseConfig.fields;
+  if (override.subGroups !== undefined) mergedConfig.subGroups = override.subGroups;
     const baseUi = baseConfig.ui || {};
     const overrideUi = (override as any).ui || {};
     const mergedUi = {
       ...baseUi,
       ...overrideUi
     };
-    const mergedOverlayDetail = mergeOverlayDetailConfig(baseUi?.overlayDetail, overrideUi?.overlayDetail);
-    if (mergedOverlayDetail) {
-      (mergedUi as any).overlayDetail = mergedOverlayDetail;
-    }
-    mergedConfig.ui = Object.keys(mergedUi).length ? mergedUi : undefined;
-    return mergedConfig;
-  };
+  const mergedOverlayDetail = mergeOverlayDetailConfig(baseUi?.overlayDetail, overrideUi?.overlayDetail);
+  if (mergedOverlayDetail) {
+    (mergedUi as any).overlayDetail = mergedOverlayDetail;
+  }
+  mergedConfig.ui = Object.keys(mergedUi).length ? mergedUi : undefined;
+  const baseAddOverlay = (baseConfig as any)?.addOverlay || {};
+  const overrideAddOverlay = (override as any)?.addOverlay || {};
+  if (Object.keys(baseAddOverlay).length || Object.keys(overrideAddOverlay).length) {
+    (mergedConfig as any).addOverlay = { ...baseAddOverlay, ...overrideAddOverlay };
+  }
+  return mergedConfig;
+};
+
+const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
+  const cfg = groupCfg?.addOverlay || {};
+  const title = cfg.title ? resolveLocalizedString(cfg.title, language, '').trim() : '';
+  const helperText = cfg.helperText ? resolveLocalizedString(cfg.helperText, language, '').trim() : '';
+  const placeholder = cfg.placeholder ? resolveLocalizedString(cfg.placeholder, language, '').trim() : '';
+  return { title, helperText, placeholder };
+};
 
   const buildOverlayGroupOverride = (group: WebQuestionDefinition, override?: LineItemGroupConfigOverride) => {
     if (!override || typeof override !== 'object') return undefined;
@@ -681,6 +696,17 @@ export const LineItemGroupQuestion: React.FC<{
         if (!headerConfig) return '';
         return buildRowFlowContextHeader({
           config: headerConfig,
+          rowId: row.id,
+          rowValues: (row.values || {}) as Record<string, FieldValue>,
+          rowFlowState
+        });
+      };
+      const resolveOverlayHelperText = (effect: RowFlowResolvedEffect): string => {
+        if (effect.type !== 'openOverlay') return '';
+        const helperConfig = effect.overlayHelperText;
+        if (!helperConfig) return '';
+        return buildRowFlowContextHeader({
+          config: helperConfig,
           rowId: row.id,
           rowValues: (row.values || {}) as Record<string, FieldValue>,
           rowFlowState
@@ -722,6 +748,8 @@ export const LineItemGroupQuestion: React.FC<{
           openEffects.forEach(effect => {
             const contextHeader = resolveOverlayContextHeader(effect);
             const hasContextHeader = Boolean(contextHeader);
+            const helperText = resolveOverlayHelperText(effect);
+            const hasHelperText = Boolean(helperText);
             if (effect.targetKind === 'line') {
               const baseGroup = definition.questions.find(q => q.id === effect.key && q.type === 'LINE_ITEM_GROUP') as
                 | WebQuestionDefinition
@@ -745,6 +773,7 @@ export const LineItemGroupQuestion: React.FC<{
                 source: 'overlayOpenAction',
                 label: resolveLocalizedString(effect.label as any, language, ''),
                 contextHeader: contextHeader || undefined,
+                helperText: helperText || undefined,
                 rowFlow: effect.rowFlow
               });
               onDiagnostic?.('lineItems.rowFlow.overlay.open', {
@@ -755,6 +784,7 @@ export const LineItemGroupQuestion: React.FC<{
                 hasOverride: !!effect.groupOverride,
                 hasRowFlow: !!effect.rowFlow,
                 hasContextHeader,
+                hasHelperText,
                 hideCloseButton: !!effect.hideCloseButton
               });
               return;
@@ -769,6 +799,7 @@ export const LineItemGroupQuestion: React.FC<{
               source: 'overlayOpenAction',
               label: resolveLocalizedString(effect.label as any, language, ''),
               contextHeader: contextHeader || undefined,
+              helperText: helperText || undefined,
               rowFlow: effect.rowFlow
             });
             onDiagnostic?.('lineItems.rowFlow.overlay.open', {
@@ -779,6 +810,7 @@ export const LineItemGroupQuestion: React.FC<{
               hasOverride: !!effect.groupOverride,
               hasRowFlow: !!effect.rowFlow,
               hasContextHeader,
+              hasHelperText,
               hideCloseButton: !!effect.hideCloseButton
             });
           });
@@ -1593,12 +1625,25 @@ export const LineItemGroupQuestion: React.FC<{
                     optionCount: overlayOptions.length,
                     indexedCount
                   });
+                  const addOverlayCopy = resolveAddOverlayCopy(q.lineItemConfig, language);
+                  if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.placeholder) {
+                    onDiagnostic?.('ui.lineItems.overlay.copy.override', {
+                      groupId: q.id,
+                      scope: 'lineItemGroup',
+                      hasTitle: !!addOverlayCopy.title,
+                      hasHelperText: !!addOverlayCopy.helperText,
+                      hasPlaceholder: !!addOverlayCopy.placeholder
+                    });
+                  }
                   setOverlay({
                     open: true,
                     options: overlayOptions,
                     groupId: q.id,
                     anchorFieldId: anchorField.id,
-                    selected: []
+                    selected: [],
+                    title: addOverlayCopy.title,
+                    helperText: addOverlayCopy.helperText,
+                    placeholder: addOverlayCopy.placeholder
                   });
                 }}
               >
@@ -1743,6 +1788,7 @@ export const LineItemGroupQuestion: React.FC<{
                     resolveSelectorPlaceholder(selectorCfg, language) ||
                     tSystem('lineItems.selectLinesSearch', language, 'Search items')
                   }
+                  helperText={resolveSelectorHelperText(selectorCfg, language) || undefined}
                   emptyText={tSystem('common.noMatches', language, 'No matches.')}
                   onDiagnostic={(event, payload) =>
                     onDiagnostic?.(event, {
@@ -2330,6 +2376,11 @@ export const LineItemGroupQuestion: React.FC<{
             }
 
             if (field.type === 'CHECKBOX') {
+              const hasAnyOption =
+                !!((optionSetField.en && optionSetField.en.length) ||
+                  ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                  ((optionSetField as any).nl && (optionSetField as any).nl.length));
+              const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
               const selected = Array.isArray(row.values[field.id]) ? (row.values[field.id] as string[]) : [];
               const allowedWithSelected = selected.reduce((acc, val) => {
                 if (val && !acc.includes(val)) acc.push(val);
@@ -2337,9 +2388,13 @@ export const LineItemGroupQuestion: React.FC<{
               }, [...allowedField]);
               const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
               if (renderAsLabel) {
-                const labels = selected
-                  .map(val => optsField.find(opt => opt.value === val)?.label || val)
-                  .filter(Boolean);
+                const labels = isConsentCheckbox
+                  ? [
+                      row.values[field.id]
+                        ? tSystem('common.yes', language, 'Yes')
+                        : tSystem('common.no', language, 'No')
+                    ]
+                  : selected.map(val => optsField.find(opt => opt.value === val)?.label || val).filter(Boolean);
                 return (
                   <div
                     className="ck-line-item-table__value"
@@ -2351,6 +2406,33 @@ export const LineItemGroupQuestion: React.FC<{
                       {labels.length ? labels.join(', ') : '—'}
                       {warningFootnote}
                     </span>
+                    {errorNode}
+                  </div>
+                );
+              }
+              if (isConsentCheckbox) {
+                return (
+                  <div
+                    className="ck-line-item-table__control ck-line-item-table__control--consent"
+                    data-field-path={fieldPath}
+                    data-has-warning={showWarningHighlight ? 'true' : undefined}
+                    data-has-error={hasFieldError ? 'true' : undefined}
+                  >
+                    <label className="inline">
+                      <input
+                        type="checkbox"
+                        className="ck-line-item-table__consent-checkbox"
+                        checked={!!row.values[field.id]}
+                        aria-label={resolveFieldLabel(field, language, field.id)}
+                        disabled={submitting || (field as any)?.readOnly === true}
+                        onChange={e => {
+                          if (submitting || (field as any)?.readOnly === true) return;
+                          handleLineFieldChange(q, row.id, field, e.target.checked);
+                        }}
+                      />
+                      <span style={srOnly}>{resolveFieldLabel(field, language, field.id)}</span>
+                    </label>
+                    {warningFootnote}
                     {errorNode}
                   </div>
                 );
@@ -2982,6 +3064,8 @@ export const LineItemGroupQuestion: React.FC<{
               </div>
             ) : null}
             {parentRows.map((row, rowIdx) => {
+              const isLeftoverGroup = q.id === 'MP_TYPE_LI';
+              const isLastLeftoverRow = isLeftoverGroup && rowIdx === parentRows.length - 1;
               const groupCtx: VisibilityContext = {
                 getValue: fid => resolveTopValue(fid),
                 getLineValue: (_rowId, fid) => row.values[fid],
@@ -3381,7 +3465,9 @@ export const LineItemGroupQuestion: React.FC<{
                       language,
                       resolveLocalizedString(anchorField.label, language, anchorField.id)
                     );
-                    const { labelText, helperText } = splitPromptLabel(resolvedLabel);
+                    const { labelText, helperText: labelHelperText } = splitPromptLabel(resolvedLabel);
+                    const helperOverride = resolveLocalizedString(prompt.config.input?.helperText, language, '').trim();
+                    const helperText = helperOverride || labelHelperText;
                     const placeholder =
                       resolveLocalizedString(prompt.config.input?.placeholder, language, '') ||
                       tSystem('lineItems.selectLinesSearch', language, 'Search items');
@@ -3394,6 +3480,7 @@ export const LineItemGroupQuestion: React.FC<{
                           options={options}
                           disabled={submitting}
                           placeholder={placeholder}
+                          helperText={helperOverride || undefined}
                           emptyText={tSystem('common.noMatches', language, 'No matches.')}
                           onDiagnostic={(event, payload) =>
                             onDiagnostic?.(event, {
@@ -3440,7 +3527,7 @@ export const LineItemGroupQuestion: React.FC<{
                             });
                           }}
                         />
-                        {helperText ? (
+                        {helperText && !helperOverride ? (
                           <div className="muted" style={{ marginTop: 4, whiteSpace: 'pre-line' }}>
                             {helperText}
                           </div>
@@ -3590,7 +3677,11 @@ export const LineItemGroupQuestion: React.FC<{
                   }
                   const display = resolveRowFlowDisplayValue(segment, target.groupKey, field, target.parentValues);
                   const text = display.text || '—';
-                  const formatted = label ? `${label}: ${text}` : text;
+                  const formatted = label
+                    ? label.includes('{{value}}')
+                      ? label.replace('{{value}}', text)
+                      : `${label}: ${text}`
+                    : text;
                   return (
                     <span
                       key={`${segment.config.fieldRef}-${idx}`}
@@ -3618,13 +3709,14 @@ export const LineItemGroupQuestion: React.FC<{
                 return (
                   <div
                     key={row.id}
-                    className="line-item-row ck-row-flow"
+                    className={`line-item-row ck-row-flow${isLeftoverGroup ? ' ck-row-flow--leftover' : ''}`}
                     data-row-anchor={`${q.id}__${row.id}`}
                     style={{
                       background: 'transparent',
                       border: 'none',
-                      padding: 0,
-                      marginBottom: 14
+                      width: '100%',
+                      padding: isLeftoverGroup ? '12px 0' : 0,
+                      marginBottom: isLeftoverGroup ? 0 : 14
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -3635,7 +3727,15 @@ export const LineItemGroupQuestion: React.FC<{
                         {outputSegments.map((segment, idx) => renderOutputSegment(segment, idx, idx < outputSegments.length - 1))}
                       </div>
                       {outputActionsLayout === 'inline' && outputActionsEnd.length ? (
-                        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                        <div
+                          className={isLeftoverGroup ? 'ck-row-flow-actions ck-row-flow-actions--leftover' : 'ck-row-flow-actions'}
+                          style={{
+                            display: 'flex',
+                            gap: 8,
+                            flexShrink: 0,
+                            ...(isLeftoverGroup ? { alignSelf: 'stretch', alignItems: 'flex-end' } : {})
+                          }}
+                        >
                           {outputActionsEnd.map(action => renderRowFlowActionControl(action.id))}
                         </div>
                       ) : null}
@@ -3656,6 +3756,19 @@ export const LineItemGroupQuestion: React.FC<{
                           <div key={prompt.id}>{renderRowFlowPrompt(prompt)}</div>
                         ))}
                       </div>
+                    ) : null}
+                    {isLeftoverGroup && !isLastLeftoverRow ? (
+                      <div
+                        className="ck-line-item-row-separator"
+                        aria-hidden="true"
+                        style={{
+                          width: '100%',
+                          marginTop: 12,
+                          height: 1,
+                          background: 'var(--border, rgba(15, 23, 42, 0.18))',
+                          borderBottom: '1px solid var(--border, rgba(15, 23, 42, 0.12))'
+                        }}
+                      />
                     ) : null}
                   </div>
                 );
@@ -6198,25 +6311,36 @@ export const LineItemGroupQuestion: React.FC<{
               return (
                 <div
                   key={row.id}
-                  className={`line-item-row${rowLocked ? ' ck-row-disabled' : ''}`}
+                  className={`line-item-row${rowLocked ? ' ck-row-disabled' : ''}${isLeftoverGroup ? ' ck-line-item-row--leftover' : ''}`}
                   data-row-anchor={`${q.id}__${row.id}`}
                   data-anchor-field-id={anchorFieldId || undefined}
                   data-anchor-has-value={anchorHasValue ? 'true' : undefined}
                   data-row-disabled={rowLocked ? 'true' : undefined}
                   style={{
-                    background:
-                      rowLocked
-                        ? '#f1f5f9'
-                        : rowIdx % 2 === 0
-                        ? '#ffffff'
-                        : '#f8fafc',
-                    padding: 12,
-                    borderRadius: 10,
-                    border: rowLocked ? '2px dashed rgba(100, 116, 139, 0.45)' : '1px solid #e5e7eb',
+                    ...(isLeftoverGroup
+                      ? {
+                          background: rowLocked ? '#f1f5f9' : 'transparent',
+                          padding: '12px 0',
+                          borderRadius: 0,
+                          border: 'none',
+                          borderBottom: isLastLeftoverRow ? 'none' : '1px solid var(--border)',
+                          marginBottom: 0
+                        }
+                      : {
+                          background:
+                            rowLocked
+                              ? '#f1f5f9'
+                              : rowIdx % 2 === 0
+                                ? '#ffffff'
+                                : '#f8fafc',
+                          padding: 12,
+                          borderRadius: 10,
+                          border: rowLocked ? '2px dashed rgba(100, 116, 139, 0.45)' : '1px solid #e5e7eb',
+                          marginBottom: 10
+                        }),
                     opacity: rowLocked ? 0.86 : 1,
                     outline: rowHasError ? '3px solid rgba(239, 68, 68, 0.55)' : undefined,
-                    outlineOffset: 2,
-                    marginBottom: 10
+                    outlineOffset: rowHasError ? 2 : undefined
                   }}
                 >
                   {showRowHeader ? (
@@ -6537,7 +6661,7 @@ export const LineItemGroupQuestion: React.FC<{
                         ) : null}
                       </div>
                       {canRemoveRow || rowTogglePill ? (
-                        <div className="ck-row-header-actions">
+                        <div className={`ck-row-header-actions${isLeftoverGroup ? ' ck-row-header-actions--leftover' : ''}`}>
                           {rowTogglePill}
                           {canRemoveRow ? (
                             <button
@@ -7513,6 +7637,19 @@ export const LineItemGroupQuestion: React.FC<{
                       </button>
                     ) : null}
                   </div>
+                  {isLeftoverGroup && !isLastLeftoverRow ? (
+                    <div
+                      className="ck-line-item-row-separator"
+                      aria-hidden="true"
+                      style={{
+                        width: '100%',
+                        marginTop: 12,
+                        height: 1,
+                        background: 'var(--border, rgba(15, 23, 42, 0.18))',
+                        borderBottom: '1px solid var(--border, rgba(15, 23, 42, 0.12))'
+                      }}
+                    />
+                  ) : null}
                   {!hideInlineSubgroups && !isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
                     const subLabelResolved = resolveLocalizedString(
                       sub.label,
@@ -7723,12 +7860,25 @@ export const LineItemGroupQuestion: React.FC<{
                                 optionCount: optionsForOverlay.length,
                                 indexedCount: optionsForOverlay.filter(opt => opt.searchText).length
                               });
+                              const addOverlayCopy = resolveAddOverlayCopy(sub, language);
+                              if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.placeholder) {
+                                onDiagnostic?.('ui.lineItems.overlay.copy.override', {
+                                  groupId: subKey,
+                                  scope: 'subgroup',
+                                  hasTitle: !!addOverlayCopy.title,
+                                  hasHelperText: !!addOverlayCopy.helperText,
+                                  hasPlaceholder: !!addOverlayCopy.placeholder
+                                });
+                              }
                               setOverlay({
                                 open: true,
                                 options: optionsForOverlay,
                                 groupId: subKey,
                                 anchorFieldId: anchorField.id,
-                                selected: []
+                                selected: [],
+                                title: addOverlayCopy.title,
+                                helperText: addOverlayCopy.helperText,
+                                placeholder: addOverlayCopy.placeholder
                               });
                             }}
                           >
@@ -8895,6 +9045,7 @@ export const LineItemGroupQuestion: React.FC<{
                                           resolveSelectorPlaceholder(subSelectorCfg, language) ||
                                           tSystem('lineItems.selectLinesSearch', language, 'Search items')
                                         }
+                                        helperText={resolveSelectorHelperText(subSelectorCfg, language) || undefined}
                                         emptyText={tSystem('common.noMatches', language, 'No matches.')}
                                         onDiagnostic={(event, payload) =>
                                           onDiagnostic?.(event, {

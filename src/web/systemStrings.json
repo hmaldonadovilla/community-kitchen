@@ -153,6 +153,16 @@
     "addSelected": { "en": "Add selected", "fr": "Ajouter la sélection", "nl": "Selectie toevoegen" },
     "selectLinesTitle": { "en": "Select lines", "fr": "Sélectionner des lignes", "nl": "Regels selecteren" },
     "selectLinesSearch": { "en": "Search items", "fr": "Rechercher des éléments", "nl": "Zoek items" },
+    "selectLinesHelp": {
+      "en": "Search and select one or more items. You can update quantities after you return.",
+      "fr": "Recherchez et sélectionnez un ou plusieurs éléments. Vous pourrez ajuster les quantités ensuite.",
+      "nl": "Zoek en selecteer een of meer items. U kunt de hoeveelheden daarna aanpassen."
+    },
+    "duplicateAdd": {
+      "en": "{value} is already in the list, change the quantity",
+      "fr": "{value} est déjà dans la liste, modifiez la quantité",
+      "nl": "{value} staat al in de lijst, pas de hoeveelheid aan"
+    },
     "noOptionsAvailable": { "en": "No options available.", "fr": "Aucune option disponible.", "nl": "Geen opties beschikbaar." }
   },
   "common": {
@@ -160,12 +170,14 @@
     "selectPlaceholder": { "en": "Select…", "fr": "Sélectionner…", "nl": "Selecteer…" },
     "noMatches": { "en": "No matches.", "fr": "Aucun résultat.", "nl": "Geen resultaten." },
     "close": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" },
+    "back": { "en": "Back", "fr": "Retour", "nl": "Terug" },
     "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
     "tapToOpen": { "en": "Tap to open", "fr": "Appuyez pour ouvrir", "nl": "Tik om te openen" },
     "tapToExpand": { "en": "Tap to expand", "fr": "Appuyez pour ouvrir", "nl": "Tik om te openen" },
     "tapToCollapse": { "en": "Tap to collapse", "fr": "Appuyez pour réduire", "nl": "Tik om te sluiten" },
     "download": { "en": "Download", "fr": "Télécharger", "nl": "Downloaden" },
     "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
+    "saveChanges": { "en": "Save changes", "fr": "Enregistrer les modifications", "nl": "Wijzigingen opslaan" },
     "add": { "en": "Add", "fr": "Ajouter", "nl": "Toevoegen" },
     "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
     "noChange": { "en": "No change.", "fr": "Aucun changement.", "nl": "Geen wijziging." },

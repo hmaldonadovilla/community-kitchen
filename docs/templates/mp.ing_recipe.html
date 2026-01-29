@@ -24,19 +24,22 @@
 
   .ck-tab-list {
     display: flex;
-    gap: 16px;
+    gap: 0;
     margin: 0 0 12px 0;
     padding: 0 0 6px 0;
     border-bottom: 1px solid var(--border);
+    width: 100%;
   }
 
   .ck-tab {
+    flex: 1 1 0;
     border: 0;
     background: none;
     padding: 6px 0;
     font: inherit;
     color: inherit;
     cursor: pointer;
+    text-align: center;
   }
 
   .ck-tab.is-active {

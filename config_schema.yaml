@@ -786,7 +786,7 @@ components:
             - Typically omitted for the top-level `lineItemConfig` because the parent question’s `id` is used as the group key.
         label:
           $ref: '#/components/schemas/LocalizedString'
-          description: Optional localized label rendered as the subgroup title; falls back to `id` when omitted.
+          description: Optional label/template for this value (supports {{value}} placeholder).
         ui:
           $ref: '#/components/schemas/LineItemGroupUiConfig'
           description: Optional UI settings for how line item rows are rendered (e.g., progressive disclosure).
@@ -811,6 +811,10 @@ components:
             - selectorOverlay: use the section selector as a searchable multi-select list for the anchor CHOICE field (no separate Add button). Search indexes include extra columns from `optionsRef` / data sources.
             - auto: automatically add/recompute rows when the anchor field's `optionFilter.dependsOn` fields are filled (one row per allowed anchor option). Auto-generated rows are overwritten when dependencies change, while manual rows are preserved.
             - inline: default; show a simple "Add line" button and create an empty row per click.
+        addOverlay:
+          $ref: '#/components/schemas/LineItemAddOverlayConfig'
+          description: |
+            Optional copy overrides for the multi-select add overlay (used when `addMode: "overlay"`).
         sectionSelector:
           $ref: '#/components/schemas/LineItemSelectorConfig'
           description: Optional selector rendered above the line items to scope filters/validation rules (options can come from a REF tab).
@@ -1286,6 +1290,8 @@ components:
         addMode:
           type: string
           enum: [overlay, selectorOverlay, inline, auto]
+        addOverlay:
+          $ref: '#/components/schemas/LineItemAddOverlayConfig'
         sectionSelector:
           $ref: '#/components/schemas/LineItemSelectorConfig'
         dedupRules:
@@ -2054,6 +2060,11 @@ components:
             - Generated rows inside `GROUP_TABLE` and `CONSOLIDATED_TABLE` outputs use alternating row background colors (zebra striping) automatically.
         pdfFolderId:
           type: string
+        pdfFileNameFieldId:
+          type: string
+          description: |
+            Optional field id used to name generated PDFs (and email attachments).
+            Can reference a question id or a meta field: `id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`.
         emailTemplateId:
           $ref: '#/components/schemas/TemplateIdMap'
         emailSubject:
@@ -2315,6 +2326,9 @@ components:
           $ref: '#/components/schemas/LocalizedString'
         helpText:
           $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional helper text displayed above the step content (guided mode).
+            Use this for step-wide guidance such as food safety confirmations or photo requirements.
         render:
           $ref: '#/components/schemas/StepsRenderDefaultsConfig'
         include:
@@ -2544,6 +2558,8 @@ components:
             - hidden: hide the visual label (screen-reader label is preserved)
         placeholder:
           $ref: '#/components/schemas/LocalizedString'
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
       additionalProperties: false
 
     RowFlowPromptConfig:
@@ -2721,6 +2737,8 @@ components:
             rowFlow:
               $ref: '#/components/schemas/RowFlowConfig'
             overlayContextHeader:
+              $ref: '#/components/schemas/RowFlowOverlayContextHeaderConfig'
+            overlayHelperText:
               $ref: '#/components/schemas/RowFlowOverlayContextHeaderConfig'
           required: [type]
           additionalProperties: false
@@ -3931,6 +3949,24 @@ components:
           type: string
         labelNl:
           type: string
+        placeholder:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Placeholder text for the selector input.
+        placeholderEn:
+          type: string
+        placeholderFr:
+          type: string
+        placeholderNl:
+          type: string
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper text for selector-overlay search prompts.
+        helperTextEn:
+          type: string
+        helperTextFr:
+          type: string
+        helperTextNl:
+          type: string
         hideLabel:
           type: boolean
           description: When true, hide the selector label (placeholder only).
@@ -3966,6 +4002,19 @@ components:
             Optional filter for the selector options themselves. Supports `optionMap` or `optionMapRef` (including multi-column keys).
             Useful for cascading selectors where available sections depend on other fields.
 
+    LineItemAddOverlayConfig:
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional title for the multi-select add overlay.
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper text shown under the title in the multi-select add overlay.
+        placeholder:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional placeholder text for the overlay search input.
+
     LineItemTotalConfig:
       type: object
       properties:
@@ -3999,7 +4048,7 @@ components:
           oneOf:
             - type: string
             - $ref: '#/components/schemas/LocalizedString'
-          description: Optional localized error message for duplicate rows.
+          description: Optional localized error message for duplicate rows (supports {value} placeholder).
       required: [fields]
 
     ValidationRule:

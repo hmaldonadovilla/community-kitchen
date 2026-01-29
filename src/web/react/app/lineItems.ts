@@ -1,4 +1,4 @@
-import { FieldValue, LineItemRowState, OptionFilter, WebFormDefinition, WebQuestionDefinition } from '../../types';
+import { FieldValue, LineItemDedupRule, LineItemRowState, OptionFilter, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LineItemState } from '../types';
 import { toDependencyValue } from '../../core';
 import { computeNonMatchOptionKeys } from '../../rules/filter';
@@ -120,6 +120,79 @@ export const buildLineItemDedupKey = (rowValues: Record<string, FieldValue>, fie
   const parts = fieldIds.map(fid => normalizeDedupScalar((rowValues as any)[fid]));
   if (parts.some(p => !p)) return null;
   return parts.join('||');
+};
+
+export const formatLineItemDedupValue = (raw: FieldValue): string => {
+  if (raw === undefined || raw === null) return '';
+  if (Array.isArray(raw)) {
+    return raw
+      .map(item => formatLineItemDedupValue(item as any))
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (raw instanceof Date) return raw.toISOString();
+  try {
+    return raw.toString().trim();
+  } catch (_) {
+    return '';
+  }
+};
+
+export const normalizeLineItemDedupRules = (raw: any): LineItemDedupRule[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(rule => {
+      if (!rule || typeof rule !== 'object') return null;
+      const rawFields = (rule as any).fields ?? (rule as any).fieldIds ?? (rule as any).keys ?? (rule as any).keyFields;
+      const fields = (() => {
+        if (Array.isArray(rawFields)) {
+          return rawFields
+            .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
+            .filter(Boolean);
+        }
+        if (typeof rawFields === 'string') {
+          return rawFields
+            .split(',')
+            .map(v => v.trim())
+            .filter(Boolean);
+        }
+        return [];
+      })();
+      if (!fields.length) return null;
+      return { fields, message: (rule as any).message } as LineItemDedupRule;
+    })
+    .filter(Boolean) as LineItemDedupRule[];
+};
+
+export const findLineItemDedupConflict = (args: {
+  rules: LineItemDedupRule[];
+  rows: LineItemRowState[];
+  rowValues: Record<string, FieldValue>;
+  excludeRowId?: string;
+}):
+  | {
+      rule: LineItemDedupRule;
+      fields: string[];
+      matchRow: LineItemRowState;
+    }
+  | null => {
+  const { rules, rows, rowValues, excludeRowId } = args;
+  if (!rules.length || !rows.length) return null;
+  for (const rule of rules) {
+    const fields = (rule.fields || []).map(fid => (fid ?? '').toString().trim()).filter(Boolean);
+    if (!fields.length) continue;
+    const nextKey = buildLineItemDedupKey(rowValues, fields);
+    if (!nextKey) continue;
+    const match = rows.find(row => {
+      if (excludeRowId && row.id === excludeRowId) return false;
+      const key = buildLineItemDedupKey((row.values || {}) as Record<string, FieldValue>, fields);
+      return key === nextKey;
+    });
+    if (match) {
+      return { rule, fields, matchRow: match };
+    }
+  }
+  return null;
 };
 
 const isOrMatchMode = (filter: OptionFilter | undefined): boolean => {
@@ -683,5 +756,4 @@ export const cascadeRemoveLineItemRows = (args: {
 
   return { lineItems: nextLineItems, removed, removedSubgroupKeys };
 };
-
 

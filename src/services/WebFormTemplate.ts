@@ -425,6 +425,13 @@ export function buildWebFormHtml(
       button:disabled { opacity: 0.6; cursor: not-allowed; }
       .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
       .muted { color: var(--muted); font-size: 0.7em; }
+      .ck-step-help-text {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: calc(var(--ck-font-control) * 0.85);
+        line-height: 1.4;
+        font-weight: 400;
+      }
       .status { margin-top: 8px; padding: 8px 10px; background: rgba(118,118,128,0.12); border: 1px solid var(--border); border-radius: 12px; }
       .inline-options { display: flex; gap: 10px; flex-wrap: wrap; }
       .inline { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }

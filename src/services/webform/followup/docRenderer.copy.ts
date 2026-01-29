@@ -18,6 +18,51 @@ import { linkifyUploadedFileUrls } from './fileLinks';
  * - Linkify FILE_UPLOAD URLs
  */
 
+const META_FILE_NAME_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
+
+const sanitizeFileLabel = (value: string): string => {
+  return (value || '')
+    .toString()
+    .replace(/[\\\/]+/g, '-')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const normalizeFileLabel = (value: any): string => {
+  if (value === undefined || value === null) return '';
+  const text = sanitizeFileLabel(value.toString());
+  const lowered = text.toLowerCase();
+  if (!text || lowered === 'null' || lowered === 'undefined') return '';
+  return text;
+};
+
+const resolveMetaFileLabel = (record: WebFormSubmission, fieldId: string): string => {
+  const key = fieldId.toLowerCase();
+  if (key === 'id') return normalizeFileLabel(record.id);
+  if (key === 'createdat') return normalizeFileLabel(record.createdAt);
+  if (key === 'updatedat') return normalizeFileLabel(record.updatedAt);
+  if (key === 'status') return normalizeFileLabel(record.status);
+  if (key === 'pdfurl') return normalizeFileLabel(record.pdfUrl);
+  return '';
+};
+
+export const resolveRecordFileLabel = (form: FormConfig, record: WebFormSubmission): string => {
+  const fieldIdRaw = form.followupConfig?.pdfFileNameFieldId;
+  const fieldId = fieldIdRaw ? fieldIdRaw.toString().trim() : '';
+  if (fieldId) {
+    if (META_FILE_NAME_FIELDS.has(fieldId) || META_FILE_NAME_FIELDS.has(fieldId.toLowerCase())) {
+      const metaLabel = resolveMetaFileLabel(record, fieldId);
+      if (metaLabel) return metaLabel;
+    }
+    const value = (record?.values as any)?.[fieldId];
+    const label = normalizeFileLabel(value);
+    if (label) return label;
+  }
+  const recordId = normalizeFileLabel(record.id);
+  return recordId;
+};
+
 export const renderDocCopyFromTemplate = (args: {
   dataSources: DataSourceService;
   form: FormConfig;
@@ -34,7 +79,8 @@ export const renderDocCopyFromTemplate = (args: {
   }
   try {
     const templateFile = DriveApp.getFileById(templateId);
-    const copyName = `${namePrefix || form.title || 'Form'} - ${record.id || generateUuid()}`;
+    const recordLabel = resolveRecordFileLabel(form, record);
+    const copyName = `${namePrefix || form.title || 'Form'} - ${recordLabel || generateUuid()}`;
     const copy = templateFile.makeCopy(copyName, copyFolder);
     const doc = DocumentApp.openById(copy.getId());
     const lineItemRows = collectLineItemRows(record, questions);
@@ -156,5 +202,3 @@ const generateUuid = (): string => {
   }
   return 'uuid-' + Math.random().toString(16).slice(2);
 };
-
-

@@ -15,3 +15,9 @@ export interface FormErrors {
 
 export type View = 'form' | 'list' | 'summary';
 
+export type LineItemAddResult = {
+  status: 'added' | 'blocked' | 'duplicate';
+  message?: string;
+  fieldId?: string;
+  matchRowId?: string;
+};
