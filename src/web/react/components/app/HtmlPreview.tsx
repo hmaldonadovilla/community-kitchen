@@ -8,11 +8,19 @@ export const HtmlPreview: React.FC<{
    */
   allowScripts?: boolean;
   /**
+   * Optional list of tab targets to hide when the template uses data-tab-target/data-tab-panel.
+   */
+  hideTabTargets?: string[];
+  /**
    * Called when the user clicks a FILE_UPLOAD icon placeholder rendered in the HTML.
    */
   onOpenFiles?: (fieldId: string) => void;
+  /**
+   * Called when a data-ck-action element is clicked inside the HTML.
+   */
+  onAction?: (actionId: string) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
-}> = ({ html, allowScripts, onOpenFiles, onDiagnostic }) => {
+}> = ({ html, allowScripts, hideTabTargets, onOpenFiles, onAction, onDiagnostic }) => {
   const htmlText = useMemo(() => (html || '').toString(), [html]);
   const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -55,6 +63,48 @@ export const HtmlPreview: React.FC<{
     onDiagnostic?.('htmlPreview.scripts.execute.done', { count: nodes.length });
   }, [allowScripts, htmlText, onDiagnostic]);
 
+  useEffect(() => {
+    if (!hideTabTargets || !hideTabTargets.length) return;
+    const root = contentRef.current;
+    if (!root) return;
+    const targets = new Set(hideTabTargets.map(t => (t || '').toString().trim()).filter(Boolean));
+    if (!targets.size) return;
+    const tabs = Array.from(root.querySelectorAll('[data-tab-target]')) as HTMLElement[];
+    const panels = Array.from(root.querySelectorAll('[data-tab-panel]')) as HTMLElement[];
+    if (!tabs.length || !panels.length) return;
+    tabs.forEach(tab => {
+      const key = (tab.getAttribute('data-tab-target') || '').toString().trim();
+      if (!key) return;
+      if (targets.has(key)) {
+        tab.setAttribute('hidden', 'true');
+        tab.setAttribute('aria-hidden', 'true');
+        tab.classList.remove('is-active');
+      }
+    });
+    panels.forEach(panel => {
+      const key = (panel.getAttribute('data-tab-panel') || '').toString().trim();
+      if (!key) return;
+      if (targets.has(key)) {
+        panel.hidden = true;
+        panel.classList.remove('is-active');
+      }
+    });
+    const visibleTabs = tabs.filter(tab => !tab.hasAttribute('hidden'));
+    if (!visibleTabs.length) return;
+    const activeTab = visibleTabs.find(tab => tab.classList.contains('is-active')) || visibleTabs[0];
+    const activeTarget = (activeTab.getAttribute('data-tab-target') || '').toString().trim();
+    tabs.forEach(tab => {
+      const isActive = tab === activeTab;
+      tab.classList.toggle('is-active', isActive);
+      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    panels.forEach(panel => {
+      const isActive = (panel.getAttribute('data-tab-panel') || '').toString().trim() === activeTarget;
+      panel.classList.toggle('is-active', isActive);
+      panel.hidden = !isActive;
+    });
+  }, [hideTabTargets, htmlText]);
+
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       try {
@@ -71,6 +121,17 @@ export const HtmlPreview: React.FC<{
             count: fileBtn.getAttribute('data-ck-file-count') || null
           });
           onOpenFiles?.(fieldId);
+          return;
+        }
+
+        const actionEl = target.closest?.('[data-ck-action]') as HTMLElement | null;
+        if (actionEl) {
+          e.preventDefault();
+          e.stopPropagation();
+          const actionId = (actionEl.getAttribute('data-ck-action') || '').toString().trim();
+          if (!actionId) return;
+          onDiagnostic?.('htmlPreview.action.click', { actionId });
+          onAction?.(actionId);
           return;
         }
 
@@ -91,7 +152,7 @@ export const HtmlPreview: React.FC<{
         // ignore
       }
     },
-    [onDiagnostic, onOpenFiles]
+    [onAction, onDiagnostic, onOpenFiles]
   );
 
   return (
@@ -111,5 +172,3 @@ export const HtmlPreview: React.FC<{
     </div>
   );
 };
-
-

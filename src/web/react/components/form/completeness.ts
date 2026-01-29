@@ -51,7 +51,9 @@ export function isLineItemGroupQuestionComplete(args: {
 
     const groupCtx: VisibilityContext = {
       getValue: fid => getTopValue(fid),
-      getLineValue: (_rowId, fid) => (row?.values || {})[fid]
+      getLineValue: (_rowId, fid) => (row?.values || {})[fid],
+      getLineItems: groupId => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems || {})
     };
 
     const isHidden = (fieldId: string) => {
@@ -119,7 +121,9 @@ export function isLineItemGroupQuestionComplete(args: {
 
     const groupCtx: VisibilityContext = {
       getValue: fid => getTopValue(fid),
-      getLineValue: (_rowId, fid) => rowValues[fid]
+      getLineValue: (_rowId, fid) => rowValues[fid],
+      getLineItems: groupId => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems || {})
     };
 
     for (const field of lineFields) {
@@ -171,7 +175,9 @@ export function isLineItemGroupQuestionComplete(args: {
 
           const subCtx: VisibilityContext = {
             getValue: fid => getTopValue(fid),
-            getLineValue: (_rowId, fid) => (subRow?.values || {})[fid]
+            getLineValue: (_rowId, fid) => (subRow?.values || {})[fid],
+            getLineItems: groupId => lineItems[groupId] || [],
+            getLineItemKeys: () => Object.keys(lineItems || {})
           };
           const isHidden = (fieldId: string) => {
             const target = (subFields || []).find((f: any) => f?.id === fieldId) as any;
@@ -223,7 +229,9 @@ export function isLineItemGroupQuestionComplete(args: {
             if (Object.prototype.hasOwnProperty.call(rowValues || {}, fid)) return (rowValues as any)[fid];
             return getTopValue(fid);
           },
-          getLineValue: (_rowId, fid) => subRowValues[fid]
+          getLineValue: (_rowId, fid) => subRowValues[fid],
+          getLineItems: groupId => lineItems[groupId] || [],
+          getLineItemKeys: () => Object.keys(lineItems || {})
         };
 
         for (const field of subFields) {
@@ -250,4 +258,3 @@ export function isLineItemGroupQuestionComplete(args: {
 
   return hasAnyEnabledRow;
 }
-

@@ -28,6 +28,7 @@ export const SummaryView: React.FC<{
   recordLoadingId: string | null;
   currentRecord: WebFormSubmission | null;
   onOpenFiles?: (fieldId: string) => void;
+  onAction?: (actionId: string) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }> = ({
   definition,
@@ -41,6 +42,7 @@ export const SummaryView: React.FC<{
   recordLoadingId,
   currentRecord,
   onOpenFiles,
+  onAction,
   onDiagnostic
 }) => {
   // Ensure we start at the top when switching from a scrolled form view (common on mobile).
@@ -209,6 +211,7 @@ export const SummaryView: React.FC<{
                 html={summaryHtml.html}
                 allowScripts={summaryHtml.allowScripts}
                 onOpenFiles={onOpenFiles}
+                onAction={onAction}
                 onDiagnostic={onDiagnostic}
               />
             ) : summaryHtml.phase === 'error' ? (
@@ -247,5 +250,4 @@ export const SummaryView: React.FC<{
     </div>
   );
 };
-
 

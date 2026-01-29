@@ -76,10 +76,13 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
           resolvedKey = res.formKey || formKey;
           setActiveFormKey(resolvedKey);
           setActiveRecord(res.record ?? null);
+          const configSource = res.configSource || 'sheet';
           logBootEvent('bootstrap.fetch.success', {
             formKey: resolvedKey,
-            elapsedMs: Date.now() - startedAt
+            elapsedMs: Date.now() - startedAt,
+            configSource
           });
+          logBootEvent('config.source', { formKey: resolvedKey, source: configSource });
         } catch (err: any) {
           if (cancelled) return;
           const message = err?.message ? err.message.toString() : 'Request failed';

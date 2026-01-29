@@ -1,7 +1,10 @@
 import { Dashboard } from '../config/Dashboard';
 import { ConfigSheet } from '../config/ConfigSheet';
+import { ConfigValidator } from '../config/ConfigValidator';
 import {
   FormConfig,
+  FormConfigExport,
+  DedupRule,
   QuestionConfig,
   WebFormDefinition,
   WebFormSubmission,
@@ -23,6 +26,7 @@ import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from '
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
 import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
 import { ensureRecordIndexSheet } from './webform/recordIndex';
+import { getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -51,13 +55,58 @@ export class WebFormService {
     this.followups = new FollowupService(ss, this.submissions, this.dataSources);
   }
 
+  private resolveBundledConfig(formKey?: string): FormConfigExport | null {
+    const config = getBundledFormConfig(formKey);
+    if (!config || !config.form || !Array.isArray(config.questions)) return null;
+    return config;
+  }
+
+  private listBundledForms(): FormConfig[] {
+    return listBundledFormConfigs()
+      .map(cfg => cfg?.form)
+      .filter((form): form is FormConfig => !!form);
+  }
+
+  private filterActiveQuestions(questions: QuestionConfig[]): QuestionConfig[] {
+    return (Array.isArray(questions) ? questions : []).filter(q => q && q.status === 'Active');
+  }
+
+  private resolveFormOnly(formKey?: string): { form: FormConfig; source: 'bundled' | 'sheet' } {
+    const bundled = this.resolveBundledConfig(formKey);
+    if (bundled?.form) return { form: bundled.form, source: 'bundled' };
+    return { form: this.definitionBuilder.findForm(formKey), source: 'sheet' };
+  }
+
+  private resolveBundledFormContext(formKey?: string): { form: FormConfig; questions: QuestionConfig[] } | null {
+    const bundled = this.resolveBundledConfig(formKey);
+    if (!bundled) return null;
+    return { form: bundled.form, questions: this.filterActiveQuestions(bundled.questions) };
+  }
+
+  private resolveDedupRules(formKey?: string, form?: FormConfig): DedupRule[] {
+    const bundled = this.resolveBundledConfig(formKey || form?.configSheet || form?.title);
+    if (bundled && Array.isArray(bundled.dedupRules)) return bundled.dedupRules;
+    const resolvedForm = form || this.definitionBuilder.findForm(formKey);
+    return loadDedupRules(this.ss, resolvedForm.configSheet);
+  }
+
   public buildDefinition(formKey?: string): WebFormDefinition {
+    const bundled = this.resolveBundledConfig(formKey);
+    if (bundled?.definition) {
+      debugLog('definition.bundle.hit', { requestedKey: formKey || null, formKey: bundled.formKey || null });
+      return bundled.definition;
+    }
     const def = this.definitionBuilder.buildDefinition(formKey);
     debugLog('buildDefinition.formSelected', { requestedKey: formKey, formTitle: def.title });
     return def;
   }
 
   private getFormsCached(): FormConfig[] {
+    const bundledForms = this.listBundledForms();
+    if (bundledForms.length) {
+      debugLog('forms.bundle.hit', { count: bundledForms.length });
+      return bundledForms;
+    }
     const formsCacheKey = this.cacheManager.makeCacheKey('FORMS', ['ALL']);
     const startedAt = Date.now();
     try {
@@ -82,6 +131,11 @@ export class WebFormService {
   }
 
   private getOrBuildDefinition(formKey?: string): WebFormDefinition {
+    const bundled = this.resolveBundledConfig(formKey);
+    if (bundled?.definition) {
+      debugLog('definition.bundle.hit', { requestedKey: formKey || null, formKey: bundled.formKey || null });
+      return bundled.definition;
+    }
     const keyBase = (formKey || '').toString().trim() || '__DEFAULT__';
     const formCacheKey = this.cacheManager.makeCacheKey('DEF', [keyBase]);
     const startedAt = Date.now();
@@ -111,11 +165,75 @@ export class WebFormService {
     return def;
   }
 
-  public fetchBootstrapContext(formKey?: string): { definition: WebFormDefinition; formKey: string } {
+  public fetchBootstrapContext(formKey?: string): { definition: WebFormDefinition; formKey: string; configSource?: string } {
+    const bundled = this.resolveBundledConfig(formKey);
+    if (bundled?.definition) {
+      const resolvedKey =
+        (formKey || '').toString().trim() ||
+        bundled.formKey ||
+        bundled.form?.configSheet ||
+        bundled.form?.title ||
+        '__DEFAULT__';
+      debugLog('definition.fetch', {
+        formKey: resolvedKey,
+        questions: bundled.definition?.questions?.length || 0,
+        source: 'bundled'
+      });
+      return { definition: bundled.definition, formKey: resolvedKey, configSource: 'bundled' };
+    }
     const def = this.getOrBuildDefinition(formKey);
     const resolvedKey = (formKey || '').toString().trim() || def.title || '__DEFAULT__';
-    debugLog('definition.fetch', { formKey: resolvedKey, questions: def.questions?.length || 0 });
-    return { definition: def, formKey: resolvedKey };
+    debugLog('definition.fetch', { formKey: resolvedKey, questions: def.questions?.length || 0, source: 'sheet' });
+    return { definition: def, formKey: resolvedKey, configSource: 'sheet' };
+  }
+
+  public fetchFormConfig(formKey?: string): FormConfigExport {
+    const startedAt = Date.now();
+    const bundled = this.resolveBundledConfig(formKey);
+    if (bundled) {
+      const resolvedKey =
+        (formKey || '').toString().trim() ||
+        bundled.formKey ||
+        bundled.form?.configSheet ||
+        bundled.form?.title ||
+        '__DEFAULT__';
+      const activeQuestions = this.filterActiveQuestions(bundled.questions || []);
+      debugLog('config.export.ready', {
+        formKey: resolvedKey,
+        questions: bundled.questions?.length || 0,
+        activeQuestions: activeQuestions.length,
+        dedupRules: bundled.dedupRules?.length || 0,
+        validationErrors: bundled.validationErrors?.length || 0,
+        source: 'bundled',
+        elapsedMs: Date.now() - startedAt
+      });
+      return bundled;
+    }
+    const form = this.definitionBuilder.findForm(formKey);
+    const resolvedKey = (formKey || '').toString().trim() || form.configSheet || form.title || '__DEFAULT__';
+    const questions = ConfigSheet.getQuestions(this.ss, form.configSheet);
+    const activeQuestions = questions.filter(q => q.status === 'Active');
+    const dedupRules = loadDedupRules(this.ss, form.configSheet);
+    const validationErrors = ConfigValidator.validate(activeQuestions, form.configSheet);
+    const definition = this.definitionBuilder.buildDefinition(form.configSheet || form.title);
+    debugLog('config.export.ready', {
+      formKey: resolvedKey,
+      questions: questions.length,
+      activeQuestions: activeQuestions.length,
+      dedupRules: dedupRules.length,
+      validationErrors: validationErrors.length,
+      source: 'sheet',
+      elapsedMs: Date.now() - startedAt
+    });
+    return {
+      formKey: resolvedKey,
+      generatedAt: new Date().toISOString(),
+      form,
+      questions,
+      dedupRules,
+      definition,
+      validationErrors
+    };
   }
 
   public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
@@ -257,7 +375,7 @@ export class WebFormService {
    * that initial user hits see a warmed definition cache.
    */
   public warmDefinitions(): void {
-    const forms = this.dashboard.getForms();
+    const forms = this.getFormsCached();
     const startedAt = Date.now();
     forms.forEach(form => {
       try {
@@ -345,14 +463,14 @@ export class WebFormService {
   ): { success: boolean; id?: string; rowNumber?: number; dataVersion?: number; updatedAt?: string; message?: string } {
     // Keep this very lightweight: avoid loading questions/dedup rules or ensuring destination headers.
     // The index sheet is designed so base columns are fixed and rows align with destination row numbers.
-    const form = this.definitionBuilder.findForm(formKey);
+    const { form } = this.resolveFormOnly(formKey);
     return this.submissions.getRecordVersion(form, recordId, rowNumberHint);
   }
 
   public saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     const { form, questions } = this.getFormContext(formKey);
-    const dedupRules = loadDedupRules(this.ss, form.configSheet);
+    const dedupRules = this.resolveDedupRules(formKey, form);
     return this.submissions.saveSubmissionWithId(formObject, form, questions, dedupRules);
   }
 
@@ -363,7 +481,7 @@ export class WebFormService {
   public checkDedupConflict(formObject: WebFormSubmission): { success: boolean; conflict?: any; message?: string } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     const { form, questions } = this.getFormContextLite(formKey);
-    const dedupRules = loadDedupRules(this.ss, form.configSheet);
+    const dedupRules = this.resolveDedupRules(formKey, form);
     return this.submissions.checkDedupConflict(formObject, form, questions, dedupRules);
   }
 
@@ -389,18 +507,18 @@ export class WebFormService {
       if (sheetName.endsWith(' Dedup')) return;
       if (sheetName.startsWith('__CK_INDEX__')) return;
 
-      const forms = this.dashboard.getForms();
+      const forms = this.getFormsCached();
       const match = forms.find(f => {
         const dest = (f.destinationTab || `${f.title} Responses`).toString();
         return dest === sheetName;
       });
       if (!match) return;
 
-      const questions = ConfigSheet.getQuestionsLite(this.ss, match.configSheet).filter(q => q.status === 'Active');
-      const dedupRules = loadDedupRules(this.ss, match.configSheet);
+      const { form, questions } = this.getFormContextLite(match.configSheet || match.title);
+      const dedupRules = this.resolveDedupRules(match.configSheet || match.title, form);
 
       this.submissions.handleManualDestinationEdits({
-        form: match,
+        form,
         questions,
         dedupRules,
         startRow: range.getRow(),
@@ -557,8 +675,8 @@ export class WebFormService {
   public rebuildIndexes(formKey?: string): { success: boolean; message?: string; results?: any[] } {
     try {
       const forms = (() => {
-        if (formKey) return [this.definitionBuilder.findForm(formKey)];
-        return this.dashboard.getForms();
+        if (formKey) return [this.resolveFormOnly(formKey).form];
+        return this.getFormsCached();
       })();
       if (!forms.length) return { success: true, message: 'No forms found.' };
 
@@ -566,9 +684,9 @@ export class WebFormService {
       const BATCH = 2000;
 
       forms.forEach(form => {
-        const dest = form.destinationTab || `${form.title} Responses`;
-        const questions = ConfigSheet.getQuestionsLite(this.ss, form.configSheet).filter(q => q.status === 'Active');
-        const dedupRules = loadDedupRules(this.ss, form.configSheet);
+        const { form: resolvedForm, questions } = this.getFormContextLite(form.configSheet || form.title);
+        const dest = resolvedForm.destinationTab || `${resolvedForm.title} Responses`;
+        const dedupRules = this.resolveDedupRules(form.configSheet || form.title, resolvedForm);
         const effectiveDedupRules = (dedupRules || []).filter(r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form');
 
         const { sheet, columns } = this.submissions.ensureDestination(dest, questions);
@@ -1105,12 +1223,16 @@ export class WebFormService {
   }
 
   private getFormContext(formKey?: string): { form: FormConfig; questions: QuestionConfig[] } {
+    const bundled = this.resolveBundledFormContext(formKey);
+    if (bundled) return bundled;
     const form = this.definitionBuilder.findForm(formKey);
     const questions = this.loadActiveQuestions(form.configSheet);
     return { form, questions };
   }
 
   private getFormContextLite(formKey?: string): { form: FormConfig; questions: QuestionConfig[] } {
+    const bundled = this.resolveBundledFormContext(formKey);
+    if (bundled) return bundled;
     const cacheKey = this.cacheManager.makeCacheKey('CTX', [formKey || '', 'lite']);
     const cached = this.cacheManager.cacheGet<{ form: FormConfig; questions: QuestionConfig[] }>(cacheKey);
     if (cached && cached.form && Array.isArray(cached.questions)) {

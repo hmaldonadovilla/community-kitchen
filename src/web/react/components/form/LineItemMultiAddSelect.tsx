@@ -16,11 +16,12 @@ export const LineItemMultiAddSelect: React.FC<{
   options: LineItemMultiAddOption[];
   disabled?: boolean;
   placeholder?: string;
+  helperText?: string;
   emptyText?: string;
   onAddSelected: (values: string[]) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   diagnosticMeta?: Record<string, unknown>;
-}> = ({ label, language, options, disabled, placeholder, emptyText, onAddSelected, onDiagnostic, diagnosticMeta }) => {
+}> = ({ label, language, options, disabled, placeholder, helperText, emptyText, onAddSelected, onDiagnostic, diagnosticMeta }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -32,6 +33,7 @@ export const LineItemMultiAddSelect: React.FC<{
   const hasQuery = normalizedQuery.length > 0;
   const showClear = !disabled && Boolean(normalizedQuery);
   const maxItems = 60;
+  const resolvedHelperText = (helperText || '').toString().trim();
   const mergeDiagnostic = (payload?: Record<string, unknown>) => {
     if (!diagnosticMeta) return payload;
     if (!payload) return { ...diagnosticMeta };
@@ -194,7 +196,7 @@ export const LineItemMultiAddSelect: React.FC<{
               <div className="ck-line-item-multiadd__empty">
                 {hasQuery
                   ? emptyText || tSystem('lineItems.noOptionsAvailable', language, 'No options available.')
-                  : tSystem('lineItems.searchPrompt', language, 'Enter at least 1 character to search.')}
+                  : resolvedHelperText || tSystem('lineItems.searchPrompt', language, 'Enter at least 1 character to search.')}
               </div>
             )}
           </div>
@@ -205,7 +207,7 @@ export const LineItemMultiAddSelect: React.FC<{
               style={withDisabled(buttonStyles.primary, !!disabled || selectedCount === 0)}
               onClick={handleAddSelected}
             >
-              {tSystem('lineItems.addSelected', language, 'Add selected ({count})', { count: selectedCount })}
+              {tSystem('lineItems.addSelected', language, 'Add selected')}
             </button>
           </div>
         </div>

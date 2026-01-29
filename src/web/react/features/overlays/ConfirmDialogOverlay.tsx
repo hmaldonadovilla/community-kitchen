@@ -3,18 +3,20 @@ import React from 'react';
 /**
  * ConfirmDialogOverlay
  * --------------------
- * A reusable confirm/cancel modal dialog (clicking the backdrop cancels).
+ * A reusable confirm/cancel modal dialog (backdrop can optionally dismiss).
  *
  * Owner: WebForm UI (React)
  */
 export const ConfirmDialogOverlay: React.FC<{
   open: boolean;
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel: string;
   cancelLabel: string;
   showCancel?: boolean;
   showConfirm?: boolean;
+  dismissOnBackdrop?: boolean;
+  showCloseButton?: boolean;
   zIndex?: number;
   onCancel: () => void;
   onConfirm: () => void;
@@ -26,6 +28,8 @@ export const ConfirmDialogOverlay: React.FC<{
   cancelLabel,
   showCancel = true,
   showConfirm = true,
+  dismissOnBackdrop = true,
+  showCloseButton = true,
   zIndex = 12020,
   onCancel,
   onConfirm
@@ -50,15 +54,16 @@ export const ConfirmDialogOverlay: React.FC<{
         type="button"
         aria-label="Close dialog"
         title="Close"
-        onClick={onCancel}
+        onClick={dismissOnBackdrop ? onCancel : undefined}
+        aria-disabled={!dismissOnBackdrop}
         style={{
           position: 'absolute',
           inset: 0,
           border: 0,
           padding: 0,
           margin: 0,
-          background: 'rgba(15,23,42,0.46)',
-          cursor: 'pointer'
+          background: 'rgba(15, 23, 42, 0.35)',
+          cursor: dismissOnBackdrop ? 'pointer' : 'default'
         }}
       />
       <dialog
@@ -66,82 +71,76 @@ export const ConfirmDialogOverlay: React.FC<{
         aria-label={title}
         aria-modal="true"
         style={{
-          width: 'min(760px, 100%)',
-          minHeight: 'min(360px, 92vh)',
+          width: 'min(720px, 100%)',
           maxHeight: 'min(92vh, 980px)',
           margin: 0,
           background: '#ffffff',
-          borderRadius: 18,
-          border: '1px solid rgba(15,23,42,0.14)',
-          boxShadow: '0 30px 90px rgba(15,23,42,0.22)',
-          padding: 26,
+          borderRadius: 12,
+          border: '1px solid var(--border)',
+          boxShadow: 'none',
+          padding: 22,
           position: 'relative',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          gap: 16,
+          fontFamily: 'var(--ck-font-family)',
+          fontSize: 'var(--ck-font-base)',
+          color: 'var(--text)'
         }}
       >
-        <button
-          type="button"
-          aria-label="Close dialog"
-          title="Close"
-          onClick={e => {
-            e.stopPropagation();
-            onCancel();
-          }}
-          style={{
-            position: 'absolute',
-            top: 12,
-            right: 12,
-            width: 44,
-            height: 44,
-            borderRadius: 999,
-            border: '1px solid rgba(220,38,38,0.40)',
-            background: 'rgba(220,38,38,0.10)',
-            color: '#dc2626',
-            fontWeight: 900,
-            fontSize: 26,
-            lineHeight: '1',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          ×
-        </button>
+        {showCloseButton ? (
+          <button
+            type="button"
+            aria-label="Close dialog"
+            title="Close"
+            onClick={e => {
+              e.stopPropagation();
+              onCancel();
+            }}
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: '#ffffff',
+              color: 'var(--text)',
+              fontWeight: 500,
+              fontSize: 18,
+              lineHeight: '1',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ×
+          </button>
+        ) : null}
 
-        <div style={{ fontWeight: 900, fontSize: 48, letterSpacing: -0.2, color: '#0f172a', paddingRight: 56 }}>
-          {title}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 'var(--ck-font-group-title)', fontWeight: 600, lineHeight: 1.2 }}>{title}</div>
+          <div style={{ fontSize: 'var(--ck-font-control)', lineHeight: 1.4 }}>{message}</div>
         </div>
-        <div
-          className="muted"
-          style={{
-            marginTop: 18,
-            fontSize: 32,
-            fontWeight: 700,
-            lineHeight: 1.35,
-            flex: '1 1 auto',
-            minHeight: 0,
-            overflowY: 'auto',
-            paddingRight: 6
-          }}
-        >
-          {message}
-        </div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 26, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 4, flexWrap: 'wrap' }}>
           {showCancel ? (
             <button
               type="button"
               onClick={onCancel}
               style={{
                 marginRight: 'auto',
-                padding: '10px 14px',
-                borderRadius: 12,
-                border: '1px solid rgba(15, 23, 42, 0.18)',
-                background: 'rgba(15,23,42,0.06)',
-                color: '#0f172a',
-                fontWeight: 600,
-                minWidth: 110
+                padding: '14px 18px',
+                minHeight: 'var(--control-height)',
+                borderRadius: 'var(--radius-control)',
+                border: '1px solid var(--border)',
+                background: '#ffffff',
+                color: 'var(--text)',
+                fontWeight: 500,
+                fontSize: 'var(--ck-font-control)',
+                lineHeight: 1.1,
+                minWidth: 140
               }}
             >
               {cancelLabel}
@@ -152,12 +151,16 @@ export const ConfirmDialogOverlay: React.FC<{
               type="button"
               onClick={onConfirm}
               style={{
-                padding: '10px 14px',
-                borderRadius: 12,
-                border: '1px solid rgba(59,130,246,0.35)',
-                background: '#2563eb',
+                padding: '14px 18px',
+                minHeight: 'var(--control-height)',
+                borderRadius: 'var(--radius-control)',
+                border: '1px solid var(--accent)',
+                background: 'var(--accent)',
                 color: '#ffffff',
-                fontWeight: 900
+                fontWeight: 500,
+                fontSize: 'var(--ck-font-control)',
+                lineHeight: 1.1,
+                minWidth: 140
               }}
             >
               {confirmLabel}

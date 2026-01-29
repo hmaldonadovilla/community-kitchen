@@ -38,6 +38,7 @@ describe('runSelectionEffects selectionEffect id tagging', () => {
       value: 'Yes',
       language: 'EN' as any,
       values,
+      lineItems,
       setValues,
       setLineItems
     });
@@ -91,6 +92,7 @@ describe('runSelectionEffects selectionEffect id tagging', () => {
       value: 'Yes',
       language: 'EN' as any,
       values,
+      lineItems,
       setValues,
       setLineItems
     });
@@ -138,6 +140,7 @@ describe('runSelectionEffects selectionEffect id tagging', () => {
       value: 'Yes',
       language: 'EN' as any,
       values,
+      lineItems,
       setValues,
       setLineItems,
       opts: { lineItem: { groupId: 'LINES', rowId: 'p1', rowValues: { ITEM: 'Parent' } } }
@@ -199,6 +202,7 @@ describe('runSelectionEffects selectionEffect id tagging', () => {
       value: 'No',
       language: 'EN' as any,
       values,
+      lineItems,
       setValues,
       setLineItems,
       opts: { lineItem: { groupId: 'LINES', rowId: 'p1', rowValues: { ITEM: 'Parent' } } }

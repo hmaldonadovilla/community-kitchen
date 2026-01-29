@@ -221,22 +221,38 @@ export class DataSourceService {
     const isRecord = (val: any): val is Record<string, any> => !!val && typeof val === 'object';
     const items = Array.isArray(response.items) ? response.items.filter(isRecord) : [];
     const lookupFields = this.buildDataSourceLookupFields(ds);
+    const matchesSelected = (val: any): boolean => {
+      if (val === undefined || val === null) return false;
+      if (typeof val !== 'string' && typeof val !== 'number' && typeof val !== 'boolean') return false;
+      const text = val.toString().trim().toLowerCase();
+      if (!text) return false;
+      return text === normalized;
+    };
+    const toDetails = (item: Record<string, any>): Record<string, string> => {
+      const result: Record<string, string> = {};
+      Object.entries(item).forEach(([key, val]) => {
+        if (val === undefined || val === null) return;
+        const text = this.stringify(val);
+        const sanitizedKey = key.split(/\s+/).join('_').toUpperCase();
+        result[sanitizedKey] = text;
+      });
+      return result;
+    };
+
+    let fallback: Record<string, any> | null = null;
     for (const item of items) {
-      const matchField = lookupFields.find(field => item[field] !== undefined);
-      if (!matchField) continue;
-      const candidate = item[matchField];
-      if (!candidate) continue;
-      if (candidate.toString().trim().toLowerCase() === normalized) {
-        const result: Record<string, string> = {};
-        Object.entries(item).forEach(([key, val]) => {
-          if (val === undefined || val === null) return;
-          const text = this.stringify(val);
-          const sanitizedKey = key.split(/\s+/).join('_').toUpperCase();
-          result[sanitizedKey] = text;
-        });
-        return result;
+      const matchField = lookupFields.find(field => item[field] !== undefined && item[field] !== null);
+      if (matchField && matchesSelected(item[matchField])) {
+        return toDetails(item);
+      }
+      if (!fallback) {
+        const values = Object.values(item);
+        if (values.some(val => matchesSelected(val))) {
+          fallback = item;
+        }
       }
     }
+    if (fallback) return toDetails(fallback);
     return null;
   }
 

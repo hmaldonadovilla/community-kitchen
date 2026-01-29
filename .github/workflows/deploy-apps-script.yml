@@ -1,0 +1,60 @@
+name: Deploy Apps Script
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploymentId:
+        description: 'Existing deployment ID to update (optional)'
+        required: false
+        type: string
+      createDeployment:
+        description: 'Create a new deployment if no ID is provided'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      skipTests:
+        description: 'Skip unit tests'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure clasp auth
+        env:
+          CLASP_TOKEN: ${{ secrets.CLASP_TOKEN }}
+        run: |
+          if [ -z "$CLASP_TOKEN" ]; then
+            echo "Missing CLASP_TOKEN secret" >&2
+            exit 1
+          fi
+          echo "$CLASP_TOKEN" > ~/.clasprc.json
+
+      - name: Deploy
+        env:
+          CLASP_SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID }}
+          CLASP_DEPLOYMENT_ID: ${{ inputs.deploymentId || secrets.CLASP_DEPLOYMENT_ID }}
+          CLASP_CREATE_DEPLOYMENT: ${{ inputs.createDeployment }}
+          CLASP_DEPLOY_DESCRIPTION: CI ${GITHUB_SHA}
+          SKIP_TESTS: ${{ inputs.skipTests == 'true' && '1' || '' }}
+        run: bash scripts/deploy-apps-script.sh

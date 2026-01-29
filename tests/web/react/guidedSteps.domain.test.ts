@@ -33,6 +33,53 @@ describe('guidedSteps domain', () => {
     expect(out.maxValidIndex).toBe(-1);
   });
 
+  it('treats FILE_UPLOAD fields as incomplete until the upload minimum is satisfied', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'U',
+          type: 'FILE_UPLOAD',
+          required: true,
+          uploadConfig: { minFiles: 1 }
+        }
+      ],
+      steps: {
+        mode: 'guided',
+        items: [{ id: 's1', include: [{ kind: 'question', id: 'U' }] }]
+      }
+    };
+
+    const emptyOut = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: { U: [] } as any,
+      lineItems: {} as any
+    });
+
+    expect(emptyOut.steps[0].complete).toBe(false);
+    expect(emptyOut.steps[0].valid).toBe(false);
+
+    const placeholderOut = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: { U: [{}] } as any,
+      lineItems: {} as any
+    });
+
+    expect(placeholderOut.steps[0].complete).toBe(false);
+    expect(placeholderOut.steps[0].valid).toBe(false);
+
+    const filledOut = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: { U: ['https://example.com/file.jpg'] } as any,
+      lineItems: {} as any
+    });
+
+    expect(filledOut.steps[0].complete).toBe(true);
+    expect(filledOut.steps[0].valid).toBe(true);
+  });
+
   it('applies row filtering for lifted lineGroup fields (only evaluates included rows)', () => {
     const definition: any = {
       questions: [
@@ -201,6 +248,63 @@ describe('guidedSteps domain', () => {
     expect(outNone.steps[0].valid).toBe(false);
   });
 
+  it('honors line-group validationRules when computing step validity', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'G',
+          type: 'LINE_ITEM_GROUP',
+          required: false,
+          validationRules: [
+            {
+              when: {
+                not: {
+                  lineItems: {
+                    groupId: 'G',
+                    when: { fieldId: 'QTY', greaterThan: 0 },
+                    match: 'any'
+                  }
+                }
+              },
+              message: { en: 'Enter at least one quantity greater than 0.' }
+            }
+          ],
+          lineItemConfig: {
+            fields: [{ id: 'QTY', type: 'NUMBER', required: true, options: [], optionsFr: [], optionsNl: [] }]
+          }
+        }
+      ],
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'orderForm',
+            include: [{ kind: 'lineGroup', id: 'G', presentation: 'liftedRowFields', fields: ['QTY'] }]
+          }
+        ]
+      }
+    };
+
+    const outZero = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: {} as any,
+      lineItems: { G: [{ id: 'r1', values: { QTY: 0 } }] } as any
+    });
+
+    expect(outZero.steps[0].valid).toBe(false);
+    expect(outZero.steps[0].errorCount).toBeGreaterThan(0);
+
+    const outPositive = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: {} as any,
+      lineItems: { G: [{ id: 'r1', values: { QTY: 2 } }] } as any
+    });
+
+    expect(outPositive.steps[0].valid).toBe(true);
+  });
+
   it('treats progressive rows blocked by expandGate (collapsedFieldsValid) as blocking step completion/validity', () => {
     const definition: any = {
       questions: [
@@ -362,4 +466,3 @@ describe('guidedSteps domain', () => {
     expect(resolveVirtualStepField('__ckStepComplete_order', state as any)).toBe('false');
   });
 });
-

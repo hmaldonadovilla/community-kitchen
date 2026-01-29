@@ -30,6 +30,13 @@ describe('DefinitionBuilder', () => {
       submissionConfirmationMessage: { EN: 'Ready to submit?' },
       submissionConfirmationConfirmLabel: { EN: 'Yes, submit' },
       submissionConfirmationCancelLabel: { EN: 'Not yet' },
+      dedupDialog: {
+        title: { EN: 'No duplicates allowed' },
+        intro: { EN: 'Record already exists for:' },
+        outro: { EN: 'What would you like to do?' },
+        changeLabel: { EN: 'Change details' },
+        openLabel: { EN: 'Open existing' }
+      },
       languages: ['EN', 'FR', 'NL'],
       defaultLanguage: 'FR',
       languageSelectorEnabled: false,
@@ -73,6 +80,13 @@ describe('DefinitionBuilder', () => {
     expect(def.createButtonLabel).toEqual({ en: 'New' });
     expect(def.copyCurrentRecordLabel).toEqual({ en: 'Duplicate' });
     expect(def.copyCurrentRecordDropFields).toEqual(['Q1']);
+    expect(def.dedupDialog).toEqual({
+      title: { en: 'No duplicates allowed' },
+      intro: { en: 'Record already exists for:' },
+      outro: { en: 'What would you like to do?' },
+      changeLabel: { en: 'Change details' },
+      openLabel: { en: 'Open existing' }
+    });
     const metaColumns = (def.listView?.columns || [])
       .filter((col): col is { fieldId: string; kind: 'meta' } => (col as any).kind === 'meta')
       .map(col => col.fieldId);

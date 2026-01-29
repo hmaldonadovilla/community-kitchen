@@ -409,6 +409,13 @@ export interface QuestionUiConfig {
    * editing the injected section directly in the textarea.
    */
   paragraphDisclaimer?: ParagraphDisclaimerConfig;
+  /**
+   * Optional field-driven overlay open actions.
+   *
+   * When configured, the field can render as a button (after `when` matches)
+   * to open a line-item group overlay with optional row filters + UI overrides.
+   */
+  overlayOpenActions?: LineItemOverlayOpenActionConfig[];
 }
 
 export interface ParagraphDisclaimerConfig {
@@ -633,6 +640,29 @@ export interface FieldChangeDialogConfig {
   inputs?: FieldChangeDialogInput[];
 }
 
+export interface DedupDialogConfig {
+  /**
+   * Dialog title shown when a duplicate record is detected.
+   */
+  title?: LocalizedString;
+  /**
+   * Intro line shown before the list of dedup key values.
+   */
+  intro?: LocalizedString;
+  /**
+   * Outro line shown after the list of dedup key values.
+   */
+  outro?: LocalizedString;
+  /**
+   * Label for the action that clears the dedup fields.
+   */
+  changeLabel?: LocalizedString;
+  /**
+   * Label for the action that opens the existing record.
+   */
+  openLabel?: LocalizedString;
+}
+
 export interface OptionFilter {
   dependsOn: string | string[]; // question/field ID(s) to watch (supports array for composite filters)
   optionMap?: Record<string, string[]>; // value -> allowed options (composite keys can be joined values)
@@ -714,15 +744,23 @@ export interface LineItemWhenClause {
     groupId: string;
     /**
      * Optional subgroup id to evaluate (scans all parent rows).
+     * Prefer `subGroupPath` for deep nesting and wildcard paths.
      */
     subGroupId?: string;
+    /**
+     * Optional subgroup path to evaluate (dot-delimited string or array of ids).
+     * Supports wildcards:
+     * - "*" matches a single subgroup level
+     * - "**" matches any depth (including zero levels)
+     */
+    subGroupPath?: string | string[];
     /**
      * Row-level condition applied within each row.
      * When omitted, any row counts as a match.
      */
     when?: WhenClause;
     /**
-     * Optional condition evaluated against the parent row when `subGroupId` is provided.
+     * Optional condition evaluated against the parent/ancestor rows when subgroup matching is used.
      * This lets you scope subgroup matching to parent rows that satisfy their own criteria.
      */
     parentWhen?: WhenClause;
@@ -734,6 +772,12 @@ export interface LineItemWhenClause {
      * Parent-row matching mode (default: "any") when `parentWhen` is set.
      */
     parentMatch?: 'any' | 'all';
+    /**
+     * Which ancestor scope to use for parentWhen.
+     * - immediate: direct parent row only (default)
+     * - ancestor: any ancestor row (root-to-parent chain)
+     */
+    parentScope?: 'immediate' | 'ancestor';
   };
 }
 
@@ -778,6 +822,11 @@ export interface ValidationRule {
      * - If both `max` and `maxFieldId` are provided, `max` wins.
      */
     maxFieldId?: string;
+    /**
+     * When true, the target numeric value must be an integer (no decimals).
+     * Skips empty values unless required is also set.
+     */
+    integer?: boolean;
     allowed?: string[];
     disallowed?: string[];
   };
@@ -918,11 +967,58 @@ export interface DerivedValueCopyConfig {
   hidden?: boolean;
 }
 
+export interface DerivedValueCalcFilterConfig {
+  /**
+   * Reference to the aggregate in the expression (e.g., "MP_TYPE_LI.PREP_QTY").
+   */
+  ref: string;
+  /**
+   * When-clause applied to each row included in the aggregate.
+   */
+  when: WhenClause;
+}
+
+export interface DerivedValueCalcConfig {
+  op: 'calc';
+  /**
+   * Numeric expression using `{FIELD_ID}` tokens and `SUM(GROUP.FIELD)` aggregates.
+   * Example: "{QTY} - SUM(MP_TYPE_LI.PREP_QTY)".
+   */
+  expression: string;
+  /**
+   * Optional per-aggregate filters for SUM(...) tokens.
+   */
+  lineItemFilters?: DerivedValueCalcFilterConfig[];
+  /**
+   * When to apply the derived value:
+   * - always: recompute on every change (default for calc)
+   * - empty: only set when the target field is empty (allows user overrides)
+   */
+  when?: DerivedValueWhen;
+  /**
+   * Control when the derived value is applied during editing.
+   * - change: apply on every onChange (default for calc)
+   * - blur: apply only after the user leaves the input
+   */
+  applyOn?: 'change' | 'blur';
+  /**
+   * Optional numeric precision (decimal places) applied to the computed result.
+   */
+  precision?: number;
+  /**
+   * Optional clamp bounds for the computed result.
+   */
+  min?: number;
+  max?: number;
+  hidden?: boolean;
+}
+
 export type DerivedValueConfig =
   | DerivedValueAddDaysConfig
   | DerivedValueTodayConfig
   | DerivedValueTimeOfDayMapConfig
-  | DerivedValueCopyConfig;
+  | DerivedValueCopyConfig
+  | DerivedValueCalcConfig;
 
 export interface AutoIncrementConfig {
   prefix?: string;
@@ -978,6 +1074,11 @@ export interface LineItemGroupUiConfig {
    * Default: false (render inline).
    */
   openInOverlay?: boolean;
+  /**
+   * Optional overlay detail layout (header/body) for full-page group overlays.
+   * Requires `openInOverlay: true` to take effect.
+   */
+  overlayDetail?: LineItemOverlayDetailConfig;
   /**
    * Default CHOICE search behavior for all CHOICE fields in this group (and its subgroups when configured there),
    * unless a specific field overrides it via `field.ui.choiceSearchEnabled`.
@@ -1048,6 +1149,46 @@ export interface LineItemGroupUiConfig {
    * When true, they are included in the saved record (useful when you want them to appear in downstream PDFs).
    */
   saveDisabledRows?: boolean;
+}
+
+export interface LineItemOverlayDetailConfig {
+  enabled?: boolean;
+  header?: LineItemOverlayDetailHeaderConfig;
+  body?: LineItemOverlayDetailBodyConfig;
+  rowActions?: LineItemOverlayDetailRowActionsConfig;
+}
+
+export interface LineItemOverlayDetailHeaderConfig {
+  tableColumns?: string[];
+  tableColumnWidths?: Record<string, string | number>;
+  addButtonPlacement?: 'top' | 'bottom' | 'both' | 'hidden';
+}
+
+export interface LineItemOverlayDetailBodyConfig {
+  /**
+   * Target subgroup id to render in the body section.
+   */
+  subGroupId: string;
+  edit?: {
+    mode?: 'table';
+    tableColumns?: string[];
+    tableColumnWidths?: Record<string, string | number>;
+  };
+  view?: {
+    mode?: 'html';
+    templateId: TemplateIdMap;
+    /**
+     * Optional list of tab targets to hide in HTML templates that use data-tab-target/data-tab-panel.
+     */
+    hideTabTargets?: string[];
+  };
+}
+
+export interface LineItemOverlayDetailRowActionsConfig {
+  viewLabel?: LocalizedString | string;
+  editLabel?: LocalizedString | string;
+  viewPlacement?: 'header' | 'body' | 'hidden';
+  editPlacement?: 'header' | 'body' | 'hidden';
 }
 
 export interface RowDisclaimerRule {
@@ -1148,6 +1289,10 @@ export interface LineItemSelectorConfig {
   placeholderEn?: string;
   placeholderFr?: string;
   placeholderNl?: string;
+  helperText?: LocalizedString | string;
+  helperTextEn?: string;
+  helperTextFr?: string;
+  helperTextNl?: string;
   hideLabel?: boolean;
   options?: string[];
   optionsFr?: string[];
@@ -1168,6 +1313,12 @@ export interface LineItemSelectorConfig {
    * Useful for cascading selectors where available sections depend on other fields.
    */
   optionFilter?: OptionFilter;
+}
+
+export interface LineItemAddOverlayConfig {
+  title?: LocalizedString;
+  helperText?: LocalizedString;
+  placeholder?: LocalizedString;
 }
 
 export interface LineItemTotalConfig {
@@ -1201,11 +1352,108 @@ export interface LineItemGroupConfig {
   };
   anchorFieldId?: string; // field to drive overlay multi-add
   addMode?: 'overlay' | 'selectorOverlay' | 'inline' | 'auto';
+  addOverlay?: LineItemAddOverlayConfig;
   sectionSelector?: LineItemSelectorConfig;
   dedupRules?: LineItemDedupRule[];
   totals?: LineItemTotalConfig[];
   fields: LineItemFieldConfig[];
   subGroups?: LineItemGroupConfig[]; // nested line item groups driven by this header group
+}
+
+export interface LineItemGroupConfigOverride {
+  id?: string;
+  label?: LocalizedString;
+  ui?: LineItemGroupUiConfig;
+  minRows?: number;
+  maxRows?: number;
+  addButtonLabel?: {
+    en?: string;
+    fr?: string;
+    nl?: string;
+  };
+  anchorFieldId?: string;
+  addMode?: 'overlay' | 'selectorOverlay' | 'inline' | 'auto';
+  addOverlay?: LineItemAddOverlayConfig;
+  sectionSelector?: LineItemSelectorConfig;
+  dedupRules?: LineItemDedupRule[];
+  totals?: LineItemTotalConfig[];
+  fields?: LineItemFieldConfig[];
+  subGroups?: LineItemGroupConfig[];
+}
+
+export interface LineItemOverlayRowFilter {
+  includeWhen?: WhenClause;
+  excludeWhen?: WhenClause;
+}
+
+export interface LineItemOverlayOpenActionConfig {
+  /**
+   * Target line-item group id to open.
+   */
+  groupId: string;
+  /**
+   * Optional condition to enable/activate this action.
+   */
+  when?: WhenClause;
+  /**
+   * Optional button label override (defaults to the field label).
+   */
+  label?: LocalizedString;
+  /**
+   * Optional row filter applied to the overlay header rows.
+   */
+  rowFilter?: LineItemOverlayRowFilter | null;
+  /**
+   * Optional override for the overlay view of this group.
+   */
+  groupOverride?: LineItemGroupConfigOverride;
+  /**
+   * When true, hide inline subgroups in the overlay body (header-only + body detail).
+   */
+  hideInlineSubgroups?: boolean;
+  /**
+   * Render mode for the field-triggered opener.
+   * - replace: replace the field control with a button (default)
+   * - inline: keep the control and show a separate button below
+   */
+  renderMode?: 'replace' | 'inline';
+  /**
+   * Optional value to set on the source field when the reset (trash) action is confirmed.
+   * Use this to revert the field back to its original control by breaking the `when` condition.
+   */
+  resetValue?: DefaultValue;
+  /**
+   * When true, hide the trash/reset icon on the overlay opener button.
+   */
+  hideTrashIcon?: boolean;
+  /**
+   * When true, hide the close button in the overlay header.
+   */
+  hideCloseButton?: boolean;
+  /**
+   * Optional label override for the overlay close button.
+   */
+  closeButtonLabel?: LocalizedString;
+  /**
+   * Optional confirm dialog shown when closing the overlay.
+   */
+  closeConfirm?: RowFlowActionConfirmConfig;
+  /**
+   * Optional list of line-item field ids to surface inline when the target group only allows one row.
+   * This keeps the data structure unchanged while flattening the UI for quick edits.
+   */
+  flattenFields?: string[];
+  /**
+   * Placement for `flattenFields` relative to the opener field.
+   * - left: render flattened fields to the left
+   * - right: render flattened fields to the right
+   * - below: render flattened fields beneath the opener (default)
+   */
+  flattenPlacement?: 'left' | 'right' | 'below';
+  /**
+   * Optional row-flow override to use when rendering the overlay editor for this group.
+   */
+  rowFlow?: RowFlowConfig;
 }
 
 export interface SelectionEffect {
@@ -1216,8 +1464,23 @@ export interface SelectionEffect {
    * so you can reference the originating effect in visibility/validation/disclaimer rules.
    */
   id?: string;
-  type: 'addLineItems' | 'addLineItemsFromDataSource' | 'deleteLineItems';
-  groupId: string; // target line item group
+  type: 'addLineItems' | 'addLineItemsFromDataSource' | 'deleteLineItems' | 'setValue';
+  // target line item group (legacy or immediate subgroup id); required for add/delete effects
+  groupId?: string;
+  // target field id for setValue effects (uses current row context when triggered inside line items)
+  fieldId?: string;
+  // value to set for setValue effects (supports $row./$top. references; null clears)
+  value?: PresetValue | null;
+  /**
+   * Optional subgroup path target for nested line item groups.
+   * - String uses dot notation: "SUB1.SUB2"
+   * - Array uses explicit ids: ["SUB1", "SUB2"]
+   */
+  targetPath?: string | string[];
+  /**
+   * Optional conditional gate for the effect (evaluated against the current row/top-level values).
+   */
+  when?: WhenClause;
   preset?: Record<string, PresetValue>; // preset field values for simple addLineItems (supports $row./$top. references)
   triggerValues?: string[]; // which choice/checkbox values trigger this effect (defaults to any)
   /**
@@ -1305,6 +1568,11 @@ export type EmailRecipientEntry = string | EmailRecipientDataSourceConfig;
 export interface FollowupConfig {
   pdfTemplateId?: TemplateIdMap;
   pdfFolderId?: string;
+  /**
+   * Optional field id used to name generated PDF files (question id or meta field).
+   * Supports meta fields: id, createdAt, updatedAt, status, pdfUrl.
+   */
+  pdfFileNameFieldId?: string;
   emailTemplateId?: TemplateIdMap;
   emailSubject?: LocalizedString | string;
   emailRecipients?: EmailRecipientEntry[];
@@ -1673,6 +1941,13 @@ export interface FormConfig {
   submissionConfirmationCancelLabel?: LocalizedString;
 
   /**
+   * Optional duplicate-detection dialog copy overrides (dashboard-level).
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  dedupDialog?: DedupDialogConfig;
+
+  /**
    * Optional localized label override for the Submit button in the React web app.
    *
    * Configured via the dashboard “Follow-up Config (JSON)” column.
@@ -1685,6 +1960,18 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   summaryButtonLabel?: LocalizedString;
+}
+
+export interface FormConfigExport {
+  // Allow manual metadata tags in exported configs (e.g., local verification markers).
+  [key: string]: unknown;
+  formKey: string;
+  generatedAt: string;
+  form: FormConfig;
+  questions: QuestionConfig[];
+  dedupRules: DedupRule[];
+  definition: WebFormDefinition;
+  validationErrors: string[];
 }
 
 export interface AppHeaderConfig {
@@ -1814,6 +2101,214 @@ export interface StepRowFilterConfig {
   excludeWhen?: WhenClause;
 }
 
+export interface RowFlowConfig {
+  /**
+   * Step-scoped row flow mode (currently only "progressive").
+   */
+  mode?: 'progressive';
+  /**
+   * Optional references to child line item groups for prompts/outputs/actions.
+   */
+  references?: Record<string, RowFlowReferenceConfig>;
+  /**
+   * Output row configuration.
+   */
+  output?: RowFlowOutputConfig;
+  /**
+   * Input prompt definitions (one active at a time).
+   */
+  prompts?: RowFlowPromptConfig[];
+  /**
+   * Action definitions referenced by prompts/segments.
+   */
+  actions?: RowFlowActionConfig[];
+  /**
+   * Optional context header for overlays opened from this row flow.
+   */
+  overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
+}
+
+export interface RowFlowReferenceConfig {
+  /**
+   * Target line item group id.
+   */
+  groupId: string;
+  /**
+   * Optional parent reference (for nested subgroups).
+   */
+  parentRef?: string;
+  /**
+   * Row matching strategy when multiple rows are present.
+   */
+  match?: 'first' | 'any' | 'all';
+  /**
+   * Optional row filter applied when resolving this reference.
+   */
+  rowFilter?: StepRowFilterConfig;
+}
+
+export interface RowFlowOverlayContextHeaderConfig {
+  fields: RowFlowOverlayContextFieldConfig[];
+}
+
+export interface RowFlowOverlayContextFieldConfig {
+  fieldRef: string;
+  /**
+   * Optional label/template for this value (supports {{value}} placeholder).
+   */
+  label?: LocalizedString;
+}
+
+export interface RowFlowOutputConfig {
+  separator?: string;
+  hideEmpty?: boolean;
+  segments?: RowFlowOutputSegmentConfig[];
+  actions?: RowFlowActionRef[];
+  /**
+   * Layout for output actions relative to the segments.
+   * - inline: render actions on the same row (default)
+   * - below: render actions on a separate row
+   */
+  actionsLayout?: 'inline' | 'below';
+  /**
+   * Scope for output actions.
+   * - row: render actions per row (default)
+   * - group: render actions once after all rows
+   */
+  actionsScope?: 'row' | 'group';
+}
+
+export interface RowFlowOutputSegmentFormatConfig {
+  type?: 'text' | 'list';
+  listDelimiter?: string;
+}
+
+export interface RowFlowOutputSegmentConfig {
+  fieldRef: string;
+  /**
+   * Optional label/template for this value (supports {{value}} placeholder).
+   */
+  label?: LocalizedString;
+  showWhen?: WhenClause;
+  format?: RowFlowOutputSegmentFormatConfig;
+  renderAs?: 'value' | 'control';
+  editAction?: string;
+  /**
+   * Optional action ids to render as icons next to this segment.
+   * When provided, these render alongside (or instead of) `editAction`.
+   */
+  editActions?: string[];
+}
+
+export interface RowFlowPromptInputConfig {
+  kind?: 'field' | 'selectorOverlay';
+  targetRef?: string;
+  groupOverride?: LineItemGroupConfigOverride;
+  label?: LocalizedString;
+  /**
+   * Layout for the prompt label when rendering a field prompt.
+   * - stacked: label above the control (default)
+   * - inline: label rendered inline with the control
+   * - hidden: hide the visual label (screen-reader label is preserved)
+   */
+  labelLayout?: 'stacked' | 'inline' | 'hidden';
+  placeholder?: LocalizedString;
+  helperText?: LocalizedString;
+}
+
+export interface RowFlowPromptConfig {
+  id: string;
+  fieldRef?: string;
+  input?: RowFlowPromptInputConfig;
+  showWhen?: WhenClause;
+  completedWhen?: WhenClause;
+  hideWhenFilled?: boolean;
+  keepVisibleWhenFilled?: boolean;
+  /**
+   * Optional action ids to trigger once when this prompt transitions to complete.
+   */
+  onCompleteActions?: string[];
+  /**
+   * Layout for prompt actions relative to the input control.
+   * - below: render actions on a separate row (default)
+   * - inline: render actions alongside the prompt control
+   */
+  actionsLayout?: 'below' | 'inline';
+  actions?: RowFlowActionRef[];
+}
+
+export interface RowFlowActionRef {
+  id: string;
+  position?: 'start' | 'end';
+  scope?: 'row' | 'group';
+  showWhen?: WhenClause;
+}
+
+export interface RowFlowActionConfirmConfig {
+  title?: LocalizedString;
+  body?: LocalizedString;
+  confirmLabel?: LocalizedString;
+  cancelLabel?: LocalizedString;
+  showCancel?: boolean;
+  kind?: string;
+  /**
+   * When to show the confirmation dialog relative to the action.
+   * - before: open dialog first, then run the action on confirm (default)
+   * - after: run the action immediately, then show the dialog as an acknowledgement
+   */
+  timing?: 'before' | 'after';
+}
+
+export type RowFlowActionEffect =
+  | {
+      type: 'setValue';
+      fieldRef: string;
+      value?: DefaultValue;
+    }
+  | {
+      type: 'deleteLineItems';
+      targetRef?: string;
+      groupId?: string;
+      rowFilter?: StepRowFilterConfig;
+    }
+  | {
+      type: 'deleteRow';
+    }
+  | {
+      type: 'addLineItems';
+      targetRef?: string;
+      groupId?: string;
+      preset?: Record<string, DefaultValue>;
+      count?: number;
+    }
+  | {
+      type: 'closeOverlay';
+    }
+  | (Omit<LineItemOverlayOpenActionConfig, 'groupId'> & {
+      type: 'openOverlay';
+      targetRef?: string;
+      groupId?: string;
+      /**
+       * Optional overlay context header override for this action.
+       */
+      overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
+      /**
+       * Optional overlay helper text override for this action.
+       */
+      overlayHelperText?: RowFlowOverlayContextHeaderConfig;
+    });
+
+export interface RowFlowActionConfig {
+  id: string;
+  label?: LocalizedString;
+  icon?: 'edit' | 'remove' | 'add' | 'back';
+  variant?: 'button' | 'icon';
+  tone?: 'primary' | 'secondary';
+  showWhen?: WhenClause;
+  confirm?: RowFlowActionConfirmConfig;
+  effects?: RowFlowActionEffect[];
+}
+
 export interface StepSubGroupTargetConfig {
   /**
    * Subgroup id (stable identifier, not a label).
@@ -1873,6 +2368,10 @@ export interface StepLineGroupTargetConfig {
    * - liftedRowFields: render selected row fields as top-level step content (repeated per row).
    */
   presentation?: 'groupEditor' | 'liftedRowFields';
+  /**
+   * Optional step-scoped row flow configuration for progressive input/output per row.
+   */
+  rowFlow?: RowFlowConfig;
   /**
    * Allowlist of visible parent row fields for this step.
    */
@@ -2125,6 +2624,11 @@ export interface WebFormDefinition {
    * When omitted, the UI falls back to localized system strings (e.g. "Cancel").
    */
   submissionConfirmationCancelLabel?: LocalizedString;
+
+  /**
+   * Optional duplicate-detection dialog copy overrides.
+   */
+  dedupDialog?: DedupDialogConfig;
 
   /**
    * Optional localized label override for the Submit button in the React web app.

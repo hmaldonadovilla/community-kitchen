@@ -5,26 +5,37 @@ type SubGroupConfig = LineItemGroupConfig;
 
 export const extractTableRepeatDirective = (
   table: GoogleAppsScript.Document.Table
-): { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string } | null => {
+): { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string; subGroupId?: string } | null => {
   const text = table.getText && table.getText();
   if (!text) return null;
-  const match = text.match(/{{(GROUP_TABLE|ROW_TABLE)\(([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/i);
+  const match = text.match(/{{(GROUP_TABLE|ROW_TABLE)\(([A-Z0-9_]+)\.([A-Z0-9_]+(?:\.[A-Z0-9_]+)*)\)}}/i);
   if (!match) return null;
-  return {
+  const pathParts = (match[3] || '')
+    .toString()
+    .split('.')
+    .map(p => p.trim())
+    .filter(Boolean);
+  if (!pathParts.length) return null;
+  const fieldId = (pathParts[pathParts.length - 1] || '').toUpperCase();
+  const subGroupId = pathParts.length > 1 ? pathParts.slice(0, -1).join('.').toUpperCase() : undefined;
+  const directive: { kind: 'GROUP_TABLE' | 'ROW_TABLE'; groupId: string; fieldId: string; subGroupId?: string } = {
     kind: (match[1] || '').toUpperCase() as 'GROUP_TABLE' | 'ROW_TABLE',
     groupId: match[2].toUpperCase(),
-    fieldId: match[3].toUpperCase()
+    fieldId
   };
+  if (subGroupId) directive.subGroupId = subGroupId;
+  return directive;
 };
 
 export const replaceTableRepeatDirectivePlaceholders = (
   table: GoogleAppsScript.Document.Table,
-  directive: { groupId: string; fieldId: string },
+  directive: { groupId: string; fieldId: string; subGroupId?: string },
   replacementValue: string,
   directiveType: 'GROUP_TABLE' | 'ROW_TABLE'
 ): void => {
   // IMPORTANT: replaceText() uses regex. We must escape literal "(" / ")" / "." in the directive token.
-  const pattern = `(?i){{${directiveType}\\(${directive.groupId}\\.${directive.fieldId}\\)}}`;
+  const path = directive.subGroupId ? `${directive.subGroupId}.${directive.fieldId}` : directive.fieldId;
+  const pattern = `(?i){{${directiveType}\\(${escapeRegExp(directive.groupId)}\\.${escapeRegExp(path)}\\)}}`;
   for (let r = 0; r < table.getNumRows(); r++) {
     const tableRow = table.getRow(r);
     for (let c = 0; c < tableRow.getNumCells(); c++) {
@@ -38,7 +49,7 @@ export const extractConsolidatedTableDirective = (
 ): { groupId: string; subGroupId: string } | null => {
   const text = table.getText && table.getText();
   if (!text) return null;
-  const match = text.match(/{{CONSOLIDATED_TABLE\(([A-Z0-9_]+)\.([A-Z0-9_]+)\)}}/i);
+  const match = text.match(/{{CONSOLIDATED_TABLE\(([A-Z0-9_]+)\.([A-Z0-9_]+(?:\.[A-Z0-9_]+)*)\)}}/i);
   if (!match) return null;
   return {
     groupId: match[1].toUpperCase(),
@@ -51,7 +62,7 @@ export const stripConsolidatedTableDirectivePlaceholders = (
   directive: { groupId: string; subGroupId: string }
 ): void => {
   if (!table) return;
-  const pattern = `(?i){{CONSOLIDATED_TABLE\\(${directive.groupId}\\.${directive.subGroupId}\\)}}`;
+  const pattern = `(?i){{CONSOLIDATED_TABLE\\(${escapeRegExp(directive.groupId)}\\.${escapeRegExp(directive.subGroupId)}\\)}}`;
   for (let r = 0; r < table.getNumRows(); r++) {
     const tableRow = table.getRow(r);
     for (let c = 0; c < tableRow.getNumCells(); c++) {
@@ -105,8 +116,8 @@ export const parseOrderByKeys = (raw: string): Array<{ key: string; direction: '
       }
 
       const normalized = token.toUpperCase().replace(/\s+/g, '');
-      // Allow FIELD, GROUP.FIELD, or GROUP.SUBGROUP.FIELD
-      if (!/^[A-Z0-9_]+(\.[A-Z0-9_]+){0,2}$/.test(normalized)) return;
+      // Allow FIELD, GROUP.FIELD, or GROUP.SUBGROUP.FIELD (any subgroup depth)
+      if (!/^[A-Z0-9_]+(\.[A-Z0-9_]+)*$/.test(normalized)) return;
       out.push({ key: normalized, direction });
     });
   return out;
@@ -163,8 +174,8 @@ export const parseExcludeWhenClauses = (raw: string): Array<{ key: string; value
       const valueRaw = part.slice(eq + 1).trim();
       if (!keyRaw || !valueRaw) return;
       const key = keyRaw.toUpperCase().replace(/\s+/g, '');
-      // Allow FIELD, GROUP.FIELD, or GROUP.SUBGROUP.FIELD
-      if (!/^[A-Z0-9_]+(\.[A-Z0-9_]+){0,2}$/.test(key)) return;
+      // Allow FIELD, GROUP.FIELD, or GROUP.SUBGROUP.FIELD (any subgroup depth)
+      if (!/^[A-Z0-9_]+(\.[A-Z0-9_]+)*$/.test(key)) return;
       const values = valueRaw
         .split('|')
         .map(v => (v || '').toString().trim())
@@ -204,7 +215,7 @@ export const extractSubGroupDirective = (
 ): { groupId: string; subGroupId: string } | null => {
   const text = table.getText && table.getText();
   if (!text) return null;
-  const match = text.match(/{{([A-Z0-9_]+)\.([A-Z0-9_]+)\.[A-Z0-9_]+}}/i);
+  const match = text.match(/{{([A-Z0-9_]+)\.([A-Z0-9_]+(?:\.[A-Z0-9_]+)*)\.[A-Z0-9_]+}}/i);
   if (!match) return null;
   return {
     groupId: match[1].toUpperCase(),
@@ -218,13 +229,19 @@ export const extractLineItemPlaceholders = (
   const matches: Array<{ groupId: string; subGroupId?: string; fieldId: string }> = [];
   if (!text) return matches;
   // Allow incidental spaces inside {{ ... }} and around "." to tolerate Markdown/text templates.
-  const pattern = /{{\s*([A-Z0-9_]+)\s*(?:\.\s*([A-Z0-9_]+)\s*)?\.\s*([A-Z0-9_]+)\s*}}/gi;
+  const pattern = /{{\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+(?:\s*\.\s*[A-Z0-9_]+)*)\s*}}/gi;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
+    const parts = (match[2] || '')
+      .toString()
+      .split('.')
+      .map(p => p.trim())
+      .filter(Boolean);
+    if (!parts.length) continue;
     matches.push({
       groupId: match[1].toUpperCase(),
-      subGroupId: match[2] ? match[2].toUpperCase() : undefined,
-      fieldId: (match[3] || match[2] || '').toUpperCase()
+      subGroupId: parts.length > 1 ? parts.slice(0, -1).join('.').toUpperCase() : undefined,
+      fieldId: (parts[parts.length - 1] || '').toUpperCase()
     });
   }
 
@@ -241,15 +258,15 @@ export const extractLineItemPlaceholders = (
     const inner = (am[1] || '').toString().trim();
     if (!inner) continue;
 
-    const consolidatedMatch = inner.match(/^CONSOLIDATED_ROW\(\s*([A-Z0-9_]+\.[A-Z0-9_]+\.[A-Z0-9_]+)\s*\)$/i);
+    const consolidatedMatch = inner.match(/^CONSOLIDATED_ROW\(\s*([A-Z0-9_]+(?:\.[A-Z0-9_]+)+)\s*\)$/i);
     if (consolidatedMatch) {
       const parts = (consolidatedMatch[1] || '').toString().split('.').map(p => p.trim()).filter(Boolean);
-      if (parts.length === 3) {
+      if (parts.length >= 3) {
         // Treat as group-only placeholder so it does NOT trigger subgroup (child-row) rendering.
         matches.push({
           groupId: (parts[0] || '').toString().toUpperCase(),
           subGroupId: undefined,
-          fieldId: (parts[2] || '').toString().toUpperCase()
+          fieldId: (parts[parts.length - 1] || '').toString().toUpperCase()
         });
       }
       continue;
@@ -264,11 +281,11 @@ export const extractLineItemPlaceholders = (
       });
       continue;
     }
-    if (parts.length === 3) {
+    if (parts.length >= 3) {
       matches.push({
         groupId: (parts[0] || '').toString().toUpperCase(),
-        subGroupId: (parts[1] || '').toString().toUpperCase(),
-        fieldId: (parts[2] || '').toString().toUpperCase()
+        subGroupId: parts.slice(1, -1).map(p => p.toString().toUpperCase()).join('.'),
+        fieldId: (parts[parts.length - 1] || '').toString().toUpperCase()
       });
       continue;
     }
@@ -277,13 +294,19 @@ export const extractLineItemPlaceholders = (
   // Row-scoped consolidated placeholders should still cause the row to be processed by the table renderer,
   // even when they are the only tokens present in the row.
   // We treat them as "group-only" placeholders so they do NOT trigger subgroup (child-row) rendering.
-  const consolidatedRowPattern = /{{\s*CONSOLIDATED_ROW\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+)\s*\)\s*}}/gi;
+  const consolidatedRowPattern = /{{\s*CONSOLIDATED_ROW\(\s*([A-Z0-9_]+)\s*\.\s*([A-Z0-9_]+(?:\s*\.\s*[A-Z0-9_]+)*)\s*\)\s*}}/gi;
   let cm: RegExpExecArray | null;
   while ((cm = consolidatedRowPattern.exec(text)) !== null) {
+    const parts = (cm[2] || '')
+      .toString()
+      .split('.')
+      .map(p => p.trim())
+      .filter(Boolean);
+    if (parts.length < 2) continue;
     matches.push({
       groupId: (cm[1] || '').toString().toUpperCase(),
       subGroupId: undefined,
-      fieldId: (cm[3] || '').toString().toUpperCase()
+      fieldId: (parts[parts.length - 1] || '').toString().toUpperCase()
     });
   }
 

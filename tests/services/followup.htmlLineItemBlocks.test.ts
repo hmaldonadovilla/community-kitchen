@@ -50,6 +50,72 @@ describe('applyHtmlLineItemBlocks', () => {
     expect(rendered.match(/Beef/gi)?.length).toBe(1);
   });
 
+  it('scopes GROUP_TABLE rows to nested subgroup values', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'QTY', labelEn: 'Qty', type: 'NUMBER' } as any],
+        subGroups: [
+          {
+            id: 'MP_TYPE_LI',
+            fields: [{ id: 'RECIPE', labelEn: 'Recipe', type: 'TEXT' } as any],
+            subGroups: [
+              {
+                id: 'MP_INGREDIENTS_LI',
+                fields: [
+                  { id: 'CAT', labelEn: 'Category', type: 'TEXT' } as any,
+                  { id: 'ING', labelEn: 'Ingredient', type: 'TEXT' } as any
+                ]
+              } as any
+            ]
+          } as any
+        ]
+      }
+    } as any;
+
+    const html = `
+      <table>
+        <tbody>
+          {{GROUP_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT)}}
+          <tr>
+            <td>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT}}</td>
+            <td>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          QTY: 1,
+          MP_TYPE_LI: [
+            {
+              RECIPE: 'Soup',
+              MP_INGREDIENTS_LI: [
+                { CAT: 'Veg', ING: 'Carrot' },
+                { CAT: 'Protein', ING: 'Chicken' }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+
+    const rendered = applyHtmlLineItemBlocks({ html, questions: [group], lineItemRows });
+
+    expect(rendered.match(/<table/gi)?.length).toBe(2);
+    expect(rendered.match(/Carrot/gi)?.length).toBe(1);
+    expect(rendered.match(/Chicken/gi)?.length).toBe(1);
+  });
+
   it('resolves CONSOLIDATED_ROW inside ROW_TABLE sections in HTML', () => {
     const group: QuestionConfig = {
       id: 'MP_DISH',
@@ -96,5 +162,61 @@ describe('applyHtmlLineItemBlocks', () => {
     expect(rendered).toContain('Meal B');
     expect(rendered).toContain('Gluten, Milk');
     expect(rendered).toContain('None');
+  });
+
+  it('flattens deeper subgroups when ROW_TABLE already targets a parent subgroup', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'MEAL_TYPE', labelEn: 'Meal type', type: 'TEXT' } as any],
+        subGroups: [
+          {
+            id: 'MP_TYPE_LI',
+            fields: [{ id: 'RECIPE', labelEn: 'Recipe', type: 'TEXT' } as any],
+            subGroups: [
+              {
+                id: 'MP_INGREDIENTS_LI',
+                fields: [{ id: 'ING', labelEn: 'Ingredient', type: 'TEXT' } as any]
+              } as any
+            ]
+          } as any
+        ]
+      }
+    } as any;
+
+    const html = `
+      <table>
+        {{ROW_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE)}}
+        <tr>
+          <td>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}</td>
+        </tr>
+      </table>
+    `;
+
+    const lineItemRows = {
+      MP_MEALS_REQUEST: [
+        {
+          MEAL_TYPE: 'Dinner',
+          MP_TYPE_LI: [
+            {
+              RECIPE: 'Soup',
+              MP_INGREDIENTS_LI: [{ ING: 'Carrot' }, { ING: 'Onion' }]
+            }
+          ]
+        }
+      ]
+    };
+
+    const rendered = applyHtmlLineItemBlocks({ html, questions: [group], lineItemRows });
+
+    expect(rendered.match(/Carrot/gi)?.length).toBe(1);
+    expect(rendered.match(/Onion/gi)?.length).toBe(1);
   });
 });

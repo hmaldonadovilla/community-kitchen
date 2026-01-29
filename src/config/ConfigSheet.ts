@@ -27,6 +27,7 @@ import {
   QuestionUiConfig,
   QuestionConfig,
   QuestionType,
+  PresetValue,
   SelectionEffect,
   ValidationRule,
   VisibilityCondition,
@@ -1472,17 +1473,47 @@ export class ConfigSheet {
     }
   }
 
+  private static normalizeSelectionEffectValue(raw: any): PresetValue | null | undefined {
+    if (raw === null) return null;
+    return this.normalizeDefaultValue(raw) as PresetValue | undefined;
+  }
+
   private static normalizeSelectionEffects(rawEffects: any): SelectionEffect[] | undefined {
     if (!Array.isArray(rawEffects)) return undefined;
     const effects: SelectionEffect[] = [];
     rawEffects.forEach((effect: any) => {
-      if (!effect || !effect.groupId) return;
+      if (!effect) return;
       const type = (effect.type || 'addLineItems').toString();
-      if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource' && type !== 'deleteLineItems') return;
+      if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource' && type !== 'deleteLineItems' && type !== 'setValue') {
+        return;
+      }
       const normalized: SelectionEffect = {
-        type: type as SelectionEffect['type'],
-        groupId: effect.groupId.toString()
+        type: type as SelectionEffect['type']
       };
+      if (effect.groupId !== undefined && effect.groupId !== null) {
+        const groupId = effect.groupId.toString().trim();
+        if (groupId) normalized.groupId = groupId;
+      }
+      if (type !== 'setValue' && !normalized.groupId) return;
+      {
+        const targetPathRaw =
+          effect.targetPath !== undefined
+            ? effect.targetPath
+            : effect.targetGroupPath !== undefined
+              ? effect.targetGroupPath
+              : effect.groupPath !== undefined
+                ? effect.groupPath
+                : undefined;
+        if (Array.isArray(targetPathRaw)) {
+          const path = targetPathRaw
+            .map((entry: any) => (entry !== undefined && entry !== null ? entry.toString().trim() : ''))
+            .filter(Boolean);
+          if (path.length) normalized.targetPath = path;
+        } else if (targetPathRaw !== undefined && targetPathRaw !== null) {
+          const path = targetPathRaw.toString().trim();
+          if (path) normalized.targetPath = path;
+        }
+      }
       {
         const idCandidate =
           effect.id !== undefined
@@ -1503,8 +1534,25 @@ export class ConfigSheet {
           .filter(Boolean);
         if (triggers.length) normalized.triggerValues = triggers;
       }
+      {
+        const whenRaw = effect.when ?? effect.condition ?? effect.whenClause;
+        const normalizedWhen = this.normalizeWhenClause(whenRaw);
+        if (normalizedWhen) normalized.when = normalizedWhen;
+      }
       if (effect.hideRemoveButton !== undefined) {
         normalized.hideRemoveButton = Boolean(effect.hideRemoveButton);
+      }
+      if (type === 'setValue') {
+        const fieldIdCandidate = effect.fieldId ?? effect.targetFieldId ?? effect.fieldRef;
+        const fieldId = fieldIdCandidate !== undefined && fieldIdCandidate !== null ? fieldIdCandidate.toString().trim() : '';
+        if (!fieldId) return;
+        normalized.fieldId = fieldId;
+        if (Object.prototype.hasOwnProperty.call(effect, 'value')) {
+          const value = this.normalizeSelectionEffectValue(effect.value);
+          if (value !== undefined || effect.value === null) {
+            normalized.value = value as PresetValue | null;
+          }
+        }
       }
       {
         const targetCandidate =
@@ -1744,6 +1792,13 @@ export class ConfigSheet {
 
       const subGroupRaw = (lineItemsRaw as any).subGroupId ?? (lineItemsRaw as any).subGroup;
       const subGroupId = subGroupRaw !== undefined && subGroupRaw !== null ? subGroupRaw.toString().trim() : '';
+      const subGroupPathRaw = (lineItemsRaw as any).subGroupPath ?? (lineItemsRaw as any).subGroupPathIds;
+      const subGroupPath =
+        Array.isArray(subGroupPathRaw)
+          ? subGroupPathRaw.map((entry: any) => (entry !== undefined && entry !== null ? entry.toString().trim() : '')).filter(Boolean)
+          : subGroupPathRaw !== undefined && subGroupPathRaw !== null
+            ? subGroupPathRaw.toString().trim()
+            : '';
 
       const whenRaw = (lineItemsRaw as any).when;
       const when = this.normalizeWhenClause(whenRaw);
@@ -1763,12 +1818,21 @@ export class ConfigSheet {
       const parentMatch =
         parentMatchStr === 'all' || parentMatchStr === 'any' ? (parentMatchStr as 'all' | 'any') : undefined;
 
+      const parentScopeRaw = (lineItemsRaw as any).parentScope ?? (lineItemsRaw as any).parentDepth;
+      const parentScopeStr = typeof parentScopeRaw === 'string' ? parentScopeRaw.trim().toLowerCase() : '';
+      const parentScope =
+        parentScopeStr === 'immediate' || parentScopeStr === 'ancestor'
+          ? (parentScopeStr as 'immediate' | 'ancestor')
+          : undefined;
+
       const cfg: any = { groupId };
       if (subGroupId) cfg.subGroupId = subGroupId;
+      if (subGroupPath) cfg.subGroupPath = subGroupPath;
       if (when) cfg.when = when;
       if (parentWhen) cfg.parentWhen = parentWhen;
       if (match) cfg.match = match;
       if (parentMatch) cfg.parentMatch = parentMatch;
+      if (parentScope) cfg.parentScope = parentScope;
       return { lineItems: cfg } as any;
     }
 
@@ -2217,6 +2281,17 @@ export class ConfigSheet {
         rawUi.paragraphDisclaimerConfig ??
         rawUi.paragraph_disclaimer_config
     );
+    const overlayOpenActionsRaw =
+      rawUi.overlayOpenActions ??
+      rawUi.overlayOpenAction ??
+      rawUi.overlayOpen ??
+      rawUi.overlayActions ??
+      rawUi.overlayAction;
+    const overlayOpenActions = Array.isArray(overlayOpenActionsRaw)
+      ? overlayOpenActionsRaw
+      : overlayOpenActionsRaw
+        ? [overlayOpenActionsRaw]
+        : undefined;
     const choiceSearchEnabled = normalizeBool(
       rawUi.choiceSearchEnabled ??
         rawUi.choiceSearch ??
@@ -2253,6 +2328,7 @@ export class ConfigSheet {
     if (paragraphRows) (cfg as any).paragraphRows = paragraphRows;
     if (paragraphDisclaimer) (cfg as any).paragraphDisclaimer = paragraphDisclaimer;
     if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
+    if (overlayOpenActions && overlayOpenActions.length) (cfg as any).overlayOpenActions = overlayOpenActions;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
@@ -2316,6 +2392,7 @@ export class ConfigSheet {
       rawUi.defaultCollapsed !== undefined && rawUi.defaultCollapsed !== null ? !!rawUi.defaultCollapsed : undefined;
 
     const rowDisclaimer = this.normalizeRowDisclaimer(rawUi.rowDisclaimer ?? rawUi.row_disclaimer ?? rawUi.disclaimer);
+    const overlayDetail = rawUi.overlayDetail ?? rawUi.overlay_detail ?? rawUi.overlayDetailLayout ?? rawUi.overlay_detail_layout;
 
     const tableColumnsRaw =
       rawUi.tableColumns ??
@@ -2468,6 +2545,7 @@ export class ConfigSheet {
     if (openInOverlay !== undefined) (cfg as any).openInOverlay = openInOverlay;
     if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
     if (nonMatchWarningMode !== undefined) (cfg as any).nonMatchWarningMode = nonMatchWarningMode;
+    if (overlayDetail !== undefined) (cfg as any).overlayDetail = overlayDetail;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
@@ -2597,6 +2675,7 @@ export class ConfigSheet {
           addButtonLabel: parsed.addButtonLabel,
           anchorFieldId: parsed.anchorFieldId,
           addMode: parsed.addMode,
+          addOverlay: parsed.addOverlay,
           sectionSelector,
           dedupRules,
           totals,
@@ -2654,6 +2733,15 @@ export class ConfigSheet {
       rawSelector.placeholderFr || (placeholderObj && placeholderObj.fr) || '';
     const placeholderNl =
       rawSelector.placeholderNl || (placeholderObj && placeholderObj.nl) || '';
+    const helperTextRaw = rawSelector.helperText ?? rawSelector.helper ?? rawSelector.helperLabel;
+    const helperTextObj = helperTextRaw && typeof helperTextRaw === 'object' ? helperTextRaw : null;
+    const helperTextStr = typeof helperTextRaw === 'string' ? helperTextRaw : '';
+    const helperTextEn =
+      rawSelector.helperTextEn || (helperTextObj && helperTextObj.en) || helperTextStr || '';
+    const helperTextFr =
+      rawSelector.helperTextFr || (helperTextObj && helperTextObj.fr) || '';
+    const helperTextNl =
+      rawSelector.helperTextNl || (helperTextObj && helperTextObj.nl) || '';
     const hideLabel = this.normalizeBoolean(rawSelector.hideLabel ?? rawSelector.hideLabelText ?? rawSelector.hideSelectorLabel);
 
     return {
@@ -2665,6 +2753,10 @@ export class ConfigSheet {
       placeholderEn: placeholderEn || undefined,
       placeholderFr: placeholderFr || undefined,
       placeholderNl: placeholderNl || undefined,
+      helperText: helperTextObj || (helperTextStr ? helperTextStr : undefined),
+      helperTextEn: helperTextEn || undefined,
+      helperTextFr: helperTextFr || undefined,
+      helperTextNl: helperTextNl || undefined,
       hideLabel: hideLabel === undefined ? undefined : hideLabel,
       required: !!rawSelector.required,
       options,
@@ -2873,6 +2965,17 @@ export class ConfigSheet {
       const refName = entry.ref.substring(4).trim();
       const refCfg = this.parseLineItemSheet(ss, refName);
       if (refCfg) {
+        const subGroups = Array.isArray(entry.subGroups)
+          ? entry.subGroups
+              .map((subEntry: any, idx: number) =>
+                this.normalizeSubGroupConfig(
+                  ss,
+                  subEntry,
+                  `${entry.id || refCfg.id || fallbackId || refName}_sub_${idx + 1}`
+                )
+              )
+              .filter(Boolean) as LineItemGroupConfig[]
+          : refCfg.subGroups;
         return {
           ...refCfg,
           id: entry.id ? entry.id.toString() : refCfg.id || fallbackId,
@@ -2883,9 +2986,11 @@ export class ConfigSheet {
           addMode: entry.addMode ?? refCfg.addMode,
           addButtonLabel: entry.addButtonLabel ?? refCfg.addButtonLabel,
           anchorFieldId: entry.anchorFieldId ?? refCfg.anchorFieldId,
+          addOverlay: entry.addOverlay ?? refCfg.addOverlay,
           sectionSelector: entry.sectionSelector ? this.normalizeLineItemSelector(ss, entry.sectionSelector) : refCfg.sectionSelector,
           dedupRules: entry.dedupRules ? this.normalizeLineItemDedupRules(entry.dedupRules) : refCfg.dedupRules,
-          totals: entry.totals ? this.normalizeLineItemTotals(entry.totals) : refCfg.totals
+          totals: entry.totals ? this.normalizeLineItemTotals(entry.totals) : refCfg.totals,
+          subGroups
         };
       }
     }
@@ -2897,6 +3002,11 @@ export class ConfigSheet {
     const dedupRules = this.normalizeLineItemDedupRules(entry.dedupRules);
     const totals = this.normalizeLineItemTotals(entry.totals);
     const ui = this.normalizeLineItemUi(entry.ui);
+    const subGroups = Array.isArray(entry.subGroups)
+      ? entry.subGroups
+          .map((subEntry: any, idx: number) => this.normalizeSubGroupConfig(ss, subEntry, `${entry.id || fallbackId}_sub_${idx + 1}`))
+          .filter(Boolean) as LineItemGroupConfig[]
+      : undefined;
 
     return {
       id: entry.id ? entry.id.toString() : fallbackId,
@@ -2907,10 +3017,12 @@ export class ConfigSheet {
       addButtonLabel: entry.addButtonLabel,
       anchorFieldId: entry.anchorFieldId,
       addMode: entry.addMode,
+      addOverlay: entry.addOverlay,
       sectionSelector,
       dedupRules,
       totals,
-      fields
+      fields,
+      subGroups
     };
   }
 
@@ -2923,12 +3035,13 @@ export class ConfigSheet {
 
   private static normalizeDerivedValue(raw: any): DerivedValueConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
-    const op = raw.op ? raw.op.toString() : 'addDays';
+    const opRaw = raw.op ? raw.op.toString().trim() : 'addDays';
+    const op = opRaw.toLowerCase();
     const whenRaw = raw.when !== undefined && raw.when !== null ? raw.when.toString().trim().toLowerCase() : '';
     const when = whenRaw === 'empty' || whenRaw === 'always' ? (whenRaw as any) : undefined;
     const hidden = raw.hidden !== undefined ? Boolean(raw.hidden) : undefined;
 
-    if (op === 'addDays') {
+    if (op === 'adddays' || opRaw === 'addDays') {
       const dependsOn = raw.dependsOn ? raw.dependsOn.toString().trim() : '';
       if (!dependsOn) return undefined;
       const cfg: any = { op: 'addDays', dependsOn };
@@ -2948,7 +3061,7 @@ export class ConfigSheet {
       return cfg as DerivedValueConfig;
     }
 
-    if (op === 'timeOfDayMap') {
+    if (op === 'timeofdaymap' || opRaw === 'timeOfDayMap') {
       const dependsOn = raw.dependsOn ? raw.dependsOn.toString().trim() : '';
       const thresholdsRaw = raw.thresholds ?? raw.map ?? raw.mapping ?? raw.timeMap;
       if (!Array.isArray(thresholdsRaw)) return undefined;
@@ -3012,6 +3125,46 @@ export class ConfigSheet {
       }
       if (when) cfg.when = when;
       if (hidden !== undefined) cfg.hidden = hidden;
+      return cfg as DerivedValueConfig;
+    }
+
+    if (op === 'calc' || op === 'calculate' || op === 'formula') {
+      const expressionRaw = raw.expression ?? raw.formula ?? raw.expr ?? raw.expressionText;
+      const expression = expressionRaw !== undefined && expressionRaw !== null ? expressionRaw.toString().trim() : '';
+      if (!expression) return undefined;
+      const cfg: any = { op: 'calc', expression };
+      const applyOnRaw = raw.applyOn !== undefined && raw.applyOn !== null ? raw.applyOn.toString().trim().toLowerCase() : '';
+      if (applyOnRaw === 'change' || applyOnRaw === 'blur') cfg.applyOn = applyOnRaw;
+      if (when) cfg.when = when;
+      if (hidden !== undefined) cfg.hidden = hidden;
+      const precisionRaw = raw.precision ?? raw.round ?? raw.decimals;
+      if (precisionRaw !== undefined && precisionRaw !== null) {
+        const num = Number(precisionRaw);
+        if (!isNaN(num)) cfg.precision = Math.max(0, Math.floor(num));
+      }
+      if (raw.min !== undefined && raw.min !== null) {
+        const num = Number(raw.min);
+        if (!isNaN(num)) cfg.min = num;
+      }
+      if (raw.max !== undefined && raw.max !== null) {
+        const num = Number(raw.max);
+        if (!isNaN(num)) cfg.max = num;
+      }
+      const filtersRaw = raw.lineItemFilters ?? raw.aggregateFilters ?? raw.filters;
+      if (Array.isArray(filtersRaw)) {
+        const lineItemFilters = filtersRaw
+          .map((entry: any) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const refRaw = entry.ref ?? entry.path ?? entry.target;
+            const ref = refRaw !== undefined && refRaw !== null ? refRaw.toString().trim() : '';
+            if (!ref) return null;
+            const whenClause = entry.when;
+            if (!whenClause || typeof whenClause !== 'object') return null;
+            return { ref, when: whenClause };
+          })
+          .filter(Boolean);
+        if (lineItemFilters.length) cfg.lineItemFilters = lineItemFilters;
+      }
       return cfg as DerivedValueConfig;
     }
 

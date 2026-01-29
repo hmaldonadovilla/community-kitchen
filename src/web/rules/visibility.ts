@@ -49,10 +49,16 @@ export function matchesWhen(value: unknown, when?: VisibilityCondition | any): b
   };
 
   const wantsNotEmpty = (when as any).notEmpty;
-  if (typeof wantsNotEmpty === 'boolean') {
+  const wantsEmpty = (when as any).isEmpty;
+  if (typeof wantsNotEmpty === 'boolean' || typeof wantsEmpty === 'boolean') {
     const hasAny = normalized.some(isNonEmpty);
-    if (wantsNotEmpty && !hasAny) return false;
-    if (!wantsNotEmpty && hasAny) return false;
+    if (typeof wantsNotEmpty === 'boolean') {
+      if (wantsNotEmpty && !hasAny) return false;
+      if (!wantsNotEmpty && hasAny) return false;
+    } else if (typeof wantsEmpty === 'boolean') {
+      if (wantsEmpty && hasAny) return false;
+      if (!wantsEmpty && !hasAny) return false;
+    }
   }
 
   if (when.equals !== undefined) {
@@ -123,6 +129,78 @@ const normalizeLineItemId = (raw: any): string => {
   } catch (_) {
     return '';
   }
+};
+
+const normalizeLineItemPathInput = (raw: any): string[] => {
+  if (raw === undefined || raw === null) return [];
+  const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split('.') : [];
+  return list.map(v => (v === undefined || v === null ? '' : v.toString().trim())).filter(Boolean);
+};
+
+const normalizePathSegment = (raw: string): string => raw.toString().trim().toUpperCase();
+
+const matchPathSegments = (pattern: string[], actual: string[]): boolean => {
+  const p = pattern.map(normalizePathSegment);
+  const a = actual.map(normalizePathSegment);
+  const walk = (pi: number, ai: number): boolean => {
+    if (pi >= p.length) return ai >= a.length;
+    const seg = p[pi];
+    if (seg === '**') {
+      if (pi === p.length - 1) return true;
+      for (let k = ai; k <= a.length; k += 1) {
+        if (walk(pi + 1, k)) return true;
+      }
+      return false;
+    }
+    if (ai >= a.length) return false;
+    if (seg === '*' || seg === a[ai]) return walk(pi + 1, ai + 1);
+    return false;
+  };
+  return walk(0, 0);
+};
+
+const parseGroupKeyPath = (
+  key: string
+): { rootId: string; path: string[]; parentChain: Array<{ groupKey: string; rowId: string }> } => {
+  const raw = (key || '').toString();
+  if (!raw) return { rootId: '', path: [], parentChain: [] };
+  if (raw.includes('::')) {
+    const parts = raw.split('::').filter(Boolean);
+    const rootId = parts[0] || '';
+    const tail = parts.slice(1);
+    if (!rootId || tail.length % 2 !== 0) return { rootId, path: [], parentChain: [] };
+    const path: string[] = [];
+    const parentChain: Array<{ groupKey: string; rowId: string }> = [];
+    let currentKey = rootId;
+    for (let i = 0; i < tail.length; i += 2) {
+      const rowId = tail[i] || '';
+      const subId = tail[i + 1] || '';
+      if (!rowId || !subId) break;
+      path.push(subId);
+      parentChain.push({ groupKey: currentKey, rowId });
+      currentKey = `${currentKey}::${rowId}::${subId}`;
+    }
+    return { rootId, path, parentChain };
+  }
+  if (raw.includes('.')) {
+    const parts = raw.split('.').filter(Boolean);
+    return { rootId: parts[0] || '', path: parts.slice(1), parentChain: [] };
+  }
+  return { rootId: raw, path: [], parentChain: [] };
+};
+
+const resolveMatchingGroupKeys = (groupId: string, path: string[], ctx: VisibilityContext): string[] => {
+  const normalizedGroupId = normalizeLineItemId(groupId).toUpperCase();
+  if (!normalizedGroupId) return [];
+  if (!path.length) return [groupId];
+  const keys = typeof ctx.getLineItemKeys === 'function' ? ctx.getLineItemKeys() : [];
+  if (!keys.length) return [];
+  return keys.filter(key => {
+    const parsed = parseGroupKeyPath(key);
+    if (!parsed.rootId) return false;
+    if (parsed.rootId.toUpperCase() !== normalizedGroupId) return false;
+    return matchPathSegments(path, parsed.path);
+  });
 };
 
 /**
@@ -256,7 +334,7 @@ export const matchesWhenClause = (
 
   const lineItemsClause = pickLineItemsClause(when);
   if (lineItemsClause) {
-    return matchesLineItemsClause(lineItemsClause, ctx);
+    return matchesLineItemsClause(lineItemsClause, ctx, options);
   }
 
   // Leaf condition
@@ -268,23 +346,66 @@ export const matchesWhenClause = (
   return matchesWhen(value, leaf as any);
 };
 
-const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
+const matchesLineItemsClause = (
+  raw: any,
+  ctx: VisibilityContext,
+  options?: { rowId?: string; linePrefix?: string }
+): boolean => {
   if (!raw || typeof raw !== 'object') return true;
   if (typeof ctx.getLineItems !== 'function') return false;
 
   const groupId = normalizeLineItemId((raw as any).groupId ?? (raw as any).group ?? (raw as any).lineGroupId ?? (raw as any).lineGroup);
   if (!groupId) return false;
   const subGroupId = normalizeLineItemId((raw as any).subGroupId ?? (raw as any).subGroup ?? (raw as any).subGroupID);
+  const subGroupPathRaw = (raw as any).subGroupPath ?? (raw as any).subGroupPaths ?? (raw as any).subGroupPathIds;
+  const subGroupPath = normalizeLineItemPathInput(subGroupPathRaw || (subGroupId ? [subGroupId] : []));
   const matchRaw = (raw as any).match;
   const parentMatchRaw = (raw as any).parentMatch;
   const matchMode = normalizeLineItemMatchMode(matchRaw);
   const parentMatchMode = parentMatchRaw !== undefined ? normalizeLineItemMatchMode(parentMatchRaw) : undefined;
   const when = (raw as any).when as WhenClause | undefined;
   const parentWhen = (raw as any).parentWhen as WhenClause | undefined;
+  const parentScopeRaw = (raw as any).parentScope;
+  const parentScope = typeof parentScopeRaw === 'string' && parentScopeRaw.trim().toLowerCase() === 'ancestor' ? 'ancestor' : 'immediate';
+  const hasExplicitPath = subGroupPathRaw !== undefined && subGroupPathRaw !== null;
+  const hasWildcard = subGroupPath.some(seg => seg === '*' || seg === '**');
+  const scope = (() => {
+    const scopedRowId = normalizeLineItemId(options?.rowId);
+    const scopedPrefix = options?.linePrefix ? options.linePrefix.toString().trim() : '';
+    if (!scopedRowId || !scopedPrefix) return null;
+    const parsed = parseGroupKeyPath(scopedPrefix);
+    if (!parsed.rootId) return null;
+    return {
+      rootId: parsed.rootId,
+      chain: [...parsed.parentChain, { groupKey: scopedPrefix, rowId: scopedRowId }]
+    };
+  })();
+  const normalizeScopeKey = (raw: string): string => normalizeLineItemId(raw).toUpperCase();
+  const scopeRoot = scope ? normalizeScopeKey(scope.rootId) : '';
+  const scopedToRow = Boolean(scope && scopeRoot && scopeRoot === normalizeScopeKey(groupId));
 
   const getRows = (key: string): any[] => {
     const rows = ctx.getLineItems?.(key);
     return Array.isArray(rows) ? rows : [];
+  };
+  const scopedRows = (rows: any[]): any[] => {
+    if (!scopedToRow || !scope?.chain.length) return rows;
+    const targetRowId = normalizeScopeKey(scope.chain[0].rowId);
+    return rows.filter(row => normalizeScopeKey((row as any)?.id) === targetRowId);
+  };
+  const isKeyInScope = (key: string): boolean => {
+    if (!scopedToRow || !scope?.chain.length) return true;
+    const parsed = parseGroupKeyPath(key);
+    if (normalizeScopeKey(parsed.rootId) !== scopeRoot) return false;
+    if (parsed.parentChain.length < scope.chain.length) return false;
+    for (let idx = 0; idx < scope.chain.length; idx += 1) {
+      const expected = scope.chain[idx];
+      const actual = parsed.parentChain[idx];
+      if (!actual) return false;
+      if (normalizeScopeKey(actual.groupKey) !== normalizeScopeKey(expected.groupKey)) return false;
+      if (normalizeScopeKey(actual.rowId) !== normalizeScopeKey(expected.rowId)) return false;
+    }
+    return true;
   };
 
   const buildRowCtx = (
@@ -328,8 +449,8 @@ const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
     return matchesWhenClause(clause, rowCtx, { rowId, linePrefix });
   };
 
-  if (!subGroupId) {
-    const rows = getRows(groupId);
+  if (!subGroupId && !subGroupPath.length) {
+    const rows = scopedRows(getRows(groupId));
     if (!rows.length) return false;
     const clause = when || parentWhen;
     const mode = matchRaw !== undefined ? matchMode : parentMatchMode || matchMode;
@@ -337,31 +458,83 @@ const matchesLineItemsClause = (raw: any, ctx: VisibilityContext): boolean => {
     return rows.some(row => rowMatches(row, groupId, undefined, clause));
   }
 
-  const parentRows = getRows(groupId);
-  if (!parentRows.length) return false;
+  const useLegacySubgroup = !hasExplicitPath && subGroupId && !hasWildcard && parentScope === 'immediate';
+  if (useLegacySubgroup) {
+    const parentRows = scopedRows(getRows(groupId));
+    if (!parentRows.length) return false;
 
-  let hasAnyParentCandidate = false;
-  const effectiveParentMatchMode =
-    parentMatchMode || (parentWhen ? 'any' : matchMode === 'all' ? 'all' : 'any');
-  for (const parentRow of parentRows) {
-    const parentId = normalizeLineItemId((parentRow as any)?.id);
-    if (!parentId) continue;
-    if (parentWhen && !rowMatches(parentRow, groupId, undefined, parentWhen)) continue;
-    hasAnyParentCandidate = true;
-    const subKey = `${groupId}::${parentId}::${subGroupId}`;
-    const subRows = getRows(subKey);
-    if (!subRows.length) {
-      if (effectiveParentMatchMode === 'all') return false;
-      continue;
+    let hasAnyParentCandidate = false;
+    const effectiveParentMatchMode =
+      parentMatchMode || (parentWhen ? 'any' : matchMode === 'all' ? 'all' : 'any');
+    for (const parentRow of parentRows) {
+      const parentId = normalizeLineItemId((parentRow as any)?.id);
+      if (!parentId) continue;
+      if (parentWhen && !rowMatches(parentRow, groupId, undefined, parentWhen)) continue;
+      hasAnyParentCandidate = true;
+      const subKey = `${groupId}::${parentId}::${subGroupId}`;
+      const subRows = getRows(subKey);
+      if (!subRows.length) {
+        if (effectiveParentMatchMode === 'all') return false;
+        continue;
+      }
+      const parentValues = ((parentRow as any)?.values || {}) as Record<string, FieldValue>;
+      const childMatches = subRows.map(subRow => rowMatches(subRow, subKey, parentValues, when));
+      const parentHasMatch = matchMode === 'all' ? childMatches.every(Boolean) : childMatches.some(Boolean);
+      if (effectiveParentMatchMode === 'any' && parentHasMatch) return true;
+      if (effectiveParentMatchMode === 'all' && !parentHasMatch) return false;
     }
-    const parentValues = ((parentRow as any)?.values || {}) as Record<string, FieldValue>;
-    const childMatches = subRows.map(subRow => rowMatches(subRow, subKey, parentValues, when));
-    const parentHasMatch = matchMode === 'all' ? childMatches.every(Boolean) : childMatches.some(Boolean);
-    if (effectiveParentMatchMode === 'any' && parentHasMatch) return true;
-    if (effectiveParentMatchMode === 'all' && !parentHasMatch) return false;
+
+    return effectiveParentMatchMode === 'all' ? hasAnyParentCandidate : false;
   }
 
-  return effectiveParentMatchMode === 'all' ? hasAnyParentCandidate : false;
+  const candidateKeys = resolveMatchingGroupKeys(groupId, subGroupPath, ctx).filter(isKeyInScope);
+  if (!candidateKeys.length) return false;
+
+  const effectiveParentMatchMode =
+    parentMatchMode || (parentWhen ? 'any' : matchMode === 'all' ? 'all' : 'any');
+
+  const resolveAncestorRows = (parentChain: Array<{ groupKey: string; rowId: string }>) => {
+    const chain: Array<{ groupKey: string; rowId: string; row?: any; parentValues?: Record<string, FieldValue> }> = [];
+    parentChain.forEach((entry, idx) => {
+      const rows = getRows(entry.groupKey);
+      const row = rows.find(r => normalizeLineItemId((r as any)?.id) === normalizeLineItemId(entry.rowId));
+      const parentValues = idx > 0 ? ((chain[idx - 1]?.row as any)?.values || undefined) : undefined;
+      chain.push({ groupKey: entry.groupKey, rowId: entry.rowId, row, parentValues });
+    });
+    return chain;
+  };
+
+  const parentMatches = (ancestorChain: Array<{ groupKey: string; rowId: string; row?: any; parentValues?: Record<string, FieldValue> }>): boolean => {
+    if (!parentWhen) return true;
+    if (!ancestorChain.length) return false;
+    if (parentScope === 'ancestor') {
+      const matches = ancestorChain.map(entry =>
+        entry.row ? rowMatches(entry.row, entry.groupKey, entry.parentValues, parentWhen) : false
+      );
+      if (!matches.length) return false;
+      return parentMatchMode === 'all' ? matches.every(Boolean) : matches.some(Boolean);
+    }
+    const immediate = ancestorChain[ancestorChain.length - 1];
+    if (!immediate?.row) return false;
+    return rowMatches(immediate.row, immediate.groupKey, immediate.parentValues, parentWhen);
+  };
+
+  const keyMatches = candidateKeys.map(key => {
+    const rows = getRows(key);
+    if (!rows.length) return false;
+    const parsed = parseGroupKeyPath(key);
+    const ancestorChain = resolveAncestorRows(parsed.parentChain);
+    if (!parentMatches(ancestorChain)) return false;
+    const immediateParentValues =
+      ancestorChain.length > 0 ? ((ancestorChain[ancestorChain.length - 1].row as any)?.values || undefined) : undefined;
+    const matches = rows.map(row => rowMatches(row, key, immediateParentValues, when));
+    if (!matches.length) return false;
+    return matchMode === 'all' ? matches.every(Boolean) : matches.some(Boolean);
+  });
+
+  if (!keyMatches.length) return false;
+  if (effectiveParentMatchMode === 'all') return keyMatches.every(Boolean);
+  return keyMatches.some(Boolean);
 };
 
 function resolveVisibilityValue(

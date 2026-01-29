@@ -14,6 +14,58 @@ This project uses TypeScript. You need to build the script before using it in Go
 4. Run `npm run build` to compile the TypeScript code.
    - This will generate a `dist/Code.js` file.
 
+## 2b. Optional: Bundle a Config Export (sheetless override)
+
+If you want the Apps Script runtime to read config from JSON instead of the Sheets tabs:
+
+1. Export a config JSON from your deployed web app:
+
+   ```bash
+   npm run export:config -- --url "<appScriptWebAppUrl>" --form "Config: Meal Production"
+   ```
+
+   This writes a `FormConfigExport` JSON file under `docs/config/exports/`.
+   - Alternative: set `CK_APP_URL` and `CK_FORM_KEY` in `.env` (see `.env.example`) and run `npm run export:config`.
+
+2. Re-run the build:
+
+   ```bash
+   npm run build
+   ```
+
+   The build embeds `docs/config/exports/*.json` into `dist/Code.js`. When present, the bundled config overrides reading from the dashboard + config sheets.
+
+## 2c. Optional: Apps Script CI/CD (clasp)
+
+This repo can deploy to Apps Script automatically using `clasp` (locally or via GitHub Actions).
+
+Local (no GitHub compute):
+
+1. Copy `.clasp.json.example` → `.clasp.json` and set your Apps Script **scriptId**.
+2. Run `npx clasp login` once to generate `~/.clasprc.json` (clasp auth token).
+3. Deploy:
+
+   ```bash
+   npm run deploy:apps-script
+   ```
+   - To skip tests: `SKIP_TESTS=1 npm run deploy:apps-script`
+   - Optional: use `.env.deploy` to store local deploy variables (see `.env.deploy.example`).
+
+Local deploy env variables (optional):
+
+- `SKIP_TESTS=1` — skip unit tests
+- `CLASP_DEPLOYMENT_ID=...` — update a specific `/exec` deployment
+- `CLASP_CREATE_DEPLOYMENT=1` — create a new deployment if no ID is provided
+- `CLASP_DEPLOY_DESCRIPTION="..."` — custom deployment description
+
+CI (GitHub Actions):
+
+1. Add GitHub secrets:
+   - `CLASP_SCRIPT_ID` = your Apps Script scriptId
+   - `CLASP_TOKEN` = contents of `~/.clasprc.json`
+   - Optional: `CLASP_DEPLOYMENT_ID` to update a specific web app deployment
+2. Run the **Deploy Apps Script** workflow (manual `workflow_dispatch`).
+
 ## 3. Create a Google Sheet
 
 1. Go to [sheets.google.com](https://sheets.google.com) and create a new blank spreadsheet.
@@ -508,13 +560,37 @@ This project uses TypeScript. You need to build the script before using it in Go
 
       **Notes:**
       - Steps can mix **top-level questions** and **line item groups**.
+      - Use `helpText` on a step to display guidance above the step content (e.g., food safety confirmation + per-pot photo instructions).
       - Line groups can be rendered **inline** or via a **full-page overlay** (`displayMode: "overlay"` or step `render.lineGroups.mode`).
       - You can filter visible rows per step using `rows.includeWhen` / `rows.excludeWhen` (e.g., `quantity > 0`) and scope subgroups via `subGroups.include`.
       - If you need to **show all rows** but only **validate/advance based on a subset** (e.g., ignore rows where `QTY < 1` while still displaying them), use `validationRows.includeWhen` / `validationRows.excludeWhen` on the step target.
+      - When a step is blocked, **field-level error messages** are shown inline; there is no step-level validation banner.
       - For **progressive** line item groups in guided steps, set `collapsedFieldsInHeader: true` on the step target to:
         - show the configured `lineItemConfig.ui.collapsedFields` in the **row header**
         - keep rows **always expanded** (no toggle/pill indicator)
         - hide the row body when the step only includes collapsed fields (row disclaimer shows as a footer)
+      - **Row flow (steps)**: Use `rowFlow` on a step line-group target to render an output line + a single active prompt per row.
+
+        ```json
+        {
+          "kind": "lineGroup",
+          "id": "MP_MEALS_REQUEST",
+          "rowFlow": {
+            "output": { "segments": [{ "fieldRef": "MEAL_TYPE" }, { "fieldRef": "QTY" }] },
+            "prompts": [{ "id": "reheat", "fieldRef": "MP_IS_REHEAT", "hideWhenFilled": true }]
+          }
+        }
+        ```
+
+        - `output.segments` defines the text line (supports labels, list formatting, and `showWhen`).
+        - `output.segments[].editAction` (single) or `editActions` (array) renders one or more action icons next to a segment.
+        - `output.actions` lets you place row actions at the start/end of the output line; use `output.actionsLayout: "below"` to render them on a separate row. Use `output.actionsScope: "group"` (or per-action `scope: "group"`) to render actions once after all rows.
+        - `prompts` controls the input order (`completedWhen`, `hideWhenFilled`, `keepVisibleWhenFilled`), allows label overrides via `input.label`, and supports `input.labelLayout` (`stacked` | `inline` | `hidden`).
+        - `onCompleteActions` triggers action ids once a prompt becomes complete (useful to auto-open overlays after a selection).
+        - `actionsLayout` controls prompt action placement (`below` | `inline`) to keep prompts on a single row.
+        - `actions` can edit values, delete rows (`deleteRow`), add rows, close overlays, or open overlays.
+        - `openOverlay` effects accept the same options as `LineItemOverlayOpenActionConfig` (row filters, overrides, flattening, rowFlow override, `hideCloseButton`, `closeButtonLabel`, `closeConfirm`) plus `overlayContextHeader` for per-action headers and `overlayHelperText` for helper copy shown below the overlay list.
+        - `rowFlow.overlayContextHeader.fields` shows a default context line in overlays opened from row flow actions.
       - Navigation/back labels and controls:
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
@@ -568,6 +644,30 @@ This project uses TypeScript. You need to build the script before using it in Go
       }
       ```
 
+    - Want to **customize the duplicate-record dialog** shown when dedup rules block a record? Set `dedupDialog` in the same dashboard JSON. The dialog body automatically lists the dedup key labels + values between `intro` and `outro`:
+
+      ```json
+      {
+        "dedupDialog": {
+          "title": {
+            "en": "Creating duplicate record for the same customer, service and date is not allowed."
+          },
+          "intro": {
+            "en": "A meal production record already exists for:"
+          },
+          "outro": {
+            "en": "What do you want to do?"
+          },
+          "changeLabel": {
+            "en": "Change customer, service or date"
+          },
+          "openLabel": {
+            "en": "Open existing record"
+          }
+        }
+      }
+      ```
+
     - Want to **override the Submit button label**? Set `submitButtonLabel` (localized). When omitted, the UI uses system string defaults:
 
       ```json
@@ -617,19 +717,21 @@ This project uses TypeScript. You need to build the script before using it in Go
     - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
         - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.
         - Header controls:
-          - `ui.showItemPill`: show/hide the “N items” pill in the line-item header (default: true)
+          - `ui.showItemPill`: show/hide the items pill in the line-item header (default: true)
           - `ui.addButtonPlacement`: where the Add button appears (`top`, `bottom`, `both`, `hidden`; default: `both`)
           - `ui.openInOverlay`: when `true`, the line-item group editor opens in a **full-page overlay** (like subgroup overlays) and the main form shows a compact “Open” card instead of rendering the full table inline
           - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`). Search indexes include extra columns from `optionsRef`/data sources when available.
           - `ui.mode: "table"`: render line items as a compact table (also supported on subgroups)
           - `ui.tableColumns`: ordered list of field ids to show as table columns (defaults to the line-item field order)
-          - `ui.tableColumnWidths`: optional per-column widths map (e.g., `{ "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" }`)
+         - `ui.tableColumnWidths`: optional per-column widths map. Keys can be field ids plus action keys
+           (`__remove`, `__view`, `__edit` and `_remove`, `_view`, `_edit` for overlay header action columns).
+           Example: `{ "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" }`
           - `ui.nonMatchWarningMode`: choose how optionFilter non-match warnings show in the table legend (`descriptive`, `validation`, or `both`)
           - `ui.tableHideUntilAnchor`: when true (default), hide non-anchor columns until the anchor field has a value
           - `ui.needsAttentionMessage`: localized override for the “Needs attention” helper shown when this line item group or subgroup requires review
           - `ui.allowRemoveAutoRows`: when `false`, hides the **Remove** button for rows marked `__ckRowSource: "auto"`
           - `ui.saveDisabledRows`: when `true`, includes disabled progressive rows in the submitted payload (so they can appear in downstream PDFs)
-        - `dedupRules`: optional row-level de-duplication rules for this group or subgroup. Each rule lists field ids that must be unique together; the check runs once all listed fields have values.
+        - `dedupRules`: optional row-level de-duplication rules for this group or subgroup. Each rule lists field ids that must be unique together; the check runs once all listed fields have values. The `message` supports a `{value}` placeholder (replaced with the first dedup field’s value).
           Example:
           ```json
           {
@@ -733,7 +835,12 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
       Users tap **Add lines**, pick multiple products in the overlay, and a new row is created per selection. You can still keep line-item fields in a ref sheet (e.g., `Options (EN)` = `REF:DeliveryLineItems`) while storing only the overlay metadata (addMode/anchor/button label) in `Config (JSON/REF)`. The ref sheet supplies fields; the JSON supplies overlay settings.
+      - Optional: customize the overlay copy per group (or via `groupOverride` on overlay openers) with:
+        - `addOverlay.title` (localized)
+        - `addOverlay.helperText` (localized)
+        - `addOverlay.placeholder` (localized)
    - Selector overlay add flow (search + multi-select): use `addMode: "selectorOverlay"` with `anchorFieldId` and a `sectionSelector` label. The selector becomes the search input + multi-select results list (no separate **Add** button), and search indexes include extra columns from `optionsRef` / data sources so typing a category or dietary label surfaces matching items.
+      - Optional: `sectionSelector.placeholder` and `sectionSelector.helperText` customize the search input placeholder and helper copy for the selector overlay.
     - Auto add flow (no overlay): use `addMode: "auto"` with `anchorFieldId` pointing to a CHOICE line-item field that has an `optionFilter.dependsOn` (one or more controlling fields). When all `dependsOn` fields are filled, the form will automatically create one row per allowed anchor option (same filtering logic as overlay). If the controlling fields change later, auto-generated rows are recomputed and overwritten; manual rows are preserved.
       - Progressive + expand gate: if you also set `"ui": { "mode": "progressive", "expandGate": "collapsedFieldsValid", "collapsedFields": [...] }` then:
         - Auto-generated rows treat the anchor field as the row title and it is not editable (it’s system-selected).
@@ -882,9 +989,11 @@ This project uses TypeScript. You need to build the script before using it in Go
        ```
 
       This will add a row to the `DELIVERY_LINES` line-item group when the value "Add lines" is selected, pre-filling the `ITEM_UNIT` field with "Crate".
+      - **Target nested subgroups**: Use `targetPath` to point to a nested subgroup relative to the triggering row (dot-delimited string or array). Example: `"targetPath": "INGREDIENTS"` or `"targetPath": ["INGREDIENTS"]`.
       - You can also **copy values** into the new row using reference strings in `preset`:
         - `$row.FIELD_ID` copies from the originating **line-item row** (when the effect is triggered inside a line item)
         - `$top.FIELD_ID` copies from **top-level** record values
+      - **Optional condition gating**: Use `when` to gate effects with visibility-style conditions (e.g., numeric comparisons for NUMBER fields).
 
       ```json
       {
@@ -897,6 +1006,38 @@ This project uses TypeScript. You need to build the script before using it in Go
               "MEAL_TYPE": "$row.MEAL_TYPE",
               "SERVICE_DATE": "$top.MEAL_DATE"
             }
+          }
+        ]
+      }
+      ```
+
+      - **Set values directly**: Use `type: "setValue"` to update a field in the current line-item row (when triggered inside a line item) or at the top level. `value` supports literals, `$row.FIELD_ID`, `$top.FIELD_ID`, and `null` to clear the field.
+
+      ```json
+      {
+        "selectionEffects": [
+          { "type": "setValue", "fieldId": "LEFTOVER_INFO", "value": "No left over" }
+        ]
+      }
+      ```
+
+      Example: keep a single auto row in a subgroup while a NUMBER is > 0, and clear it when the value is 0:
+
+      ```json
+      {
+        "selectionEffects": [
+          {
+            "id": "mp_to_cook_sync",
+            "type": "deleteLineItems",
+            "groupId": "MP_TYPE_LI"
+          },
+          {
+            "id": "mp_to_cook_sync",
+            "type": "addLineItems",
+            "groupId": "MP_TYPE_LI",
+            "when": { "fieldId": "MP_TO_COOK", "greaterThan": 0 },
+            "preset": { "PREP_QTY": "$row.MP_TO_COOK", "PREP_TYPE": "Cook" },
+            "hideRemoveButton": true
           }
         ]
       }
@@ -1087,6 +1228,8 @@ This project uses TypeScript. You need to build the script before using it in Go
             - `copy`: copy another field’s value into the target. Defaults to `"when": "empty"` (behaves like a default; allows user overrides) and applies on `"applyOn": "blur"` (so it doesn’t change mid-typing).
               - Optional: `"applyOn": "change"` to apply on every keystroke/change.
               - Optional: `"copyMode": "allowIncrease" | "allowDecrease"` (only with `"when": "always"`) to allow operator overrides in one direction and clamp back to the source value on blur.
+            - `calc`: compute numeric expressions using `{FIELD_ID}` tokens and `SUM(GROUP.FIELD)` aggregates. Defaults to `"when": "always"`.
+              - Optional: `"lineItemFilters"` to filter rows included in a specific aggregate.
 
           - Example: prefill a DATE field with today (local):
 
@@ -1122,6 +1265,20 @@ This project uses TypeScript. You need to build the script before using it in Go
 
             ```json
             { "derivedValue": { "op": "copy", "dependsOn": "QTY", "when": "always", "copyMode": "allowIncrease" } }
+            ```
+
+          - Example: compute a line-item field using a subgroup sum with a filter:
+
+            ```json
+            {
+              "derivedValue": {
+                "op": "calc",
+                "expression": "{QTY} - SUM(MP_TYPE_LI.PREP_QTY)",
+                "lineItemFilters": [
+                  { "ref": "MP_TYPE_LI.PREP_QTY", "when": { "fieldId": "PREP_TYPE", "equals": ["Full Dish"] } }
+                ]
+              }
+            }
             ```
 
       - Example: cross-field numeric validation (B must be >= A):
@@ -1165,7 +1322,94 @@ This project uses TypeScript. You need to build the script before using it in Go
       - **Post-submit experience (summary)**: After a successful submit, the React app automatically runs the configured follow-up actions (Create PDF / Send Email / Close record when configured) and then shows the Summary screen with timestamps + status. The UI no longer includes a dedicated Follow-up view.
       - **Data list view**: The React web app includes a Records list view backed by Apps Script. It uses `fetchSubmissions` for lightweight row summaries (fast list loads) and `fetchSubmissionById` to open a full record on demand. `listView.pageSize` defaults to 10 and is capped at 50; you can optionally hide the UI paging controls via `listView.paginationControlsEnabled: false`. Search runs client-side (keyword search by default, or date search via `listView.search`). Header sorting is enabled by default (click a column header to sort), and can be disabled with `listView.headerSortEnabled: false` (totalCount is capped at 200).
     - **Line-item selector & totals**: In a line-item JSON config you can add `sectionSelector` (with `id`, labels, and `options` or `optionsRef`) to render a dropdown above the rows so filters/validation can depend on it. Add `totals` to display counts or sums under the line items, for example: `"totals": [ { "type": "count", "label": { "en": "Items" } }, { "type": "sum", "fieldId": "QTY", "label": { "en": "Qty" }, "decimalPlaces": 1 } ]`.
-    - **Line-item table mode**: To render line items as a compact table, set `"ui": { "mode": "table" }` in the line-item config (also supported for subgroups). You can control column order with `"ui": { "tableColumns": ["ING", "QTY", "UNIT"] }`, set column widths with `"ui": { "tableColumnWidths": { "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" } }`, and hide non-anchor columns until the anchor value is chosen with `"ui": { "tableHideUntilAnchor": true }` (default).
+    - **Line-item table mode**: To render line items as a compact table, set `"ui": { "mode": "table" }` in the line-item config (also supported for subgroups). You can control column order with `"ui": { "tableColumns": ["ING", "QTY", "UNIT"] }`, set column widths with `"ui": { "tableColumnWidths": { "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" } }` (action keys supported: `__remove`, `__view`, `__edit` and `_remove`, `_view`, `_edit`), and hide non-anchor columns until the anchor value is chosen with `"ui": { "tableHideUntilAnchor": true }` (default).
+    - **True nesting (subgroups inside subgroups)**: Line-item groups can contain subgroups, and subgroups can themselves contain nested subgroups. Reference nested groups with dot-delimited paths (example: `"MEALS.INGREDIENTS"`). For visibility rules, use `subGroupPath` with `*`/`**` wildcards when you need to match any depth.
+    - **Overlay detail layout (header + body)**: For full-page overlays, you can render a header table of parent rows and a body area for nested rows. Configure this inside the line-item group JSON:
+
+      ```json
+      {
+        "ui": {
+          "overlayDetail": {
+            "enabled": true,
+            "header": {
+              "tableColumns": ["TYPE", "RECIPE", "NOTES"],
+              "tableColumnWidths": { "TYPE": "25%", "RECIPE": "45%", "NOTES": "30%" },
+              "addButtonPlacement": "top"
+            },
+            "rowActions": {
+              "viewLabel": { "en": "View" },
+              "editLabel": { "en": "Edit" },
+              "editPlacement": "body"
+            },
+            "body": {
+              "subGroupId": "INGREDIENTS",
+              "edit": { "mode": "table", "tableColumns": ["ING", "QTY", "UNIT"] },
+              "view": {
+                "mode": "html",
+                "templateId": { "en": "bundle:Leftovers_Detail" },
+                "hideTabTargets": ["instructions"]
+              }
+            }
+          }
+        }
+      }
+      ```
+
+      Notes:
+      - `subGroupId` currently targets the immediate subgroup only.
+      - `view.mode` requires a bundled HTML template id (`bundle:...`).
+      - `rowActions.editPlacement: "body"` hides the header Edit action; add a button in the HTML template with `data-ck-action="edit"` to switch to edit mode.
+      - `body.view.hideTabTargets` hides tab targets in bundled HTML templates that use `data-tab-target`/`data-tab-panel`.
+      - `header.tableColumnWidths` supports action keys `__view`, `__edit`, `__remove` (and `_view`, `_edit`, `_remove` aliases) for fixed-width icon columns.
+    - **Field-driven overlay open actions**: Any question can act as an overlay opener by adding `ui.overlayOpenActions`.
+      When the `when` clause matches, the field renders as a button that opens the target line-item group overlay.
+      Use `rowFilter` to show only matching header rows, and `groupOverride` to customize columns, actions,
+      add buttons, or subgroups for this specific opener.
+
+      ```json
+      {
+        "id": "MP_IS_REHEAT",
+        "type": "CHOICE",
+        "qEn": "Reheat?",
+        "options": ["No", "Yes"],
+        "ui": {
+          "control": "select",
+          "overlayOpenActions": [
+            {
+              "groupId": "MP_TYPE_LI",
+              "when": { "fieldId": "MP_IS_REHEAT", "equals": "Yes" },
+              "label": { "en": "Open reheats" },
+              "rowFilter": { "includeWhen": { "fieldId": "PREP_TYPE", "equals": "Reheat" } },
+              "flattenFields": ["PREP_QTY", "RECIPE"],
+              "groupOverride": {
+                "minRows": 1,
+                "maxRows": 1,
+                "ui": {
+                  "overlayDetail": {
+                    "enabled": true,
+                    "header": {
+                      "tableColumns": ["PREP_TYPE", "PREP_QTY", "RECIPE"],
+                      "tableColumnWidths": { "PREP_TYPE": "20%", "PREP_QTY": "20%", "RECIPE": "60%", "_view": "44px", "_edit": "44px", "_remove": "44px" }
+                    }
+                  }
+                },
+                "addButtonLabel": { "en": "Add reheat" }
+              }
+            }
+          ]
+        }
+      }
+      ```
+
+      - `renderMode: "replace"` (default) replaces the field control with a button. Use `"inline"` to keep the control and show a separate button below.
+      - `resetValue` sets the field value when the trash/reset icon is confirmed, so the field reverts to its original control.
+      - `groupOverride.minRows` seeds blank rows when the overlay opens; `groupOverride.maxRows` disables the Add button (and selector overlay) once the limit is reached.
+      - `flattenFields` surfaces specific line-item fields inline when the target group is single-row (`maxRows: 1`).
+      - `flattenPlacement` controls where flattened fields render relative to the opener: `"left" | "right" | "below"` (default).
+      - `hideTrashIcon: true` hides the reset icon on the opener button.
+      - When the overlay detail view is enabled, overlayOpenActions auto-select the first row (view mode if available; otherwise edit).
+      - When overlay detail is enabled, completing all header fields auto-opens the detail panel (view if available; otherwise edit).
+      - If multiple actions are provided, the first matching `when` clause is used.
     - **Quick recipe for the new features**:
       - *Section selector (top-left dropdown in line items)*: In the LINE_ITEM_GROUP JSON, add:
 
@@ -1243,9 +1487,44 @@ This project uses TypeScript. You need to build the script before using it in Go
         }
         ```
 
-        Add `subGroupId` to scan subgroup rows (across all parent rows) with the same row-level `when` shape.
+        Example: show an "Ingredients needed" BUTTON when there is at least one `MP_TYPE_LI` row with `PREP_TYPE = "Cook"` **or** a `PREP_TYPE = "Full"` row that has at least one child `MP_INGREDIENTS_LI` subrow marked as manual:
+
+        ```json
+        {
+          "visibility": {
+            "showWhen": {
+              "any": [
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupId": "MP_TYPE_LI",
+                    "when": {
+                      "all": [
+                        { "fieldId": "PREP_TYPE", "equals": "Cook" },
+                        { "fieldId": "RECIPE", "notEmpty": true }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
+                    "parentWhen": { "fieldId": "PREP_TYPE", "equals": "Full" },
+                    "when": { "fieldId": "__ckRowSource", "equals": "manual" }
+                  }
+                }
+              ]
+            }
+          }
+        }
+        ```
+
+        Add `subGroupPath` (or legacy `subGroupId` for a single level) to scan subgroup rows with the same row-level `when` shape.
+        `subGroupPath` supports dot-delimited paths (e.g., `"MEALS.INGREDIENTS"`) and wildcards (`*`, `**`) for any depth.
         Row-level `when` reads only row/subgroup values; put top-level conditions outside the `lineItems` clause.
-        To require both a parent row condition and a child row condition, use `parentWhen` (subgroup only):
+        To require both a parent row condition and a child row condition, use `parentWhen` (subgroup only).
+        Add `parentScope: "ancestor"` to match any ancestor in the path (default is immediate parent):
 
         ```json
         {
@@ -1427,6 +1706,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        "FR": "1PdfTemplateForFrench"
      },
      "pdfFolderId": "1FOLDERIDOptional",
+     "pdfFileNameFieldId": "MP_ID",
      "emailTemplateId": {
        "EN": "1EmailDocEn",
        "FR": "1EmailDocFr"
@@ -1482,6 +1762,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
      Use `{{FIELD_ID}}` tokens (or slugified labels) in the Doc; the runtime replaces them with the submitted values (line items render as bullet summaries).
    - `pdfFolderId` (optional): target Drive folder for generated PDFs; falls back to the spreadsheet’s parent folder.
+   - `pdfFileNameFieldId` (optional): field id used to name generated PDFs + email attachments. Supports question ids or meta fields (`id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`).
    - `emailTemplateId`: Google Doc containing the email body. Same structure as `pdfTemplateId` (string, language map, or `cases` selector). Tokens work the same as in the PDF template.
    - `emailRecipients`: list of addresses. Entries can be plain strings (placeholders allowed) or objects describing a data source lookup:
      - `recordFieldId`: the form/line-item field whose submitted value should be used as the lookup key.
@@ -1527,6 +1808,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 - `doGet` now returns a **minimal shell**; the full form definition is fetched client-side via `fetchBootstrapContext`. Ensure that function is included in the deployment and that `warmDefinitions` is scheduled (recommended) to avoid cold-start delays.
 - **Operational note**: run `createAllForms()` and `warmDefinitions()` **only after config/dashboard changes**. For code-only changes, rebuild + re-deploy the bundle; no need to re-run those functions.
 - Optional: add `?app=<bundleKey>` to pick an app-specific React bundle (defaults to `full`). Bundle keys come from filenames you add under `src/web/react/entrypoints` (converted to kebab-case). If no entrypoints exist, only the `full` bundle is available.
+- Optional: add `?config=1` to the web app URL to return the full form configuration as JSON (includes dashboard config, questions including archived, dedup rules, and the computed `WebFormDefinition`).
+- Optional: in DevTools, run `window.__CK_EXPORT_FORM_CONFIG__()` to fetch the same export and store it in `window.__CK_FORM_CONFIG_JSON__` for easy copy (pass `{ logJson: true }` to print it).
 - **Destination “Responses” headers (stable keys)**: The destination tab stores field columns using the convention **`Label [ID]`** (example: `Meal Number [Q5]`). The bracket token is the canonical key, so labels can repeat and can be renamed without breaking storage.
 - The web app supports list views (paginated) and edit-in-place. The frontenduses `fetchSubmissions` and `fetchSubmissionById` to open existing records with`createdAt`/`updatedAt`. Save calls `saveSubmissionWithId` (or client helper`submitWithDedup`), which enforces dedup rules and returns any conflictmessages to display.
 - Validation errors surface in-context: the first invalid field is highlightedand auto-scrolled into view, and a red banner appears under the submit buttonon long forms.
@@ -1544,7 +1827,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - KEY can be a normal placeholder key (e.g., `COOK`, `MP_DISTRIBUTOR.EMAIL`) or even `{{COOK}}` (braces are tolerated).
   - Works in **Doc templates (PDF/email)** and also in **Markdown/HTML templates**.
 - **Line item tables**: Build a table row whose cells contain placeholders such as `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`. The service duplicates that row for every line item entry and replaces the placeholders per row. Empty groups simply clear the template row.
-- **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` anywhere inside the table you want duplicated per recipe. The renderer will:
+- **Line item data source fields**: if a line-item field uses a data source, you can reference its columns via `{{GROUP.FIELD.COLUMN_ID}}` or `{{GROUP.SUBGROUP.FIELD.COLUMN_ID}}` (nested subgroup paths supported).
+- **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` or `{{GROUP_TABLE(PARENT.SUBGROUP.FIELD)}}` anywhere inside the table you want duplicated per distinct value. The renderer will:
   1. Create a copy of the entire table for every distinct value of the referenced field (`RECIPE` in this example).
   2. Replace the directive placeholder with the group value (so you can show it in the heading).
   3. Populate the table rows with only the line items that belong to that recipe. If multiple line-item rows share the same recipe, the table’s placeholder rows will repeat for each matching row (e.g., you may see “Portions/Recipe/Core temp” repeated).
@@ -1554,6 +1838,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   1. Create a copy of the entire table for each line-item row, preserving row order.
   2. Replace the directive placeholder with the current row’s field value (so you can show it in the heading).
   3. Populate the table rows using that single row (so “Portions/Recipe/Core temp” do **not** duplicate inside one section when titles repeat).
+- **System row identifiers (line items)**: Inside line-item expansion contexts you can reference the current row index/id via `{{GROUP.__ROWINDEX}}` and `{{GROUP.__ROWID}}` (also valid on subgroup paths like `{{GROUP.SUBGROUP.__ROWINDEX}}`).
+- **Deeper subgroup paths inside repeated subgroup tables**: When a table already repeats a parent subgroup (for example `{{ROW_TABLE(GROUP.SUBGROUP.FIELD)}}`), rows inside that same table can reference deeper subgroup paths (for example `{{GROUP.SUBGROUP.CHILD.FIELD}}`) and they will be flattened relative to the current repeated subgroup row.
 - **Nested subgroup tables (parent → child line items)**: To mirror Summary’s nested layout, add a table that uses `{{PARENT_ID.SUBGROUP_ID.FIELD_ID}}` placeholders inside the row cells (**IDs only**; subgroup `id` is required). The renderer will:
   - Insert one copy of the table per parent row that has children.
   - For each child row, duplicate the template row(s) and replace subgroup placeholders. You can also include parent fields in the same row via `{{PARENT_ID.FIELD_ID}}` if needed.

@@ -33,6 +33,16 @@ describe('FollowupService table directives', () => {
     });
   });
 
+  it('extracts GROUP_TABLE directives with subgroup paths', () => {
+    const table = { getText: () => '{{GROUP_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT)}}' };
+    expect(extractTableRepeatDirective(table as any)).toEqual({
+      kind: 'GROUP_TABLE',
+      groupId: 'MP_MEALS_REQUEST',
+      fieldId: 'CAT',
+      subGroupId: 'MP_TYPE_LI.MP_INGREDIENTS_LI'
+    });
+  });
+
   it('replaces GROUP_TABLE directive using an escaped regex (so the token does not leak into output)', () => {
     const cell = { replaceText: jest.fn() };
     const row = { getNumCells: () => 1, getCell: () => cell };
@@ -48,6 +58,24 @@ describe('FollowupService table directives', () => {
     expect(cell.replaceText).toHaveBeenCalledWith(
       '(?i){{GROUP_TABLE\\(MP_MEALS_REQUEST\\.MEAL_TYPE\\)}}',
       'Dinner'
+    );
+  });
+
+  it('replaces GROUP_TABLE directives with subgroup paths', () => {
+    const cell = { replaceText: jest.fn() };
+    const row = { getNumCells: () => 1, getCell: () => cell };
+    const table = { getNumRows: () => 1, getRow: () => row };
+
+    replaceTableRepeatDirectivePlaceholders(
+      table as any,
+      { groupId: 'MP_MEALS_REQUEST', fieldId: 'CAT', subGroupId: 'MP_TYPE_LI.MP_INGREDIENTS_LI' },
+      'Vegetables',
+      'GROUP_TABLE'
+    );
+
+    expect(cell.replaceText).toHaveBeenCalledWith(
+      '(?i){{GROUP_TABLE\\(MP_MEALS_REQUEST\\.MP_TYPE_LI\\.MP_INGREDIENTS_LI\\.CAT\\)}}',
+      'Vegetables'
     );
   });
 
@@ -377,6 +405,48 @@ describe('FollowupService table directives', () => {
 
     const out = replaceLineItemPlaceholders('{{MP_GROUP.A}}|{{MP_GROUP.B}}', group, { A: 'aaa', B: 'bbb' }, {});
     expect(out).toBe('aaa|bbb');
+  });
+
+  it('resolves dataSource fields inside line-item placeholders', () => {
+    const group: QuestionConfig = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      qEn: 'Meals',
+      required: false,
+      status: 'Active',
+      options: [],
+      optionsFr: [],
+      optionsNl: [],
+      lineItemConfig: {
+        fields: [{ id: 'QTY', type: 'NUMBER', labelEn: 'Qty', required: false }] as any,
+        subGroups: [
+          {
+            id: 'MP_TYPE_LI',
+            fields: [
+              {
+                id: 'RECIPE',
+                type: 'CHOICE',
+                labelEn: 'Recipe',
+                dataSource: { id: 'Recipes Data' }
+              }
+            ]
+          } as any
+        ]
+      }
+    } as any;
+
+    const dataSources = {
+      lookupDataSourceDetails: jest.fn().mockReturnValue({ REC_INST: 'Simmer gently.' })
+    };
+
+    const out = replaceLineItemPlaceholders('{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE.REC_INST}}', group, { RECIPE: 'X' }, {
+      subGroup: (group.lineItemConfig as any)?.subGroups?.[0],
+      subGroupToken: 'MP_TYPE_LI',
+      dataSources: dataSources as any,
+      language: 'en'
+    });
+
+    expect(out).toBe('Simmer gently.');
   });
 
   it('in progressive mode, PDF can render collapsed-only rows when requested', () => {

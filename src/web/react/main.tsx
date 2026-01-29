@@ -1,7 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { WebFormDefinition } from '../types';
+import { FormConfigExport, WebFormDefinition } from '../types';
+import { fetchFormConfigApi } from './api';
 
 const debugEnabled = (): boolean => {
   try {
@@ -58,6 +59,54 @@ const summarizeOptionMapRefs = (def: WebFormDefinition | undefined): {
   return { ...buckets, refs: Array.from(refs).sort() };
 };
 
+type ConfigExportOptions = {
+  formKey?: string;
+  pretty?: boolean;
+  logJson?: boolean;
+};
+
+const registerConfigExport = (defaultFormKey: string): void => {
+  const globalAny = globalThis as any;
+  if (globalAny.__CK_EXPORT_FORM_CONFIG__) return;
+  globalAny.__CK_EXPORT_FORM_CONFIG__ = async (arg?: string | ConfigExportOptions): Promise<FormConfigExport> => {
+    const options = typeof arg === 'string' ? { formKey: arg } : (arg || {});
+    const targetKey = (options.formKey || defaultFormKey || '').toString().trim();
+    const startedAt = Date.now();
+    if (typeof console !== 'undefined' && typeof console.info === 'function') {
+      console.info('[ReactForm]', 'config.export.start', { formKey: targetKey || null });
+    }
+    try {
+      const config = await fetchFormConfigApi(targetKey || null);
+      const pretty = options.pretty !== false;
+      const json = JSON.stringify(config, null, pretty ? 2 : 0);
+      globalAny.__CK_FORM_CONFIG__ = config;
+      globalAny.__CK_FORM_CONFIG_JSON__ = json;
+      if (typeof console !== 'undefined' && typeof console.info === 'function') {
+        console.info('[ReactForm]', 'config.export.success', {
+          formKey: targetKey || config.formKey || null,
+          bytes: json.length,
+          elapsedMs: Date.now() - startedAt
+        });
+        console.info('[FormConfigExport]', 'stored', {
+          objectKey: '__CK_FORM_CONFIG__',
+          jsonKey: '__CK_FORM_CONFIG_JSON__',
+          bytes: json.length
+        });
+        if (options.logJson) {
+          console.info('[FormConfigExport]', json);
+        }
+      }
+      return config;
+    } catch (err: any) {
+      const message = err?.message ? err.message.toString() : 'Request failed';
+      if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[FormConfigExport]', 'error', { formKey: targetKey || null, message });
+      }
+      throw err;
+    }
+  };
+};
+
 const mount = () => {
   const globalAny = globalThis as any;
   const def: WebFormDefinition | null | undefined = globalAny.__WEB_FORM_DEF__;
@@ -83,6 +132,8 @@ const mount = () => {
     }
   }
 
+  registerConfigExport(formKey);
+
   const root = createRoot(rootEl);
   const Root = require('./Root').default as typeof import('./Root').Root;
   root.render(<Root definition={def ?? null} formKey={formKey} record={record} />);
@@ -93,4 +144,3 @@ if (typeof document !== 'undefined') {
 }
 
 export {};
-

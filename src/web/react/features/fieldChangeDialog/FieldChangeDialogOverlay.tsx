@@ -1,5 +1,5 @@
 import React from 'react';
-import { FieldValue } from '../../types';
+import { FieldValue } from '../../../types';
 import { FieldChangeDialogInputState } from './useFieldChangeDialog';
 
 const inputBaseStyle: React.CSSProperties = {

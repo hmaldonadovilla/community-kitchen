@@ -37,7 +37,6 @@ export const resolveValueMapValue = (
 };
 
 // Keep derivedValue helpers accessible from this module for convenience, but delegate to the canonical implementation.
-export { resolveDerivedValue, applyValueMapsToLineRow, applyValueMapsToForm } from '../../app/valueMaps';
-
+export { resolveDerivedValue, applyValueMapsToLineRow, applyValueMapsToForm, coerceDefaultValue } from '../../app/valueMaps';
 
 

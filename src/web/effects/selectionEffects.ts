@@ -1,7 +1,8 @@
 import { PresetValue, SelectionEffect, WebFormDefinition, WebQuestionDefinition } from '../../types';
-import { LangCode } from '../types';
+import { LangCode, VisibilityContext } from '../types';
 import { fetchDataSource } from '../data/dataSources';
 import { computeAllowedOptions } from '../rules/filter';
+import { matchesWhenClause } from '../rules/visibility';
 
 interface EffectContext {
   addLineItemRow: (
@@ -19,6 +20,8 @@ interface EffectContext {
     groupId: string,
     meta?: { effectId?: string; parentGroupId?: string; parentRowId?: string }
   ) => void;
+  setValue?: (args: { fieldId: string; value: PresetValue | null; lineItem?: SelectionEffectOptions['lineItem'] }) => void;
+  logEvent?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
 export interface SelectionEffectOptions {
@@ -32,12 +35,36 @@ export interface SelectionEffectOptions {
    * Keys are SelectionEffect.id values.
    */
   effectOverrides?: Record<string, Record<string, PresetValue>>;
+  /**
+   * Optional line-item state snapshot for when-clause evaluation (lineItems clauses).
+   */
+  lineItems?: Record<string, any[]>;
   lineItem?: {
     groupId: string;
     rowId?: string;
     rowValues?: Record<string, any>;
   };
   forceContextReset?: boolean;
+}
+
+function buildEffectWhenContext(options?: SelectionEffectOptions): VisibilityContext {
+  const rowValues = (options?.lineItem?.rowValues || {}) as Record<string, any>;
+  const topValues = (options?.topValues || {}) as Record<string, any>;
+  const lineItems = options?.lineItems;
+  return {
+    getValue: (fieldId: string) => {
+      if (Object.prototype.hasOwnProperty.call(rowValues, fieldId)) return rowValues[fieldId];
+      if (Object.prototype.hasOwnProperty.call(topValues, fieldId)) return topValues[fieldId];
+      return undefined;
+    },
+    getLineItems: lineItems
+      ? (groupId: string) => {
+          const rows = lineItems[groupId];
+          return Array.isArray(rows) ? rows : [];
+        }
+      : undefined,
+    getLineItemKeys: lineItems ? () => Object.keys(lineItems) : undefined
+  };
 }
 
 function applies(effect: SelectionEffect, value: string | string[] | null | undefined): boolean {
@@ -90,6 +117,19 @@ export function handleSelectionEffects(
   const contextId = options?.contextId || '__global__';
   const normalizedSelections = normalizeSelectionValues(value);
   const diffPreview = previewSelectionDiff(question, contextId, normalizedSelections, options?.forceContextReset);
+  const whenCtx = buildEffectWhenContext(options);
+  const resolveEffectTargetGroupId = (effect: SelectionEffect): string | undefined => {
+    const rawPath = (effect as any)?.targetPath;
+    if (rawPath === undefined || rawPath === null || rawPath === '') return effect.groupId;
+    if (Array.isArray(rawPath)) {
+      const parts = rawPath
+        .map(entry => (entry !== undefined && entry !== null ? entry.toString().trim() : ''))
+        .filter(Boolean);
+      return parts.length ? parts.join('.') : effect.groupId;
+    }
+    const trimmed = rawPath.toString().trim();
+    return trimmed || effect.groupId;
+  };
   if (debug && typeof console !== 'undefined') {
     console.info('[SelectionEffects] evaluating', {
       questionId: question.id,
@@ -103,18 +143,42 @@ export function handleSelectionEffects(
     });
   }
   question.selectionEffects.forEach(effect => {
+    const targetGroupId = resolveEffectTargetGroupId(effect);
     const match = applies(effect, value);
+    const whenMatch = effect.when ? matchesWhenClause(effect.when as any, whenCtx) : true;
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] effect check', {
         questionId: question.id,
         effectType: effect.type,
         groupId: effect.groupId,
+        targetGroupId,
         match,
+        whenMatch,
         triggerValues: effect.triggerValues
       });
     }
     if (!match) return;
+    if (!whenMatch) {
+      ctx.logEvent?.('selectionEffects.when.skip', {
+        questionId: question.id,
+        effectType: effect.type,
+        groupId: effect.groupId,
+        targetGroupId,
+        when: effect.when || null
+      });
+      if (debug && typeof console !== 'undefined') {
+        console.info('[SelectionEffects] effect skipped (when)', {
+          questionId: question.id,
+          effectType: effect.type,
+          groupId: effect.groupId,
+          targetGroupId,
+          when: effect.when || null
+        });
+      }
+      return;
+    }
     if (effect.type === 'addLineItems') {
+      if (!targetGroupId) return;
       const resolvedPreset = resolveAddLineItemsPreset(effect.preset as any, options);
       const override = resolveEffectOverride(effect, options?.effectOverrides);
       const mergedPreset = mergePresetOverrides(resolvedPreset as any, override);
@@ -127,7 +191,7 @@ export function handleSelectionEffects(
       // Apply target field optionFilters to selectionEffects-created rows:
       // if the preset sets a value that's not allowed by the target field's optionFilter in the current context,
       // skip creating the row entirely (prevents disallowed rows like "Salt" ingredients from appearing).
-      const targetConfig = resolveTargetLineConfigForEffect(definition, effect.groupId, options?.lineItem);
+      const targetConfig = resolveTargetLineConfigForEffect(definition, targetGroupId, options?.lineItem);
       const allowed =
         !targetConfig || !targetConfig.fields.length
           ? true
@@ -138,18 +202,18 @@ export function handleSelectionEffects(
       if (!allowed) {
         if (debug && typeof console !== 'undefined') {
           console.info('[SelectionEffects] addLineItems skipped (optionFilter)', {
-            groupId: effect.groupId,
+            groupId: targetGroupId,
             effectId: effectId || null,
             preset: resolvedPreset || null
           });
         }
         return;
       }
-      if (meta) ctx.addLineItemRow(effect.groupId, mergedPreset, meta as any);
-      else ctx.addLineItemRow(effect.groupId, mergedPreset);
+      if (meta) ctx.addLineItemRow(targetGroupId, mergedPreset, meta as any);
+      else ctx.addLineItemRow(targetGroupId, mergedPreset);
       if (debug && typeof console !== 'undefined') {
         console.info('[SelectionEffects] addLineItems dispatched', {
-          groupId: effect.groupId,
+          groupId: targetGroupId,
           preset: effect.preset,
           resolvedPreset: mergedPreset
         });
@@ -158,15 +222,16 @@ export function handleSelectionEffects(
     }
     if (effect.type === 'deleteLineItems') {
       if (!ctx.deleteLineItemRows) return;
+      if (!targetGroupId) return;
       const effectId = normalizeString((effect as any)?.targetEffectId) || normalizeEffectId(effect);
-      ctx.deleteLineItemRows(effect.groupId, {
+      ctx.deleteLineItemRows(targetGroupId, {
         effectId: effectId || undefined,
         parentGroupId: options?.lineItem?.groupId,
         parentRowId: options?.lineItem?.rowId
       });
       if (debug && typeof console !== 'undefined') {
         console.info('[SelectionEffects] deleteLineItems dispatched', {
-          groupId: effect.groupId,
+          groupId: targetGroupId,
           effectId: effectId || null,
           parentGroupId: options?.lineItem?.groupId || null,
           parentRowId: options?.lineItem?.rowId || null
@@ -174,9 +239,39 @@ export function handleSelectionEffects(
       }
       return;
     }
+    if (effect.type === 'setValue') {
+      if (!ctx.setValue) return;
+      const fieldId = normalizeString((effect as any)?.fieldId);
+      if (!fieldId) return;
+      const rawValue = (effect as any)?.value;
+      const explicitNull = rawValue === null;
+      if (!explicitNull && !Object.prototype.hasOwnProperty.call(effect as any, 'value')) return;
+      const resolved = explicitNull ? null : resolvePresetValue(rawValue, options);
+      if (!explicitNull && resolved === undefined) return;
+      ctx.setValue({ fieldId, value: explicitNull ? null : (resolved as PresetValue), lineItem: options?.lineItem });
+      ctx.logEvent?.('selectionEffects.setValue', {
+        questionId: question.id,
+        effectId: normalizeEffectId(effect) || null,
+        fieldId,
+        value: explicitNull ? null : resolved,
+        lineItem: options?.lineItem
+          ? { groupId: options.lineItem.groupId, rowId: options.lineItem.rowId || null }
+          : null
+      });
+      if (debug && typeof console !== 'undefined') {
+        console.info('[SelectionEffects] setValue dispatched', {
+          fieldId,
+          value: explicitNull ? null : resolved,
+          lineItem: options?.lineItem || null
+        });
+      }
+      return;
+    }
     if (effect.type === 'addLineItemsFromDataSource') {
+      if (!targetGroupId) return;
       populateLineItemsFromDataSource({
         effect,
+        targetGroupId,
         definition,
         question,
         language,
@@ -195,6 +290,7 @@ export function handleSelectionEffects(
 
 interface DataDrivenEffectParams {
   effect: SelectionEffect;
+  targetGroupId: string;
   definition: WebFormDefinition;
   question: WebQuestionDefinition;
   language: LangCode;
@@ -564,6 +660,7 @@ function applyScale(
 
 function populateLineItemsFromDataSource({
   effect,
+  targetGroupId,
   definition,
   question,
   language,
@@ -586,7 +683,7 @@ function populateLineItemsFromDataSource({
     }
     return;
   }
-  const targetConfig = resolveTargetLineConfigForEffect(definition, effect.groupId, lineItem);
+  const targetConfig = resolveTargetLineConfigForEffect(definition, targetGroupId, lineItem);
   if (!targetConfig || !targetConfig.fields.length) {
     if (debug && typeof console !== 'undefined') {
       console.warn('[SelectionEffects] target group missing or misconfigured', {
@@ -606,6 +703,7 @@ function populateLineItemsFromDataSource({
     }
     renderAggregatedRows({
       effect,
+      targetGroupId,
       targetConfig,
       cache,
       ctx,
@@ -619,6 +717,7 @@ function populateLineItemsFromDataSource({
   if (!missingSelections.length) {
     renderAggregatedRows({
       effect,
+      targetGroupId,
       targetConfig,
       cache,
       ctx,
@@ -650,6 +749,7 @@ function populateLineItemsFromDataSource({
         contextMap.clear();
         renderAggregatedRows({
           effect,
+          targetGroupId,
           targetConfig,
           cache,
           ctx,
@@ -713,7 +813,7 @@ function populateLineItemsFromDataSource({
               const keep = presetPassesOptionFilters(preset as any, targetConfig.fields, { rowValues: rowCtx, topValues });
               if (!keep && debug && typeof console !== 'undefined') {
                 console.info('[SelectionEffects] addLineItemsFromDataSource filtered entry (optionFilter)', {
-                  groupId: effect.groupId,
+                  groupId: targetGroupId,
                   selection: selectedValue,
                   preset
                 });
@@ -728,6 +828,7 @@ function populateLineItemsFromDataSource({
       });
       renderAggregatedRows({
         effect,
+        targetGroupId,
         targetConfig,
         cache,
         ctx,
@@ -748,15 +849,89 @@ function resolveTargetLineConfigForEffect(
   groupId: string,
   lineItem?: SelectionEffectOptions['lineItem']
 ): { id: string; fields: any[] } | null {
+  const normalizePath = (raw: string): string[] =>
+    (raw || '')
+      .toString()
+      .split('.')
+      .map(seg => seg.trim())
+      .filter(Boolean);
+
+  const resolveSubConfigByPath = (base: any, path: string[]): any | null => {
+    if (!base || !path.length) return null;
+    let current: any = base;
+    for (let i = 0; i < path.length; i += 1) {
+      const token = path[i];
+      const subs = (current?.subGroups || current?.lineItemConfig?.subGroups || []) as any[];
+      const match = subs.find(sub => resolveSubgroupKey(sub) === token);
+      if (!match) return null;
+      if (i === path.length - 1) return match;
+      current = match;
+    }
+    return null;
+  };
+
+  const parseGroupKeyPath = (key: string): { rootGroupId: string; path: string[] } | null => {
+    const parts = (key || '').toString().split('::').filter(Boolean);
+    if (parts.length < 3 || parts.length % 2 === 0) return null;
+    const rootGroupId = parts[0] || '';
+    const path = parts.filter((_, idx) => idx > 0 && idx % 2 === 0);
+    if (!rootGroupId) return null;
+    return { rootGroupId, path };
+  };
+  const resolveContextGroupConfig = (contextKey: string): any | null => {
+    const parsed = parseGroupKeyPath(contextKey);
+    const rootId = parsed?.rootGroupId || contextKey;
+    const root = definition.questions.find(q => q.id === rootId);
+    if (!root) return null;
+    let base: any = root;
+    if (parsed?.path?.length) {
+      parsed.path.forEach(seg => {
+        const next = resolveSubConfigByPath(base, [seg]);
+        if (next) base = next;
+      });
+    }
+    return base;
+  };
+
   const direct = definition.questions.find(q => q.id === groupId);
   if (direct?.lineItemConfig?.fields) {
     return { id: direct.id, fields: direct.lineItemConfig.fields };
   }
+  const pathSegments = groupId.includes('.') ? normalizePath(groupId) : [];
+  if (pathSegments.length) {
+    const contextKey = normalizeString(lineItem?.groupId);
+    if (contextKey) {
+      const parsed = parseGroupKeyPath(contextKey);
+      const rootId = parsed?.rootGroupId || contextKey;
+      const root = definition.questions.find(q => q.id === rootId);
+      let base: any = root;
+      if (parsed?.path?.length) {
+        parsed.path.forEach(seg => {
+          const next = resolveSubConfigByPath(base, [seg]);
+          if (next) base = next;
+        });
+      }
+      const match = resolveSubConfigByPath(base, pathSegments);
+      if (match) return { id: groupId, fields: (match as any).fields || [] };
+    }
+    for (const parent of definition.questions) {
+      const match = resolveSubConfigByPath(parent, pathSegments);
+      if (match) return { id: groupId, fields: (match as any).fields || [] };
+    }
+  }
   const contextGroupId = normalizeString(lineItem?.groupId);
-  const parents = contextGroupId ? definition.questions.filter(q => q.id === contextGroupId) : definition.questions;
-  for (const parent of parents) {
-    const match = parent.lineItemConfig?.subGroups?.find(sub => resolveSubgroupKey(sub) === groupId);
-    if (match) return { id: groupId, fields: (match as any).fields || [] };
+  if (contextGroupId) {
+    const base = resolveContextGroupConfig(contextGroupId);
+    if (base) {
+      const baseId = resolveSubgroupKey(base) || (base as any)?.id;
+      if (baseId && baseId === groupId) {
+        const baseFields = (base as any)?.fields || (base as any)?.lineItemConfig?.fields || [];
+        return { id: groupId, fields: baseFields };
+      }
+      const subs = (base?.subGroups || base?.lineItemConfig?.subGroups || []) as any[];
+      const match = subs.find(sub => resolveSubgroupKey(sub) === groupId);
+      if (match) return { id: groupId, fields: (match as any).fields || [] };
+    }
   }
   // Fallback: search all line item groups for a matching subgroup id.
   for (const parent of definition.questions) {
@@ -812,6 +987,7 @@ function presetPassesOptionFilters(
 interface RenderParams {
   targetConfig: { id: string; fields: any[] };
   effect: SelectionEffect;
+  targetGroupId: string;
   cache: SelectionEffectCache;
   ctx: EffectContext;
   debug: boolean;
@@ -819,7 +995,7 @@ interface RenderParams {
   effectOverrides?: Record<string, Record<string, PresetValue>>;
 }
 
-function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, contextId, effectOverrides }: RenderParams): void {
+function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx, debug, contextId, effectOverrides }: RenderParams): void {
   const entriesForAllSelections: any[] = [];
   const contextMap = getContextMap(cache, contextId);
   if (contextMap) {
@@ -834,11 +1010,11 @@ function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, context
 
   if (!entriesForAllSelections.length) {
     if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-      ctx.clearLineItems(effect.groupId, contextId);
+      ctx.clearLineItems(targetGroupId, contextId);
     }
     if (debug && typeof console !== 'undefined') {
       console.warn('[SelectionEffects] data-driven effect produced no entries after filtering', {
-        questionId: effect.groupId
+        questionId: targetGroupId
       });
     }
     return;
@@ -851,7 +1027,7 @@ function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, context
   const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
 
   if (ctx.updateAutoLineItems) {
-    ctx.updateAutoLineItems(effect.groupId, mergedPresets, {
+    ctx.updateAutoLineItems(targetGroupId, mergedPresets, {
       effectContextId: contextId,
       numericTargets,
       keyFields: nonNumericFieldIds,
@@ -862,10 +1038,10 @@ function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, context
   }
 
   if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-    ctx.clearLineItems(effect.groupId, contextId);
+    ctx.clearLineItems(targetGroupId, contextId);
   }
   mergedPresets.forEach(preset => {
-    ctx.addLineItemRow(effect.groupId, preset, {
+    ctx.addLineItemRow(targetGroupId, preset, {
       effectContextId: contextId,
       auto: true,
       effectId: normalizeEffectId(effect) || undefined,
@@ -873,7 +1049,7 @@ function renderAggregatedRows({ effect, targetConfig, cache, ctx, debug, context
     });
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] addLineItemsFromDataSource dispatched', {
-        groupId: effect.groupId,
+        groupId: targetGroupId,
         preset
       });
     }

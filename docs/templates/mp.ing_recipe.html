@@ -1,0 +1,243 @@
+<!--
+  Community Kitchen - Recipe Detail (Overlay HTML Template)
+
+  - Keep placeholders intact (e.g., {{FIELD_ID}}).
+  - Designed for in-app overlay detail view; minimal styles + tabs.
+-->
+
+<style>
+  .ck-summary-template {
+    font-family: var(--ck-font-family, system-ui);
+    font-size: var(--ck-font-control, 1rem);
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .ck-summary-template * {
+    box-sizing: border-box;
+    font-weight: 400;
+  }
+
+  .ck-tabs {
+    margin-top: 4px;
+  }
+
+  .ck-tab-list {
+    display: flex;
+    gap: 0;
+    margin: 0 0 12px 0;
+    padding: 0 0 6px 0;
+    border-bottom: 1px solid var(--border);
+    width: 100%;
+  }
+
+  .ck-tab {
+    flex: 1 1 0;
+    border: 0;
+    background: none;
+    padding: 6px 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .ck-tab.is-active {
+    font-weight: 600;
+    border-bottom: 2px solid currentColor;
+  }
+
+  .ck-tab-panel {
+    display: none;
+  }
+
+  .ck-tab-panel.is-active {
+    display: block;
+  }
+
+  .ck-panel-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+  }
+
+  .ck-panel-action {
+    border: 1px solid var(--border);
+    background: transparent;
+    padding: 6px 12px;
+    border-radius: var(--radius-control, 8px);
+    font: inherit;
+    font-weight: 500;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .ck-ingredients-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+
+  .ck-ingredients-table col.ck-col-name {
+    width: auto;
+  }
+
+  .ck-ingredients-table col.ck-col-qty {
+    width: 10ch;
+  }
+
+  .ck-ingredients-table th,
+  .ck-ingredients-table td {
+    text-align: left;
+    padding: 6px 0;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .ck-category-row th {
+    font-size: var(--ck-font-label, 0.95rem);
+    font-weight: 600;
+    padding-top: 12px;
+  }
+
+  .ck-ingredient-row td {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ck-ingredient-name {
+    min-width: 0;
+  }
+
+  .ck-ingredient-qty {
+    white-space: nowrap;
+    text-align: right;
+    font-weight: 500;
+    padding-left: 12px;
+    min-width: 8ch;
+  }
+
+  .ck-ingredient-allergen {
+    opacity: 0.75;
+  }
+
+  .ck-ingredient-allergen:empty {
+    display: none;
+  }
+
+  .ck-ingredient-allergen:not(:empty)::before {
+    content: " (";
+  }
+
+  .ck-ingredient-allergen:not(:empty)::after {
+    content: ")";
+  }
+
+  .ck-instructions {
+    white-space: pre-wrap;
+  }
+</style>
+
+<div class="ck-summary-template" data-ck-template="mp.ing_recipe">
+  <div class="ck-tabs" data-ck-tabs>
+    <div class="ck-tab-list" role="tablist" aria-label="Recipe details">
+      <button
+        class="ck-tab is-active"
+        type="button"
+        role="tab"
+        aria-selected="true"
+        aria-controls="ck-tab-ingredients"
+        id="ck-tab-btn-ingredients"
+        data-tab-target="ingredients"
+      >
+        Ingredients
+      </button>
+      <button
+        class="ck-tab"
+        type="button"
+        role="tab"
+        aria-selected="false"
+        aria-controls="ck-tab-instructions"
+        id="ck-tab-btn-instructions"
+        data-tab-target="instructions"
+      >
+        Instructions
+      </button>
+    </div>
+
+    <div
+      class="ck-tab-panel is-active"
+      role="tabpanel"
+      aria-labelledby="ck-tab-btn-ingredients"
+      id="ck-tab-ingredients"
+      data-tab-panel="ingredients"
+    >
+      <div class="ck-panel-actions">
+        <button class="ck-panel-action" type="button" data-ck-action="edit" aria-label="Edit ingredients">
+          Edit ingredients
+        </button>
+      </div>
+
+      <table class="ck-ingredients-table" aria-label="Ingredients by category">
+        <colgroup>
+          <col class="ck-col-name" />
+          <col class="ck-col-qty" />
+        </colgroup>
+        <tbody>
+          <tr class="ck-category-row">
+            <th scope="row" colspan="2">
+              {{GROUP_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT)}}{{ORDER_BY(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT ASC, MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING ASC)}}
+            </th>
+          </tr>
+          <tr class="ck-ingredient-row">
+            <td class="ck-ingredient-name">
+              {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}
+              <span class="ck-ingredient-allergen">{{DEFAULT(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN, "")}}</span>
+            </td>
+            <td class="ck-ingredient-qty">
+              {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.QTY}} {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.UNIT}}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div
+      class="ck-tab-panel"
+      role="tabpanel"
+      aria-labelledby="ck-tab-btn-instructions"
+      id="ck-tab-instructions"
+      data-tab-panel="instructions"
+      hidden
+    >
+      <div class="ck-instructions">{{DEFAULT(MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE.REC_INST, "No instructions provided.")}}</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var root = document.querySelector('[data-ck-template="mp.ing_recipe"]');
+    if (!root || root.getAttribute('data-ck-init') === '1') return;
+    root.setAttribute('data-ck-init', '1');
+
+    var tabs = root.querySelectorAll('[data-tab-target]');
+    var panels = root.querySelectorAll('[data-tab-panel]');
+    var activate = function (target) {
+      tabs.forEach(function (tab) {
+        var active = tab.getAttribute('data-tab-target') === target;
+        tab.classList.toggle('is-active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      panels.forEach(function (panel) {
+        var active = panel.getAttribute('data-tab-panel') === target;
+        panel.classList.toggle('is-active', active);
+        panel.hidden = !active;
+      });
+    };
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        activate(tab.getAttribute('data-tab-target'));
+      });
+    });
+  })();
+</script>

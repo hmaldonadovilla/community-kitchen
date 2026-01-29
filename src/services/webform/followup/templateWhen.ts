@@ -3,6 +3,7 @@ import { FieldValue, VisibilityContext } from '../../../web/types';
 import { matchesWhenClause } from '../../../web/rules/visibility';
 import { resolveLineItemTokenValue } from './lineItemPlaceholders';
 import { debugLog } from '../debug';
+import type { DataSourceService } from '../dataSources';
 
 /**
  * Template `when` helpers for line-item row filtering.
@@ -31,8 +32,10 @@ export const matchesTemplateWhenClause = (args: {
   subGroup?: LineItemGroupConfig;
   subGroupToken?: string;
   lineItemRows: Record<string, any[]>;
+  dataSources?: DataSourceService;
+  language?: string;
 }): boolean => {
-  const { when, group, rowData, subGroup, subGroupToken, lineItemRows } = args;
+  const { when, group, rowData, subGroup, subGroupToken, lineItemRows, dataSources, language } = args;
   if (!when) return false;
 
   const resolveRowValue = (fieldIdRaw: string): FieldValue | undefined => {
@@ -44,7 +47,9 @@ export const matchesTemplateWhenClause = (args: {
         group,
         rowData,
         subGroup,
-        subGroupToken
+        subGroupToken,
+        dataSources,
+        language
       }) as FieldValue;
     }
     if (Object.prototype.hasOwnProperty.call(rowData || {}, fieldId)) return (rowData as any)[fieldId] as FieldValue;
@@ -56,7 +61,8 @@ export const matchesTemplateWhenClause = (args: {
   const ctx: VisibilityContext = {
     getValue: resolveRowValue,
     getLineValue: (_rowId: string, fieldId: string) => resolveRowValue(fieldId),
-    getLineItems: (groupId: string) => (lineItemRows || {})[groupId] || []
+    getLineItems: (groupId: string) => (lineItemRows || {})[groupId] || [],
+    getLineItemKeys: () => Object.keys(lineItemRows || {})
   };
 
   return matchesWhenClause(when, ctx);

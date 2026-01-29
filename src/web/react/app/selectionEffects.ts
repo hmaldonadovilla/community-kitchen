@@ -30,6 +30,7 @@ export const runSelectionEffects = (args: {
   value: FieldValue;
   language: LangCode;
   values: Record<string, FieldValue>;
+  lineItems: LineItemState;
   setValues: (next: Record<string, FieldValue> | ((prev: Record<string, FieldValue>) => Record<string, FieldValue>)) => void;
   setLineItems: (next: LineItemState | ((prev: LineItemState) => LineItemState)) => void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
@@ -37,38 +38,89 @@ export const runSelectionEffects = (args: {
   opts?: SelectionEffectOpts;
   effectOverrides?: Record<string, Record<string, FieldValue>>;
 }) => {
-  const { definition, question, value, language, values, setValues, setLineItems, logEvent, onRowAppended, opts, effectOverrides } = args;
+  const { definition, question, value, language, values, lineItems, setValues, setLineItems, logEvent, onRowAppended, opts, effectOverrides } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
+  const applyValueMapsWithBlurDerived = (nextLineItems: LineItemState) =>
+    applyValueMapsToForm(definition, values, nextLineItems, { mode: 'change' });
+
+  const applyValueMapsWithBlurDerivedForValues = (
+    nextValues: Record<string, FieldValue>,
+    nextLineItems: LineItemState,
+    lockedTopFields?: string[]
+  ) =>
+    applyValueMapsToForm(definition, nextValues, nextLineItems, {
+      mode: 'change',
+      lockedTopFields
+    });
+
+  const resolveRowIdPrefix = (groupKey: string): string => {
+    const parsed = parseSubgroupKey(groupKey);
+    return parsed?.subGroupId || groupKey;
+  };
+
+  const resolveGroupConfigForKey = (groupKey: string): { root?: WebQuestionDefinition; group?: any } => {
+    const parsed = parseSubgroupKey(groupKey);
+    if (!parsed) {
+      const root = definition.questions.find(q => q.id === groupKey);
+      return { root, group: root?.lineItemConfig };
+    }
+    const root = definition.questions.find(q => q.id === parsed.rootGroupId);
+    if (!root) return { root };
+    let current: any = root;
+    for (let i = 0; i < parsed.path.length; i += 1) {
+      const subId = parsed.path[i];
+      const subs = (current?.lineItemConfig?.subGroups || current?.subGroups || []) as any[];
+      const match = subs.find(s => resolveSubgroupKey(s) === subId);
+      if (!match) break;
+      current = match;
+    }
+    return { root, group: current };
+  };
 
   const resolveTargetGroupKey = (targetGroupId: string, lineItemCtx?: { groupId: string; rowId?: string }): string => {
     if (!lineItemCtx?.groupId || !lineItemCtx?.rowId) return targetGroupId;
+    const rawTarget = (targetGroupId || '').toString();
+    const pathSegments = rawTarget.includes('.')
+      ? rawTarget
+          .split('.')
+          .map(seg => seg.trim())
+          .filter(Boolean)
+      : [];
     // If we're already operating inside a subgroup key, resolve subgroup ids relative to that parent row.
     const parsed = parseSubgroupKey(lineItemCtx.groupId);
+    const currentPath = parsed?.path || [];
+    const matchesCurrentPrefix =
+      pathSegments.length && currentPath.length
+        ? pathSegments.slice(0, currentPath.length).join('.') === currentPath.join('.')
+        : false;
+    const relativePath = pathSegments.length ? (matchesCurrentPrefix ? pathSegments.slice(currentPath.length) : pathSegments) : [];
+    const targetId = relativePath.length ? relativePath[0] : rawTarget;
     if (parsed) {
-      // same subgroup id -> current subgroup key
-      if (targetGroupId === parsed.subGroupId) return lineItemCtx.groupId;
-      const parentGroup = definition.questions.find(q => q.id === parsed.parentGroupId);
-      const subMatch = parentGroup?.lineItemConfig?.subGroups?.find(sub => {
+      // same subgroup path -> current subgroup key
+      if (!relativePath.length && pathSegments.length && matchesCurrentPrefix) return lineItemCtx.groupId;
+      if (targetId === parsed.subGroupId) return lineItemCtx.groupId;
+      const currentCfg = resolveGroupConfigForKey(lineItemCtx.groupId).group;
+      const subMatch = currentCfg?.subGroups?.find((sub: any) => {
         const key = resolveSubgroupKey(sub as any);
-        return key === targetGroupId;
+        return key === targetId;
       });
       if (subMatch) {
-        const key = resolveSubgroupKey(subMatch as any) || targetGroupId;
-        return buildSubgroupKey(parsed.parentGroupId, parsed.parentRowId, key);
+        const key = resolveSubgroupKey(subMatch as any) || targetId;
+        return buildSubgroupKey(lineItemCtx.groupId, lineItemCtx.rowId, key);
       }
-      if (targetGroupId === parsed.parentGroupId) return parsed.parentGroupId;
-      return targetGroupId;
+      if (targetId === parsed.rootGroupId) return parsed.rootGroupId;
+      return rawTarget;
     }
     const parentGroup = definition.questions.find(q => q.id === lineItemCtx.groupId);
     const subMatch = parentGroup?.lineItemConfig?.subGroups?.find(sub => {
       const key = resolveSubgroupKey(sub as any);
-      return key === targetGroupId;
+      return key === targetId;
     });
     if (subMatch) {
-      const key = resolveSubgroupKey(subMatch as any) || targetGroupId;
+      const key = resolveSubgroupKey(subMatch as any) || targetId;
       return buildSubgroupKey(lineItemCtx.groupId, lineItemCtx.rowId, key);
     }
-    return targetGroupId;
+    return rawTarget;
   };
 
   handleSelectionEffects(
@@ -77,6 +129,7 @@ export const runSelectionEffects = (args: {
     value as any,
     language,
     {
+      logEvent,
       addLineItemRow: (
         groupId: string,
         preset?: Record<string, any>,
@@ -117,8 +170,9 @@ export const runSelectionEffects = (args: {
           if (selectorId && selectorValue !== undefined && selectorValue !== null && presetValues[selectorId] === undefined) {
             presetValues[selectorId] = selectorValue;
           }
+          const rowIdPrefix = resolveRowIdPrefix(targetKey);
           const newRow: LineItemRowState = {
-            id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
+            id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
             values: { ...presetValues, [ROW_ID_KEY]: '' }, // filled below; keeps the ID persisted in row values
             parentId: opts?.lineItem?.rowId,
             parentGroupId: opts?.lineItem?.groupId,
@@ -153,9 +207,7 @@ export const runSelectionEffects = (args: {
           let nextLineItems = { ...prev, [targetKey]: nextRows };
           // Important: do NOT auto-seed subgroup default rows for selection-effect-created rows.
           // Selection effects should only create what they explicitly preset; otherwise it produces "phantom" empty rows.
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
-            mode: 'change'
-          });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
           setValues(nextValues);
           if (appended) {
             const anchor = `${targetKey}__${newRow.id}`;
@@ -212,6 +264,7 @@ export const runSelectionEffects = (args: {
           });
 
           // Rebuild auto rows for this context from scratch so recipe changes fully replace them
+          const rowIdPrefix = resolveRowIdPrefix(targetKey);
           const rebuiltAuto: LineItemRowState[] = presets.map(preset => {
             const values: Record<string, FieldValue> = { ...preset };
             meta.numericTargets.forEach(fid => {
@@ -229,7 +282,7 @@ export const runSelectionEffects = (args: {
               values[ROW_PARENT_ROW_ID_KEY] = opts.lineItem.rowId;
             }
             return {
-              id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
+              id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
               values,
               parentId: opts?.lineItem?.rowId,
               parentGroupId: opts?.lineItem?.groupId,
@@ -239,9 +292,7 @@ export const runSelectionEffects = (args: {
           });
 
           const next: LineItemState = { ...prev, [targetKey]: [...keepRows, ...rebuiltAuto] };
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
-            mode: 'change'
-          });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
           setValues(nextValues);
           return recomputed;
         });
@@ -284,9 +335,7 @@ export const runSelectionEffects = (args: {
           if (!roots.length) return prev;
 
           const cascade = cascadeRemoveLineItemRows({ lineItems: prev, roots });
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, cascade.lineItems, {
-            mode: 'change'
-          });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(cascade.lineItems);
           setValues(nextValues);
           logEvent?.('selectionEffects.deleteLineItems', {
             groupId,
@@ -296,17 +345,37 @@ export const runSelectionEffects = (args: {
             parentGroupId: parentGroupId || null,
             parentRowId: parentRowId || null
           });
-          if (typeof console !== 'undefined') {
-            console.info('[SelectionEffects] deleteLineItems removed rows', {
-              groupId,
-              targetKey,
-              removedCount: cascade.removed.length,
-              effectId: effectId || null,
-              parentGroupId: parentGroupId || null,
-              parentRowId: parentRowId || null
-            });
-          }
           return recomputed;
+        });
+      },
+      setValue: ({ fieldId, value, lineItem }) => {
+        const target = lineItem || opts?.lineItem;
+        if (target?.groupId && target?.rowId) {
+          setLineItems(prev => {
+            const groupKey = target.groupId;
+            const rows = prev[groupKey] || [];
+            const idx = rows.findIndex(r => r.id === target.rowId);
+            if (idx < 0) return prev;
+            const baseRow = rows[idx];
+            const nextRowValues = { ...(baseRow.values || {}), [fieldId]: value as FieldValue };
+            const nextRows = [...rows];
+            nextRows[idx] = { ...baseRow, values: nextRowValues };
+            const nextLineItems = { ...prev, [groupKey]: nextRows };
+            const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
+            setValues(nextValues);
+            return recomputed;
+          });
+          return;
+        }
+        setValues(prev => {
+          const nextValues = { ...prev, [fieldId]: value as FieldValue };
+          const { values: appliedValues, lineItems: recomputed } = applyValueMapsWithBlurDerivedForValues(
+            nextValues,
+            lineItems,
+            [fieldId]
+          );
+          setLineItems(recomputed);
+          return appliedValues;
         });
       },
       clearLineItems: (groupId: string, contextId?: string) => {
@@ -320,16 +389,15 @@ export const runSelectionEffects = (args: {
           const next: LineItemState = { ...prev, [targetKey]: remaining };
           const subgroupInfo = parseSubgroupKey(targetKey);
           if (!subgroupInfo) {
+            const prefixes = Array.from(removedIds).map(id => `${targetKey}::${id}::`);
             Object.keys(next).forEach(key => {
-              const parsed = parseSubgroupKey(key);
-              if (parsed?.parentGroupId === targetKey && removedIds.has(parsed.parentRowId)) {
+              if (!key.startsWith(`${targetKey}::`)) return;
+              if (prefixes.some(prefix => key.startsWith(prefix))) {
                 delete (next as any)[key];
               }
             });
           }
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
-            mode: 'change'
-          });
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
           setValues(nextValues);
           return recomputed;
         });
@@ -339,5 +407,3 @@ export const runSelectionEffects = (args: {
     opts ? { ...opts, topValues: values, effectOverrides: effectOverrides as any } : { topValues: values, effectOverrides: effectOverrides as any }
   );
 };
-
-

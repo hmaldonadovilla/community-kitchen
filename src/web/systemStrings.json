@@ -138,11 +138,31 @@
       "nl": "Vul verplichte velden in om te openen: {fields}"
     },
     "remove": { "en": "Remove", "fr": "Supprimer", "nl": "Verwijderen" },
+    "removeRowsTitle": {
+      "en": "Remove rows?",
+      "fr": "Supprimer les lignes ?",
+      "nl": "Rijen verwijderen?"
+    },
+    "removeRowsMessage": {
+      "en": "This will remove the matching rows.",
+      "fr": "Cela supprimera les lignes correspondantes.",
+      "nl": "Dit verwijdert de overeenkomende rijen."
+    },
     "addLine": { "en": "Add line", "fr": "Ajouter une ligne", "nl": "Regel toevoegen" },
     "addLines": { "en": "Add lines", "fr": "Ajouter des lignes", "nl": "Regels toevoegen" },
-    "addSelected": { "en": "Add selected ({count})", "fr": "Ajouter la sélection ({count})", "nl": "Selectie toevoegen ({count})" },
+    "addSelected": { "en": "Add selected", "fr": "Ajouter la sélection", "nl": "Selectie toevoegen" },
     "selectLinesTitle": { "en": "Select lines", "fr": "Sélectionner des lignes", "nl": "Regels selecteren" },
     "selectLinesSearch": { "en": "Search items", "fr": "Rechercher des éléments", "nl": "Zoek items" },
+    "selectLinesHelp": {
+      "en": "Search and select one or more items. You can update quantities after you return.",
+      "fr": "Recherchez et sélectionnez un ou plusieurs éléments. Vous pourrez ajuster les quantités ensuite.",
+      "nl": "Zoek en selecteer een of meer items. U kunt de hoeveelheden daarna aanpassen."
+    },
+    "duplicateAdd": {
+      "en": "{value} is already in the list, change the quantity",
+      "fr": "{value} est déjà dans la liste, modifiez la quantité",
+      "nl": "{value} staat al in de lijst, pas de hoeveelheid aan"
+    },
     "noOptionsAvailable": { "en": "No options available.", "fr": "Aucune option disponible.", "nl": "Geen opties beschikbaar." }
   },
   "common": {
@@ -150,12 +170,14 @@
     "selectPlaceholder": { "en": "Select…", "fr": "Sélectionner…", "nl": "Selecteer…" },
     "noMatches": { "en": "No matches.", "fr": "Aucun résultat.", "nl": "Geen resultaten." },
     "close": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" },
+    "back": { "en": "Back", "fr": "Retour", "nl": "Terug" },
     "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
     "tapToOpen": { "en": "Tap to open", "fr": "Appuyez pour ouvrir", "nl": "Tik om te openen" },
     "tapToExpand": { "en": "Tap to expand", "fr": "Appuyez pour ouvrir", "nl": "Tik om te openen" },
     "tapToCollapse": { "en": "Tap to collapse", "fr": "Appuyez pour réduire", "nl": "Tik om te sluiten" },
     "download": { "en": "Download", "fr": "Télécharger", "nl": "Downloaden" },
     "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
+    "saveChanges": { "en": "Save changes", "fr": "Enregistrer les modifications", "nl": "Wijzigingen opslaan" },
     "add": { "en": "Add", "fr": "Ajouter", "nl": "Toevoegen" },
     "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
     "noChange": { "en": "No change.", "fr": "Aucun changement.", "nl": "Geen wijziging." },
@@ -228,8 +250,30 @@
   },
   "overlay": {
     "row": { "en": "Row", "fr": "Ligne", "nl": "Rij" },
-    "itemsOne": { "en": "{count} item", "fr": "{count} élément", "nl": "{count} item" },
-    "itemsMany": { "en": "{count} items", "fr": "{count} éléments", "nl": "{count} items" }
+    "itemsOne": { "en": "Item", "fr": "Élément", "nl": "Item" },
+    "itemsMany": { "en": "Items", "fr": "Éléments", "nl": "Items" },
+    "detail": {
+      "templateMissing": { "en": "Template not configured.", "fr": "Modèle non configuré.", "nl": "Sjabloon niet geconfigureerd." },
+      "templateBundleRequired": {
+        "en": "Template must be a bundled (bundle:...) HTML template.",
+        "fr": "Le modèle doit être un modèle HTML intégré (bundle:...).",
+        "nl": "Het sjabloon moet een gebundeld (bundle:...) HTML-sjabloon zijn."
+      },
+      "templateFailed": { "en": "Unable to render template.", "fr": "Impossible de rendre le modèle.", "nl": "Kan het sjabloon niet weergeven." },
+      "selected": { "en": "Selected", "fr": "Sélectionné", "nl": "Geselecteerd" },
+      "pathUnsupported": {
+        "en": "Nested paths beyond one level are not supported yet.",
+        "fr": "Les chemins imbriqués au-delà d’un niveau ne sont pas encore pris en charge.",
+        "nl": "Geneste paden dieper dan één niveau worden nog niet ondersteund."
+      },
+      "subgroupMissing": { "en": "Subgroup configuration not found.", "fr": "Configuration du sous-groupe introuvable.", "nl": "Subgroepconfiguratie niet gevonden." },
+      "selectRow": { "en": "Select a row to view details.", "fr": "Sélectionnez une ligne pour voir les détails.", "nl": "Selecteer een rij om details te bekijken." },
+      "viewModeUnsupported": { "en": "View mode is not supported.", "fr": "Le mode d’affichage n’est pas pris en charge.", "nl": "De weergavemodus wordt niet ondersteund." },
+      "editModeUnsupported": { "en": "Edit mode is not supported.", "fr": "Le mode d’édition n’est pas pris en charge.", "nl": "De bewerkingsmodus wordt niet ondersteund." },
+      "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
+      "empty": { "en": "No preview available.", "fr": "Aucun aperçu disponible.", "nl": "Geen voorbeeld beschikbaar." },
+      "selectedRow": { "en": "Selected row", "fr": "Ligne sélectionnée", "nl": "Geselecteerde rij" }
+    }
   },
   "files": {
     "title": { "en": "Photos", "fr": "Photos", "nl": "Foto's" },

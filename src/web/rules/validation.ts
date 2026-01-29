@@ -29,6 +29,11 @@ const defaultRuleMessages = {
     en: 'This combination is not allowed.',
     fr: "Cette combinaison n'est pas autorisée.",
     nl: 'Deze combinatie is niet toegestaan.'
+  },
+  integer: {
+    en: 'Please enter a whole number.',
+    fr: 'Veuillez entrer un nombre entier.',
+    nl: 'Voer een geheel getal in.'
   }
 };
 
@@ -92,6 +97,11 @@ export function checkRule(
   }
 
   const numVals = values.map(v => toFiniteNumber(v)).filter((v): v is number => typeof v === 'number');
+  const stringVals = values
+    .filter((v): v is string => typeof v === 'string')
+    .map(v => v.trim())
+    .filter(Boolean);
+  const hasMinusOnly = stringVals.some(v => v === '-' || v === '-.' || v === '-,');
 
   const resolveMinSpec = (): { limit: number; label: number | string; source?: string } | null => {
     if (thenCfg?.min !== undefined) {
@@ -126,7 +136,7 @@ export function checkRule(
   };
 
   const minSpec = resolveMinSpec();
-  if (minSpec && numVals.length && numVals.some(v => v < minSpec.limit)) {
+  if (minSpec && ((numVals.length && numVals.some(v => v < minSpec.limit)) || hasMinusOnly)) {
     if (minSpec.source && minSpec.source.startsWith('minFieldId:')) {
       validationLog('minFieldId.fail', { minSpec, value });
     }
@@ -145,6 +155,10 @@ export function checkRule(
       customMessage ||
       resolveLocalizedString(withLimitMessage('Value must be <=', maxSpec.label), language, 'Value must be <= ' + maxSpec.label + '.')
     );
+  }
+
+  if (thenCfg?.integer === true && numVals.length && numVals.some(v => !Number.isInteger(v))) {
+    return customMessage || resolveLocalizedString(defaultRuleMessages.integer, language, 'Please enter a whole number.');
   }
 
   if (thenCfg?.allowed?.length && !values.every(v => thenCfg.allowed?.includes(v as string))) {

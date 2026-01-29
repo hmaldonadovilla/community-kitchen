@@ -1,0 +1,581 @@
+<!--
+  Community Kitchen - Meal Production (Summary HTML Template)
+
+  Notes:
+  - Keep placeholders intact (e.g., {{FIELD_ID}}).
+  - Designed for in-app summary; minimal styles and a small script to organize meal details.
+-->
+
+<style>
+  .ck-summary-template {
+    font-family: var(--ck-font-family, system-ui);
+    font-size: var(--ck-font-control, 1rem);
+    line-height: 1.45;
+    margin: -8px;
+  }
+
+  .ck-summary-template * {
+    box-sizing: border-box;
+    max-width: 100%;
+    font-weight: 400;
+  }
+
+  .ck-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ck-header-title {
+    font-weight: 600;
+    font-size: 1.05em;
+  }
+
+  .ck-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+  }
+
+  .ck-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ck-meta-item-inline {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .ck-meta-item--full {
+    grid-column: 1 / -1;
+  }
+
+  .ck-label {
+    font-weight: 500;
+    font-size: 0.92em;
+  }
+
+  .ck-value {
+    font-weight: 400;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .ck-section {
+    margin-top: 16px;
+  }
+
+  .ck-section-title {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+    font-size: 1em;
+  }
+
+  .ck-meal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ck-meal-block {
+    padding-top: 12px;
+    border-top: 1px solid currentColor;
+  }
+
+  .ck-meal-block:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .ck-meal-title {
+    font-weight: 600;
+    margin: 0 0 2px 0;
+  }
+
+  .ck-prep-group {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ck-prep-line {
+    font-weight: 500;
+  }
+
+  .ck-prep-details {
+    font-size: 0.92em;
+    opacity: 0.85;
+  }
+
+  .ck-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .ck-inline-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .ck-inline-item + .ck-inline-item::before {
+    content: "|";
+    margin-right: 6px;
+    opacity: 0.6;
+  }
+
+  .ck-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+  }
+
+  .ck-total-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ck-action-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .ck-action-button {
+    border: 1px solid currentColor;
+    background: transparent;
+    padding: 6px 12px;
+    border-radius: var(--radius-control, 8px);
+    font: inherit;
+    font-weight: 500;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .ck-hidden {
+    display: none;
+  }
+
+  @media (max-width: 600px) {
+    .ck-meta-grid,
+    .ck-totals {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="ck-summary-template" data-ck-template="meal-production-summary">
+  <div class="ck-header">
+    <div class="ck-header-title">{{MP_DISTRIBUTOR.DIST_NAME}} | {{MP_SERVICE}}</div>
+    <div class="ck-meta-grid">
+      <div class="ck-meta-item ck-meta-item-inline">
+        <span class="ck-label">Production date:</span>
+        <span class="ck-value">{{MP_PREP_DATE}}</span>
+      </div>
+      <div class="ck-meta-item ck-meta-item-inline">
+        <span class="ck-label">Expiration date:</span>
+        <span class="ck-value">{{MP_EXP_DATE}}</span>
+      </div>
+      <div class="ck-meta-item ck-meta-item-inline">
+        <span class="ck-label">Batch number:</span>
+        <span class="ck-value">{{MP_ID}}</span>
+      </div>
+      <div class="ck-meta-item ck-meta-item--full">
+        <div class="ck-label">Responsible cook</div>
+        <div class="ck-value">{{MP_COOK_NAME}}</div>
+      </div>
+      <div class="ck-meta-item ck-meta-item--full">
+        <div class="ck-label">Volunteer cook</div>
+        <div class="ck-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ck-section">
+    <div class="ck-section-title">Production details</div>
+    <div class="ck-meal-list" data-ck-meal-list></div>
+
+    <table class="ck-hidden" data-ck-meal-data>
+      <tbody>
+        <tr>
+          <td>
+            <span class="ck-hidden">{{ROW_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.PREP_TYPE)}}</span>
+            <span class="ck-hidden" data-meal-index>{{MP_MEALS_REQUEST.__ROWINDEX}}</span>
+            <span class="ck-hidden" data-meal-type>{{MP_MEALS_REQUEST.MEAL_TYPE}}</span>
+            <span class="ck-hidden" data-ord-qty>{{MP_MEALS_REQUEST.ORD_QTY}}</span>
+            <span class="ck-hidden" data-to-cook>{{MP_MEALS_REQUEST.MP_TO_COOK}}</span>
+            <span class="ck-hidden" data-final-qty>{{MP_MEALS_REQUEST.FINAL_QTY}}</span>
+            <span class="ck-hidden" data-prep-type>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_TYPE}}</span>
+            <span class="ck-hidden" data-prep-qty>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_QTY}}</span>
+            <span class="ck-hidden" data-recipe>{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE}}</span>
+            <span class="ck-hidden" data-core-temp>{{MP_MEALS_REQUEST.MP_COOK_TEMP}}</span>
+            <span class="ck-hidden" data-temp-photos="{{MP_MEALS_REQUEST.TEMP_EVD}}"></span>
+          </td>
+        </tr>
+        <tr class="ck-ingredient-row ck-hidden">
+          <td data-ingredient-name>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}</td>
+          <td data-ingredient-allergen>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN}}</td>
+          {{EXCLUDE_WHEN_WHEN({"fieldId":"MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING","isEmpty":true})}}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="ck-section">
+    <div class="ck-totals">
+      <div class="ck-total-row">
+        <div class="ck-label">Total requested</div>
+        <div class="ck-value">{{SUM(MP_MEALS_REQUEST.ORD_QTY)}}</div>
+      </div>
+      <div class="ck-total-row">
+        <div class="ck-label">Total delivered</div>
+        <div class="ck-value">{{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ck-section">
+    <div class="ck-action-row">
+      <button type="button" class="ck-action-button" data-ck-action="ING_PREVIEW">Ingredients needed</button>
+    </div>
+    <div class="ck-total-row">
+      <div class="ck-label">Ingredient delivery receipt evidence</div>
+      <div class="ck-value">{{FILES_ICON(ING_EVD)}}</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var root = document.querySelector('[data-ck-template="meal-production-summary"]');
+    if (!root || root.getAttribute('data-ck-init') === '1') return;
+    root.setAttribute('data-ck-init', '1');
+
+    var listContainer = root.querySelector('[data-ck-meal-list]');
+    var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
+    if (!listContainer || !dataTables.length) return;
+
+    var normalize = function (value) {
+      return (value || '').toString().trim().toLowerCase();
+    };
+    var toText = function (value) {
+      return (value || '').toString().trim();
+    };
+    var parseNumber = function (value) {
+      var n = Number((value || '').toString().trim());
+      return Number.isFinite(n) ? n : NaN;
+    };
+    var encodeFileField = function (urls) {
+      if (!urls || !urls.length) return '';
+      try {
+        return 'urls:' + encodeURIComponent(JSON.stringify(urls));
+      } catch (err) {
+        try {
+          return 'urls:' + encodeURIComponent(urls.join('|'));
+        } catch (err2) {
+          return '';
+        }
+      }
+    };
+    var uniq = function (list) {
+      var seen = new Set();
+      var out = [];
+      list.forEach(function (item) {
+        var key = normalize(item);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        out.push(item.toString().trim());
+      });
+      return out;
+    };
+    var looksLikeUrl = function (value) {
+      return /^https?:\/\//i.test((value || '').toString().trim());
+    };
+    var extractUrls = function (raw) {
+      var text = toText(raw);
+      if (!text) return [];
+      var parts = text
+        .split(/[,\n]+/g)
+        .map(function (item) {
+          return item.trim();
+        })
+        .filter(Boolean);
+      var urls = [];
+      var addUrl = function (url) {
+        if (!looksLikeUrl(url)) return;
+        urls.push(url);
+      };
+      if (parts.length > 1) {
+        parts.forEach(addUrl);
+        return uniq(urls);
+      }
+      var matches = text.match(/https?:\/\/[^\s,]+/gi) || [];
+      matches.forEach(addUrl);
+      return uniq(urls);
+    };
+
+    var collectIngredients = function (table) {
+      var rows = Array.prototype.slice.call(table.querySelectorAll('.ck-ingredient-row'));
+      var ingredients = [];
+      var allergens = [];
+      rows.forEach(function (row) {
+        var nameEl = row.querySelector('[data-ingredient-name]');
+        var allergenEl = row.querySelector('[data-ingredient-allergen]');
+        var name = toText(nameEl ? nameEl.textContent : '');
+        var allergen = toText(allergenEl ? allergenEl.textContent : '');
+        if (name) ingredients.push(name);
+        if (allergen && normalize(allergen) !== 'none') allergens.push(allergen);
+      });
+      return {
+        ingredients: ingredients,
+        allergens: allergens
+      };
+    };
+
+    var entries = dataTables.map(function (table) {
+      var getText = function (selector) {
+        var el = table.querySelector(selector);
+        return toText(el ? el.textContent : '');
+      };
+      var tempPhotosEl = table.querySelector('[data-temp-photos]');
+      var tempPhotosRaw = tempPhotosEl ? tempPhotosEl.getAttribute('data-temp-photos') : '';
+      var tempPhotoUrls = extractUrls(tempPhotosRaw);
+      var collected = collectIngredients(table);
+      return {
+        table: table,
+        mealIndex: getText('[data-meal-index]'),
+        mealType: getText('[data-meal-type]'),
+        ordQty: getText('[data-ord-qty]'),
+        toCook: getText('[data-to-cook]'),
+        finalQty: getText('[data-final-qty]'),
+        prepType: getText('[data-prep-type]'),
+        prepQty: getText('[data-prep-qty]'),
+        recipe: getText('[data-recipe]'),
+        coreTemp: getText('[data-core-temp]'),
+        tempPhotoUrls: tempPhotoUrls,
+        ingredients: collected.ingredients,
+        allergens: collected.allergens
+      };
+    });
+
+    var groups = new Map();
+    entries.forEach(function (entry) {
+      var key = entry.mealIndex || entry.mealType || '__unknown__';
+      var group = groups.get(key);
+      if (!group) {
+        group = { entries: [] };
+        groups.set(key, group);
+      }
+      group.entries.push(entry);
+    });
+
+    var formatPortions = function (rawValue, fallbackValue) {
+      var n = parseNumber(rawValue);
+      if (!Number.isNaN(n)) return n.toString() + ' portions';
+      var text = toText(rawValue);
+      if (text) return text + ' portions';
+      var fallbackText = toText(fallbackValue);
+      if (fallbackText) return fallbackText + ' portions';
+      return '0 portions';
+    };
+
+    var formatList = function (items, emptyText) {
+      var list = uniq(items);
+      return list.length ? list.join(', ') : emptyText;
+    };
+    var formatConfirmation = function (rawValue) {
+      var text = normalize(rawValue);
+      if (!text) return 'Not confirmed';
+      if (text === 'true' || text === 'yes' || text === '1') return 'Yes';
+      if (text === 'false' || text === 'no' || text === '0') return 'No';
+      return toText(rawValue);
+    };
+
+    var appendDetailLine = function (container, data) {
+      var inline = document.createElement('div');
+      inline.className = 'ck-inline';
+
+      var addTextItem = function (text) {
+        if (!text) return;
+        var item = document.createElement('span');
+        item.className = 'ck-inline-item';
+        item.textContent = text;
+        inline.appendChild(item);
+      };
+
+      if (data.ingredientsText) {
+        addTextItem(data.ingredientsText);
+      }
+      if (data.allergensText) {
+        addTextItem('Allergens: ' + data.allergensText);
+      }
+
+      if (data.includeTemp) {
+        var tempItem = document.createElement('span');
+        tempItem.className = 'ck-inline-item';
+        var tempLabel = document.createElement('span');
+        tempLabel.textContent = 'All pots ≥63°C confirmed: ';
+        tempItem.appendChild(tempLabel);
+        var tempValue = document.createElement('span');
+        tempValue.textContent = formatConfirmation(data.coreTemp);
+        tempItem.appendChild(tempValue);
+        inline.appendChild(tempItem);
+      }
+
+      if (data.photoUrls && data.photoUrls.length) {
+        var urls = uniq(data.photoUrls);
+        var count = urls.length;
+        var fieldKey = encodeFileField(urls);
+        if (count && fieldKey) {
+          var photoItem = document.createElement('span');
+          photoItem.className = 'ck-inline-item';
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'ck-file-icon';
+          button.setAttribute('data-ck-file-field', fieldKey);
+          button.setAttribute('data-ck-file-count', count.toString());
+          button.setAttribute('aria-label', 'Open photos');
+          button.appendChild(document.createTextNode('📷'));
+          var badge = document.createElement('span');
+          badge.className = 'ck-file-icon__badge';
+          badge.textContent = count.toString();
+          button.appendChild(badge);
+          photoItem.appendChild(button);
+          inline.appendChild(photoItem);
+        }
+      }
+
+      if (!inline.children.length) return;
+      var details = document.createElement('div');
+      details.className = 'ck-prep-details';
+      details.appendChild(inline);
+      container.appendChild(details);
+    };
+
+    var appendPrepGroup = function (mealBlock, lineText, detailData) {
+      var group = document.createElement('div');
+      group.className = 'ck-prep-group';
+      var line = document.createElement('div');
+      line.className = 'ck-prep-line';
+      line.textContent = lineText;
+      group.appendChild(line);
+      if (detailData) {
+        appendDetailLine(group, detailData);
+      }
+      mealBlock.appendChild(group);
+    };
+
+    listContainer.textContent = '';
+
+    groups.forEach(function (group) {
+      if (!group.entries.length) return;
+      var mealType = '';
+      var requested = '';
+      var toCook = '';
+      var coreTemp = '';
+      var tempPhotoUrls = [];
+
+      for (var i = 0; i < group.entries.length; i += 1) {
+        var entry = group.entries[i];
+        if (!mealType) mealType = entry.mealType;
+        if (!requested) requested = entry.ordQty;
+        if (!toCook) toCook = entry.toCook;
+        if (!coreTemp) coreTemp = entry.coreTemp;
+        if (!tempPhotoUrls.length && entry.tempPhotoUrls && entry.tempPhotoUrls.length) {
+          tempPhotoUrls = entry.tempPhotoUrls.slice();
+        }
+      }
+
+      var cookEntries = group.entries.filter(function (entry) {
+        return normalize(entry.prepType) === 'cook';
+      });
+      var leftoverFullEntries = group.entries.filter(function (entry) {
+        return normalize(entry.prepType) === 'entire dish';
+      });
+      var leftoverPartEntries = group.entries.filter(function (entry) {
+        return normalize(entry.prepType) === 'part dish';
+      });
+
+      var cookEntry = cookEntries.length ? cookEntries[0] : null;
+
+      var mealBlock = document.createElement('div');
+      mealBlock.className = 'ck-meal-block';
+
+      var title = document.createElement('div');
+      title.className = 'ck-meal-title';
+      var titleText = mealType || 'Meal';
+      var requestedText = toText(requested) ? formatPortions(requested, '') : '';
+      if (requestedText) {
+        titleText += ' | Requested: ' + requestedText;
+      }
+      title.textContent = titleText;
+      mealBlock.appendChild(title);
+
+      var cookedIngredients = cookEntry ? cookEntry.ingredients.slice() : [];
+      var cookedAllergens = cookEntry ? cookEntry.allergens.slice() : [];
+
+      leftoverFullEntries.forEach(function (entry) {
+        var qty = parseNumber(entry.prepQty);
+        var qtyValue = Number.isNaN(qty) ? 0 : qty;
+        var leftoverFullLine = 'Leftover: ' + formatPortions(entry.prepQty, '0');
+        if (entry.recipe) {
+          leftoverFullLine += ' | ' + entry.recipe;
+        }
+        var showLeftoverFullDetails = qtyValue > 0;
+        if (showLeftoverFullDetails) {
+          appendPrepGroup(mealBlock, leftoverFullLine, {
+            ingredientsText: formatList(entry.ingredients, 'None'),
+            allergensText: formatList(entry.allergens, 'None'),
+            includeTemp: true,
+            coreTemp: entry.coreTemp || coreTemp,
+            photoUrls: entry.tempPhotoUrls && entry.tempPhotoUrls.length ? entry.tempPhotoUrls : tempPhotoUrls
+          });
+        } else {
+          appendPrepGroup(mealBlock, leftoverFullLine, null);
+          cookedIngredients = cookedIngredients.concat(entry.ingredients);
+          cookedAllergens = cookedAllergens.concat(entry.allergens);
+        }
+      });
+
+      leftoverPartEntries.forEach(function (entry) {
+        var leftoverPartLine = 'Leftover part dish';
+        if (entry.recipe) {
+          leftoverPartLine += ': ' + entry.recipe;
+        }
+        appendPrepGroup(mealBlock, leftoverPartLine, null);
+        cookedIngredients = cookedIngredients.concat(entry.ingredients);
+        cookedAllergens = cookedAllergens.concat(entry.allergens);
+      });
+
+      var cookedLine = 'Cooked: ' + formatPortions(toCook, requested);
+      var cookedRecipe = cookEntry ? cookEntry.recipe : '';
+      if (!cookedRecipe) cookedRecipe = 'Recipe not set';
+      cookedLine += ' | ' + cookedRecipe;
+
+      appendPrepGroup(mealBlock, cookedLine, {
+        ingredientsText: formatList(cookedIngredients, 'None'),
+        allergensText: formatList(cookedAllergens, 'None'),
+        includeTemp: true,
+        coreTemp: coreTemp,
+        photoUrls: tempPhotoUrls
+      });
+
+      listContainer.appendChild(mealBlock);
+    });
+
+    dataTables.forEach(function (table) {
+      table.remove();
+    });
+  })();
+</script>

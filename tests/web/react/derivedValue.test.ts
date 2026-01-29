@@ -1,4 +1,5 @@
 import { applyValueMapsToForm } from '../../../src/web/react/app/valueMaps';
+import { buildSubgroupKey } from '../../../src/web/react/app/lineItems';
 
 const pad2 = (n: number) => n.toString().padStart(2, '0');
 
@@ -183,6 +184,56 @@ describe('derivedValue', () => {
 
     const b = applyValueMapsToForm(definition, { QTY: 20, ACTUAL: 25 } as any, {} as any, { mode: 'blur' });
     expect(b.values.ACTUAL).toBe(20);
+  });
+
+  it('calc computes line-item aggregates with filters', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            fields: [
+              { id: 'QTY', type: 'NUMBER' },
+              {
+                id: 'MP_TO_COOK',
+                type: 'NUMBER',
+                derivedValue: {
+                  op: 'calc',
+                  expression: '{QTY} - SUM(MP_TYPE_LI.PREP_QTY)',
+                  lineItemFilters: [
+                    { ref: 'MP_TYPE_LI.PREP_QTY', when: { fieldId: 'PREP_TYPE', equals: ['Full Dish'] } }
+                  ]
+                }
+              }
+            ],
+            subGroups: [
+              {
+                id: 'MP_TYPE_LI',
+                fields: [
+                  { id: 'PREP_QTY', type: 'NUMBER' },
+                  { id: 'PREP_TYPE', type: 'CHOICE' }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    const rowId = 'row_1';
+    const lineItems: any = {
+      MP_MEALS_REQUEST: [{ id: rowId, values: { QTY: 10 } }]
+    };
+    const subgroupKey = buildSubgroupKey('MP_MEALS_REQUEST', rowId, 'MP_TYPE_LI');
+    lineItems[subgroupKey] = [
+      { id: 'sub_1', values: { PREP_QTY: 3, PREP_TYPE: 'Full Dish' } },
+      { id: 'sub_2', values: { PREP_QTY: 2, PREP_TYPE: 'Cook' } }
+    ];
+
+    const { lineItems: computed } = applyValueMapsToForm(definition, {} as any, lineItems, { mode: 'change' });
+    const updatedRow = (computed.MP_MEALS_REQUEST || []).find((row: any) => row.id === rowId);
+    expect(updatedRow?.values?.MP_TO_COOK).toBe(7);
   });
 });
 

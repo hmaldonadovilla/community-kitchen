@@ -13,18 +13,34 @@ import { addPlaceholderVariants, formatTemplateValue, slugifyPlaceholder, resolv
 
 export const collectLineItemRows = (record: WebFormSubmission, questions: QuestionConfig[]): Record<string, any[]> => {
   const map: Record<string, any[]> = {};
+  const normalizeRows = (raw: any): any[] => {
+    if (Array.isArray(raw)) {
+      return raw.map((row, idx) => {
+        const base = row && typeof row === 'object' ? row : {};
+        const rowId = (base as any)?.id;
+        return {
+          ...(base || {}),
+          __rowIndex: idx,
+          __rowId: rowId ?? ''
+        };
+      });
+    }
+    return [];
+  };
   questions.forEach(q => {
     if (q.type !== 'LINE_ITEM_GROUP') return;
     const value = record.values ? (record.values as any)[q.id] : undefined;
-    if (Array.isArray(value)) {
-      const normalized = value.map(row => (row && typeof row === 'object' ? row : {}));
-      map[q.id] = normalized;
-      (q.lineItemConfig?.subGroups || []).forEach(sub => {
+    const normalized = normalizeRows(value);
+    map[q.id] = normalized;
+
+    const walkSubGroups = (parentRows: any[], subs: any[], path: string[]) => {
+      (subs || []).forEach(sub => {
         const subKey = resolveSubgroupKey(sub as any);
         if (!subKey) return;
+        const nextPath = [...path, subKey];
         const collected: any[] = [];
-        normalized.forEach(parentRow => {
-          const children = Array.isArray((parentRow as any)[subKey]) ? (parentRow as any)[subKey] : [];
+        parentRows.forEach(parentRow => {
+          const children = normalizeRows((parentRow as any)[subKey]);
           children.forEach((child: any) => {
             collected.push({
               ...(child || {}),
@@ -32,8 +48,16 @@ export const collectLineItemRows = (record: WebFormSubmission, questions: Questi
             });
           });
         });
-        map[`${q.id}.${subKey}`] = collected;
+        map[`${q.id}.${nextPath.join('.')}`] = collected;
+        const deeper = (sub as any)?.subGroups || [];
+        if (deeper.length) {
+          walkSubGroups(collected, deeper, nextPath);
+        }
       });
+    };
+
+    if (normalized.length) {
+      walkSubGroups(normalized, q.lineItemConfig?.subGroups || [], []);
     }
   });
   return map;
@@ -78,23 +102,80 @@ export const buildPlaceholderMap = (args: {
         const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
         addPlaceholderVariants(map, `${q.id}.${fieldSlug}`, joined, 'PARAGRAPH', formatValue);
       });
-
-      (q.lineItemConfig?.subGroups || []).forEach(sub => {
-        const subKey = resolveSubgroupKey(sub as any);
-        if (!subKey) return;
+      (q.lineItemConfig?.fields || []).forEach(field => {
+        if (!(field as any)?.dataSource) return;
+        const detailBuckets: Record<string, string[]> = {};
         rows.forEach(row => {
-          const subRows = Array.isArray((row as any)[subKey]) ? (row as any)[subKey] : [];
+          const raw = (row as any)?.[field.id];
+          if (raw === undefined || raw === null || raw === '') return;
+          const details = dataSources.lookupDataSourceDetails(field as any, raw.toString(), record.language);
+          if (!details) return;
+          Object.entries(details).forEach(([key, val]) => {
+            if (val === undefined || val === null || val === '') return;
+            const dsKey = (key || '').toString().trim().toUpperCase();
+            if (!dsKey) return;
+            if (!detailBuckets[dsKey]) detailBuckets[dsKey] = [];
+            detailBuckets[dsKey].push(val.toString());
+          });
+        });
+        const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
+        Object.entries(detailBuckets).forEach(([dsKey, values]) => {
+          const joined = (values || []).filter(Boolean).join('\n');
+          if (!joined) return;
+          addPlaceholderVariants(map, `${q.id}.${field.id}.${dsKey}`, joined, 'PARAGRAPH', formatValue);
+          if (fieldSlug) {
+            addPlaceholderVariants(map, `${q.id}.${fieldSlug}.${dsKey}`, joined, 'PARAGRAPH', formatValue);
+          }
+        });
+      });
+
+      const resolveSubConfigByPath = (path: string[]): any | undefined => {
+        if (!path.length) return undefined;
+        let current: any = q.lineItemConfig;
+        for (let i = 0; i < path.length; i += 1) {
+          const subId = path[i];
+          const subs = (current?.subGroups || []) as any[];
+          const match = subs.find(s => resolveSubgroupKey(s as any) === subId);
+          if (!match) return undefined;
+          if (i === path.length - 1) return match;
+          current = match;
+        }
+        return undefined;
+      };
+
+      Object.keys(lineItemRows)
+        .filter(key => key.startsWith(`${q.id}.`))
+        .forEach(key => {
+          const pathRaw = key.slice(q.id.length + 1);
+          const path = pathRaw.split('.').map(seg => seg.trim()).filter(Boolean);
+          if (!path.length) return;
+          const subCfg = resolveSubConfigByPath(path);
+          if (!subCfg) return;
+          const subRows = lineItemRows[key] || [];
           subRows.forEach((subRow: any) => {
-            (sub.fields || []).forEach(field => {
+            (subCfg.fields || []).forEach((field: any) => {
               const raw = subRow?.[field.id];
               if (raw === undefined || raw === null || raw === '') return;
-              addPlaceholderVariants(map, `${q.id}.${subKey}.${field.id}`, raw, (field as any).type, formatValue);
+              const tokenPath = path.join('.');
+              addPlaceholderVariants(map, `${q.id}.${tokenPath}.${field.id}`, raw, (field as any).type, formatValue);
               const slug = slugifyPlaceholder(field.labelEn || field.id);
-              addPlaceholderVariants(map, `${q.id}.${subKey}.${slug}`, raw, (field as any).type, formatValue);
+              addPlaceholderVariants(map, `${q.id}.${tokenPath}.${slug}`, raw, (field as any).type, formatValue);
+              if ((field as any)?.dataSource) {
+                const details = dataSources.lookupDataSourceDetails(field as any, raw.toString(), record.language);
+                if (!details) return;
+                Object.entries(details).forEach(([key, val]) => {
+                  if (val === undefined || val === null || val === '') return;
+                  const dsKey = (key || '').toString().trim().toUpperCase();
+                  if (!dsKey) return;
+                  addPlaceholderVariants(map, `${q.id}.${tokenPath}.${field.id}.${dsKey}`, val, undefined, formatValue);
+                  if (slug) {
+                    addPlaceholderVariants(map, `${q.id}.${tokenPath}.${slug}.${dsKey}`, val, undefined, formatValue);
+                  }
+                });
+              }
             });
           });
         });
-      });
     } else if (q.dataSource && typeof value === 'string' && value) {
       const dsDetails = dataSources.lookupDataSourceDetails(q as any, value, record.language);
       if (dsDetails) {
@@ -124,6 +205,12 @@ export const addConsolidatedPlaceholders = (
   questions: QuestionConfig[],
   lineItemRows: Record<string, any[]>
 ): void => {
+  const normalizeRows = (raw: any): any[] => {
+    if (Array.isArray(raw)) {
+      return raw.map(row => (row && typeof row === 'object' ? row : {}));
+    }
+    return [];
+  };
   const toNumber = (raw: any): number | null => {
     if (raw === undefined || raw === null || raw === '') return null;
     if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
@@ -143,6 +230,35 @@ export const addConsolidatedPlaceholders = (
   questions.forEach(q => {
     if (q.type !== 'LINE_ITEM_GROUP') return;
     const rows = Array.isArray(lineItemRows[q.id]) ? (lineItemRows[q.id] as any[]) : [];
+    const subgroupRowMap = (() => {
+      const hasSubgroupKeys = Object.keys(lineItemRows).some(key => key.startsWith(`${q.id}.`));
+      if (hasSubgroupKeys || !rows.length) return lineItemRows;
+      const derived: Record<string, any[]> = {};
+      const walkSubGroups = (parentRows: any[], subs: any[], path: string[]) => {
+        (subs || []).forEach(sub => {
+          const subKey = resolveSubgroupKey(sub as any);
+          if (!subKey) return;
+          const nextPath = [...path, subKey];
+          const collected: any[] = [];
+          parentRows.forEach(parentRow => {
+            const children = normalizeRows((parentRow as any)[subKey]);
+            children.forEach((child: any) => {
+              collected.push({
+                ...(child || {}),
+                __parent: parentRow
+              });
+            });
+          });
+          derived[`${q.id}.${nextPath.join('.')}`] = collected;
+          const deeper = (sub as any)?.subGroups || [];
+          if (deeper.length) {
+            walkSubGroups(collected, deeper, nextPath);
+          }
+        });
+      };
+      walkSubGroups(rows, q.lineItemConfig?.subGroups || [], []);
+      return { ...lineItemRows, ...derived };
+    })();
 
     // Item count across the full group.
     placeholders[`{{COUNT(${q.id})}}`] = `${rows.length}`;
@@ -178,58 +294,69 @@ export const addConsolidatedPlaceholders = (
       }
     });
 
-    // nested sub groups
-    (q.lineItemConfig?.subGroups || []).forEach(sub => {
-      const subKey = resolveSubgroupKey(sub as any);
-      if (!subKey) return;
-      const subSlug = slugifyPlaceholder(subKey);
+    const resolveSubConfigByPath = (path: string[]): any | undefined => {
+      if (!path.length) return undefined;
+      let current: any = q.lineItemConfig;
+      for (let i = 0; i < path.length; i += 1) {
+        const subId = path[i];
+        const subs = (current?.subGroups || []) as any[];
+        const match = subs.find(s => resolveSubgroupKey(s as any) === subId);
+        if (!match) return undefined;
+        if (i === path.length - 1) return match;
+        current = match;
+      }
+      return undefined;
+    };
 
-      const children: any[] = [];
-      rows.forEach(parentRow => {
-        const subRows = Array.isArray((parentRow as any)?.[subKey]) ? (parentRow as any)[subKey] : [];
-        subRows.forEach((subRow: any) => children.push(subRow || {}));
-      });
+    Object.keys(subgroupRowMap)
+      .filter(key => key.startsWith(`${q.id}.`))
+      .forEach(key => {
+        const pathRaw = key.slice(q.id.length + 1);
+        const path = pathRaw.split('.').map(seg => seg.trim()).filter(Boolean);
+        if (!path.length) return;
+        const subCfg = resolveSubConfigByPath(path);
+        if (!subCfg) return;
+        const subSlug = slugifyPlaceholder(path.join('.'));
+        const children: any[] = Array.isArray(subgroupRowMap[key]) ? (subgroupRowMap[key] as any[]) : [];
 
-      // Item count across the full subgroup.
-      placeholders[`{{COUNT(${q.id}.${subKey})}}`] = `${children.length}`;
-      placeholders[`{{COUNT(${q.id}.${subSlug})}}`] = `${children.length}`;
+        placeholders[`{{COUNT(${q.id}.${pathRaw})}}`] = `${children.length}`;
+        placeholders[`{{COUNT(${q.id}.${subSlug})}}`] = `${children.length}`;
 
-      (sub.fields || []).forEach(field => {
-        const type = ((field as any)?.type || '').toString().toUpperCase();
-        const values = children
-          .map(row => (row as any)?.[field.id])
-          .filter(val => val !== undefined && val !== null && val !== '')
-          .map(val => formatTemplateValue(val, (field as any).type))
-          .map(s => (s || '').toString().trim())
-          .filter(Boolean);
-        const unique = Array.from(new Set(values));
-        const consolidatedText = unique.length ? unique.join(', ') : 'None';
+        (subCfg.fields || []).forEach((field: any) => {
+          const type = ((field as any)?.type || '').toString().toUpperCase();
+          const values = children
+            .map(row => (row as any)?.[field.id])
+            .filter(val => val !== undefined && val !== null && val !== '')
+            .map(val => formatTemplateValue(val, (field as any).type))
+            .map(s => (s || '').toString().trim())
+            .filter(Boolean);
+          const unique = Array.from(new Set(values));
+          const consolidatedText = unique.length ? unique.join(', ') : 'None';
 
-        const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
-        const fieldTokens = [field.id, fieldSlug];
-        fieldTokens.forEach(ft => {
-          placeholders[`{{CONSOLIDATED(${q.id}.${subKey}.${ft})}}`] = consolidatedText;
-          placeholders[`{{CONSOLIDATED(${q.id}.${subSlug}.${ft})}}`] = consolidatedText;
-        });
-
-        if (type === 'NUMBER') {
-          let sum = 0;
-          let hasAny = false;
-          children.forEach(row => {
-            const n = toNumber((row as any)?.[field.id]);
-            if (n === null) return;
-            hasAny = true;
-            sum += n;
-          });
-          const sumText = hasAny ? `${round2(sum)}` : '0';
+          const fieldSlug = slugifyPlaceholder(field.labelEn || field.id);
+          const fieldTokens = [field.id, fieldSlug];
           fieldTokens.forEach(ft => {
-            placeholders[`{{SUM(${q.id}.${subKey}.${ft})}}`] = sumText;
-            placeholders[`{{SUM(${q.id}.${subSlug}.${ft})}}`] = sumText;
+            placeholders[`{{CONSOLIDATED(${q.id}.${pathRaw}.${ft})}}`] = consolidatedText;
+            placeholders[`{{CONSOLIDATED(${q.id}.${subSlug}.${ft})}}`] = consolidatedText;
           });
-        }
+
+          if (type === 'NUMBER') {
+            let sum = 0;
+            let hasAny = false;
+            children.forEach(row => {
+              const n = toNumber((row as any)?.[field.id]);
+              if (n === null) return;
+              hasAny = true;
+              sum += n;
+            });
+            const sumText = hasAny ? `${round2(sum)}` : '0';
+            fieldTokens.forEach(ft => {
+              placeholders[`{{SUM(${q.id}.${pathRaw}.${ft})}}`] = sumText;
+              placeholders[`{{SUM(${q.id}.${subSlug}.${ft})}}`] = sumText;
+            });
+          }
+        });
       });
-    });
   });
 };
-
 

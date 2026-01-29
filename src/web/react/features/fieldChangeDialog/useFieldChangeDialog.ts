@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FieldValue } from '../../types';
+import { FieldValue } from '../../../types';
 
 export type FieldChangeDialogInputOption = { value: string; label: string };
 

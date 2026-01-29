@@ -166,7 +166,82 @@
 - ck-48:
   -For line item groups rows, with the `MP_IS_REHEAT` field set to `Yes`, the `Ingredient Needed` button does not need to be shown because these type of meals do not need for the cook to retrieve ingredients from the pantry. Logically we must hide Ingredients needed unless there is at least one row with a recipe selection and the value `No` on the `MP_IS_REHEAT` field. To define this generically we should create a feature where visibility of top level fields, including buttons shown in edit view, is impacted by logic that looks at nested line item and subgroups.
   - When
-  > **WIP - Cursor**
+  > **DONE - Cursor**
 - ck-49:
   - Assess if we can apply option filter to data coming from dataSource, based on values from current record fields. The specific use case to enable is: we are setting recipies on a different form, these records are defined by a multi-select field that contains the dietary applicability of the recipe and the values are being saved in the sever as strings separated by commas. In the meal production form we are defining a single dietary applicability for the meal to be preparead and we require the cook to select the recipe that will be used, therefore we need to define an option filter to will exclude the recipies that are not compatible with the dietary applicability of the meal. Please follow guidelines defined in AGENT.md.
+  > **DONE - Codex**
+- ck-50:
+  - we require true nesting design for line item groups and subgroups. Along with 2 level line item handling in full page overlays. Design is defined in `docs/true-nesting-design.md`.
+  > **DONE - Cursor**
+- ck-51:
+  - we need to be able to calculate fields using complex hierarchy. For example a line item group has two numeric field called `QTY` and `MP_TO_COOK`, and also contains a subgroup called `MP_TYPE_LI` that has a numeric field called `PREP_QTY` and a CHOICE field called `PREP_TYPE`. We need to be able to calculate the field `MP_TO_COOK` by doing {`QTY` - SUM(`MP_TYPE_LI.PREP_QTY`)} when `MP_TYPE_LI.PREP_TYPE` is `Full Dish`.
+  - then with the calculated field will use selection effects to add a new line item row in MP_TYPE_LI group that has the value of `PREP_QTY` = `MP_TO_COOK` (we will also assign the value of `PREP_TYPE` = `Cook` to avoid creating a loop). I think this last part we can do it with the existing selection effects functionality, please assess.
+  > **DONE - Cursor**
+- ck-52:
+  - Please adjust the functionality of GROUP_TABLE placeholder to support complex hierarchy. Review the configuration defined in `docs/templates/mp.ing_recipe.html`, the table grouping is not happening and check if the sorting is working as expected. Also we need to allow dataSource fields to appear in the template. The value of `MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE` is comming from a dataSource row and we are already using the RECIPE.REC_INST as the `tooltipField` value, in our use case we want to display the content of the `RECIPE.REC_INST` field in the `Instructions` tab of out html template.
+  > **DONE - Cursor**
+- ck-53:
+  - for the `flattenFields` feature we need to be able to control the placement of the field in the parent view, either to the right, left or below the parent field that is controlling the overlay open action. DONE
+  - we need to allow up to 3 fields to be displayed in the row header in steps UI, when `"collapsedFieldsInHeader": true`, if there are more fields defined in the step, those will appear in the row body.
+  - we need to trigger error validation on field focus out same as we already do for warning validation. DONE
+  - remove all item counts from all views, this is unnecessary and add congnitive load to the user, including selection notices and breadcrumbs.
+  - define control to hide the trash can icon on the `overlayOpenActions` config. DONE
+  - on the `overlayOpenActions` overlay we need to select the first row by default when the overlay is opened, if the view action is available, active it for the first row, if the view action is not available, active the edit action for the first row. DONE
+  > **WIP - Cursor**
+- ck-bug-13: when you open the overlay the view or edit rendered needs to be triggered only after all fields in the header row are completed and valid. You only need to trigger the view or edit action once. I'm currently seeing multiple triggers of the action even if I'm already in the view or edit mode.
+
+   ```text
+  [ReactForm] lineItems.overlayDetail.view.rendered
+  {groupId: 'MP_MEALS_REQUEST', rowId:   'MP_MEALS_REQUEST::MP_MEALS_REQUEST_780077aaf68098::MP_TYPE_LI_e7be55f11e3c8', templateId:   'bundle:mp.ing_recipe.html'}
+  groupId
+  :
+  "MP_MEALS_REQUEST"
+  rowId
+  :
+  "MP_MEALS_REQUEST::MP_MEALS_REQUEST_780077aaf68098::MP_TYPE_LI_e7be55f11e3c8"
+  templateId
+  :
+  "bundle:mp.ing_recipe.html"
+  [[Prototype]]
+  :
+  Object
+  ```
+
   > **WIP - Codex**
+- ck-54: create the custom html bundled template for the meal production form.
+  > **WIP - Codex**
+- ck-55: on the full page overlay, when adding lines manually the header section is being hidden and only the body is visible. After we close the overlay and open again it renders correctly, this only happens when adding lines manually, including from `selectorOverlay`. Rows comming from selection effects are working as expected. Error message: `Unable to load subgroup editor (missing group/subgroup configuration for MP_MEALS_REQUEST::MP_MEALS_REQUEST_04ccba0471eba::MP_TYPE_LI::MP_MEALS_REQUEST::MP_MEALS_REQUEST_04ccba0471eba::MP_TYPE_LI_083db004c1b6e::MP_INGREDIENTS_LI).`
+  > **WIP - Codex**
+- ck-59: Step row flow (rowFlow) progressive prompts + overlay detail body actions / tab hiding.
+  > **DONE - Codex**
+- ck-56: add `updateLineItems` selection effect to update the line items.
+- ck-57:
+  - for listView rule columns, please allow multiple actions per row, by only showing icons, instead of icons and text.
+  - enable search preset buttons in view.mode:table of list view.
+- ck-58: when fetching paginated data from server on first load, we need to fetch data sorted by multiple fields in order, for example `MP_PREP_DATE` desc, `MP_DISTRIBUTOR` asc and MP_SERVICE source order. This way we make sure that the first page of results is always the most releveant to the user. Also call the different pages in parallel so we can fetch the data faster, this goes as well for retrieving the bundle, I've notices that after page load we are making sequential calls to the for the different components which is not efficient. Also I thought we were caching the bundle but this takes more than 2 seconds to be retrieved after page load
+- ck-60:
+  - we need to control the width of columns in the grid on edit view. Specially on the steps UI as we often need to provide more space to choice fields than to number fields, buttons, etc. Also need need to be able to overide in the steps UI per step.
+  - when we make a field read only we need to remove the `*` from the field label and remove the input control box as it takes space. Take a look at the screenshot to see a mock of the expected view when fields are read only or `renderAsLabel` is true.
+  - also in the steps UI we need to be able to hide the field label in the context of a step.
+- ck-61: set values automatically, add selectionEffects: [{ type: "setValue", ... }]
+- ck-62:
+  - I see a bug, when I enter the step and data has already been saved with at least one row that MP_IS_REHEAT = Yes, the leftoversInfo prompt is completed and it always opens the overlay, it should happen only when the value was set.
+  - Also my current configuration in configJson.json does not allow me to start the rowFlow on the openLeftoversOverlay it was previously working if I created the row with a preset, however I don't want to do that so the user can select the type of leftover from the start. I added minRows: 1 in the groupOverride but this is not working. Please suggest an adequate configuration.
+  - Also as shown on the requiremtens document progressive-step-ui.md we need a trash can icon to delete the row, which is shown on the far right of the output line. How do I set that one up
+  - Also, we need a dialog when returning from the overlays back to the steps ui, how do I set that one?
+  - I need a back button on the `editLeftoverIngredients` instead of close button
+  - the `derivedValue` calculation on the `MP_TO_COOK` is being triggered on every character change despite the `applyOn` is set to `blur`.
+  > **DONE - Codex**
+- ck-63: `ingredientsSelector` prompt is not working, nothing is shown on the input control line.
+  > **DONE - Codex**
+- ck-64:
+  - the back button on the `editLeftoverIngredients` needs to go back to the previous `openLeftoversOverlay` where it came from. DONE
+  - For the concent dialog we need to be able to decide if the dialog opens before the action is triggered or after, when arriving to the target. The idea is to show the user a message when coming back from the overlays back to the steps ui. DONE
+  - When triggering the `removeLeftover` action it fails to complete if no rows exists and the user gets blocked. The row can no longer go back to the inital question. WIP
+- ck-65:
+  - on the `overlayDetail` where we have a header and a body, I've set validation rules for the fields in the body table `MP_INGREDIENTS_LI.QTY` and `MP_INGREDIENTS_LI.UNIT`. I expect these fields to be validated on blur and honoring `enforceFieldOrder` configuration. At the moment the user is not notified of the validation errors, only running submit/next button, the fields are highlighted.
+  - The `ingredientsSelector` prompt is using the `selectorOverlay` input control and when items are added it opens the overlay. I need to control the fields that are shown in the overlay table, for this use case I only need to show the `ING` field.
+- ck-66:
+  - Auto save is not working as expected, only when I enter a photo the auto save is triggered and it starts working again. When starting a new record and entering data does not trigger the auto save unless I file upload is made.
+  - "clearOnChange": true, is not working as expected, when changing the service the rest of the fields are not cleared.
+  - The `changeDialog` needs to be triggered when the value of the field changes, when the field is empty it should not trigger the dialog.

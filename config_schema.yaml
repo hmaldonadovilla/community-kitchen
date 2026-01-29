@@ -236,6 +236,8 @@ components:
 
                 Placeholder helpers:
                 - `{{DEFAULT(KEY, "fallback")}}`: use a fallback value when the referenced placeholder is empty.
+                - Line-item data source columns can be referenced via `{{GROUP.FIELD.COLUMN_ID}}` or `{{GROUP.SUBGROUP.FIELD.COLUMN_ID}}`.
+                - `GROUP_TABLE` supports nested subgroup paths, e.g. `{{GROUP_TABLE(PARENT.SUBGROUP.FIELD)}}`.
             templateId:
               $ref: '#/components/schemas/TemplateIdMap'
               description: Google Drive file id config (string, language map, or `cases` selector) for the Markdown template.
@@ -784,7 +786,7 @@ components:
             - Typically omitted for the top-level `lineItemConfig` because the parent question’s `id` is used as the group key.
         label:
           $ref: '#/components/schemas/LocalizedString'
-          description: Optional localized label rendered as the subgroup title; falls back to `id` when omitted.
+          description: Optional label/template for this value (supports {{value}} placeholder).
         ui:
           $ref: '#/components/schemas/LineItemGroupUiConfig'
           description: Optional UI settings for how line item rows are rendered (e.g., progressive disclosure).
@@ -809,6 +811,10 @@ components:
             - selectorOverlay: use the section selector as a searchable multi-select list for the anchor CHOICE field (no separate Add button). Search indexes include extra columns from `optionsRef` / data sources.
             - auto: automatically add/recompute rows when the anchor field's `optionFilter.dependsOn` fields are filled (one row per allowed anchor option). Auto-generated rows are overwritten when dependencies change, while manual rows are preserved.
             - inline: default; show a simple "Add line" button and create an empty row per click.
+        addOverlay:
+          $ref: '#/components/schemas/LineItemAddOverlayConfig'
+          description: |
+            Optional copy overrides for the multi-select add overlay (used when `addMode: "overlay"`).
         sectionSelector:
           $ref: '#/components/schemas/LineItemSelectorConfig'
           description: Optional selector rendered above the line items to scope filters/validation rules (options can come from a REF tab).
@@ -928,6 +934,13 @@ components:
             - When `true`, always use the searchable control (even for smaller lists)
             - When `false`, always use the native select (no search)
             - When omitted, the UI enables it automatically only for large option sets
+        overlayOpenActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemOverlayOpenActionConfig'
+          description: |
+            Optional field-driven overlay open actions. When configured, the field can render as a button
+            (after `when` matches) to open a line-item group overlay with optional row filters + UI overrides.
 
     ParagraphDisclaimerConfig:
       type: object
@@ -1042,9 +1055,9 @@ components:
               - type: string
               - type: number
           description: |
-            Optional per-column widths for table mode. Keys should match field ids, plus `__remove`
-            to target the remove button column. Values can be CSS widths (e.g., "50%", "120px")
-            or numbers (treated as percent).
+            Optional per-column widths for table mode. Keys should match field ids, plus action keys:
+            `__remove`, `__view`, `__edit` (action columns) and `_remove`, `_view`, `_edit` (overlay header aliases).
+            Values can be CSS widths (e.g., "50%", "120px") or numbers (treated as percent).
         nonMatchWarningMode:
           type: string
           enum: [descriptive, validation, both]
@@ -1065,6 +1078,11 @@ components:
             and the main form shows a compact "Open" card instead of rendering the full table inline.
 
             Default: false (render inline).
+        overlayDetail:
+          $ref: '#/components/schemas/LineItemOverlayDetailConfig'
+          description: |
+            Optional header/body overlay layout for full-page line item group overlays.
+            Requires `openInOverlay: true` to take effect.
         choiceSearchEnabled:
           type: boolean
           description: |
@@ -1077,7 +1095,7 @@ components:
         showItemPill:
           type: boolean
           description: |
-            Controls whether the "N items" pill is shown in the line item group header.
+            Controls whether the items pill is shown in the line item group header.
             Default: true.
         addButtonPlacement:
           type: string
@@ -1135,6 +1153,234 @@ components:
         needsAttentionMessage:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional localized helper shown when this line item group or subgroup needs attention.
+
+    LineItemOverlayDetailConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: When true, enable header/body overlay layout for this group.
+        header:
+          $ref: '#/components/schemas/LineItemOverlayDetailHeaderConfig'
+        body:
+          $ref: '#/components/schemas/LineItemOverlayDetailBodyConfig'
+        rowActions:
+          $ref: '#/components/schemas/LineItemOverlayDetailRowActionsConfig'
+      additionalProperties: false
+
+    LineItemOverlayDetailHeaderConfig:
+      type: object
+      properties:
+        tableColumns:
+          type: array
+          items:
+            type: string
+          description: Optional ordered list of field ids to render as columns in the header table.
+        tableColumnWidths:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+          description: |
+            Optional per-column widths for the header table. Keys should match field ids plus action keys:
+            `__view`, `__edit`, `__remove` (and `_view`, `_edit`, `_remove` aliases).
+        addButtonPlacement:
+          type: string
+          enum: [top, bottom, both, hidden]
+          description: Controls where the Add button is shown for header rows.
+      additionalProperties: false
+
+    LineItemOverlayDetailBodyConfig:
+      type: object
+      required: [subGroupId]
+      properties:
+        subGroupId:
+          type: string
+          description: Subgroup id to render in the overlay body section.
+        edit:
+          $ref: '#/components/schemas/LineItemOverlayDetailBodyEditConfig'
+        view:
+          $ref: '#/components/schemas/LineItemOverlayDetailBodyViewConfig'
+      additionalProperties: false
+
+    LineItemOverlayDetailBodyEditConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [table]
+          description: Rendering mode for body edit view (table only).
+        tableColumns:
+          type: array
+          items:
+            type: string
+        tableColumnWidths:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+      additionalProperties: false
+
+    LineItemOverlayDetailBodyViewConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [html]
+          description: Rendering mode for body view (html template).
+        templateId:
+          $ref: '#/components/schemas/TemplateIdMap'
+        hideTabTargets:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of tab targets to hide in HTML templates that use `data-tab-target` and `data-tab-panel`.
+            For example: ["instructions"] hides the Instructions tab/panel.
+      additionalProperties: false
+
+    LineItemOverlayDetailRowActionsConfig:
+      type: object
+      properties:
+        viewLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        editLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        viewPlacement:
+          type: string
+          enum: [header, body, hidden]
+          description: Where the View action is rendered (defaults to header).
+        editPlacement:
+          type: string
+          enum: [header, body, hidden]
+          description: Where the Edit action is rendered (defaults to header).
+      additionalProperties: false
+
+    LineItemOverlayRowFilter:
+      type: object
+      properties:
+        includeWhen:
+          $ref: '#/components/schemas/WhenClause'
+        excludeWhen:
+          $ref: '#/components/schemas/WhenClause'
+      additionalProperties: false
+
+    LineItemGroupConfigOverride:
+      type: object
+      description: |
+        Optional override for a line-item group's configuration when opening an overlay via a field action.
+        Any omitted fields fall back to the base group configuration.
+      properties:
+        id:
+          type: string
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+        ui:
+          $ref: '#/components/schemas/LineItemGroupUiConfig'
+        minRows:
+          type: integer
+        maxRows:
+          type: integer
+        addButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        anchorFieldId:
+          type: string
+        addMode:
+          type: string
+          enum: [overlay, selectorOverlay, inline, auto]
+        addOverlay:
+          $ref: '#/components/schemas/LineItemAddOverlayConfig'
+        sectionSelector:
+          $ref: '#/components/schemas/LineItemSelectorConfig'
+        dedupRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemDedupRule'
+        totals:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemTotalConfig'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemFieldConfig'
+        subGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemGroupConfig'
+      additionalProperties: false
+
+    LineItemOverlayOpenActionConfig:
+      type: object
+      description: |
+        Field-driven overlay opener configuration.
+        When overlay detail is enabled, completing all header fields auto-opens the detail panel (view if available; otherwise edit).
+      properties:
+        groupId:
+          type: string
+          description: Target line-item group id to open.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition to enable/activate this action.
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional button label override (defaults to the field label).
+        rowFilter:
+          $ref: '#/components/schemas/LineItemOverlayRowFilter'
+          description: Optional row filter applied to the overlay header rows.
+        groupOverride:
+          $ref: '#/components/schemas/LineItemGroupConfigOverride'
+          description: Optional override for the overlay view of this group.
+        hideInlineSubgroups:
+          type: boolean
+          description: When true, hide inline subgroups in the overlay body (header-only + body detail).
+        renderMode:
+          type: string
+          enum: [replace, inline]
+          description: |
+            Render mode for the field-triggered opener.
+            - replace: replace the field control with a button (default)
+            - inline: keep the control and show a separate button below
+        resetValue:
+          $ref: '#/components/schemas/DefaultValue'
+          description: |
+            Optional value to set on the source field when the trash/reset action is confirmed.
+            Use this to revert the field back to its original control by breaking the `when` condition.
+        hideTrashIcon:
+          type: boolean
+          description: |
+            When true, hide the trash/reset icon on the overlay opener button.
+        hideCloseButton:
+          type: boolean
+          description: When true, hide the close button in the overlay header.
+        closeButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional label override for the overlay close button.
+        closeConfirm:
+          $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+          description: Optional confirm dialog shown when closing the overlay.
+        flattenFields:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of line-item field ids to render inline in the parent view when the target group only allows one row.
+            Requires `maxRows: 1` on the target group (or `groupOverride`) to take effect.
+        flattenPlacement:
+          type: string
+          enum: [left, right, below]
+          description: |
+            Placement for `flattenFields` relative to the opener field.
+            - left: render flattened fields to the left of the opener
+            - right: render flattened fields to the right of the opener
+            - below: render flattened fields beneath the opener (default)
+        rowFlow:
+          $ref: '#/components/schemas/RowFlowConfig'
+          description: Optional row flow override for the overlay editor opened by this action.
+      required: [groupId]
+      additionalProperties: false
 
     RowDisclaimerRule:
       type: object
@@ -1389,6 +1635,42 @@ components:
           description: Optional dialog input fields that update other targets on confirm.
       required: [when]
 
+    DedupDialogConfig:
+      type: object
+      description: |
+        Optional copy overrides for the duplicate-record dialog.
+
+        The dialog message is composed as:
+        - `intro` (if provided)
+        - a list of dedup key labels + values
+        - `outro` (if provided)
+      properties:
+        title:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Dialog title shown when a duplicate record is detected.
+        intro:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Intro line shown before the list of dedup key values.
+        outro:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Outro line shown after the list of dedup key values.
+        changeLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Label for the action that clears the dedup fields.
+        openLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Label for the action that opens the existing record.
+
     DerivedValueConfig:
       oneOf:
         - type: object
@@ -1469,6 +1751,58 @@ components:
               type: boolean
               description: Informational flag to mark the field as system-managed/hidden in UI.
           description: Copy a field value from another field (typically for NUMBER defaults).
+        - type: object
+          required: [op, expression]
+          properties:
+            op:
+              type: string
+              enum: [calc]
+              description: Compute a numeric expression using fields and line-item aggregates.
+            expression:
+              type: string
+              description: |
+                Numeric expression using `{FIELD_ID}` tokens and `SUM(GROUP.FIELD)` aggregates.
+                Example: "{QTY} - SUM(MP_TYPE_LI.PREP_QTY)".
+            lineItemFilters:
+              type: array
+              description: Optional filters applied to specific SUM(...) aggregates.
+              items:
+                type: object
+                required: [ref, when]
+                properties:
+                  ref:
+                    type: string
+                    description: Aggregate reference matching the SUM(...) token (e.g., "MP_TYPE_LI.PREP_QTY").
+                  when:
+                    $ref: '#/components/schemas/WhenClause'
+                    description: Row-level filter applied to aggregate rows.
+            applyOn:
+              type: string
+              enum: [change, blur]
+              description: |
+                When to apply the derived value during editing.
+                - change: apply on every onChange (default for calc)
+                - blur: apply only after the user leaves the input
+            when:
+              type: string
+              enum: [always, empty]
+              description: |
+                When to apply the derived value.
+                - always: recompute on every change (default for calc)
+                - empty: only set when the target field is empty (allows user overrides)
+            precision:
+              type: integer
+              description: Optional decimal precision to round to.
+            min:
+              type: number
+              description: Optional minimum clamp for the computed result.
+            max:
+              type: number
+              description: Optional maximum clamp for the computed result.
+            hidden:
+              type: boolean
+              description: Informational flag to mark the field as system-managed/hidden in UI.
+          description: Compute numeric fields from other fields and line-item aggregates.
         - type: object
           required: [op, thresholds]
           properties:
@@ -1672,6 +2006,12 @@ components:
             Optional localized label for the **negative (cancel)** button in the submission confirmation dialog.
 
             When omitted, the UI falls back to localized system strings (e.g. "Cancel").
+        dedupDialog:
+          $ref: '#/components/schemas/DedupDialogConfig'
+          description: |
+            Optional copy overrides for the **duplicate record** dialog.
+
+            The dialog message automatically lists the dedup key labels + values between `intro` and `outro`.
         submitButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -1720,6 +2060,11 @@ components:
             - Generated rows inside `GROUP_TABLE` and `CONSOLIDATED_TABLE` outputs use alternating row background colors (zebra striping) automatically.
         pdfFolderId:
           type: string
+        pdfFileNameFieldId:
+          type: string
+          description: |
+            Optional field id used to name generated PDFs (and email attachments).
+            Can reference a question id or a meta field: `id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`.
         emailTemplateId:
           $ref: '#/components/schemas/TemplateIdMap'
         emailSubject:
@@ -1799,6 +2144,7 @@ components:
             Optional HTML template to fully replace the built-in Summary view UI.
 
             - When set, the Summary view renders this HTML template (Drive file) with placeholders.
+            - Line-item templates also expose system pseudo-fields `{{GROUP.__ROWINDEX}}` and `{{GROUP.__ROWID}}` in row contexts.
             - If rendering fails, the app falls back to the built-in Summary view.
         templateCacheTtlSeconds:
           type: number
@@ -1919,6 +2265,7 @@ components:
         - a stepper at the top of the edit view
         - step-scoped progressive disclosure (only show fields relevant to the active step)
         - configurable forward gating + auto-advance (defaults: `whenValid` + `onValid`)
+        - inline field-level validation feedback when a step is blocked (no step-level banner)
       properties:
         mode:
           type: string
@@ -1979,6 +2326,9 @@ components:
           $ref: '#/components/schemas/LocalizedString'
         helpText:
           $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional helper text displayed above the step content (guided mode).
+            Use this for step-wide guidance such as food safety confirmations or photo requirements.
         render:
           $ref: '#/components/schemas/StepsRenderDefaultsConfig'
         include:
@@ -2045,6 +2395,379 @@ components:
           $ref: '#/components/schemas/WhenClause'
         excludeWhen:
           $ref: '#/components/schemas/WhenClause'
+      additionalProperties: false
+
+    RowFlowConfig:
+      type: object
+      description: Step-scoped progressive row flow configuration for line groups.
+      properties:
+        mode:
+          type: string
+          enum: [progressive]
+        references:
+          type: object
+          description: Map of reference ids to child line item groups.
+          additionalProperties:
+            $ref: '#/components/schemas/RowFlowReferenceConfig'
+        output:
+          $ref: '#/components/schemas/RowFlowOutputConfig'
+        prompts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowPromptConfig'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowActionConfig'
+        overlayContextHeader:
+          $ref: '#/components/schemas/RowFlowOverlayContextHeaderConfig'
+      additionalProperties: false
+
+    RowFlowReferenceConfig:
+      type: object
+      properties:
+        groupId:
+          type: string
+          description: Target line item group id.
+        parentRef:
+          type: string
+          description: Optional parent reference id (for nested subgroups).
+        match:
+          type: string
+          enum: [first, any, all]
+          description: Row matching strategy when multiple rows are present.
+        rowFilter:
+          $ref: '#/components/schemas/StepRowFilterConfig'
+      required: [groupId]
+      additionalProperties: false
+
+    RowFlowOverlayContextHeaderConfig:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowOverlayContextFieldConfig'
+      required: [fields]
+      additionalProperties: false
+
+    RowFlowOverlayContextFieldConfig:
+      type: object
+      properties:
+        fieldRef:
+          type: string
+          description: Parent field id or reference field (e.g., "childRef.RECIPE").
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional label or template for this value. If the label contains `{{value}}`,
+            it will be replaced with the resolved value (e.g., "Leftovers for: {{value}}").
+      required: [fieldRef]
+      additionalProperties: false
+
+    RowFlowOutputConfig:
+      type: object
+      properties:
+        separator:
+          type: string
+          description: Output separator between segments (default " | ").
+        hideEmpty:
+          type: boolean
+          description: When true, empty segments are omitted from the output row.
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowOutputSegmentConfig'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowActionRef'
+        actionsLayout:
+          type: string
+          enum: [inline, below]
+          description: |
+            Layout for output actions relative to the segments.
+            - inline: render actions on the same row (default)
+            - below: render actions on a separate row
+        actionsScope:
+          type: string
+          enum: [row, group]
+          description: |
+            Scope for output actions.
+            - row: render actions per row (default)
+            - group: render actions once after all rows
+      additionalProperties: false
+
+    RowFlowOutputSegmentFormatConfig:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [text, list]
+        listDelimiter:
+          type: string
+      additionalProperties: false
+
+    RowFlowOutputSegmentConfig:
+      type: object
+      properties:
+        fieldRef:
+          type: string
+          description: Parent field id or reference field (e.g., "childRef.RECIPE").
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+        showWhen:
+          $ref: '#/components/schemas/WhenClause'
+        format:
+          $ref: '#/components/schemas/RowFlowOutputSegmentFormatConfig'
+        renderAs:
+          type: string
+          enum: [value, control]
+        editAction:
+          type: string
+          description: Action id to render as an edit icon next to this segment.
+        editActions:
+          type: array
+          items:
+            type: string
+          description: Action ids to render as icons next to this segment (renders alongside editAction when provided).
+      required: [fieldRef]
+      additionalProperties: false
+
+    RowFlowPromptInputConfig:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [field, selectorOverlay]
+        targetRef:
+          type: string
+          description: Reference id for selector overlay prompts.
+        groupOverride:
+          $ref: '#/components/schemas/LineItemGroupConfigOverride'
+          description: Optional line-item group override applied for selector overlay prompts.
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+        labelLayout:
+          type: string
+          enum: [stacked, inline, hidden]
+          description: |
+            Prompt label layout for field inputs.
+            - stacked: label above the control (default)
+            - inline: label rendered inline with the control
+            - hidden: hide the visual label (screen-reader label is preserved)
+        placeholder:
+          $ref: '#/components/schemas/LocalizedString'
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
+      additionalProperties: false
+
+    RowFlowPromptConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        fieldRef:
+          type: string
+          description: Field id or reference field id for the prompt.
+        input:
+          $ref: '#/components/schemas/RowFlowPromptInputConfig'
+        showWhen:
+          $ref: '#/components/schemas/WhenClause'
+        completedWhen:
+          $ref: '#/components/schemas/WhenClause'
+        hideWhenFilled:
+          type: boolean
+        keepVisibleWhenFilled:
+          type: boolean
+        onCompleteActions:
+          type: array
+          items:
+            type: string
+          description: |
+            Action ids to trigger once when the prompt transitions to complete.
+            Useful for auto-opening overlays after a selection.
+        actionsLayout:
+          type: string
+          enum: [below, inline]
+          description: |
+            Layout for prompt actions relative to the input control.
+            - below: render actions on a separate row (default)
+            - inline: render actions alongside the prompt control
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowActionRef'
+      required: [id]
+      additionalProperties: false
+
+    RowFlowActionRef:
+      type: object
+      properties:
+        id:
+          type: string
+        position:
+          type: string
+          enum: [start, end]
+        scope:
+          type: string
+          enum: [row, group]
+        showWhen:
+          $ref: '#/components/schemas/WhenClause'
+      required: [id]
+      additionalProperties: false
+
+    RowFlowActionConfirmConfig:
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+        body:
+          $ref: '#/components/schemas/LocalizedString'
+        confirmLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        cancelLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        showCancel:
+          type: boolean
+        kind:
+          type: string
+        timing:
+          type: string
+          enum: [before, after]
+          description: When to show the dialog relative to the action. `before` opens first (default); `after` opens after the action completes.
+      additionalProperties: false
+
+    RowFlowActionEffectConfig:
+      oneOf:
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [setValue]
+            fieldRef:
+              type: string
+            value:
+              $ref: '#/components/schemas/DefaultValue'
+          required: [type, fieldRef]
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [deleteLineItems]
+            targetRef:
+              type: string
+            groupId:
+              type: string
+            rowFilter:
+              $ref: '#/components/schemas/StepRowFilterConfig'
+          required: [type]
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [deleteRow]
+          required: [type]
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [addLineItems]
+            targetRef:
+              type: string
+            groupId:
+              type: string
+            preset:
+              type: object
+              description: Optional field/value map for new rows.
+            count:
+              type: integer
+              description: Number of rows to add (default 1).
+          required: [type]
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [closeOverlay]
+          required: [type]
+          additionalProperties: false
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [openOverlay]
+            targetRef:
+              type: string
+            groupId:
+              type: string
+            when:
+              $ref: '#/components/schemas/WhenClause'
+            rowFilter:
+              $ref: '#/components/schemas/StepRowFilterConfig'
+            label:
+              $ref: '#/components/schemas/LocalizedString'
+            groupOverride:
+              $ref: '#/components/schemas/LineItemGroupConfigOverride'
+            hideInlineSubgroups:
+              type: boolean
+            renderMode:
+              type: string
+              enum: [replace, inline]
+            resetValue:
+              $ref: '#/components/schemas/DefaultValue'
+            hideTrashIcon:
+              type: boolean
+            hideCloseButton:
+              type: boolean
+            closeButtonLabel:
+              $ref: '#/components/schemas/LocalizedString'
+            closeConfirm:
+              $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+            flattenFields:
+              type: array
+              items:
+                type: string
+            flattenPlacement:
+              type: string
+              enum: [left, right, below]
+            rowFlow:
+              $ref: '#/components/schemas/RowFlowConfig'
+            overlayContextHeader:
+              $ref: '#/components/schemas/RowFlowOverlayContextHeaderConfig'
+            overlayHelperText:
+              $ref: '#/components/schemas/RowFlowOverlayContextHeaderConfig'
+          required: [type]
+          additionalProperties: false
+
+    RowFlowActionConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+        icon:
+          type: string
+          enum: [edit, remove, add, back]
+        variant:
+          type: string
+          enum: [button, icon]
+        tone:
+          type: string
+          enum: [primary, secondary]
+        showWhen:
+          $ref: '#/components/schemas/WhenClause'
+        confirm:
+          $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+        effects:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowActionEffectConfig'
+      required: [id]
       additionalProperties: false
 
     StepSubGroupTargetConfig:
@@ -2138,6 +2861,9 @@ components:
             How this line group should be rendered inside the step.
             - groupEditor: use the existing line item group editor UI
             - liftedRowFields: show selected nested row fields as top-level step content
+        rowFlow:
+          $ref: '#/components/schemas/RowFlowConfig'
+          description: Optional step-scoped row flow configuration for progressive input/output per row.
         fields:
           type: array
           items:
@@ -2983,11 +3709,12 @@ components:
             When set, auto-created rows will be tagged with `__ckSelectionEffectId = id` so rules can reference the originating effect.
         type:
           type: string
-          enum: [addLineItems, addLineItemsFromDataSource, deleteLineItems]
+          enum: [addLineItems, addLineItemsFromDataSource, deleteLineItems, setValue]
           description: |
             Effect type. `addLineItems` inserts rows with static presets.
             `addLineItemsFromDataSource` hydrates rows by looking up the selected value inside a data source row (supports JSON columns).
             `deleteLineItems` deletes previously-created child rows (typically the inverse of an `addLineItems` rule).
+            `setValue` updates a field value in the current row (when triggered inside a line item) or at the top level.
 
             **Option filter enforcement:** When an effect creates rows (either via `preset` or via a data source),
             the target line-item/subgroup field `optionFilter` rules are treated as allowlists. Any generated row
@@ -2995,7 +3722,35 @@ components:
             in the current context is skipped (useful for filtering out disallowed ingredient rows like “Salt”).
         groupId:
           type: string
-          description: Target LINE_ITEM_GROUP id where rows are added.
+          description: Target LINE_ITEM_GROUP id where rows are added/removed (required for add/delete effects).
+        fieldId:
+          type: string
+          description: Target field id for `setValue` effects (uses the current row when triggered inside line items).
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: array
+              items:
+                type: string
+            - type: "null"
+          description: |
+            Value to set for `setValue` effects. Supports reference strings:
+            - `$row.FIELD_ID`: copy from the originating line-item row (when the effect is triggered inside a line item)
+            - `$top.FIELD_ID`: copy from the top-level record values
+        targetPath:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: |
+            Optional subgroup path for nested targets (dot-delimited string or array of subgroup ids).
+            When provided, this path is resolved relative to the triggering row for true nesting.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition that must match for the effect to run.
         preset:
           type: object
           additionalProperties:
@@ -3087,6 +3842,10 @@ components:
         notEmpty:
           type: boolean
           description: If true, condition matches when the field has any value other than empty/blank/null. If false, condition matches when the field is empty.
+        isEmpty:
+          type: boolean
+          description: |
+            Alias for `notEmpty: false`. If true, condition matches when the field is empty; if false, matches when non-empty.
 
     LineItemWhenClause:
       type: object
@@ -3101,7 +3860,16 @@ components:
               description: Line item group question id whose rows should be evaluated.
             subGroupId:
               type: string
-              description: Optional subgroup id to evaluate (scans all parent rows).
+              description: Optional subgroup id to evaluate (scans all parent rows). Prefer `subGroupPath` for deep nesting.
+            subGroupPath:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+              description: |
+                Optional subgroup path to evaluate (dot-delimited string or array of subgroup ids).
+                Supports wildcards: "*" for one level, "**" for any depth (including zero levels).
             match:
               type: string
               enum: [any, all]
@@ -3111,11 +3879,15 @@ components:
               description: Row-level condition applied within each row (evaluated against row/subgroup values only).
             parentWhen:
               $ref: '#/components/schemas/WhenClause'
-              description: Optional condition evaluated against the parent row (subgroup only).
+              description: Optional condition evaluated against parent or ancestor rows when subgroup matching is used.
             parentMatch:
               type: string
               enum: [any, all]
               description: Parent-row matching mode; defaults to `any`.
+            parentScope:
+              type: string
+              enum: [immediate, ancestor]
+              description: When parentWhen is provided, controls whether to match only the direct parent or any ancestor.
           additionalProperties: false
       additionalProperties: false
 
@@ -3124,8 +3896,8 @@ components:
         Condition clause used by visibility, validation, rowDisclaimer, and guided-step row filters.
 
         Supports both:
-        - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `notEmpty`
-        - Line-item conditions: `lineItems: { groupId, subGroupId?, when?, match? }`
+        - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `notEmpty`, `isEmpty`
+        - Line-item conditions: `lineItems: { groupId, subGroupId?, subGroupPath?, when?, match?, parentWhen?, parentScope?, parentMatch? }`
         - Compound conditions:
           - `all`: AND (every entry must match)
           - `any`: OR (at least one entry must match)
@@ -3177,6 +3949,24 @@ components:
           type: string
         labelNl:
           type: string
+        placeholder:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Placeholder text for the selector input.
+        placeholderEn:
+          type: string
+        placeholderFr:
+          type: string
+        placeholderNl:
+          type: string
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper text for selector-overlay search prompts.
+        helperTextEn:
+          type: string
+        helperTextFr:
+          type: string
+        helperTextNl:
+          type: string
         hideLabel:
           type: boolean
           description: When true, hide the selector label (placeholder only).
@@ -3212,6 +4002,19 @@ components:
             Optional filter for the selector options themselves. Supports `optionMap` or `optionMapRef` (including multi-column keys).
             Useful for cascading selectors where available sections depend on other fields.
 
+    LineItemAddOverlayConfig:
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional title for the multi-select add overlay.
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper text shown under the title in the multi-select add overlay.
+        placeholder:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional placeholder text for the overlay search input.
+
     LineItemTotalConfig:
       type: object
       properties:
@@ -3245,7 +4048,7 @@ components:
           oneOf:
             - type: string
             - $ref: '#/components/schemas/LocalizedString'
-          description: Optional localized error message for duplicate rows.
+          description: Optional localized error message for duplicate rows (supports {value} placeholder).
       required: [fields]
 
     ValidationRule:
@@ -3297,6 +4100,9 @@ components:
             maxFieldId:
               type: string
               description: Enforce target numeric value <= the numeric value of another field (skips if the referenced field is empty/non-numeric). If both `max` and `maxFieldId` are set, `max` wins.
+            integer:
+              type: boolean
+              description: When true, enforce the target numeric value is a whole number (no decimals). Skips empty values unless required is also set.
             allowed:
               type: array
               items:
@@ -3394,3 +4200,160 @@ components:
       description: A collection of question configurations defining a form.
       items:
         $ref: '#/components/schemas/QuestionConfig'
+
+    FormConfigExport:
+      type: object
+      description: |
+        Full form configuration export produced by fetchFormConfig(formKey) or by appending ?config=1 to the web app URL.
+        Includes dashboard-level settings, all questions (active + archived), dedup rules, and the computed WebFormDefinition.
+        Save these exports under docs/config/exports to bundle them into the Apps Script build.
+        When a bundled export exists, the app can use it to override sheet-based configuration reads.
+      properties:
+        formKey:
+          type: string
+          description: Resolved form key (config sheet name or form title).
+        generatedAt:
+          type: string
+          format: date-time
+          description: ISO timestamp when the export was generated.
+        form:
+          $ref: '#/components/schemas/FormDashboardConfig'
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionConfig'
+        dedupRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/DedupRule'
+        definition:
+          type: object
+          description: Computed WebFormDefinition for active questions.
+          additionalProperties: true
+        validationErrors:
+          type: array
+          items:
+            type: string
+      required:
+        - formKey
+        - generatedAt
+        - form
+        - questions
+        - dedupRules
+        - definition
+        - validationErrors
+
+    FormDashboardConfig:
+      type: object
+      description: Parsed Forms Dashboard row for the selected form (dashboard-level settings).
+      properties:
+        title:
+          type: string
+        configSheet:
+          type: string
+        destinationTab:
+          type: string
+        description:
+          type: string
+        formId:
+          type: string
+        appUrl:
+          type: string
+        rowIndex:
+          type: integer
+        templateCacheTtlSeconds:
+          type: integer
+        followupConfig:
+          type: object
+          description: Parsed follow-up configuration (templates, recipients, list view, status transitions, etc).
+          additionalProperties: true
+        listViewTitle:
+          $ref: '#/components/schemas/LocalizedString'
+        listViewDefaultSort:
+          type: object
+          additionalProperties: true
+        listViewPageSize:
+          type: integer
+        listViewPaginationControlsEnabled:
+          type: boolean
+        listViewHeaderSortEnabled:
+          type: boolean
+        listViewMetaColumns:
+          type: array
+          items:
+            type: string
+        listViewColumns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListViewColumnConfig'
+        listViewLegend:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListViewLegendItem'
+        listViewSearch:
+          type: object
+          description: List view search config (dashboard-level).
+          additionalProperties: true
+        listViewView:
+          type: object
+          description: List view mode config (dashboard-level).
+          additionalProperties: true
+        languages:
+          type: array
+          items:
+            type: string
+            enum: [EN, FR, NL]
+        defaultLanguage:
+          type: string
+          enum: [EN, FR, NL]
+        languageSelectorEnabled:
+          type: boolean
+        autoSave:
+          type: object
+          description: Draft autosave configuration (dashboard-level).
+          additionalProperties: true
+        summaryViewEnabled:
+          type: boolean
+        summaryHtmlTemplateId:
+          $ref: '#/components/schemas/TemplateIdMap'
+        copyCurrentRecordEnabled:
+          type: boolean
+        copyCurrentRecordDropFields:
+          type: array
+          items:
+            type: string
+        createButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        copyCurrentRecordLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        createNewRecordEnabled:
+          type: boolean
+        createRecordPresetButtonsEnabled:
+          type: boolean
+        actionBars:
+          $ref: '#/components/schemas/ActionBarsConfig'
+        appHeader:
+          $ref: '#/components/schemas/AppHeaderConfig'
+        groupBehavior:
+          $ref: '#/components/schemas/GroupBehaviorConfig'
+        submitValidation:
+          $ref: '#/components/schemas/SubmitValidationConfig'
+        steps:
+          $ref: '#/components/schemas/StepsConfig'
+        portraitOnly:
+          type: boolean
+        submissionConfirmationMessage:
+          $ref: '#/components/schemas/LocalizedString'
+        submissionConfirmationTitle:
+          $ref: '#/components/schemas/LocalizedString'
+        submissionConfirmationConfirmLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        submissionConfirmationCancelLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        dedupDialog:
+          $ref: '#/components/schemas/DedupDialogConfig'
+        submitButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        summaryButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+      additionalProperties: true

@@ -54,7 +54,8 @@ describe('WebFormService', () => {
       ['Q2', 'LINE_ITEM_GROUP', 'Items', 'Articles', 'Artikelen', true, '', '', '', 'Active', 'REF:LineItems_Q2', '', '', '', ''],
       ['Q3', 'FILE_UPLOAD', 'Receipt', 'Reçu', 'Bon', false, '', '', '', 'Active', '{"maxFiles":1,"allowedExtensions":["png"]}', '', '', '', ''],
       ['Q4', 'TEXT', 'Distributor', 'Distrib', 'Distributeur', true, '', '', '', 'Active', '{"listViewSort":{"direction":"desc","priority":1}}', '', '', 'TRUE', ''],
-      ['Q5', 'TEXT', 'Meal Number', 'Numéro de repas', 'Maaltijdnummer', false, '', '', '', 'Active', '{"autoIncrement":{"prefix":"MP-AA","padLength":6}}', '', '', '', '']
+      ['Q5', 'TEXT', 'Meal Number', 'Numéro de repas', 'Maaltijdnummer', false, '', '', '', 'Active', '{"autoIncrement":{"prefix":"MP-AA","padLength":6}}', '', '', '', ''],
+      ['Q6', 'TEXT', 'Archived Note', 'Note archive', 'Archiefnotitie', false, '', '', '', 'Archived', '', '', '', '', '']
     ];
     (configSheet as any).setMockData(configRows);
 
@@ -221,6 +222,18 @@ describe('WebFormService', () => {
     const result = service.triggerFollowupAction('Config: Delivery', 'REC-1', 'SEND_EMAIL');
     expect(result.success).toBe(true);
     expect((global as any).DocumentApp.openById).toHaveBeenCalledWith('email-template-acme');
+  });
+
+  test('fetchFormConfig returns full config export with archived questions', () => {
+    const exported = service.fetchFormConfig('Config: Delivery');
+    expect(exported.form.title).toBe('Delivery Form');
+    expect(exported.formKey).toBe('Config: Delivery');
+    expect(Array.isArray(exported.questions)).toBe(true);
+    expect(exported.questions.some(q => q.id === 'Q6' && q.status === 'Archived')).toBe(true);
+    expect(exported.definition.questions.some(q => q.id === 'Q6')).toBe(false);
+    expect(Array.isArray(exported.dedupRules)).toBe(true);
+    expect(Array.isArray(exported.validationErrors)).toBe(true);
+    expect(typeof exported.generatedAt).toBe('string');
   });
 
   test('auto increment text fields populate sequential values', () => {

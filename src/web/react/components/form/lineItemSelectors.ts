@@ -21,6 +21,20 @@ export const resolveSelectorPlaceholder = (selector: LineItemSelectorConfig | un
   return selector.placeholderEn || '';
 };
 
+export const resolveSelectorHelperText = (selector: LineItemSelectorConfig | undefined, language: LangCode): string => {
+  if (!selector) return '';
+  const raw = selector.helperText;
+  if (typeof raw === 'string') return raw;
+  if (raw && typeof raw === 'object') {
+    if (language === 'FR') return (raw as any).fr || (raw as any).en || '';
+    if (language === 'NL') return (raw as any).nl || (raw as any).en || '';
+    return (raw as any).en || '';
+  }
+  if (language === 'FR') return selector.helperTextFr || selector.helperTextEn || '';
+  if (language === 'NL') return selector.helperTextNl || selector.helperTextEn || '';
+  return selector.helperTextEn || '';
+};
+
 export const buildSelectorOptionSet = (selector?: LineItemSelectorConfig | null): OptionSet | null => {
   if (!selector) return null;
   const base = selector.options || [];
@@ -31,4 +45,3 @@ export const buildSelectorOptionSet = (selector?: LineItemSelectorConfig | null)
     raw: selector.optionsRaw
   };
 };
-

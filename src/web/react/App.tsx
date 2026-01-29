@@ -72,7 +72,8 @@ import {
   applyFieldChangeDialogTargets,
   evaluateFieldChangeDialogWhen,
   resolveFieldChangeDialogSource,
-  resolveTargetFieldConfig
+  resolveTargetFieldConfig,
+  type FieldChangeDialogTargetUpdate
 } from './app/fieldChangeDialog';
 import {
   buildInitialLineItems,
@@ -88,6 +89,7 @@ import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { upsertListCacheRowPure } from './app/listCache';
+import { resolveDedupDialogCopy } from './app/dedupDialog';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
@@ -96,6 +98,7 @@ import { SYSTEM_FONT_STACK } from '../../constants/typography';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { toUploadItems } from './components/form/utils';
+import { isEmptyValue } from './utils/values';
 import { clearFetchDataSourceCache } from '../data/dataSources';
 import { shouldHideField } from '../rules/visibility';
 import { getSystemFieldValue } from '../rules/systemFields';
@@ -397,7 +400,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         event.startsWith('steps.') ||
         event.startsWith('validation.navigate.') ||
         event.startsWith('optionFilter.') ||
-        event.startsWith('paragraphDisclaimer.');
+        event.startsWith('paragraphDisclaimer.') ||
+        event.startsWith('selectionEffects.');
       if ((!debugEnabled && !alwaysLog) || typeof console === 'undefined' || typeof console.info !== 'function') return;
       try {
         console.info('[ReactForm]', event, payload || {});
@@ -494,7 +498,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const inputs: FieldChangeDialogInputState[] = [];
       const values: Record<string, FieldValue> = {};
       const dialogInputs = pending.dialog?.inputs || [];
-      const selectionEffects = pending.selectionEffects || [];
+      const selectionEffects = (pending.selectionEffects || []).filter(
+        (effect): effect is SelectionEffect & { groupId: string } => !!effect?.groupId
+      );
       const context = { scope: pending.scope, groupId: pending.groupId };
 
       const resolveTargetValue = (target: any): FieldValue | undefined => {
@@ -625,8 +631,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const pending = fieldChangeActiveRef.current;
       if (!pending) return;
       const dialogCfg = pending.dialog;
-      const baseTargetScope = pending.scope === 'top' ? 'top' : 'row';
-      const updates = [
+      const baseTargetScope: 'top' | 'row' = pending.scope === 'top' ? 'top' : 'row';
+      const updates: FieldChangeDialogTargetUpdate[] = [
         {
           target: { scope: baseTargetScope, fieldId: pending.fieldId },
           value: pending.nextValue
@@ -744,6 +750,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           value: pending.nextValue,
           language,
           values: mapped.values,
+          lineItems: mapped.lineItems,
           setValues,
           setLineItems,
           logEvent,
@@ -853,6 +860,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         if (!autoSaveUserEditedRef.current) {
           autoSaveUserEditedRef.current = true;
         }
+        lastUserInteractionRef.current = Date.now();
 
         // Mark dirty immediately on user edits so navigation handlers can flush autosave
         // even if the debounced autosave effect hasn't run yet.
@@ -870,8 +878,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             fieldId,
             groupId: args.groupId
           });
+          const prevValue =
+            args.scope === 'line' && args.groupId && args.rowId
+              ? (lineItemsRef.current[args.groupId] || []).find(row => row.id === args.rowId)?.values?.[fieldId]
+              : valuesRef.current[fieldId];
+          const hasNonEmptyChange =
+            !isEmptyValue(prevValue as FieldValue) &&
+            !isEmptyValue(args.nextValue as FieldValue) &&
+            prevValue !== args.nextValue;
           const dialogCfg = source?.dialog;
-          if (dialogCfg?.when) {
+          if (dialogCfg?.when && hasNonEmptyChange) {
             const shouldTrigger = evaluateFieldChangeDialogWhen({
               when: dialogCfg.when,
               scope: args.scope,
@@ -960,29 +976,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             dedupConflictRef.current = null;
             setDedupConflict(null);
           }
-          if (args?.event === 'blur') {
-            // Cancel any pending/in-flight dedup check; the next render will schedule a new one.
-            if (dedupCheckTimerRef.current) {
-              globalThis.clearTimeout(dedupCheckTimerRef.current);
-              dedupCheckTimerRef.current = null;
-            }
-            dedupCheckSeqRef.current += 1; // invalidate in-flight responses
-            lastDedupCheckedSignatureRef.current = ''; // force re-check for next signature
-            dedupCheckRequestedRef.current = true;
-            dedupHoldRef.current = true;
-            autoSaveDirtyRef.current = true;
-            if (autoSaveTimerRef.current) {
-              globalThis.clearTimeout(autoSaveTimerRef.current);
-              autoSaveTimerRef.current = null;
-            }
-            setDraftSave({ phase: 'idle' });
-            logEvent('dedup.check.requested.blur', {
-              fieldId: fieldId || fieldPath || null,
-              fieldPath: fieldPath || fieldId || null
-            });
-            setDedupCheckRequestTick(prev => prev + 1);
-          } else if (!dedupHoldRef.current) {
-            // Keep autosave held while typing, but do not run dedup precheck yet.
+          if (!dedupHoldRef.current) {
+            // Hold autosave while dedup-key edits settle; precheck runs once keys are complete.
             dedupHoldRef.current = true;
             autoSaveDirtyRef.current = true;
             if (autoSaveTimerRef.current) {
@@ -992,7 +987,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
             setDraftSave({ phase: 'idle' });
             logEvent('autosave.hold.dedupKeyChange', {
               fieldId: fieldId || fieldPath || null,
-              fieldPath: fieldPath || fieldId || null
+              fieldPath: fieldPath || fieldId || null,
+              event: args?.event || null
             });
           }
         }
@@ -1163,7 +1159,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
     phase: 'idle'
   }));
-  const [dedupCheckRequestTick, setDedupCheckRequestTick] = useState(0);
 
   useEffect(() => {
     if (!orderedEntryEnabled) {
@@ -1176,6 +1171,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const autoSaveInFlightRef = useRef<boolean>(false);
   const autoSaveQueuedRef = useRef<boolean>(false);
   const autoSaveUserEditedRef = useRef<boolean>(false);
+  const lastUserInteractionRef = useRef<number>(0);
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   /**
    * Monotonic session counter used to ignore late async results (autosave, uploads, etc)
@@ -1219,7 +1215,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
    */
   const createFlowUserEditedRef = useRef<boolean>(false);
   const dedupHoldRef = useRef<boolean>(false);
-  const dedupCheckRequestedRef = useRef<boolean>(false);
   // Initialize immediately so the very first user interaction can be dedup-held (before effects run).
   const dedupKeyFieldIdsRef = useRef<Record<string, true>>(computeDedupKeyFieldIdMap((definition as any)?.dedupRules));
 
@@ -1348,16 +1343,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   // Arm autosave for create-flow ONLY after the user actually changes a field value.
   // (We intentionally do NOT arm autosave when values are populated by defaultValue/derivedValue/createRecordPreset.)
   useEffect(() => {
+    const isFormTarget = (target: HTMLElement | null): boolean => {
+      if (!target) return false;
+      if (target.closest('[data-field-path]')) return true;
+      const root = target.closest('.ck-form-sections') || target.closest('.webform-overlay') || target.closest('.form-card');
+      return Boolean(root);
+    };
+
     const onFieldChange = (e: Event) => {
       try {
         if (viewRef.current !== 'form') return;
-        if (!createFlowRef.current) return;
         const target = e.target as HTMLElement | null;
         if (!target) return;
         const tag = ((target as any).tagName || '').toString().toLowerCase();
         if (tag !== 'input' && tag !== 'select' && tag !== 'textarea') return;
         const fieldPath = (target.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
         if (!fieldPath) return;
+        lastUserInteractionRef.current = Date.now();
+        if (!createFlowRef.current) return;
         if (!createFlowUserEditedRef.current) {
           createFlowUserEditedRef.current = true;
           logEvent('autosave.armed.userEdit', { fieldPath });
@@ -1366,7 +1369,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           autoSaveUserEditedRef.current = true;
         }
 
-        // Dedup checks are triggered on blur; avoid holding autosave here.
+        // Dedup checks run once dedup keys are complete; no extra handling here.
+      } catch (_) {
+        // ignore
+      }
+    };
+
+    const onFieldInteract = (e: Event) => {
+      try {
+        if (viewRef.current !== 'form') return;
+        const target = e.target as HTMLElement | null;
+        if (!isFormTarget(target)) return;
+        lastUserInteractionRef.current = Date.now();
       } catch (_) {
         // ignore
       }
@@ -1374,9 +1388,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
     document.addEventListener('input', onFieldChange, true);
     document.addEventListener('change', onFieldChange, true);
+    document.addEventListener('pointerdown', onFieldInteract, true);
+    document.addEventListener('keydown', onFieldInteract, true);
     return () => {
       document.removeEventListener('input', onFieldChange, true);
       document.removeEventListener('change', onFieldChange, true);
+      document.removeEventListener('pointerdown', onFieldInteract, true);
+      document.removeEventListener('keydown', onFieldInteract, true);
     };
   }, [logEvent]);
 
@@ -2414,7 +2432,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   }, [debugEnabled]);
 
   const openExistingRecordFromDedup = useCallback(
-    async (args: { recordId: string; rowNumber?: number | null; source: string }): Promise<boolean> => {
+    async (args: { recordId: string; rowNumber?: number | null; source: string; view?: 'auto' | 'form' | 'summary' }): Promise<boolean> => {
       const id = (args.recordId || '').toString().trim();
       if (!id) return false;
       bumpRecordSession({ reason: 'dedup.openExisting', nextRecordId: id });
@@ -2423,6 +2441,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
           ? undefined
           : Number(rowNumberRaw);
+      const requestedView = (args.view || 'auto').toString().trim().toLowerCase() as 'auto' | 'form' | 'summary';
 
       // Clear transient status before navigation.
       setStatus(null);
@@ -2436,13 +2455,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         const statusRaw = ((cached.status || '') as any)?.toString?.() || '';
         const summaryEnabled = definition.summaryViewEnabled !== false;
         const resolved = resolveStatusAutoView(statusRaw, summaryEnabled);
-        setView(resolved.view);
+        const targetView =
+          requestedView === 'form' ? 'form' : requestedView === 'summary' ? (summaryEnabled ? 'summary' : 'form') : resolved.view;
+        setView(targetView);
         logEvent('dedup.precreate.openExisting.viewByStatus', {
           source: args.source,
           recordId: id,
           status: statusRaw || null,
           statusKey: resolved.statusKey,
-          nextView: resolved.view
+          nextView: targetView,
+          requestedView
         });
         logEvent('dedup.precreate.openExisting.cached', { source: args.source, recordId: id });
         return true;
@@ -2456,13 +2478,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const statusRaw = ((selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
       const summaryEnabled = definition.summaryViewEnabled !== false;
       const resolved = resolveStatusAutoView(statusRaw, summaryEnabled);
-      setView(resolved.view);
+      const targetView =
+        requestedView === 'form' ? 'form' : requestedView === 'summary' ? (summaryEnabled ? 'summary' : 'form') : resolved.view;
+      setView(targetView);
       logEvent('dedup.precreate.openExisting.viewByStatus', {
         source: args.source,
         recordId: id,
         status: statusRaw || null,
         statusKey: resolved.statusKey,
-        nextView: resolved.view
+        nextView: targetView,
+        requestedView
       });
       logEvent('dedup.precreate.openExisting.ok', { source: args.source, recordId: id, rowNumber: rowNumber ?? null });
       return true;
@@ -2766,7 +2791,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     };
     const visibilityCtx = {
       getValue: (fieldId: string) => resolveButtonVisibilityValue(fieldId),
-      getLineItems: (groupId: string) => lineItems[groupId] || []
+      getLineItems: (groupId: string) => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
     } as any;
     return definition.questions
       .map((q, idx) => ({ q, idx }))
@@ -3571,6 +3597,38 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     (fieldIdRaw: string) => {
       const fieldId = (fieldIdRaw || '').toString().trim();
       if (!fieldId) return;
+
+      if (fieldId.startsWith('urls:')) {
+        const payload = fieldId.slice(5);
+        const items = (() => {
+          if (!payload) return [];
+          try {
+            const decoded = decodeURIComponent(payload);
+            const parsed = JSON.parse(decoded);
+            if (Array.isArray(parsed)) {
+              return parsed.map(item => (item == null ? '' : item.toString())).filter(Boolean);
+            }
+          } catch (_) {
+            // fall back to pipe-separated payloads
+            try {
+              const decoded = decodeURIComponent(payload);
+              return decoded
+                .split('|')
+                .map(part => (part || '').toString().trim())
+                .filter(Boolean);
+            } catch (_) {
+              return [];
+            }
+          }
+          return [];
+        })();
+        if (!items.length) return;
+        const title = tSystem('files.title', languageRef.current, 'Photos');
+        setReadOnlyFilesOverlay({ open: true, fieldId, title, items, uploadConfig: undefined });
+        logEvent('filesOverlay.readOnly.open.inline', { fieldId: 'urls', count: items.length });
+        return;
+      }
+
       const q = definition.questions.find(qq => qq && qq.type === 'FILE_UPLOAD' && qq.id === fieldId) as any;
       if (!q) {
         logEvent('filesOverlay.readOnly.unknownField', { fieldId });
@@ -3801,16 +3859,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     dedupSignatureRef.current = dedupSignature;
   }, [dedupSignature]);
 
+  const dedupSignatureValue = (dedupSignature || '').toString();
+  const dedupNavigationBlocked =
+    view === 'form' &&
+    (dedupChecking ||
+      !!dedupConflict ||
+      Boolean(dedupSignatureValue && lastDedupCheckedSignatureRef.current !== dedupSignatureValue));
+
   // Dedup precheck (server-side) so we can block duplicate creation early (before autosave/submit).
   useEffect(() => {
     // Only relevant while editing.
-    if (view !== 'form') {
-      dedupCheckRequestedRef.current = false;
-      return;
-    }
-
-    if (!dedupCheckRequestedRef.current) return;
-    dedupCheckRequestedRef.current = false;
+    if (view !== 'form') return;
 
     const signature = (dedupSignature || '').toString();
     const existingRecordId = resolveExistingRecordId({
@@ -3830,6 +3889,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
 
     if (!signature) {
       lastDedupCheckedSignatureRef.current = '';
+      dedupCheckSeqRef.current += 1;
       dedupCheckingRef.current = false;
       dedupConflictRef.current = null;
       setDedupChecking(false);
@@ -3844,11 +3904,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     dedupConflictRef.current = null;
     setDedupChecking(true);
     setDedupConflict(null);
+    const seq = ++dedupCheckSeqRef.current;
     logEvent('dedup.check.start', { recordId: candidateId || null, signatureLen: signature.length });
 
     // Debounce to avoid spamming Apps Script while the user is still selecting values.
     dedupCheckTimerRef.current = globalThis.setTimeout(() => {
-      const seq = ++dedupCheckSeqRef.current;
       const payload = buildDraftPayload({
         definition,
         formKey,
@@ -3940,8 +4000,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     selectedRecordId,
     selectedRecordSnapshot,
     lastSubmissionMeta?.id,
-    view,
-    dedupCheckRequestTick
+    view
   ]);
 
   const performAutoSave: (reason: string) => Promise<void> = useCallback(
@@ -4415,6 +4474,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     if (isClosedRecord) {
       setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: tSystem('app.closedReadOnly', language, 'Closed (read-only)') }));
       return;
+    }
+    if (!autoSaveUserEditedRef.current) {
+      const now = Date.now();
+      const ageMs = now - (lastUserInteractionRef.current || 0);
+      if (lastUserInteractionRef.current > 0 && ageMs <= 3000) {
+        autoSaveUserEditedRef.current = true;
+        if (createFlowRef.current && !createFlowUserEditedRef.current) {
+          createFlowUserEditedRef.current = true;
+          logEvent('autosave.armed.interactionFallback', { ageMs });
+        }
+      }
     }
     // In create-flow, do not autosave until the user actually changes a field value.
     if (createFlowRef.current && !createFlowUserEditedRef.current) return;
@@ -5010,6 +5080,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       value,
       language,
       values,
+      lineItems,
       setValues,
       setLineItems,
       logEvent,
@@ -5772,8 +5843,223 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     );
   }, [autoSaveEnabled, draftSave.message, draftSave.phase, isClosedRecord, language, view]);
 
+  const dedupDialogConflict = useMemo(() => {
+    const conflict = (dedupConflict || dedupNotice) as any;
+    if (!conflict || !conflict.existingRecordId) return null;
+    return conflict as DedupConflictInfo;
+  }, [dedupConflict, dedupNotice]);
+
+  const dedupDialogDetails = useMemo(() => {
+    if (!dedupDialogConflict) return null;
+    const rules = Array.isArray((definition as any)?.dedupRules) ? ((definition as any).dedupRules as any[]) : [];
+    const ruleId = (dedupDialogConflict.ruleId || '').toString().trim();
+    const rule = rules.find(entry => (entry?.id || '').toString().trim() === ruleId);
+    const ruleKeys = Array.isArray(rule?.keys)
+      ? rule.keys.map((key: any) => (key ?? '').toString().trim()).filter(Boolean)
+      : [];
+    const fallbackKeys = (() => {
+      const keys = Object.keys(dedupKeyFieldIdMap || {});
+      const list: string[] = [];
+      const seen = new Set<string>();
+      keys.forEach(key => {
+        const trimmed = (key || '').toString().trim();
+        if (!trimmed) return;
+        const lower = trimmed.toLowerCase();
+        if (seen.has(lower)) return;
+        seen.add(lower);
+        list.push(trimmed);
+      });
+      return list;
+    })();
+    const keys = ruleKeys.length ? ruleKeys : fallbackKeys;
+    const questions = Array.isArray(definition?.questions) ? definition.questions : [];
+    type DedupDialogItem = { fieldId: string; label: string; value: string; fieldType?: string };
+    const rawItems: DedupDialogItem[] = keys.map((key: string) => {
+      const keyLower = key.toLowerCase();
+      const question = questions.find(entry => {
+        const id = (entry?.id || '').toString();
+        return id === key || id.toLowerCase() === keyLower;
+      });
+      const fieldId = (question?.id || key).toString();
+      const label = question ? resolveLabel(question, language) : key;
+      const optionSet = question ? optionState[optionKey(question.id)] || toOptionSet(question as any) : undefined;
+      const fieldType = question?.type;
+      const rawValue = (values as any)[fieldId];
+      const value = formatDisplayText(rawValue, { language, optionSet, fieldType });
+      return { fieldId, label: label.toString(), value, fieldType };
+    });
+    const seen = new Set<string>();
+    const items = rawItems.filter((item: DedupDialogItem) => {
+      const lower = item.fieldId.toLowerCase();
+      if (seen.has(lower)) return false;
+      seen.add(lower);
+      return true;
+    });
+    const priority = (item: DedupDialogItem) => {
+      if ((item.fieldType || '').toString().toUpperCase() === 'DATE') return 2;
+      const labelLower = item.label.toLowerCase();
+      if (labelLower.includes('customer')) return 0;
+      if (labelLower.includes('service')) return 1;
+      if (labelLower.includes('date')) return 2;
+      return 3;
+    };
+    const ordered = [...items].sort((a, b) => {
+      const pa = priority(a);
+      const pb = priority(b);
+      if (pa !== pb) return pa - pb;
+      return 0;
+    });
+    return { keys: ordered.map(item => item.fieldId), items: ordered };
+  }, [dedupDialogConflict, dedupKeyFieldIdMap, definition, language, optionState, values]);
+
+  const dedupDialogCopy = useMemo(
+    () => resolveDedupDialogCopy(definition.dedupDialog, language),
+    [definition.dedupDialog, language]
+  );
+
+  const dedupDialogMessage = useMemo(() => {
+    if (!dedupDialogConflict) return '';
+    const items = dedupDialogDetails?.items || [];
+    const intro = dedupDialogCopy.intro.trim();
+    const outro = dedupDialogCopy.outro.trim();
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {intro ? <div>{intro}</div> : null}
+        {items.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {items.map(item => (
+              <div key={item.fieldId}>
+                {item.label}: {item.value}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {outro ? <div>{outro}</div> : null}
+      </div>
+    );
+  }, [dedupDialogConflict, dedupDialogCopy.intro, dedupDialogCopy.outro, dedupDialogDetails]);
+
+  const resetDedupState = useCallback(
+    (reason: string) => {
+      if (dedupCheckTimerRef.current) {
+        globalThis.clearTimeout(dedupCheckTimerRef.current);
+        dedupCheckTimerRef.current = null;
+      }
+      dedupCheckSeqRef.current += 1;
+      lastDedupCheckedSignatureRef.current = '';
+      dedupHoldRef.current = false;
+      dedupCheckingRef.current = false;
+      dedupConflictRef.current = null;
+      setDedupChecking(false);
+      setDedupConflict(null);
+      setDedupNotice(null);
+      autoSaveDirtyRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+      logEvent('dedup.state.reset', { reason });
+    },
+    [logEvent]
+  );
+
+  const handleDedupChangeFields = useCallback(() => {
+    const conflict = dedupDialogConflict;
+    if (!conflict) return;
+    const fallbackKeys = dedupDialogDetails?.keys || [];
+    const keys = fallbackKeys.length
+      ? fallbackKeys
+      : (() => {
+          const list: string[] = [];
+          const seen = new Set<string>();
+          Object.keys(dedupKeyFieldIdMap || {}).forEach(key => {
+            const trimmed = (key || '').toString().trim();
+            if (!trimmed) return;
+            const lower = trimmed.toLowerCase();
+            if (seen.has(lower)) return;
+            seen.add(lower);
+            list.push(trimmed);
+          });
+          return list;
+        })();
+    resetDedupState('dedup.dialog.changeFields');
+    if (keys.length) {
+      const baseValues = { ...(valuesRef.current || {}) };
+      keys.forEach(key => {
+        if (!key) return;
+        baseValues[key] = '';
+      });
+      const mapped = applyValueMapsToForm(definition, baseValues, lineItemsRef.current, {
+        mode: 'change',
+        lockedTopFields: keys
+      });
+      setValues(mapped.values);
+      setLineItems(mapped.lineItems);
+      valuesRef.current = mapped.values;
+      lineItemsRef.current = mapped.lineItems;
+      setErrors(prev => {
+        const next = { ...(prev || {}) };
+        keys.forEach(key => {
+          if (key && key in next) delete next[key];
+        });
+        return next;
+      });
+      autoSaveDirtyRef.current = true;
+      setDraftSave({ phase: 'dirty' });
+    }
+    setView('form');
+    logEvent('dedup.dialog.changeFields', {
+      ruleId: conflict.ruleId || null,
+      existingRecordId: conflict.existingRecordId || null,
+      clearedFields: keys
+    });
+  }, [
+    dedupDialogConflict,
+    dedupDialogDetails,
+    dedupKeyFieldIdMap,
+    definition,
+    logEvent,
+    resetDedupState,
+    setErrors,
+    setLineItems,
+    setValues,
+    setView
+  ]);
+
+  const handleDedupOpenExisting = useCallback(() => {
+    const conflict = dedupDialogConflict as any;
+    const id = (conflict?.existingRecordId || '').toString().trim();
+    if (!id) return;
+    const rowNumberRaw = conflict?.existingRowNumber;
+    const rowNumber =
+      rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
+        ? undefined
+        : Number(rowNumberRaw);
+    resetDedupState('dedup.dialog.openExisting');
+    logEvent('dedup.openExisting.click', { existingRecordId: id, source: 'dedupDialog' });
+    void openExistingRecordFromDedup({ recordId: id, rowNumber, source: 'dedupDialog', view: 'form' });
+  }, [dedupDialogConflict, logEvent, openExistingRecordFromDedup, resetDedupState]);
+
+  useEffect(() => {
+    if (!dedupDialogConflict) return;
+    const dialogCfg = definition.dedupDialog;
+    logEvent('dedup.dialog.open', {
+      ruleId: dedupDialogConflict.ruleId || null,
+      existingRecordId: dedupDialogConflict.existingRecordId || null,
+      existingRowNumber: dedupDialogConflict.existingRowNumber ?? null,
+      copyOverrides: {
+        title: Boolean(dialogCfg?.title),
+        intro: Boolean(dialogCfg?.intro),
+        outro: Boolean(dialogCfg?.outro),
+        changeLabel: Boolean(dialogCfg?.changeLabel),
+        openLabel: Boolean(dialogCfg?.openLabel)
+      }
+    });
+  }, [dedupDialogConflict, definition.dedupDialog, logEvent]);
+
   const dedupTopNotice =
-    view === 'form' && (!!dedupConflict || !!dedupNotice) ? (
+    view === 'form' && (!!dedupConflict || !!dedupNotice) && !dedupDialogConflict ? (
       <div
         role="status"
         aria-live="polite"
@@ -6008,7 +6294,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       : !formIsValid
     : false;
   const submitDisabledTooltip =
-    view === 'form' && orderedEntryEnabled && orderedSubmitDisabled && !dedupChecking && !dedupConflict
+    view === 'form' && orderedEntryEnabled && orderedSubmitDisabled && !dedupNavigationBlocked
       ? tSystem('actions.submitDisabledTooltip', language, 'Complete all required fields to activate.')
       : '';
 
@@ -6077,7 +6363,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
+        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
@@ -6147,6 +6433,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           onDiagnostic={logEvent}
           onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
+          dedupNavigationBlocked={dedupNavigationBlocked}
+          openConfirmDialog={customConfirm.openConfirm}
         />
       ) : null}
 
@@ -6163,6 +6451,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           recordLoadingId={recordLoadingId}
           currentRecord={currentRecord}
           onOpenFiles={openReadOnlyFilesOverlay}
+          onAction={handleCustomButton}
           onDiagnostic={logEvent}
         />
       )}
@@ -6208,6 +6497,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onCancel={fieldChangeDialog.cancel}
         onConfirm={fieldChangeDialog.confirm}
         zIndex={12015}
+      />
+
+      <ConfirmDialogOverlay
+        open={view === 'form' && !!dedupDialogConflict}
+        title={dedupDialogCopy.title}
+        message={dedupDialogMessage}
+        confirmLabel={dedupDialogCopy.confirmLabel}
+        cancelLabel={dedupDialogCopy.cancelLabel}
+        dismissOnBackdrop={false}
+        showCloseButton={false}
+        zIndex={12018}
+        onCancel={handleDedupChangeFields}
+        onConfirm={handleDedupOpenExisting}
       />
 
       <ConfirmDialogOverlay
@@ -6279,7 +6581,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupChecking || !!dedupConflict || orderedSubmitDisabled)}
+        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}

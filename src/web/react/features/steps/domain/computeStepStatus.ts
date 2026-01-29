@@ -2,21 +2,8 @@ import { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '
 import { shouldHideField, matchesWhenClause } from '../../../../rules/visibility';
 import { validateRules } from '../../../../rules/validation';
 import { LineItemState } from '../../../types';
-import { isEmptyValue } from '../../../utils/values';
-
-// Step completion should block when step-visible fields are "unset", even if not marked required in the base definition.
-// Important: this differs from `isEmptyValue` (which treats boolean false as empty).
-const isUnsetForStep = (value: FieldValue | undefined): boolean => {
-  if (value === undefined || value === null) return true;
-  if (typeof value === 'string') return value.trim().length === 0;
-  if (Array.isArray(value)) return value.length === 0;
-  try {
-    if (typeof FileList !== 'undefined' && value instanceof FileList) return value.length === 0;
-  } catch (_) {
-    // ignore
-  }
-  return false;
-};
+import { isEmptyValue, isUnsetForStep } from '../../../utils/values';
+import { isUploadValueComplete } from '../../../components/form/utils';
 
 export type GuidedStepStatus = {
   id: string;
@@ -89,7 +76,8 @@ export function computeGuidedStepsStatus(args: {
 
   const topCtx = {
     getValue: (fieldId: string) => (values as any)[fieldId],
-    getLineItems: (groupId: string) => (lineItems as any)[groupId] || []
+    getLineItems: (groupId: string) => (lineItems as any)[groupId] || [],
+    getLineItemKeys: () => Object.keys(lineItems || {})
   };
 
   const headerTargets: any[] = Array.isArray(stepsCfg.header?.include) ? stepsCfg.header!.include : [];
@@ -100,7 +88,21 @@ export function computeGuidedStepsStatus(args: {
     let missingComplete = 0;
     let missingValid = 0;
     const raw = (values as any)[q.id] as FieldValue | undefined;
-    if ((q as any).required) {
+    if (q.type === 'FILE_UPLOAD') {
+      const complete = isUploadValueComplete({
+        value: raw as any,
+        uploadConfig: (q as any).uploadConfig,
+        required: !!(q as any).required
+      });
+      if ((q as any).required) {
+        if (!complete) {
+          missingValid += 1;
+          missingComplete += 1;
+        }
+      } else if (!complete) {
+        missingComplete += 1;
+      }
+    } else if ((q as any).required) {
       // Preserve "required checkbox must be checked" semantics.
       if (isEmptyValue(raw as any)) {
         missingValid += 1;
@@ -208,7 +210,9 @@ export function computeGuidedStepsStatus(args: {
 
       const groupCtx = {
         getValue: (fieldId: string) => (values as any)[fieldId],
-        getLineValue: (_rowId: string, fieldId: string) => (rowValues as any)[fieldId]
+        getLineValue: (_rowId: string, fieldId: string) => (rowValues as any)[fieldId],
+        getLineItems: (groupId: string) => (lineItems as any)[groupId] || [],
+        getLineItemKeys: () => Object.keys(lineItems || {})
       };
 
       const getRowValue = (fieldId: string): FieldValue => {
@@ -379,7 +383,9 @@ export function computeGuidedStepsStatus(args: {
 
           const subCtx = {
             getValue: (fieldId: string) => (values as any)[fieldId],
-            getLineValue: (_rowId: string, fieldId: string) => (subRowValues as any)[fieldId]
+            getLineValue: (_rowId: string, fieldId: string) => (subRowValues as any)[fieldId],
+            getLineItems: (groupId: string) => (lineItems as any)[groupId] || [],
+            getLineItemKeys: () => Object.keys(lineItems || {})
           };
 
           const getSubValue = (fieldId: string): FieldValue => {
@@ -460,6 +466,22 @@ export function computeGuidedStepsStatus(args: {
       if (includedValidRowCount > 0 && !hasAnyValidRow) missingValid += 1;
     }
 
+    const groupRules = Array.isArray((q as any).validationRules) ? ((q as any).validationRules as any[]) : [];
+    if (groupRules.length) {
+      const errs = validateRules(groupRules as any, {
+        ...(topCtx as any),
+        language,
+        phase: 'submit',
+        isHidden: (fieldId: string) => {
+          if (fieldId === groupId) return groupHidden;
+          const target = questionById.get(fieldId);
+          if (!target) return false;
+          return shouldHideField(target.visibility, topCtx as any);
+        }
+      } as any);
+      errors += errs.length;
+    }
+
     return { missingComplete, missingValid, errors };
   };
 
@@ -526,4 +548,3 @@ export function computeGuidedStepsStatus(args: {
 
   return { steps, maxCompleteIndex, maxValidIndex };
 }
-

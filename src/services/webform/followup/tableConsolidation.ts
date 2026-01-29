@@ -1,4 +1,5 @@
 import { QuestionConfig, LineItemGroupConfig } from '../../../types';
+import type { DataSourceService } from '../dataSources';
 import { normalizeText, slugifyPlaceholder } from './utils';
 import { replaceLineItemPlaceholders } from './lineItemPlaceholders';
 import { resolveSubgroupKey } from './utils';
@@ -11,8 +12,10 @@ export const consolidateConsolidatedTableRows = (args: {
   group: QuestionConfig;
   subConfig: SubGroupConfig | undefined;
   targetSubGroupId: string;
+  dataSources?: DataSourceService;
+  language?: string;
 }): any[] => {
-  const { rows, placeholders, group, subConfig, targetSubGroupId } = args;
+  const { rows, placeholders, group, subConfig, targetSubGroupId, dataSources, language } = args;
   const source = rows || [];
   if (!source.length) return [];
   const normalizedGroupId = (group?.id || '').toString().toUpperCase();
@@ -59,7 +62,9 @@ export const consolidateConsolidatedTableRows = (args: {
       const key = normalizeText(
         replaceLineItemPlaceholders(keyTemplate, group, dataRow, {
           subGroup: subConfig,
-          subGroupToken: targetSubGroupId
+          subGroupToken: targetSubGroupId,
+          dataSources,
+          language
         })
       );
       if (!key) return;
@@ -114,7 +119,9 @@ export const consolidateConsolidatedTableRows = (args: {
       ? normalizeText(
           replaceLineItemPlaceholders(keyTemplate, group, dataRow, {
             subGroup: subConfig,
-            subGroupToken: targetSubGroupId
+            subGroupToken: targetSubGroupId,
+            dataSources,
+            language
           })
         )
       : 'ALL';
@@ -201,9 +208,11 @@ export const applyOrderBy = (args: {
       }
     } else if (segs.length >= 3) {
       const g = segs[0];
-      const s = segs[1];
-      const f = segs[2];
-      if (g === normalizedGroupId && subConfig && (s === subToken || s === slugifyPlaceholder(resolveSubgroupKey(subConfig as any) || ''))) {
+      const f = segs[segs.length - 1];
+      const s = segs.slice(1, -1).join('.');
+      const slugPath = slugifyPlaceholder(s);
+      const slugSub = slugifyPlaceholder(subToken || '');
+      if (g === normalizedGroupId && subConfig && (s === subToken || s === slugSub || slugPath === subToken)) {
         fieldToken = f;
         fieldCfg = resolveFieldCfg(fieldToken, 'sub');
       } else if (g === normalizedGroupId) {
