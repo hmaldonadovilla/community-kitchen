@@ -48,6 +48,6 @@ describe('WebFormService config override', () => {
     const ss = new MockSpreadsheet();
     const service = new WebFormService(ss as any);
     const def = service.buildDefinition('Config: Bundled');
-    expect(def.title).toBe('Bundled Definition');
+    expect(def.title).toBe('Bundled Form');
   });
 });

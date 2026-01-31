@@ -2,6 +2,7 @@ import { Dashboard } from '../../config/Dashboard';
 import { ConfigSheet } from '../../config/ConfigSheet';
 import {
   FormConfig,
+  DedupRule,
   QuestionConfig,
   WebFormDefinition,
   WebQuestionDefinition,
@@ -33,11 +34,21 @@ export class DefinitionBuilder {
 
   buildDefinition(formKey?: string): WebFormDefinition {
     const form = this.findForm(formKey);
-    const questions = ConfigSheet.getQuestions(this.ss, form.configSheet).filter(q => q.status === 'Active');
-    const languageSettings = this.resolveLanguageSettings(form, questions);
+    const questions = ConfigSheet.getQuestions(this.ss, form.configSheet);
+    const dedupRules = loadDedupRules(this.ss, form.configSheet);
+    return this.buildDefinitionFromConfig(form, questions, dedupRules);
+  }
+
+  buildDefinitionFromConfig(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    dedupRules?: DedupRule[]
+  ): WebFormDefinition {
+    const activeQuestions = (questions || []).filter(q => q.status === 'Active');
+    const languageSettings = this.resolveLanguageSettings(form, activeQuestions);
     const languages: Array<'EN' | 'FR' | 'NL'> = languageSettings.languages;
 
-    const webQuestions: WebQuestionDefinition[] = questions.map(q => ({
+    const webQuestions: WebQuestionDefinition[] = activeQuestions.map(q => ({
       id: q.id,
       type: q.type,
       label: {
@@ -97,6 +108,9 @@ export class DefinitionBuilder {
       listView.view = form.listViewView;
     }
 
+    const resolvedDedupRules =
+      dedupRules || (form.configSheet ? loadDedupRules(this.ss, form.configSheet) : []);
+
     return {
       title: form.title,
       description: form.description,
@@ -107,7 +121,7 @@ export class DefinitionBuilder {
       questions: webQuestions,
       dataSources: [],
       listView,
-      dedupRules: loadDedupRules(this.ss, form.configSheet),
+      dedupRules: resolvedDedupRules,
       startRoute: listView ? 'list' : 'form',
       followup: form.followupConfig,
       autoSave: form.autoSave,

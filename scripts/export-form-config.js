@@ -37,13 +37,13 @@ const parseEnvContent = content => {
   return out;
 };
 
-const loadEnvFile = envPath => {
+const loadEnvFile = (envPath, override = false) => {
   if (!envPath || !fs.existsSync(envPath)) return;
   try {
     const raw = fs.readFileSync(envPath, 'utf8');
     const parsed = parseEnvContent(raw);
     Object.entries(parsed).forEach(([key, value]) => {
-      if (process.env[key] === undefined) {
+      if (override || process.env[key] === undefined) {
         process.env[key] = value;
       }
     });
@@ -53,7 +53,26 @@ const loadEnvFile = envPath => {
   }
 };
 
+const normalizeEnvName = value => {
+  const raw = (value || '').toString().trim().toLowerCase();
+  if (!raw) return '';
+  if (raw === 'production') return 'prod';
+  return raw;
+};
+
+const resolveConfigEnv = () =>
+  normalizeEnvName(
+    readFlag('env') || readFlag('config-env') || process.env.CK_CONFIG_ENV || process.env.CK_ENV || process.env.DEPLOY_ENV
+  );
+
+const resolveDefaultExportDir = configEnv =>
+  configEnv ? path.join(root, 'docs', 'config', 'exports', configEnv) : path.join(root, 'docs', 'config', 'exports');
+
 loadEnvFile(path.join(root, '.env'));
+const configEnv = resolveConfigEnv();
+if (configEnv) {
+  loadEnvFile(path.join(root, `.env.${configEnv}`), true);
+}
 
 const slugify = value =>
   (value || '')
@@ -73,8 +92,8 @@ const buildRequestUrl = (appUrlValue, formKeyValue) => {
   return target;
 };
 
-const resolveOutputPath = (formKeyValue, outPathArg) => {
-  const defaultDir = path.join(root, 'docs', 'config', 'exports');
+const resolveOutputPath = (formKeyValue, outPathArg, configEnvValue) => {
+  const defaultDir = resolveDefaultExportDir(configEnvValue);
   if (outPathArg) {
     const outPathAbs = path.isAbsolute(outPathArg) ? outPathArg : path.join(root, outPathArg);
     if (outPathAbs.toLowerCase().endsWith('.json')) {
@@ -127,11 +146,12 @@ const main = async () => {
   const appUrl = readFlag('url') || process.env.CK_APP_URL || process.env.APP_SCRIPT_URL;
   const formKey = readFlag('form') || process.env.CK_FORM_KEY || '';
   const outArg = readFlag('out') || process.env.CK_EXPORT_OUT || '';
+  const activeEnv = resolveConfigEnv();
 
   if (!appUrl) {
     console.error('[export-form-config] Missing --url (or CK_APP_URL env var).');
     console.error(
-      'Usage: node scripts/export-form-config.js --url <appUrl> [--form "Config: My Form"] [--out docs/config/exports/my_form.json]'
+      'Usage: node scripts/export-form-config.js --url <appUrl> [--form "Config: My Form"] [--env staging] [--out docs/config/exports/staging/my_form.json]'
     );
     process.exit(1);
   }
@@ -141,11 +161,14 @@ const main = async () => {
     console.info('[export-form-config] Fetching', targetUrl.toString());
     const json = await requestJson(targetUrl);
     const resolvedFormKey = (json && json.formKey) || formKey || 'form_config';
-    const outPath = resolveOutputPath(resolvedFormKey, outArg);
+    const outPath = resolveOutputPath(resolvedFormKey, outArg, activeEnv);
     const pretty = JSON.stringify(json, null, 2);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, pretty, 'utf8');
     console.info('[export-form-config] Saved', pretty.length, 'bytes to', outPath);
+    if ((process.env.CK_EXPORT_EXIT || '1') !== '0') {
+      process.exit(0);
+    }
   } catch (err) {
     console.error('[export-form-config] Failed:', err && err.message ? err.message : err);
     process.exit(1);
@@ -156,4 +179,12 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { parseEnvContent, loadEnvFile, main };
+module.exports = {
+  parseEnvContent,
+  loadEnvFile,
+  normalizeEnvName,
+  resolveConfigEnv,
+  resolveDefaultExportDir,
+  resolveOutputPath,
+  main
+};

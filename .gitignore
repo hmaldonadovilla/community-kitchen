@@ -10,6 +10,10 @@ src/web/react/reactBundle.ts
 .clasprc.json
 .env
 .env.deploy
+.env.deploy.staging
+.env.deploy.prod
+.clasp.staging.json
+.clasp.prod.json
 
 .vscode/
 # Snyk Security Extension - AI Rules (auto-generated)

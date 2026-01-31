@@ -658,6 +658,10 @@ export interface DedupDialogConfig {
    */
   changeLabel?: LocalizedString;
   /**
+   * Label for the action that cancels the duplicate dialog (list view).
+   */
+  cancelLabel?: LocalizedString;
+  /**
    * Label for the action that opens the existing record.
    */
   openLabel?: LocalizedString;

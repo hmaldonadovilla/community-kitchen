@@ -1,7 +1,14 @@
 import { FollowupConfig, FormConfig, QuestionConfig, TemplateIdMap, WebFormSubmission } from '../../../types';
 import { DataSourceService } from '../dataSources';
 import { debugLog } from '../debug';
-import { renderDocCopyFromTemplate, resolveOutputFolder, resolveRecordFileLabel } from './docRenderer.copy';
+import {
+  exportPdfBlobFromDoc,
+  renderDocCopyFromTemplate,
+  resolveOutputTarget,
+  resolveRecordFileLabel,
+  resolveRootOutputTarget,
+  trashFileById
+} from './docRenderer.copy';
 import { exportDocFileToHtml } from './docRenderer.exportHtml';
 import { renderHtmlFromHtmlTemplate } from './htmlRenderer';
 import { buildMealProductionPdfPlaceholders } from './mealProductionPdfContent';
@@ -43,9 +50,9 @@ function renderHtmlPdfArtifactFromTemplate(args: {
     const recordLabel = resolveRecordFileLabel(form, record);
     const copyName = `${namePrefix || form.title || 'Form'} - ${recordLabel || 'Record'}`;
     pdfBlob.setName(`${copyName}.pdf`);
-    const folder = resolveOutputFolder(ss, folderId, form.followupConfig);
-    const pdfFile = folder.createFile(pdfBlob).setName(`${copyName}.pdf`);
-    return { success: true, url: pdfFile.getUrl(), fileId: pdfFile.getId(), blob: pdfBlob };
+    const outputTarget = resolveOutputTarget(ss, folderId, form.followupConfig);
+    const created = outputTarget.createFile(pdfBlob);
+    return { success: true, url: created.url, fileId: created.fileId, blob: pdfBlob };
   } catch (err) {
     debugLog('followup.htmlPdf.failed', { error: err ? err.toString() : 'unknown' });
     return { success: false, message: 'Failed to generate PDF from HTML template.' };
@@ -90,7 +97,7 @@ export const renderPdfArtifactFromTemplate = (args: {
     });
   }
   try {
-    const folder = resolveOutputFolder(ss, folderId, form.followupConfig);
+    const outputTarget = resolveOutputTarget(ss, folderId, form.followupConfig);
     const rendered = renderDocCopyFromTemplate({
       dataSources,
       form,
@@ -98,17 +105,17 @@ export const renderPdfArtifactFromTemplate = (args: {
       record,
       templateIdMap,
       namePrefix,
-      copyFolder: folder
+      outputTarget
     });
-    if (!rendered.success || !rendered.copy || !rendered.copyName) {
+    if (!rendered.success || !rendered.copyId || !rendered.copyName) {
       return { success: false, message: rendered.message || 'Failed to render template.' };
     }
-    const pdfBlob = rendered.copy.getAs('application/pdf');
+    const pdfBlob = exportPdfBlobFromDoc(rendered.copyId);
     const copyName = rendered.copyName;
     pdfBlob.setName(`${copyName}.pdf`);
-    const pdfFile = folder.createFile(pdfBlob).setName(`${copyName}.pdf`);
-    rendered.copy.setTrashed(true);
-    return { success: true, url: pdfFile.getUrl(), fileId: pdfFile.getId(), blob: pdfBlob };
+    const pdfFile = outputTarget.createFile(pdfBlob);
+    trashFileById(rendered.copyId);
+    return { success: true, url: pdfFile.url, fileId: pdfFile.fileId, blob: pdfBlob };
   } catch (err) {
     debugLog('followup.pdf.failed', { error: err ? err.toString() : 'unknown' });
     return { success: false, message: 'Failed to generate PDF.' };
@@ -139,6 +146,7 @@ export const renderPdfBytesFromTemplate = (args: {
 }): { success: boolean; message?: string; pdfBase64?: string; mimeType?: string; fileName?: string } => {
   const { dataSources, form, questions, record, templateIdMap, namePrefix } = args;
   try {
+    const outputTarget = resolveRootOutputTarget();
     const rendered = renderDocCopyFromTemplate({
       dataSources,
       form,
@@ -146,16 +154,16 @@ export const renderPdfBytesFromTemplate = (args: {
       record,
       templateIdMap,
       namePrefix: `${namePrefix || form.title || 'Form'} - Preview`,
-      copyFolder: DriveApp.getRootFolder()
+      outputTarget
     });
-    if (!rendered.success || !rendered.copy || !rendered.copyName) {
+    if (!rendered.success || !rendered.copyId || !rendered.copyName) {
       return { success: false, message: rendered.message || 'Failed to render template.' };
     }
-    const pdfBlob = rendered.copy.getAs('application/pdf');
+    const pdfBlob = exportPdfBlobFromDoc(rendered.copyId);
     const bytes = pdfBlob.getBytes();
     const pdfBase64 = Utilities.base64Encode(bytes);
     const fileName = `${rendered.copyName}.pdf`;
-    rendered.copy.setTrashed(true);
+    trashFileById(rendered.copyId);
     return { success: true, pdfBase64, mimeType: 'application/pdf', fileName };
   } catch (err) {
     debugLog('followup.pdfBytes.failed', { error: err ? err.toString() : 'unknown' });
@@ -175,7 +183,7 @@ export const renderDocPreviewFromTemplate = (args: {
 }): { success: boolean; message?: string; fileId?: string; previewUrl?: string } => {
   const { ss, dataSources, form, questions, record, templateIdMap, folderId, namePrefix } = args;
   try {
-    const folder = resolveOutputFolder(ss, folderId, form.followupConfig);
+    const outputTarget = resolveOutputTarget(ss, folderId, form.followupConfig);
     const rendered = renderDocCopyFromTemplate({
       dataSources,
       form,
@@ -183,12 +191,12 @@ export const renderDocPreviewFromTemplate = (args: {
       record,
       templateIdMap,
       namePrefix: `${namePrefix || form.title || 'Form'} - Preview`,
-      copyFolder: folder
+      outputTarget
     });
-    if (!rendered.success || !rendered.copy) {
+    if (!rendered.success || !rendered.copyId) {
       return { success: false, message: rendered.message || 'Failed to render template.' };
     }
-    const fileId = rendered.copy.getId();
+    const fileId = rendered.copyId;
     const previewUrl = `https://docs.google.com/document/d/${fileId}/preview`;
     return { success: true, fileId, previewUrl };
   } catch (err) {
@@ -206,6 +214,7 @@ export const renderHtmlFromTemplate = (args: {
   templateIdMap: TemplateIdMap;
   namePrefix?: string;
 }): { success: boolean; message?: string; html?: string } => {
+  const outputTarget = resolveRootOutputTarget();
   const rendered = renderDocCopyFromTemplate({
     dataSources: args.dataSources,
     form: args.form,
@@ -213,19 +222,19 @@ export const renderHtmlFromTemplate = (args: {
     record: args.record,
     templateIdMap: args.templateIdMap,
     namePrefix: args.namePrefix,
-    copyFolder: DriveApp.getRootFolder()
+    outputTarget
   });
-  if (!rendered.success || !rendered.copy) {
+  if (!rendered.success || !rendered.copyId) {
     return { success: false, message: rendered.message || 'Failed to render template.' };
   }
 
   try {
-    const html = exportDocFileToHtml(rendered.copy);
-    rendered.copy.setTrashed(true);
+    const html = exportDocFileToHtml(rendered.copyId);
+    trashFileById(rendered.copyId);
     return { success: true, html };
   } catch (err) {
     try {
-      rendered.copy.setTrashed(true);
+      if (rendered.copyId) trashFileById(rendered.copyId);
     } catch (_) {
       // ignore
     }

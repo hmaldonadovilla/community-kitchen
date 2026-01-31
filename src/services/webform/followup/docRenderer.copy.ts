@@ -1,6 +1,15 @@
 import { FollowupConfig, FormConfig, QuestionConfig, TemplateIdMap, WebFormSubmission } from '../../../types';
 import { DataSourceService } from '../dataSources';
 import { debugLog } from '../debug';
+import {
+  copyDriveApiFile,
+  createDriveApiFile,
+  exportDriveApiFile,
+  getDriveApiFile,
+  readDriveFileAsString,
+  resolveDriveApiFolderTarget,
+  trashDriveApiFile
+} from '../driveApi';
 import { addPlaceholderVariants, applyPlaceholders, escapeRegExp } from './utils';
 import { addConsolidatedPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
@@ -70,19 +79,21 @@ export const renderDocCopyFromTemplate = (args: {
   record: WebFormSubmission;
   templateIdMap: TemplateIdMap;
   namePrefix?: string;
-  copyFolder: GoogleAppsScript.Drive.Folder;
-}): { success: boolean; message?: string; copy?: GoogleAppsScript.Drive.File; copyName?: string } => {
-  const { dataSources, form, questions, record, templateIdMap, namePrefix, copyFolder } = args;
+  outputTarget: OutputTarget;
+}): { success: boolean; message?: string; copyId?: string; copyName?: string; resolvedBy?: 'DriveApp' | 'DriveAPI' } => {
+  const { dataSources, form, questions, record, templateIdMap, namePrefix, outputTarget } = args;
   const templateId = resolveTemplateId(templateIdMap, record);
   if (!templateId) {
     return { success: false, message: 'No template matched the record values/language.' };
   }
   try {
-    const templateFile = DriveApp.getFileById(templateId);
     const recordLabel = resolveRecordFileLabel(form, record);
     const copyName = `${namePrefix || form.title || 'Form'} - ${recordLabel || generateUuid()}`;
-    const copy = templateFile.makeCopy(copyName, copyFolder);
-    const doc = DocumentApp.openById(copy.getId());
+    const copyInfo = copyTemplateToFolder(templateId, copyName, outputTarget);
+    if (!copyInfo || !copyInfo.fileId) {
+      return { success: false, message: 'Failed to copy template.' };
+    }
+    const doc = DocumentApp.openById(copyInfo.fileId);
     const lineItemRows = collectLineItemRows(record, questions);
     const placeholders = buildPlaceholderMap({ record, questions, lineItemRows, dataSources });
     addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
@@ -147,49 +158,111 @@ export const renderDocCopyFromTemplate = (args: {
     linkifyUploadedFileUrls(doc, questions, record);
 
     doc.saveAndClose();
-    return { success: true, copy, copyName };
+    return { success: true, copyId: copyInfo.fileId, copyName, resolvedBy: copyInfo.resolvedBy };
   } catch (err) {
     debugLog('followup.renderDocCopy.failed', { error: err ? err.toString() : 'unknown' });
     return { success: false, message: 'Failed to render template.' };
   }
 };
 
-export const resolveOutputFolder = (
+export type OutputTarget = {
+  folderId: string;
+  folderName?: string | null;
+  resolvedBy: 'DriveApp' | 'DriveAPI';
+  folder?: GoogleAppsScript.Drive.Folder;
+  createFile: (blob: GoogleAppsScript.Base.Blob) => { fileId?: string; url?: string };
+};
+
+export const resolveOutputTarget = (
   ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
   folderId: string | undefined,
   followup: FollowupConfig | undefined
-): GoogleAppsScript.Drive.Folder => {
-  if (folderId) {
-    try {
-      return DriveApp.getFolderById(folderId);
-    } catch (_) {
-      // fall through to follow-up/default folder
-    }
+): OutputTarget => {
+  const explicitId = folderId ? folderId.toString().trim() : '';
+  if (explicitId) {
+    const target = resolveFolderTargetById(explicitId, 'followup.output.explicit');
+    if (target) return target;
   }
-  return resolveFollowupFolder(ss, followup || {});
-};
-
-const resolveFollowupFolder = (
-  ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
-  followup: FollowupConfig
-): GoogleAppsScript.Drive.Folder => {
-  if (followup.pdfFolderId) {
-    try {
-      return DriveApp.getFolderById(followup.pdfFolderId);
-    } catch (_) {
-      // fall through to default
-    }
+  const followupId = followup?.pdfFolderId ? followup.pdfFolderId.toString().trim() : '';
+  if (followupId) {
+    const target = resolveFolderTargetById(followupId, 'followup.output.config');
+    if (target) return target;
   }
   try {
     const file = DriveApp.getFileById(ss.getId());
     const parents = file.getParents();
     if (parents && parents.hasNext()) {
-      return parents.next();
+      const folder = parents.next();
+      return makeDriveAppTarget(folder);
     }
   } catch (_) {
-    // ignore
+    // DriveApp can fail on shared drives; fallback to Drive API
   }
-  return DriveApp.getRootFolder();
+  const meta = resolveDriveApiFolderTargetBySpreadsheet(ss);
+  if (meta) return makeDriveApiTarget(meta.folderId, meta.folderName || null);
+  throw new Error('Unable to resolve output folder. No parent folder was returned for the spreadsheet.');
+};
+
+export const resolveRootOutputTarget = (): OutputTarget => {
+  const folder = DriveApp.getRootFolder();
+  return makeDriveAppTarget(folder);
+};
+
+export const exportPdfBlobFromDoc = (fileId: string): GoogleAppsScript.Base.Blob => {
+  const id = (fileId || '').toString().trim();
+  if (!id) throw new Error('Missing file id.');
+  try {
+    return DriveApp.getFileById(id).getAs('application/pdf');
+  } catch (_) {
+    const blob = exportDriveApiFile(id, 'application/pdf');
+    if (!blob) throw new Error('Failed to export PDF.');
+    return blob;
+  }
+};
+
+export const trashFileById = (fileId: string): boolean => {
+  const id = (fileId || '').toString().trim();
+  if (!id) return false;
+  try {
+    DriveApp.getFileById(id).setTrashed(true);
+    return true;
+  } catch (_) {
+    return trashDriveApiFile(id);
+  }
+};
+
+export const readDriveTemplateRawWithFallback = (
+  templateId: string,
+  preferredExportMimeTypes: string[],
+  context?: string
+): { raw: string; mimeType?: string } | null => {
+  const id = (templateId || '').toString().trim();
+  if (!id) return null;
+  try {
+    const file = DriveApp.getFileById(id);
+    const mimeType = (file.getMimeType ? file.getMimeType() : '').toString();
+    let raw = '';
+    try {
+      raw = file.getBlob().getDataAsString();
+    } catch (_) {
+      // ignore; try other exports
+    }
+    if (!raw && mimeType === 'application/vnd.google-apps.document') {
+      for (const exportType of preferredExportMimeTypes) {
+        try {
+          raw = file.getAs(exportType).getDataAsString();
+        } catch (_) {
+          // ignore
+        }
+        if (raw) break;
+      }
+    }
+    if (raw && raw.trim()) return { raw, mimeType };
+  } catch (_) {
+    // fallback to Drive API below
+  }
+  const fallback = readDriveFileAsString(id, preferredExportMimeTypes, context || 'template.read');
+  return fallback || null;
 };
 
 const generateUuid = (): string => {
@@ -201,4 +274,83 @@ const generateUuid = (): string => {
     // ignore
   }
   return 'uuid-' + Math.random().toString(16).slice(2);
+};
+
+const resolveFolderTargetById = (folderId: string, context: string): OutputTarget | null => {
+  const id = (folderId || '').toString().trim();
+  if (!id) return null;
+  try {
+    const folder = DriveApp.getFolderById(id);
+    return makeDriveAppTarget(folder);
+  } catch (_) {
+    const apiTarget = resolveDriveApiFolderTarget(id, context);
+    if (apiTarget) return makeDriveApiTarget(apiTarget.folderId, apiTarget.folderName || null);
+  }
+  return null;
+};
+
+const resolveDriveApiFolderTargetBySpreadsheet = (
+  ss: GoogleAppsScript.Spreadsheet.Spreadsheet
+): { folderId: string; folderName?: string | null } | null => {
+  const meta = resolveDriveApiFolderTargetForFile(ss.getId());
+  return meta ? { folderId: meta.folderId, folderName: meta.folderName } : null;
+};
+
+const resolveDriveApiFolderTargetForFile = (
+  fileId: string
+): { folderId: string; folderName?: string | null } | null => {
+  const fileMeta = getDriveApiFile(fileId, 'followup.output.spreadsheet');
+  const parentId = fileMeta?.parents && fileMeta.parents.length ? fileMeta.parents[0].id : null;
+  if (!parentId) return null;
+  const parentMeta = resolveDriveApiFolderTarget(parentId, 'followup.output.parent');
+  return parentMeta ? { folderId: parentMeta.folderId, folderName: parentMeta.folderName || null } : null;
+};
+
+const makeDriveAppTarget = (folder: GoogleAppsScript.Drive.Folder): OutputTarget => {
+  return {
+    folderId: folder.getId(),
+    folderName: folder.getName(),
+    resolvedBy: 'DriveApp',
+    folder,
+    createFile: blob => {
+      const created = folder.createFile(blob);
+      return { fileId: created.getId(), url: created.getUrl() };
+    }
+  };
+};
+
+const makeDriveApiTarget = (folderId: string, folderName: string | null): OutputTarget => {
+  return {
+    folderId,
+    folderName,
+    resolvedBy: 'DriveAPI',
+    createFile: blob => {
+      const created = createDriveApiFile(blob, folderId);
+      if (!created) {
+        throw new Error('Drive API createFile failed.');
+      }
+      const url = (created as any).webViewLink || (created as any).alternateLink || '';
+      const fileId = created.id || '';
+      return { fileId: fileId || undefined, url: url || (fileId ? `https://drive.google.com/open?id=${fileId}` : '') };
+    }
+  };
+};
+
+const copyTemplateToFolder = (
+  templateId: string,
+  copyName: string,
+  outputTarget: OutputTarget
+): { fileId?: string; resolvedBy?: 'DriveApp' | 'DriveAPI' } | null => {
+  const id = (templateId || '').toString().trim();
+  if (!id) return null;
+  try {
+    const templateFile = DriveApp.getFileById(id);
+    const folder = outputTarget.folder || DriveApp.getFolderById(outputTarget.folderId);
+    const copy = templateFile.makeCopy(copyName, folder);
+    return { fileId: copy.getId(), resolvedBy: 'DriveApp' };
+  } catch (_) {
+    const apiCopy = copyDriveApiFile(id, copyName, outputTarget.folderId);
+    if (apiCopy && apiCopy.id) return { fileId: apiCopy.id, resolvedBy: 'DriveAPI' };
+  }
+  return null;
 };

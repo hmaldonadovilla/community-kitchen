@@ -6,6 +6,7 @@
  * - This module is safe in non-Apps Script environments (tests) where CacheService/DriveApp may be undefined.
  */
 
+import { readDriveFileAsString } from '../driveApi';
 import { getTemplateCacheEpoch } from './templateCacheEpoch';
 
 const CACHE_PREFIX = 'ck.mdTemplate.v1:'; // keep stable; epoch is appended dynamically
@@ -67,6 +68,7 @@ export const readMarkdownTemplateRawFromDrive = (
 ): { success: boolean; raw?: string; mimeType?: string; message?: string } => {
   const id = (templateId || '').toString().trim();
   if (!id) return { success: false, message: 'templateId is required.' };
+  let lastError = '';
   try {
     const file = DriveApp.getFileById(id);
     const mimeType = (file.getMimeType ? file.getMimeType() : '').toString();
@@ -88,9 +90,13 @@ export const readMarkdownTemplateRawFromDrive = (
     }
     return { success: true, raw, mimeType };
   } catch (err: any) {
-    const msg = (err?.message || err?.toString?.() || 'Failed to read template.').toString();
-    return { success: false, message: msg };
+    lastError = (err?.message || err?.toString?.() || 'Failed to read template.').toString();
   }
+  const fallback = readDriveFileAsString(id, ['text/plain'], 'markdown.template');
+  if (fallback && fallback.raw) {
+    return { success: true, raw: fallback.raw, mimeType: fallback.mimeType || 'driveApi' };
+  }
+  return { success: false, message: lastError || 'Failed to read template.' };
 };
 
 export const prefetchMarkdownTemplateIds = (
@@ -127,5 +133,4 @@ export const prefetchMarkdownTemplateIds = (
 
   return { requested, cacheHit, loaded, skipped, failed };
 };
-
 

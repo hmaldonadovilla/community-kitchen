@@ -21,12 +21,13 @@ import { ListingService } from './webform/listing';
 import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
 import { buildReactShellTemplate } from './webform/template';
+import { getDriveApiFile, trashDriveApiFile } from './webform/driveApi';
 import { loadDedupRules, computeDedupSignature } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
 import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
 import { ensureRecordIndexSheet } from './webform/recordIndex';
-import { getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
+import { getBundledConfigEnv, getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -67,6 +68,58 @@ export class WebFormService {
       .filter((form): form is FormConfig => !!form);
   }
 
+  private normalizeFormKey(value: any): string {
+    return value == null ? '' : value.toString().trim().toLowerCase();
+  }
+
+  private buildFormMatchKeys(form: FormConfig): string[] {
+    const keys = [
+      form?.configSheet,
+      form?.title,
+      (form as any)?.formId,
+      (form as any)?.appUrl
+    ]
+      .map(value => this.normalizeFormKey(value))
+      .filter(Boolean);
+    return Array.from(new Set(keys));
+  }
+
+  private mergeBundledForms(sheetForms: FormConfig[], bundledForms: FormConfig[]): FormConfig[] {
+    if (!bundledForms.length) return sheetForms;
+    if (!sheetForms.length) return bundledForms;
+
+    const bundledByKey = new Map<string, FormConfig>();
+    bundledForms.forEach(form => {
+      this.buildFormMatchKeys(form).forEach(key => {
+        if (!bundledByKey.has(key)) {
+          bundledByKey.set(key, form);
+        }
+      });
+    });
+
+    const usedBundled = new Set<FormConfig>();
+    const merged = sheetForms.map(form => {
+      const match = this.buildFormMatchKeys(form)
+        .map(key => bundledByKey.get(key))
+        .find(Boolean);
+      if (!match) return form;
+      usedBundled.add(match);
+      return {
+        ...form,
+        ...match,
+        rowIndex: form.rowIndex || match.rowIndex
+      };
+    });
+
+    bundledForms.forEach(form => {
+      if (!usedBundled.has(form)) {
+        merged.push(form);
+      }
+    });
+
+    return merged;
+  }
+
   private filterActiveQuestions(questions: QuestionConfig[]): QuestionConfig[] {
     return (Array.isArray(questions) ? questions : []).filter(q => q && q.status === 'Active');
   }
@@ -83,6 +136,11 @@ export class WebFormService {
     return { form: bundled.form, questions: this.filterActiveQuestions(bundled.questions) };
   }
 
+  private buildBundledDefinition(bundled: FormConfigExport): WebFormDefinition {
+    const activeQuestions = this.filterActiveQuestions(bundled.questions || []);
+    return this.definitionBuilder.buildDefinitionFromConfig(bundled.form, activeQuestions, bundled.dedupRules || []);
+  }
+
   private resolveDedupRules(formKey?: string, form?: FormConfig): DedupRule[] {
     const bundled = this.resolveBundledConfig(formKey || form?.configSheet || form?.title);
     if (bundled && Array.isArray(bundled.dedupRules)) return bundled.dedupRules;
@@ -92,21 +150,21 @@ export class WebFormService {
 
   public buildDefinition(formKey?: string): WebFormDefinition {
     const bundled = this.resolveBundledConfig(formKey);
-    if (bundled?.definition) {
-      debugLog('definition.bundle.hit', { requestedKey: formKey || null, formKey: bundled.formKey || null });
-      return bundled.definition;
+    if (bundled) {
+      const def = this.buildBundledDefinition(bundled);
+      debugLog('definition.bundle.built', {
+        requestedKey: formKey || null,
+        formKey: bundled.formKey || null,
+        questions: def.questions?.length || 0
+      });
+      return def;
     }
     const def = this.definitionBuilder.buildDefinition(formKey);
     debugLog('buildDefinition.formSelected', { requestedKey: formKey, formTitle: def.title });
     return def;
   }
 
-  private getFormsCached(): FormConfig[] {
-    const bundledForms = this.listBundledForms();
-    if (bundledForms.length) {
-      debugLog('forms.bundle.hit', { count: bundledForms.length });
-      return bundledForms;
-    }
+  private getSheetFormsCached(): FormConfig[] {
     const formsCacheKey = this.cacheManager.makeCacheKey('FORMS', ['ALL']);
     const startedAt = Date.now();
     try {
@@ -130,11 +188,29 @@ export class WebFormService {
     return forms;
   }
 
+  private getFormsCached(): FormConfig[] {
+    const bundledForms = this.listBundledForms();
+    const sheetForms = this.getSheetFormsCached();
+    if (!bundledForms.length) return sheetForms;
+    const merged = this.mergeBundledForms(sheetForms, bundledForms);
+    debugLog('forms.bundle.merge', {
+      bundled: bundledForms.length,
+      sheet: sheetForms.length,
+      merged: merged.length
+    });
+    return merged;
+  }
+
   private getOrBuildDefinition(formKey?: string): WebFormDefinition {
     const bundled = this.resolveBundledConfig(formKey);
-    if (bundled?.definition) {
-      debugLog('definition.bundle.hit', { requestedKey: formKey || null, formKey: bundled.formKey || null });
-      return bundled.definition;
+    if (bundled) {
+      const def = this.buildBundledDefinition(bundled);
+      debugLog('definition.bundle.built', {
+        requestedKey: formKey || null,
+        formKey: bundled.formKey || null,
+        questions: def.questions?.length || 0
+      });
+      return def;
     }
     const keyBase = (formKey || '').toString().trim() || '__DEFAULT__';
     const formCacheKey = this.cacheManager.makeCacheKey('DEF', [keyBase]);
@@ -165,9 +241,16 @@ export class WebFormService {
     return def;
   }
 
-  public fetchBootstrapContext(formKey?: string): { definition: WebFormDefinition; formKey: string; configSource?: string } {
+  public fetchBootstrapContext(formKey?: string): {
+    definition: WebFormDefinition;
+    formKey: string;
+    configSource?: string;
+    configEnv?: string;
+  } {
+    const configEnv = getBundledConfigEnv() || undefined;
     const bundled = this.resolveBundledConfig(formKey);
-    if (bundled?.definition) {
+    if (bundled) {
+      const def = this.buildBundledDefinition(bundled);
       const resolvedKey =
         (formKey || '').toString().trim() ||
         bundled.formKey ||
@@ -176,21 +259,28 @@ export class WebFormService {
         '__DEFAULT__';
       debugLog('definition.fetch', {
         formKey: resolvedKey,
-        questions: bundled.definition?.questions?.length || 0,
-        source: 'bundled'
+        questions: def.questions?.length || 0,
+        source: 'bundled',
+        configEnv: configEnv || null
       });
-      return { definition: bundled.definition, formKey: resolvedKey, configSource: 'bundled' };
+      return { definition: def, formKey: resolvedKey, configSource: 'bundled', configEnv };
     }
     const def = this.getOrBuildDefinition(formKey);
     const resolvedKey = (formKey || '').toString().trim() || def.title || '__DEFAULT__';
-    debugLog('definition.fetch', { formKey: resolvedKey, questions: def.questions?.length || 0, source: 'sheet' });
-    return { definition: def, formKey: resolvedKey, configSource: 'sheet' };
+    debugLog('definition.fetch', {
+      formKey: resolvedKey,
+      questions: def.questions?.length || 0,
+      source: 'sheet',
+      configEnv: configEnv || null
+    });
+    return { definition: def, formKey: resolvedKey, configSource: 'sheet', configEnv };
   }
 
   public fetchFormConfig(formKey?: string): FormConfigExport {
     const startedAt = Date.now();
     const bundled = this.resolveBundledConfig(formKey);
     if (bundled) {
+      const def = this.buildBundledDefinition(bundled);
       const resolvedKey =
         (formKey || '').toString().trim() ||
         bundled.formKey ||
@@ -207,7 +297,10 @@ export class WebFormService {
         source: 'bundled',
         elapsedMs: Date.now() - startedAt
       });
-      return bundled;
+      return {
+        ...bundled,
+        definition: def
+      };
     }
     const form = this.definitionBuilder.findForm(formKey);
     const resolvedKey = (formKey || '').toString().trim() || form.configSheet || form.title || '__DEFAULT__';
@@ -634,7 +727,9 @@ export class WebFormService {
         (f.getName ? f.getName() : '').toString();
         docOk += 1;
       } catch (_) {
-        docFailed += 1;
+        const apiMeta = getDriveApiFile(id, 'templates.prefetch.doc');
+        if (apiMeta) docOk += 1;
+        else docFailed += 1;
       }
     });
 
@@ -1154,9 +1249,12 @@ export class WebFormService {
     try {
       DriveApp.getFileById(fileId).setTrashed(true);
     } catch (err: any) {
-      const msg = (err?.message || err?.toString?.() || 'Failed to trash preview file.').toString();
-      debugLog('preview.trash.failed', { fileId, message: msg });
-      return { success: false, message: msg };
+      const trashed = trashDriveApiFile(fileId);
+      if (!trashed) {
+        const msg = (err?.message || err?.toString?.() || 'Failed to trash preview file.').toString();
+        debugLog('preview.trash.failed', { fileId, message: msg });
+        return { success: false, message: msg };
+      }
     }
     try {
       const remover = (cache as any).remove;
@@ -1177,8 +1275,9 @@ export class WebFormService {
       const urls = this.uploads.saveFiles(files, uploadConfig);
       return { success: true, urls: urls || '' };
     } catch (err: any) {
-      debugLog('uploadFiles.error', { message: err?.message || err?.toString?.() || 'unknown' });
-      return { success: false, urls: '', message: 'Failed to upload files.' };
+      const msg = (err?.message || err?.toString?.() || 'Failed to upload files.').toString();
+      debugLog('uploadFiles.error', { message: msg });
+      return { success: false, urls: '', message: msg };
     }
   }
 

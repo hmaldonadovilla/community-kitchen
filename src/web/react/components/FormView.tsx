@@ -537,6 +537,7 @@ interface FormViewProps {
    * FormView-specific behavior (e.g., validation navigation).
    */
   submitActionRef?: React.MutableRefObject<(() => void) | null>;
+  summarySubmitIntentRef?: React.MutableRefObject<boolean>;
   /**
    * Optional back navigation hook for guided steps.
    */
@@ -646,6 +647,7 @@ const FormView: React.FC<FormViewProps> = ({
   setLineItems,
   onSubmit,
   submitActionRef,
+  summarySubmitIntentRef,
   guidedBackActionRef,
   navigateToFieldRef,
   submitting,
@@ -1719,11 +1721,15 @@ const FormView: React.FC<FormViewProps> = ({
     if (!submitActionRef) return;
     submitActionRef.current = () => {
       if (submitting) return;
+      const forceFinalSubmit = summarySubmitIntentRef?.current === true;
+      if (summarySubmitIntentRef && summarySubmitIntentRef.current) {
+        summarySubmitIntentRef.current = false;
+      }
       const isGuidedFinalStep = guidedEnabled && guidedStepIds.length && activeGuidedStepIndex >= guidedStepIds.length - 1;
 
       // In guided steps, the bottom "Submit" action behaves like "Next" until the final step.
       // It should validate only the current step's visible targets (not the full form).
-      if (guidedEnabled && guidedStepsCfg && guidedStepIds.length && !isGuidedFinalStep) {
+      if (guidedEnabled && guidedStepsCfg && guidedStepIds.length && !isGuidedFinalStep && !forceFinalSubmit) {
         const steps = guidedStepsCfg.items || [];
         const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
         const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
@@ -1861,6 +1867,7 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic,
     onSubmit,
     selectGuidedStep,
+    summarySubmitIntentRef,
     submitActionRef,
     submitting,
     values
@@ -2097,8 +2104,14 @@ const FormView: React.FC<FormViewProps> = ({
       const lineChanged = !lineItemsEqual(currentLineItems, nextLineItems);
       if (!changedFields.length && !lineChanged) return;
 
-      if (changedFields.length) setValues(nextValues);
-      if (lineChanged) setLineItems(nextLineItems);
+      if (changedFields.length) {
+        valuesRef.current = nextValues;
+        setValues(nextValues);
+      }
+      if (lineChanged) {
+        lineItemsRef.current = nextLineItems;
+        setLineItems(nextLineItems);
+      }
       const sourceGroupKey = (() => {
         const fp = meta?.fieldPath || '';
         if (!fp.includes('__')) return '';
@@ -2574,7 +2587,11 @@ const FormView: React.FC<FormViewProps> = ({
       const target = event.target as HTMLElement | null;
       if (!target) return;
       const tag = target.tagName ? target.tagName.toLowerCase() : '';
-      if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
+      const role = (target.getAttribute('role') || '').toString().trim().toLowerCase();
+      const isInputLike = tag === 'input' || tag === 'textarea' || tag === 'select';
+      const isButtonLike =
+        tag === 'button' || role === 'button' || role === 'radio' || role === 'option' || role === 'combobox';
+      if (!isInputLike && !isButtonLike) return;
       // Derived-value blur recompute should run for any field blur within the form content, including guided steps.
       // Note: guided step content is not always wrapped in `.form-card`, so use `.ck-form-sections` as a stable root.
       const root = target.closest('.ck-form-sections') || target.closest('.webform-overlay') || target.closest('.form-card');
@@ -2599,7 +2616,16 @@ const FormView: React.FC<FormViewProps> = ({
         });
       }
 
-      if (fieldPath) {
+      const blurredFieldId = (() => {
+        if (!fieldPath) return '';
+        const parts = fieldPath.split('__');
+        if (parts.length >= 2) return (parts[1] || '').toString().trim();
+        return fieldPath.toString().trim();
+      })();
+      const shouldRecomputeBlurDerived =
+        !!fieldPath && hasBlurDerived && (!blurDerivedDependencyIds.size || (blurredFieldId ? blurDerivedDependencyIds.has(blurredFieldId) : true));
+
+      if (fieldPath && !shouldRecomputeBlurDerived) {
         validateErrorsOnBlur(fieldPath, { tag, inputType });
       }
 
@@ -2636,26 +2662,22 @@ const FormView: React.FC<FormViewProps> = ({
         }, 0);
       }
 
-      if (!hasBlurDerived) return;
-      const blurredFieldId = (() => {
-        if (!fieldPath) return '';
-        const parts = fieldPath.split('__');
-        if (parts.length >= 2) return (parts[1] || '').toString().trim();
-        return fieldPath.toString().trim();
-      })();
-      const shouldRecomputeBlurDerived =
-        !blurDerivedDependencyIds.size || (blurredFieldId ? blurDerivedDependencyIds.has(blurredFieldId) : true);
-      if (!shouldRecomputeBlurDerived) {
-        onDiagnostic?.('derived.blur.skip', { fieldPath, blurredFieldId });
-        return;
+      if (hasBlurDerived) {
+        if (!shouldRecomputeBlurDerived) {
+          onDiagnostic?.('derived.blur.skip', { fieldPath, blurredFieldId });
+          return;
+        }
+        if (blurRecomputeTimerRef.current !== null) {
+          window.clearTimeout(blurRecomputeTimerRef.current);
+        }
+        blurRecomputeTimerRef.current = window.setTimeout(() => {
+          blurRecomputeTimerRef.current = null;
+          recomputeDerivedOnBlur({ fieldPath, tag });
+          if (fieldPath) {
+            validateErrorsOnBlur(fieldPath, { tag, inputType });
+          }
+        }, 0);
       }
-      if (blurRecomputeTimerRef.current !== null) {
-        window.clearTimeout(blurRecomputeTimerRef.current);
-      }
-      blurRecomputeTimerRef.current = window.setTimeout(() => {
-        blurRecomputeTimerRef.current = null;
-        recomputeDerivedOnBlur({ fieldPath, tag });
-      }, 0);
     };
     document.addEventListener('focusout', handler, true);
     return () => {
@@ -5743,16 +5765,18 @@ const FormView: React.FC<FormViewProps> = ({
     onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue: value });
     clearOverlayOpenActionSuppression(q.id);
     if (onStatusClear) onStatusClear();
+    const currentValues = valuesRef.current;
+    const currentLineItems = lineItemsRef.current;
     if (
       q.clearOnChange === true &&
-      !isEmptyValue(values[q.id]) &&
+      !isEmptyValue(currentValues[q.id]) &&
       !isEmptyValue(value) &&
-      !areFieldValuesEqual(values[q.id], value)
+      !areFieldValuesEqual(currentValues[q.id], value)
     ) {
       const cleared = applyClearOnChange({
         definition,
-        values,
-        lineItems,
+        values: currentValues,
+        lineItems: currentLineItems,
         fieldId: q.id,
         nextValue: value
       });
@@ -5771,13 +5795,18 @@ const FormView: React.FC<FormViewProps> = ({
       }
       return;
     }
-    const baseValues = { ...values, [q.id]: value };
-    const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(definition, baseValues, lineItems, {
-      mode: 'change',
-      lockedTopFields: [q.id]
-    });
+    const baseValues = { ...currentValues, [q.id]: value };
+    const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(
+      definition,
+      baseValues,
+      currentLineItems,
+      {
+        mode: 'change',
+        lockedTopFields: [q.id]
+      }
+    );
     setValues(nextValues);
-    if (nextLineItems !== lineItems) {
+    if (nextLineItems !== currentLineItems) {
       setLineItems(nextLineItems);
     }
     valuesRef.current = nextValues;
@@ -5865,7 +5894,9 @@ const FormView: React.FC<FormViewProps> = ({
     });
     clearOverlayOpenActionSuppression(`${group.id}__${field?.id || ''}__${rowId}`);
     if (onStatusClear) onStatusClear();
-    const existingRows = lineItems[group.id] || [];
+    const currentLineItems = lineItemsRef.current;
+    const currentValues = valuesRef.current;
+    const existingRows = currentLineItems[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
     const nextRowValues: Record<string, FieldValue> = { ...(currentRow?.values || {}), [field.id]: value };
     const dedupRules = normalizeLineItemDedupRules((group.lineItemConfig as any)?.dedupRules);
@@ -5933,10 +5964,15 @@ const FormView: React.FC<FormViewProps> = ({
     const nextRows = existingRows.map(row =>
       row.id === rowId ? { ...row, values: nextRowValues } : row
     );
-    let updatedLineItems: LineItemState = { ...lineItems, [group.id]: nextRows };
-    const { values: nextValues, lineItems: finalLineItems } = applyValueMapsToForm(definition, values, updatedLineItems, {
-      mode: 'change'
-    });
+    let updatedLineItems: LineItemState = { ...currentLineItems, [group.id]: nextRows };
+    const { values: nextValues, lineItems: finalLineItems } = applyValueMapsToForm(
+      definition,
+      currentValues,
+      updatedLineItems,
+      {
+        mode: 'change'
+      }
+    );
     const syncedLineItems = finalLineItems;
     setLineItems(syncedLineItems);
     setValues(nextValues);
@@ -6021,7 +6057,7 @@ const FormView: React.FC<FormViewProps> = ({
         });
       }
 
-      runSelectionEffectsForAncestorRows(group.id, lineItems, syncedLineItems, { mode: 'change', topValues: nextValues });
+      runSelectionEffectsForAncestorRows(group.id, currentLineItems, syncedLineItems, { mode: 'change', topValues: nextValues });
     }
   };
 

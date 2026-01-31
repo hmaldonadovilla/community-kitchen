@@ -9,10 +9,11 @@ import { escapeRegExp } from './utils';
  * - Strips script tags defensively.
  */
 
-export const exportDocFileToHtml = (file: GoogleAppsScript.Drive.File): string => {
-  const fileId = file.getId();
+export const exportDocFileToHtml = (fileId: string): string => {
+  const id = (fileId || '').toString().trim();
+  if (!id) throw new Error('Missing file id.');
   try {
-    const res = fetchDriveExport(fileId, 'application/zip');
+    const res = fetchDriveExport(id, 'application/zip');
     const blob = res.getBlob();
     const contentType = (blob.getContentType() || '').toString().toLowerCase();
     if (contentType.includes('zip')) {
@@ -23,6 +24,7 @@ export const exportDocFileToHtml = (file: GoogleAppsScript.Drive.File): string =
   } catch (err) {
     // Fallback attempt (may still work for some deployments/templates).
     try {
+      const file = DriveApp.getFileById(id);
       const blob = file.getAs('application/zip');
       const contentType = (blob.getContentType() || '').toString().toLowerCase();
       if (contentType.includes('zip')) {
@@ -106,5 +108,4 @@ const stripUnsafeHtml = (html: string): string => {
   // Defensive: Docs export should already be safe, but never allow script tags in the embedded preview.
   return raw.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
 };
-
 

@@ -499,7 +499,7 @@ export const ActionBar: React.FC<{
     });
   }, [onDiagnostic, position, resolved.capsule.length, resolved.menus.length, resolved.wantsSubmit, viewKey]);
 
-  const showSubmit = resolved.wantsSubmit && viewKey === 'form' && !readOnly;
+  const showSubmit = resolved.wantsSubmit && (viewKey === 'form' || viewKey === 'summary') && !readOnly;
 
   const hasCapsuleRow = resolved.capsule.length > 0 || showSubmit;
   const hasNoticeRow = !!notice;

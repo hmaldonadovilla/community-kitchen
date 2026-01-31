@@ -883,12 +883,8 @@ export class Dashboard {
               dedupDialogObj.footer ??
               dedupDialogObj.prompt
           ),
-          changeLabel: normalizeLocalized(
-            dedupDialogObj.changeLabel ??
-              dedupDialogObj.cancelLabel ??
-              dedupDialogObj.changeButtonLabel ??
-              dedupDialogObj.cancelButtonLabel
-          ),
+          changeLabel: normalizeLocalized(dedupDialogObj.changeLabel ?? dedupDialogObj.changeButtonLabel),
+          cancelLabel: normalizeLocalized(dedupDialogObj.cancelLabel ?? dedupDialogObj.cancelButtonLabel),
           openLabel: normalizeLocalized(
             dedupDialogObj.openLabel ??
               dedupDialogObj.confirmLabel ??

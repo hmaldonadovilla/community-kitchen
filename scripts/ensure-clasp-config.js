@@ -3,8 +3,9 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const targetPath = path.join(root, '.clasp.json');
+const forceRewrite = process.env.CLASP_FORCE_REWRITE === '1';
 
-if (fs.existsSync(targetPath)) {
+if (fs.existsSync(targetPath) && !forceRewrite) {
   console.info('[ensure-clasp-config] Using existing .clasp.json');
   process.exit(0);
 }

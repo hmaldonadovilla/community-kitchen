@@ -77,12 +77,15 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
           setActiveFormKey(resolvedKey);
           setActiveRecord(res.record ?? null);
           const configSource = res.configSource || 'sheet';
+          const configEnv = (res.configEnv || '').toString().trim();
           logBootEvent('bootstrap.fetch.success', {
             formKey: resolvedKey,
             elapsedMs: Date.now() - startedAt,
-            configSource
+            configSource,
+            configEnv: configEnv || 'default'
           });
           logBootEvent('config.source', { formKey: resolvedKey, source: configSource });
+          logBootEvent('config.env', { formKey: resolvedKey, env: configEnv || 'default' });
         } catch (err: any) {
           if (cancelled) return;
           const message = err?.message ? err.message.toString() : 'Request failed';

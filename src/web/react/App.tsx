@@ -346,6 +346,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const [dedupChecking, setDedupChecking] = useState<boolean>(false);
   const [dedupConflict, setDedupConflict] = useState<DedupConflictInfo | null>(null);
   const [dedupNotice, setDedupNotice] = useState<DedupConflictInfo | null>(null);
+  type ListDedupPromptState = {
+    conflict: DedupConflictInfo;
+    source: string;
+    buttonId: string;
+    qIdx?: number | null;
+    values: Record<string, FieldValue>;
+  };
+  const [listDedupPrompt, setListDedupPrompt] = useState<ListDedupPromptState | null>(null);
   const [precreateDedupChecking, setPrecreateDedupChecking] = useState<boolean>(false);
   const dedupCheckingRef = useRef<boolean>(false);
   const dedupConflictRef = useRef<DedupConflictInfo | null>(null);
@@ -1181,6 +1189,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
   const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const summarySubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const summarySubmitIntentRef = useRef<boolean>(false);
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
     setUploadQueueSize(uploadQueueRef.current.size);
@@ -2504,7 +2514,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
   );
 
   const precheckCreateDedupAndMaybeNavigate = useCallback(
-    async (args: { values: Record<string, FieldValue>; lineItems: LineItemState; source: string }): Promise<boolean> => {
+    async (args: {
+      values: Record<string, FieldValue>;
+      lineItems: LineItemState;
+      source: string;
+      onDuplicate?: (conflict: DedupConflictInfo) => Promise<boolean | void> | boolean | void;
+    }): Promise<boolean> => {
       const signature = computeDedupSignatureFromValues((definition as any)?.dedupRules, args.values as any);
       if (!signature) return false;
       const startedAt = Date.now();
@@ -2531,11 +2546,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           logEvent('dedup.precreate.check.ok', { source: args.source });
           return false;
         }
+        const conflictInfo: DedupConflictInfo = {
+          ruleId: (conflict?.ruleId || 'dedup').toString(),
+          message: (conflict?.message || '').toString(),
+          existingRecordId,
+          existingRowNumber
+        };
         logEvent('dedup.precreate.conflict', {
           source: args.source,
           existingRecordId,
           existingRowNumber: existingRowNumber ?? null
         });
+        if (args.onDuplicate) {
+          const handled = await args.onDuplicate(conflictInfo);
+          if (handled) return true;
+        }
         await openExistingRecordFromDedup({
           recordId: existingRecordId,
           rowNumber: existingRowNumber,
@@ -3306,10 +3331,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       const mapped = applyValueMapsToForm(definition, valuesWithPreset, initialLineItems, { mode: 'init' });
 
       // Precheck dedup BEFORE navigating to the new record (avoid duplicate creation when presets/defaults populate dedup keys).
+      const listViewDuplicateHandler =
+        view === 'list'
+          ? (conflict: DedupConflictInfo) => {
+              const prompt: ListDedupPromptState = {
+                conflict,
+                source: 'createRecordPreset',
+                buttonId: baseId,
+                qIdx: qIdx ?? null,
+                values: mapped.values
+              };
+              setListDedupPrompt(prompt);
+              logEvent('dedup.precreate.listDialog.open', {
+                source: prompt.source,
+                buttonId: prompt.buttonId,
+                qIdx: prompt.qIdx ?? null,
+                existingRecordId: conflict.existingRecordId || null,
+                existingRowNumber: conflict.existingRowNumber ?? null
+              });
+              return true;
+            }
+          : undefined;
       const handled = await precheckCreateDedupAndMaybeNavigate({
         values: mapped.values,
         lineItems: mapped.lineItems,
-        source: 'createRecordPreset'
+        source: 'createRecordPreset',
+        onDuplicate: listViewDuplicateHandler
       });
       if (handled) return;
 
@@ -3353,7 +3400,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         unknownFields: unknownFields.length ? unknownFields.slice(0, 20) : []
       });
     },
-    [definition, logEvent, parseButtonRef, precheckCreateDedupAndMaybeNavigate]
+    [definition, logEvent, parseButtonRef, precheckCreateDedupAndMaybeNavigate, view]
   );
 
   const handleCustomButton = useCallback(
@@ -5507,6 +5554,50 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     }
   };
 
+  const handleSummarySubmit = useCallback(() => {
+    if (submitting) return;
+    if (recordLoadingId) return;
+    if (updateRecordBusyOpen) return;
+    submitConfirmedRef.current = false;
+    summarySubmitIntentRef.current = true;
+    logEvent('ui.submit.tap', {
+      submitLabelOverridden: Boolean(definition.submitButtonLabel),
+      view: 'summary'
+    });
+    if (viewRef.current === 'form') {
+      formSubmitActionRef.current?.();
+      return;
+    }
+    setView('form');
+    if (summarySubmitTimerRef.current) {
+      globalThis.clearTimeout(summarySubmitTimerRef.current);
+      summarySubmitTimerRef.current = null;
+    }
+    const startedAt = Date.now();
+    let attempt = 0;
+    const maxAttempts = 40;
+    const delayMs = 80;
+    const tick = () => {
+      attempt += 1;
+      const inForm = viewRef.current === 'form';
+      const submitAction = formSubmitActionRef.current;
+      const hasAction = typeof submitAction === 'function';
+      if (!inForm || !hasAction) {
+        if (attempt >= maxAttempts) {
+          summarySubmitIntentRef.current = false;
+          logEvent('summary.submit.timeout', { attempt, inForm, hasAction });
+          return;
+        }
+        summarySubmitTimerRef.current = globalThis.setTimeout(tick, delayMs);
+        return;
+      }
+      summarySubmitTimerRef.current = null;
+      logEvent('summary.submit.fire', { attempt, waitMs: Date.now() - startedAt });
+      submitAction?.();
+    };
+    tick();
+  }, [definition.submitButtonLabel, logEvent, recordLoadingId, setView, submitting, updateRecordBusyOpen]);
+
   const handleRecordSelect = (
     row: ListItem,
     fullRecord?: WebFormSubmission,
@@ -5849,95 +5940,120 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     return conflict as DedupConflictInfo;
   }, [dedupConflict, dedupNotice]);
 
+  type DedupDialogItem = { fieldId: string; label: string; value: string; fieldType?: string };
+  const buildDedupDialogDetails = useCallback(
+    (args: { ruleId?: string; values: Record<string, FieldValue> }) => {
+      const rules = Array.isArray((definition as any)?.dedupRules) ? ((definition as any).dedupRules as any[]) : [];
+      const ruleId = (args.ruleId || '').toString().trim();
+      const rule = rules.find(entry => (entry?.id || '').toString().trim() === ruleId);
+      const ruleKeys = Array.isArray(rule?.keys)
+        ? rule.keys.map((key: any) => (key ?? '').toString().trim()).filter(Boolean)
+        : [];
+      const fallbackKeys = (() => {
+        const keys = Object.keys(dedupKeyFieldIdMap || {});
+        const list: string[] = [];
+        const seen = new Set<string>();
+        keys.forEach(key => {
+          const trimmed = (key || '').toString().trim();
+          if (!trimmed) return;
+          const lower = trimmed.toLowerCase();
+          if (seen.has(lower)) return;
+          seen.add(lower);
+          list.push(trimmed);
+        });
+        return list;
+      })();
+      const keys = ruleKeys.length ? ruleKeys : fallbackKeys;
+      const questions = Array.isArray(definition?.questions) ? definition.questions : [];
+      const rawItems: DedupDialogItem[] = keys.map((key: string) => {
+        const keyLower = key.toLowerCase();
+        const question = questions.find(entry => {
+          const id = (entry?.id || '').toString();
+          return id === key || id.toLowerCase() === keyLower;
+        });
+        const fieldId = (question?.id || key).toString();
+        const label = question ? resolveLabel(question, language) : key;
+        const optionSet = question ? optionState[optionKey(question.id)] || toOptionSet(question as any) : undefined;
+        const fieldType = question?.type;
+        const rawValue = (args.values as any)[fieldId];
+        const value = formatDisplayText(rawValue, { language, optionSet, fieldType });
+        return { fieldId, label: label.toString(), value, fieldType };
+      });
+      const seen = new Set<string>();
+      const items = rawItems.filter((item: DedupDialogItem) => {
+        const lower = item.fieldId.toLowerCase();
+        if (seen.has(lower)) return false;
+        seen.add(lower);
+        return true;
+      });
+      const priority = (item: DedupDialogItem) => {
+        if ((item.fieldType || '').toString().toUpperCase() === 'DATE') return 2;
+        const labelLower = item.label.toLowerCase();
+        if (labelLower.includes('customer')) return 0;
+        if (labelLower.includes('service')) return 1;
+        if (labelLower.includes('date')) return 2;
+        return 3;
+      };
+      const ordered = [...items].sort((a, b) => {
+        const pa = priority(a);
+        const pb = priority(b);
+        if (pa !== pb) return pa - pb;
+        return 0;
+      });
+      return { keys: ordered.map(item => item.fieldId), items: ordered };
+    },
+    [dedupKeyFieldIdMap, definition, language, optionState]
+  );
+
   const dedupDialogDetails = useMemo(() => {
     if (!dedupDialogConflict) return null;
-    const rules = Array.isArray((definition as any)?.dedupRules) ? ((definition as any).dedupRules as any[]) : [];
-    const ruleId = (dedupDialogConflict.ruleId || '').toString().trim();
-    const rule = rules.find(entry => (entry?.id || '').toString().trim() === ruleId);
-    const ruleKeys = Array.isArray(rule?.keys)
-      ? rule.keys.map((key: any) => (key ?? '').toString().trim()).filter(Boolean)
-      : [];
-    const fallbackKeys = (() => {
-      const keys = Object.keys(dedupKeyFieldIdMap || {});
-      const list: string[] = [];
-      const seen = new Set<string>();
-      keys.forEach(key => {
-        const trimmed = (key || '').toString().trim();
-        if (!trimmed) return;
-        const lower = trimmed.toLowerCase();
-        if (seen.has(lower)) return;
-        seen.add(lower);
-        list.push(trimmed);
-      });
-      return list;
-    })();
-    const keys = ruleKeys.length ? ruleKeys : fallbackKeys;
-    const questions = Array.isArray(definition?.questions) ? definition.questions : [];
-    type DedupDialogItem = { fieldId: string; label: string; value: string; fieldType?: string };
-    const rawItems: DedupDialogItem[] = keys.map((key: string) => {
-      const keyLower = key.toLowerCase();
-      const question = questions.find(entry => {
-        const id = (entry?.id || '').toString();
-        return id === key || id.toLowerCase() === keyLower;
-      });
-      const fieldId = (question?.id || key).toString();
-      const label = question ? resolveLabel(question, language) : key;
-      const optionSet = question ? optionState[optionKey(question.id)] || toOptionSet(question as any) : undefined;
-      const fieldType = question?.type;
-      const rawValue = (values as any)[fieldId];
-      const value = formatDisplayText(rawValue, { language, optionSet, fieldType });
-      return { fieldId, label: label.toString(), value, fieldType };
-    });
-    const seen = new Set<string>();
-    const items = rawItems.filter((item: DedupDialogItem) => {
-      const lower = item.fieldId.toLowerCase();
-      if (seen.has(lower)) return false;
-      seen.add(lower);
-      return true;
-    });
-    const priority = (item: DedupDialogItem) => {
-      if ((item.fieldType || '').toString().toUpperCase() === 'DATE') return 2;
-      const labelLower = item.label.toLowerCase();
-      if (labelLower.includes('customer')) return 0;
-      if (labelLower.includes('service')) return 1;
-      if (labelLower.includes('date')) return 2;
-      return 3;
-    };
-    const ordered = [...items].sort((a, b) => {
-      const pa = priority(a);
-      const pb = priority(b);
-      if (pa !== pb) return pa - pb;
-      return 0;
-    });
-    return { keys: ordered.map(item => item.fieldId), items: ordered };
-  }, [dedupDialogConflict, dedupKeyFieldIdMap, definition, language, optionState, values]);
+    return buildDedupDialogDetails({ ruleId: dedupDialogConflict.ruleId, values });
+  }, [buildDedupDialogDetails, dedupDialogConflict, values]);
 
   const dedupDialogCopy = useMemo(
     () => resolveDedupDialogCopy(definition.dedupDialog, language),
     [definition.dedupDialog, language]
   );
 
+  const renderDedupDialogMessage = useCallback(
+    (items: DedupDialogItem[]) => {
+      const intro = dedupDialogCopy.intro.trim();
+      const outro = dedupDialogCopy.outro.trim();
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {intro ? <div>{intro}</div> : null}
+          {items.length ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {items.map(item => (
+                <div key={item.fieldId}>
+                  {item.label}: {item.value}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {outro ? <div>{outro}</div> : null}
+        </div>
+      );
+    },
+    [dedupDialogCopy.intro, dedupDialogCopy.outro]
+  );
+
   const dedupDialogMessage = useMemo(() => {
     if (!dedupDialogConflict) return '';
     const items = dedupDialogDetails?.items || [];
-    const intro = dedupDialogCopy.intro.trim();
-    const outro = dedupDialogCopy.outro.trim();
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {intro ? <div>{intro}</div> : null}
-        {items.length ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {items.map(item => (
-              <div key={item.fieldId}>
-                {item.label}: {item.value}
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {outro ? <div>{outro}</div> : null}
-      </div>
-    );
-  }, [dedupDialogConflict, dedupDialogCopy.intro, dedupDialogCopy.outro, dedupDialogDetails]);
+    return renderDedupDialogMessage(items);
+  }, [dedupDialogConflict, dedupDialogDetails, renderDedupDialogMessage]);
+
+  const listDedupDialogDetails = useMemo(() => {
+    if (!listDedupPrompt) return null;
+    return buildDedupDialogDetails({ ruleId: listDedupPrompt.conflict.ruleId, values: listDedupPrompt.values });
+  }, [buildDedupDialogDetails, listDedupPrompt]);
+
+  const listDedupDialogMessage = useMemo(() => {
+    if (!listDedupPrompt) return '';
+    const items = listDedupDialogDetails?.items || [];
+    return renderDedupDialogMessage(items);
+  }, [listDedupDialogDetails, listDedupPrompt, renderDedupDialogMessage]);
 
   const resetDedupState = useCallback(
     (reason: string) => {
@@ -6041,6 +6157,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     void openExistingRecordFromDedup({ recordId: id, rowNumber, source: 'dedupDialog', view: 'form' });
   }, [dedupDialogConflict, logEvent, openExistingRecordFromDedup, resetDedupState]);
 
+  const handleListDedupDialogConfirm = useCallback(() => {
+    const prompt = listDedupPrompt;
+    if (!prompt) return;
+    setListDedupPrompt(null);
+    const id = (prompt.conflict.existingRecordId || '').toString().trim();
+    if (!id) return;
+    const rowNumberRaw = prompt.conflict.existingRowNumber;
+    const rowNumber =
+      rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
+        ? undefined
+        : Number(rowNumberRaw);
+    logEvent('dedup.precreate.openExistingFromList', {
+      source: prompt.source,
+      buttonId: prompt.buttonId,
+      qIdx: prompt.qIdx ?? null,
+      existingRecordId: id,
+      existingRowNumber: rowNumber ?? null
+    });
+    void openExistingRecordFromDedup({ recordId: id, rowNumber, source: prompt.source });
+  }, [listDedupPrompt, logEvent, openExistingRecordFromDedup]);
+
+  const handleListDedupDialogCancel = useCallback(() => {
+    const prompt = listDedupPrompt;
+    if (!prompt) return;
+    setListDedupPrompt(null);
+    logEvent('dedup.precreate.listDialog.cancel', {
+      source: prompt.source,
+      buttonId: prompt.buttonId,
+      qIdx: prompt.qIdx ?? null,
+      existingRecordId: prompt.conflict.existingRecordId || null,
+      existingRowNumber: prompt.conflict.existingRowNumber ?? null
+    });
+  }, [listDedupPrompt, logEvent]);
+
   useEffect(() => {
     if (!dedupDialogConflict) return;
     const dialogCfg = definition.dedupDialog;
@@ -6053,6 +6203,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         intro: Boolean(dialogCfg?.intro),
         outro: Boolean(dialogCfg?.outro),
         changeLabel: Boolean(dialogCfg?.changeLabel),
+        cancelLabel: Boolean(dialogCfg?.cancelLabel),
         openLabel: Boolean(dialogCfg?.openLabel)
       }
     });
@@ -6384,7 +6535,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onCreateCopy={handleDuplicateCurrent}
         onEdit={() => setView('form')}
         onSummary={handleGoSummary}
-        onSubmit={requestSubmit}
+        onSubmit={view === 'summary' ? handleSummarySubmit : requestSubmit}
         onCustomButton={handleCustomButton}
         onDiagnostic={logEvent}
       />
@@ -6435,6 +6586,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
           onGuidedUiChange={setGuidedUiState}
           dedupNavigationBlocked={dedupNavigationBlocked}
           openConfirmDialog={customConfirm.openConfirm}
+          summarySubmitIntentRef={summarySubmitIntentRef}
         />
       ) : null}
 
@@ -6503,13 +6655,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         open={view === 'form' && !!dedupDialogConflict}
         title={dedupDialogCopy.title}
         message={dedupDialogMessage}
-        confirmLabel={dedupDialogCopy.confirmLabel}
-        cancelLabel={dedupDialogCopy.cancelLabel}
+        confirmLabel={dedupDialogCopy.openLabel}
+        cancelLabel={dedupDialogCopy.changeLabel}
         dismissOnBackdrop={false}
         showCloseButton={false}
         zIndex={12018}
         onCancel={handleDedupChangeFields}
         onConfirm={handleDedupOpenExisting}
+      />
+
+      <ConfirmDialogOverlay
+        open={view === 'list' && !!listDedupPrompt}
+        title={dedupDialogCopy.title}
+        message={listDedupDialogMessage}
+        confirmLabel={dedupDialogCopy.openLabel}
+        cancelLabel={dedupDialogCopy.cancelLabel}
+        dismissOnBackdrop={false}
+        showCloseButton={false}
+        zIndex={12020}
+        onCancel={handleListDedupDialogCancel}
+        onConfirm={handleListDedupDialogConfirm}
       />
 
       <ConfirmDialogOverlay
@@ -6606,7 +6771,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
         onCreateCopy={handleDuplicateCurrent}
         onEdit={() => setView('form')}
         onSummary={handleGoSummary}
-        onSubmit={requestSubmit}
+        onSubmit={view === 'summary' ? handleSummarySubmit : requestSubmit}
         onCustomButton={handleCustomButton}
         onDiagnostic={logEvent}
       />
