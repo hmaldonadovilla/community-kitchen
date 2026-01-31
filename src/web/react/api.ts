@@ -503,6 +503,7 @@ export interface BootstrapContext {
   formKey: string;
   record?: WebFormSubmission;
   configSource?: string;
+  configEnv?: string;
 }
 
 export const fetchBootstrapContextApi = (formKey?: string | null): Promise<BootstrapContext> =>

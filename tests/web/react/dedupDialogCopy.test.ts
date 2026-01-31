@@ -6,8 +6,9 @@ describe('dedupDialog copy', () => {
     expect(copy.title).toBe('Creating duplicate record for the same customer, service and date is not allowed.');
     expect(copy.intro).toBe('A meal production record already exists for:');
     expect(copy.outro).toBe('What do you want to do?');
-    expect(copy.confirmLabel).toBe('Open existing record');
-    expect(copy.cancelLabel).toBe('Change customer, service or date');
+    expect(copy.openLabel).toBe('Open existing record');
+    expect(copy.changeLabel).toBe('Change customer, service or date');
+    expect(copy.cancelLabel).toBe('Cancel');
   });
 
   it('uses localized overrides when provided', () => {
@@ -17,6 +18,7 @@ describe('dedupDialog copy', () => {
         intro: { en: 'Record already exists', fr: 'Enregistrement existe deja' },
         outro: { en: 'Next step?', fr: 'Et ensuite?' },
         changeLabel: { en: 'Change details', fr: 'Modifier' },
+        cancelLabel: { en: 'Cancel', fr: 'Annuler' },
         openLabel: { en: 'Open existing', fr: 'Ouvrir existant' }
       },
       'FR'
@@ -26,8 +28,9 @@ describe('dedupDialog copy', () => {
       title: 'Pas de doublons',
       intro: 'Enregistrement existe deja',
       outro: 'Et ensuite?',
-      confirmLabel: 'Ouvrir existant',
-      cancelLabel: 'Modifier'
+      openLabel: 'Ouvrir existant',
+      changeLabel: 'Modifier',
+      cancelLabel: 'Annuler'
     });
   });
 });

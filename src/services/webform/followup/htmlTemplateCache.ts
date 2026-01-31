@@ -6,6 +6,7 @@
  * - This module is safe in non-Apps Script environments (tests) where CacheService/DriveApp may be undefined.
  */
 
+import { readDriveFileAsString } from '../driveApi';
 import { getTemplateCacheEpoch } from './templateCacheEpoch';
 import { getBundledHtmlTemplateRaw, parseBundledHtmlTemplateId } from './bundledHtmlTemplates';
 
@@ -78,6 +79,7 @@ export const readHtmlTemplateRawFromDrive = (
     }
     return { success: true, raw, mimeType: 'bundle' };
   }
+  let lastError = '';
   try {
     const file = DriveApp.getFileById(id);
     const mimeType = (file.getMimeType ? file.getMimeType() : '').toString();
@@ -106,9 +108,13 @@ export const readHtmlTemplateRawFromDrive = (
     }
     return { success: true, raw, mimeType };
   } catch (err: any) {
-    const msg = (err?.message || err?.toString?.() || 'Failed to read template.').toString();
-    return { success: false, message: msg };
+    lastError = (err?.message || err?.toString?.() || 'Failed to read template.').toString();
   }
+  const fallback = readDriveFileAsString(id, ['text/html', 'text/plain'], 'html.template');
+  if (fallback && fallback.raw) {
+    return { success: true, raw: fallback.raw, mimeType: fallback.mimeType || 'driveApi' };
+  }
+  return { success: false, message: lastError || 'Failed to read template.' };
 };
 
 export const prefetchHtmlTemplateIds = (
@@ -156,5 +162,4 @@ export const prefetchHtmlTemplateIds = (
 
   return { requested, cacheHit, loaded, skipped, failed };
 };
-
 

@@ -1,0 +1,6825 @@
+{
+  "formKey": "Config: Checklist",
+  "generatedAt": "2026-01-31T20:36:39.789Z",
+  "form": {
+    "title": "Storage & cleaning checks",
+    "configSheet": "Config: Checklist",
+    "destinationTab": "Checklist Data",
+    "description": "Capture data for AFSCA compliance",
+    "appUrl": "https://script.google.com/a/communitykitchen.be/macros/s/AKfycbyEeTpS1mWGUC-hs3mtKDNtNu0N_TKt8nCbcB3x4tM/exec?form=Config%3A%20Checklist",
+    "formId": "https://script.google.com/a/communitykitchen.be/macros/s/AKfycbyEeTpS1mWGUC-hs3mtKDNtNu0N_TKt8nCbcB3x4tM/exec?form=Config%3A%20Checklist",
+    "rowIndex": 5,
+    "followupConfig": {
+      "pdfTemplateId": {
+        "cases": [
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": "Weekly"
+            },
+            "templateId": {
+              "EN": "1gDDChgj96UYO8srhdQsuQGF1vF1d8GrjZHL0aVCJm_I",
+              "FR": "1gDDChgj96UYO8srhdQsuQGF1vF1d8GrjZHL0aVCJm_I"
+            }
+          },
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": "Monthly"
+            },
+            "templateId": {
+              "EN": "1Gz8WGjspwwfEYxnhlyqyathxAq-aIjF1ZhoQB_W6rrk",
+              "FR": "1Gz8WGjspwwfEYxnhlyqyathxAq-aIjF1ZhoQB_W6rrk"
+            }
+          },
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": "AM"
+            },
+            "templateId": {
+              "EN": "1YeSO7eGv7Yb9DPYAHG3ogGjl-oDQ1lGU0b_es65MFGU",
+              "FR": "1YeSO7eGv7Yb9DPYAHG3ogGjl-oDQ1lGU0b_es65MFGU"
+            }
+          },
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": "PM"
+            },
+            "templateId": {
+              "EN": "11Bgci42U5wf0ws7QLOHSPMGtm_K4GtXhgMyefciRaQk",
+              "FR": "11Bgci42U5wf0ws7QLOHSPMGtm_K4GtXhgMyefciRaQk"
+            }
+          }
+        ],
+        "default": "11Bgci42U5wf0ws7QLOHSPMGtm_K4GtXhgMyefciRaQk"
+      },
+      "pdfFolderId": "1PEV18PYv28uOTVZ_rui0noR5pE1dkHZF",
+      "emailTemplateId": {
+        "EN": "1S_fS8Lgv-psriFgIktTs_aftKnih78SPF0c_hlKIR4M",
+        "FR": "1S_fS8Lgv-psriFgIktTs_aftKnih78SPF0c_hlKIR4M"
+      },
+      "emailSubject": {
+        "en": "Checklist summary",
+        "fr": "Synthèse checklist"
+      },
+      "emailRecipients": [
+        "hmaldonadovilla@gmail.com"
+      ],
+      "emailCc": [
+        "hmaldonadovilla@gmail.com"
+      ],
+      "emailBcc": [
+        "hmaldonadovilla@gmail.com"
+      ],
+      "statusFieldId": "Status",
+      "statusTransitions": {
+        "onPdf": "PDF ready",
+        "onEmail": "Emailed",
+        "onClose": "Closed"
+      }
+    },
+    "listViewTitle": {
+      "en": "Recent activity",
+      "fr": "Activité récente",
+      "nl": "Recente activiteit"
+    },
+    "listViewPageSize": 7,
+    "listViewPaginationControlsEnabled": false,
+    "listViewMetaColumns": [],
+    "listViewColumns": [
+      {
+        "type": "rule",
+        "fieldId": "action",
+        "label": {
+          "en": "Action",
+          "fr": "Action",
+          "nl": "Actie"
+        },
+        "cases": [
+          {
+            "text": {
+              "en": "Edit",
+              "fr": "Modifier",
+              "nl": "Bewerken"
+            },
+            "when": {
+              "all": [
+                {
+                  "fieldId": "status",
+                  "notEquals": "Closed"
+                },
+                {
+                  "fieldId": "DATE",
+                  "isNotToday": true
+                }
+              ]
+            },
+            "style": "warning",
+            "icon": "warning"
+          },
+          {
+            "text": {
+              "en": "Edit",
+              "fr": "Modifier",
+              "nl": "Bewerken"
+            },
+            "when": {
+              "fieldId": "status",
+              "notEquals": "Closed"
+            },
+            "style": "link",
+            "icon": "edit"
+          },
+          {
+            "text": {
+              "en": "View",
+              "fr": "Voir",
+              "nl": "Bekijken"
+            },
+            "when": {
+              "fieldId": "status",
+              "equals": "Closed"
+            },
+            "style": "link",
+            "icon": "check"
+          }
+        ],
+        "openView": "auto"
+      }
+    ],
+    "listViewLegend": [
+      {
+        "icon": "warning",
+        "text": {
+          "en": "Past record incomplete or missing",
+          "fr": "Enregistrement passé incomplet ou manquant",
+          "nl": "Vorige record onvolledig of ontbrekend"
+        }
+      }
+    ],
+    "listViewSearch": {
+      "mode": "date",
+      "dateFieldId": "DATE"
+    },
+    "autoSave": {
+      "enabled": true,
+      "debounceMs": 2000,
+      "status": "In progress"
+    },
+    "summaryHtmlTemplateId": {
+      "cases": [
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "AM"
+          },
+          "templateId": {
+            "EN": "bundle:checklist_am.summary.html",
+            "FR": "bundle:checklist_am.summary.html",
+            "NL": "bundle:checklist_am.summary.html"
+          }
+        },
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "PM"
+          },
+          "templateId": {
+            "EN": "bundle:checklist_pm.summary.html",
+            "FR": "bundle:checklist_pm.summary.html",
+            "NL": "bundle:checklist_pm.summary.html"
+          }
+        },
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          },
+          "templateId": {
+            "EN": "bundle:checklist_weekly.summary.html",
+            "FR": "bundle:checklist_weekly.summary.html",
+            "NL": "bundle:checklist_weekly.summary.html"
+          }
+        },
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          },
+          "templateId": {
+            "EN": "bundle:checklist_monthly.summary.html",
+            "FR": "bundle:checklist_monthly.summary.html",
+            "NL": "bundle:checklist_monthly.summary.html"
+          }
+        }
+      ]
+    },
+    "copyCurrentRecordEnabled": false,
+    "createNewRecordEnabled": false,
+    "actionBars": {
+      "bottom": {
+        "list": {
+          "items": [
+            "home"
+          ]
+        },
+        "form": {
+          "items": [
+            "home",
+            {
+              "type": "system",
+              "id": "summary",
+              "summaryBehavior": "navigate"
+            }
+          ],
+          "primary": [
+            "submit"
+          ]
+        },
+        "summary": {
+          "items": [
+            "home",
+            {
+              "type": "system",
+              "id": "create",
+              "menuBehavior": "menu",
+              "actions": [
+                "createRecordPreset"
+              ]
+            },
+            {
+              "type": "system",
+              "id": "actions",
+              "actions": [
+                "openUrlField"
+              ]
+            },
+            "edit"
+          ]
+        }
+      },
+      "system": {
+        "home": {
+          "hideWhenActive": true
+        }
+      }
+    },
+    "appHeader": {
+      "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+    },
+    "groupBehavior": {
+      "autoCollapseOnComplete": true,
+      "autoOpenNextIncomplete": true,
+      "autoScrollOnExpand": true
+    },
+    "portraitOnly": true,
+    "submissionConfirmationMessage": {
+      "en": "This report confirms that the checks were completed by {COOK} on {DATE}, in accordance with the Kitchen Safety & Cleaning Checks procedure.",
+      "fr": "Ce rapport confirme que les vérifications ont été effectuées par {COOK} le {DATE}, conformément à la procédure de vérifications de la cuisine et de nettoyage.",
+      "nl": "Dit rapport bevestigt dat de controles zijn uitgevoerd door {COOK} op {DATE}, conform de procedure voor keukenveiligheid en schoonmaakcontroles."
+    },
+    "submissionConfirmationTitle": {
+      "en": "Please confirm",
+      "fr": "Veuillez confirmer",
+      "nl": "Vergoeding bevestigen"
+    },
+    "dedupDialog": {
+      "title": {
+        "en": "Creating duplicate record for the same date and type of check is not allowed.",
+        "fr": "Créer un enregistrement dupliqué pour le même date et le même type de vérification n'est pas autorisé.",
+        "nl": "Een dubbele record maken voor dezelfde datum en type controle is niet toegestaan."
+      },
+      "intro": {
+        "en": "A storage and cleaning check record already exists for:",
+        "fr": "Un enregistrement de checklist de stockage et de nettoyage existe déjà pour:",
+        "nl": "Een opslag- en schoonmaakchecklistrecord bestaat al voor:"
+      },
+      "outro": {
+        "en": "What do you want to do?",
+        "fr": "Que voulez-vous faire?",
+        "nl": "Wat wil je doen?"
+      },
+      "changeLabel": {
+        "en": "Change date or type of check",
+        "fr": "Changer la date ou le type de vérification",
+        "nl": "Wijzig de datum of het type controle"
+      },
+      "openLabel": {
+        "en": "Open existing check",
+        "fr": "Ouvrir la vérification existante",
+        "nl": "Open de bestaande controle"
+      }
+    },
+    "summaryButtonLabel": {
+      "en": "Draft report",
+      "fr": "Brouillon de rapport",
+      "nl": "Conceptverslag"
+    },
+    "languages": [
+      "EN",
+      "FR",
+      "NL"
+    ],
+    "defaultLanguage": "EN",
+    "languageSelectorEnabled": true
+  },
+  "questions": [
+    {
+      "id": "CHECK_FREQ",
+      "type": "CHOICE",
+      "qEn": "Check Frequency",
+      "qFr": "Fréquence de contrôle",
+      "qNl": "Controlefrequentie",
+      "required": true,
+      "requiredMessage": {
+        "en": "Please select the check frequency",
+        "fr": "Veuillez sélectionner la fréquence de vérification",
+        "nl": "Selecteer de controlefrequentie"
+      },
+      "ui": {
+        "control": "segmented",
+        "hideLabel": true
+      },
+      "optionSort": "source",
+      "group": {
+        "id": "header",
+        "header": true,
+        "title": {
+          "en": "Check Frequency",
+          "fr": "Fréquence de contrôle",
+          "nl": "Controlefrequentie"
+        },
+        "collapsible": true,
+        "defaultCollapsed": false
+      },
+      "listView": true,
+      "options": [
+        "AM",
+        "PM",
+        "Weekly",
+        "Monthly"
+      ],
+      "optionsFr": [
+        "AM",
+        "PM",
+        "Hebdomadaire",
+        "Mensuel"
+      ],
+      "optionsNl": [
+        "AM",
+        "PM",
+        "Wekelijks",
+        "Maandelijks"
+      ],
+      "status": "Active",
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          },
+          "then": {
+            "fieldId": "CHECK_FREQ",
+            "required": true
+          },
+          "message": {
+            "en": "Please select the check frequency",
+            "fr": "Veuillez sélectionner la fréquence de vérification",
+            "nl": "Selecteer de controlefrequentie"
+          }
+        }
+      ],
+      "clearOnChange": true,
+      "listViewSort": {
+        "direction": "desc",
+        "priority": 2
+      },
+      "derivedValue": {
+        "op": "timeOfDayMap",
+        "thresholds": [
+          {
+            "before": "12h",
+            "value": "AM"
+          },
+          {
+            "value": "PM"
+          }
+        ]
+      }
+    },
+    {
+      "id": "DATE",
+      "type": "DATE",
+      "qEn": "Date",
+      "qFr": "Date",
+      "qNl": "Datum",
+      "required": true,
+      "requiredMessage": {
+        "en": "Please select the date",
+        "fr": "Veuillez sélectionner la date",
+        "nl": "Selecteer de datum"
+      },
+      "group": {
+        "id": "header",
+        "header": true,
+        "collapsible": true,
+        "defaultCollapsed": false
+      },
+      "listView": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "listViewSort": {
+        "direction": "desc",
+        "priority": 1
+      },
+      "derivedValue": {
+        "op": "today"
+      }
+    },
+    {
+      "id": "COOK",
+      "type": "CHOICE",
+      "qEn": "Cook name",
+      "qFr": "Nom du cuisinier",
+      "qNl": "Naam kok",
+      "required": true,
+      "requiredMessage": {
+        "en": "Select your name from the list",
+        "fr": "Veuillez sélectionner votre nom dans la liste",
+        "nl": "Selecteer je naam uit de lijst"
+      },
+      "group": {
+        "id": "header",
+        "header": true,
+        "collapsible": true,
+        "defaultCollapsed": false
+      },
+      "listView": true,
+      "options": [
+        "⁠Akkara",
+        "⁠Anjali",
+        "⁠Roya",
+        "⁠Saga",
+        "⁠Nezka",
+        "⁠Haven",
+        "⁠Ruby",
+        "⁠Aline"
+      ],
+      "optionsFr": [
+        "⁠Akkara",
+        "⁠Anjali",
+        "⁠Roya",
+        "⁠Saga",
+        "⁠Nezka",
+        "⁠Haven",
+        "⁠Ruby",
+        "⁠Aline"
+      ],
+      "optionsNl": [
+        "⁠Akkara",
+        "⁠Anjali",
+        "⁠Roya",
+        "⁠Saga",
+        "⁠Nezka",
+        "⁠Haven",
+        "⁠Ruby",
+        "⁠Aline"
+      ],
+      "optionsRaw": [
+        {
+          "Options (EN)": "⁠Akkara",
+          "Options (FR)": "⁠Akkara",
+          "Options (NL)": "⁠Akkara",
+          "__ckOptionValue": "⁠Akkara"
+        },
+        {
+          "Options (EN)": "⁠Anjali",
+          "Options (FR)": "⁠Anjali",
+          "Options (NL)": "⁠Anjali",
+          "__ckOptionValue": "⁠Anjali"
+        },
+        {
+          "Options (EN)": "⁠Roya",
+          "Options (FR)": "⁠Roya",
+          "Options (NL)": "⁠Roya",
+          "__ckOptionValue": "⁠Roya"
+        },
+        {
+          "Options (EN)": "⁠Saga",
+          "Options (FR)": "⁠Saga",
+          "Options (NL)": "⁠Saga",
+          "__ckOptionValue": "⁠Saga"
+        },
+        {
+          "Options (EN)": "⁠Nezka",
+          "Options (FR)": "⁠Nezka",
+          "Options (NL)": "⁠Nezka",
+          "__ckOptionValue": "⁠Nezka"
+        },
+        {
+          "Options (EN)": "⁠Haven",
+          "Options (FR)": "⁠Haven",
+          "Options (NL)": "⁠Haven",
+          "__ckOptionValue": "⁠Haven"
+        },
+        {
+          "Options (EN)": "⁠Ruby",
+          "Options (FR)": "⁠Ruby",
+          "Options (NL)": "⁠Ruby",
+          "__ckOptionValue": "⁠Ruby"
+        },
+        {
+          "Options (EN)": "⁠Aline",
+          "Options (FR)": "⁠Aline",
+          "Options (NL)": "⁠Aline",
+          "__ckOptionValue": "⁠Aline"
+        }
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "FRIDGE_TEMP",
+      "type": "CHOICE",
+      "qEn": "Fridge temp (0–7°C)",
+      "qFr": "Température frigo (0–7°C)",
+      "qNl": "Koelkast temp (0–7°C)",
+      "required": true,
+      "requiredMessage": {
+        "en": "Select Yes or No",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "fridge",
+        "header": false,
+        "title": {
+          "en": "Fridges",
+          "fr": "Réfrigérateurs",
+          "nl": "Koelkasten"
+        },
+        "collapsible": true,
+        "defaultCollapsed": false,
+        "pageSection": {
+          "title": {
+            "en": "Storage",
+            "fr": "Stockage",
+            "nl": "Opslag"
+          },
+          "infoText": {
+            "en": "Beginning of the shift",
+            "fr": "Début de la journée",
+            "nl": "Begin van de dag"
+          }
+        }
+      },
+      "pair": "fridge",
+      "listView": false,
+      "options": [
+        "No",
+        "Yes"
+      ],
+      "optionsFr": [
+        "Non",
+        "Oui"
+      ],
+      "optionsNl": [
+        "Nee",
+        "Ja"
+      ],
+      "optionsRaw": [
+        {
+          "Options (EN)": "No",
+          "Options (FR)": "Non",
+          "Options (NL)": "Nee",
+          "__ckOptionValue": "No"
+        },
+        {
+          "Options (EN)": "Yes",
+          "Options (FR)": "Oui",
+          "Options (NL)": "Ja",
+          "__ckOptionValue": "Yes"
+        }
+      ],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FRIDGE_TEMP_PHOTO",
+      "type": "FILE_UPLOAD",
+      "qEn": "Fridge photos",
+      "qFr": "Photos du réfrigérateur",
+      "qNl": "Foto’s van de koelkast",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo per fridge",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "fridge"
+      },
+      "pair": "fridge",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 2,
+        "maxFiles": 2,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "minFiles": {
+            "en": "Please upload one photo per fridge",
+            "fr": "Veuillez télécharger une photo par réfrigérateur",
+            "nl": "Upload een foto per koelkast"
+          },
+          "maxFiles": {
+            "en": "The maximun number of photos is {max}",
+            "fr": "Le nombre maximum de photos est de {max}",
+            "nl": "Het maximum aantal foto's is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You need to add {count} more photo",
+            "fr": "Vous devez ajouter {count} photo supplémentaire",
+            "nl": "Je moet {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You need to add {count} more photos",
+            "fr": "Vous devez ajouter {count} photos supplémentaires",
+            "nl": "Je moet {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FRIDGE_LBD",
+      "type": "CHECKBOX",
+      "qEn": "All items covered & dated",
+      "qFr": "Tous les articles couverts et datés",
+      "qNl": "Alle items afgedekt en gedateerd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "fridge"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FRIDGE_NBO",
+      "type": "CHECKBOX",
+      "qEn": "No bad odour",
+      "qFr": "Aucune mauvaise odeur",
+      "qNl": "Geen slechte geur",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "fridge"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FRIDGE_FIF",
+      "type": "CHECKBOX",
+      "qEn": "FIFO respected",
+      "qFr": "FIFO respecté",
+      "qNl": "FIFO gerespecteerd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "fridge"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FRIDGE_48H",
+      "type": "CHECKBOX",
+      "qEn": ">48h and expired items discarded",
+      "qFr": "Articles >48h et périmés jetés",
+      "qNl": "Items >48u en vervallen producten weggegooid",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "fridge"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FREEZER_TEMP",
+      "type": "CHOICE",
+      "qEn": "Freezer temp (≤ -12°C)",
+      "qFr": "Température congélateur (≤ -12°C)",
+      "qNl": "Vriezer temp (≤ -12°C)",
+      "required": true,
+      "requiredMessage": {
+        "en": "Select Yes or No",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "freezer",
+        "header": false,
+        "title": {
+          "en": "Freezers",
+          "fr": "Congélateurs",
+          "nl": "Vrieskasten"
+        },
+        "collapsible": true,
+        "defaultCollapsed": true
+      },
+      "pair": "freezer",
+      "listView": false,
+      "options": [
+        "No",
+        "Yes"
+      ],
+      "optionsFr": [
+        "Non",
+        "Oui"
+      ],
+      "optionsNl": [
+        "Nee",
+        "Ja"
+      ],
+      "optionsRaw": [
+        {
+          "Options (EN)": "No",
+          "Options (FR)": "Non",
+          "Options (NL)": "Nee",
+          "__ckOptionValue": "No"
+        },
+        {
+          "Options (EN)": "Yes",
+          "Options (FR)": "Oui",
+          "Options (NL)": "Ja",
+          "__ckOptionValue": "Yes"
+        }
+      ],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FREEZER_TEMP_PHOTO",
+      "type": "FILE_UPLOAD",
+      "qEn": "Freezer photos",
+      "qFr": "Photos du congélateur",
+      "qNl": "Foto’s van de diepvriezer",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo per freezer",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "freezer"
+      },
+      "pair": "freezer",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 4,
+        "maxFiles": 4,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "minFiles": {
+            "en": "Add one photo per freezer",
+            "fr": "Veuillez télécharger une photo par congélateur",
+            "nl": "Upload een foto per vrieskast"
+          },
+          "maxFiles": {
+            "en": "The maximun number of photos is {max}",
+            "fr": "Le nombre maximum de photos est de {max}",
+            "nl": "Het maximum aantal foto's is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You need to add {count} more photo",
+            "fr": "Vous devez ajouter {count} photo supplémentaire",
+            "nl": "Je moet {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You need to add {count} more photos",
+            "fr": "Vous devez ajouter {count} photos supplémentaires",
+            "nl": "Je moet {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FREEZER_FDS",
+      "type": "CHECKBOX",
+      "qEn": "Food fully frozen (solid)",
+      "qFr": "Aliments entièrement congelés (solides)",
+      "qNl": "Voedsel volledig bevroren (hard)",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "freezer"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FREEZER_PKI",
+      "type": "CHECKBOX",
+      "qEn": "Packaging intact",
+      "qFr": "Emballage intact",
+      "qNl": "Verpakking intact",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "freezer"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FREEZER_FIF",
+      "type": "CHECKBOX",
+      "qEn": "FIFO respected",
+      "qFr": "FIFO respecté",
+      "qNl": "FIFO gerespecteerd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "freezer"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FREEZER_NEI",
+      "type": "CHECKBOX",
+      "qEn": "Expired items discarded",
+      "qFr": "Articles périmés jetés",
+      "qNl": "Vervallen items weggegooid",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "freezer"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "FRESH_VEGGIES",
+      "type": "CHECKBOX",
+      "qEn": "Molded and spoiled vegetables discarded",
+      "qFr": "Légumes moisis et abîmés jetés",
+      "qNl": "Beschimmelde en bedorven groenten weggegooid",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "veggies",
+        "header": false,
+        "title": {
+          "en": "Fresh Vegetables",
+          "fr": "Légumes frais",
+          "nl": "Vers fruit en groenten"
+        },
+        "collapsible": true,
+        "defaultCollapsed": true
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "DRY_EXP",
+      "type": "CHECKBOX",
+      "qEn": "Expired dry food discarded",
+      "qFr": "Produits secs périmés jetés",
+      "qNl": "Vervallen droge voeding weggegooid",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "dry_section",
+        "header": false,
+        "title": {
+          "en": "Dry foods",
+          "fr": "Produits secs",
+          "nl": "Droge voedingsmiddelen"
+        },
+        "collapsible": true,
+        "defaultCollapsed": true
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ISSUES_PREV",
+      "type": "PARAGRAPH",
+      "qEn": "Issues from previous shift",
+      "qFr": "Problèmes du shift précédent",
+      "qNl": "Problemen vorige shift",
+      "required": false,
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "prev_issues",
+        "header": false,
+        "title": {
+          "en": "Issues from previous shift",
+          "fr": "Problèmes de la précédente équipe",
+          "nl": "Problemen van de vorige team"
+        },
+        "collapsible": true,
+        "defaultCollapsed": true
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "validationRules": [
+        {
+          "level": "warning",
+          "warningDisplay": "top",
+          "warningView": "summary",
+          "when": {
+            "fieldId": "ISSUES_PREV",
+            "notEmpty": true
+          },
+          "message": {
+            "en": "Issues from the previous shift have been reported",
+            "fr": "Des problèmes du service précédent ont été signalés",
+            "nl": "Er zijn problemen gemeld tijdens de vorige dienst"
+          }
+        }
+      ],
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ISSUES_PREV_EVD",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": false,
+      "group": {
+        "id": "prev_issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "maxFiles": 5,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*",
+          "video/*",
+          "application/pdf"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "ISSUES_PREV",
+            "notEmpty": true
+          },
+          "then": {
+            "fieldId": "ISSUES_PREV_EVD",
+            "required": true
+          },
+          "message": {
+            "en": "Add photo evidence",
+            "fr": "",
+            "nl": ""
+          }
+        }
+      ],
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_STV",
+      "type": "CHECKBOX",
+      "qEn": "Stove / cooktop clean",
+      "qFr": "Cuisinière / plaques propres",
+      "qNl": "Fornuis / kookplaat schoon",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness",
+        "header": false,
+        "title": {
+          "en": "Kitchen check",
+          "fr": "Vérification de la cuisine",
+          "nl": "Keukencontrole"
+        },
+        "collapsible": true,
+        "defaultCollapsed": true,
+        "pageSection": {
+          "title": {
+            "en": "Cleanliness",
+            "fr": "Propreté",
+            "nl": "Keukenzuivering"
+          },
+          "infoText": {
+            "en": "End of the shift",
+            "fr": "Fin de la journée",
+            "nl": "Einde van de dienst"
+          }
+        }
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_KEQ",
+      "type": "CHECKBOX",
+      "qEn": "Kitchen equipment & utensils clean",
+      "qFr": "Kitchen equipment & utensils clean",
+      "qNl": "Kitchen equipment & utensils clean",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_CNT",
+      "type": "CHECKBOX",
+      "qEn": "Countertops clean & disinfected",
+      "qFr": "Plans de travail propres et désinfectés",
+      "qNl": "Werkbladen schoon en gedesinfecteerd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_FLR",
+      "type": "CHECKBOX",
+      "qEn": "Floor clean",
+      "qFr": "Sol propre",
+      "qNl": "Vloer schoon",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_OVN",
+      "type": "CHECKBOX",
+      "qEn": "Oven clean & empty",
+      "qFr": "Four propre et vide",
+      "qNl": "Oven schoon en leeg",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_DSH",
+      "type": "CHECKBOX",
+      "qEn": "Dishwasher empty",
+      "qFr": "Lave-vaisselle vide",
+      "qNl": "Vaatwasser leeg",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_NDD",
+      "type": "CHECKBOX",
+      "qEn": "No dirty dishes left",
+      "qFr": "Aucune vaisselle sale laissée",
+      "qNl": "Geen vuile vaat achtergelaten",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_BET",
+      "type": "CHECKBOX",
+      "qEn": "Bins emptied",
+      "qFr": "Poubelles vidées",
+      "qNl": "Vuilbakken geleegd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_BLR",
+      "type": "CHECKBOX",
+      "qEn": "Bin liners replaced",
+      "qFr": "Sacs poubelle remplacés",
+      "qNl": "Vuilniszakken vervangen",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_BCN",
+      "type": "CHECKBOX",
+      "qEn": "Bins clean (no odour)",
+      "qFr": "Poubelles propres (pas d'odeur)",
+      "qNl": "Vuilbakken schoon",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "CLEAN_PEST",
+      "type": "CHECKBOX",
+      "qEn": "Pest control and traps checked",
+      "qFr": "Lutte antiparasitaire et pièges vérifiés",
+      "qNl": "Ongediertebestrijding en vallen gecontroleerd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "HYGIENE_PM",
+      "type": "CHECKBOX",
+      "qEn": "Dirty cloths washed",
+      "qFr": "Bac à chiffons sales vidé",
+      "qNl": "Bak vuile doeken geleegd (alleen PM)",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "PM"
+        }
+      }
+    },
+    {
+      "id": "CLEAN_EQP",
+      "type": "CHECKBOX",
+      "qEn": "Cleaning equipment clean & stored",
+      "qFr": "Cleaning equipment clean & stored",
+      "qNl": "Cleaning equipment clean & stored",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "kitchen_cleanliness"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": [
+            "AM",
+            "PM"
+          ]
+        }
+      }
+    },
+    {
+      "id": "WK_FRIDGE",
+      "type": "CHECKBOX",
+      "qEn": "Deep clean fridges (shelves|seals)",
+      "qFr": "Nettoyage en profondeur des frigos (étagères|joints)",
+      "qNl": "Koelkasten diep reinigen (rekken|deurrubbers)",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "weekly_checks",
+        "header": false,
+        "title": {
+          "en": "Weekly Checks",
+          "fr": "Vérifications hebdomadaires",
+          "nl": "Wekelijkse controles"
+        },
+        "collapsible": true,
+        "defaultCollapsed": false
+      },
+      "pair": "fridge",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_FRIDGE_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "fridge",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_FREEZER",
+      "type": "CHECKBOX",
+      "qEn": "Deep clean freezers (interior)",
+      "qFr": "Nettoyage en profondeur des congélateurs (intérieur)",
+      "qNl": "Vriezers diep reinigen (binnenkant)",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "freezer",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_FREEZER_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "freezer",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_BINS",
+      "type": "CHECKBOX",
+      "qEn": "Clean & disinfect bins",
+      "qFr": "Nettoyer et désinfecter les poubelles",
+      "qNl": "Vuilbakken reinigen en desinfecteren",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "bins",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_BINS_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "bins",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_DRANIS",
+      "type": "CHECKBOX",
+      "qEn": "Clean drains & sinks",
+      "qFr": "Nettoyer les évacuations et les éviers",
+      "qNl": "Afvoeren en spoelbakken reinigen",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "drains",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_DRANIS_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "drains",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_EQUIP",
+      "type": "CHECKBOX",
+      "qEn": "Clean small equipment & storage",
+      "qFr": "Nettoyer le petit matériel et le stockage",
+      "qNl": "Klein materiaal en opslag reinigen",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "equipment",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_EQUIP_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "equipment",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_EXHAUST",
+      "type": "CHECKBOX",
+      "qEn": "Exhaust hood filter and visible parts cleaned",
+      "qFr": "Filtre de hotte d’extraction et parties visibles nettoyés",
+      "qNl": "Filter van de afzuigkap en zichtbare onderdelen gereinigd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "exhaust",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_EXHAUST_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "pair": "exhaust",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "WK_CLEAN_EQP",
+      "type": "CHECKBOX",
+      "qEn": "Cleaning equipment clean & stored",
+      "qFr": "Cleaning equipment clean & stored",
+      "qNl": "Cleaning equipment clean & stored",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "weekly_checks"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Weekly"
+        }
+      }
+    },
+    {
+      "id": "MH_OVEN",
+      "type": "CHECKBOX",
+      "qEn": "Oven deep cleaning",
+      "qFr": "Nettoyage en profondeur du four",
+      "qNl": "Oven diep reinigen",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "monthly_checks",
+        "header": false,
+        "title": {
+          "en": "Monthly Checks",
+          "fr": "Vérifications mensuelles",
+          "nl": "Maandelijkse controles"
+        },
+        "collapsible": true,
+        "defaultCollapsed": false
+      },
+      "pair": "oven",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_OVEN_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "oven",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_EXH_DEEP",
+      "type": "CHECKBOX",
+      "qEn": "Exhaust hood deep cleaned",
+      "qFr": "Hotte d’extraction nettoyée en profondeur",
+      "qNl": "Afzuigkap grondig gereinigd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "monthly_checks",
+        "header": false,
+        "title": {
+          "en": "Monthly Checks",
+          "fr": "Vérifications mensuelles",
+          "nl": "Maandelijkse controles"
+        },
+        "collapsible": true,
+        "defaultCollapsed": false
+      },
+      "pair": "deep",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_EXH_DEEP_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "deep",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_DISH",
+      "type": "CHECKBOX",
+      "qEn": "Dishwasher filter cleaned",
+      "qFr": "Filtre du lave-vaisselle nettoyé",
+      "qNl": "Vaatwasserfilter gereinigd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "dish",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_DISH_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "dish",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_EXTR",
+      "type": "CHECKBOX",
+      "qEn": "Extractor hood / filters cleaned",
+      "qFr": "Hotte / filtres nettoyés",
+      "qNl": "Dampkap / filters gereinigd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "extractor",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_EXTR_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "extractor",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_FRIDGE",
+      "type": "CHECKBOX",
+      "qEn": "Fridge door seals cleaned & checked",
+      "qFr": "Joints de porte du frigo nettoyés et vérifiés",
+      "qNl": "Koelkastdeurrubbers gereinigd en gecontroleerd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "fridge",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_FRIDGE_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "fridge",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_FREEZER",
+      "type": "CHECKBOX",
+      "qEn": "Freezer door seals cleaned & checked",
+      "qFr": "Joints de porte du congélateur nettoyés et vérifiés",
+      "qNl": "Vriezerdeurrubbers gereinigd en gecontroleerd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "freezer",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_FREEZER_PH",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": true,
+      "requiredMessage": {
+        "en": "Add one photo",
+        "fr": "",
+        "nl": ""
+      },
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "pair": "freezer",
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "minFiles": 1,
+        "maxFiles": 1,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_DRY",
+      "type": "CHECKBOX",
+      "qEn": "Dry storage inspected",
+      "qFr": "Stockage sec inspecté",
+      "qNl": "Droge opslag gecontroleerd",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "MH_CLEAN_EQP",
+      "type": "CHECKBOX",
+      "qEn": "Cleaning equipment clean & stored",
+      "qFr": "Cleaning equipment clean & stored",
+      "qNl": "Cleaning equipment clean & stored",
+      "required": true,
+      "requiredMessage": {
+        "en": "Confirm this check by ticking the box",
+        "fr": "",
+        "nl": ""
+      },
+      "group": {
+        "id": "monthly_checks"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "CHECK_FREQ",
+          "equals": "Monthly"
+        }
+      }
+    },
+    {
+      "id": "ISSUES",
+      "type": "PARAGRAPH",
+      "qEn": "Issues",
+      "qFr": "Problèmes",
+      "qNl": "Problemen",
+      "required": false,
+      "ui": {
+        "hideLabel": true
+      },
+      "group": {
+        "id": "issues",
+        "header": false,
+        "title": {
+          "en": "Issues",
+          "fr": "Problèmes",
+          "nl": "Problemen"
+        },
+        "collapsible": true,
+        "defaultCollapsed": true
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "validationRules": [
+        {
+          "level": "warning",
+          "warningDisplay": "top",
+          "warningView": "summary",
+          "when": {
+            "fieldId": "ISSUES",
+            "notEmpty": true
+          },
+          "message": {
+            "en": "Issues have been reported for this shift",
+            "fr": "Des problèmes ont été signalés pour ce service",
+            "nl": "Er zijn problemen gemeld voor deze dienst"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ISSUES_EVD",
+      "type": "FILE_UPLOAD",
+      "qEn": "Photo",
+      "qFr": "Photo",
+      "qNl": "Foto",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "uploadConfig": {
+        "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+        "maxFiles": 5,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*",
+          "video/*",
+          "application/pdf"
+        ],
+        "errorMessages": {
+          "maxFiles": {
+            "en": "The maximun number of files is {max}",
+            "fr": "Le nombre maximum de fichiers est de {max}",
+            "nl": "Het maximum aantal bestanden is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The maximum photo size is {mb}MB",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You can add {count} more photo",
+            "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+            "nl": "Je kan {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You can add {count} more photos",
+            "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+            "nl": "Je kan {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1600,
+            "quality": 0.82,
+            "outputType": "keep"
+          }
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "ISSUES",
+            "notEmpty": true
+          },
+          "then": {
+            "fieldId": "ISSUES_EVD",
+            "required": true
+          },
+          "message": {
+            "en": "Add photo evidence",
+            "fr": "",
+            "nl": ""
+          }
+        }
+      ]
+    },
+    {
+      "id": "AM_DAILY",
+      "type": "BUTTON",
+      "qEn": "AM",
+      "qFr": "AM",
+      "qNl": "AM",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "status",
+          "equals": "Closed"
+        }
+      },
+      "button": {
+        "action": "createRecordPreset",
+        "presetValues": {
+          "CHECK_FREQ": "AM"
+        },
+        "placements": [
+          "topBarList"
+        ]
+      }
+    },
+    {
+      "id": "PM_DAILY",
+      "type": "BUTTON",
+      "qEn": "PM",
+      "qFr": "PM",
+      "qNl": "PM",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "status",
+          "equals": "Closed"
+        }
+      },
+      "button": {
+        "action": "createRecordPreset",
+        "presetValues": {
+          "CHECK_FREQ": "PM"
+        },
+        "placements": [
+          "topBarList"
+        ]
+      }
+    },
+    {
+      "id": "WEEKLY",
+      "type": "BUTTON",
+      "qEn": "Weekly",
+      "qFr": "Hebdomadaire",
+      "qNl": "Wekelijks",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "status",
+          "equals": "Closed"
+        }
+      },
+      "button": {
+        "action": "createRecordPreset",
+        "presetValues": {
+          "CHECK_FREQ": "Weekly"
+        },
+        "placements": [
+          "topBarList"
+        ]
+      }
+    },
+    {
+      "id": "MONTHLY",
+      "type": "BUTTON",
+      "qEn": "Monthly",
+      "qFr": "Mensuel",
+      "qNl": "Maandelijks",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "status",
+          "equals": "Closed"
+        }
+      },
+      "button": {
+        "action": "createRecordPreset",
+        "presetValues": {
+          "CHECK_FREQ": "Monthly"
+        },
+        "placements": [
+          "topBarList"
+        ]
+      }
+    },
+    {
+      "id": "PDF_DRAFT",
+      "type": "BUTTON",
+      "qEn": "Final report",
+      "qFr": "Rapport final",
+      "qNl": "Eindrapport",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "status",
+          "equals": "Closed"
+        }
+      },
+      "button": {
+        "action": "openUrlField",
+        "fieldId": "pdfUrl",
+        "placements": [
+          "summaryBar"
+        ]
+      }
+    },
+    {
+      "id": "STO_PROCEDURE",
+      "type": "BUTTON",
+      "qEn": "Storage Procedure",
+      "qFr": "Procédure de stockage",
+      "qNl": "Opslagprocedure",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "button": {
+        "action": "renderHtmlTemplate",
+        "templateId": {
+          "EN": "bundle:procedure_storage.html",
+          "FR": "bundle:procedure_storage.html",
+          "NL": "bundle:procedure_storage.html"
+        },
+        "placements": [
+          "topBar"
+        ]
+      }
+    },
+    {
+      "id": "CLEAN_PROCEDURE",
+      "type": "BUTTON",
+      "qEn": "Cleaning Procedure",
+      "qFr": "Procédure de nettoyage",
+      "qNl": "Schoonmaakprocedure",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "button": {
+        "action": "renderHtmlTemplate",
+        "templateId": {
+          "EN": "bundle:procedure_cleaning_disinfection.html",
+          "FR": "bundle:procedure_cleaning_disinfection.html",
+          "NL": "bundle:procedure_cleaning_disinfection.html"
+        },
+        "placements": [
+          "topBar"
+        ]
+      }
+    }
+  ],
+  "dedupRules": [
+    {
+      "id": "uniqueDateFrequency",
+      "scope": "form",
+      "keys": [
+        "DATE",
+        "CHECK_FREQ"
+      ],
+      "matchMode": "exact",
+      "onConflict": "reject",
+      "message": {
+        "en": "A record already exists for this date and frequency."
+      }
+    }
+  ],
+  "definition": {
+    "title": "Storage & cleaning checks",
+    "description": "Capture data for AFSCA compliance",
+    "destinationTab": "Checklist Data",
+    "languages": [
+      "EN",
+      "FR",
+      "NL"
+    ],
+    "defaultLanguage": "EN",
+    "languageSelectorEnabled": true,
+    "questions": [
+      {
+        "id": "CHECK_FREQ",
+        "type": "CHOICE",
+        "label": {
+          "en": "Check Frequency",
+          "fr": "Fréquence de contrôle",
+          "nl": "Controlefrequentie"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Please select the check frequency",
+          "fr": "Veuillez sélectionner la fréquence de vérification",
+          "nl": "Selecteer de controlefrequentie"
+        },
+        "ui": {
+          "control": "segmented",
+          "hideLabel": true
+        },
+        "optionSort": "source",
+        "group": {
+          "id": "header",
+          "header": true,
+          "title": {
+            "en": "Check Frequency",
+            "fr": "Fréquence de contrôle",
+            "nl": "Controlefrequentie"
+          },
+          "collapsible": true,
+          "defaultCollapsed": false
+        },
+        "listView": true,
+        "options": {
+          "en": [
+            "AM",
+            "PM",
+            "Weekly",
+            "Monthly"
+          ],
+          "fr": [
+            "AM",
+            "PM",
+            "Hebdomadaire",
+            "Mensuel"
+          ],
+          "nl": [
+            "AM",
+            "PM",
+            "Wekelijks",
+            "Maandelijks"
+          ]
+        },
+        "derivedValue": {
+          "op": "timeOfDayMap",
+          "thresholds": [
+            {
+              "before": "12h",
+              "value": "AM"
+            },
+            {
+              "value": "PM"
+            }
+          ]
+        },
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": [
+                "AM",
+                "PM"
+              ]
+            },
+            "then": {
+              "fieldId": "CHECK_FREQ",
+              "required": true
+            },
+            "message": {
+              "en": "Please select the check frequency",
+              "fr": "Veuillez sélectionner la fréquence de vérification",
+              "nl": "Selecteer de controlefrequentie"
+            }
+          }
+        ],
+        "clearOnChange": true,
+        "listViewSort": {
+          "direction": "desc",
+          "priority": 2
+        }
+      },
+      {
+        "id": "DATE",
+        "type": "DATE",
+        "label": {
+          "en": "Date",
+          "fr": "Date",
+          "nl": "Datum"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Please select the date",
+          "fr": "Veuillez sélectionner la date",
+          "nl": "Selecteer de datum"
+        },
+        "group": {
+          "id": "header",
+          "header": true,
+          "collapsible": true,
+          "defaultCollapsed": false
+        },
+        "listView": true,
+        "derivedValue": {
+          "op": "today"
+        },
+        "listViewSort": {
+          "direction": "desc",
+          "priority": 1
+        }
+      },
+      {
+        "id": "COOK",
+        "type": "CHOICE",
+        "label": {
+          "en": "Cook name",
+          "fr": "Nom du cuisinier",
+          "nl": "Naam kok"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Select your name from the list",
+          "fr": "Veuillez sélectionner votre nom dans la liste",
+          "nl": "Selecteer je naam uit de lijst"
+        },
+        "group": {
+          "id": "header",
+          "header": true,
+          "collapsible": true,
+          "defaultCollapsed": false
+        },
+        "listView": true,
+        "options": {
+          "en": [
+            "⁠Akkara",
+            "⁠Anjali",
+            "⁠Roya",
+            "⁠Saga",
+            "⁠Nezka",
+            "⁠Haven",
+            "⁠Ruby",
+            "⁠Aline"
+          ],
+          "fr": [
+            "⁠Akkara",
+            "⁠Anjali",
+            "⁠Roya",
+            "⁠Saga",
+            "⁠Nezka",
+            "⁠Haven",
+            "⁠Ruby",
+            "⁠Aline"
+          ],
+          "nl": [
+            "⁠Akkara",
+            "⁠Anjali",
+            "⁠Roya",
+            "⁠Saga",
+            "⁠Nezka",
+            "⁠Haven",
+            "⁠Ruby",
+            "⁠Aline"
+          ],
+          "raw": [
+            {
+              "Options (EN)": "⁠Akkara",
+              "Options (FR)": "⁠Akkara",
+              "Options (NL)": "⁠Akkara",
+              "__ckOptionValue": "⁠Akkara"
+            },
+            {
+              "Options (EN)": "⁠Anjali",
+              "Options (FR)": "⁠Anjali",
+              "Options (NL)": "⁠Anjali",
+              "__ckOptionValue": "⁠Anjali"
+            },
+            {
+              "Options (EN)": "⁠Roya",
+              "Options (FR)": "⁠Roya",
+              "Options (NL)": "⁠Roya",
+              "__ckOptionValue": "⁠Roya"
+            },
+            {
+              "Options (EN)": "⁠Saga",
+              "Options (FR)": "⁠Saga",
+              "Options (NL)": "⁠Saga",
+              "__ckOptionValue": "⁠Saga"
+            },
+            {
+              "Options (EN)": "⁠Nezka",
+              "Options (FR)": "⁠Nezka",
+              "Options (NL)": "⁠Nezka",
+              "__ckOptionValue": "⁠Nezka"
+            },
+            {
+              "Options (EN)": "⁠Haven",
+              "Options (FR)": "⁠Haven",
+              "Options (NL)": "⁠Haven",
+              "__ckOptionValue": "⁠Haven"
+            },
+            {
+              "Options (EN)": "⁠Ruby",
+              "Options (FR)": "⁠Ruby",
+              "Options (NL)": "⁠Ruby",
+              "__ckOptionValue": "⁠Ruby"
+            },
+            {
+              "Options (EN)": "⁠Aline",
+              "Options (FR)": "⁠Aline",
+              "Options (NL)": "⁠Aline",
+              "__ckOptionValue": "⁠Aline"
+            }
+          ]
+        }
+      },
+      {
+        "id": "FRIDGE_TEMP",
+        "type": "CHOICE",
+        "label": {
+          "en": "Fridge temp (0–7°C)",
+          "fr": "Température frigo (0–7°C)",
+          "nl": "Koelkast temp (0–7°C)"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Select Yes or No",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "fridge",
+          "header": false,
+          "title": {
+            "en": "Fridges",
+            "fr": "Réfrigérateurs",
+            "nl": "Koelkasten"
+          },
+          "collapsible": true,
+          "defaultCollapsed": false,
+          "pageSection": {
+            "title": {
+              "en": "Storage",
+              "fr": "Stockage",
+              "nl": "Opslag"
+            },
+            "infoText": {
+              "en": "Beginning of the shift",
+              "fr": "Début de la journée",
+              "nl": "Begin van de dag"
+            }
+          }
+        },
+        "pair": "fridge",
+        "listView": false,
+        "options": {
+          "en": [
+            "No",
+            "Yes"
+          ],
+          "fr": [
+            "Non",
+            "Oui"
+          ],
+          "nl": [
+            "Nee",
+            "Ja"
+          ],
+          "raw": [
+            {
+              "Options (EN)": "No",
+              "Options (FR)": "Non",
+              "Options (NL)": "Nee",
+              "__ckOptionValue": "No"
+            },
+            {
+              "Options (EN)": "Yes",
+              "Options (FR)": "Oui",
+              "Options (NL)": "Ja",
+              "__ckOptionValue": "Yes"
+            }
+          ]
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FRIDGE_TEMP_PHOTO",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Fridge photos",
+          "fr": "Photos du réfrigérateur",
+          "nl": "Foto’s van de koelkast"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo per fridge",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "fridge"
+        },
+        "pair": "fridge",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 2,
+          "maxFiles": 2,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "minFiles": {
+              "en": "Please upload one photo per fridge",
+              "fr": "Veuillez télécharger une photo par réfrigérateur",
+              "nl": "Upload een foto per koelkast"
+            },
+            "maxFiles": {
+              "en": "The maximun number of photos is {max}",
+              "fr": "Le nombre maximum de photos est de {max}",
+              "nl": "Het maximum aantal foto's is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You need to add {count} more photo",
+              "fr": "Vous devez ajouter {count} photo supplémentaire",
+              "nl": "Je moet {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You need to add {count} more photos",
+              "fr": "Vous devez ajouter {count} photos supplémentaires",
+              "nl": "Je moet {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FRIDGE_LBD",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "All items covered & dated",
+          "fr": "Tous les articles couverts et datés",
+          "nl": "Alle items afgedekt en gedateerd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "fridge"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FRIDGE_NBO",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "No bad odour",
+          "fr": "Aucune mauvaise odeur",
+          "nl": "Geen slechte geur"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "fridge"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FRIDGE_FIF",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "FIFO respected",
+          "fr": "FIFO respecté",
+          "nl": "FIFO gerespecteerd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "fridge"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FRIDGE_48H",
+        "type": "CHECKBOX",
+        "label": {
+          "en": ">48h and expired items discarded",
+          "fr": "Articles >48h et périmés jetés",
+          "nl": "Items >48u en vervallen producten weggegooid"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "fridge"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FREEZER_TEMP",
+        "type": "CHOICE",
+        "label": {
+          "en": "Freezer temp (≤ -12°C)",
+          "fr": "Température congélateur (≤ -12°C)",
+          "nl": "Vriezer temp (≤ -12°C)"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Select Yes or No",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "freezer",
+          "header": false,
+          "title": {
+            "en": "Freezers",
+            "fr": "Congélateurs",
+            "nl": "Vrieskasten"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true
+        },
+        "pair": "freezer",
+        "listView": false,
+        "options": {
+          "en": [
+            "No",
+            "Yes"
+          ],
+          "fr": [
+            "Non",
+            "Oui"
+          ],
+          "nl": [
+            "Nee",
+            "Ja"
+          ],
+          "raw": [
+            {
+              "Options (EN)": "No",
+              "Options (FR)": "Non",
+              "Options (NL)": "Nee",
+              "__ckOptionValue": "No"
+            },
+            {
+              "Options (EN)": "Yes",
+              "Options (FR)": "Oui",
+              "Options (NL)": "Ja",
+              "__ckOptionValue": "Yes"
+            }
+          ]
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FREEZER_TEMP_PHOTO",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Freezer photos",
+          "fr": "Photos du congélateur",
+          "nl": "Foto’s van de diepvriezer"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo per freezer",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "freezer"
+        },
+        "pair": "freezer",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 4,
+          "maxFiles": 4,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "minFiles": {
+              "en": "Add one photo per freezer",
+              "fr": "Veuillez télécharger une photo par congélateur",
+              "nl": "Upload een foto per vrieskast"
+            },
+            "maxFiles": {
+              "en": "The maximun number of photos is {max}",
+              "fr": "Le nombre maximum de photos est de {max}",
+              "nl": "Het maximum aantal foto's is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You need to add {count} more photo",
+              "fr": "Vous devez ajouter {count} photo supplémentaire",
+              "nl": "Je moet {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You need to add {count} more photos",
+              "fr": "Vous devez ajouter {count} photos supplémentaires",
+              "nl": "Je moet {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FREEZER_FDS",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Food fully frozen (solid)",
+          "fr": "Aliments entièrement congelés (solides)",
+          "nl": "Voedsel volledig bevroren (hard)"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "freezer"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FREEZER_PKI",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Packaging intact",
+          "fr": "Emballage intact",
+          "nl": "Verpakking intact"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "freezer"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FREEZER_FIF",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "FIFO respected",
+          "fr": "FIFO respecté",
+          "nl": "FIFO gerespecteerd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "freezer"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FREEZER_NEI",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Expired items discarded",
+          "fr": "Articles périmés jetés",
+          "nl": "Vervallen items weggegooid"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "freezer"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "FRESH_VEGGIES",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Molded and spoiled vegetables discarded",
+          "fr": "Légumes moisis et abîmés jetés",
+          "nl": "Beschimmelde en bedorven groenten weggegooid"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "veggies",
+          "header": false,
+          "title": {
+            "en": "Fresh Vegetables",
+            "fr": "Légumes frais",
+            "nl": "Vers fruit en groenten"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "DRY_EXP",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Expired dry food discarded",
+          "fr": "Produits secs périmés jetés",
+          "nl": "Vervallen droge voeding weggegooid"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "dry_section",
+          "header": false,
+          "title": {
+            "en": "Dry foods",
+            "fr": "Produits secs",
+            "nl": "Droge voedingsmiddelen"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "ISSUES_PREV",
+        "type": "PARAGRAPH",
+        "label": {
+          "en": "Issues from previous shift",
+          "fr": "Problèmes du shift précédent",
+          "nl": "Problemen vorige shift"
+        },
+        "required": false,
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "prev_issues",
+          "header": false,
+          "title": {
+            "en": "Issues from previous shift",
+            "fr": "Problèmes de la précédente équipe",
+            "nl": "Problemen van de vorige team"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true
+        },
+        "listView": false,
+        "validationRules": [
+          {
+            "level": "warning",
+            "warningDisplay": "top",
+            "warningView": "summary",
+            "when": {
+              "fieldId": "ISSUES_PREV",
+              "notEmpty": true
+            },
+            "message": {
+              "en": "Issues from the previous shift have been reported",
+              "fr": "Des problèmes du service précédent ont été signalés",
+              "nl": "Er zijn problemen gemeld tijdens de vorige dienst"
+            }
+          }
+        ],
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "ISSUES_PREV_EVD",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": false,
+        "group": {
+          "id": "prev_issues"
+        },
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "maxFiles": 5,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*",
+            "video/*",
+            "application/pdf"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "ISSUES_PREV",
+              "notEmpty": true
+            },
+            "then": {
+              "fieldId": "ISSUES_PREV_EVD",
+              "required": true
+            },
+            "message": {
+              "en": "Add photo evidence",
+              "fr": "",
+              "nl": ""
+            }
+          }
+        ],
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_STV",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Stove / cooktop clean",
+          "fr": "Cuisinière / plaques propres",
+          "nl": "Fornuis / kookplaat schoon"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness",
+          "header": false,
+          "title": {
+            "en": "Kitchen check",
+            "fr": "Vérification de la cuisine",
+            "nl": "Keukencontrole"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true,
+          "pageSection": {
+            "title": {
+              "en": "Cleanliness",
+              "fr": "Propreté",
+              "nl": "Keukenzuivering"
+            },
+            "infoText": {
+              "en": "End of the shift",
+              "fr": "Fin de la journée",
+              "nl": "Einde van de dienst"
+            }
+          }
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_KEQ",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Kitchen equipment & utensils clean",
+          "fr": "Kitchen equipment & utensils clean",
+          "nl": "Kitchen equipment & utensils clean"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_CNT",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Countertops clean & disinfected",
+          "fr": "Plans de travail propres et désinfectés",
+          "nl": "Werkbladen schoon en gedesinfecteerd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_FLR",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Floor clean",
+          "fr": "Sol propre",
+          "nl": "Vloer schoon"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_OVN",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Oven clean & empty",
+          "fr": "Four propre et vide",
+          "nl": "Oven schoon en leeg"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_DSH",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Dishwasher empty",
+          "fr": "Lave-vaisselle vide",
+          "nl": "Vaatwasser leeg"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_NDD",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "No dirty dishes left",
+          "fr": "Aucune vaisselle sale laissée",
+          "nl": "Geen vuile vaat achtergelaten"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_BET",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Bins emptied",
+          "fr": "Poubelles vidées",
+          "nl": "Vuilbakken geleegd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_BLR",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Bin liners replaced",
+          "fr": "Sacs poubelle remplacés",
+          "nl": "Vuilniszakken vervangen"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_BCN",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Bins clean (no odour)",
+          "fr": "Poubelles propres (pas d'odeur)",
+          "nl": "Vuilbakken schoon"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "CLEAN_PEST",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Pest control and traps checked",
+          "fr": "Lutte antiparasitaire et pièges vérifiés",
+          "nl": "Ongediertebestrijding en vallen gecontroleerd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "HYGIENE_PM",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Dirty cloths washed",
+          "fr": "Bac à chiffons sales vidé",
+          "nl": "Bak vuile doeken geleegd (alleen PM)"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "PM"
+          }
+        }
+      },
+      {
+        "id": "CLEAN_EQP",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Cleaning equipment clean & stored",
+          "fr": "Cleaning equipment clean & stored",
+          "nl": "Cleaning equipment clean & stored"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "kitchen_cleanliness"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": [
+              "AM",
+              "PM"
+            ]
+          }
+        }
+      },
+      {
+        "id": "WK_FRIDGE",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Deep clean fridges (shelves|seals)",
+          "fr": "Nettoyage en profondeur des frigos (étagères|joints)",
+          "nl": "Koelkasten diep reinigen (rekken|deurrubbers)"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "weekly_checks",
+          "header": false,
+          "title": {
+            "en": "Weekly Checks",
+            "fr": "Vérifications hebdomadaires",
+            "nl": "Wekelijkse controles"
+          },
+          "collapsible": true,
+          "defaultCollapsed": false
+        },
+        "pair": "fridge",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_FRIDGE_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "fridge",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_FREEZER",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Deep clean freezers (interior)",
+          "fr": "Nettoyage en profondeur des congélateurs (intérieur)",
+          "nl": "Vriezers diep reinigen (binnenkant)"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "freezer",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_FREEZER_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "freezer",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_BINS",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Clean & disinfect bins",
+          "fr": "Nettoyer et désinfecter les poubelles",
+          "nl": "Vuilbakken reinigen en desinfecteren"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "bins",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_BINS_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "bins",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_DRANIS",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Clean drains & sinks",
+          "fr": "Nettoyer les évacuations et les éviers",
+          "nl": "Afvoeren en spoelbakken reinigen"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "drains",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_DRANIS_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "drains",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_EQUIP",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Clean small equipment & storage",
+          "fr": "Nettoyer le petit matériel et le stockage",
+          "nl": "Klein materiaal en opslag reinigen"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "equipment",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_EQUIP_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "equipment",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_EXHAUST",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Exhaust hood filter and visible parts cleaned",
+          "fr": "Filtre de hotte d’extraction et parties visibles nettoyés",
+          "nl": "Filter van de afzuigkap en zichtbare onderdelen gereinigd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "exhaust",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_EXHAUST_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "pair": "exhaust",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "WK_CLEAN_EQP",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Cleaning equipment clean & stored",
+          "fr": "Cleaning equipment clean & stored",
+          "nl": "Cleaning equipment clean & stored"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "weekly_checks"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          }
+        }
+      },
+      {
+        "id": "MH_OVEN",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Oven deep cleaning",
+          "fr": "Nettoyage en profondeur du four",
+          "nl": "Oven diep reinigen"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "monthly_checks",
+          "header": false,
+          "title": {
+            "en": "Monthly Checks",
+            "fr": "Vérifications mensuelles",
+            "nl": "Maandelijkse controles"
+          },
+          "collapsible": true,
+          "defaultCollapsed": false
+        },
+        "pair": "oven",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_OVEN_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "oven",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_EXH_DEEP",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Exhaust hood deep cleaned",
+          "fr": "Hotte d’extraction nettoyée en profondeur",
+          "nl": "Afzuigkap grondig gereinigd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "monthly_checks",
+          "header": false,
+          "title": {
+            "en": "Monthly Checks",
+            "fr": "Vérifications mensuelles",
+            "nl": "Maandelijkse controles"
+          },
+          "collapsible": true,
+          "defaultCollapsed": false
+        },
+        "pair": "deep",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_EXH_DEEP_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "deep",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_DISH",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Dishwasher filter cleaned",
+          "fr": "Filtre du lave-vaisselle nettoyé",
+          "nl": "Vaatwasserfilter gereinigd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "dish",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_DISH_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "dish",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_EXTR",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Extractor hood / filters cleaned",
+          "fr": "Hotte / filtres nettoyés",
+          "nl": "Dampkap / filters gereinigd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "extractor",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_EXTR_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "extractor",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_FRIDGE",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Fridge door seals cleaned & checked",
+          "fr": "Joints de porte du frigo nettoyés et vérifiés",
+          "nl": "Koelkastdeurrubbers gereinigd en gecontroleerd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "fridge",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_FRIDGE_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "fridge",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_FREEZER",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Freezer door seals cleaned & checked",
+          "fr": "Joints de porte du congélateur nettoyés et vérifiés",
+          "nl": "Vriezerdeurrubbers gereinigd en gecontroleerd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "freezer",
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_FREEZER_PH",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Add one photo",
+          "fr": "",
+          "nl": ""
+        },
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "pair": "freezer",
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "minFiles": 1,
+          "maxFiles": 1,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_DRY",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Dry storage inspected",
+          "fr": "Stockage sec inspecté",
+          "nl": "Droge opslag gecontroleerd"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "MH_CLEAN_EQP",
+        "type": "CHECKBOX",
+        "label": {
+          "en": "Cleaning equipment clean & stored",
+          "fr": "Cleaning equipment clean & stored",
+          "nl": "Cleaning equipment clean & stored"
+        },
+        "required": true,
+        "requiredMessage": {
+          "en": "Confirm this check by ticking the box",
+          "fr": "",
+          "nl": ""
+        },
+        "group": {
+          "id": "monthly_checks"
+        },
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          }
+        }
+      },
+      {
+        "id": "ISSUES",
+        "type": "PARAGRAPH",
+        "label": {
+          "en": "Issues",
+          "fr": "Problèmes",
+          "nl": "Problemen"
+        },
+        "required": false,
+        "ui": {
+          "hideLabel": true
+        },
+        "group": {
+          "id": "issues",
+          "header": false,
+          "title": {
+            "en": "Issues",
+            "fr": "Problèmes",
+            "nl": "Problemen"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true
+        },
+        "listView": false,
+        "validationRules": [
+          {
+            "level": "warning",
+            "warningDisplay": "top",
+            "warningView": "summary",
+            "when": {
+              "fieldId": "ISSUES",
+              "notEmpty": true
+            },
+            "message": {
+              "en": "Issues have been reported for this shift",
+              "fr": "Des problèmes ont été signalés pour ce service",
+              "nl": "Er zijn problemen gemeld voor deze dienst"
+            }
+          }
+        ]
+      },
+      {
+        "id": "ISSUES_EVD",
+        "type": "FILE_UPLOAD",
+        "label": {
+          "en": "Photo",
+          "fr": "Photo",
+          "nl": "Foto"
+        },
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "uploadConfig": {
+          "destinationFolderId": "1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu",
+          "maxFiles": 5,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*",
+            "video/*",
+            "application/pdf"
+          ],
+          "errorMessages": {
+            "maxFiles": {
+              "en": "The maximun number of files is {max}",
+              "fr": "Le nombre maximum de fichiers est de {max}",
+              "nl": "Het maximum aantal bestanden is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The maximum photo size is {mb}MB",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You can add {count} more photo",
+              "fr": "Vous pouvez ajouter {count} photo supplémentaire",
+              "nl": "Je kan {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You can add {count} more photos",
+              "fr": "Vous pouvez ajouter {count} photos supplémentaires",
+              "nl": "Je kan {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1600,
+              "quality": 0.82,
+              "outputType": "keep"
+            }
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "ISSUES",
+              "notEmpty": true
+            },
+            "then": {
+              "fieldId": "ISSUES_EVD",
+              "required": true
+            },
+            "message": {
+              "en": "Add photo evidence",
+              "fr": "",
+              "nl": ""
+            }
+          }
+        ]
+      },
+      {
+        "id": "AM_DAILY",
+        "type": "BUTTON",
+        "label": {
+          "en": "AM",
+          "fr": "AM",
+          "nl": "AM"
+        },
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "button": {
+          "action": "createRecordPreset",
+          "presetValues": {
+            "CHECK_FREQ": "AM"
+          },
+          "placements": [
+            "topBarList"
+          ]
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "status",
+            "equals": "Closed"
+          }
+        }
+      },
+      {
+        "id": "PM_DAILY",
+        "type": "BUTTON",
+        "label": {
+          "en": "PM",
+          "fr": "PM",
+          "nl": "PM"
+        },
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "button": {
+          "action": "createRecordPreset",
+          "presetValues": {
+            "CHECK_FREQ": "PM"
+          },
+          "placements": [
+            "topBarList"
+          ]
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "status",
+            "equals": "Closed"
+          }
+        }
+      },
+      {
+        "id": "WEEKLY",
+        "type": "BUTTON",
+        "label": {
+          "en": "Weekly",
+          "fr": "Hebdomadaire",
+          "nl": "Wekelijks"
+        },
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "button": {
+          "action": "createRecordPreset",
+          "presetValues": {
+            "CHECK_FREQ": "Weekly"
+          },
+          "placements": [
+            "topBarList"
+          ]
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "status",
+            "equals": "Closed"
+          }
+        }
+      },
+      {
+        "id": "MONTHLY",
+        "type": "BUTTON",
+        "label": {
+          "en": "Monthly",
+          "fr": "Mensuel",
+          "nl": "Maandelijks"
+        },
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "button": {
+          "action": "createRecordPreset",
+          "presetValues": {
+            "CHECK_FREQ": "Monthly"
+          },
+          "placements": [
+            "topBarList"
+          ]
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "status",
+            "equals": "Closed"
+          }
+        }
+      },
+      {
+        "id": "PDF_DRAFT",
+        "type": "BUTTON",
+        "label": {
+          "en": "Final report",
+          "fr": "Rapport final",
+          "nl": "Eindrapport"
+        },
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "button": {
+          "action": "openUrlField",
+          "fieldId": "pdfUrl",
+          "placements": [
+            "summaryBar"
+          ]
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "status",
+            "equals": "Closed"
+          }
+        }
+      },
+      {
+        "id": "STO_PROCEDURE",
+        "type": "BUTTON",
+        "label": {
+          "en": "Storage Procedure",
+          "fr": "Procédure de stockage",
+          "nl": "Opslagprocedure"
+        },
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "button": {
+          "action": "renderHtmlTemplate",
+          "templateId": {
+            "EN": "bundle:procedure_storage.html",
+            "FR": "bundle:procedure_storage.html",
+            "NL": "bundle:procedure_storage.html"
+          },
+          "placements": [
+            "topBar"
+          ]
+        }
+      },
+      {
+        "id": "CLEAN_PROCEDURE",
+        "type": "BUTTON",
+        "label": {
+          "en": "Cleaning Procedure",
+          "fr": "Procédure de nettoyage",
+          "nl": "Schoonmaakprocedure"
+        },
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "button": {
+          "action": "renderHtmlTemplate",
+          "templateId": {
+            "EN": "bundle:procedure_cleaning_disinfection.html",
+            "FR": "bundle:procedure_cleaning_disinfection.html",
+            "NL": "bundle:procedure_cleaning_disinfection.html"
+          },
+          "placements": [
+            "topBar"
+          ]
+        }
+      }
+    ],
+    "dataSources": [],
+    "listView": {
+      "columns": [
+        {
+          "type": "rule",
+          "fieldId": "action",
+          "label": {
+            "en": "Action",
+            "fr": "Action",
+            "nl": "Actie"
+          },
+          "cases": [
+            {
+              "text": {
+                "en": "Edit",
+                "fr": "Modifier",
+                "nl": "Bewerken"
+              },
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "fieldId": "DATE",
+                    "isNotToday": true
+                  }
+                ]
+              },
+              "style": "warning",
+              "icon": "warning"
+            },
+            {
+              "text": {
+                "en": "Edit",
+                "fr": "Modifier",
+                "nl": "Bewerken"
+              },
+              "when": {
+                "fieldId": "status",
+                "notEquals": "Closed"
+              },
+              "style": "link",
+              "icon": "edit"
+            },
+            {
+              "text": {
+                "en": "View",
+                "fr": "Voir",
+                "nl": "Bekijken"
+              },
+              "when": {
+                "fieldId": "status",
+                "equals": "Closed"
+              },
+              "style": "link",
+              "icon": "check"
+            }
+          ],
+          "openView": "auto"
+        },
+        {
+          "fieldId": "CHECK_FREQ",
+          "label": {
+            "en": "Check Frequency",
+            "fr": "Fréquence de contrôle",
+            "nl": "Controlefrequentie"
+          },
+          "kind": "question"
+        },
+        {
+          "fieldId": "DATE",
+          "label": {
+            "en": "Date",
+            "fr": "Date",
+            "nl": "Datum"
+          },
+          "kind": "question"
+        },
+        {
+          "fieldId": "COOK",
+          "label": {
+            "en": "Cook name",
+            "fr": "Nom du cuisinier",
+            "nl": "Naam kok"
+          },
+          "kind": "question"
+        }
+      ],
+      "metaColumns": [],
+      "defaultSort": {
+        "fieldId": "DATE",
+        "direction": "desc"
+      },
+      "title": {
+        "en": "Recent activity",
+        "fr": "Activité récente",
+        "nl": "Recente activiteit"
+      },
+      "legend": [
+        {
+          "icon": "warning",
+          "text": {
+            "en": "Past record incomplete or missing",
+            "fr": "Enregistrement passé incomplet ou manquant",
+            "nl": "Vorige record onvolledig of ontbrekend"
+          }
+        }
+      ],
+      "pageSize": 7,
+      "paginationControlsEnabled": false,
+      "search": {
+        "mode": "date",
+        "dateFieldId": "DATE"
+      }
+    },
+    "dedupRules": [
+      {
+        "id": "uniqueDateFrequency",
+        "scope": "form",
+        "keys": [
+          "DATE",
+          "CHECK_FREQ"
+        ],
+        "matchMode": "exact",
+        "onConflict": "reject",
+        "message": {
+          "en": "A record already exists for this date and frequency."
+        }
+      }
+    ],
+    "startRoute": "list",
+    "followup": {
+      "pdfTemplateId": {
+        "cases": [
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": "Weekly"
+            },
+            "templateId": {
+              "EN": "1gDDChgj96UYO8srhdQsuQGF1vF1d8GrjZHL0aVCJm_I",
+              "FR": "1gDDChgj96UYO8srhdQsuQGF1vF1d8GrjZHL0aVCJm_I"
+            }
+          },
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": "Monthly"
+            },
+            "templateId": {
+              "EN": "1Gz8WGjspwwfEYxnhlyqyathxAq-aIjF1ZhoQB_W6rrk",
+              "FR": "1Gz8WGjspwwfEYxnhlyqyathxAq-aIjF1ZhoQB_W6rrk"
+            }
+          },
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": "AM"
+            },
+            "templateId": {
+              "EN": "1YeSO7eGv7Yb9DPYAHG3ogGjl-oDQ1lGU0b_es65MFGU",
+              "FR": "1YeSO7eGv7Yb9DPYAHG3ogGjl-oDQ1lGU0b_es65MFGU"
+            }
+          },
+          {
+            "when": {
+              "fieldId": "CHECK_FREQ",
+              "equals": "PM"
+            },
+            "templateId": {
+              "EN": "11Bgci42U5wf0ws7QLOHSPMGtm_K4GtXhgMyefciRaQk",
+              "FR": "11Bgci42U5wf0ws7QLOHSPMGtm_K4GtXhgMyefciRaQk"
+            }
+          }
+        ],
+        "default": "11Bgci42U5wf0ws7QLOHSPMGtm_K4GtXhgMyefciRaQk"
+      },
+      "pdfFolderId": "1PEV18PYv28uOTVZ_rui0noR5pE1dkHZF",
+      "emailTemplateId": {
+        "EN": "1S_fS8Lgv-psriFgIktTs_aftKnih78SPF0c_hlKIR4M",
+        "FR": "1S_fS8Lgv-psriFgIktTs_aftKnih78SPF0c_hlKIR4M"
+      },
+      "emailSubject": {
+        "en": "Checklist summary",
+        "fr": "Synthèse checklist"
+      },
+      "emailRecipients": [
+        "hmaldonadovilla@gmail.com"
+      ],
+      "emailCc": [
+        "hmaldonadovilla@gmail.com"
+      ],
+      "emailBcc": [
+        "hmaldonadovilla@gmail.com"
+      ],
+      "statusFieldId": "Status",
+      "statusTransitions": {
+        "onPdf": "PDF ready",
+        "onEmail": "Emailed",
+        "onClose": "Closed"
+      }
+    },
+    "autoSave": {
+      "enabled": true,
+      "debounceMs": 2000,
+      "status": "In progress"
+    },
+    "summaryHtmlTemplateId": {
+      "cases": [
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "AM"
+          },
+          "templateId": {
+            "EN": "bundle:checklist_am.summary.html",
+            "FR": "bundle:checklist_am.summary.html",
+            "NL": "bundle:checklist_am.summary.html"
+          }
+        },
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "PM"
+          },
+          "templateId": {
+            "EN": "bundle:checklist_pm.summary.html",
+            "FR": "bundle:checklist_pm.summary.html",
+            "NL": "bundle:checklist_pm.summary.html"
+          }
+        },
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Weekly"
+          },
+          "templateId": {
+            "EN": "bundle:checklist_weekly.summary.html",
+            "FR": "bundle:checklist_weekly.summary.html",
+            "NL": "bundle:checklist_weekly.summary.html"
+          }
+        },
+        {
+          "when": {
+            "fieldId": "CHECK_FREQ",
+            "equals": "Monthly"
+          },
+          "templateId": {
+            "EN": "bundle:checklist_monthly.summary.html",
+            "FR": "bundle:checklist_monthly.summary.html",
+            "NL": "bundle:checklist_monthly.summary.html"
+          }
+        }
+      ]
+    },
+    "copyCurrentRecordEnabled": false,
+    "createNewRecordEnabled": false,
+    "actionBars": {
+      "bottom": {
+        "list": {
+          "items": [
+            "home"
+          ]
+        },
+        "form": {
+          "items": [
+            "home",
+            {
+              "type": "system",
+              "id": "summary",
+              "summaryBehavior": "navigate"
+            }
+          ],
+          "primary": [
+            "submit"
+          ]
+        },
+        "summary": {
+          "items": [
+            "home",
+            {
+              "type": "system",
+              "id": "create",
+              "menuBehavior": "menu",
+              "actions": [
+                "createRecordPreset"
+              ]
+            },
+            {
+              "type": "system",
+              "id": "actions",
+              "actions": [
+                "openUrlField"
+              ]
+            },
+            "edit"
+          ]
+        }
+      },
+      "system": {
+        "home": {
+          "hideWhenActive": true
+        }
+      }
+    },
+    "appHeader": {
+      "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+    },
+    "groupBehavior": {
+      "autoCollapseOnComplete": true,
+      "autoOpenNextIncomplete": true,
+      "autoScrollOnExpand": true
+    },
+    "portraitOnly": true,
+    "submissionConfirmationMessage": {
+      "en": "This report confirms that the checks were completed by {COOK} on {DATE}, in accordance with the Kitchen Safety & Cleaning Checks procedure.",
+      "fr": "Ce rapport confirme que les vérifications ont été effectuées par {COOK} le {DATE}, conformément à la procédure de vérifications de la cuisine et de nettoyage.",
+      "nl": "Dit rapport bevestigt dat de controles zijn uitgevoerd door {COOK} op {DATE}, conform de procedure voor keukenveiligheid en schoonmaakcontroles."
+    },
+    "submissionConfirmationTitle": {
+      "en": "Please confirm",
+      "fr": "Veuillez confirmer",
+      "nl": "Vergoeding bevestigen"
+    },
+    "dedupDialog": {
+      "title": {
+        "en": "Creating duplicate record for the same date and type of check is not allowed.",
+        "fr": "Créer un enregistrement dupliqué pour le même date et le même type de vérification n'est pas autorisé.",
+        "nl": "Een dubbele record maken voor dezelfde datum en type controle is niet toegestaan."
+      },
+      "intro": {
+        "en": "A storage and cleaning check record already exists for:",
+        "fr": "Un enregistrement de checklist de stockage et de nettoyage existe déjà pour:",
+        "nl": "Een opslag- en schoonmaakchecklistrecord bestaat al voor:"
+      },
+      "outro": {
+        "en": "What do you want to do?",
+        "fr": "Que voulez-vous faire?",
+        "nl": "Wat wil je doen?"
+      },
+      "changeLabel": {
+        "en": "Change date or type of check",
+        "fr": "Changer la date ou le type de vérification",
+        "nl": "Wijzig de datum of het type controle"
+      },
+      "openLabel": {
+        "en": "Open existing check",
+        "fr": "Ouvrir la vérification existante",
+        "nl": "Open de bestaande controle"
+      },
+      "cancelLabel": {
+        "en": "Cancel",
+        "fr": "Annuler",
+        "nl": "Annuleren"
+      }
+    },
+    "summaryButtonLabel": {
+      "en": "Draft report",
+      "fr": "Brouillon de rapport",
+      "nl": "Conceptverslag"
+    }
+  },
+  "validationErrors": []
+}

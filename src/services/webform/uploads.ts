@@ -1,4 +1,5 @@
 import { QuestionConfig } from '../../types';
+import { debugLog } from './debug';
 
 export class UploadService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -27,7 +28,15 @@ export class UploadService {
       return Utilities.newBlob(bytes, mime, name);
     };
 
-    const folder = this.getUploadFolder(uploadConfig);
+    const target = this.resolveUploadTarget(uploadConfig);
+    const folderId = target.folderId || '';
+    const folderName = target.folderName || '';
+    debugLog('upload.folder.resolve', {
+      folderId: folderId || null,
+      folderName: folderName || null,
+      destinationFolderId: uploadConfig?.destinationFolderId || null,
+      resolvedBy: target.resolvedBy
+    });
     const urls: string[] = [];
 
     limitedFiles.forEach(file => {
@@ -74,8 +83,16 @@ export class UploadService {
         if (sizeMb > uploadConfig.maxFileSizeMb) return;
       }
 
-      const created = folder.createFile(blob);
-      urls.push(created.getUrl());
+      try {
+        const url = target.createFile(blob);
+        if (url) urls.push(url);
+      } catch (err: any) {
+        const sizeMb = bytes ? Math.round((bytes.length / (1024 * 1024)) * 100) / 100 : 0;
+        const msg = (err?.message || err?.toString?.() || 'Drive createFile failed.').toString();
+        throw new Error(
+          `Drive createFile failed (folderId=${folderId || 'unknown'}, name=${name || 'upload'}, sizeMb=${sizeMb}). ${msg}`
+        );
+      }
     });
 
     // De-dupe while preserving order
@@ -89,14 +106,113 @@ export class UploadService {
     return deduped.join(', ');
   }
 
-  private getUploadFolder(uploadConfig?: QuestionConfig['uploadConfig']): GoogleAppsScript.Drive.Folder {
-    if (uploadConfig?.destinationFolderId) {
-      return DriveApp.getFolderById(uploadConfig.destinationFolderId);
+  private resolveUploadTarget(uploadConfig?: QuestionConfig['uploadConfig']): {
+    folderId: string | null;
+    folderName: string | null;
+    resolvedBy: 'DriveApp' | 'DriveAPI';
+    createFile: (blob: GoogleAppsScript.Base.Blob) => string;
+  } {
+    const destinationId = uploadConfig?.destinationFolderId
+      ? uploadConfig.destinationFolderId.toString().trim()
+      : '';
+    if (destinationId) {
+      try {
+        const folder = DriveApp.getFolderById(destinationId);
+        return {
+          folderId: folder.getId(),
+          folderName: folder.getName(),
+          resolvedBy: 'DriveApp',
+          createFile: blob => folder.createFile(blob).getUrl()
+        };
+      } catch (err: any) {
+        const msg = (err?.message || err?.toString?.() || 'Failed to access upload folder.').toString();
+        const apiMeta = this.getDriveApiFile(destinationId, 'upload.folder.destination');
+        if (apiMeta && apiMeta.mimeType === 'application/vnd.google-apps.shortcut') {
+          throw new Error(
+            `Upload folder id appears to be a shortcut. Use the target folder id (not the shortcut id). (${destinationId})`
+          );
+        }
+        if (apiMeta) {
+          const apiMetaAny = apiMeta as any;
+          return {
+            folderId: destinationId,
+            folderName: apiMetaAny.title || apiMetaAny.name || null,
+            resolvedBy: 'DriveAPI',
+            createFile: blob => this.createFileViaDriveApi(blob, destinationId)
+          };
+        }
+        throw new Error(
+          `Upload folder not accessible (id=${destinationId}). ${msg} If this is a shared drive, ensure the script executes as a user who is a member of that drive.`
+        );
+      }
     }
 
-    const file = DriveApp.getFileById(this.ss.getId());
-    const parents = file.getParents();
-    if (parents.hasNext()) return parents.next();
-    return DriveApp.getRootFolder();
+    try {
+      const file = DriveApp.getFileById(this.ss.getId());
+      const parents = file.getParents();
+      if (parents.hasNext()) {
+        const folder = parents.next();
+        return {
+          folderId: folder.getId(),
+          folderName: folder.getName(),
+          resolvedBy: 'DriveApp',
+          createFile: blob => folder.createFile(blob).getUrl()
+        };
+      }
+    } catch (_) {
+      // DriveApp can fail on shared drives; fall back to Drive API
+    }
+
+    const apiFile = this.getDriveApiFile(this.ss.getId(), 'upload.folder.spreadsheet');
+    const parentId = apiFile?.parents && apiFile.parents.length ? apiFile.parents[0].id : null;
+    if (!parentId) {
+      throw new Error('Unable to resolve upload folder. No parent folder was returned for the spreadsheet.');
+    }
+    const parentMeta = this.getDriveApiFile(parentId, 'upload.folder.parent');
+    const parentMetaAny = parentMeta as any;
+    return {
+      folderId: parentId,
+      folderName: parentMetaAny?.title || parentMetaAny?.name || null,
+      resolvedBy: 'DriveAPI',
+      createFile: blob => this.createFileViaDriveApi(blob, parentId)
+    };
+  }
+
+  private getDriveApiFile(fileId: string, context: string): GoogleAppsScript.Drive.Schema.File | null {
+    const drive = (Drive as any) || null;
+    if (!drive || !drive.Files || typeof drive.Files.get !== 'function') {
+      throw new Error(
+        'Drive API not available. Enable the Advanced Drive Service (Drive API) for this Apps Script project.'
+      );
+    }
+    try {
+      return drive.Files.get(fileId, { supportsAllDrives: true });
+    } catch (err: any) {
+      const msg = (err?.message || err?.toString?.() || 'Drive API get failed.').toString();
+      debugLog('upload.driveApi.get.failed', { fileId, context, message: msg });
+      return null;
+    }
+  }
+
+  private createFileViaDriveApi(blob: GoogleAppsScript.Base.Blob, folderId: string): string {
+    const drive = (Drive as any) || null;
+    if (!drive || !drive.Files || typeof drive.Files.insert !== 'function') {
+      throw new Error(
+        'Drive API not available. Enable the Advanced Drive Service (Drive API) for this Apps Script project.'
+      );
+    }
+    const resource = {
+      title: blob.getName(),
+      mimeType: blob.getContentType(),
+      parents: [{ id: folderId }]
+    };
+    const created = drive.Files.insert(resource, blob, { supportsAllDrives: true });
+    if (created && (created.webViewLink || created.alternateLink)) {
+      return (created.webViewLink || created.alternateLink) as string;
+    }
+    if (created && created.id) {
+      return `https://drive.google.com/open?id=${created.id}`;
+    }
+    return '';
   }
 }

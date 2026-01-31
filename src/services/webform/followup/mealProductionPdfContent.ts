@@ -1,4 +1,5 @@
 import { FormConfig, QuestionConfig, WebFormSubmission } from '../../../types';
+import { fetchDriveFileBlob } from '../driveApi';
 import { collectLineItemRows } from './placeholders';
 
 interface TypeRow {
@@ -54,6 +55,10 @@ const resolveLogoDataUri = (logoUrl: string): string => {
       // ignore; fallback to fetching the raw URL below.
     }
   }
+  if (fileId) {
+    const blob = fetchDriveFileBlob(fileId, 'pdf.logo');
+    if (blob) return buildDataUriFromBlob(blob);
+  }
   if (typeof UrlFetchApp !== 'undefined') {
     try {
       const response = UrlFetchApp.fetch(normalized);
@@ -94,14 +99,6 @@ const uniqueList = (values: string[]): string[] => {
     result.push(text);
   });
   return result;
-};
-
-const formatConfirmation = (value: any): string => {
-  const normalized = normalizeText(value).toLowerCase();
-  if (!normalized) return 'Not confirmed';
-  if (normalized === 'true' || normalized === 'yes' || normalized === '1') return 'Yes';
-  if (normalized === 'false' || normalized === 'no' || normalized === '0') return 'No';
-  return normalizeText(value);
 };
 
 interface RecipeSection {
@@ -187,8 +184,7 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
         prepQty,
         recipe,
         ingredients: bucket.names,
-        allergens: bucket.allergens,
-        coreTemp: normalizeText(row.MP_COOK_TEMP || meal.MP_COOK_TEMP)
+        allergens: bucket.allergens
       };
     });
 
@@ -262,20 +258,12 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
       );
     });
 
-    const coreTempCandidate = normalizedEntries.find(entry => entry.coreTemp) ?? { coreTemp: '' };
-    const tempLabel = formatConfirmation(coreTempCandidate.coreTemp);
-    const showTempConfirmation = finalQtyNumber !== null && finalQtyNumber > 0;
-    const tempLine = showTempConfirmation
-      ? `<div class="ck-core-temp">All pots ≥63°C confirmed: ${escapeHtml(tempLabel)}</div>`
-      : '';
-
     blocks.push(`
       <div class="ck-meal-block">
         <div class="ck-meal-heading">
           <div class="ck-meal-type">${escapeHtml(mealLabel)}</div>
           <div class="ck-meal-portions">Delivered: ${escapeHtml(finalQtyLabel)}</div>
         </div>
-        ${tempLine}
         ${segments.join('')}
       </div>`);
   });

@@ -10,7 +10,8 @@ export type DedupDialogCopy = {
   title: string;
   intro: string;
   outro: string;
-  confirmLabel: string;
+  openLabel: string;
+  changeLabel: string;
   cancelLabel: string;
 };
 
@@ -33,7 +34,8 @@ export const resolveDedupDialogCopy = (config: DedupDialogConfig | undefined, la
     ),
     intro: resolveOptionalText(config?.intro, language, 'A meal production record already exists for:'),
     outro: resolveOptionalText(config?.outro, language, 'What do you want to do?'),
-    confirmLabel: resolveRequiredText(config?.openLabel, language, 'Open existing record'),
-    cancelLabel: resolveRequiredText(config?.changeLabel, language, 'Change customer, service or date')
+    openLabel: resolveRequiredText(config?.openLabel, language, 'Open existing record'),
+    changeLabel: resolveRequiredText(config?.changeLabel, language, 'Change customer, service or date'),
+    cancelLabel: resolveRequiredText(config?.cancelLabel, language, 'Cancel')
   };
 };

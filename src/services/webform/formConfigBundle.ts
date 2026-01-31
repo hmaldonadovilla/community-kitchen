@@ -1,5 +1,5 @@
 import { FormConfigExport } from '../../types';
-import { BUNDLED_FORM_CONFIGS } from '../../config/bundledFormConfigs';
+import { BUNDLED_CONFIG_ENV, BUNDLED_FORM_CONFIGS } from '../../config/bundledFormConfigs';
 
 const normalizeKey = (value: any): string => (value == null ? '' : value.toString()).trim().toLowerCase();
 
@@ -27,3 +27,8 @@ export const getBundledFormConfig = (formKey?: string | null): FormConfigExport 
 
 export const listBundledFormConfigs = (): FormConfigExport[] =>
   Array.isArray(BUNDLED_FORM_CONFIGS) ? BUNDLED_FORM_CONFIGS : [];
+
+export const getBundledConfigEnv = (): string | null => {
+  const env = (BUNDLED_CONFIG_ENV || '').toString().trim();
+  return env ? env : null;
+};

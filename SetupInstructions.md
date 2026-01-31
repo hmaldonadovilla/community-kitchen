@@ -22,10 +22,13 @@ If you want the Apps Script runtime to read config from JSON instead of the Shee
 
    ```bash
    npm run export:config -- --url "<appScriptWebAppUrl>" --form "Config: Meal Production"
+   # optional env-aware export
+   npm run export:config -- --url "<appScriptWebAppUrl>" --form "Config: Meal Production" --env staging
    ```
 
    This writes a `FormConfigExport` JSON file under `docs/config/exports/`.
    - Alternative: set `CK_APP_URL` and `CK_FORM_KEY` in `.env` (see `.env.example`) and run `npm run export:config`.
+   - For staging/prod bundles, set `CK_CONFIG_ENV=staging|prod` (or pass `--env`) to write into `docs/config/exports/<env>/`.
 
 2. Re-run the build:
 
@@ -33,7 +36,7 @@ If you want the Apps Script runtime to read config from JSON instead of the Shee
    npm run build
    ```
 
-   The build embeds `docs/config/exports/*.json` into `dist/Code.js`. When present, the bundled config overrides reading from the dashboard + config sheets.
+   The build embeds `docs/config/exports/*.json` into `dist/Code.js` (or `docs/config/exports/<env>/*.json` when `CK_CONFIG_ENV` is set). When present, the bundled config overrides reading from the dashboard + config sheets.
 
 ## 2c. Optional: Apps Script CI/CD (clasp)
 
@@ -42,6 +45,8 @@ This repo can deploy to Apps Script automatically using `clasp` (locally or via 
 Local (no GitHub compute):
 
 1. Copy `.clasp.json.example` → `.clasp.json` and set your Apps Script **scriptId**.
+   - Optional multi-env: copy `.clasp.staging.json.example` → `.clasp.staging.json` (and/or create `.clasp.prod.json`)
+     with the respective **scriptId** values.
 2. Run `npx clasp login` once to generate `~/.clasprc.json` (clasp auth token).
 3. Deploy:
 
@@ -49,7 +54,9 @@ Local (no GitHub compute):
    npm run deploy:apps-script
    ```
    - To skip tests: `SKIP_TESTS=1 npm run deploy:apps-script`
-   - Optional: use `.env.deploy` to store local deploy variables (see `.env.deploy.example`).
+   - Optional: use `.env.deploy` (or `.env.deploy.staging` / `.env.deploy.prod`) to store local deploy variables (see `.env.deploy.example`).
+   - Set `DEPLOY_ENV=staging|prod` to auto-load the env-specific file, export `CK_CONFIG_ENV`,
+     and swap `.clasp.<env>.json` into `.clasp.json` during deploy.
 
 Local deploy env variables (optional):
 
@@ -57,6 +64,7 @@ Local deploy env variables (optional):
 - `CLASP_DEPLOYMENT_ID=...` — update a specific `/exec` deployment
 - `CLASP_CREATE_DEPLOYMENT=1` — create a new deployment if no ID is provided
 - `CLASP_DEPLOY_DESCRIPTION="..."` — custom deployment description
+- `DEPLOY_ENV=staging|prod` — selects `.env.deploy.<env>` and the matching config bundle folder
 
 CI (GitHub Actions):
 
@@ -644,7 +652,7 @@ CI (GitHub Actions):
       }
       ```
 
-    - Want to **customize the duplicate-record dialog** shown when dedup rules block a record? Set `dedupDialog` in the same dashboard JSON. The dialog body automatically lists the dedup key labels + values between `intro` and `outro`:
+    - Want to **customize the duplicate-record dialog** shown when dedup rules block a record? Set `dedupDialog` in the same dashboard JSON. The dialog body automatically lists the dedup key labels + values between `intro` and `outro`. Use `cancelLabel` to control the list-view cancel action (when a duplicate is detected before opening the form).
 
       ```json
       {
@@ -660,6 +668,9 @@ CI (GitHub Actions):
           },
           "changeLabel": {
             "en": "Change customer, service or date"
+          },
+          "cancelLabel": {
+            "en": "Cancel"
           },
           "openLabel": {
             "en": "Open existing record"

@@ -14,6 +14,47 @@ import { buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
 import { resolveLocalizedStringValue, resolveRecipients, resolveTemplateId } from './recipients';
 import { resolveStatusTransitionValue } from '../../../domain/statusTransitions';
+import { fetchDriveFileBlob, findDriveFileByNameInFolder } from '../driveApi';
+import { resolveOutputTarget, resolveRecordFileLabel } from './docRenderer.copy';
+
+const extractDriveFileId = (value: string): string => {
+  const text = (value || '').toString().trim();
+  if (!text) return '';
+  const idParamMatch = text.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idParamMatch) return idParamMatch[1];
+  const pathMatch = text.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (pathMatch) return pathMatch[1];
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(text)) return text;
+  return '';
+};
+
+const resolveExpectedPdfFileName = (form: FormConfig, record: WebFormSubmission): string => {
+  const namePrefix = (form.title || 'Form').toString().trim() || 'Form';
+  const recordLabel = resolveRecordFileLabel(form, record);
+  if (!recordLabel) return '';
+  return `${namePrefix} - ${recordLabel}.pdf`;
+};
+
+const resolveExistingPdfFile = (
+  form: FormConfig,
+  followup: FollowupConfig,
+  ctx: RecordContext
+): { fileId: string; url?: string } | null => {
+  if (!ctx.record) return null;
+  const existingUrl = (ctx.record?.pdfUrl || '').toString().trim();
+  const existingFileId = extractDriveFileId(existingUrl);
+  if (existingFileId) return { fileId: existingFileId, url: existingUrl };
+  try {
+    const ss = ctx.sheet.getParent();
+    const outputTarget = resolveOutputTarget(ss, followup.pdfFolderId, followup);
+    const fileName = resolveExpectedPdfFileName(form, ctx.record);
+    if (!fileName) return null;
+    return findDriveFileByNameInFolder(outputTarget.folderId, fileName, 'followup.pdf.find');
+  } catch (err) {
+    debugLog('followup.pdf.findFailed', { error: err ? err.toString() : 'unknown' });
+    return null;
+  }
+};
 
 export const handleCreatePdfAction = (args: {
   form: FormConfig;
@@ -35,6 +76,27 @@ export const handleCreatePdfAction = (args: {
   }
   if (!ctx || !ctx.record) {
     return { success: false, message: 'Record not found.' };
+  }
+  const existing = resolveExistingPdfFile(form, followup, ctx);
+  if (existing?.fileId) {
+    if (ctx.columns.pdfUrl && existing.url) {
+      ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(existing.url);
+    }
+    const statusValue = resolveStatusTransitionValue(followup.statusTransitions, 'onPdf', ctx.record?.language);
+    let updatedAt = statusValue
+      ? submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
+      : null;
+    if (!updatedAt) {
+      updatedAt = submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
+    }
+    submissionService.refreshRecordCache(form.configSheet, questions, ctx);
+    return {
+      success: true,
+      status: statusValue || ctx.record.status,
+      pdfUrl: existing.url,
+      fileId: existing.fileId,
+      updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
+    };
   }
   const pdfArtifact = generatePdfArtifact(form, questions, ctx.record, followup);
   if (!pdfArtifact.success) {
@@ -91,9 +153,22 @@ export const handleSendEmailAction = (args: {
   const validationWarnings = collectValidationWarnings(questions, ctx.record);
   addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));
 
-  const pdfArtifact = followup.pdfTemplateId ? generatePdfArtifact(form, questions, ctx.record, followup) : null;
-  if (followup.pdfTemplateId && (!pdfArtifact || !pdfArtifact.success)) {
-    return { success: false, message: pdfArtifact?.message || 'Failed to generate PDF.' };
+  let pdfArtifact: { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob } | null = null;
+  if (followup.pdfTemplateId) {
+    const existing = resolveExistingPdfFile(form, followup, ctx);
+    if (existing?.fileId) {
+      const blob = fetchDriveFileBlob(existing.fileId, 'followup.email.existingPdf');
+      if (blob) {
+        pdfArtifact = { success: true, url: existing.url, fileId: existing.fileId, blob };
+        debugLog('followup.email.reusePdf', { fileId: existing.fileId });
+      }
+    }
+    if (!pdfArtifact) {
+      pdfArtifact = generatePdfArtifact(form, questions, ctx.record, followup);
+    }
+    if (!pdfArtifact || !pdfArtifact.success) {
+      return { success: false, message: pdfArtifact?.message || 'Failed to generate PDF.' };
+    }
   }
   if (ctx.columns.pdfUrl && pdfArtifact?.url) {
     ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
@@ -169,5 +244,3 @@ export const handleCloseRecordAction = (args: {
     updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record?.updatedAt
   };
 };
-
-

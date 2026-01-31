@@ -1,5 +1,6 @@
 import { WebFormDefinition } from '../types';
 import { SYSTEM_FONT_STACK } from '../constants/typography';
+import { CACHE_VERSION_PROPERTY_KEY, DEFAULT_CACHE_VERSION, getDocumentProperties } from './webform/cache';
 import { isDebugEnabled } from './webform/debug';
 
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
@@ -33,10 +34,23 @@ const resolveServiceUrl = (): string | null => {
   return null;
 };
 
+const resolveCacheVersion = (): string => {
+  try {
+    const props = getDocumentProperties();
+    if (!props) return DEFAULT_CACHE_VERSION;
+    const version = props.getProperty(CACHE_VERSION_PROPERTY_KEY);
+    return (version || DEFAULT_CACHE_VERSION).toString().trim() || DEFAULT_CACHE_VERSION;
+  } catch (_) {
+    return DEFAULT_CACHE_VERSION;
+  }
+};
+
 const buildBundleSrc = (bundleTarget?: string): string => {
   const target = (bundleTarget || '').toString().trim();
   const appParam = target ? `&app=${encodeURIComponent(target)}` : '';
-  const query = `bundle=react${appParam}`;
+  const cacheVersion = resolveCacheVersion();
+  const versionParam = cacheVersion ? `&v=${encodeURIComponent(cacheVersion)}` : '';
+  const query = `bundle=react${appParam}${versionParam}`;
   const baseUrl = resolveServiceUrl();
   if (!baseUrl) return `?${query}`;
   const sep = baseUrl.includes('?') ? '&' : '?';

@@ -1644,6 +1644,8 @@ components:
         - `intro` (if provided)
         - a list of dedup key labels + values
         - `outro` (if provided)
+
+        `cancelLabel` is used for list-view cancel actions (when a duplicate is detected before opening the form).
       properties:
         title:
           oneOf:
@@ -1665,6 +1667,11 @@ components:
             - type: string
             - $ref: '#/components/schemas/LocalizedString'
           description: Label for the action that clears the dedup fields.
+        cancelLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Label for the action that cancels the duplicate dialog (list view).
         openLabel:
           oneOf:
             - type: string
@@ -4357,3 +4364,15 @@ components:
         summaryButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
       additionalProperties: true
+    BuildBundleConfig:
+      type: object
+      description: |
+        Build/deploy-time settings (not stored in the config sheet).
+        Use these to keep staging/prod bundles separate when exporting configs.
+      properties:
+        configEnv:
+          type: string
+          description: |
+            Environment name used for bundle selection (e.g., "staging" or "prod").
+            When set, config exports should be saved to `docs/config/exports/<env>/`
+            and the build should embed only that environment's exports.

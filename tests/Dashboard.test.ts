@@ -395,6 +395,7 @@ describe('Dashboard', () => {
         intro: { EN: 'Record already exists for:' },
         outro: { EN: 'What would you like to do?' },
         changeLabel: { EN: 'Change details' },
+        cancelLabel: { EN: 'Cancel' },
         openLabel: { EN: 'Open existing' }
       }
     });
@@ -412,6 +413,7 @@ describe('Dashboard', () => {
       intro: { en: 'Record already exists for:' },
       outro: { en: 'What would you like to do?' },
       changeLabel: { en: 'Change details' },
+      cancelLabel: { en: 'Cancel' },
       openLabel: { en: 'Open existing' }
     });
   });

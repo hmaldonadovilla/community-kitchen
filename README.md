@@ -138,14 +138,17 @@ You can bundle a config export into the Apps Script build so the app reads confi
 1. Export a config file into the repo:
    ```bash
    npm run export:config -- --url "<appScriptWebAppUrl>" --form "Config: Meal Production"
+   # optional env-aware export
+   npm run export:config -- --url "<appScriptWebAppUrl>" --form "Config: Meal Production" --env staging
    ```
    This saves a JSON export under `docs/config/exports/` (file name derived from `formKey`).
    - Alternative: set `CK_APP_URL` and `CK_FORM_KEY` in `.env` (see `.env.example`) and run `npm run export:config`.
+   - To keep environment bundles separate, set `CK_CONFIG_ENV=staging` (or `--env staging`) to write to `docs/config/exports/staging/`.
 2. Build as usual:
    ```bash
    npm run build
    ```
-   The build embeds `docs/config/exports/*.json` into the Apps Script bundle.
+   The build embeds `docs/config/exports/*.json` into the Apps Script bundle (or `docs/config/exports/<env>/*.json` when `CK_CONFIG_ENV` is set).
 3. Deploy `dist/Code.js` to Apps Script. When a bundled export is present, the server logs `configSource: "bundled"` and the app no longer needs to read dashboard/config sheets for that form.
 
 ### Optional: Apps Script CI/CD (clasp)
@@ -255,7 +258,7 @@ This repo includes a deploy workflow using `clasp`, so you can deploy from GitHu
 - **Draft autosave (optional)**: Enable background saves while editing by adding `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the dashboard JSON column. Draft saves run without validation, bump `Updated At`, and write the configured `Status` (falls back to `statusTransitions.inProgress`). Records matching `statusTransitions.onClose` are read-only and do not autosave. The first time a user enters Create/Edit/Copy, the web app shows a one-time autosave explainer overlay (customize copy via `autosaveNotice.*` in `src/web/systemStrings.json`).
 - **Follow-up actions**: After submitting, the app automatically runs the configured actions (`Create PDF`, `Send PDF via email`, `Close record`). Add JSON to the “Follow-up Config (JSON)” column on the *Forms Dashboard* to point at template IDs, recipients, target status values (including `statusTransitions.inProgress` / `reOpened`), and optional `pdfFileNameFieldId` for naming generated PDFs. See `SetupInstructions.md` for the full schema plus template guidance. After the user confirms submit, the UI shows a **full-screen blocking overlay** (spinner + message) until submission + follow-up finish.
 - **Submit confirmation (optional)**: When users tap **Submit**, the app shows a Confirm/Cancel overlay (with a close `X`). You can customize the title (`submissionConfirmationTitle`), message (`submissionConfirmationMessage`), and the confirm/cancel button labels (`submissionConfirmationConfirmLabel`, `submissionConfirmationCancelLabel`) per language via dashboard JSON (falls back to system strings when omitted). The message supports record placeholders like `{COOK}` / `{DATE}` (or `{{COOK}}` / `{{DATE}}`).
-- **Dedup dialog copy (optional)**: When dedup rules block a record, the app shows a duplicate-record dialog with the dedup key values. Customize the title, intro/outro lines, and button labels via dashboard JSON `dedupDialog` (localized). The dialog body always injects the dedup key labels + values between the intro and outro.
+- **Dedup dialog copy (optional)**: When dedup rules block a record, the app shows a duplicate-record dialog with the dedup key values. Customize the title, intro/outro lines, and button labels via dashboard JSON `dedupDialog` (localized). Use `cancelLabel` for the list-view cancel action when a duplicate is detected before opening the form. The dialog body always injects the dedup key labels + values between the intro and outro.
 - **Submit button label (optional)**: Override the Submit button label per language via dashboard JSON `submitButtonLabel` (falls back to system strings when omitted).
 - **Ordered submit validation (optional)**: Enable `submitValidation.enforceFieldOrder` to require required fields to be completed in order, disable Submit until the form is valid, and (in guided steps) keep **Next** enabled once the step forward gate is satisfied. Customize the top error banner with `submitValidation.submitTopErrorMessage` (localized), and the line-item group “Needs attention” helper with `submitValidation.lineItemGroupNeedsAttentionMessage` (localized).
 - **Language-aware templates & dynamic recipients**: Follow-up configs now accept per-language `pdfTemplateId` / `emailTemplateId` maps and recipient entries that look up emails via data sources (e.g., find the distributor row in “Distributor Data” and use its `email` column). The runtime picks the correct template for the submission’s language and expands placeholders before generating / emailing PDFs, including `emailCc` / `emailBcc` recipient lists when you need extra copies.
@@ -297,6 +300,7 @@ This section summarizes the deployment flow and the new server-side caching, wit
    ```
 
    This regenerates `dist/Code.js` and `dist/webform-react.js`.
+   - If you're deploying staging/prod bundles, set `CK_CONFIG_ENV=staging|prod` (or `DEPLOY_ENV=staging|prod` when using the deploy script) to pick the correct `docs/config/exports/<env>` directory.
 
 2. **Update the Apps Script project**
    - Open the Google Sheet.
@@ -326,6 +330,7 @@ This section summarizes the deployment flow and the new server-side caching, wit
    - In Apps Script, go to **Deploy → Manage deployments**.
    - Update or create a **Web app** deployment with entrypoint `doGet`.
    - Keep the same URL for existing testers where possible; query parameters (e.g. `?form=Config:+Recipes`) still route to the same forms.
+   - For multi-env deploys, you can keep `.clasp.staging.json` / `.clasp.prod.json` (different scriptIds) and set `DEPLOY_ENV=staging|prod` so `npm run deploy:apps-script` swaps the clasp config automatically.
 
 ### Server-side caching behavior
 

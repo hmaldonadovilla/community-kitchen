@@ -177,6 +177,8 @@ export class MockForm {
 }
 
 export class MockFolder {
+  getId() { return 'mock-folder-id'; }
+  getName() { return 'Mock Folder'; }
   createFile(blob: any) { 
     return { getUrl: () => 'http://file-url', getName: () => (blob?.getName ? blob.getName() : 'file') }; 
   }
