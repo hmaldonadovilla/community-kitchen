@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
+import { matchesQueryTokens } from './searchUtils';
+
 export type SearchableSelectOption = {
   value: string;
   label: string;
@@ -31,14 +33,11 @@ export const SearchableSelect: React.FC<{
     setText(selectedLabel);
   }, [editing, selectedLabel]);
 
-  const normalizedQuery = (text || '').toString().trim().toLowerCase();
+  const normalizedQuery = (text || '').toString().trim();
   const filtered = useMemo(() => {
     if (!normalizedQuery) return options;
     return options.filter(o => {
-      const label = (o.label || '').toString().toLowerCase();
-      const val = (o.value || '').toString().toLowerCase();
-      const extra = (o.searchText || '').toString().toLowerCase();
-      return label.includes(normalizedQuery) || val.includes(normalizedQuery) || extra.includes(normalizedQuery);
+      return matchesQueryTokens(normalizedQuery, [o.label, o.value, o.searchText]);
     });
   }, [normalizedQuery, options]);
 

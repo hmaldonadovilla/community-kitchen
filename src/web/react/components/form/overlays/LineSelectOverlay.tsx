@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { buttonStyles, withDisabled } from '../ui';
+import { matchesQueryTokens } from '../searchUtils';
 import type { LangCode } from '../../../../types';
 import type { LineItemAddResult } from '../../../types';
 import { tSystem } from '../../../../systemStrings';
@@ -41,13 +42,12 @@ export const LineSelectOverlay: React.FC<{
     setDedupMessage('');
   }, [overlay.open]);
 
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = query.trim();
   const hasQuery = normalizedQuery.length > 0;
   const filteredOptions = useMemo(() => {
     if (!overlay.open || !hasQuery) return [];
     return overlay.options.filter(opt => {
-      const haystack = `${opt.label || ''} ${opt.value || ''} ${opt.searchText || ''}`.toLowerCase();
-      return haystack.includes(normalizedQuery);
+      return matchesQueryTokens(normalizedQuery, [opt.label, opt.value, opt.searchText]);
     });
   }, [hasQuery, normalizedQuery, overlay.open, overlay.options]);
   const optionLabelByValue = useMemo(() => {
@@ -114,11 +114,10 @@ export const LineSelectOverlay: React.FC<{
             aria-describedby={helpId}
             onChange={e => {
               const next = e.target.value;
-              const nextNormalized = next.trim().toLowerCase();
+              const nextNormalized = next.trim();
               const nextMatches = nextNormalized
                 ? overlay.options.filter(opt => {
-                    const haystack = `${opt.label || ''} ${opt.value || ''} ${opt.searchText || ''}`.toLowerCase();
-                    return haystack.includes(nextNormalized);
+                    return matchesQueryTokens(nextNormalized, [opt.label, opt.value, opt.searchText]);
                   }).length
                 : 0;
               setQuery(next);

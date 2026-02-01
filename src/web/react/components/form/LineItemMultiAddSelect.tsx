@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { tSystem } from '../../../systemStrings';
 import type { LangCode } from '../../../types';
+import { matchesQueryTokens } from './searchUtils';
 import { buttonStyles, withDisabled } from './ui';
 
 export type LineItemMultiAddOption = {
@@ -29,7 +30,7 @@ export const LineItemMultiAddSelect: React.FC<{
   const [selected, setSelected] = useState<string[]>([]);
 
   const selectedCount = selected.length;
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = query.trim();
   const hasQuery = normalizedQuery.length > 0;
   const showClear = !disabled && Boolean(normalizedQuery);
   const maxItems = 60;
@@ -43,10 +44,7 @@ export const LineItemMultiAddSelect: React.FC<{
   const filtered = useMemo(() => {
     if (!hasQuery) return [];
     return options.filter(opt => {
-      const labelValue = (opt.label || '').toString().toLowerCase();
-      const valueValue = (opt.value || '').toString().toLowerCase();
-      const extra = (opt.searchText || '').toString().toLowerCase();
-      return labelValue.includes(normalizedQuery) || valueValue.includes(normalizedQuery) || extra.includes(normalizedQuery);
+      return matchesQueryTokens(normalizedQuery, [opt.label, opt.value, opt.searchText]);
     });
   }, [hasQuery, normalizedQuery, options]);
 
@@ -122,11 +120,10 @@ export const LineItemMultiAddSelect: React.FC<{
           onChange={e => {
             if (disabled) return;
             const next = e.target.value;
-            const nextNormalized = next.trim().toLowerCase();
+            const nextNormalized = next.trim();
             const matchCount = nextNormalized
               ? options.filter(opt => {
-                  const haystack = `${opt.label || ''} ${opt.value || ''} ${opt.searchText || ''}`.toLowerCase();
-                  return haystack.includes(nextNormalized);
+                  return matchesQueryTokens(nextNormalized, [opt.label, opt.value, opt.searchText]);
                 }).length
               : 0;
             setQuery(next);
