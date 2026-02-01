@@ -28,7 +28,7 @@
 
   .ck-header-title {
     font-weight: 600;
-    font-size: 1.05em;
+    font-size: var(--ck-font-control);
   }
 
   .ck-meta-grid {
@@ -57,7 +57,7 @@
 
   .ck-label {
     font-weight: 500;
-    font-size: 0.92em;
+    font-size: var(--ck-font-label);
   }
 
   .ck-value {
@@ -73,7 +73,7 @@
   .ck-section-title {
     margin: 0 0 8px 0;
     font-weight: 600;
-    font-size: 1em;
+    font-size: var(--ck-font-label);
   }
 
   .ck-meal-list {
@@ -109,7 +109,7 @@
   }
 
   .ck-prep-details {
-    font-size: 0.92em;
+    font-size: calc(var(--ck-font-label) * 0.85);
     opacity: 0.85;
   }
 
@@ -179,25 +179,25 @@
   <div class="ck-header">
     <div class="ck-header-title">{{MP_DISTRIBUTOR.DIST_NAME}} | {{MP_SERVICE}}</div>
     <div class="ck-meta-grid">
-      <div class="ck-meta-item ck-meta-item-inline">
-        <span class="ck-label">Production date:</span>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_PREP_DATE)}}:</span>
         <span class="ck-value">{{MP_PREP_DATE}}</span>
       </div>
-      <div class="ck-meta-item ck-meta-item-inline">
-        <span class="ck-label">Expiration date:</span>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_EXP_DATE)}}:</span>
         <span class="ck-value">{{MP_EXP_DATE}}</span>
       </div>
-      <div class="ck-meta-item ck-meta-item-inline">
-        <span class="ck-label">Batch number:</span>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_ID)}}:</span>
         <span class="ck-value">{{MP_ID}}</span>
       </div>
-      <div class="ck-meta-item ck-meta-item--full">
-        <div class="ck-label">Responsible cook</div>
-        <div class="ck-value">{{MP_COOK_NAME}}</div>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_COOK_NAME)}}:</span>
+        <span class="ck-value">{{MP_COOK_NAME}}</span>
       </div>
-      <div class="ck-meta-item ck-meta-item--full">
-        <div class="ck-label">Volunteer cook</div>
-        <div class="ck-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</div>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_VOLUNTEER)}}:</span>
+        <span class="ck-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</span>
       </div>
     </div>
   </div>
@@ -220,6 +220,7 @@
             <span class="ck-hidden" data-prep-qty>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_QTY}}</span>
             <span class="ck-hidden" data-recipe>{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE}}</span>
             <span class="ck-hidden" data-core-temp>{{MP_MEALS_REQUEST.MP_COOK_TEMP}}</span>
+            <span class="ck-hidden" data-core-temp-label>{{LABEL(MP_MEALS_REQUEST.MP_COOK_TEMP)}}</span>
             <span class="ck-hidden" data-temp-photos="{{MP_MEALS_REQUEST.TEMP_EVD}}"></span>
           </td>
         </tr>
@@ -235,11 +236,11 @@
   <div class="ck-section">
     <div class="ck-totals">
       <div class="ck-total-row">
-        <div class="ck-label">Total requested</div>
+        <div class="ck-label">Total {{LABEL(MP_MEALS_REQUEST.ORD_QTY)}}</div>
         <div class="ck-value">{{SUM(MP_MEALS_REQUEST.ORD_QTY)}}</div>
       </div>
       <div class="ck-total-row">
-        <div class="ck-label">Total delivered</div>
+        <div class="ck-label">Total {{LABEL(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
         <div class="ck-value">{{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
       </div>
     </div>
@@ -250,7 +251,7 @@
       <button type="button" class="ck-action-button" data-ck-action="ING_PREVIEW">Ingredients needed</button>
     </div>
     <div class="ck-total-row">
-      <div class="ck-label">Ingredient delivery receipt evidence</div>
+      <div class="ck-label">{{LABEL(ING_EVD)}}</div>
       <div class="ck-value">{{FILES_ICON(ING_EVD)}}</div>
     </div>
   </div>
@@ -363,6 +364,7 @@
         prepQty: getText('[data-prep-qty]'),
         recipe: getText('[data-recipe]'),
         coreTemp: getText('[data-core-temp]'),
+        coreTempLabel: getText('[data-core-temp-label]'),
         tempPhotoUrls: tempPhotoUrls,
         ingredients: collected.ingredients,
         allergens: collected.allergens
@@ -402,6 +404,54 @@
       return toText(rawValue);
     };
 
+    var appendPhotoIcon = function (inline, rawUrls) {
+      if (!rawUrls || !rawUrls.length) return;
+      var urls = uniq(rawUrls);
+      var count = urls.length;
+      var fieldKey = encodeFileField(urls);
+      if (!count || !fieldKey) return;
+      var photoItem = document.createElement('span');
+      photoItem.className = 'ck-inline-item';
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ck-file-icon';
+      button.setAttribute('data-ck-file-field', fieldKey);
+      button.setAttribute('data-ck-file-count', count.toString());
+      button.appendChild(document.createTextNode('📷'));
+      var badge = document.createElement('span');
+      badge.className = 'ck-file-icon__badge';
+      badge.textContent = count.toString();
+      button.appendChild(badge);
+      photoItem.appendChild(button);
+      inline.appendChild(photoItem);
+    };
+
+    var appendMealEvidence = function (mealBlock, coreTempLabel, coreTempValue, photoUrls) {
+      var label = toText(coreTempLabel);
+      var value = toText(coreTempValue);
+      var hasValue = label || value;
+      var hasPhotos = photoUrls && photoUrls.length;
+      if (!hasValue && !hasPhotos) return;
+
+      var inline = document.createElement('div');
+      inline.className = 'ck-inline';
+
+      if (hasValue) {
+        var tempItem = document.createElement('span');
+        tempItem.className = 'ck-inline-item';
+        tempItem.textContent = (label ? label + ': ' : '') + formatConfirmation(value);
+        inline.appendChild(tempItem);
+      }
+
+      appendPhotoIcon(inline, photoUrls || []);
+
+      if (!inline.children.length) return;
+      var details = document.createElement('div');
+      details.className = 'ck-prep-details';
+      details.appendChild(inline);
+      mealBlock.appendChild(details);
+    };
+
     var appendDetailLine = function (container, data) {
       var inline = document.createElement('div');
       inline.className = 'ck-inline';
@@ -419,41 +469,6 @@
       }
       if (data.allergensText) {
         addTextItem('Allergens: ' + data.allergensText);
-      }
-
-      if (data.includeTemp) {
-        var tempItem = document.createElement('span');
-        tempItem.className = 'ck-inline-item';
-        var tempLabel = document.createElement('span');
-        tempLabel.textContent = 'All pots ≥63°C confirmed: ';
-        tempItem.appendChild(tempLabel);
-        var tempValue = document.createElement('span');
-        tempValue.textContent = formatConfirmation(data.coreTemp);
-        tempItem.appendChild(tempValue);
-        inline.appendChild(tempItem);
-      }
-
-      if (data.photoUrls && data.photoUrls.length) {
-        var urls = uniq(data.photoUrls);
-        var count = urls.length;
-        var fieldKey = encodeFileField(urls);
-        if (count && fieldKey) {
-          var photoItem = document.createElement('span');
-          photoItem.className = 'ck-inline-item';
-          var button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'ck-file-icon';
-          button.setAttribute('data-ck-file-field', fieldKey);
-          button.setAttribute('data-ck-file-count', count.toString());
-          button.setAttribute('aria-label', 'Open photos');
-          button.appendChild(document.createTextNode('📷'));
-          var badge = document.createElement('span');
-          badge.className = 'ck-file-icon__badge';
-          badge.textContent = count.toString();
-          button.appendChild(badge);
-          photoItem.appendChild(button);
-          inline.appendChild(photoItem);
-        }
       }
 
       if (!inline.children.length) return;
@@ -484,6 +499,7 @@
       var requested = '';
       var toCook = '';
       var coreTemp = '';
+      var coreTempLabel = '';
       var tempPhotoUrls = [];
 
       for (var i = 0; i < group.entries.length; i += 1) {
@@ -492,6 +508,7 @@
         if (!requested) requested = entry.ordQty;
         if (!toCook) toCook = entry.toCook;
         if (!coreTemp) coreTemp = entry.coreTemp;
+        if (!coreTempLabel) coreTempLabel = entry.coreTempLabel;
         if (!tempPhotoUrls.length && entry.tempPhotoUrls && entry.tempPhotoUrls.length) {
           tempPhotoUrls = entry.tempPhotoUrls.slice();
         }
@@ -521,6 +538,7 @@
       }
       title.textContent = titleText;
       mealBlock.appendChild(title);
+      appendMealEvidence(mealBlock, coreTempLabel, coreTemp, tempPhotoUrls);
 
       var cookedIngredients = cookEntry ? cookEntry.ingredients.slice() : [];
       var cookedAllergens = cookEntry ? cookEntry.allergens.slice() : [];
@@ -536,10 +554,7 @@
         if (showLeftoverFullDetails) {
           appendPrepGroup(mealBlock, leftoverFullLine, {
             ingredientsText: formatList(entry.ingredients, 'None'),
-            allergensText: formatList(entry.allergens, 'None'),
-            includeTemp: true,
-            coreTemp: entry.coreTemp || coreTemp,
-            photoUrls: entry.tempPhotoUrls && entry.tempPhotoUrls.length ? entry.tempPhotoUrls : tempPhotoUrls
+            allergensText: formatList(entry.allergens, 'None')
           });
         } else {
           appendPrepGroup(mealBlock, leftoverFullLine, null);
@@ -565,10 +580,7 @@
 
       appendPrepGroup(mealBlock, cookedLine, {
         ingredientsText: formatList(cookedIngredients, 'None'),
-        allergensText: formatList(cookedAllergens, 'None'),
-        includeTemp: true,
-        coreTemp: coreTemp,
-        photoUrls: tempPhotoUrls
+        allergensText: formatList(cookedAllergens, 'None')
       });
 
       listContainer.appendChild(mealBlock);

@@ -21,10 +21,8 @@ export const FORM_VIEW_STYLES = `
           position: relative;
           /* Full-bleed like the sticky header */
           padding: 12px 18px 12px;
-          background: rgba(242, 242, 247, 0.92);
-          border-bottom: 1px solid rgba(60, 60, 67, 0.22);
-          backdrop-filter: saturate(180%) blur(18px);
-          -webkit-backdrop-filter: saturate(180%) blur(18px);
+          background: var(--bg);
+          border-bottom: 1px solid var(--border);
           /* Keep under the header (z=30) but above scrolling content. */
           z-index: 29;
         }
@@ -54,9 +52,7 @@ export const FORM_VIEW_STYLES = `
           position: fixed;
           inset: 0;
           z-index: 13000;
-          background: rgba(242, 242, 247, 0.94);
-          backdrop-filter: saturate(180%) blur(18px);
-          -webkit-backdrop-filter: saturate(180%) blur(18px);
+          background: var(--bg);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -65,25 +61,25 @@ export const FORM_VIEW_STYLES = `
         }
         .ck-orientation-blocker__card {
           width: min(720px, 100%);
-          background: #ffffff;
+          background: var(--card);
           border-radius: 18px;
-          border: 1px solid rgba(15, 23, 42, 0.14);
-          box-shadow: 0 30px 90px rgba(15, 23, 42, 0.22);
+          border: 1px solid var(--border);
+          box-shadow: none;
           padding: 18px;
           text-align: center;
-          color: #0f172a;
+          color: var(--text);
         }
         .ck-orientation-blocker__title {
-          font-weight: 950;
-          font-size: 44px;
-          letter-spacing: -0.2px;
+          font-weight: 600;
+          font-size: var(--ck-font-group-title);
+          letter-spacing: 0;
         }
         .ck-orientation-blocker__body {
           margin-top: 10px;
-          font-weight: 800;
-          font-size: 32px;
+          font-weight: 600;
+          font-size: var(--ck-font-label);
           line-height: 1.35;
-          color: rgba(15, 23, 42, 0.82);
+          color: var(--muted);
         }
         .ck-validation-notice {
           display: flex;
@@ -93,8 +89,8 @@ export const FORM_VIEW_STYLES = `
         .ck-validation-banner {
           padding: 12px 14px;
           border-radius: 14px;
-          font-weight: 900;
-          color: #0f172a;
+          font-weight: 600;
+          color: var(--text);
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
@@ -102,12 +98,12 @@ export const FORM_VIEW_STYLES = `
           box-sizing: border-box;
         }
         .ck-validation-banner--error {
-          border: 1px solid #fca5a5;
-          background: #fee2e2;
+          border: 1px solid var(--danger);
+          background: transparent;
         }
         .ck-validation-banner--warning {
-          border: 1px solid #fdba74;
-          background: #ffedd5;
+          border: 1px solid var(--border);
+          background: transparent;
           flex-direction: column;
           align-items: stretch;
           gap: 8px;
@@ -119,16 +115,16 @@ export const FORM_VIEW_STYLES = `
           gap: 12px;
         }
         .ck-validation-banner__title {
-          font-weight: 900;
+          font-weight: 600;
         }
         .ck-validation-banner__list {
           display: flex;
           flex-direction: column;
           gap: 6px;
-          font-weight: 800;
+          font-weight: 600;
         }
         .ck-validation-banner__more {
-          font-weight: 900;
+          font-weight: 600;
           opacity: 0.85;
         }
         .ck-validation-banner__link,
@@ -145,13 +141,13 @@ export const FORM_VIEW_STYLES = `
         .ck-validation-banner__hide {
           flex: 0 0 auto;
           border-radius: 999px;
-          border: 1px solid rgba(15, 23, 42, 0.16);
-          background: rgba(255, 255, 255, 0.55);
+          border: 1px solid var(--border);
+          background: transparent;
           padding: 6px 10px;
-          font-weight: 900;
+          font-weight: 600;
           font-size: calc(var(--ck-font-pill) * 0.95);
           line-height: 1;
-          color: #0f172a;
+          color: var(--text);
           cursor: pointer;
           box-shadow: none;
           white-space: nowrap;
@@ -171,12 +167,12 @@ export const FORM_VIEW_STYLES = `
         }
         .form-card .line-item-table td,
         .form-card .line-item-table th {
-          font-size: 26px;
+          font-size: var(--ck-font-control);
         }
         .form-card .line-item-table input,
         .form-card .line-item-table select,
         .form-card .line-item-table textarea {
-          font-size: 26px;
+          font-size: var(--ck-font-control);
         }
         .form-card .ck-line-item-table,
         .webform-overlay .ck-line-item-table {
@@ -190,7 +186,7 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay .ck-line-item-table th,
         .webform-overlay .ck-line-item-table td {
           padding: 8px 10px;
-          border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+          border-bottom: 1px solid var(--border);
           text-align: left;
           overflow-wrap: anywhere;
           word-break: break-word;
@@ -199,7 +195,7 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay .ck-line-item-table th {
           font-size: var(--ck-font-control);
           font-weight: 600;
-          color: rgba(15, 23, 42, 0.65);
+          color: var(--muted);
         }
         .form-card .ck-line-item-table thead th,
         .webform-overlay .ck-line-item-table thead th {
@@ -220,7 +216,7 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__remove-button,
         .webform-overlay .ck-line-item-table__remove-button {
           border: 1px solid var(--border) !important;
-          background: #ffffff !important;
+          background: var(--card) !important;
           color: var(--text) !important;
           border-radius: 10px;
           width: 40px !important;
@@ -290,7 +286,7 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__value[data-has-error="true"],
         .webform-overlay .ck-line-item-table__control[data-has-error="true"],
         .webform-overlay .ck-line-item-table__value[data-has-error="true"] {
-          box-shadow: 0 0 0 1px #b91c1c;
+          box-shadow: none;
           border-radius: 6px;
           background: transparent;
         }
@@ -311,10 +307,10 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__empty {
           text-align: center;
           padding: 16px;
-          color: rgba(15, 23, 42, 0.55);
+          color: var(--muted);
         }
         .form-card .ck-line-item-table__message-row td {
-          border-bottom: 1px solid rgba(226, 232, 240, 0.65);
+          border-bottom: 1px solid var(--border);
           padding: 4px 10px 12px;
         }
         .form-card .ck-line-item-table__row-errors {
@@ -375,7 +371,7 @@ export const FORM_VIEW_STYLES = `
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-size: 0.7em;
+          font-size: calc(var(--ck-font-label) * 0.85);
           font-weight: 600;
           line-height: 1;
           flex: 0 0 auto;
@@ -387,12 +383,12 @@ export const FORM_VIEW_STYLES = `
           height: 22px;
           border-radius: 999px;
           border: 1px solid var(--border);
-          background: #ffffff;
+          background: var(--card);
           display: inline-flex;
           align-items: center;
           justify-content: center;
           font-weight: 600;
-          font-size: 0.9em;
+          font-size: calc(var(--ck-font-label) * 0.85);
           flex: 0 0 auto;
         }
         .form-card .ck-line-item-table__warning-footnote,
@@ -401,7 +397,7 @@ export const FORM_VIEW_STYLES = `
           align-items: center;
           justify-content: center;
           margin-left: 6px;
-          font-size: 0.7em;
+          font-size: calc(var(--ck-font-label) * 0.85);
           font-weight: 600;
           color: var(--text);
           border: 1px solid var(--border);
@@ -484,7 +480,7 @@ export const FORM_VIEW_STYLES = `
           min-width: 0;
           max-width: calc(50% - 6px);
           margin: 0;
-          font-weight: 800;
+          font-weight: 600;
           font-size: var(--ck-font-label);
           color: var(--text);
           overflow-wrap: anywhere;
@@ -492,7 +488,7 @@ export const FORM_VIEW_STYLES = `
         }
         .form-card .required-star,
         .webform-overlay .required-star {
-          color: #dc2626;
+          color: var(--danger);
           font-weight: 600;
         }
         .form-card .field.inline-field > input,
@@ -526,7 +522,7 @@ export const FORM_VIEW_STYLES = `
           min-height: var(--control-height);
           border: 1px solid var(--border);
           border-radius: var(--radius-control);
-          background: #ffffff;
+          background: var(--card);
           box-sizing: border-box;
         }
         .form-card .ck-paragraph-shell > textarea,
@@ -544,7 +540,7 @@ export const FORM_VIEW_STYLES = `
         @supports (-webkit-touch-callout: none) {
           /* Prevent iOS Safari from zooming on paragraph focus (font < 16px). */
           .ck-paragraph-input {
-            font-size: 16px;
+            font-size: var(--ck-font-control);
           }
         }
         .form-card .ck-paragraph-shell > textarea:focus,
@@ -554,8 +550,8 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-paragraph-shell .ck-paragraph-disclaimer,
         .webform-overlay .ck-paragraph-shell .ck-paragraph-disclaimer {
           white-space: pre-wrap;
-          font-size: 0.95em;
-          color: var(--text);
+          font-size: calc(var(--ck-font-label) * 0.85);
+          color: var(--muted);
           border-top: 1px dashed var(--border);
           padding-top: 8px;
         }
@@ -587,7 +583,7 @@ export const FORM_VIEW_STYLES = `
         .ck-row-title {
           display: block;
           font-size: var(--ck-font-group-title);
-          font-weight: 900;
+          font-weight: 600;
           color: var(--text);
           line-height: 1.1;
           overflow-wrap: anywhere;
@@ -595,10 +591,10 @@ export const FORM_VIEW_STYLES = `
         }
         .ck-row-disclaimer {
           margin-top: 4px;
-          font-size: calc(var(--ck-font-label) * 0.82);
+          font-size: calc(var(--ck-font-label) * 0.85);
           font-weight: 600;
-          font-style: italic;
-          color: rgba(15, 23, 42, 0.56);
+          font-style: normal;
+          color: var(--muted);
           line-height: 1.2;
           overflow-wrap: anywhere;
           word-break: break-word;
@@ -735,9 +731,9 @@ export const FORM_VIEW_STYLES = `
           justify-content: center;
         }
         .ck-progress-pill.ck-progress-info {
-          background: #e0f2fe;
-          border-color: rgba(14, 165, 233, 0.28);
-          color: #0c4a6e;
+          background: transparent;
+          border-color: var(--border);
+          color: var(--text);
         }
         /* Progressive upload UI: camera slots + checkmarks (opt-in via uploadConfig.ui.variant = "progressive") */
         .ck-upload-progress {
@@ -760,14 +756,14 @@ export const FORM_VIEW_STYLES = `
           max-width: calc(var(--control-height) - 12px);
           aspect-ratio: 1 / 1;
           border-radius: 32%;
-          background: rgba(118, 118, 128, 0.08);
-          border: 1px solid rgba(15, 23, 42, 0.14);
-          color: rgba(15, 23, 42, 0.7);
+          background: transparent;
+          border: 1px solid var(--border);
+          color: var(--muted);
         }
         .ck-upload-progress-item--done {
-          background: #dcfce7;
-          border-color: rgba(22, 163, 74, 0.25);
-          color: #166534;
+          background: transparent;
+          border-color: var(--border);
+          color: var(--text);
         }
         .ck-upload-progress-check {
           position: absolute;
@@ -776,13 +772,13 @@ export const FORM_VIEW_STYLES = `
           width: 60%;
           height: 60%;
           border-radius: 999px;
-          background: #dcfce7;
-          border: 2px solid #ffffff;
+          background: transparent;
+          border: 2px solid var(--border);
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          color: #166534;
-          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+          color: var(--text);
+          box-shadow: none;
         }
         /* File upload helper text (e.g., remaining files): always render on its own line below the controls. */
         .form-card .field.inline-field > .ck-upload-helper,
@@ -813,9 +809,9 @@ export const FORM_VIEW_STYLES = `
           padding: 10px 12px;
           border: 1px dashed var(--border);
           border-radius: 12px;
-          background: rgba(118, 118, 128, 0.08);
-          font-weight: 700;
-          color: #0f172a;
+          background: transparent;
+          font-weight: 500;
+          color: var(--text);
         }
         .ck-readonly-file-list {
           display: flex;
@@ -826,7 +822,7 @@ export const FORM_VIEW_STYLES = `
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          color: #0f172a;
+          color: var(--text);
         }
         /* In 2-up grids, keep the "aligned label rows" behavior even if a field forces stacked layout. */
         .ck-line-grid > .field.inline-field.ck-label-stacked > label,
@@ -843,20 +839,20 @@ export const FORM_VIEW_STYLES = `
         .form-card .field[data-has-warning="true"]:not([data-has-error="true"]),
         .webform-overlay .field[data-has-warning="true"]:not([data-has-error="true"]),
         .ck-form-sections .field[data-has-warning="true"]:not([data-has-error="true"]) {
-          outline: 2px solid rgba(245, 158, 11, 0.6);
+          outline: 2px solid var(--text);
           outline-offset: 2px;
           border-radius: 12px;
           padding: 8px;
-          background: rgba(245, 158, 11, 0.08);
+          background: transparent;
         }
         .form-card .field[data-has-error="true"],
         .webform-overlay .field[data-has-error="true"],
         .ck-form-sections .field[data-has-error="true"] {
-          outline: 2px solid rgba(255, 59, 48, 0.65);
+          outline: 2px solid var(--danger);
           outline-offset: 2px;
           border-radius: 12px;
           padding: 8px;
-          background: rgba(255, 59, 48, 0.08);
+          background: transparent;
         }
         .form-card .info-button,
         .webform-overlay .info-button {
@@ -869,7 +865,7 @@ export const FORM_VIEW_STYLES = `
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-weight: 700;
+          font-weight: 500;
           font-size: var(--ck-font-control);
           cursor: pointer;
           white-space: nowrap;
@@ -885,7 +881,7 @@ export const FORM_VIEW_STYLES = `
           padding: 2px;
           border: 1px solid var(--border);
           border-radius: 12px;
-          background: rgba(118, 118, 128, 0.12);
+          background: transparent;
           min-height: var(--control-height);
           box-sizing: border-box;
         }
@@ -897,7 +893,7 @@ export const FORM_VIEW_STYLES = `
           border-radius: 10px;
           padding: 10px 12px;
           font-size: var(--ck-font-control);
-          font-weight: 800;
+          font-weight: 600;
           color: var(--text);
           line-height: 1.1;
           display: inline-flex;
@@ -912,14 +908,14 @@ export const FORM_VIEW_STYLES = `
         .ck-segmented button.active {
           /* Make the selected segment visually obvious. */
           background: var(--accent);
-          color: #ffffff;
-          box-shadow: 0 6px 14px rgba(0, 0, 0, 0.14);
+          color: var(--accentText);
+          box-shadow: none;
         }
         .ck-segmented button:not(.active) {
-          color: rgba(15, 23, 42, 0.78);
+          color: var(--muted);
         }
         .ck-segmented button:focus-visible {
-          outline: 3px solid rgba(59, 130, 246, 0.5);
+          outline: 2px solid var(--text);
           outline-offset: 2px;
         }
 
@@ -937,7 +933,7 @@ export const FORM_VIEW_STYLES = `
           gap: 12px;
           padding: 10px 12px;
           border-bottom: 1px solid var(--border);
-          font-weight: 700;
+          font-weight: 500;
           color: var(--text);
         }
         .ck-radio-row:last-child { border-bottom: none; }
@@ -1055,8 +1051,8 @@ export const FORM_VIEW_STYLES = `
           width: 78px;
           height: 48px;
           border-radius: 999px;
-          background: rgba(120, 120, 128, 0.28);
-          border: 1px solid rgba(60, 60, 67, 0.22);
+          background: transparent;
+          border: 1px solid var(--border);
           outline: none;
           cursor: pointer;
           margin: 0;
@@ -1072,8 +1068,8 @@ export const FORM_VIEW_STYLES = `
           width: 44px;
           height: 44px;
           border-radius: 999px;
-          background: #ffffff;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+          background: var(--card);
+          box-shadow: none;
           transform: translateX(0);
           transition: transform 160ms ease;
           pointer-events: none;
@@ -1182,7 +1178,7 @@ export const FORM_VIEW_STYLES = `
           background: transparent;
           color: var(--text);
           font-weight: 600;
-          font-size: 1.2em;
+          font-size: var(--ck-font-control);
           line-height: 1;
           display: inline-flex;
           align-items: center;
@@ -1194,17 +1190,17 @@ export const FORM_VIEW_STYLES = `
         .ck-line-item-multiadd__clear:focus-visible,
         .form-card .ck-line-item-multiadd__clear:focus-visible,
         .webform-overlay .ck-line-item-multiadd__clear:focus-visible {
-          outline: 4px solid rgba(15, 23, 42, 0.2);
+          outline: 2px solid var(--text);
           outline-offset: 3px;
         }
         .ck-line-item-multiadd__menu,
         .form-card .ck-line-item-multiadd__menu,
         .webform-overlay .ck-line-item-multiadd__menu {
           position: static;
-          background: #ffffff;
-          border: 1px solid rgba(15, 23, 42, 0.14);
+          background: var(--card);
+          border: 1px solid var(--border);
           border-radius: 14px;
-          box-shadow: 0 22px 70px rgba(15, 23, 42, 0.18);
+          box-shadow: none;
           padding: 8px;
           display: flex;
           flex-direction: column;
@@ -1251,9 +1247,9 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
           text-align: left;
           padding: 10px 12px;
-          border: 1px solid rgba(15, 23, 42, 0.14);
+          border: 1px solid var(--border);
           border-radius: 12px;
-          background: #ffffff;
+          background: var(--card);
           font-size: var(--ck-font-control);
           font-weight: 600;
           color: var(--text);
@@ -1272,14 +1268,14 @@ export const FORM_VIEW_STYLES = `
         .ck-line-item-multiadd__option.is-selected,
         .form-card .ck-line-item-multiadd__option.is-selected,
         .webform-overlay .ck-line-item-multiadd__option.is-selected {
-          background: rgba(59, 130, 246, 0.16);
-          border-color: rgba(59, 130, 246, 0.28);
+          background: transparent;
+          border-color: var(--border);
         }
         .ck-line-item-multiadd__empty,
         .form-card .ck-line-item-multiadd__empty,
         .webform-overlay .ck-line-item-multiadd__empty {
           padding: 8px 10px;
-          color: rgba(15, 23, 42, 0.62);
+          color: var(--muted);
           font-weight: 600;
         }
         .ck-line-item-multiadd__footer,
@@ -1290,8 +1286,8 @@ export const FORM_VIEW_STYLES = `
           gap: 10px;
           padding-top: 6px;
           padding-bottom: calc(6px + env(safe-area-inset-bottom));
-          border-top: 1px solid rgba(226, 232, 240, 0.9);
-          background: #ffffff;
+          border-top: 1px solid var(--border);
+          background: var(--card);
           position: sticky;
           bottom: 0;
         }
@@ -1320,7 +1316,7 @@ export const FORM_VIEW_STYLES = `
           background: transparent;
           color: var(--text);
           font-weight: 600;
-          font-size: 1.2em;
+          font-size: var(--ck-font-control);
           line-height: 1;
           display: inline-flex;
           align-items: center;
@@ -1330,7 +1326,7 @@ export const FORM_VIEW_STYLES = `
           padding: 0;
         }
         .ck-searchable-select__clear-icon:focus-visible {
-          outline: 4px solid rgba(15, 23, 42, 0.2);
+          outline: 2px solid var(--text);
           outline-offset: 3px;
         }
         .ck-searchable-select__menu {
@@ -1341,10 +1337,10 @@ export const FORM_VIEW_STYLES = `
           z-index: 200;
           max-height: 320px;
           overflow: auto;
-          background: #ffffff;
-          border: 1px solid rgba(15, 23, 42, 0.14);
+          background: var(--card);
+          border: 1px solid var(--border);
           border-radius: 14px;
-          box-shadow: 0 22px 70px rgba(15, 23, 42, 0.18);
+          box-shadow: none;
           padding: 6px;
         }
         .ck-searchable-select__option {
@@ -1362,19 +1358,19 @@ export const FORM_VIEW_STYLES = `
         }
         .ck-searchable-select__option:hover,
         .ck-searchable-select__option.is-active {
-          background: rgba(59, 130, 246, 0.16);
+          background: transparent;
           color: var(--text);
           -webkit-text-fill-color: var(--text);
         }
         .ck-searchable-select__option:active {
-          background: rgba(59, 130, 246, 0.22);
+          background: transparent;
           color: var(--text);
           -webkit-text-fill-color: var(--text);
         }
         .ck-searchable-select__empty {
           padding: 10px 12px;
-          color: rgba(15, 23, 42, 0.62);
-          font-weight: 700;
+          color: var(--muted);
+          font-weight: 500;
         }
 
         /* Date inputs can be surprisingly wide on iOS; ensure they always shrink within 2-up grids. */
@@ -1449,17 +1445,17 @@ export const FORM_VIEW_STYLES = `
           outline: none;
           overflow: hidden;
           /* stronger separation between grouped cards */
-          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+          box-shadow: none;
         }
         /* Summary view: softer, more report-like group headers (avoid "primary button" look). */
         .ck-summary-view .ck-group-card {
-          box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+          box-shadow: none;
         }
         .ck-summary-view .ck-group-header {
-          background: rgba(118, 118, 128, 0.06);
+          background: transparent;
         }
         .ck-summary-view .ck-progress-pill {
-          background: rgba(118, 118, 128, 0.10);
+          background: transparent;
         }
         /* Summary view: use more horizontal space for the card grid (less side padding). */
         .ck-summary-view .ck-group-body {
@@ -1489,29 +1485,29 @@ export const FORM_VIEW_STYLES = `
         }
         .ck-page-section__title {
           margin: 0;
-          font-weight: 900;
-          font-size: 1.00em;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: rgba(15, 23, 42, 0.72);
+          font-weight: 600;
+          font-size: var(--ck-font-group-title);
+          letter-spacing: 0;
+          text-transform: none;
+          color: var(--text);
         }
         .ck-page-section__info {
           flex: 0 0 auto;
           max-width: 52%;
           padding: 10px 12px;
           border-radius: 12px;
-          border: 1px solid rgba(148, 163, 184, 0.55);
-          background: rgba(148, 163, 184, 0.12);
-          color: rgba(15, 23, 42, 0.78);
-          font-weight: 800;
-          font-size: 1.00em;
+          border: 1px solid var(--border);
+          background: transparent;
+          color: var(--muted);
+          font-weight: 400;
+          font-size: calc(var(--ck-font-label) * 0.85);
           line-height: 1.25;
         }
         .ck-page-section__body {
           min-width: 0;
         }
         .ck-group-card[data-has-error="true"] {
-          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08), 0 0 0 4px rgba(239, 68, 68, 0.22);
+          box-shadow: none;
         }
         .ck-group-header {
           width: 100%;
@@ -1531,26 +1527,26 @@ export const FORM_VIEW_STYLES = `
         }
         .ck-group-header--clickable {
           cursor: pointer;
-          background: rgba(118, 118, 128, 0.06);
+          background: transparent;
           transition: background 160ms ease;
         }
         .ck-group-header--clickable:hover {
-          background: rgba(118, 118, 128, 0.08);
+          background: transparent;
         }
         .ck-group-header--clickable:active {
-          background: rgba(118, 118, 128, 0.10);
+          background: transparent;
         }
         .ck-group-header--clickable:focus-visible {
-          outline: 4px solid rgba(0, 122, 255, 0.28);
+          outline: 2px solid var(--text);
           outline-offset: 2px;
           border-radius: var(--radius-card);
         }
         .ck-group-title {
           font-size: var(--ck-font-group-title);
-          font-weight: 900;
+          font-weight: 600;
           /* Distinguish group titles from field labels */
-          color: rgba(15, 23, 42, 0.72);
-          letter-spacing: -0.2px;
+          color: var(--text);
+          letter-spacing: 0;
         }
         .ck-progress-pill {
           flex: 0 0 auto;
@@ -1560,19 +1556,19 @@ export const FORM_VIEW_STYLES = `
           padding: 10px 14px;
           border-radius: 999px;
           border: 1px solid var(--border);
-          background: rgba(118, 118, 128, 0.12);
-          color: rgba(15, 23, 42, 0.72);
-          font-weight: 900;
+          background: transparent;
+          color: var(--muted);
+          font-weight: 600;
           font-size: var(--ck-font-pill);
           line-height: 1;
           white-space: nowrap;
           min-height: 56px;
           cursor: pointer;
-          box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+          box-shadow: none;
         }
         .ck-progress-pill .ck-progress-label {
-          font-size: 0.92em;
-          font-weight: 900;
+          font-size: var(--ck-font-pill);
+          font-weight: 600;
           opacity: 0.92;
         }
         .ck-progress-pill:active {
@@ -1583,27 +1579,27 @@ export const FORM_VIEW_STYLES = `
           cursor: not-allowed;
         }
         .ck-progress-pill[data-has-error="true"] {
-          box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18);
+          box-shadow: none;
         }
         .ck-progress-pill .ck-progress-caret {
           font-size: var(--ck-font-caret);
-          font-weight: 900;
+          font-weight: 600;
           opacity: 0.8;
         }
         .ck-progress-pill.ck-progress-good {
-          background: #dcfce7;
-          border-color: rgba(22, 163, 74, 0.28);
-          color: #166534;
+          background: transparent;
+          border-color: var(--border);
+          color: var(--text);
         }
         .ck-progress-pill.ck-progress-bad {
-          background: #fee2e2;
-          border-color: rgba(220, 38, 38, 0.28);
-          color: #b91c1c;
+          background: transparent;
+          border-color: var(--danger);
+          color: var(--danger);
         }
         .ck-progress-pill.ck-progress-neutral {
-          background: rgba(118, 118, 128, 0.12);
+          background: transparent;
           border-color: var(--border);
-          color: rgba(15, 23, 42, 0.72);
+          color: var(--muted);
         }
         /* Row toggle wrapper (line-item progressive rows): make the whole "Row X + pill" area tappable */
         .ck-row-toggle {
@@ -1630,7 +1626,7 @@ export const FORM_VIEW_STYLES = `
           margin: -12px -12px 12px;
           padding: 18px 18px 14px;
           border-bottom: 1px solid var(--border);
-          background: rgba(118, 118, 128, 0.06);
+          background: transparent;
           border-top-left-radius: 10px;
           border-top-right-radius: 10px;
         }
@@ -1670,9 +1666,9 @@ export const FORM_VIEW_STYLES = `
         }
         .ck-group-chevron {
           flex: 0 0 auto;
-          font-size: 44px;
-          font-weight: 900;
-          color: rgba(15, 23, 42, 0.6);
+          font-size: var(--ck-font-caret);
+          font-weight: 600;
+          color: var(--muted);
           width: 64px;
           height: 64px;
           padding: 0;
@@ -1681,7 +1677,7 @@ export const FORM_VIEW_STYLES = `
           display: flex;
           align-items: center;
           justify-content: center;
-          background: rgba(118, 118, 128, 0.12);
+          background: transparent;
           border: 1px solid var(--border);
           cursor: pointer;
         }

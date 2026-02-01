@@ -56,7 +56,7 @@ export class Dashboard {
       ]
     ];
 
-    sheet.getRange('A3:F3').setValues(headers).setFontWeight('bold').setBackground('#e0e0e0');
+    sheet.getRange('A3:F3').setValues(headers).setFontWeight('normal');
 
     const exampleAppUrl = `${baseUrl}?form=${encodeURIComponent('Config: Example')}`;
     const examples = [

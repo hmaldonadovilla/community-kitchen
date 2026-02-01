@@ -10,7 +10,7 @@
 <style>
   .ck-procedure-template {
     /* Inherit app typography; keep styles scoped to avoid affecting the host app */
-    font-size: 0.98em;
+    font-size: var(--ck-font-label);
     line-height: 1.5;
     margin: -8px;
     font-family: var(--ck-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif);
@@ -28,23 +28,23 @@
   }
 
   .ck-procedure-template h1 {
-    font-size: 1.55em;
+    font-size: var(--ck-font-group-title);
     margin: 0 0 0.5em;
-    font-weight: 850;
+    font-weight: 600;
     line-height: 1.2;
   }
 
   .ck-procedure-template h2 {
-    font-size: 1.15em;
+    font-size: var(--ck-font-control);
     margin: 1.25em 0 0.5em;
-    font-weight: 850;
+    font-weight: 600;
     line-height: 1.25;
   }
 
   .ck-procedure-template h3 {
-    font-size: 1em;
+    font-size: var(--ck-font-label);
     margin: 0.9em 0 0.35em;
-    font-weight: 750;
+    font-weight: 600;
     line-height: 1.3;
   }
 
@@ -65,7 +65,7 @@
 
   .ck-procedure-template blockquote.ck-procedure-important h2 {
     margin-top: 0;
-    text-transform: uppercase;
+    text-transform: none;
   }
 
   .ck-procedure-template ul {
@@ -100,7 +100,7 @@
     </section>
 
     <blockquote class="ck-procedure-important">
-      <h2>IMPORTANT</h2>
+      <h2>Important</h2>
       <ul>
         <li>Daily, weekly and monthly cleaning activities must be recorded in the <strong>Storage and Cleaning Checks</strong> app.</li>
         <li>Daily cleaning is done after each shift, AM and PM.</li>

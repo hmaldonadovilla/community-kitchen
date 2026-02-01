@@ -7,8 +7,8 @@ function createTooltipIcon(text: string, label?: string): HTMLElement {
   wrapper.style.position = 'relative';
   wrapper.style.display = 'inline-flex';
   wrapper.style.marginLeft = '6px';
-  wrapper.style.color = '#2563eb';
-  wrapper.style.fontWeight = '700';
+  wrapper.style.color = 'var(--text)';
+  wrapper.style.fontWeight = '600';
   wrapper.style.cursor = 'pointer';
 
   const icon = document.createElement('button');
@@ -32,17 +32,17 @@ function createTooltipIcon(text: string, label?: string): HTMLElement {
   overlay.style.top = '100%';
   overlay.style.left = '0';
   overlay.style.marginTop = '8px';
-  overlay.style.background = '#ffffff';
-  overlay.style.color = '#111827';
-  overlay.style.border = '1px solid #e5e7eb';
+  overlay.style.background = 'var(--card)';
+  overlay.style.color = 'var(--text)';
+  overlay.style.border = '1px solid var(--border)';
   overlay.style.borderRadius = '12px';
-  overlay.style.boxShadow = '0 16px 40px rgba(15,23,42,0.16)';
+  overlay.style.boxShadow = 'none';
   overlay.style.padding = '18px';
   overlay.style.maxWidth = '90vw';
   overlay.style.minWidth = '70vw';
   overlay.style.maxHeight = '80vh';
   overlay.style.overflowY = 'auto';
-  overlay.style.fontSize = '15px';
+  overlay.style.fontSize = 'var(--ck-font-label)';
   overlay.style.lineHeight = '1.7';
   overlay.style.whiteSpace = 'pre-wrap';
   overlay.style.display = 'none';
@@ -55,8 +55,8 @@ function createTooltipIcon(text: string, label?: string): HTMLElement {
   header.style.gap = '10px';
 
   const titleSpan = document.createElement('span');
-  titleSpan.style.fontWeight = '700';
-  titleSpan.style.color = '#0f172a';
+  titleSpan.style.fontWeight = '600';
+  titleSpan.style.color = 'var(--text)';
   titleSpan.textContent = label || 'Details';
   header.appendChild(titleSpan);
 
@@ -66,16 +66,16 @@ function createTooltipIcon(text: string, label?: string): HTMLElement {
   closeButton.textContent = '×';
   closeButton.style.border = 'none';
   closeButton.style.background = 'transparent';
-  closeButton.style.fontSize = '16px';
+  closeButton.style.fontSize = 'var(--ck-font-label)';
   closeButton.style.cursor = 'pointer';
   closeButton.style.padding = '2px';
   closeButton.style.lineHeight = '1';
-  closeButton.style.color = '#475569';
+  closeButton.style.color = 'var(--muted)';
   header.appendChild(closeButton);
 
   const content = document.createElement('div');
   content.style.marginTop = '10px';
-  content.style.color = '#1f2937';
+  content.style.color = 'var(--text)';
   content.textContent = text;
 
   overlay.appendChild(header);

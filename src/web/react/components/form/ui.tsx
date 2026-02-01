@@ -228,7 +228,7 @@ const buttonBase: React.CSSProperties = {
   padding: '14px 22px',
   minHeight: 'var(--control-height)',
   borderRadius: 12,
-  fontWeight: 800,
+  fontWeight: 600,
   border: '1px solid transparent',
   cursor: 'pointer',
   display: 'inline-flex',
@@ -243,7 +243,7 @@ export const buttonStyles = {
     ...buttonBase,
     background: 'var(--accent)',
     borderColor: 'transparent',
-    color: '#ffffff'
+    color: 'var(--accentText)'
   },
   secondary: {
     ...buttonBase,
@@ -253,9 +253,9 @@ export const buttonStyles = {
   },
   negative: {
     ...buttonBase,
-    background: 'rgba(255, 59, 48, 0.08)',
-    borderColor: 'rgba(255, 59, 48, 0.35)',
-    color: 'var(--danger)'
+    background: 'transparent',
+    borderColor: 'var(--border)',
+    color: 'var(--text)'
   }
 } as const;
 
@@ -267,5 +267,3 @@ export const withDisabled = (style: React.CSSProperties, disabled?: boolean): Re
         cursor: 'not-allowed'
       }
     : style;
-
-

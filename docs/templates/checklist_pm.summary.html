@@ -10,8 +10,8 @@
 <style>
   .ck-summary-template {
     /* inherit app typography; avoid fixed pt/px sizes so it scales nicely on iOS */
-    color: #0f172a;
-    font-size: 0.94em; /* slightly denser than the app default */
+    color: var(--text);
+    font-size: var(--ck-font-label); /* slightly denser than the app default */
     margin: -8px; /* counter the preview container padding so more content fits */
     font-family: var(--ck-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif);
   }
@@ -29,76 +29,76 @@
   }
 
   .ck-meta {
-    border: 1px solid rgba(148, 163, 184, 0.55);
-    background: rgba(148, 163, 184, 0.1);
-    border-radius: 12px;
+    border: none;
+    background: transparent;
+    border-radius: 0;
     padding: 10px 10px;
     min-width: 0;
   }
 
   .ck-meta-label {
-    font-weight: 800;
-    font-size: 0.7em;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: rgba(15, 23, 42, 0.58);
+    font-weight: 600;
+    font-size: calc(var(--ck-font-label) * 0.85);
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
     margin-bottom: 4px;
   }
 
   .ck-meta-value {
-    font-weight: 900;
-    font-size: 0.9em;
-    color: #0f172a;
+    font-weight: 600;
+    font-size: calc(var(--ck-font-label) * 0.85);
+    color: var(--text);
     line-height: 1.15;
     word-break: break-word;
     overflow-wrap: anywhere;
   }
 
   .ck-status-pill {
-    display: inline-flex;
+    display: inline;
     align-items: center;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
+    padding: 0;
+    border-radius: 0;
+    border: none;
+    background: transparent;
+    color: var(--text);
     font-weight: 600;
-    font-size: 0.78em;
+    font-size: calc(var(--ck-font-label) * 0.85);
     line-height: 1;
     white-space: nowrap;
   }
   .ck-status-pill[data-status-key="onClose"] {
-    border-color: #94a3b8;
-    background: #e2e8f0;
-    color: #334155;
+    border-color: var(--border);
+    background: transparent;
+    color: var(--text);
   }
   .ck-status-pill[data-status-key="reOpened"] {
-    border-color: #64748b;
-    background: #e5e7eb;
-    color: #1f2937;
+    border-color: var(--border);
+    background: transparent;
+    color: var(--text);
   }
 
   .ck-divider {
     border: 0;
     height: 1px;
-    background: rgba(148, 163, 184, 0.55);
+    background: var(--border);
     margin: 10px 0;
   }
 
   .ck-section-title {
     margin: 0 0 8px 0;
-    font-weight: 800;
-    font-size: 0.88em;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: rgba(15, 23, 42, 0.72);
+    font-weight: 600;
+    font-size: calc(var(--ck-font-label) * 0.85);
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
   }
 
   .ck-subtitle {
     margin: 10px 0 8px 0;
-    font-weight: 900;
-    font-size: 0.98em;
-    color: #0f172a;
+    font-weight: 600;
+    font-size: var(--ck-font-label);
+    color: var(--text);
   }
 
   .ck-checklist {
@@ -116,9 +116,9 @@
   }
 
   .ck-check {
-    border: 1px solid rgba(15, 23, 42, 0.1);
-    background: rgba(118, 118, 128, 0.06);
-    border-radius: 12px;
+    border: none;
+    background: transparent;
+    border-radius: 0;
     padding: 8px 10px;
     display: flex;
     align-items: flex-start;
@@ -130,17 +130,17 @@
     flex: 0 0 auto;
     width: 1.6em;
     text-align: center;
-    font-weight: 900;
+    font-weight: 600;
     line-height: 1.2;
-    font-size: 1.05em;
+    font-size: var(--ck-font-control);
   }
 
   .ck-text {
     flex: 1 1 auto;
     min-width: 0;
-    font-weight: 700;
+    font-weight: 500;
     line-height: 1.2;
-    color: rgba(15, 23, 42, 0.92);
+    color: var(--text);
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
@@ -159,8 +159,8 @@
   }
 
   .ck-muted {
-    color: rgba(15, 23, 42, 0.55);
-    font-weight: 700;
+    color: var(--muted);
+    font-weight: 500;
   }
 
   .ck-callouts {
@@ -175,21 +175,21 @@
   }
 
   .ck-callout {
-    border: 1px solid rgba(251, 146, 60, 0.55);
-    background: rgba(251, 146, 60, 0.10);
-    border-radius: 12px;
+    border: none;
+    background: transparent;
+    border-radius: 0;
     padding: 10px 10px;
     min-width: 0;
   }
 
   .ck-callout-title {
-    font-weight: 900;
-    font-size: 0.82em;
+    font-weight: 600;
+    font-size: calc(var(--ck-font-label) * 0.85);
     margin-bottom: 4px;
   }
 
   .ck-callout-body {
-    font-weight: 700;
+    font-weight: 500;
     line-height: 1.15;
     word-break: break-word;
     overflow-wrap: anywhere;
@@ -219,7 +219,7 @@
   .ck-summary-template .ck-file-icon {
     padding: 12px 14px !important;
     border-radius: 16px !important;
-    font-size: 22px !important;
+    font-size: var(--ck-font-control) !important;
     line-height: 1 !important;
   }
 
@@ -228,7 +228,7 @@
     min-width: 28px !important;
     height: 28px !important;
     padding: 0 8px !important;
-    font-size: 15px !important;
+    font-size: calc(var(--ck-font-label) * 0.85) !important;
   }
 
   /* Ultra-narrow devices: stack a bit to avoid unreadably tiny columns */
@@ -255,14 +255,14 @@
   }
 
   .ck-issues-title {
-    font-weight: 950;
-    font-size: 1.02em;
-    letter-spacing: 0.01em;
+    font-weight: 600;
+    font-size: var(--ck-font-control);
+    letter-spacing: 0;
   }
 
   .ck-issues-status-icon {
     margin-left: auto;
-    font-size: 1.25em;
+    font-size: var(--ck-font-control);
     line-height: 1;
   }
 
@@ -270,7 +270,7 @@
     display: none;
     align-items: center;
     gap: 10px;
-    font-weight: 900;
+    font-weight: 600;
   }
 
   .ck-issues-row {
@@ -280,9 +280,9 @@
   }
 
   .ck-issues-subtitle {
-    font-weight: 900;
-    font-size: 0.9em;
-    letter-spacing: 0.01em;
+    font-weight: 600;
+    font-size: calc(var(--ck-font-label) * 0.85);
+    letter-spacing: 0;
   }
 
   .ck-issues-body {
@@ -291,12 +291,12 @@
     gap: 8px;
     flex-wrap: wrap;
     min-width: 0;
-    font-weight: 750;
+    font-weight: 600;
     line-height: 1.15;
     word-break: break-word;
     overflow-wrap: anywhere;
     padding-left: 12px;
-    border-left: 3px solid rgba(15, 23, 42, 0.12);
+    border-left: 3px solid var(--border);
   }
 
   .ck-issues-text {
@@ -307,8 +307,8 @@
 
   .ck-issues-sep {
     flex: 0 0 auto;
-    color: rgba(15, 23, 42, 0.38);
-    font-weight: 900;
+    color: var(--muted);
+    font-weight: 600;
   }
 
   .ck-issues-icon {
@@ -322,37 +322,37 @@
   .ck-issues-divider {
     border: 0;
     height: 1px;
-    background: rgba(15, 23, 42, 0.12);
+    background: var(--border);
     margin: 0;
   }
 
   .ck-callout.ck-issues--ok {
-    border-color: rgba(34, 197, 94, 0.55);
-    background: rgba(34, 197, 94, 0.12);
+    border-color: var(--border);
+    background: transparent;
   }
 
   .ck-callout.ck-issues--warn {
-    border-color: rgba(245, 158, 11, 0.7);
-    background: rgba(245, 158, 11, 0.14);
+    border-color: var(--border);
+    background: transparent;
   }
 </style>
 
 <div class="ck-summary-template">
   <div class="ck-meta-grid">
     <div class="ck-meta">
-      <div class="ck-meta-label">Check frequency</div>
+      <div class="ck-meta-label">{{LABEL(CHECK_FREQ)}}</div>
       <div class="ck-meta-value">{{CHECK_FREQ}}</div>
     </div>
     <div class="ck-meta">
-      <div class="ck-meta-label">Date</div>
+      <div class="ck-meta-label">{{LABEL(DATE)}}</div>
       <div class="ck-meta-value">{{DATE}}</div>
     </div>
     <div class="ck-meta">
-      <div class="ck-meta-label">Responsible</div>
+      <div class="ck-meta-label">{{LABEL(COOK)}}</div>
       <div class="ck-meta-value">{{COOK}}</div>
     </div>
     <div class="ck-meta">
-      <div class="ck-meta-label">Status</div>
+      <div class="ck-meta-label">{{LABEL(STATUS)}}</div>
       <div class="ck-meta-value">
         <span class="ck-status-pill" data-status-key="{{STATUS_KEY}}">{{DEFAULT(STATUS, "—")}}</span>
       </div>
@@ -362,7 +362,7 @@
   <div class="ck-callouts">
     <div class="ck-callout ck-issues-card ck-issues--warn" data-ck-issues-card>
       <div class="ck-issues-header">
-        <div class="ck-issues-title">Issues</div>
+        <div class="ck-issues-title">{{LABEL(ISSUES)}}</div>
         <div class="ck-issues-status-icon" data-ck-issues-icon aria-hidden="true">⚠️</div>
       </div>
 
@@ -372,7 +372,7 @@
       </div>
 
       <div class="ck-issues-row" data-ck-issues-prev-row>
-        <div class="ck-issues-subtitle"><strong>Previous shift:</strong></div>
+        <div class="ck-issues-subtitle"><strong>{{LABEL(ISSUES_PREV)}}:</strong></div>
         <div class="ck-issues-body">
           <span class="ck-issues-text" data-ck-issues-prev-text>{{DEFAULT(ISSUES_PREV, "No issues")}}</span>
           <span class="ck-issues-sep" data-ck-issues-prev-sep aria-hidden="true">|</span>
@@ -383,7 +383,7 @@
       <hr class="ck-issues-divider" data-ck-issues-divider />
 
       <div class="ck-issues-row" data-ck-issues-current-row>
-        <div class="ck-issues-subtitle"><strong>Current shift:</strong></div>
+        <div class="ck-issues-subtitle"><strong>{{LABEL(ISSUES)}}:</strong></div>
         <div class="ck-issues-body">
           <span class="ck-issues-text" data-ck-issues-current-text>{{DEFAULT(ISSUES, "No issues")}}</span>
           <span class="ck-issues-sep" data-ck-issues-current-sep aria-hidden="true">|</span>
@@ -438,12 +438,12 @@
         var icon = card.querySelector('[data-ck-issues-icon]');
         if (prevEmpty && currentEmpty) {
           if (emptyBlock) emptyBlock.style.display = 'flex';
-          if (icon) icon.textContent = '✅';
+          if (icon) icon.textContent = '';
           card.classList.add('ck-issues--ok');
           card.classList.remove('ck-issues--warn');
         } else {
           if (emptyBlock) emptyBlock.style.display = 'none';
-          if (icon) icon.textContent = '⚠️';
+          if (icon) icon.textContent = '';
           card.classList.add('ck-issues--warn');
           card.classList.remove('ck-issues--ok');
         }
@@ -461,56 +461,56 @@
   <ul class="ck-checklist">
     <li class="ck-check">
       <span class="ck-mark">{{FRIDGE_TEMP}}</span>
-      <span class="ck-text">Fridge temp (0-7&deg;C)</span>
+      <span class="ck-text">{{LABEL(FRIDGE_TEMP)}}</span>
       <span class="ck-right">{{FILES_ICON(FRIDGE_TEMP_PHOTO)}}</span>
     </li>
-    <li class="ck-check"><span class="ck-mark">{{FRIDGE_LBD}}</span><span class="ck-text">All items covered &amp; dated</span></li>
-    <li class="ck-check"><span class="ck-mark">{{FRIDGE_NBO}}</span><span class="ck-text">No bad odour</span></li>
-    <li class="ck-check"><span class="ck-mark">{{FRIDGE_FIF}}</span><span class="ck-text">FIFO respected</span></li>
-    <li class="ck-check"><span class="ck-mark">{{FRIDGE_48H}}</span><span class="ck-text">&gt;48h and expired items discarded</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FRIDGE_LBD}}</span><span class="ck-text">{{LABEL(FRIDGE_LBD)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FRIDGE_NBO}}</span><span class="ck-text">{{LABEL(FRIDGE_NBO)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FRIDGE_FIF}}</span><span class="ck-text">{{LABEL(FRIDGE_FIF)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FRIDGE_48H}}</span><span class="ck-text">{{LABEL(FRIDGE_48H)}}</span></li>
   </ul>
 
   <div class="ck-subtitle">Freezers</div>
   <ul class="ck-checklist">
     <li class="ck-check">
       <span class="ck-mark">{{FREEZER_TEMP}}</span>
-      <span class="ck-text">Freezer temp (≤ -12&deg;C)</span>
+      <span class="ck-text">{{LABEL(FREEZER_TEMP)}}</span>
       <span class="ck-right">{{FILES_ICON(FREEZER_TEMP_PHOTO)}}</span>
     </li>
-    <li class="ck-check"><span class="ck-mark">{{FREEZER_FDS}}</span><span class="ck-text">Food fully frozen (solid)</span></li>
-    <li class="ck-check"><span class="ck-mark">{{FREEZER_PKI}}</span><span class="ck-text">Packaging intact</span></li>
-    <li class="ck-check"><span class="ck-mark">{{FREEZER_FIF}}</span><span class="ck-text">FIFO respected (freezer)</span></li>
-    <li class="ck-check"><span class="ck-mark">{{FREEZER_NEI}}</span><span class="ck-text">Expired items discarded</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FREEZER_FDS}}</span><span class="ck-text">{{LABEL(FREEZER_FDS)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FREEZER_PKI}}</span><span class="ck-text">{{LABEL(FREEZER_PKI)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FREEZER_FIF}}</span><span class="ck-text">{{LABEL(FREEZER_FIF)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FREEZER_NEI}}</span><span class="ck-text">{{LABEL(FREEZER_NEI)}}</span></li>
   </ul>
 
   <div class="ck-subtitle">Vegetables</div>
   <ul class="ck-checklist">
-    <li class="ck-check"><span class="ck-mark">{{FRESH_VEGGIES}}</span><span class="ck-text">Molded and spoiled vegetables discarded</span></li>
+    <li class="ck-check"><span class="ck-mark">{{FRESH_VEGGIES}}</span><span class="ck-text">{{LABEL(FRESH_VEGGIES)}}</span></li>
   </ul>
 
   <div class="ck-subtitle">Dry foods</div>
   <ul class="ck-checklist">
-    <li class="ck-check"><span class="ck-mark">{{DRY_EXP}}</span><span class="ck-text">Expired dry food discarded</span></li>
+    <li class="ck-check"><span class="ck-mark">{{DRY_EXP}}</span><span class="ck-text">{{LABEL(DRY_EXP)}}</span></li>
   </ul>
 
   <hr class="ck-divider" />
 
   <div class="ck-section-title">Cleanliness</div>
   <ul class="ck-checklist">
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_STV}}</span><span class="ck-text">Clean &amp; disinfect stove, cooktops and splashbacks</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_KEQ}}</span><span class="ck-text">Clean &amp; dry cooking equipment, utensils, boxes, buckets, trays, containers</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_CNT}}</span><span class="ck-text">Clean &amp; disinfect portioning tables, countertops and sinks</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_RICE}}</span><span class="ck-text">Clean rice cooker pot and exterior</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_OVN}}</span><span class="ck-text">Empty &amp; clean oven</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_DSH}}</span><span class="ck-text">Empty &amp; clean dishwasher</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_BET}}</span><span class="ck-text">Empty &amp; clean bins</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_BLR}}</span><span class="ck-text">Replace bin liners</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_CLTH}}</span><span class="ck-text">Wash dirty cloths &amp; empty dirty cloth bin</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_FLR}}</span><span class="ck-text">Sweep &amp; mop floor</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_BROOM}}</span><span class="ck-text">Clean brooms</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_MOP}}</span><span class="ck-text">Empty &amp; clean mop bucket</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_EQP}}</span><span class="ck-text">Clean &amp; store cleaning equipment</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_PEST}}</span><span class="ck-text">Check for sign of pests (insects, rodents)</span></li>
-    <li class="ck-check"><span class="ck-mark">{{CLEAN_DMG}}</span><span class="ck-text">Discard damage equipment</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_STV}}</span><span class="ck-text">{{LABEL(CLEAN_STV)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_KEQ}}</span><span class="ck-text">{{LABEL(CLEAN_KEQ)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_CNT}}</span><span class="ck-text">{{LABEL(CLEAN_CNT)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_RICE}}</span><span class="ck-text">{{LABEL(CLEAN_RICE)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_OVN}}</span><span class="ck-text">{{LABEL(CLEAN_OVN)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_DSH}}</span><span class="ck-text">{{LABEL(CLEAN_DSH)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_BET}}</span><span class="ck-text">{{LABEL(CLEAN_BET)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_BLR}}</span><span class="ck-text">{{LABEL(CLEAN_BLR)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_CLTH}}</span><span class="ck-text">{{LABEL(CLEAN_CLTH)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_FLR}}</span><span class="ck-text">{{LABEL(CLEAN_FLR)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_BROOM}}</span><span class="ck-text">{{LABEL(CLEAN_BROOM)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_MOP}}</span><span class="ck-text">{{LABEL(CLEAN_MOP)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_EQP}}</span><span class="ck-text">{{LABEL(CLEAN_EQP)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_PEST}}</span><span class="ck-text">{{LABEL(CLEAN_PEST)}}</span></li>
+    <li class="ck-check"><span class="ck-mark">{{CLEAN_DMG}}</span><span class="ck-text">{{LABEL(CLEAN_DMG)}}</span></li>
   </ul>
 </div>

@@ -2,7 +2,7 @@ import { FormConfig, QuestionConfig, TemplateIdMap, WebFormSubmission } from '..
 import { DataSourceService } from '../dataSources';
 import { debugLog } from '../debug';
 import { resolveTemplateId } from './recipients';
-import { addConsolidatedPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
+import { addConsolidatedPlaceholders, addLabelPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
 import { addPlaceholderVariants, applyPlaceholders, formatTemplateValueForMarkdown } from './utils';
 import {
@@ -57,6 +57,7 @@ export const renderMarkdownFromTemplate = (args: {
       dataSources,
       formatValue: formatTemplateValueForMarkdown
     });
+    addLabelPlaceholders(placeholders, questions, record.language);
     addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
     const validationWarnings = collectValidationWarnings(questions, record);
     addPlaceholderVariants(
@@ -86,5 +87,4 @@ export const renderMarkdownFromTemplate = (args: {
     return { success: false, message: msg };
   }
 };
-
 

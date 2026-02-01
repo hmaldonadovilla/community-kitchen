@@ -8,7 +8,7 @@ const inputBaseStyle: React.CSSProperties = {
   minHeight: 'var(--control-height)',
   borderRadius: 'var(--radius-control)',
   border: '1px solid var(--border)',
-  background: '#ffffff',
+  background: 'var(--card)',
   color: 'var(--text)',
   fontSize: 'var(--ck-font-control)',
   fontFamily: 'inherit',
@@ -25,7 +25,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 const helperStyle: React.CSSProperties = {
-  fontSize: 'calc(var(--ck-font-label) * 0.82)',
+  fontSize: 'calc(var(--ck-font-label) * 0.85)',
   marginTop: 4,
   color: 'var(--muted)',
   lineHeight: 1.2
@@ -168,7 +168,7 @@ export const FieldChangeDialogOverlay: React.FC<{
         position: 'fixed',
         inset: 0,
         zIndex,
-        background: 'rgba(15, 23, 42, 0.35)',
+        background: 'transparent',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -199,7 +199,7 @@ export const FieldChangeDialogOverlay: React.FC<{
           width: 'min(720px, 100%)',
           maxHeight: 'min(92vh, 980px)',
           margin: 0,
-          background: '#ffffff',
+          background: 'var(--card)',
           borderRadius: 12,
           border: '1px solid var(--border)',
           padding: 22,
@@ -246,7 +246,7 @@ export const FieldChangeDialogOverlay: React.FC<{
               minHeight: 'var(--control-height)',
               borderRadius: 'var(--radius-control)',
               border: '1px solid var(--border)',
-              background: '#ffffff',
+              background: 'var(--card)',
               color: 'var(--text)',
               fontWeight: 500,
               fontSize: 'var(--ck-font-control)',
@@ -265,7 +265,7 @@ export const FieldChangeDialogOverlay: React.FC<{
               borderRadius: 'var(--radius-control)',
               border: '1px solid var(--accent)',
               background: 'var(--accent)',
-              color: '#ffffff',
+              color: 'var(--accentText)',
               fontWeight: 500,
               fontSize: 'var(--ck-font-control)',
               lineHeight: 1.1,
