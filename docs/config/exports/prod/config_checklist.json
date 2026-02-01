@@ -65,14 +65,10 @@
         "fr": "Synthèse checklist"
       },
       "emailRecipients": [
-        "hmaldonadovilla@gmail.com"
+        "operations@communitykitchen.be"
       ],
-      "emailCc": [
-        "hmaldonadovilla@gmail.com"
-      ],
-      "emailBcc": [
-        "hmaldonadovilla@gmail.com"
-      ],
+      "emailCc": [],
+      "emailBcc": [],
       "statusFieldId": "Status",
       "statusTransitions": {
         "onPdf": "PDF ready",
@@ -691,8 +687,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -957,8 +953,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -1279,8 +1275,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -1884,8 +1880,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -1991,8 +1987,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2098,8 +2094,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2205,8 +2201,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2312,8 +2308,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2419,8 +2415,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2553,8 +2549,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2668,8 +2664,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2775,8 +2771,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2882,8 +2878,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -2989,8 +2985,8 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
@@ -3157,29 +3153,12 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1600,
-            "quality": 0.82,
+            "maxDimension": 1280,
+            "quality": 0.78,
             "outputType": "keep"
           }
         }
-      },
-      "validationRules": [
-        {
-          "when": {
-            "fieldId": "ISSUES",
-            "notEmpty": true
-          },
-          "then": {
-            "fieldId": "ISSUES_EVD",
-            "required": true
-          },
-          "message": {
-            "en": "Add photo evidence",
-            "fr": "",
-            "nl": ""
-          }
-        }
-      ]
+      }
     },
     {
       "id": "AM_DAILY",
@@ -3781,8 +3760,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -4040,8 +4019,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -4346,8 +4325,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -4917,8 +4896,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5020,8 +4999,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5123,8 +5102,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5226,8 +5205,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5329,8 +5308,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5432,8 +5411,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5560,8 +5539,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5671,8 +5650,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5774,8 +5753,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5877,8 +5856,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -5980,8 +5959,8 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
@@ -6140,29 +6119,12 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1600,
-              "quality": 0.82,
+              "maxDimension": 1280,
+              "quality": 0.78,
               "outputType": "keep"
             }
           }
-        },
-        "validationRules": [
-          {
-            "when": {
-              "fieldId": "ISSUES",
-              "notEmpty": true
-            },
-            "then": {
-              "fieldId": "ISSUES_EVD",
-              "required": true
-            },
-            "message": {
-              "en": "Add photo evidence",
-              "fr": "",
-              "nl": ""
-            }
-          }
-        ]
+        }
       },
       {
         "id": "AM_DAILY",
@@ -6547,14 +6509,10 @@
         "fr": "Synthèse checklist"
       },
       "emailRecipients": [
-        "hmaldonadovilla@gmail.com"
+        "operations@communitykitchen.be"
       ],
-      "emailCc": [
-        "hmaldonadovilla@gmail.com"
-      ],
-      "emailBcc": [
-        "hmaldonadovilla@gmail.com"
-      ],
+      "emailCc": [],
+      "emailBcc": [],
       "statusFieldId": "Status",
       "statusTransitions": {
         "onPdf": "PDF ready",

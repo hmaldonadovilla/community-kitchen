@@ -34,7 +34,8 @@
             "id": "Distributor Data",
             "projection": [
               "NICKNAME",
-              "DIST_EMAIL"
+              "DIST_EMAIL",
+              "DIST_NAME"
             ]
           }
         }
@@ -11964,7 +11965,8 @@
             "id": "Distributor Data",
             "projection": [
               "NICKNAME",
-              "DIST_EMAIL"
+              "DIST_EMAIL",
+              "DIST_NAME"
             ]
           }
         }
