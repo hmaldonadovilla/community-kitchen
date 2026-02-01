@@ -10,6 +10,7 @@ export interface RootProps {
   definition?: WebFormDefinition | null;
   formKey: string;
   record?: WebFormSubmission | null;
+  envTag?: string | null;
 }
 
 const logBootEvent = (event: string, payload?: Record<string, unknown>): void => {
@@ -21,7 +22,7 @@ const logBootEvent = (event: string, payload?: Record<string, unknown>): void =>
   }
 };
 
-export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formKey, record }) => {
+export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formKey, record, envTag: initialEnvTag }) => {
   const [phase, setPhase] = useState<AppPhase>('bootstrapping');
   const [showSlowMessage, setShowSlowMessage] = useState(false);
   const [allowRetry, setAllowRetry] = useState(false);
@@ -30,6 +31,12 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
   const [definition, setDefinition] = useState<WebFormDefinition | null>(initialDefinition ?? null);
   const [activeFormKey, setActiveFormKey] = useState(formKey);
   const [activeRecord, setActiveRecord] = useState<WebFormSubmission | null>(record ?? null);
+  const [envTag, setEnvTag] = useState<string | null>(() => {
+    const globalAny = globalThis as any;
+    const bootstrapTag = globalAny?.__WEB_FORM_BOOTSTRAP__?.envTag;
+    const raw = (bootstrapTag ?? initialEnvTag ?? '').toString().trim();
+    return raw ? raw : null;
+  });
   const definitionRef = useRef<WebFormDefinition | null>(initialDefinition ?? null);
 
   useEffect(() => {
@@ -76,6 +83,8 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
           resolvedKey = res.formKey || formKey;
           setActiveFormKey(resolvedKey);
           setActiveRecord(res.record ?? null);
+          const resolvedEnvTag = (res.envTag || '').toString().trim();
+          setEnvTag(resolvedEnvTag ? resolvedEnvTag : null);
           const configSource = res.configSource || 'sheet';
           const configEnv = (res.configEnv || '').toString().trim();
           logBootEvent('bootstrap.fetch.success', {
@@ -86,6 +95,7 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
           });
           logBootEvent('config.source', { formKey: resolvedKey, source: configSource });
           logBootEvent('config.env', { formKey: resolvedKey, env: configEnv || 'default' });
+          logBootEvent('ui.envTag', { formKey: resolvedKey, envTag: resolvedEnvTag || null });
         } catch (err: any) {
           if (cancelled) return;
           const message = err?.message ? err.message.toString() : 'Request failed';
@@ -137,7 +147,12 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
         />
       )}
       {!showLoading && definition && (
-        <App definition={definition} formKey={activeFormKey || formKey} record={activeRecord || undefined} />
+        <App
+          definition={definition}
+          formKey={activeFormKey || formKey}
+          record={activeRecord || undefined}
+          envTag={envTag || undefined}
+        />
       )}
     </>
   );

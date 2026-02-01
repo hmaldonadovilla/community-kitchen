@@ -94,6 +94,15 @@ CI (GitHub Actions):
 3. Authorize the script when prompted.
 4. This will create a "Forms Dashboard" and example config sheets.
 
+## 5b. Optional: Environment tag in the web app header
+
+If you want a discrete environment label (e.g., "Staging") to appear in the web app header:
+
+1. Open the Apps Script editor for your spreadsheet.
+2. Go to **Project Settings** → **Script properties**.
+3. Add a property named `CK_UI_ENV_TAG` with the label you want to display (for example, `Staging`).
+4. Save the property and refresh the web app.
+
 ## 6. Configure Your Forms
 
 1. **Dashboard**: Add new rows to the "Forms Dashboard" sheet for each form.

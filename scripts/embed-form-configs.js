@@ -12,6 +12,43 @@ const readFlag = name => {
   return null;
 };
 
+const parseEnvContent = content => {
+  if (!content) return {};
+  const out = {};
+  content
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .forEach(line => {
+      if (!line || line.startsWith('#')) return;
+      const eq = line.indexOf('=');
+      if (eq < 0) return;
+      const key = line.slice(0, eq).trim();
+      if (!key) return;
+      let val = line.slice(eq + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      out[key] = val;
+    });
+  return out;
+};
+
+const loadEnvFile = (envPath, override = false) => {
+  if (!envPath || !fs.existsSync(envPath)) return;
+  try {
+    const raw = fs.readFileSync(envPath, 'utf8');
+    const parsed = parseEnvContent(raw);
+    Object.entries(parsed).forEach(([key, value]) => {
+      if (override || process.env[key] === undefined) {
+        process.env[key] = value;
+      }
+    });
+  } catch (err) {
+    console.error('[embed-form-configs] Failed reading .env file:', err && err.message ? err.message : err);
+    process.exit(1);
+  }
+};
+
 const normalizeEnvName = value => {
   const raw = (value || '').toString().trim().toLowerCase();
   if (!raw) return '';
@@ -68,7 +105,11 @@ const parseConfigFile = (configsDir, fileName) => {
 };
 
 const main = () => {
+  loadEnvFile(path.join(root, '.env'));
   const configEnv = resolveConfigEnv();
+  if (configEnv) {
+    loadEnvFile(path.join(root, `.env.${configEnv}`), true);
+  }
   const configsDir = resolveConfigsDir(configEnv);
 
   if (configEnv && !fs.existsSync(configsDir)) {

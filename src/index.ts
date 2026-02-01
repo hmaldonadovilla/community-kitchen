@@ -109,6 +109,7 @@ export function fetchBootstrapContext(formKey?: string): {
   formKey: string;
   configSource?: string;
   configEnv?: string;
+  envTag?: string;
 } {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
