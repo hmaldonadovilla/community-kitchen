@@ -1210,10 +1210,22 @@ export const FORM_VIEW_STYLES = `
           overflow: hidden;
           touch-action: pan-y;
         }
+        .ck-line-item-multiadd__menu--modal,
+        .form-card .ck-line-item-multiadd__menu--modal,
+        .webform-overlay .ck-line-item-multiadd__menu--modal {
+          position: fixed;
+          top: var(--ck-line-item-multiadd-menu-top, 0px);
+          left: var(--ck-line-item-multiadd-menu-left, 0px);
+          right: var(--ck-line-item-multiadd-menu-right, 0px);
+          bottom: 0;
+          z-index: 11000;
+          max-height: none;
+          margin-top: 0;
+        }
         .webform-overlay .ck-line-item-multiadd {
           height: 100%;
         }
-        .webform-overlay .ck-line-item-multiadd__menu {
+        .webform-overlay .ck-line-item-multiadd__menu:not(.ck-line-item-multiadd__menu--modal) {
           margin-top: 6px;
           flex: 1;
           min-height: 0;
@@ -1221,7 +1233,7 @@ export const FORM_VIEW_STYLES = `
           overflow: hidden;
           touch-action: pan-y;
         }
-        .form-card .ck-line-item-multiadd__menu {
+        .form-card .ck-line-item-multiadd__menu:not(.ck-line-item-multiadd__menu--modal) {
           margin-top: 6px;
           max-height: min(60vh, 520px);
         }
