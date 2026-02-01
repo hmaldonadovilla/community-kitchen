@@ -9,9 +9,9 @@
 <style>
   .ck-pdf-template {
     font-family: var(--ck-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif);
-    font-size: 1rem;
+    font-size: var(--ck-font-control);
     line-height: 1.45;
-    color: #0f172a;
+    color: var(--text);
     margin: 0;
   }
 
@@ -40,14 +40,14 @@
   }
 
   .ck-header-title {
-    font-size: 1.15em;
+    font-size: var(--ck-font-control);
     font-weight: 600;
   }
 
   .ck-prepared-label {
-    font-size: 0.85em;
-    letter-spacing: 0.05em;
-    color: rgba(15, 23, 42, 0.65);
+    font-size: calc(var(--ck-font-label) * 0.85);
+    letter-spacing: 0;
+    color: var(--muted);
   }
 
   .ck-prepared-value {
@@ -62,7 +62,7 @@
 
   .ck-section-title {
     margin: 0 0 8px 0;
-    font-size: 1em;
+    font-size: var(--ck-font-label);
     font-weight: 600;
   }
 
@@ -74,8 +74,8 @@
 
   .ck-production-label {
     font-weight: 500;
-    font-size: 0.85em;
-    color: rgba(15, 23, 42, 0.75);
+    font-size: calc(var(--ck-font-label) * 0.85);
+    color: var(--muted);
   }
 
   .ck-production-value {
@@ -90,7 +90,7 @@
   }
 
   .ck-meal-block {
-    border-top: 1px solid rgba(15, 23, 42, 0.15);
+    border-top: 1px solid var(--border);
     padding-top: 12px;
   }
 
@@ -103,20 +103,20 @@
   }
 
   .ck-meal-type {
-    font-size: 1.05em;
+    font-size: var(--ck-font-control);
     font-weight: 600;
   }
 
   .ck-meal-portions {
     font-weight: 500;
-    font-size: 0.95em;
+    font-size: var(--ck-font-label);
   }
 
   .ck-recipe-block {
     margin-top: 8px;
     padding: 10px;
-    border: 1px solid rgba(15, 23, 42, 0.15);
-    border-radius: 8px;
+    border: none;
+    border-radius: 0;
   }
 
   .ck-recipe-heading {
@@ -129,7 +129,7 @@
 
   .ck-recipe-title {
     font-weight: 600;
-    font-size: 1em;
+    font-size: var(--ck-font-label);
   }
 
   .ck-recipe-details {
@@ -137,7 +137,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    font-size: 0.92em;
+    font-size: calc(var(--ck-font-label) * 0.85);
   }
 
   .ck-recipe-detail-label {
@@ -152,13 +152,13 @@
 
   .ck-total-label {
     font-weight: 500;
-    font-size: 0.85em;
-    color: rgba(15, 23, 42, 0.75);
+    font-size: calc(var(--ck-font-label) * 0.85);
+    color: var(--muted);
   }
 
   .ck-total-value {
     font-weight: 600;
-    font-size: 1.05em;
+    font-size: var(--ck-font-control);
   }
 
   @media (max-width: 600px) {
@@ -197,23 +197,23 @@
     <div class="ck-section-title">Production details</div>
     <div class="ck-production-grid">
       <div>
-        <div class="ck-production-label">Production date</div>
+        <div class="ck-production-label">{{LABEL(MP_PREP_DATE)}}</div>
         <div class="ck-production-value">{{MP_PREP_DATE}}</div>
       </div>
       <div>
-        <div class="ck-production-label">Expiration date</div>
+        <div class="ck-production-label">{{LABEL(MP_EXP_DATE)}}</div>
         <div class="ck-production-value">{{MP_EXP_DATE}}</div>
       </div>
       <div>
-        <div class="ck-production-label">Batch number</div>
+        <div class="ck-production-label">{{LABEL(MP_ID)}}</div>
         <div class="ck-production-value">{{MP_ID}}</div>
       </div>
       <div>
-        <div class="ck-production-label">Responsible cook</div>
+        <div class="ck-production-label">{{LABEL(MP_COOK_NAME)}}</div>
         <div class="ck-production-value">{{MP_COOK_NAME}}</div>
       </div>
       <div>
-        <div class="ck-production-label">Volunteer cook</div>
+        <div class="ck-production-label">{{LABEL(MP_VOLUNTEER)}}</div>
         <div class="ck-production-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</div>
       </div>
     </div>
@@ -230,11 +230,11 @@
     <div class="ck-section-title">Totals</div>
     <div class="ck-totals">
       <div>
-        <div class="ck-total-label">Total requested</div>
+        <div class="ck-total-label">Total {{LABEL(MP_MEALS_REQUEST.ORD_QTY)}}</div>
         <div class="ck-total-value">{{SUM(MP_MEALS_REQUEST.ORD_QTY)}}</div>
       </div>
       <div>
-        <div class="ck-total-label">Total delivered</div>
+        <div class="ck-total-label">Total {{LABEL(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
         <div class="ck-total-value">{{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
       </div>
     </div>

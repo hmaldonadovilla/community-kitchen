@@ -3765,8 +3765,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           width: '100%',
                           marginTop: 12,
                           height: 1,
-                          background: 'var(--border, rgba(15, 23, 42, 0.18))',
-                          borderBottom: '1px solid var(--border, rgba(15, 23, 42, 0.12))'
+                          background: 'var(--border)',
+                          borderBottom: '1px solid var(--border)'
                         }}
                       />
                     ) : null}
@@ -4918,7 +4918,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     return (
                       <span
                         className="muted"
-                        style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
+                        style={{ fontSize: 'var(--ck-font-control)', fontWeight: 600, color: rowHasError ? 'var(--danger)' : undefined }}
                       >
                         {text}
                       </span>
@@ -6319,7 +6319,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   style={{
                     ...(isLeftoverGroup
                       ? {
-                          background: rowLocked ? '#f1f5f9' : 'transparent',
+                          background: 'transparent',
                           padding: '12px 0',
                           borderRadius: 0,
                           border: 'none',
@@ -6327,19 +6327,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           marginBottom: 0
                         }
                       : {
-                          background:
-                            rowLocked
-                              ? '#f1f5f9'
-                              : rowIdx % 2 === 0
-                                ? '#ffffff'
-                                : '#f8fafc',
+                          background: 'transparent',
                           padding: 12,
                           borderRadius: 10,
-                          border: rowLocked ? '2px dashed rgba(100, 116, 139, 0.45)' : '1px solid #e5e7eb',
+                          border: rowLocked ? '2px dashed var(--border)' : '1px solid var(--border)',
                           marginBottom: 10
                         }),
                     opacity: rowLocked ? 0.86 : 1,
-                    outline: rowHasError ? '3px solid rgba(239, 68, 68, 0.55)' : undefined,
+                    outline: rowHasError ? '2px solid var(--danger)' : undefined,
                     outlineOffset: rowHasError ? 2 : undefined
                   }}
                 >
@@ -6649,7 +6644,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         {!guidedCollapsedFieldsInHeader && rowCollapsed && !canExpand ? (
                           <div
                             className="muted"
-                            style={{ fontSize: 22, fontWeight: 700, color: rowHasError ? '#b42318' : undefined }}
+                            style={{ fontSize: 'var(--ck-font-control)', fontWeight: 600, color: rowHasError ? 'var(--danger)' : undefined }}
                           >
                             {rowHasError ? `${tSystem('lineItems.needsAttention', language, 'Needs attention')} · ` : ''}
                             {tSystem(
@@ -7645,8 +7640,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         width: '100%',
                         marginTop: 12,
                         height: 1,
-                        background: 'var(--border, rgba(15, 23, 42, 0.18))',
-                        borderBottom: '1px solid var(--border, rgba(15, 23, 42, 0.12))'
+                        background: 'var(--border)',
+                        borderBottom: '1px solid var(--border)'
                       }}
                     />
                   ) : null}
@@ -7988,12 +7983,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       });
                     };
                     return (
-                      <div key={subKey} className="card" style={{ marginTop: 12, background: '#f8fafc' }}>
+                      <div key={subKey} className="card" style={{ marginTop: 12, background: 'var(--card)' }}>
                         <div
                           className="subgroup-header"
                           style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
                         >
-                          <div style={{ textAlign: 'center', fontWeight: 700 }}>
+                          <div style={{ textAlign: 'center', fontWeight: 600 }}>
                             {subLabelResolved || subId}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
@@ -8443,16 +8438,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               className="line-item-row"
                               data-row-anchor={`${subKey}__${subRow.id}`}
                               style={{
-                                background: subIdx % 2 === 0 ? '#ffffff' : '#f1f5f9',
+                                background: 'transparent',
                                 padding: 12,
                                 borderRadius: 10,
-                                border: '1px solid #e5e7eb',
+                                border: '1px solid var(--border)',
                                 marginBottom: 10
                               }}
                             >
                               {!subRow.autoGenerated && (
                                 <div style={{ marginBottom: 8 }}>
-                                  <span className="pill" style={{ background: '#eef2ff', color: '#312e81' }}>
+                                  <span className="pill">
                                     Manual
                                   </span>
                                 </div>

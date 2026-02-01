@@ -11,7 +11,7 @@ import {
   trashDriveApiFile
 } from '../driveApi';
 import { addPlaceholderVariants, applyPlaceholders, escapeRegExp } from './utils';
-import { addConsolidatedPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
+import { addConsolidatedPlaceholders, addLabelPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
 import { resolveTemplateId } from './recipients';
 import { renderLineItemTables } from './tableRendering';
@@ -96,6 +96,7 @@ export const renderDocCopyFromTemplate = (args: {
     const doc = DocumentApp.openById(copyInfo.fileId);
     const lineItemRows = collectLineItemRows(record, questions);
     const placeholders = buildPlaceholderMap({ record, questions, lineItemRows, dataSources });
+    addLabelPlaceholders(placeholders, questions, record.language);
     addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
     const validationWarnings = collectValidationWarnings(questions, record);
     addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));

@@ -74,7 +74,7 @@ export const LineSelectOverlay: React.FC<{
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.35)',
+        background: 'transparent',
         display: 'flex',
         alignItems: 'stretch',
         justifyContent: 'center',
@@ -85,7 +85,7 @@ export const LineSelectOverlay: React.FC<{
     >
       <div
         style={{
-          background: '#fff',
+          background: 'var(--card)',
           borderRadius: 20,
           padding: 24,
           width: '100%',
@@ -93,14 +93,14 @@ export const LineSelectOverlay: React.FC<{
           height: 'min(80vh, 100%)',
           maxHeight: '92vh',
           border: '1px solid var(--border)',
-          boxShadow: '0 18px 50px rgba(15,23,42,0.18)',
+          boxShadow: 'none',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
           minHeight: 0
         }}
       >
-        <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 'var(--ck-font-group-title)', letterSpacing: -0.3 }}>
+        <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 'var(--ck-font-group-title)', letterSpacing: 0 }}>
           {titleText}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -163,7 +163,7 @@ export const LineSelectOverlay: React.FC<{
                 padding: '14px 16px',
                 borderRadius: 14,
                 border: '1px solid var(--border)',
-                background: '#ffffff',
+                background: 'transparent',
                 fontWeight: 600
               }}
             >
@@ -206,7 +206,7 @@ export const LineSelectOverlay: React.FC<{
             paddingTop: 10,
             paddingBottom: 'calc(6px + env(safe-area-inset-bottom))',
             borderTop: '1px solid var(--border)',
-            background: '#ffffff',
+            background: 'var(--card)',
             position: 'sticky',
             bottom: 0
           }}

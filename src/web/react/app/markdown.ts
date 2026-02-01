@@ -319,14 +319,14 @@ export const markdownToHtmlDocument = (rawMarkdown: string, opts?: { title?: str
         margin: 0;
         padding: 18px;
         font-family: ${SYSTEM_FONT_STACK};
-        color: #0f172a;
-        background: #ffffff;
+        color: var(--text);
+        background: var(--card);
         line-height: 1.45;
       }
       h1, h2, h3, h4, h5, h6 {
         margin: 18px 0 10px;
         line-height: 1.2;
-        letter-spacing: -0.2px;
+        letter-spacing: 0;
       }
       p {
         margin: 10px 0;
@@ -351,42 +351,42 @@ export const markdownToHtmlDocument = (rawMarkdown: string, opts?: { title?: str
       }
       table.md-table th,
       table.md-table td {
-        border: 1px solid rgba(148, 163, 184, 0.45);
+        border: 1px solid var(--border);
         padding: 10px 12px;
         vertical-align: top;
         word-break: break-word;
       }
       table.md-table th {
-        background: rgba(148, 163, 184, 0.14);
-        font-weight: 900;
+        background: transparent;
+        font-weight: 600;
       }
       table.md-table tr:nth-child(even) td {
-        background: rgba(148, 163, 184, 0.08);
+        background: transparent;
       }
       blockquote {
         margin: 12px 0;
         padding: 10px 12px;
-        border-left: 4px solid rgba(59, 130, 246, 0.5);
-        background: rgba(59, 130, 246, 0.06);
+        border-left: 4px solid var(--border);
+        background: transparent;
         border-radius: 12px;
       }
       a {
-        color: #2563eb;
+        color: var(--accent);
         text-decoration: underline;
       }
       code {
         font-family: inherit;
-        background: rgba(15, 23, 42, 0.06);
+        background: transparent;
         padding: 2px 6px;
         border-radius: 8px;
       }
       pre.md-code {
         overflow: auto;
-        background: #0b1220;
-        color: #e2e8f0;
+        background: transparent;
+        color: var(--text);
         padding: 14px 16px;
         border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.18);
+        border: 1px solid var(--border);
       }
       pre.md-code code {
         background: transparent;
@@ -403,4 +403,3 @@ export const markdownToHtmlDocument = (rawMarkdown: string, opts?: { title?: str
 
   return doc;
 };
-

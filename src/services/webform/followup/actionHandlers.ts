@@ -10,7 +10,7 @@ import { SubmissionService } from '../submissions';
 import { RecordContext } from '../types';
 import { debugLog } from '../debug';
 import { addPlaceholderVariants, applyPlaceholders } from './utils';
-import { buildPlaceholderMap, collectLineItemRows } from './placeholders';
+import { addLabelPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
 import { resolveLocalizedStringValue, resolveRecipients, resolveTemplateId } from './recipients';
 import { resolveStatusTransitionValue } from '../../../domain/statusTransitions';
@@ -150,6 +150,7 @@ export const handleSendEmailAction = (args: {
 
   const lineItemRows = collectLineItemRows(ctx.record, questions);
   const placeholders = buildPlaceholderMap({ record: ctx.record, questions, lineItemRows, dataSources });
+  addLabelPlaceholders(placeholders, questions, ctx.record.language);
   const validationWarnings = collectValidationWarnings(questions, ctx.record);
   addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));
 

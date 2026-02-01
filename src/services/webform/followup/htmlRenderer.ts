@@ -2,7 +2,7 @@ import { FormConfig, QuestionConfig, TemplateIdMap, WebFormSubmission } from '..
 import { DataSourceService } from '../dataSources';
 import { debugLog } from '../debug';
 import { resolveTemplateId } from './recipients';
-import { addConsolidatedPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
+import { addConsolidatedPlaceholders, addLabelPlaceholders, buildPlaceholderMap, collectLineItemRows } from './placeholders';
 import { collectValidationWarnings } from './validation';
 import { addPlaceholderVariants, applyPlaceholders, formatTemplateValueForHtml } from './utils';
 import { StatusTransitionKey, resolveStatusTransitionKey } from '../../../domain/statusTransitions';
@@ -149,6 +149,7 @@ export const renderHtmlFromHtmlTemplate = (args: {
       dataSources,
       formatValue: formatTemplateValueForHtml
     });
+    addLabelPlaceholders(placeholders, questions, record.language);
     addConsolidatedPlaceholders(placeholders, questions, lineItemRows);
     const validationWarnings = collectValidationWarnings(questions, record);
     addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'), 'PARAGRAPH', formatTemplateValueForHtml);

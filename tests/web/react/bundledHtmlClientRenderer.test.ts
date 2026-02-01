@@ -99,6 +99,39 @@ describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
     expect(fetchDataSource).toHaveBeenCalledTimes(1);
   });
 
+  it('replaces {{LABEL(FIELD_ID)}} placeholders using configured question labels', async () => {
+    const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
+
+    const definition: any = {
+      title: 'F',
+      destinationTab: 'T',
+      languages: ['EN'],
+      questions: [
+        {
+          id: 'MP_COOK_NAME',
+          type: 'TEXT',
+          label: { en: 'Responsible cook', fr: 'Cuisinier responsable', nl: 'Verantwoordelijke kok' },
+          required: false
+        }
+      ]
+    };
+
+    const payload: any = { formKey: 'F', language: 'EN', id: 'R1', values: { MP_COOK_NAME: 'Haven' } };
+
+    const res = await renderBundledHtmlTemplateClient({
+      definition,
+      payload,
+      templateIdMap: 'bundle:test.html',
+      parseBundledTemplateId: () => 'test.html',
+      getBundledTemplateRaw: () => '<div>{{LABEL(MP_COOK_NAME)}} {{MP_COOK_NAME}}</div>'
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('Responsible cook');
+    expect(res.html).toContain('Haven');
+    expect(res.html).not.toContain('{{LABEL(MP_COOK_NAME)}}');
+  });
+
   it('caches fetched dataSource details per selected value (no duplicate fetch)', async () => {
     const fetchDataSource = jest.fn(async () => ({
       items: [{ DIST_NAME: 'Croix', DIST_ADDR_1: 'Rue Example 1' }]
@@ -195,5 +228,4 @@ describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
     expect(res.html).not.toContain('__ck_injected');
   });
 });
-
 

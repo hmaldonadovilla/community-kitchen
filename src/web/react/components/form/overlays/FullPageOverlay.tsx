@@ -31,7 +31,7 @@ export const FullPageOverlay: React.FC<FullPageOverlayProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        background: '#ffffff',
+        background: 'var(--card)',
         zIndex,
         display: 'flex',
         flexDirection: 'column'
@@ -40,9 +40,9 @@ export const FullPageOverlay: React.FC<FullPageOverlayProps> = ({
       <div
         style={{
           padding: 16,
-          borderBottom: '1px solid #e5e7eb',
-          background: '#ffffff',
-          boxShadow: '0 10px 30px rgba(15,23,42,0.08)'
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--card)',
+          boxShadow: 'none'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -57,12 +57,14 @@ export const FullPageOverlay: React.FC<FullPageOverlayProps> = ({
             >
               <div style={{ justifySelf: 'start' }}>{leftAction}</div>
               <div style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: 900, fontSize: 40, color: '#0f172a', letterSpacing: -0.4 }}>{title}</div>
-            {subtitle ? (
-              <div className="muted" style={{ fontWeight: 700, marginTop: 8, fontSize: 24 }}>
-                {subtitle}
-              </div>
-            ) : null}
+                <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', color: 'var(--text)', letterSpacing: 0 }}>
+                  {title}
+                </div>
+                {subtitle ? (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    {subtitle}
+                  </div>
+                ) : null}
               </div>
               <div style={{ justifySelf: 'end' }}>{rightAction}</div>
             </div>
@@ -74,5 +76,4 @@ export const FullPageOverlay: React.FC<FullPageOverlayProps> = ({
     document.body
   );
 };
-
 

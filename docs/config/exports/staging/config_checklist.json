@@ -1285,23 +1285,6 @@
           }
         }
       },
-      "validationRules": [
-        {
-          "when": {
-            "fieldId": "ISSUES_PREV",
-            "notEmpty": true
-          },
-          "then": {
-            "fieldId": "ISSUES_PREV_EVD",
-            "required": true
-          },
-          "message": {
-            "en": "Add photo evidence",
-            "fr": "",
-            "nl": ""
-          }
-        }
-      ],
       "visibility": {
         "showWhen": {
           "fieldId": "CHECK_FREQ",
@@ -3162,24 +3145,7 @@
             "outputType": "keep"
           }
         }
-      },
-      "validationRules": [
-        {
-          "when": {
-            "fieldId": "ISSUES",
-            "notEmpty": true
-          },
-          "then": {
-            "fieldId": "ISSUES_EVD",
-            "required": true
-          },
-          "message": {
-            "en": "Add photo evidence",
-            "fr": "",
-            "nl": ""
-          }
-        }
-      ]
+      }
     },
     {
       "id": "AM_DAILY",
@@ -4352,23 +4318,6 @@
             }
           }
         },
-        "validationRules": [
-          {
-            "when": {
-              "fieldId": "ISSUES_PREV",
-              "notEmpty": true
-            },
-            "then": {
-              "fieldId": "ISSUES_PREV_EVD",
-              "required": true
-            },
-            "message": {
-              "en": "Add photo evidence",
-              "fr": "",
-              "nl": ""
-            }
-          }
-        ],
         "visibility": {
           "showWhen": {
             "fieldId": "CHECK_FREQ",
@@ -6145,24 +6094,7 @@
               "outputType": "keep"
             }
           }
-        },
-        "validationRules": [
-          {
-            "when": {
-              "fieldId": "ISSUES",
-              "notEmpty": true
-            },
-            "then": {
-              "fieldId": "ISSUES_EVD",
-              "required": true
-            },
-            "message": {
-              "en": "Add photo evidence",
-              "fr": "",
-              "nl": ""
-            }
-          }
-        ]
+        }
       },
       {
         "id": "AM_DAILY",

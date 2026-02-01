@@ -189,7 +189,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                     loading="lazy"
                   />
                 ) : (
-                  <span className="muted" style={{ fontSize: 22, fontWeight: 800 }}>
+                  <span className="muted" style={{ fontSize: 'var(--ck-font-control)', fontWeight: 600 }}>
                     {isExisting ? '↗' : '⧉'}
                   </span>
                 );
@@ -214,7 +214,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '10px 12px',
-                      border: '1px solid #e2e8f0',
+                      border: '1px solid var(--border)',
                       borderRadius: 12,
                       gap: 12
                     }}
@@ -225,8 +225,8 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                           width: thumbSize,
                           height: thumbSize,
                           borderRadius: 18,
-                          border: '1px solid #e2e8f0',
-                          background: 'rgba(118,118,128,0.08)',
+                          border: '1px solid var(--border)',
+                          background: 'transparent',
                           overflow: 'hidden',
                           flex: '0 0 auto',
                           display: 'flex',
@@ -237,10 +237,10 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                         {thumbNode}
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, wordBreak: 'break-word' }}>
+                        <div style={{ fontWeight: 600, wordBreak: 'break-word' }}>
                           {name}
                         </div>
-                        <div className="muted" style={{ fontSize: 20 }}>
+                        <div className="muted">
                           {meta}
                         </div>
                       </div>
@@ -265,5 +265,3 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
     </FullPageOverlay>
   );
 };
-
-

@@ -230,16 +230,16 @@ const MARKDOWN_PREVIEW_STYLES = `
     background: transparent;
   }
   .ck-markdown-body.markdown-body h1 {
-    font-size: calc(var(--ck-font-control) * 1.35);
-    font-weight: 900;
+    font-size: var(--ck-font-group-title);
+    font-weight: 600;
   }
   .ck-markdown-body.markdown-body h2 {
-    font-size: calc(var(--ck-font-control) * 1.18);
-    font-weight: 900;
+    font-size: var(--ck-font-control);
+    font-weight: 600;
   }
   .ck-markdown-body.markdown-body h3 {
-    font-size: calc(var(--ck-font-control) * 1.06);
-    font-weight: 900;
+    font-size: var(--ck-font-label);
+    font-weight: 600;
   }
   .ck-markdown-body.markdown-body table {
     width: 100%;
@@ -266,13 +266,13 @@ const HTML_PREVIEW_STYLES = `
     gap: 10px;
     padding: 12px 14px;
     border-radius: 16px;
-    border: 1px solid rgba(15,23,42,0.16);
-    background: rgba(248,250,252,0.95);
-    color: #0f172a;
-    font-weight: 900;
-    font-size: 24px; /* makes 📷/📎 icons larger in HTML templates */
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-weight: 600;
+    font-size: var(--ck-font-control);
     cursor: pointer;
-    box-shadow: 0 1px 0 rgba(15,23,42,0.06);
+    box-shadow: none;
   }
   .ck-file-icon__badge {
     display: inline-flex;
@@ -282,11 +282,11 @@ const HTML_PREVIEW_STYLES = `
     height: 30px;
     padding: 0 9px;
     border-radius: 999px;
-    background: rgba(239,68,68,0.12);
-    border: 1px solid rgba(239,68,68,0.35);
-    color: #991b1b;
-    font-weight: 900;
-    font-size: 16px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 600;
+    font-size: calc(var(--ck-font-label) * 0.85);
     line-height: 1;
   }
 `;
@@ -2896,13 +2896,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>
     <style>
-      body { margin: 0; padding: 24px; font-family: ${SYSTEM_FONT_STACK}; color: #0f172a; background: #ffffff; }
-      .sub { margin-top: 8px; font-weight: 700; color: rgba(15,23,42,0.7); }
-      .box { margin-top: 22px; padding: 18px 18px; border: 1px solid rgba(148,163,184,0.45); border-radius: 16px; background: rgba(148,163,184,0.10); font-weight: 900; font-size: 20px; }
+      :root { --ck-font-label: 16px; --ck-font-group-title: 20px; --ck-font-helper: 14px; }
+      body { margin: 0; padding: 24px; font-family: ${SYSTEM_FONT_STACK}; color: CanvasText; background: Canvas; font-size: var(--ck-font-label); }
+      .sub { margin-top: 8px; font-weight: 400; color: GrayText; font-size: var(--ck-font-helper); }
+      .box { margin-top: 22px; padding: 18px 18px; border: 1px solid GrayText; border-radius: 16px; background: transparent; font-weight: 600; font-size: var(--ck-font-label); }
     </style>
   </head>
   <body>
-    <div style="font-weight: 900; font-size: 26px;">${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+    <div style="font-weight: 600; font-size: var(--ck-font-group-title);">${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
     ${subtitle ? `<div class="sub">${subtitle.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ``}
     <div class="box">${loading.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
   </body>
@@ -6237,10 +6238,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         style={{
           padding: '12px 14px',
           borderRadius: 14,
-          border: '1px solid #fca5a5',
-          background: '#fee2e2',
-          color: '#0f172a',
-          fontWeight: 800,
+          border: '1px solid var(--border)',
+          background: 'transparent',
+          color: 'var(--text)',
+          fontWeight: 600,
           display: 'flex',
           flexDirection: 'column',
           gap: 10
@@ -6296,10 +6297,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               style={{
                 padding: '10px 12px',
                 borderRadius: 12,
-                border: '1px solid rgba(15,23,42,0.18)',
-                background: '#ffffff',
-                color: '#0f172a',
-                fontWeight: 900
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text)',
+                fontWeight: 600
               }}
             >
               {tSystem('dedup.openExisting', language, 'Open existing')}
@@ -6317,10 +6318,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         style={{
           padding: '12px 14px',
           borderRadius: 14,
-          border: '1px solid rgba(59,130,246,0.35)',
-          background: 'rgba(59,130,246,0.12)',
-          color: '#0f172a',
-          fontWeight: 900
+          border: '1px solid var(--border)',
+          background: 'transparent',
+          color: 'var(--text)',
+          fontWeight: 600
         }}
       >
         {tSystem('dedup.checking', language, 'Checking duplicates…')}
@@ -6335,10 +6336,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         style={{
           padding: '12px 14px',
           borderRadius: 14,
-          border: '1px solid rgba(251, 146, 60, 0.55)',
-          background: 'rgba(251, 146, 60, 0.14)',
-          color: '#0f172a',
-          fontWeight: 900,
+          border: '1px solid var(--border)',
+          background: 'transparent',
+          color: 'var(--text)',
+          fontWeight: 600,
           display: 'flex',
           flexDirection: 'column',
           gap: 10
@@ -6365,10 +6366,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             style={{
               padding: '10px 12px',
               borderRadius: 12,
-              border: '1px solid rgba(15,23,42,0.18)',
-              background: '#ffffff',
-              color: '#0f172a',
-              fontWeight: 900
+              border: '1px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text)',
+              fontWeight: 600
             }}
           >
             {tSystem('record.refresh', language, 'Refresh record')}

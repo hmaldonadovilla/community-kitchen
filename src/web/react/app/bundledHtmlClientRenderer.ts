@@ -3,7 +3,11 @@ import { RenderHtmlTemplateResult, fetchDataSourceApi, SubmissionPayload } from 
 import { resolveTemplateIdForRecord } from './templateId';
 import { StatusTransitionKey, resolveStatusTransitionKey } from '../../../domain/statusTransitions';
 import { applyHtmlLineItemBlocks } from '../../../services/webform/followup/htmlLineItemBlocks';
-import { addConsolidatedPlaceholders, collectLineItemRows } from '../../../services/webform/followup/placeholders';
+import {
+  addConsolidatedPlaceholders,
+  addLabelPlaceholders,
+  collectLineItemRows
+} from '../../../services/webform/followup/placeholders';
 import { linkifyUploadedFileUrlsInHtml } from '../../../services/webform/followup/fileLinks';
 import {
   addPlaceholderVariants,
@@ -782,6 +786,7 @@ export const renderBundledHtmlTemplateClient = async (args: {
         dataSourceDetailsByFieldId,
         lineItemDataSourceDetails
       });
+      addLabelPlaceholders(placeholders, definition.questions || [], language);
       addConsolidatedPlaceholders(placeholders, definition.questions as any, lineItemRows);
       addFileIconPlaceholders(placeholders, definition.questions || [], record);
       const statusKey = resolveStatusTransitionKey(record.status, definition.followup?.statusTransitions, {
@@ -820,5 +825,4 @@ export const renderBundledHtmlTemplateClient = async (args: {
   renderedBundleInflight.set(cacheKey, promise);
   return promise;
 };
-
 

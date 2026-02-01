@@ -8399,7 +8399,7 @@ const FormView: React.FC<FormViewProps> = ({
         style={{
           position: 'fixed',
           inset: 0,
-      background: '#ffffff',
+          background: 'var(--card)',
           zIndex: 10000,
           display: 'flex',
           flexDirection: 'column'
@@ -8408,9 +8408,9 @@ const FormView: React.FC<FormViewProps> = ({
         <div
           style={{
             padding: 16,
-            borderBottom: '1px solid #e5e7eb',
-            background: '#ffffff',
-            boxShadow: '0 10px 30px rgba(15,23,42,0.08)'
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--card)',
+            boxShadow: 'none'
           }}
         >
           <div
@@ -8455,7 +8455,7 @@ const FormView: React.FC<FormViewProps> = ({
                       style={
                         Boolean((subSelectorCfg as any)?.hideLabel || (subSelectorCfg as any)?.ui?.hideLabel)
                           ? srOnly
-                          : { fontWeight: 700 }
+                          : { fontWeight: 500 }
                       }
                     >
                       {resolveSelectorLabel(subSelectorCfg, language)}
@@ -9851,10 +9851,10 @@ const FormView: React.FC<FormViewProps> = ({
                   data-anchor-field-id={anchorFieldId || undefined}
                   data-anchor-has-value={anchorHasValue ? 'true' : undefined}
                               style={{
-                    background: subIdx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                    background: 'transparent',
                                 padding: 12,
                                 borderRadius: 10,
-                                border: '1px solid #e5e7eb',
+                                border: '1px solid var(--border)',
                                 marginBottom: 10
                               }}
                             >
@@ -9870,7 +9870,7 @@ const FormView: React.FC<FormViewProps> = ({
                   ) : null}
                   {!isAutoRow && !rowDisclaimerText && (
                                 <div style={{ marginBottom: 8 }}>
-                                  <span className="pill" style={{ background: '#eef2ff', color: '#312e81' }}>
+                                  <span className="pill">
                         {resolveLocalizedString({ en: 'Manual', fr: 'Manuel', nl: 'Handmatig' }, language, 'Manual')}
                                   </span>
                                 </div>
@@ -10344,15 +10344,15 @@ const FormView: React.FC<FormViewProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: '#ffffff',
+            background: 'var(--card)',
             zIndex: 10000,
             display: 'flex',
             flexDirection: 'column'
           }}
         >
-          <div style={{ padding: 16, borderBottom: '1px solid #e5e7eb', background: '#ffffff' }}>
+          <div style={{ padding: 16, borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontWeight: 900, fontSize: 22 }}>{tSystem('common.error', language, 'Error')}</div>
+              <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-control)' }}>{tSystem('common.error', language, 'Error')}</div>
               <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
                 {tSystem('common.close', language, 'Close')}
               </button>
@@ -10707,7 +10707,7 @@ const FormView: React.FC<FormViewProps> = ({
         style={{
           position: 'fixed',
           inset: 0,
-          background: '#ffffff',
+          background: 'var(--card)',
           zIndex: 10000,
           display: 'flex',
           flexDirection: 'column'
@@ -10716,9 +10716,9 @@ const FormView: React.FC<FormViewProps> = ({
         <div
           style={{
             padding: 16,
-            borderBottom: '1px solid #e5e7eb',
-            background: '#ffffff',
-            boxShadow: '0 10px 30px rgba(15,23,42,0.08)'
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--card)',
+            boxShadow: 'none'
           }}
         >
           <div
@@ -10763,7 +10763,7 @@ const FormView: React.FC<FormViewProps> = ({
                       style={
                         Boolean((selectorCfg as any)?.hideLabel || (selectorCfg as any)?.ui?.hideLabel)
                           ? srOnly
-                          : { fontWeight: 700 }
+                          : { fontWeight: 500 }
                       }
                     >
                       {resolveSelectorLabel(selectorCfg, language)}
@@ -11854,17 +11854,17 @@ const FormView: React.FC<FormViewProps> = ({
               scrollMarginTop: 'calc(var(--safe-top) + 140px)',
               padding: '14px 16px',
               borderRadius: 14,
-              border: '1px solid #fdba74',
-              background: '#ffedd5',
-              color: '#0f172a',
-              fontWeight: 800,
+              border: '1px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text)',
+              fontWeight: 600,
               display: 'flex',
               flexDirection: 'column',
               gap: 8
             }}
           >
             <div>{tSystem('validation.warningsTitle', language, 'Warnings')}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 700 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 500 }}>
               {warningTop.map((w, idx) => (
                 <button
                   key={`${idx}-${w.fieldPath}-${w.message}`}
@@ -11904,18 +11904,11 @@ const FormView: React.FC<FormViewProps> = ({
               borderRadius: 14,
               border:
                 statusTone === 'error'
-                  ? '1px solid #fca5a5'
-                  : statusTone === 'success'
-                  ? '1px solid #86efac'
-                  : '1px solid #bae6fd',
-              background:
-                statusTone === 'error'
-                  ? '#fee2e2'
-                  : statusTone === 'success'
-                  ? '#dcfce7'
-                  : '#e0f2fe',
-              color: '#0f172a',
-              fontWeight: 800,
+                  ? '1px solid var(--danger)'
+                  : '1px solid var(--border)',
+              background: 'transparent',
+              color: statusTone === 'error' ? 'var(--danger)' : 'var(--text)',
+              fontWeight: 600,
               cursor: statusTone === 'error' && Object.keys(errors || {}).length ? 'pointer' : undefined
             }}
           >

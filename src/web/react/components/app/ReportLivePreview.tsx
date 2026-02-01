@@ -124,7 +124,7 @@ const renderValueForPreview = (
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          color: bool ? '#16a34a' : '#dc2626'
+          color: 'var(--text)'
         }}
       >
         {bool ? <CheckIcon size={28} /> : <XIcon size={28} />}
@@ -152,9 +152,9 @@ const MetaCard: React.FC<{
   <div
     data-field-path={fieldPath}
     style={{
-      border: '1px solid rgba(148,163,184,0.25)',
-      background: 'rgba(248,250,252,0.7)',
-      borderRadius: 14,
+      border: 'none',
+      background: 'transparent',
+      borderRadius: 0,
       padding: 12,
       height: '100%',
       minWidth: 0,
@@ -168,7 +168,7 @@ const MetaCard: React.FC<{
       <div
         className="muted"
         style={{
-          fontWeight: 800,
+          fontWeight: 600,
           marginBottom: 6,
           minWidth: 0,
           whiteSpace: 'normal',
@@ -183,7 +183,7 @@ const MetaCard: React.FC<{
     )}
     <div
       style={{
-        fontWeight: 800,
+        fontWeight: 600,
         wordBreak: 'break-word',
         minWidth: 0,
         flex: 1,
@@ -283,18 +283,18 @@ const LineItemRowCard: React.FC<{
   return (
     <div
       style={{
-        border: '1px solid rgba(15,23,42,0.12)',
-        background: '#ffffff',
-        borderRadius: 16,
+        border: 'none',
+        background: 'transparent',
+        borderRadius: 0,
         overflow: 'hidden'
       }}
     >
       <div
         style={{
           padding: '12px 14px',
-          background: 'rgba(219, 206, 194, 0.6)',
-          fontWeight: 900,
-          color: '#0f172a'
+          background: 'transparent',
+          fontWeight: 600,
+          color: 'var(--text)'
         }}
       >
         {title}
@@ -319,9 +319,9 @@ const LineItemRowCard: React.FC<{
                       colSpan={2}
                       style={{
                         padding: '10px 10px',
-                        borderBottom: '1px solid rgba(148,163,184,0.25)',
-                        background: stripe ? 'rgba(241,245,249,0.55)' : 'transparent',
-                        fontWeight: 700,
+                        borderBottom: '1px solid var(--border)',
+                        background: 'transparent',
+                        fontWeight: 500,
                         wordBreak: 'break-word'
                       }}
                     >
@@ -345,10 +345,10 @@ const LineItemRowCard: React.FC<{
                     style={{
                       width: '42%',
                       padding: '10px 10px',
-                      borderBottom: '1px solid rgba(148,163,184,0.25)',
-                      background: stripe ? 'rgba(241,245,249,0.55)' : 'transparent',
-                      color: '#475569',
-                      fontWeight: 700,
+                      borderBottom: '1px solid var(--border)',
+                      background: 'transparent',
+                      color: 'var(--muted)',
+                      fontWeight: 500,
                       wordBreak: 'break-word'
                     }}
                   >
@@ -357,9 +357,9 @@ const LineItemRowCard: React.FC<{
                   <td
                     style={{
                       padding: '10px 10px',
-                      borderBottom: '1px solid rgba(148,163,184,0.25)',
-                      background: stripe ? 'rgba(241,245,249,0.55)' : 'transparent',
-                      fontWeight: 700,
+                      borderBottom: '1px solid var(--border)',
+                      background: 'transparent',
+                      fontWeight: 500,
                       wordBreak: 'break-word'
                     }}
                   >
@@ -406,10 +406,10 @@ const LineItemRowCard: React.FC<{
                       colSpan={2}
                       style={{
                         padding: '10px 10px',
-                        borderBottom: '1px solid rgba(148,163,184,0.25)',
-                        background: 'rgba(241,245,249,0.6)',
-                        fontWeight: 900,
-                        color: '#0f172a'
+                        borderBottom: '1px solid var(--border)',
+                        background: 'transparent',
+                        fontWeight: 600,
+                        color: 'var(--text)'
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -417,7 +417,7 @@ const LineItemRowCard: React.FC<{
                           {subLabel}
                         </div>
                         {expandAllSubgroups ? (
-                          <span className="muted" style={{ fontWeight: 900 }}>
+                          <span className="muted" style={{ fontWeight: 600 }}>
                             ({childRows.length})
                           </span>
                         ) : (
@@ -425,15 +425,15 @@ const LineItemRowCard: React.FC<{
                             type="button"
                             onClick={() => toggleSub(subKey)}
                             style={{
-                              border: '1px solid rgba(29,78,216,0.35)',
-                              background: 'rgba(29,78,216,0.12)',
-                              color: '#1d4ed8',
+                              border: '1px solid var(--border)',
+                              background: 'transparent',
+                              color: 'var(--text)',
                               borderRadius: 999,
                               padding: '8px 12px',
-                              fontWeight: 900,
+                              fontWeight: 600,
                               cursor: 'pointer',
                               minHeight: 34,
-                              boxShadow: '0 1px 0 rgba(15,23,42,0.06)'
+                              boxShadow: 'none'
                             }}
                           >
                             {open ? tSystem('summary.hide', language, 'Hide') : tSystem('summary.show', language, 'Show')}{' '}
@@ -445,7 +445,7 @@ const LineItemRowCard: React.FC<{
                   </tr>
                   {open ? (
                     <tr>
-                      <td colSpan={2} style={{ padding: 10, borderBottom: '1px solid rgba(148,163,184,0.25)' }}>
+                      <td colSpan={2} style={{ padding: 10, borderBottom: '1px solid var(--border)' }}>
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
                             <thead>
@@ -459,9 +459,9 @@ const LineItemRowCard: React.FC<{
                                           style={{
                                             textAlign: 'left',
                                             padding: '8px 8px',
-                                            borderBottom: '1px solid rgba(148,163,184,0.25)',
-                                            color: '#475569',
-                                            fontWeight: 800
+                                            borderBottom: '1px solid var(--border)',
+                                            color: 'var(--muted)',
+                                            fontWeight: 600
                                           }}
                                         >
                                           {hideHeaderLabel ? <span style={srOnly}>{headerLabel}</span> : headerLabel}
@@ -472,7 +472,7 @@ const LineItemRowCard: React.FC<{
                             </thead>
                             <tbody>
                               {childRows.map((cr, crIdx) => (
-                                <tr key={cr.id} style={{ background: crIdx % 2 === 1 ? 'rgba(241,245,249,0.55)' : 'transparent' }}>
+                                <tr key={cr.id} style={{ background: 'transparent' }}>
                                   {subFields.map((sf: any) => {
                                     const subCtx = {
                                       ...groupCtx,
@@ -490,7 +490,7 @@ const LineItemRowCard: React.FC<{
                                           key={`${cr.id}.${sf.id}`}
                                           style={{
                                             padding: '8px 8px',
-                                            borderBottom: '1px solid rgba(148,163,184,0.18)'
+                                            borderBottom: '1px solid var(--border)'
                                           }}
                                         />
                                       );
@@ -501,8 +501,8 @@ const LineItemRowCard: React.FC<{
                                         key={`${cr.id}.${sf.id}`}
                                         style={{
                                           padding: '8px 8px',
-                                          borderBottom: '1px solid rgba(148,163,184,0.18)',
-                                          fontWeight: 700,
+                                          borderBottom: '1px solid var(--border)',
+                                          fontWeight: 500,
                                           verticalAlign: 'top',
                                           wordBreak: 'break-word'
                                         }}
@@ -758,7 +758,7 @@ export const ReportLivePreview: React.FC<{
         {hideGroupLabel ? (
           <div style={srOnly}>{groupLabel}</div>
         ) : (
-          <div className="muted" style={{ fontWeight: 800 }}>
+          <div className="muted" style={{ fontWeight: 600 }}>
             {groupLabel}
           </div>
         )}
@@ -790,17 +790,17 @@ export const ReportLivePreview: React.FC<{
           style={{
             padding: '14px 16px',
             borderRadius: 14,
-            border: '1px solid #fdba74',
-            background: '#ffedd5',
-            color: '#0f172a',
-            fontWeight: 800,
+            border: '1px solid var(--border)',
+            background: 'transparent',
+            color: 'var(--text)',
+            fontWeight: 600,
             display: 'flex',
             flexDirection: 'column',
             gap: 8
           }}
         >
           <div>{tSystem('validation.warningsTitle', language, 'Warnings')}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 700 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 500 }}>
             {warningInfo.top.map((w: { message: string; fieldPath: string }, idx: number) => (
               <button
                 key={`${idx}-${w.fieldPath}-${w.message}`}
@@ -863,7 +863,7 @@ export const ReportLivePreview: React.FC<{
                 href={recordMeta.pdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: '#0f172a', textDecoration: 'underline' }}
+                style={{ color: 'var(--text)', textDecoration: 'underline' }}
                 onClick={e => e.stopPropagation()}
               >
                 {tSystem('summary.openPdf', language, 'Open PDF')}
@@ -986,7 +986,7 @@ export const ReportLivePreview: React.FC<{
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        color: checked ? '#16a34a' : '#dc2626'
+                        color: 'var(--text)'
                       }}
                     >
                       {checked ? <CheckIcon size={22} /> : <XIcon size={22} />}
@@ -1069,5 +1069,3 @@ export const ReportLivePreview: React.FC<{
     </div>
   );
 };
-
-

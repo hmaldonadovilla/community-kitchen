@@ -27,7 +27,7 @@ const FollowupView: React.FC<FollowupViewProps> = ({
   if (!followupConfig) return <div className="card">No follow-up configured.</div>;
   const hasRecord = Boolean(recordId);
   const actions = [
-    { key: 'CREATE_PDF', label: 'Create PDF', visible: Boolean(followupConfig.pdfTemplateId) },
+    { key: 'CREATE_PDF', label: 'Create Pdf', visible: Boolean(followupConfig.pdfTemplateId) },
     { key: 'SEND_EMAIL', label: 'Send Email', visible: Boolean(followupConfig.emailTemplateId && followupConfig.emailRecipients) },
     { key: 'CLOSE_RECORD', label: 'Close Record', visible: true }
   ].filter(action => action.visible);
@@ -57,9 +57,9 @@ const FollowupView: React.FC<FollowupViewProps> = ({
         }}
       >
         <div>
-          <h3 style={{ margin: 0, fontSize: isMobile ? 26 : 22 }}>Follow-up</h3>
-          <div className="muted" style={{ marginTop: -2, fontSize: isMobile ? 16 : 15 }}>
-            Record ID: {recordId || 'Select a record from the list or submit the form.'}
+          <h3 style={{ margin: 0, fontSize: 'var(--ck-font-group-title)', fontWeight: 600 }}>Follow-up</h3>
+          <div className="muted" style={{ marginTop: 4 }}>
+            Record Id: {recordId || 'Select a record from the list or submit the form.'}
           </div>
         </div>
         {actions.length ? (
@@ -75,8 +75,8 @@ const FollowupView: React.FC<FollowupViewProps> = ({
                   borderRadius: 14,
                   padding: '18px 22px',
                   cursor: 'pointer',
-                  fontWeight: 900,
-                  fontSize: 28,
+                  fontWeight: 600,
+                  fontSize: 'var(--ck-font-control)',
                   minHeight: 'var(--control-height)'
                 }}
               >
@@ -89,10 +89,10 @@ const FollowupView: React.FC<FollowupViewProps> = ({
                     right: 0,
                     top: '100%',
                     marginTop: 8,
-                    background: '#fff',
-                    border: '1px solid #e5e7eb',
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
                     borderRadius: 16,
-                    boxShadow: '0 14px 36px rgba(15,23,42,0.16)',
+                    boxShadow: 'none',
                     padding: 14,
                     display: 'flex',
                     flexDirection: 'column',
@@ -116,8 +116,8 @@ const FollowupView: React.FC<FollowupViewProps> = ({
                         border: '1px solid var(--ck-secondary-border)',
                         background: 'var(--ck-secondary-bg)',
                         color: 'var(--ck-secondary-text)',
-                        fontWeight: 900,
-                        fontSize: 28,
+                        fontWeight: 600,
+                        fontSize: 'var(--ck-font-control)',
                         textAlign: 'left',
                         minHeight: 'var(--control-height)'
                       }}
@@ -156,27 +156,27 @@ const FollowupView: React.FC<FollowupViewProps> = ({
         }}
       >
         <div>
-          <div className="muted" style={{ fontSize: isMobile ? 16 : 15 }}>Status</div>
-          <div style={{ marginTop: 4, fontWeight: 700, fontSize: isMobile ? 18 : 17 }}>{recordStatus || '—'}</div>
+          <div className="muted">Status</div>
+          <div style={{ marginTop: 4, fontWeight: 400, fontSize: 'var(--ck-font-label)' }}>{recordStatus || '—'}</div>
         </div>
         <div>
-          <div className="muted" style={{ fontSize: isMobile ? 16 : 15 }}>Last updated</div>
-          <div style={{ marginTop: 4, fontWeight: 700, fontSize: isMobile ? 18 : 17 }}>{formatDate(lastUpdated)}</div>
+          <div className="muted">Last updated</div>
+          <div style={{ marginTop: 4, fontWeight: 400, fontSize: 'var(--ck-font-label)' }}>{formatDate(lastUpdated)}</div>
         </div>
         <div>
-          <div className="muted" style={{ fontSize: isMobile ? 16 : 15 }}>PDF</div>
+          <div className="muted">Pdf</div>
           {pdfUrl ? (
             <a
               href={pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-link"
-              style={{ marginTop: 4, display: 'inline-block', fontSize: isMobile ? 18 : 17 }}
+              style={{ marginTop: 4, display: 'inline-block', fontSize: 'var(--ck-font-label)' }}
             >
-              View PDF
+              View Pdf
             </a>
           ) : (
-            <div style={{ marginTop: 4, fontWeight: 700, fontSize: isMobile ? 18 : 17 }}>Not available</div>
+            <div style={{ marginTop: 4, fontWeight: 400, fontSize: 'var(--ck-font-label)' }}>Not available</div>
           )}
         </div>
       </div>
@@ -188,12 +188,12 @@ const FollowupView: React.FC<FollowupViewProps> = ({
       )}
 
       {followupConfig.statusTransitions && (
-        <div className="muted" style={{ fontSize: 12, marginTop: 16 }}>
+        <div className="muted" style={{ marginTop: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Status transitions</div>
           <ul style={{ paddingLeft: 18, margin: 0 }}>
             {Object.entries(followupConfig.statusTransitions).map(([key, value]) => (
               <li key={key}>
-                {key}: <strong>{value || '—'}</strong>
+                {key}: <span>{value || '—'}</span>
               </li>
             ))}
           </ul>
@@ -210,4 +210,3 @@ const FollowupView: React.FC<FollowupViewProps> = ({
 };
 
 export default FollowupView;
-

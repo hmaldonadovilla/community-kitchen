@@ -39,14 +39,15 @@
 
 - ck-1: initial load performance improvements.
 - ck-2:
-  - hide table/cards toggle in list view.
-  - We need a legend at the bottom of the list view to explain the statuses use static legend definition in issue 6.
-  - We need to normalise statuses values using the existing `statusTransitions` config. We need to have an inProgress and reOpened statuses (which it's value can be set per form, similarly as we do with `onClose`). Also please remove harcoded logic to drive visibility of elements based on the `Closed` status value, the logic needs to be driven by the configured value on statusTransitions. For example the edit button on summary view is not visible if the status is at `onClose`, regarless of it's label value. The list view standard actions on rows and cards that are driven by the status value will use `inProgress` to land on the edit view and `onClose` to land on the summary view. The search bar will allow search by status compiling the values per language that are defined on the `statusTransitions` config and remove the logic that uses the `set` key on custom buttons with `updateRecord` action.
+  - hide table/cards toggle in list view. Done
+  - We need a legend at the bottom of the list view to explain the statuses use static legend definition in issue 6. Done
+  - We need to normalise statuses values using the existing `statusTransitions` config. We need to have an inProgress and reOpened statuses (which it's value can be set per form, similarly as we do with `onClose`). Also please remove harcoded logic to drive visibility of elements based on the `Closed` status value, the logic needs to be driven by the configured value on statusTransitions. For example the edit button on summary view is not visible if the status is at `onClose`, regarless of it's label value. The list view standard actions on rows and cards that are driven by the status value will use `inProgress` to land on the edit view and `onClose` to land on the summary view. The search bar will allow search by status compiling the values per language that are defined on the `statusTransitions` config and remove the logic that uses the `set` key on custom buttons with `updateRecord` action. Done
   - We need a status pill for each result card to display the status. This pill needs to appear in all other pages inclucing edit and summary views. For summary view add the pill to the native sumary view and to the html summary template that we already have.
-  - Change `Search recipes (name, dietary category, or status)` to `Search recipes (name, dietary, or status)`.
-  -Add a list view title `You can search by recipe name, dietary category or status`.
+  - Change `Search recipes (name, dietary category, or status)` to `Search recipes (name, dietary, or status)`. Done
+  - Add a list view title `You can search by recipe name, dietary category or status`. Done
+  > **Done - Cursor**
+- ck-3: make the title of the card non clickable when using cards mode in list view page, only the footer actions are clickable.
   > **WIP - Cursor**
-- ck-3: make cards non clickable in cards mode in list view page, only the footer actions are clickable.
 - ck-4: create smart search mode to:
 
   ```text
@@ -58,7 +59,7 @@
   • Status keywords: “active”, “inactive”, “draft”
   • Combined: “mushroom diabetic”, “draft couscous”, “inactive vegan”
 
-  Technical implementation (for Hector):
+  Technical implementation:
   1) Build one “search index text” per recipe record:
      searchText = lower( recipeName
                        + " " + join(applicableDietaries, " ")
@@ -78,9 +79,15 @@
   Result: users never need to open an “advanced search” panel; no training; one fast interaction.
   ```
 
+  > **Done - Codex**
+
 - ck-6: create custom button action to delete a record. And define dynamic legends based on list results.
 - ck-7: define optional max input length for fields and auto expand text and paragraph area vertically.
-- ck-9: helper text on all fields, this is localizable and can be set below the field label or inside the input control. Define number of decimals allowed on numeric input fields, 0 means integer only. On numeric field if the user is entering a non numeric character, the field should show a warning because today the input is blocked but the user does not understand why.
+  > **WIP - Codex**
+- ck-9: helper text on all fields, this is localizable and can be set below the field label or inside the input control. On numeric field if the user is entering a non numeric character, the field should show an error message because today the input is blocked but the user does not understand why.
+  - On recipe form we need a helper text underneath the ingredients line item group field, it will display: `To proceed with writing the instructions, you must first select ingredients.`.
+  - On recipe form add a helper placeholder in the Created By and Modified By fields, it will display: `Enter a name`.
+  > **WIP - Codex**
 - ck-10: LineItemGroupConfig.label should also modify the pill content for the line item groups shown in overlay as it does today for subgroups. Avoid showing count.
 - ck-11: smart search on section selector fields.
   - Improve the existing search at CHOICE and section selector fields (`choiceSearchEnabled`) so it covers multiple fields at same time with one input field. The idea is to use the ref: functionality that we already have in place for options. For example if you check our master data in `master_data/IngredientsOptions.csv` you will see that we have columns on the right that define each option's category, dietary applicability, supplier, etc... We can use this to build a search index that covers all these fields at same time. This search index will be used to filter the options in the section selector field.
@@ -115,6 +122,7 @@
 
   > **DONE - Cursor**
 - ck-14: verbatim requirements for html summary template.
+  > **WIP - Codex**
 - ck-15: create fields to enter createdBy and updatedBy, free text or auto set with the user email, when user is authenticated.
 - ck-16: prevent deactivation (custom button action) of a record if it is being used as source data for another record which has not a finalised status. I think easiest check would be to write a blocked flag on the dataSource record when the other form is using it. The block will be released when the ofether form finalises it's data entry process.
   > **CANCELLED**
@@ -142,7 +150,7 @@
   - We need to prevent duplicate ingredient entries, so validation dedup rules are needed within a line item or subgroup
   > **DONE - Cursor**
 - ck-38: Review the full application and adjust the UI according to the guidelines defined in `docs/design_patterns/style_guide.md`
-  > **WIP - Codex**
+  > **Done - Codex**
 - ck-40 & ck-41:
   - Adjust inital visual on page load according to the screenshot.
   - On preset search, show the search results without entering the value in the input search box, ideally presets works via advance mode even if the main search box is on text mode.
@@ -245,3 +253,6 @@
   - Auto save is not working as expected, only when I enter a photo the auto save is triggered and it starts working again. When starting a new record and entering data does not trigger the auto save unless I file upload is made.
   - "clearOnChange": true, is not working as expected, when changing the service the rest of the fields are not cleared.
   - The `changeDialog` needs to be triggered when the value of the field changes, when the field is empty it should not trigger the dialog.
+- ck-67:
+  - We need to improve the search mechanism that provides multi-select search results. When the target is a field that has options, extended with multiple columns providing additional information to the option, the search mechanism is already searching on all the columns. This is good and we want to keep it, however the search mechanism match is too permissive and it leads to incorrect results. We propose to match the whole word (case insensitive) in any of the columns. This means that if the user does not provide a value that matches the full word in any of the columns, the search results will not be shown.
+  > **WIP - Codex**

@@ -1358,7 +1358,7 @@ const ListView: React.FC<ListViewProps> = ({
             inset: 0,
             zIndex: 3,
             cursor: 'wait',
-            background: 'rgba(255,255,255,0.01)',
+            background: 'transparent',
             pointerEvents: 'auto'
           }}
         />

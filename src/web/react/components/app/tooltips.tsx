@@ -49,17 +49,17 @@ export const TooltipIcon: React.FC<{
               zIndex: 3000,
               top: position.top,
               left: position.left,
-              background: '#ffffff',
-              color: '#111827',
-              border: '1px solid #e5e7eb',
+              background: 'var(--card)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
               borderRadius: 12,
-              boxShadow: '0 16px 40px rgba(15,23,42,0.16)',
+              boxShadow: 'none',
               padding: 14,
               maxWidth: 460,
               minWidth: 260,
               maxHeight: 360,
               overflowY: 'auto',
-              fontSize: 14,
+              fontSize: 'var(--ck-font-label)',
               lineHeight: 1.6,
               whiteSpace: 'pre-wrap'
             }}
@@ -69,7 +69,7 @@ export const TooltipIcon: React.FC<{
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-              <span style={{ fontWeight: 700, color: '#0f172a' }}>{label || 'Details'}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text)' }}>{label || 'Details'}</span>
               <button
                 type="button"
                 onClick={() => {
@@ -79,9 +79,9 @@ export const TooltipIcon: React.FC<{
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: '#64748b',
+                  color: 'var(--muted)',
                   cursor: 'pointer',
-                  fontWeight: 800,
+                  fontWeight: 600,
                   padding: 0
                 }}
               >
@@ -113,12 +113,12 @@ export const TooltipIcon: React.FC<{
         style={{
           background: 'transparent',
           border: 'none',
-          color: '#2563eb',
+          color: 'var(--text)',
           cursor: 'pointer',
-          fontWeight: linkStyle ? 600 : 700,
+          fontWeight: 600,
           padding: 0,
           lineHeight: 1,
-          textDecoration: linkStyle ? 'underline' : 'none',
+          textDecoration: 'underline',
           textAlign: 'left'
         }}
       >
@@ -178,6 +178,5 @@ export const resolveTooltipText = (
   }
   return pick(value);
 };
-
 
 
