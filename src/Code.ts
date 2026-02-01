@@ -45,7 +45,7 @@ function setup(): void {
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID (DO NOT EDIT)', 'Edit URL', 'Published URL']
     ];
     
-    dashboard.getRange('A3:G3').setValues(headers).setFontWeight('bold').setBackground('#e0e0e0');
+    dashboard.getRange('A3:G3').setValues(headers).setFontWeight('normal');
     
     // Example Data
     const examples = [
@@ -84,7 +84,7 @@ function createConfigSheet(ss: GoogleAppsScript.Spreadsheet.Spreadsheet, name: s
     ['Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (comma separated)', 'Status (Active/Archived)']
   ];
   
-  sheet.getRange(1, 1, 1, 7).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
+  sheet.getRange(1, 1, 1, 7).setValues(headers).setFontWeight('normal');
   sheet.getRange(2, 1, exampleRows.length, 7).setValues(exampleRows);
   
   sheet.setColumnWidth(1, 100);

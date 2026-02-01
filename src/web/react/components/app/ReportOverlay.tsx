@@ -87,13 +87,13 @@ export const ReportOverlay: React.FC<{
                 style={{
                   width: '100%',
                   height: '100%',
-                  border: '1px solid rgba(148,163,184,0.45)',
-                  borderRadius: 16,
-                  background: '#ffffff'
+                  border: 'none',
+                  borderRadius: 0,
+                  background: 'transparent'
                 }}
               />
             </div>
-            <div className="muted" style={{ fontSize: 14, fontWeight: 700 }}>
+            <div className="muted">
               <a href={pdfObjectUrl} target="_blank" rel="noopener noreferrer">
                 {tSystem('summary.openPdf', language, tSystem('common.open', language, 'Open'))}
               </a>
@@ -117,5 +117,3 @@ export const ReportOverlay: React.FC<{
     </FullPageOverlay>
   );
 };
-
-

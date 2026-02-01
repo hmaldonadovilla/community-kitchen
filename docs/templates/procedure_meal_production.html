@@ -9,12 +9,12 @@
 <style>
   .ck-procedure-template {
     /* Inherit app typography; keep styles scoped to avoid affecting the host app */
-    color: #0f172a;
-    font-size: 0.98em;
+    color: var(--text);
+    font-size: var(--ck-font-label);
     margin: -8px;
     font-family: var(--ck-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif);
-    --ck-proc-muted: rgba(15, 23, 42, 0.62);
-    --ck-proc-border: rgba(148, 163, 184, 0.55);
+    --ck-proc-muted: var(--muted);
+    --ck-proc-border: var(--border);
   }
 
   .ck-procedure-template * {
@@ -29,25 +29,25 @@
   }
 
   .ck-procedure-template h1 {
-    font-size: 1.75em;
+    font-size: var(--ck-font-group-title);
     margin: 0 0 0.25em;
-    font-weight: 950;
-    letter-spacing: -0.02em;
+    font-weight: 600;
+    letter-spacing: 0;
   }
 
   .ck-procedure-template h2 {
-    font-size: 1.12em;
+    font-size: var(--ck-font-control);
     margin: 1.35em 0 0.6em;
-    font-weight: 900;
+    font-weight: 600;
   }
 
   .ck-procedure-template h3 {
-    font-size: 0.86em;
+    font-size: var(--ck-font-label);
     margin: 1.05em 0 0.55em;
     color: var(--ck-proc-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: 900;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 600;
   }
 
   .ck-procedure-template p {
@@ -67,13 +67,14 @@
   .ck-procedure-meta {
     color: var(--ck-proc-muted);
     margin-bottom: 14px;
-    font-weight: 750;
+    font-weight: 600;
   }
 
   .ck-procedure-card {
-    border: 1px solid var(--ck-proc-border);
-    border-radius: 12px;
+    border: none;
+    border-radius: 0;
     padding: 14px;
+    background: transparent;
   }
 
   .ck-procedure-grid2 {
@@ -104,7 +105,7 @@
   }
 
   .ck-procedure-template th {
-    background: rgba(148, 163, 184, 0.12);
+    background: transparent;
     text-align: left;
   }
 
@@ -117,11 +118,11 @@
   }
 
   .ck-procedure-template .ck-procedure-step {
-    border: 1px solid var(--ck-proc-border);
-    border-radius: 14px;
-    overflow: hidden;
-    background: #ffffff;
-    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.05);
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+    background: transparent;
+    box-shadow: none;
   }
 
   .ck-procedure-template .ck-procedure-step-head {
@@ -129,7 +130,7 @@
     align-items: center;
     gap: 12px;
     padding: 14px 14px;
-    background: rgba(148, 163, 184, 0.10);
+    background: transparent;
     border-bottom: 1px solid var(--ck-proc-border);
   }
 
@@ -137,20 +138,20 @@
     width: 42px;
     height: 42px;
     border-radius: 999px;
-    background: #0f172a;
-    color: #ffffff;
+    background: transparent;
+    color: var(--text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-weight: 950;
-    letter-spacing: -0.01em;
+    font-weight: 600;
+    letter-spacing: 0;
     flex: 0 0 auto;
   }
 
   .ck-procedure-template .ck-procedure-step-title {
-    font-size: 1.05em;
-    font-weight: 950;
-    letter-spacing: -0.01em;
+    font-size: var(--ck-font-control);
+    font-weight: 600;
+    letter-spacing: 0;
     margin: 0;
   }
 
@@ -181,11 +182,11 @@
   }
 
   .ck-procedure-template .ck-procedure-role-title {
-    font-size: 0.82em;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-size: calc(var(--ck-font-label) * 0.85);
+    text-transform: none;
+    letter-spacing: 0;
     color: var(--ck-proc-muted);
-    font-weight: 950;
+    font-weight: 600;
     margin: 0 0 8px;
   }
 
@@ -208,7 +209,7 @@
     left: 0;
     top: 0;
     color: var(--ck-proc-muted);
-    font-weight: 900;
+    font-weight: 600;
   }
 
   .ck-procedure-template .ck-procedure-role .ck-procedure-small {
@@ -216,14 +217,13 @@
   }
 
   .ck-procedure-small {
-    font-size: 0.88em;
+    font-size: calc(var(--ck-font-label) * 0.85);
     color: var(--ck-proc-muted);
-    font-weight: 700;
+    font-weight: 500;
   }
 
   .ck-procedure-template code {
     font-family: inherit;
-    font-size: 0.95em;
   }
 </style>
 
@@ -491,7 +491,7 @@
     </section>
 
     <section>
-      <h2>DO / DO NOT</h2>
+      <h2>Do / Do not</h2>
       <div class="ck-procedure-grid2">
         <div class="ck-procedure-card">
           <h3>Do</h3>

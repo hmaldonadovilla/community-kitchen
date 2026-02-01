@@ -14,7 +14,7 @@ const hintStyle: React.CSSProperties = {
 const errorStyle: React.CSSProperties = {
   marginTop: 10,
   fontWeight: 600,
-  color: '#b91c1c'
+  color: 'var(--danger)'
 };
 
 const actionsStyle: React.CSSProperties = {
@@ -27,14 +27,14 @@ const actionsStyle: React.CSSProperties = {
 
 const retryButtonStyle: React.CSSProperties = {
   borderRadius: 999,
-  border: 'none',
+  border: '1px solid var(--accent)',
   padding: '12px 20px',
-  fontSize: 18,
+  fontSize: 'var(--ck-font-control)',
   fontWeight: 600,
   cursor: 'pointer',
-  background: '#0ea5e9',
-  color: '#ffffff',
-  boxShadow: '0 1px 0 rgba(15, 23, 42, 0.2)'
+  background: 'var(--accent)',
+  color: 'var(--accentText)',
+  boxShadow: 'none'
 };
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({

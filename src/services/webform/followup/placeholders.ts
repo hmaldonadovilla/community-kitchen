@@ -1,6 +1,12 @@
-import { QuestionConfig, WebFormSubmission } from '../../../types';
+import { QuestionConfig, WebFormSubmission, WebQuestionDefinition } from '../../../types';
 import { DataSourceService } from '../dataSources';
-import { addPlaceholderVariants, formatTemplateValue, slugifyPlaceholder, resolveSubgroupKey } from './utils';
+import {
+  addPlaceholderVariants,
+  buildPlaceholderKeys,
+  formatTemplateValue,
+  resolveSubgroupKey,
+  slugifyPlaceholder
+} from './utils';
 
 /**
  * Placeholder + consolidated placeholder generation for follow-up templates (Doc/PDF/Email).
@@ -200,6 +206,116 @@ export const buildPlaceholderMap = (args: {
   return map;
 };
 
+/**
+ * Label placeholders:
+ * - Syntax: {{LABEL(KEY)}}
+ * - KEY uses the same id/path notation as value tokens (e.g. FIELD_ID, GROUP.FIELD_ID, GROUP.SUBGROUP.FIELD_ID).
+ *
+ * This keeps template labels in sync with the form config (qEn/qFr/qNl and line item field labels).
+ */
+export const addLabelPlaceholders = (
+  placeholders: Record<string, string>,
+  questions: Array<QuestionConfig | WebQuestionDefinition>,
+  language: string | undefined
+): void => {
+  const lang = (language || 'EN').toString().trim().toUpperCase();
+  const isWebQuestion = (q: any): q is WebQuestionDefinition => {
+    return !!q && typeof q === 'object' && q.label && typeof q.label === 'object' && 'en' in q.label;
+  };
+  const resolveTopLabel = (q: QuestionConfig): string => {
+    if (isWebQuestion(q as any)) {
+      const label = (q as any).label || {};
+      const base =
+        lang === 'FR'
+          ? label.fr || label.en || label.nl || q.id
+          : lang === 'NL'
+            ? label.nl || label.en || label.fr || q.id
+            : label.en || label.fr || label.nl || q.id;
+      return (base || q.id || '').toString().trim();
+    }
+    const base =
+      lang === 'FR'
+        ? q.qFr || q.qEn || q.id
+        : lang === 'NL'
+          ? q.qNl || q.qEn || q.id
+          : q.qEn || q.id;
+    return (base || q.id || '').toString().trim();
+  };
+  const resolveLineFieldLabel = (field: any): string => {
+    const base =
+      lang === 'FR'
+        ? field?.labelFr || field?.labelEn || field?.id
+        : lang === 'NL'
+          ? field?.labelNl || field?.labelEn || field?.id
+          : field?.labelEn || field?.id;
+    return (base || field?.id || '').toString().trim();
+  };
+  const resolveSubGroupLabel = (subId: string, label: any): string => {
+    if (!label) return (subId || '').toString().trim();
+    if (typeof label === 'string') return label.toString().trim();
+    const base =
+      lang === 'FR'
+        ? label?.fr || label?.en || label?.nl || subId
+        : lang === 'NL'
+          ? label?.nl || label?.en || label?.fr || subId
+          : label?.en || label?.fr || label?.nl || subId;
+    return (base || subId || '').toString().trim();
+  };
+  const addLabelKey = (key: string, label: string) => {
+    const normalizedKey = (key || '').toString().trim();
+    const normalizedLabel = (label || '').toString().trim();
+    if (!normalizedKey || !normalizedLabel) return;
+    buildPlaceholderKeys(normalizedKey).forEach(v => {
+      placeholders[`{{LABEL(${v})}}`] = normalizedLabel;
+    });
+    // Also include the raw key as-is (without variant transforms).
+    placeholders[`{{LABEL(${normalizedKey})}}`] = normalizedLabel;
+  };
+
+  // Meta labels used in templates (not backed by a question).
+  addLabelKey('RECORD_ID', 'Record ID');
+  addLabelKey('FORM_KEY', 'Form key');
+  addLabelKey('CREATED_AT', 'Created at');
+  addLabelKey('UPDATED_AT', 'Updated at');
+  addLabelKey('STATUS', 'Status');
+  addLabelKey('PDF_URL', 'PDF URL');
+  addLabelKey('LANGUAGE', 'Language');
+
+  const walkSubGroups = (groupId: string, parent: any, path: string[]) => {
+    const subs: any[] = Array.isArray(parent?.subGroups) ? parent.subGroups : [];
+    subs.forEach(sub => {
+      const subId = resolveSubgroupKey(sub as any);
+      if (!subId) return;
+      const nextPath = [...path, subId];
+      const subLabel = resolveSubGroupLabel(subId, sub?.label);
+      addLabelKey(`${groupId}.${nextPath.join('.')}`, subLabel);
+      const fields: any[] = Array.isArray(sub?.fields) ? sub.fields : [];
+      fields.forEach(field => {
+        const fid = (field?.id || '').toString().trim();
+        if (!fid) return;
+        addLabelKey(`${groupId}.${nextPath.join('.')}.${fid}`, resolveLineFieldLabel(field));
+      });
+      walkSubGroups(groupId, sub, nextPath);
+    });
+  };
+
+  (questions || []).forEach(q => {
+    if (!q || q.type === 'BUTTON') return;
+    const qid = (q.id || '').toString().trim();
+    if (!qid) return;
+    addLabelKey(qid, resolveTopLabel(q as any));
+
+    if (q.type !== 'LINE_ITEM_GROUP') return;
+    const fields: any[] = Array.isArray((q as any)?.lineItemConfig?.fields) ? (q as any).lineItemConfig.fields : [];
+    fields.forEach(field => {
+      const fid = (field?.id || '').toString().trim();
+      if (!fid) return;
+      addLabelKey(`${qid}.${fid}`, resolveLineFieldLabel(field));
+    });
+    walkSubGroups(qid, (q as any)?.lineItemConfig, []);
+  });
+};
+
 export const addConsolidatedPlaceholders = (
   placeholders: Record<string, string>,
   questions: QuestionConfig[],
@@ -359,4 +475,3 @@ export const addConsolidatedPlaceholders = (
       });
   });
 };
-

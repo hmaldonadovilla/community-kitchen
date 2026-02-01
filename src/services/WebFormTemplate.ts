@@ -101,20 +101,21 @@ export function buildWebFormHtml(
     </script>
     <style>
       :root {
-        /* iOS "grouped" look */
-        --bg: #f2f2f7;
-        --card: #ffffff;
-        --border: rgba(60, 60, 67, 0.22);
-        --text: #000000;
-        --muted: rgba(60, 60, 67, 0.6);
-        --accent: #007aff;
-        --danger: #ff3b30;
-        --success: #34c759;
+        /* System-neutral surfaces and text */
+        --bg: Canvas;
+        --card: Canvas;
+        --border: GrayText;
+        --text: CanvasText;
+        --muted: GrayText;
+        --accent: #0b57d0;
+        --accentText: #ffffff;
+        --danger: #b91c1c;
+        --success: CanvasText;
 
-        /* Secondary/tinted button surface (subgroup / tooltip / files) - distinct from input surfaces like segmented controls */
-        --ck-secondary-bg: rgba(0, 122, 255, 0.12);
-        --ck-secondary-border: rgba(0, 122, 255, 0.24);
-        --ck-secondary-text: var(--accent);
+        /* Secondary action surface: neutral outline */
+        --ck-secondary-bg: transparent;
+        --ck-secondary-border: var(--border);
+        --ck-secondary-text: var(--text);
 
         --radius-card: 26px;
         --radius-control: 18px;
@@ -151,6 +152,13 @@ export function buildWebFormHtml(
         color: var(--text);
         font-size: var(--ck-font-base);
         min-height: 100vh;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: underline;
+      }
+      a:visited {
+        color: var(--accent);
       }
       /* iOS base-scale compensation: if we start in a desktop-like 980px viewport, the whole page is effectively
          scaled down (~0.4 on iPhone). Boost *token values* so labels/controls remain uniform and iOS doesn't zoom. */
@@ -192,9 +200,7 @@ export function buildWebFormHtml(
         padding: calc(14px + var(--safe-top)) 22px 14px;
         /* Make the header full-bleed within the .page padding */
         margin: -22px -22px 6px;
-        background: rgba(242, 242, 247, 0.88);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
+        background: var(--bg);
         border-bottom: 1px solid var(--border);
       }
       .ck-app-avatar-btn {
@@ -208,7 +214,7 @@ export function buildWebFormHtml(
         border-radius: 999px;
       }
       .ck-app-avatar-btn:focus-visible {
-        outline: 4px solid rgba(0, 122, 255, 0.3);
+        outline: 2px solid var(--text);
         outline-offset: 4px;
       }
       .ck-app-avatar {
@@ -222,7 +228,7 @@ export function buildWebFormHtml(
         background: var(--ck-secondary-bg);
         border: 1px solid var(--ck-secondary-border);
         color: var(--ck-secondary-text);
-        font-weight: 900;
+        font-weight: 600;
         letter-spacing: -0.02em;
         font-size: calc(var(--ck-font-control) * 0.72);
         line-height: 1;
@@ -239,9 +245,9 @@ export function buildWebFormHtml(
         font-size: calc(var(--ck-font-control) * 0.66);
       }
       .ck-app-title {
-        font-weight: 900;
-        font-size: calc(var(--ck-font-control) + 10px);
-        letter-spacing: -0.6px;
+        font-weight: 600;
+        font-size: var(--ck-font-group-title);
+        letter-spacing: 0;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -262,23 +268,23 @@ export function buildWebFormHtml(
         align-items: center;
         justify-content: flex-end;
         gap: 8px;
-        font-weight: 800;
-        font-size: calc(var(--ck-font-label) * 0.78);
-        letter-spacing: -0.2px;
-        color: rgba(15, 23, 42, 0.62);
+        font-weight: 600;
+        font-size: calc(var(--ck-font-label) * 0.85);
+        letter-spacing: 0;
+        color: var(--muted);
         white-space: nowrap;
       }
       .ck-app-title-right [data-tone="error"] {
-        color: #b91c1c;
+        color: var(--danger);
       }
       .ck-app-title-right [data-tone="saved"] {
-        color: rgba(15, 23, 42, 0.62);
+        color: var(--muted);
       }
       .ck-app-title-right [data-tone="saving"] {
-        color: rgba(15, 23, 42, 0.62);
+        color: var(--muted);
       }
       .ck-app-title-right [data-tone="paused"] {
-        color: rgba(15, 23, 42, 0.62);
+        color: var(--muted);
       }
       .ck-env-tag {
         display: inline-flex;
@@ -289,7 +295,7 @@ export function buildWebFormHtml(
         background: transparent;
         color: var(--text);
         font-weight: 600;
-        font-size: 0.95em;
+        font-size: calc(var(--ck-font-label) * 0.85);
         line-height: 1.2;
         text-transform: none;
         letter-spacing: 0;
@@ -300,12 +306,12 @@ export function buildWebFormHtml(
         position: fixed;
         inset: 0;
         z-index: 80;
-        background: rgba(15, 23, 42, 0);
+        background: transparent;
         pointer-events: none;
         transition: background 180ms ease;
       }
       .ck-app-drawer-overlay.open {
-        background: rgba(15, 23, 42, 0.28);
+        background: transparent;
         pointer-events: auto;
       }
       .ck-app-drawer {
@@ -316,7 +322,7 @@ export function buildWebFormHtml(
         width: min(520px, 88vw);
         background: var(--card);
         border-right: 1px solid var(--border);
-        box-shadow: 0 18px 60px rgba(15, 23, 42, 0.24);
+        box-shadow: none;
         transform: translateX(-104%);
         transition: transform 220ms ease;
         padding: calc(16px + var(--safe-top)) 16px 16px;
@@ -345,16 +351,16 @@ export function buildWebFormHtml(
         min-width: 0;
       }
       .ck-app-drawer-brand-title {
-        font-weight: 900;
-        font-size: calc(var(--ck-font-control) + 6px);
-        letter-spacing: -0.5px;
+        font-weight: 600;
+        font-size: var(--ck-font-group-title);
+        letter-spacing: 0;
         line-height: 1.1;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .ck-app-drawer-brand-subtitle {
-        font-weight: 700;
+        font-weight: 500;
       }
       .ck-app-drawer-close {
         background: transparent;
@@ -368,8 +374,8 @@ export function buildWebFormHtml(
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        font-weight: 900;
-        font-size: calc(var(--ck-font-control) + 12px);
+        font-weight: 600;
+        font-size: var(--ck-font-caret);
         line-height: 1;
         flex: 0 0 auto;
       }
@@ -379,10 +385,10 @@ export function buildWebFormHtml(
         gap: 10px;
       }
       .ck-app-drawer-section-title {
-        font-weight: 800;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        font-size: calc(var(--ck-font-label) * 0.66);
+        font-weight: 600;
+        letter-spacing: 0;
+        text-transform: none;
+        font-size: var(--ck-font-label);
       }
       .ck-app-drawer-item {
         width: 100%;
@@ -391,7 +397,7 @@ export function buildWebFormHtml(
         background: var(--ck-secondary-bg);
         color: var(--ck-secondary-text);
         border-radius: 16px;
-        font-weight: 900;
+        font-weight: 600;
         padding: 16px 18px;
         min-height: var(--control-height);
         font-size: var(--ck-font-control);
@@ -402,35 +408,40 @@ export function buildWebFormHtml(
       .ck-app-drawer-item--primary {
         background: var(--accent);
         border-color: var(--accent);
-        color: #fff;
+        color: var(--accentText);
       }
       .ck-app-drawer-select {
         width: 100%;
       }
       .ck-app-drawer-build {
-        font-weight: 800;
+        font-weight: 600;
       }
       .ck-app-drawer-divider {
         height: 1px;
         background: var(--border);
         margin: 6px 0;
       }
-      header h1 { margin: 0 0 6px; font-size: 54px; letter-spacing: -0.7px; }
+      header h1 {
+        margin: 0 0 6px;
+        font-size: var(--ck-font-group-title);
+        font-weight: 600;
+        letter-spacing: 0;
+      }
       header p { margin: 0 0 8px; color: var(--muted); }
       .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
       .card {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-card);
+        background: transparent;
+        border: none;
+        border-radius: 0;
         padding: 32px;
-        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+        box-shadow: none;
       }
       .form-card {
         position: relative;
       }
-      h2 { margin: 0 0 10px; }
+      h2 { margin: 0 0 10px; font-size: var(--ck-font-group-title); font-weight: 600; }
       .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-      .field label { font-weight: 700; }
+      .field label { font-weight: 500; }
       input, select, textarea, button {
         font-size: var(--ck-font-control);
         font-family: inherit;
@@ -440,20 +451,20 @@ export function buildWebFormHtml(
         min-height: var(--control-height);
         border: 1px solid var(--border);
         border-radius: var(--radius-control);
-        background: #ffffff;
+        background: var(--card);
       }
       textarea { min-height: 110px; resize: vertical; }
       button {
         background: var(--accent);
-        color: #fff;
-        border: none;
+        color: var(--accentText);
+        border: 1px solid var(--accent);
         padding: 16px 22px;
         border-radius: 12px;
         cursor: pointer;
       }
       button:disabled { opacity: 0.6; cursor: not-allowed; }
       .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
-      .muted { color: var(--muted); font-size: 0.7em; }
+      .muted { color: var(--muted); font-size: calc(var(--ck-font-label) * 0.85); font-weight: 400; }
       .ck-step-help-text {
         margin: 0 0 12px;
         color: var(--muted);
@@ -461,12 +472,12 @@ export function buildWebFormHtml(
         line-height: 1.4;
         font-weight: 400;
       }
-      .status { margin-top: 8px; padding: 8px 10px; background: rgba(118,118,128,0.12); border: 1px solid var(--border); border-radius: 12px; }
+      .status { margin-top: 8px; padding: 8px 10px; background: transparent; border: 1px solid var(--border); border-radius: 12px; color: var(--text); }
       .inline-options { display: flex; gap: 10px; flex-wrap: wrap; }
       .inline { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
       .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
-      .tabs button { background: #e2e8f0; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; }
-      .tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .tabs button { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+      .tabs button.active { background: var(--accent); color: var(--accentText); border-color: var(--accent); }
       .list-toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -565,7 +576,7 @@ export function buildWebFormHtml(
         background: transparent;
         color: var(--muted);
         font-weight: 600;
-        font-size: 1.05em;
+        font-size: var(--ck-font-control);
         line-height: 1;
         display: inline-flex;
         align-items: center;
@@ -580,10 +591,10 @@ export function buildWebFormHtml(
         right: 56px;
       }
       .list-toolbar .ck-list-search-advanced-icon:hover {
-        background: rgba(118,118,128,0.12);
+        background: transparent;
       }
       .list-toolbar .ck-list-search-advanced-icon:focus-visible {
-        outline: 4px solid rgba(0, 122, 255, 0.28);
+        outline: 2px solid var(--text);
         outline-offset: 3px;
       }
       .list-toolbar .ck-list-search-clear-icon {
@@ -598,7 +609,7 @@ export function buildWebFormHtml(
         background: transparent;
         color: var(--muted);
         font-weight: 600;
-        font-size: 1.2em;
+        font-size: var(--ck-font-control);
         line-height: 1;
         display: inline-flex;
         align-items: center;
@@ -607,7 +618,7 @@ export function buildWebFormHtml(
         box-shadow: none;
       }
       .list-toolbar .ck-list-search-clear-icon:focus-visible {
-        outline: 4px solid rgba(15, 23, 42, 0.2);
+        outline: 2px solid var(--text);
         outline-offset: 3px;
       }
       .list-toolbar .sort-control {
@@ -629,7 +640,7 @@ export function buildWebFormHtml(
       .list-table th,
       .list-table td {
         padding: 8px 10px;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--border);
         text-align: left;
         word-break: break-word;
       }
@@ -649,23 +660,23 @@ export function buildWebFormHtml(
         gap: 6px;
       }
       .ck-list-sort-header:focus-visible {
-        outline: 4px solid rgba(0, 122, 255, 0.28);
+        outline: 2px solid var(--text);
         outline-offset: 3px;
         border-radius: 10px;
       }
-      .ck-list-sort-indicator { font-size: 0.85em; opacity: 0.75; }
+      .ck-list-sort-indicator { font-size: calc(var(--ck-font-label) * 0.85); opacity: 0.75; }
       .truncate-link {
         display: inline-block;
         max-width: 100%;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        color: inherit;
+        color: var(--accent);
       }
       .truncate-link:hover { text-decoration: underline; }
       .inline-link {
         color: var(--accent);
-        text-decoration: none;
+        text-decoration: underline;
       }
       .inline-link:hover { text-decoration: underline; }
       .ck-list-nav {
@@ -676,21 +687,21 @@ export function buildWebFormHtml(
         margin: 0;
         color: var(--accent);
         font: inherit;
-        font-weight: 800;
+        font-weight: 600;
         display: inline-flex;
         align-items: center;
         gap: 6px;
         cursor: pointer;
-        text-decoration: none;
+        text-decoration: underline;
       }
       .ck-list-nav:hover { text-decoration: underline; }
       .ck-list-nav:focus-visible {
-        outline: 4px solid rgba(0, 122, 255, 0.28);
+        outline: 2px solid var(--text);
         outline-offset: 3px;
         border-radius: 10px;
       }
-      .ck-list-nav--warning { color: #b45309; }
-      .ck-list-nav--muted { color: var(--muted); font-weight: 700; }
+      .ck-list-nav--warning { color: var(--text); }
+      .ck-list-nav--muted { color: var(--muted); font-weight: 500; }
       .ck-list-icon {
         width: 1.05em;
         height: 1.05em;
@@ -705,16 +716,16 @@ export function buildWebFormHtml(
         flex: 0 0 auto;
       }
       .ck-list-view-toggle > button {
-        background: #e2e8f0;
-        color: #0f172a;
-        border: 1px solid #cbd5e1;
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
         border-radius: 10px;
         padding: 8px 12px;
       }
       .ck-list-view-toggle > button.active {
         background: var(--accent);
         border-color: var(--accent);
-        color: #fff;
+        color: var(--accentText);
       }
 
       .ck-list-advanced-panel {
@@ -722,7 +733,7 @@ export function buildWebFormHtml(
         padding: 12px;
         border: 1px solid var(--border);
         border-radius: 14px;
-        background: rgba(118,118,128,0.06);
+        background: transparent;
       }
       .ck-list-advanced-grid {
         display: flex;
@@ -736,7 +747,7 @@ export function buildWebFormHtml(
         align-items: center;
       }
       .ck-list-advanced-label {
-        font-weight: 800;
+        font-weight: 600;
         color: var(--muted);
         font-size: var(--ck-font-control);
         min-width: 0;
@@ -785,17 +796,17 @@ export function buildWebFormHtml(
         padding: 12px 0;
       }
       .ck-list-card {
-        background: #fff;
+        background: var(--card);
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 14px;
         cursor: pointer;
       }
       .ck-list-card:hover {
-        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+        box-shadow: none;
       }
       .ck-list-card:focus-visible {
-        outline: 4px solid rgba(0, 122, 255, 0.28);
+        outline: 2px solid var(--text);
         outline-offset: 3px;
       }
       .ck-list-card-title-row {
@@ -805,8 +816,8 @@ export function buildWebFormHtml(
         margin-bottom: 10px;
       }
       .ck-list-card-title {
-        font-weight: 900;
-        font-size: 1.05em;
+        font-weight: 600;
+        font-size: var(--ck-font-label);
         min-width: 0;
         flex: 1 1 auto;
       }
@@ -819,23 +830,23 @@ export function buildWebFormHtml(
         gap: 6px;
         padding: 4px 10px;
         border-radius: 999px;
-        border: 1px solid #cbd5e1;
-        background: #f8fafc;
-        color: #334155;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
         font-weight: 600;
-        font-size: 0.78em;
+        font-size: calc(var(--ck-font-label) * 0.85);
         line-height: 1;
         white-space: nowrap;
       }
       .ck-status-pill[data-status-key="onClose"] {
-        border-color: #94a3b8;
-        background: #e2e8f0;
-        color: #334155;
+        border-color: var(--border);
+        background: transparent;
+        color: var(--text);
       }
       .ck-status-pill[data-status-key="reOpened"] {
-        border-color: #64748b;
-        background: #e5e7eb;
-        color: #1f2937;
+        border-color: var(--border);
+        background: transparent;
+        color: var(--text);
       }
       .ck-record-status-row {
         display: flex;
@@ -845,27 +856,27 @@ export function buildWebFormHtml(
         margin-bottom: 8px;
       }
       .ck-record-status-label {
-        font-size: 0.7em;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
+        font-size: calc(var(--ck-font-label) * 0.85);
+        letter-spacing: 0;
+        text-transform: none;
         color: var(--muted);
-        font-weight: 800;
+        font-weight: 600;
       }
       .ck-list-card-footer {
         display: flex;
         flex-wrap: wrap;
         gap: 14px;
         padding-top: 10px;
-        border-top: 1px dashed #e2e8f0;
+        border-top: 1px dashed var(--border);
       }
-      .ck-list-icon--warning { color: #b45309; }
-      .ck-list-icon--check { color: #16a34a; }
-      .ck-list-icon--error { color: #b91c1c; }
-      .ck-list-icon--info { color: #2563eb; }
-      .ck-list-icon--external { color: var(--accent); }
+      .ck-list-icon--warning { color: var(--text); }
+      .ck-list-icon--check { color: var(--text); }
+      .ck-list-icon--error { color: var(--danger); }
+      .ck-list-icon--info { color: var(--text); }
+      .ck-list-icon--external { color: var(--text); }
       .ck-list-icon--lock { color: var(--muted); }
-      .ck-list-icon--edit { color: var(--accent); }
-      .ck-list-icon--view { color: var(--accent); }
+      .ck-list-icon--edit { color: var(--text); }
+      .ck-list-icon--view { color: var(--text); }
       .ck-list-legend {
         margin-top: 10px;
         display: flex;
@@ -873,7 +884,7 @@ export function buildWebFormHtml(
         gap: 6px;
         align-items: flex-start;
         color: var(--muted);
-        font-size: 0.85em;
+        font-size: calc(var(--ck-font-label) * 0.85);
       }
       .ck-list-legend--bottomBar {
         margin-top: 0;
@@ -881,7 +892,7 @@ export function buildWebFormHtml(
         padding-left: 20px;
       }
       .ck-list-legend-title {
-        font-weight: 800;
+        font-weight: 600;
         color: var(--text);
       }
       .ck-list-legend-list {
@@ -896,7 +907,7 @@ export function buildWebFormHtml(
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        font-weight: 700;
+        font-weight: 500;
         position: relative;
       }
       .ck-list-legend-pill {
@@ -904,31 +915,31 @@ export function buildWebFormHtml(
         align-items: center;
         padding: 2px 8px;
         border-radius: 999px;
-        border: 1px solid #cbd5e1;
-        background: #f8fafc;
-        color: #334155;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
         font-weight: 600;
-        font-size: 0.75em;
+        font-size: calc(var(--ck-font-label) * 0.85);
         line-height: 1;
         white-space: nowrap;
       }
       .ck-list-legend-pill[data-tone="muted"] {
-        border-color: #94a3b8;
-        background: #e2e8f0;
-        color: #475569;
+        border-color: var(--border);
+        background: transparent;
+        color: var(--text);
       }
       .ck-list-legend-pill[data-tone="strong"] {
-        border-color: #94a3b8;
-        background: #e2e8f0;
-        color: #1f2937;
+        border-color: var(--border);
+        background: transparent;
+        color: var(--text);
       }
       .ck-list-legend-text strong {
-        font-weight: 800;
+        font-weight: 600;
       }
       }
       .required-star {
-        color: #dc2626;
-        font-size: 0.9em;
+        color: currentColor;
+        font-size: calc(var(--ck-font-label) * 0.85);
       }
       .line-item-toolbar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 12px; justify-content: space-between; }
       .line-item-toolbar-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
@@ -936,7 +947,7 @@ export function buildWebFormHtml(
       .line-item-toolbar .section-selector label { margin-bottom: 4px; display: inline-block; }
       .line-item-toolbar .section-selector select { width: 100%; }
       .line-item-totals { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-      .line-item-row { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+      .line-item-row { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
       .inline-field { min-width: 180px; }
       .line-actions { display: flex; justify-content: flex-end; }
       .pill {
@@ -944,24 +955,25 @@ export function buildWebFormHtml(
         align-items: center;
         gap: 10px;
         padding: 0.35em 0.55em;
-        background: #e2e8f0;
+        background: transparent;
+        border: 1px solid var(--border);
         border-radius: 999px;
-        font-size: 0.75em;
-        font-weight: 800;
+        font-size: calc(var(--ck-font-label) * 0.85);
+        font-weight: 600;
         line-height: 1;
         margin-right: 6px;
         white-space: nowrap;
       }
       .error {
-        color: #b91c1c;
+        color: var(--danger);
         font-size: calc(var(--ck-font-label) * 0.85);
-        font-weight: 800;
+        font-weight: 600;
         line-height: 1.15;
       }
       .warning {
-        color: #b45309;
+        color: var(--text);
         font-size: calc(var(--ck-font-label) * 0.85);
-        font-weight: 800;
+        font-weight: 600;
         line-height: 1.15;
       }
       .line-summary-table { overflow-x: auto; margin-top: 8px; }
@@ -972,7 +984,7 @@ export function buildWebFormHtml(
         text-align: left;
         white-space: nowrap;
       }
-      .line-summary-table tbody tr:nth-child(odd) { background: #f8fafc; }
+      .line-summary-table tbody tr:nth-child(odd) { background: transparent; }
       .sticky-submit {
         position: fixed;
         left: 0;
@@ -980,10 +992,8 @@ export function buildWebFormHtml(
         bottom: var(--vv-bottom);
         /* Use safe-area inset to avoid iOS home-indicator clipping */
         padding: 14px 18px max(14px, var(--safe-bottom));
-        background: rgba(248, 248, 248, 0.92);
-        border-top: 1px solid rgba(60, 60, 67, 0.22);
-        backdrop-filter: saturate(180%) blur(18px);
-        -webkit-backdrop-filter: saturate(180%) blur(18px);
+        background: var(--bg);
+        border-top: 1px solid var(--border);
         z-index: 2000;
       }
       .sticky-submit button {
@@ -998,10 +1008,8 @@ export function buildWebFormHtml(
         bottom: var(--vv-bottom);
         /* Add extra breathing room above iPhone curved corners / home indicator. */
         padding: 12px 32px max(32px, calc(var(--safe-bottom) + 10px));
-        background: rgba(242, 242, 247, 0.92);
-        border-top: 1px solid rgba(60, 60, 67, 0.22);
-        backdrop-filter: saturate(180%) blur(18px);
-        -webkit-backdrop-filter: saturate(180%) blur(18px);
+        background: var(--bg);
+        border-top: 1px solid var(--border);
         z-index: 2000;
       }
       .ck-bottom-bar .ck-actionbar-notice-inner {
@@ -1029,9 +1037,9 @@ export function buildWebFormHtml(
         gap: 8px;
         padding: 8px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.75);
+        background: transparent;
         border: 1px solid var(--border);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+        box-shadow: none;
       }
       .ck-bottom-item {
         /* Size to label (no ellipsis). If space is tight, the capsule wraps buttons onto a new row. */
@@ -1046,8 +1054,8 @@ export function buildWebFormHtml(
         align-items: center;
         justify-content: center;
         gap: 10px;
-        font-weight: 900;
-        font-size: calc(var(--ck-font-pill) * 1.05);
+        font-weight: 600;
+        font-size: var(--ck-font-pill);
         white-space: nowrap;
         box-shadow: none;
       }
@@ -1069,10 +1077,10 @@ export function buildWebFormHtml(
       .ck-bottom-item--back {
         /* Guided steps Back button: visually primary, but distinct from the Next/Submit accent color. */
         flex: 0 0 auto;
-        background: rgba(255, 59, 48, 0.14);
-        border-color: rgba(255, 59, 48, 0.28);
-        color: #b42318;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        background: transparent;
+        border-color: var(--border);
+        color: var(--text);
+        box-shadow: none;
       }
       .ck-bottom-item--back:disabled {
         opacity: 0.6;
@@ -1092,11 +1100,11 @@ export function buildWebFormHtml(
         align-items: center;
         justify-content: center;
         gap: 10px;
-        font-weight: 900;
-        font-size: calc(var(--ck-font-pill) * 1.05);
+        font-weight: 600;
+        font-size: var(--ck-font-pill);
         background: var(--accent);
         border: 1px solid var(--accent);
-        color: #fff;
+        color: var(--accentText);
         box-shadow: none;
       }
       .ck-bottom-submit:disabled {
@@ -1111,12 +1119,12 @@ export function buildWebFormHtml(
         align-items: flex-end;
         justify-content: center;
         padding: 0 18px;
-        background: rgba(15, 23, 42, 0);
+        background: transparent;
         pointer-events: none;
         transition: background 180ms ease;
       }
       .ck-bottom-menu-overlay.open {
-        background: rgba(15, 23, 42, 0.22);
+        background: transparent;
         pointer-events: auto;
       }
       .ck-bottom-menu {
@@ -1128,7 +1136,7 @@ export function buildWebFormHtml(
         background: var(--card);
         border: 1px solid var(--border);
         border-radius: 22px;
-        box-shadow: 0 18px 60px rgba(15, 23, 42, 0.24);
+        box-shadow: none;
         padding: 14px;
         display: flex;
         flex-direction: column;
@@ -1150,7 +1158,7 @@ export function buildWebFormHtml(
         background: var(--ck-secondary-bg);
         color: var(--ck-secondary-text);
         border-radius: 16px;
-        font-weight: 900;
+        font-weight: 600;
         padding: 16px 18px;
         min-height: var(--control-height);
         font-size: var(--ck-font-control);
@@ -1162,7 +1170,7 @@ export function buildWebFormHtml(
       .ck-bottom-menu-item--primary {
         background: var(--accent);
         border-color: var(--accent);
-        color: #fff;
+        color: var(--accentText);
       }
     </style>
   </head>

@@ -23,7 +23,7 @@ export const BlockingOverlay: React.FC<{
         position: 'fixed',
         inset: 0,
         zIndex,
-        background: 'rgba(15,23,42,0.46)',
+        background: 'rgba(0,0,0,0.2)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -39,10 +39,10 @@ export const BlockingOverlay: React.FC<{
         aria-label={title}
         style={{
           width: 'min(560px, 100%)',
-          background: '#ffffff',
+          background: 'var(--card)',
           borderRadius: 18,
-          border: '1px solid rgba(15,23,42,0.14)',
-          boxShadow: '0 30px 90px rgba(15,23,42,0.22)',
+          border: '1px solid var(--border)',
+          boxShadow: 'none',
           padding: 18
         }}
       >
@@ -53,18 +53,17 @@ export const BlockingOverlay: React.FC<{
               width: 44,
               height: 44,
               borderRadius: 999,
-              border: '5px solid rgba(15,23,42,0.14)',
-              borderTopColor: '#2563eb',
+              border: '5px solid var(--border)',
+              borderTopColor: 'var(--text)',
               animation: 'ck-spin 0.9s linear infinite'
             }}
           />
-          <div style={{ fontWeight: 900, fontSize: 44, letterSpacing: -0.2, color: '#0f172a' }}>{title}</div>
+          <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', letterSpacing: 0, color: 'var(--text)' }}>{title}</div>
         </div>
-        <div className="muted" style={{ marginTop: 10, fontSize: 30, fontWeight: 700, lineHeight: 1.35 }}>
+        <div className="muted" style={{ marginTop: 10, fontSize: 'var(--ck-font-label)', fontWeight: 400, lineHeight: 1.35 }}>
           {(message || '').toString()}
         </div>
       </div>
     </div>
   );
 };
-

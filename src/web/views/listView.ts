@@ -36,14 +36,14 @@ export function renderListView(opts: ListViewOptions): void {
   columns.forEach(col => {
     const th = document.createElement('th');
     th.style.textAlign = 'left';
-    th.style.borderBottom = '1px solid #e5e7eb';
+    th.style.borderBottom = '1px solid var(--border)';
     th.style.padding = '6px';
     th.textContent = resolveLabel(col.label, col.fieldId, language);
     header.appendChild(th);
   });
   const thMeta = document.createElement('th');
   thMeta.style.textAlign = 'left';
-  thMeta.style.borderBottom = '1px solid #e5e7eb';
+  thMeta.style.borderBottom = '1px solid var(--border)';
   thMeta.style.padding = '6px';
   thMeta.textContent = 'Updated';
   header.appendChild(thMeta);
@@ -67,13 +67,13 @@ export function renderListView(opts: ListViewOptions): void {
           columns.forEach(col => {
             const td = document.createElement('td');
             td.style.padding = '6px';
-            td.style.borderBottom = '1px solid #f1f5f9';
+            td.style.borderBottom = '1px solid var(--border)';
             td.textContent = valueToString(row[col.fieldId]);
             tr.appendChild(td);
           });
           const meta = document.createElement('td');
           meta.style.padding = '6px';
-          meta.style.borderBottom = '1px solid #f1f5f9';
+          meta.style.borderBottom = '1px solid var(--border)';
           meta.textContent = row.updatedAt || row.createdAt || '';
           tr.appendChild(meta);
           if (onSelectRow) {

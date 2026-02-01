@@ -33,12 +33,10 @@ export const DocHtmlPreview: React.FC<{
       style={{
         width: '100%',
         height: iframeHeight,
-        border: '1px solid rgba(148,163,184,0.45)',
-        borderRadius: 16,
-        background: '#ffffff'
+        border: 'none',
+        borderRadius: 0,
+        background: 'transparent'
       }}
     />
   );
 };
-
-

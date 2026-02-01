@@ -31,7 +31,7 @@ export function renderFollowupView(opts: FollowupViewOptions): void {
   actions.forEach(action => {
     const btn = document.createElement(action.href ? 'a' : 'button');
     btn.textContent = action.label;
-    (btn as any).style = 'display:inline-block;margin:4px 6px;padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;background:#fff;';
+    (btn as any).style = 'display:inline-block;margin:4px 6px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);background:transparent;';
     if (action.href) {
       (btn as HTMLAnchorElement).href = action.href;
       (btn as HTMLAnchorElement).target = '_blank';

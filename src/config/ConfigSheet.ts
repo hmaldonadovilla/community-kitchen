@@ -44,7 +44,7 @@ export class ConfigSheet {
       ['ID', 'Type', 'Question (EN)', 'Question (FR)', 'Question (NL)', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Status (Active/Archived)', 'Config (JSON/REF)', 'Option Filter (JSON)', 'Validation Rules (JSON)', 'List View?', 'Edit Options']
     ];
     
-    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
+    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers).setFontWeight('normal');
     
     // Add IDs to example rows if missing
     const rowsWithIds = exampleRows.map(row => {
@@ -486,7 +486,7 @@ export class ConfigSheet {
   const headers = [
       ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Required?', 'Options (EN)', 'Options (FR)', 'Options (NL)', 'Config (JSON/REF)', 'Option Filter (JSON)', 'Validation Rules (JSON)', 'List View?', 'Edit Options']
     ];
-    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers).setFontWeight('bold').setBackground('#f3f3f3');
+    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers).setFontWeight('normal');
 
     // Data validation for Type column
     const typeRange = sheet.getRange(2, 2, 200, 1);

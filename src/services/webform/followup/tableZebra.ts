@@ -5,7 +5,7 @@
  * doesn't reliably expose background APIs across Apps Script runtimes.
  */
 
-export const DEFAULT_ZEBRA_STRIPE_COLOR = '#f1f5f9'; // slate-100
+export const DEFAULT_ZEBRA_STRIPE_COLOR = 'transparent';
 
 export const applyZebraStripeToRow = (
   row: GoogleAppsScript.Document.TableRow,
@@ -22,5 +22,4 @@ export const applyZebraStripeToRow = (
     }
   }
 };
-
 

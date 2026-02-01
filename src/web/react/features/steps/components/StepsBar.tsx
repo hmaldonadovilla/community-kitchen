@@ -39,8 +39,8 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
         overflowX: 'auto',
         padding: '14px 16px',
         borderRadius: 16,
-        border: '1px solid rgba(15,23,42,0.10)',
-        background: 'rgba(248,250,252,0.9)'
+        border: '1px solid var(--border)',
+        background: 'transparent'
       }}
     >
       {steps.map((step, idx) => {
@@ -57,27 +57,9 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
         // - bad: complete but invalid (has validation errors)
         // - good: valid
         const tone = !reachable ? 'locked' : active ? 'active' : valid ? 'good' : complete ? 'bad' : 'available';
-        const bg =
-          tone === 'active'
-            ? 'rgba(59,130,246,0.18)'
-            : tone === 'good'
-              ? 'rgba(34,197,94,0.14)'
-              : tone === 'bad'
-                ? 'rgba(239,68,68,0.10)'
-                : tone === 'locked'
-                  ? 'rgba(148,163,184,0.22)'
-                  : 'rgba(59,130,246,0.10)';
-        const border =
-          tone === 'active'
-            ? 'rgba(59,130,246,0.55)'
-            : tone === 'good'
-              ? 'rgba(34,197,94,0.42)'
-              : tone === 'bad'
-                ? 'rgba(239,68,68,0.48)'
-                : tone === 'locked'
-                  ? 'rgba(100,116,139,0.50)'
-                  : 'rgba(59,130,246,0.35)';
-        const textColor = tone === 'locked' ? 'rgba(15,23,42,0.60)' : '#0f172a';
+        const bg = active ? 'var(--card)' : 'transparent';
+        const border = active ? 'var(--text)' : 'var(--border)';
+        const textColor = tone === 'locked' ? 'var(--muted)' : 'var(--text)';
 
         return (
           <button
@@ -97,9 +79,9 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
               border: `1px solid ${border}`,
               background: bg,
               color: textColor,
-              fontWeight: active ? 900 : 800,
+              fontWeight: active ? 600 : 500,
               whiteSpace: 'nowrap',
-              boxShadow: tone === 'available' ? '0 1px 0 rgba(59,130,246,0.10)' : undefined,
+              boxShadow: 'none',
               opacity: 1,
               cursor: reachable ? 'pointer' : 'not-allowed'
             }}
@@ -113,17 +95,8 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background:
-                  tone === 'good'
-                    ? 'rgba(34,197,94,0.20)'
-                    : tone === 'bad'
-                      ? 'rgba(239,68,68,0.18)'
-                      : tone === 'active'
-                        ? 'rgba(59,130,246,0.18)'
-                        : tone === 'locked'
-                          ? 'rgba(100,116,139,0.22)'
-                          : 'rgba(59,130,246,0.16)',
-                color: tone === 'good' ? '#166534' : tone === 'bad' ? '#991b1b' : tone === 'active' ? '#1d4ed8' : '#334155',
+                background: 'transparent',
+                color: textColor,
                 flex: '0 0 auto'
               }}
               title={!reachable ? 'Locked' : valid ? 'Valid' : complete ? 'Needs attention' : 'Available'}
@@ -133,9 +106,9 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
               ) : tone === 'bad' ? (
                 <XIcon size={22} />
               ) : tone === 'locked' ? (
-                <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>–</span>
+                <span style={{ fontSize: 'var(--ck-font-control)', fontWeight: 600, lineHeight: 1 }}>–</span>
               ) : (
-                <span style={{ fontSize: 22, fontWeight: 900, lineHeight: 1 }}>›</span>
+                <span style={{ fontSize: 'var(--ck-font-control)', fontWeight: 600, lineHeight: 1 }}>›</span>
               )}
             </span>
             <span>
@@ -147,4 +120,3 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
     </div>
   );
 };
-
