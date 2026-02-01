@@ -131,6 +131,15 @@ To export the full form configuration as a single JSON document for diagnostics 
 - Web app URL: append `?config=1` (returns JSON for the selected form).
 - DevTools: run `window.__CK_EXPORT_FORM_CONFIG__()` to fetch and store JSON in `window.__CK_FORM_CONFIG_JSON__` (pass `{ logJson: true }` to print it).
 
+## Environment tag (optional)
+
+To show a small environment label in the web app header (for example, to distinguish staging vs prod), set a Script Property:
+
+- Key: `CK_UI_ENV_TAG`
+- Value: the label you want to display (e.g., `Staging`)
+
+After saving the property in the Apps Script project settings, refresh the web app to see the tag.
+
 ### Bundled config exports (sheetless override)
 
 You can bundle a config export into the Apps Script build so the app reads config from JSON instead of sheets:

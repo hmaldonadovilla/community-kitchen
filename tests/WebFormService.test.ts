@@ -90,6 +90,23 @@ describe('WebFormService', () => {
     expect(upload?.uploadConfig?.maxFiles).toBe(1);
   });
 
+  test('fetchBootstrapContext returns env tag from script properties', () => {
+    const previous = (global as any).PropertiesService;
+    const props = {
+      getProperty: jest.fn((key: string) => (key === 'CK_UI_ENV_TAG' ? 'Staging' : null))
+    };
+    (global as any).PropertiesService = {
+      getScriptProperties: () => props
+    };
+
+    try {
+      const res = service.fetchBootstrapContext('Config: Delivery');
+      expect(res.envTag).toBe('Staging');
+    } finally {
+      (global as any).PropertiesService = previous;
+    }
+  });
+
   test('submitWebForm appends rows with line item JSON and file url', () => {
     const result = service.submitWebForm({
       formKey: 'Config: Delivery',

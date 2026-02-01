@@ -291,7 +291,7 @@ const HTML_PREVIEW_STYLES = `
   }
 `;
 
-const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
+const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }) => {
   const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
     'EN' | 'FR' | 'NL'
   >;
@@ -5934,6 +5934,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
     );
   }, [autoSaveEnabled, draftSave.message, draftSave.phase, isClosedRecord, language, view]);
 
+  const headerEnvTag = useMemo(() => {
+    const trimmed = (envTag || '').toString().trim();
+    if (!trimmed) return null;
+    return (
+      <span className="ck-env-tag" role="status" aria-label={`Environment: ${trimmed}`}>
+        {trimmed}
+      </span>
+    );
+  }, [envTag]);
+
+  const headerRight = useMemo(() => {
+    if (!headerEnvTag && !headerSaveIndicator) return null;
+    return (
+      <>
+        {headerEnvTag}
+        {headerSaveIndicator}
+      </>
+    );
+  }, [headerEnvTag, headerSaveIndicator]);
+
   const dedupDialogConflict = useMemo(() => {
     const conflict = (dedupConflict || dedupNotice) as any;
     if (!conflict || !conflict.existingRecordId) return null;
@@ -6467,7 +6487,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record }) => {
       <style>{HTML_PREVIEW_STYLES}</style>
       <AppHeader
         title={definition.title || 'Form'}
-        titleRight={headerSaveIndicator}
+        titleRight={headerRight}
         logoUrl={definition.appHeader?.logoUrl}
         buildMarker={BUILD_MARKER}
         isMobile={isMobile}

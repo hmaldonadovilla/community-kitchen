@@ -28,6 +28,7 @@ import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplate
 import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
 import { ensureRecordIndexSheet } from './webform/recordIndex';
 import { getBundledConfigEnv, getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
+import { getUiEnvTag } from './webform/envTag';
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -246,8 +247,10 @@ export class WebFormService {
     formKey: string;
     configSource?: string;
     configEnv?: string;
+    envTag?: string;
   } {
     const configEnv = getBundledConfigEnv() || undefined;
+    const envTag = getUiEnvTag() || undefined;
     const bundled = this.resolveBundledConfig(formKey);
     if (bundled) {
       const def = this.buildBundledDefinition(bundled);
@@ -261,9 +264,10 @@ export class WebFormService {
         formKey: resolvedKey,
         questions: def.questions?.length || 0,
         source: 'bundled',
-        configEnv: configEnv || null
+        configEnv: configEnv || null,
+        envTag: envTag || null
       });
-      return { definition: def, formKey: resolvedKey, configSource: 'bundled', configEnv };
+      return { definition: def, formKey: resolvedKey, configSource: 'bundled', configEnv, envTag };
     }
     const def = this.getOrBuildDefinition(formKey);
     const resolvedKey = (formKey || '').toString().trim() || def.title || '__DEFAULT__';
@@ -271,9 +275,10 @@ export class WebFormService {
       formKey: resolvedKey,
       questions: def.questions?.length || 0,
       source: 'sheet',
-      configEnv: configEnv || null
+      configEnv: configEnv || null,
+      envTag: envTag || null
     });
-    return { definition: def, formKey: resolvedKey, configSource: 'sheet', configEnv };
+    return { definition: def, formKey: resolvedKey, configSource: 'sheet', configEnv, envTag };
   }
 
   public fetchFormConfig(formKey?: string): FormConfigExport {

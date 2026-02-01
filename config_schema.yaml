@@ -4376,3 +4376,13 @@ components:
             Environment name used for bundle selection (e.g., "staging" or "prod").
             When set, config exports should be saved to `docs/config/exports/<env>/`
             and the build should embed only that environment's exports.
+    ScriptPropertiesConfig:
+      type: object
+      description: |
+        Google Apps Script Script Properties consumed by the web app at runtime.
+      properties:
+        CK_UI_ENV_TAG:
+          type: string
+          description: |
+            Optional label rendered in the web app header to indicate the environment (e.g., "Staging").
+            Set this in Apps Script: Project Settings → Script properties.

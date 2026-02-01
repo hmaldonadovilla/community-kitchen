@@ -280,6 +280,21 @@ export function buildWebFormHtml(
       .ck-app-title-right [data-tone="paused"] {
         color: rgba(15, 23, 42, 0.62);
       }
+      .ck-env-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        font-weight: 600;
+        font-size: 0.95em;
+        line-height: 1.2;
+        text-transform: none;
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
       /* Left slide-in drawer */
       .ck-app-drawer-overlay {
         position: fixed;
