@@ -41,8 +41,7 @@ export const SearchableSelect: React.FC<{
     });
   }, [normalizedQuery, options]);
 
-  const maxItems = 60;
-  const visible = filtered.slice(0, maxItems);
+  const visible = filtered;
 
   const commitValue = (next: SearchableSelectOption | null) => {
     if (!next) return;

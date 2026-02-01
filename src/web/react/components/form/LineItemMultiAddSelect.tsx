@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { tSystem } from '../../../systemStrings';
 import type { LangCode } from '../../../types';
@@ -24,16 +24,17 @@ export const LineItemMultiAddSelect: React.FC<{
   diagnosticMeta?: Record<string, unknown>;
 }> = ({ label, language, options, disabled, placeholder, helperText, emptyText, onAddSelected, onDiagnostic, diagnosticMeta }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputWrapRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  const [menuLayout, setMenuLayout] = useState<{ top: number; left: number; right: number } | null>(null);
 
   const selectedCount = selected.length;
   const normalizedQuery = query.trim();
   const hasQuery = normalizedQuery.length > 0;
   const showClear = !disabled && Boolean(normalizedQuery);
-  const maxItems = 60;
   const resolvedHelperText = (helperText || '').toString().trim();
   const mergeDiagnostic = (payload?: Record<string, unknown>) => {
     if (!diagnosticMeta) return payload;
@@ -48,7 +49,39 @@ export const LineItemMultiAddSelect: React.FC<{
     });
   }, [hasQuery, normalizedQuery, options]);
 
-  const visibleOptions = filtered.slice(0, maxItems);
+  const visibleOptions = filtered;
+
+  const updateMenuLayout = useCallback(() => {
+    const el = inputWrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const top = Math.max(0, Math.round(rect.bottom + 6));
+    const left = Math.max(0, Math.round(rect.left));
+    const right = Math.max(0, Math.round(window.innerWidth - rect.right));
+    setMenuLayout(prev => {
+      if (prev && prev.top === top && prev.left === left && prev.right === right) return prev;
+      return { top, left, right };
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuLayout(null);
+      return;
+    }
+    updateMenuLayout();
+  }, [open, updateMenuLayout]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = () => updateMenuLayout();
+    window.addEventListener('resize', handle);
+    window.addEventListener('scroll', handle);
+    return () => {
+      window.removeEventListener('resize', handle);
+      window.removeEventListener('scroll', handle);
+    };
+  }, [open, updateMenuLayout]);
 
   useEffect(() => {
     if (!selectedCount) return;
@@ -103,9 +136,28 @@ export const LineItemMultiAddSelect: React.FC<{
     setOpen(false);
   };
 
+  const dismissKeyboardIfNeeded = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (document.activeElement !== el) return;
+    try {
+      el.blur();
+    } catch (_) {
+      // ignore
+    }
+  };
+
+  const menuStyle = menuLayout
+    ? ({
+        '--ck-line-item-multiadd-menu-top': `${menuLayout.top}px`,
+        '--ck-line-item-multiadd-menu-left': `${menuLayout.left}px`,
+        '--ck-line-item-multiadd-menu-right': `${menuLayout.right}px`
+      } as React.CSSProperties)
+    : undefined;
+
   return (
     <div className="ck-line-item-multiadd" ref={rootRef}>
-      <div className="ck-line-item-multiadd__input">
+      <div className="ck-line-item-multiadd__input" ref={inputWrapRef}>
         <input
           ref={inputRef}
           type="search"
@@ -168,8 +220,16 @@ export const LineItemMultiAddSelect: React.FC<{
         ) : null}
       </div>
       {open ? (
-        <div className="ck-line-item-multiadd__menu" aria-label={label}>
-          <div className="ck-line-item-multiadd__options">
+        <div
+          className={`ck-line-item-multiadd__menu${menuLayout ? ' ck-line-item-multiadd__menu--modal' : ''}`}
+          aria-label={label}
+          style={menuStyle}
+        >
+          <div
+            className="ck-line-item-multiadd__options"
+            onScroll={dismissKeyboardIfNeeded}
+            onTouchMove={dismissKeyboardIfNeeded}
+          >
             {visibleOptions.length ? (
               visibleOptions.map(opt => {
                 const checked = selected.includes(opt.value);
@@ -204,7 +264,7 @@ export const LineItemMultiAddSelect: React.FC<{
               style={withDisabled(buttonStyles.primary, !!disabled || selectedCount === 0)}
               onClick={handleAddSelected}
             >
-              {tSystem('lineItems.addSelected', language, 'Add selected')}
+              {tSystem('lineItems.addSelected', language, 'Add selected')} ({selectedCount})
             </button>
           </div>
         </div>
