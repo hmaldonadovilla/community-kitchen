@@ -72,14 +72,10 @@ export const BUNDLED_FORM_CONFIGS = [
           "fr": "Synthèse checklist"
         },
         "emailRecipients": [
-          "hmaldonadovilla@gmail.com"
+          "operations@communitykitchen.be"
         ],
-        "emailCc": [
-          "hmaldonadovilla@gmail.com"
-        ],
-        "emailBcc": [
-          "hmaldonadovilla@gmail.com"
-        ],
+        "emailCc": [],
+        "emailBcc": [],
         "statusFieldId": "Status",
         "statusTransitions": {
           "onPdf": "PDF ready",
@@ -6520,14 +6516,10 @@ export const BUNDLED_FORM_CONFIGS = [
           "fr": "Synthèse checklist"
         },
         "emailRecipients": [
-          "hmaldonadovilla@gmail.com"
+          "operations@communitykitchen.be"
         ],
-        "emailCc": [
-          "hmaldonadovilla@gmail.com"
-        ],
-        "emailBcc": [
-          "hmaldonadovilla@gmail.com"
-        ],
+        "emailCc": [],
+        "emailBcc": [],
         "statusFieldId": "Status",
         "statusTransitions": {
           "onPdf": "PDF ready",
