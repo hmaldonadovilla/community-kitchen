@@ -14,7 +14,8 @@ export const DateInput: React.FC<{
   readOnly?: boolean;
   disabled?: boolean;
   ariaLabel?: string;
-}> = ({ id, value, onChange, language, readOnly, disabled, ariaLabel }) => {
+  ariaDescribedBy?: string;
+}> = ({ id, value, onChange, language, readOnly, disabled, ariaLabel, ariaDescribedBy }) => {
   const [focused, setFocused] = useState(false);
   const [typing, setTyping] = useState(false);
   const isDisabled = Boolean(disabled || readOnly);
@@ -44,6 +45,7 @@ export const DateInput: React.FC<{
         readOnly={readOnly}
         disabled={isDisabled}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
         onFocus={() => {
           if (isDisabled) return;
           setFocused(true);
@@ -66,5 +68,4 @@ export const DateInput: React.FC<{
     </div>
   );
 };
-
 

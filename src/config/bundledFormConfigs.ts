@@ -8711,6 +8711,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "fr": "Entrez le nombre de portions.",
                 "nl": "Voer het aantal porties in."
               },
+              "ui": {
+                "helperText": {
+                  "en": "Enter the number of portions.",
+                  "fr": "Entrez le nombre de portions.",
+                  "nl": "Voer het aantal porties in."
+                },
+                "helperPlacement": "belowLabel"
+              },
               "pair": "meal_qty",
               "options": [],
               "optionsFr": [],
@@ -13999,6 +14007,14 @@ export const BUNDLED_FORM_CONFIGS = [
                   "en": "Enter the number of portions.",
                   "fr": "Entrez le nombre de portions.",
                   "nl": "Voer het aantal porties in."
+                },
+                "ui": {
+                  "helperText": {
+                    "en": "Enter the number of portions.",
+                    "fr": "Entrez le nombre de portions.",
+                    "nl": "Voer het aantal porties in."
+                  },
+                  "helperPlacement": "belowLabel"
                 },
                 "pair": "meal_qty",
                 "options": [],

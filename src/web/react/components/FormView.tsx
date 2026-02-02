@@ -44,6 +44,7 @@ import {
   applyUploadConstraints,
   clearLineItemGroupErrors,
   describeUploadItem,
+  resolveFieldHelperText,
   formatOptionFilterNonMatchWarning,
   getUploadMinRequired,
   isUploadValueComplete,
@@ -6772,6 +6773,20 @@ const FormView: React.FC<FormViewProps> = ({
               : inputValue;
         const displayText =
           displayValue === undefined || displayValue === null ? '' : displayValue.toString();
+        const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
+        const helperText = helperCfg.text;
+        const supportsPlaceholder = q.type === 'TEXT' || q.type === 'PARAGRAPH' || q.type === 'NUMBER';
+        const helperPlacement =
+          helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
+        const isEditableField =
+          !renderAsLabel && !useValueMap && !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
+        const helperId = helperText && helperPlacement === 'belowLabel' && isEditableField ? `ck-field-helper-${q.id}` : undefined;
+        const helperNode =
+          helperText && helperPlacement === 'belowLabel' && isEditableField ? (
+            <div id={helperId} className="ck-field-helper">
+              {helperText}
+            </div>
+          ) : null;
         if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
           return renderOverlayOpenReplaceButton(displayText || null);
         }
@@ -6779,6 +6794,8 @@ const FormView: React.FC<FormViewProps> = ({
           return renderReadOnly(displayValue || null, { stacked: forceStackedLabel });
         }
         if (q.type === 'NUMBER') {
+          const placeholder = helperText && helperPlacement === 'placeholder' && isEditableField ? helperText : undefined;
+          const numericOnlyMessage = tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
           return (
             <div
               key={q.id}
@@ -6796,14 +6813,33 @@ const FormView: React.FC<FormViewProps> = ({
                 disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
                 readOnly={useValueMap || q.readOnly === true}
                 ariaLabel={resolveFieldLabel(q, language, q.id)}
+                ariaDescribedBy={helperId}
+                placeholder={placeholder}
+                onInvalidInput={
+                  isEditableField
+                    ? ({ reason, value }) => {
+                  setErrors(prev => {
+                    const next = { ...prev };
+                    const existing = next[q.id];
+                    if (existing && existing !== numericOnlyMessage) return prev;
+                    if (existing === numericOnlyMessage) return prev;
+                    next[q.id] = numericOnlyMessage;
+                    return next;
+                  });
+                  onDiagnostic?.('field.number.invalidInput', { scope: 'top', fieldId: q.id, reason, value });
+                }
+                    : undefined
+                }
                 onChange={next => handleFieldChange(q, next)}
               />
+              {helperPlacement === 'belowLabel' ? helperNode : null}
               {renderOverlayOpenInlineButton(displayText || null)}
               {errors[q.id] && <div className="error">{errors[q.id]}</div>}
               {renderWarnings(q.id)}
             </div>
           );
         }
+        const placeholder = helperText && helperPlacement === 'placeholder' && isEditableField ? helperText : undefined;
         return (
           <div
             key={q.id}
@@ -6836,6 +6872,8 @@ const FormView: React.FC<FormViewProps> = ({
                     readOnly={useValueMap || q.readOnly === true}
                     disabled={submitting || isFieldLockedByDedup(q.id)}
                     rows={((q as any)?.ui as any)?.paragraphRows || 4}
+                    placeholder={placeholder}
+                    aria-describedby={helperId}
                   />
                   <div className="ck-paragraph-disclaimer">{`${paragraphDisclaimer.separator}\n${paragraphDisclaimer.sectionText}`}</div>
                 </div>
@@ -6850,6 +6888,8 @@ const FormView: React.FC<FormViewProps> = ({
                   readOnly={useValueMap || q.readOnly === true}
                   disabled={submitting || isFieldLockedByDedup(q.id)}
                   rows={((q as any)?.ui as any)?.paragraphRows || 4}
+                  placeholder={placeholder}
+                  aria-describedby={helperId}
                 />
               )
             ) : q.type === 'DATE' ? (
@@ -6859,6 +6899,7 @@ const FormView: React.FC<FormViewProps> = ({
                 readOnly={useValueMap || q.readOnly === true}
                 disabled={submitting || isFieldLockedByDedup(q.id)}
                 ariaLabel={resolveLabel(q, language)}
+                ariaDescribedBy={helperId}
                 onChange={next => handleFieldChange(q, next)}
               />
             ) : (
@@ -6868,8 +6909,11 @@ const FormView: React.FC<FormViewProps> = ({
                 onChange={e => handleFieldChange(q, e.target.value)}
                 readOnly={useValueMap || q.readOnly === true}
                 disabled={submitting || isFieldLockedByDedup(q.id)}
+                placeholder={placeholder}
+                aria-describedby={helperId}
               />
             )}
+            {helperPlacement === 'belowLabel' ? helperNode : null}
             {renderOverlayOpenInlineButton(displayText || null)}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
             {renderWarnings(q.id)}
@@ -6881,6 +6925,15 @@ const FormView: React.FC<FormViewProps> = ({
         const choiceValue = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
         const selected = opts.find(opt => opt.value === choiceValue);
         const display = selected?.label || choiceValue || null;
+        const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
+        const helperText = helperCfg.text;
+        const isEditableField = !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
+        const helperId = helperText && isEditableField ? `ck-field-helper-${q.id}` : undefined;
+        const helperNode = helperText && isEditableField ? (
+          <div id={helperId} className="ck-field-helper">
+            {helperText}
+          </div>
+        ) : null;
         if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
           return renderOverlayOpenReplaceButton(display);
         }
@@ -6909,6 +6962,7 @@ const FormView: React.FC<FormViewProps> = ({
               disabled: submitting || q.readOnly === true || isFieldLockedByDedup(q.id),
               onChange: next => handleFieldChange(q, next)
             })}
+            {helperNode}
             {renderOverlayOpenInlineButton(display)}
             {(() => {
               const fallbackLabel = resolveLabel(q, language);
@@ -6924,6 +6978,15 @@ const FormView: React.FC<FormViewProps> = ({
         const hasAnyOption = !!((optionSet.en && optionSet.en.length) || (optionSet.fr && optionSet.fr.length) || (optionSet.nl && optionSet.nl.length));
         const isConsentCheckbox = !q.dataSource && !hasAnyOption;
         const selected = Array.isArray(values[q.id]) ? (values[q.id] as string[]) : [];
+        const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
+        const helperText = helperCfg.text;
+        const isEditableField = !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
+        const helperId = helperText && isEditableField ? `ck-field-helper-${q.id}` : undefined;
+        const helperNode = helperText && isEditableField ? (
+          <div id={helperId} className="ck-field-helper">
+            {helperText}
+          </div>
+        ) : null;
         const display = (() => {
           if (isConsentCheckbox) {
             return values[q.id]
@@ -6969,6 +7032,7 @@ const FormView: React.FC<FormViewProps> = ({
                 </span>
                 ) : null}
               </label>
+              {helperNode}
               {renderOverlayOpenInlineButton(display)}
               {errors[q.id] && <div className="error">{errors[q.id]}</div>}
               {renderWarnings(q.id)}
@@ -7029,6 +7093,7 @@ const FormView: React.FC<FormViewProps> = ({
                 ))}
               </div>
             )}
+            {helperNode}
             {renderOverlayOpenInlineButton(display)}
             {(() => {
               const withTooltips = opts.filter(opt => opt.tooltip && selected.includes(opt.value));
@@ -7053,6 +7118,17 @@ const FormView: React.FC<FormViewProps> = ({
       case 'FILE_UPLOAD': {
         const items = toUploadItems(values[q.id]);
         const uploadConfig = q.uploadConfig || {};
+        const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
+        const helperText = helperCfg.text;
+        const readOnly = q.readOnly === true;
+        const locked = isFieldLockedByDedup(q.id);
+        const isEditableField = !submitting && !readOnly && !locked;
+        const helperId = helperText && isEditableField ? `ck-field-helper-${q.id}` : undefined;
+        const helperNode = helperText && isEditableField ? (
+          <div id={helperId} className="ck-field-helper">
+            {helperText}
+          </div>
+        ) : null;
         const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
         const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{
           size?: number;
@@ -7077,8 +7153,6 @@ const FormView: React.FC<FormViewProps> = ({
           .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
           .filter(Boolean);
         const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
-        const readOnly = q.readOnly === true;
-        const locked = isFieldLockedByDedup(q.id);
         const hasFiles = items.length > 0;
         const viewMode = readOnly || locked || maxed || hasFiles;
         const LeftIcon = viewMode ? EyeIcon : SlotIcon;
@@ -7172,6 +7246,7 @@ const FormView: React.FC<FormViewProps> = ({
               </div>
               ) : null}
             </div>
+            {helperNode}
             <div style={srOnly} aria-live="polite">
               {uploadAnnouncements[q.id] || ''}
             </div>
@@ -7421,6 +7496,10 @@ const FormView: React.FC<FormViewProps> = ({
             return hasAnyEnabledRow;
           })();
           const groupLabel = resolveLabel(q, language);
+          const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
+          const helperText = helperCfg.text;
+          const isEditableField = !locked && q.readOnly !== true && q.ui?.renderAsLabel !== true;
+          const helperNode = helperText && isEditableField ? <div className="ck-field-helper">{helperText}</div> : null;
           const pillText = groupLabel;
           const pillAriaLabel = pillText ? `${tapToOpenLabel} ${pillText}` : tapToOpenLabel;
           const pillClass = groupHasAnyError
@@ -7459,6 +7538,7 @@ const FormView: React.FC<FormViewProps> = ({
                   <span className="ck-progress-caret">▸</span>
                 </button>
               ) : null}
+              {helperNode}
               {renderWarnings(q.id)}
               {errors[q.id] ? (
                 <div className="error">{errors[q.id]}</div>

@@ -370,6 +370,18 @@ export interface QuestionUiConfig {
    */
   hideLabel?: boolean;
   /**
+   * Optional helper text shown for this field.
+   *
+   * Use `helperPlacement` to control where it appears (below label vs inside the control).
+   */
+  helperText?: LocalizedString;
+  /**
+   * Where to render `helperText`.
+   * - belowLabel: render as supporting text below the control (default)
+   * - placeholder: render inside the control as a placeholder (when supported)
+   */
+  helperPlacement?: 'belowLabel' | 'placeholder';
+  /**
    * When true, render the field value as a read-only label in the edit view.
    */
   renderAsLabel?: boolean;

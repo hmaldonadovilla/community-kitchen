@@ -45,6 +45,7 @@ Meal Production (Steps UI) | Recipes (Home Page) | Storage and cleaning checks (
 - **Default Values**: `defaultValue` can prefill fields on new records/new rows (top-level + line items) without overriding user edits. `selectionEffects.type="addLineItems"` presets can reference `$row.FIELD_ID` and `$top.FIELD_ID` to copy values into newly created rows. Selection effects also support `type: "setValue"` to update a field in the current row or top-level record (supports `$row.` / `$top.` refs and `null` to clear), `when` gating (visibility-style conditions, including numeric comparisons), `hideRemoveButton` (suppress Remove for effect-created rows), and `type: "deleteLineItems"` (delete linked child rows; cascade deletion prevents orphaned rows). Generated rows are filtered by the target fields' `optionFilter` allowlists (disallowed mapped values are skipped).
 - **System UI strings (i18n)**: App/system copy (menus, autosave banners, expand/collapse, etc.) is stored in `src/web/systemStrings.json` with defaults for EN/FR/NL.
 - **Hide labels (per field)**: Hide any field label with `ui.hideLabel: true` (top-level questions and line-item fields). By default this hides labels in both the Edit view and the native React Summary view; override Summary behavior with `ui.summaryHideLabel: true|false`.
+- **Helper text (per field)**: Add localized helper text with `ui.helperText`. Default renders below the control; set `ui.helperPlacement: "placeholder"` to render inside the control when supported.
 
 ### Line items and workflows
 

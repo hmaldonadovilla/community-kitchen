@@ -895,6 +895,20 @@ components:
 
             Use sparingly: labels help users understand fields. This is mainly useful when a field is already
             clearly explained by surrounding UI, or when you render your own label elsewhere.
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional helper text shown for this field.
+
+            Use `helperPlacement` to choose whether it renders below the field label/control (default)
+            or inside the control as a placeholder (when supported).
+        helperPlacement:
+          type: string
+          enum: [belowLabel, placeholder]
+          description: |
+            Where to render `helperText`.
+            - `belowLabel`: render as supporting text below the field control (default)
+            - `placeholder`: render inside the control as a placeholder (when supported; falls back to belowLabel)
         summaryHideLabel:
           type: boolean
           description: |

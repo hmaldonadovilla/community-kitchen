@@ -188,6 +188,19 @@ If you want a discrete environment label (e.g., "Staging") to appear in the web 
 
         Works for both top-level questions and line-item fields. Note: custom **HTML Summary templates** control labels via the template HTML itself (this setting does not modify template markup).
 
+    - **Field helper text (localized)**: Add helper text to any top-level question or line-item field with `ui.helperText`.
+      - Default: helper text renders below the field control (`ui.helperPlacement: "belowLabel"`).
+      - To render it inside the control (when supported), set `ui.helperPlacement: "placeholder"`.
+
+        ```json
+        {
+          "ui": {
+            "helperText": { "en": "Enter a name", "fr": "Entrez un nom", "nl": "Voer een naam in" },
+            "helperPlacement": "placeholder"
+          }
+        }
+        ```
+
     - **Custom required-field message (localized)**: For required fields, you can override the default required error message by adding `requiredMessage` to the field’s Config JSON. The message supports `{field}` (resolved to the localized field label).
       - For `FILE_UPLOAD` fields, this is used when the effective minimum is 1 (i.e., `required: true` with no `minFiles`, or `uploadConfig.minFiles: 1`). For higher minimums, use `uploadConfig.errorMessages.minFiles`.
 
