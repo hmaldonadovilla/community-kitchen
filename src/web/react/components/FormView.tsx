@@ -7079,7 +7079,8 @@ const FormView: React.FC<FormViewProps> = ({
         const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
         const readOnly = q.readOnly === true;
         const locked = isFieldLockedByDedup(q.id);
-        const viewMode = readOnly || maxed || locked;
+        const hasFiles = items.length > 0;
+        const viewMode = readOnly || locked || maxed || hasFiles;
         const LeftIcon = viewMode ? EyeIcon : SlotIcon;
         const leftLabel = viewMode
           ? tSystem('files.view', language, 'View photos')
@@ -10078,7 +10079,8 @@ const FormView: React.FC<FormViewProps> = ({
                           const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
                           const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
                           const readOnly = (field as any)?.readOnly === true;
-                          const viewMode = readOnly || maxed;
+                          const hasFiles = items.length > 0;
+                          const viewMode = readOnly || maxed || hasFiles;
                           const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                           const leftLabel = viewMode
                           ? tSystem('files.view', language, 'View photos')

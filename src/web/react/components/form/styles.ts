@@ -161,7 +161,8 @@ export const FORM_VIEW_STYLES = `
         }
         /* Numeric fields: align values to the right for better scanability (especially in 2-up grids). */
         .form-card input[type="number"],
-        .webform-overlay input[type="number"] {
+        .webform-overlay input[type="number"],
+        .ck-form-sections input[type="number"] {
           text-align: right;
           font-variant-numeric: tabular-nums;
         }
@@ -175,7 +176,8 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-control);
         }
         .form-card .ck-line-item-table,
-        .webform-overlay .ck-line-item-table {
+        .webform-overlay .ck-line-item-table,
+        .ck-form-sections .ck-line-item-table {
           width: 100%;
           border-collapse: separate;
           border-spacing: 0;
@@ -184,21 +186,94 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table th,
         .form-card .ck-line-item-table td,
         .webform-overlay .ck-line-item-table th,
-        .webform-overlay .ck-line-item-table td {
+        .webform-overlay .ck-line-item-table td,
+        .ck-form-sections .ck-line-item-table th,
+        .ck-form-sections .ck-line-item-table td {
           padding: 8px 10px;
           border-bottom: 1px solid var(--border);
           text-align: left;
           overflow-wrap: anywhere;
           word-break: break-word;
         }
+        /* Line items (table mode): enforce row alignment (label left, controls right). */
+        .form-card .ck-line-item-table th:first-child,
+        .form-card .ck-line-item-table td:first-child,
+        .webform-overlay .ck-line-item-table th:first-child,
+        .webform-overlay .ck-line-item-table td:first-child,
+        .ck-form-sections .ck-line-item-table th:first-child,
+        .ck-form-sections .ck-line-item-table td:first-child {
+          text-align: left;
+        }
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions),
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions),
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) {
+          text-align: right;
+        }
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__value,
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__value,
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__value,
+        .form-card
+          .ck-line-item-table
+          td:not(:first-child):not(.ck-line-item-table__actions)
+          .ck-line-item-table__control:not(.ck-line-item-table__control--consent),
+        .webform-overlay
+          .ck-line-item-table
+          td:not(:first-child):not(.ck-line-item-table__actions)
+          .ck-line-item-table__control:not(.ck-line-item-table__control--consent),
+        .ck-form-sections
+          .ck-line-item-table
+          td:not(:first-child):not(.ck-line-item-table__actions)
+          .ck-line-item-table__control:not(.ck-line-item-table__control--consent) {
+          align-items: flex-end;
+        }
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__control--consent,
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__control--consent,
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__control--consent {
+          align-items: flex-end;
+        }
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-row,
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-row,
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-row,
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-progress,
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-progress,
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-progress {
+          justify-content: flex-end;
+        }
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-row.ck-upload-row--table,
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-row.ck-upload-row--table,
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-row.ck-upload-row--table {
+          width: auto;
+          flex-wrap: nowrap;
+        }
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-pill-btn,
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-pill-btn,
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-pill-btn {
+          justify-content: flex-end;
+        }
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-pill-btn.ck-upload-pill-btn--table,
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-pill-btn.ck-upload-pill-btn--table,
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-pill-btn.ck-upload-pill-btn--table {
+          flex: 0 0 auto;
+          min-height: 44px;
+          padding: 8px 12px;
+          gap: 8px;
+          justify-content: center;
+        }
+        .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-helper,
+        .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-helper,
+        .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-helper {
+          text-align: right;
+        }
         .form-card .ck-line-item-table th,
-        .webform-overlay .ck-line-item-table th {
+        .webform-overlay .ck-line-item-table th,
+        .ck-form-sections .ck-line-item-table th {
           font-size: var(--ck-font-control);
           font-weight: 600;
           color: var(--muted);
         }
         .form-card .ck-line-item-table thead th,
-        .webform-overlay .ck-line-item-table thead th {
+        .webform-overlay .ck-line-item-table thead th,
+        .ck-form-sections .ck-line-item-table thead th {
           position: sticky;
           top: 0;
           z-index: 2;
@@ -206,7 +281,8 @@ export const FORM_VIEW_STYLES = `
           box-shadow: none;
         }
         .form-card .ck-line-item-table__actions,
-        .webform-overlay .ck-line-item-table__actions {
+        .webform-overlay .ck-line-item-table__actions,
+        .ck-form-sections .ck-line-item-table__actions {
           width: 1%;
           min-width: 40px;
           white-space: nowrap;

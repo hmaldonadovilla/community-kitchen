@@ -2507,17 +2507,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               const maxed = maxFiles ? items.length >= maxFiles : false;
               const isComplete = minRequired > 0 ? items.length >= minRequired : items.length > 0;
               const isEmpty = items.length === 0;
-              const missing = minRequired > 0 ? Math.max(0, minRequired - items.length) : 0;
               const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
               const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
-              const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
               const readOnly = (field as any)?.readOnly === true;
-              const viewMode = readOnly || maxed;
-              const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-              const leftLabel = viewMode
-                ? tSystem('files.view', language, 'View photos')
-                : tSystem('files.add', language, 'Add photo');
-              const cameraStyleBase = viewMode ? buttonStyles.secondary : isEmpty ? buttonStyles.primary : buttonStyles.secondary;
+              const showEyeIcon = readOnly || maxed || items.length > 0;
+              const LeftIcon = showEyeIcon ? EyeIcon : SlotIcon;
               const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
                 ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
               );
@@ -2546,38 +2540,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   data-has-warning={showWarningHighlight ? 'true' : undefined}
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
-                  <div className="ck-upload-row">
+                  <div className="ck-upload-row ck-upload-row--table">
                     <button
                       type="button"
-                      className="ck-upload-camera-btn"
-                      disabled={submitting}
-                      style={withDisabled(cameraStyleBase, submitting)}
-                      aria-label={leftLabel}
-                      title={leftLabel}
-                      onClick={() => {
-                        if (submitting) return;
-                        if (viewMode) {
-                          onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
-                          openFileOverlay({
-                            scope: 'line',
-                            title: resolveFieldLabel(field, language, field.id),
-                            group: q,
-                            rowId: row.id,
-                            field,
-                            fieldPath
-                          });
-                          return;
-                        }
-                        if (readOnly) return;
-                        onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
-                        fileInputsRef.current[fieldPath]?.click();
-                      }}
-                    >
-                      <LeftIcon style={{ width: '62%', height: '62%' }} />
-                    </button>
-                    <button
-                      type="button"
-                      className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
+                      className={`ck-progress-pill ck-upload-pill-btn ck-upload-pill-btn--table ${pillClass}`}
                       aria-disabled={submitting ? 'true' : undefined}
                       aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                         'files.title',
@@ -2586,6 +2552,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       )} ${pillText}`}
                       onClick={() => {
                         if (submitting) return;
+                        onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                         openFileOverlay({
                           scope: 'line',
                           title: resolveFieldLabel(field, language, field.id),
@@ -2596,23 +2563,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         });
                       }}
                     >
-                      {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
+                      <LeftIcon style={{ width: '1.1em', height: '1.1em' }} />
                       <span>{pillText}</span>
                       <span className="ck-progress-label">
                         {tSystem('files.open', language, tSystem('common.open', language, 'Open'))}
                       </span>
                       <span className="ck-progress-caret">▸</span>
                     </button>
-                    {maxed ? (
-                      <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
-                    ) : showMissingHelper ? (
-                      <div className="ck-upload-helper muted" aria-live="polite">
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <SlotIcon style={{ width: '1.05em', height: '1.05em' }} />
-                          {tSystem('common.more', language, '+{count} more', { count: missing })}
-                        </span>
-                      </div>
-                    ) : null}
                   </div>
                   <div style={srOnly} aria-live="polite">
                     {uploadAnnouncements[fieldPath] || ''}
@@ -7332,7 +7289,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
                           const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
                           const readOnly = (field as any)?.readOnly === true;
-                          const viewMode = readOnly || maxed;
+                          const hasFiles = items.length > 0;
+                          const viewMode = readOnly || maxed || hasFiles;
                           const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                           const leftLabel = viewMode
                             ? tSystem('files.view', language, 'View photos')
@@ -8750,7 +8708,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
                                       const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
                                       const readOnly = (field as any)?.readOnly === true;
-                                      const viewMode = readOnly || maxed;
+                                      const hasFiles = items.length > 0;
+                                      const viewMode = readOnly || maxed || hasFiles;
                                       const LeftIcon = viewMode ? EyeIcon : SlotIcon;
                                       const leftLabel = viewMode
                                         ? tSystem('files.view', language, 'View photos')
