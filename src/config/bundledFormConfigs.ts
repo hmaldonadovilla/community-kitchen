@@ -6950,6 +6950,20 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
+                "groupOverride": {
+                  "totals": [
+                    {
+                      "type": "sum",
+                      "fieldId": "ORD_QTY",
+                      "label": {
+                        "en": "Total ordered",
+                        "fr": "Total commandé",
+                        "nl": "Totaal besteld"
+                      },
+                      "decimalPlaces": 0
+                    }
+                  ]
+                },
                 "rowFlow": {
                   "mode": "progressive",
                   "references": {
@@ -18946,6 +18960,20 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
+                "groupOverride": {
+                  "totals": [
+                    {
+                      "type": "sum",
+                      "fieldId": "ORD_QTY",
+                      "label": {
+                        "en": "Total ordered",
+                        "fr": "Total commandé",
+                        "nl": "Totaal besteld"
+                      },
+                      "decimalPlaces": 0
+                    }
+                  ]
+                },
                 "rowFlow": {
                   "mode": "progressive",
                   "references": {

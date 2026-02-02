@@ -797,6 +797,7 @@ const FormView: React.FC<FormViewProps> = ({
   const choiceSearchIndexLoggedRef = useRef<Set<string>>(new Set());
   const hideLabelLoggedRef = useRef<Set<string>>(new Set());
   const overlayOpenActionLoggedRef = useRef<Set<string>>(new Set());
+  const guidedLineGroupOverrideLoggedRef = useRef<Set<string>>(new Set());
   const foodSafetyDiagnosticLoggedRef = useRef(false);
   const [overlayOpenActionSuppressed, setOverlayOpenActionSuppressed] = useState<Record<string, boolean>>({});
   const fallbackConfirm = useConfirmDialog({ eventPrefix: 'ui.formConfirm', onDiagnostic });
@@ -1337,7 +1338,20 @@ const FormView: React.FC<FormViewProps> = ({
         const t = lineTargetsById.get(q.id);
         if (!t) return;
         const groupId = q.id;
-        const lineCfg = (q as any).lineItemConfig || {};
+        const groupOverride = (t as any).groupOverride as LineItemGroupConfigOverride | undefined;
+        const baseLineCfg = (q as any).lineItemConfig || {};
+        const lineCfg = groupOverride ? applyLineItemGroupOverride(baseLineCfg, groupOverride) : baseLineCfg;
+        if (groupOverride && onDiagnostic) {
+          const logKey = `${resolvedStepId}::${groupId}::groupOverride`;
+          if (!guidedLineGroupOverrideLoggedRef.current.has(logKey)) {
+            guidedLineGroupOverrideLoggedRef.current.add(logKey);
+            onDiagnostic('steps.lineGroup.groupOverride.applied', {
+              stepId: resolvedStepId,
+              groupId,
+              keys: Object.keys(groupOverride || {})
+            });
+          }
+        }
 
         const { allowed: allowedFieldIds, renderAsLabel: renderAsLabelFieldIdsFromFields } = parseStepFieldEntries(
           groupId,
@@ -1440,7 +1454,7 @@ const FormView: React.FC<FormViewProps> = ({
 
       return { ...(definition as any), questions: scopedQuestions } as WebFormDefinition;
     },
-    [activeGuidedStepId, definition, guidedEnabled, guidedStepIds, guidedStepsCfg]
+    [activeGuidedStepId, definition, guidedEnabled, guidedStepIds, guidedStepsCfg, onDiagnostic]
   );
 
   const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);

@@ -1344,6 +1344,11 @@ export class Dashboard {
       const rowFlowRaw = (raw as any).rowFlow;
       if (rowFlowRaw && typeof rowFlowRaw === 'object') out.rowFlow = rowFlowRaw;
 
+      const groupOverrideRaw = (raw as any).groupOverride;
+      if (groupOverrideRaw && typeof groupOverrideRaw === 'object' && !Array.isArray(groupOverrideRaw)) {
+        out.groupOverride = groupOverrideRaw;
+      }
+
       const subGroupsRaw = (raw as any).subGroups;
       if (subGroupsRaw && typeof subGroupsRaw === 'object') {
         const sgOut: any = {};

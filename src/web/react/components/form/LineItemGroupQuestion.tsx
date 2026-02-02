@@ -2808,18 +2808,24 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             { ...removeColumn, style: resolveTableColumnStyle(removeColumn.id) }
           ];
           const tableTotalsById = new Map(tableTotals.map(total => [total.key.toString(), total]));
+          const totalLabelColumnId = (() => {
+            const nonRemoveCols = tableColumns.filter(col => col.id !== '__remove');
+            if (!nonRemoveCols.length) return '';
+            const preferred = nonRemoveCols.find(col => !tableTotalsById.has(col.id.toString()));
+            return (preferred || nonRemoveCols[0]).id;
+          })();
           const tableFooter =
             tableTotals.length > 0 ? (
               <tr className="ck-line-item-table__totals-row">
                 {tableColumns.map(col => {
                   const total = col.id !== '__remove' ? tableTotalsById.get(col.id.toString()) : undefined;
+                  const isLabelCell = !!totalLabelColumnId && col.id === totalLabelColumnId;
+                  const labelText = isLabelCell ? tSystem('lineItems.total', language, 'Total') : '';
+                  const valueText = total ? total.value.toFixed(total.decimalPlaces || 0) : '';
+                  const cellText = [labelText, valueText].filter(Boolean).join(' ');
                   return (
                     <td key={`total-${col.id}`} className={col.className} style={col.style}>
-                      {total ? (
-                        <span className="ck-line-item-table__total">
-                          {total.label}: {total.value.toFixed(total.decimalPlaces || 0)}
-                        </span>
-                      ) : null}
+                      {cellText ? <span className="ck-line-item-table__total">{cellText}</span> : null}
                     </td>
                   );
                 })}

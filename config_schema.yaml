@@ -2977,6 +2977,9 @@ components:
         rowFlow:
           $ref: '#/components/schemas/RowFlowConfig'
           description: Optional step-scoped row flow configuration for progressive input/output per row.
+        groupOverride:
+          $ref: '#/components/schemas/LineItemGroupConfigOverride'
+          description: Optional step-scoped override for the line-item group configuration (e.g., totals).
         fields:
           type: array
           items:
