@@ -67,12 +67,8 @@
       "emailRecipients": [
         "hmaldonadovilla@gmail.com"
       ],
-      "emailCc": [
-        "hmaldonadovilla@gmail.com"
-      ],
-      "emailBcc": [
-        "hmaldonadovilla@gmail.com"
-      ],
+      "emailCc": [],
+      "emailBcc": [],
       "statusFieldId": "Status",
       "statusTransitions": {
         "onPdf": "PDF ready",
@@ -6481,12 +6477,8 @@
       "emailRecipients": [
         "hmaldonadovilla@gmail.com"
       ],
-      "emailCc": [
-        "hmaldonadovilla@gmail.com"
-      ],
-      "emailBcc": [
-        "hmaldonadovilla@gmail.com"
-      ],
+      "emailCc": [],
+      "emailBcc": [],
       "statusFieldId": "Status",
       "statusTransitions": {
         "onPdf": "PDF ready",

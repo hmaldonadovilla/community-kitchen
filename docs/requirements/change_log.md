@@ -87,6 +87,7 @@
 - ck-9: helper text on all fields, this is localizable and can be set below the field label or inside the input control. On numeric field if the user is entering a non numeric character, the field should show an error message because today the input is blocked but the user does not understand why.
   - On recipe form we need a helper text underneath the ingredients line item group field, it will display: `To proceed with writing the instructions, you must first select ingredients.`.
   - On recipe form add a helper placeholder in the Created By and Modified By fields, it will display: `Enter a name`.
+  - Add helper on meal-production form on the `ORD_QTY` field, since this is shown in table mode, the helper text needs to be shown between the table header of the column and the 1st row of the table.
   > **WIP - Codex**
 - ck-10: LineItemGroupConfig.label should also modify the pill content for the line item groups shown in overlay as it does today for subgroups. Avoid showing count.
 - ck-11: smart search on section selector fields.
