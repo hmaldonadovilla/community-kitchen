@@ -93,6 +93,12 @@ export const clearLineItemGroupErrors = (errors: FormErrors, groupId: string): F
   return next;
 };
 
+export const mergeLineItemGroupErrors = (errors: FormErrors, groupId: string, nextErrors: FormErrors): FormErrors => {
+  const cleared = clearLineItemGroupErrors(errors || {}, groupId);
+  const overlay = nextErrors || {};
+  return { ...cleared, ...overlay };
+};
+
 const normalizeExtensions = (extensions?: string[]) =>
   (extensions || []).map(ext => {
     const trimmed = ext.trim();
@@ -446,4 +452,3 @@ export const resolveRowDisclaimerText = (args: {
 
   return interpolateTemplate(template, vars).trim();
 };
-

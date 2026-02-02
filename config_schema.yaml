@@ -1092,6 +1092,24 @@ components:
             and the main form shows a compact "Open" card instead of rendering the full table inline.
 
             Default: false (render inline).
+        closeButtonLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional label override for the overlay close button when `openInOverlay: true`.
+
+            Notes:
+            - Overlay openers (e.g. `ui.overlayOpenActions` / rowFlow `openOverlay`) can also provide their own `closeButtonLabel`.
+            - Opener-level values take precedence over this per-group default.
+        closeConfirm:
+          oneOf:
+            - $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+            - $ref: '#/components/schemas/OverlayCloseConfirmConfig'
+          description: |
+            Optional confirm dialog shown when closing the overlay when `openInOverlay: true`.
+
+            Notes:
+            - Overlay openers (e.g. `ui.overlayOpenActions` / rowFlow `openOverlay`) can also provide their own `closeConfirm`.
+            - Opener-level values take precedence over this per-group default.
         overlayDetail:
           $ref: '#/components/schemas/LineItemOverlayDetailConfig'
           description: |
@@ -1373,8 +1391,12 @@ components:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional label override for the overlay close button.
         closeConfirm:
-          $ref: '#/components/schemas/RowFlowActionConfirmConfig'
-          description: Optional confirm dialog shown when closing the overlay.
+          oneOf:
+            - $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+            - $ref: '#/components/schemas/OverlayCloseConfirmConfig'
+          description: |
+            Optional confirm dialog shown when closing the overlay.
+            Can be a simple dialog (`RowFlowActionConfirmConfig`) or a conditional multi-case dialog (`OverlayCloseConfirmConfig`).
         flattenFields:
           type: array
           items:
@@ -2659,6 +2681,74 @@ components:
           description: When to show the dialog relative to the action. `before` opens first (default); `after` opens after the action completes.
       additionalProperties: false
 
+    OverlayCloseConfirmCaseConfig:
+      type: object
+      description: |
+        Conditional close-confirm case for full-page overlays.
+
+        When a case matches, the dialog opens and the user can either continue editing (cancel) or exit (confirm).
+        When confirmed, optional `onConfirmEffects` can run (for example, delete incomplete line-item rows before leaving).
+      properties:
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition controlling when this case applies (first match wins).
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+        body:
+          $ref: '#/components/schemas/LocalizedString'
+        confirmLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        cancelLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        showCancel:
+          type: boolean
+        kind:
+          type: string
+        timing:
+          type: string
+          enum: [before, after]
+        onConfirmEffects:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowActionEffectConfig'
+          description: Optional effects to run after the user confirms exit.
+        highlightFirstError:
+          type: boolean
+          description: When true, dialog copy may include a hint about the first validation error (if any).
+        validateOnReopen:
+          type: boolean
+          description: When true, re-run validation and focus the first issue the next time this overlay opens.
+      additionalProperties: false
+
+    OverlayCloseConfirmConfig:
+      type: object
+      description: |
+        Overlay close confirmation with conditional cases.
+
+        This is used for full-page line-item overlays (and overlayDetail edit panels) to allow exiting even when invalid,
+        while still giving users a choice and optionally discarding incomplete rows on exit.
+      properties:
+        cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverlayCloseConfirmCaseConfig'
+          description: Ordered list of cases; first matching `when` wins.
+        default:
+          $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+          description: Optional fallback confirm config when no case matches.
+        defaultOnConfirmEffects:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowFlowActionEffectConfig'
+          description: Optional effects to run when `default` is confirmed.
+        allowCloseFromEdit:
+          type: boolean
+          description: |
+            When true, allow the close button to attempt to close the overlay directly from overlayDetail edit mode
+            (instead of switching to view mode first when a view template exists).
+      required: [cases]
+      additionalProperties: false
+
     RowFlowActionEffectConfig:
       oneOf:
         - type: object
@@ -2747,7 +2837,9 @@ components:
             closeButtonLabel:
               $ref: '#/components/schemas/LocalizedString'
             closeConfirm:
-              $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+              oneOf:
+                - $ref: '#/components/schemas/RowFlowActionConfirmConfig'
+                - $ref: '#/components/schemas/OverlayCloseConfirmConfig'
             flattenFields:
               type: array
               items:

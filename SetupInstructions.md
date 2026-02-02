@@ -753,6 +753,8 @@ If you want a discrete environment label (e.g., "Staging") to appear in the web 
           - `ui.showItemPill`: show/hide the items pill in the line-item header (default: true)
           - `ui.addButtonPlacement`: where the Add button appears (`top`, `bottom`, `both`, `hidden`; default: `both`)
           - `ui.openInOverlay`: when `true`, the line-item group editor opens in a **full-page overlay** (like subgroup overlays) and the main form shows a compact “Open” card instead of rendering the full table inline
+          - `ui.closeButtonLabel`: optional label override for the overlay close button (used when `ui.openInOverlay: true`)
+          - `ui.closeConfirm`: optional close confirmation dialog (simple confirm or conditional cases via `OverlayCloseConfirmConfig`; used when `ui.openInOverlay: true`)
           - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`). Search indexes include extra columns from `optionsRef`/data sources when available.
           - `ui.mode: "table"`: render line items as a compact table (also supported on subgroups)
           - `ui.tableColumns`: ordered list of field ids to show as table columns (defaults to the line-item field order)
@@ -1440,6 +1442,56 @@ If you want a discrete environment label (e.g., "Staging") to appear in the web 
       - `flattenFields` surfaces specific line-item fields inline when the target group is single-row (`maxRows: 1`).
       - `flattenPlacement` controls where flattened fields render relative to the opener: `"left" | "right" | "below"` (default).
       - `hideTrashIcon: true` hides the reset icon on the opener button.
+      - `closeConfirm` controls the close dialog shown when the user tries to leave the overlay. It accepts either:
+        - a simple `RowFlowActionConfirmConfig` object, or
+        - an `OverlayCloseConfirmConfig` object with conditional `cases` that can run `onConfirmEffects` (for example, delete incomplete rows before exiting).
+
+        Example (allow exit even when invalid, with two cases + discard behavior):
+
+        ```json
+        {
+          "closeConfirm": {
+            "allowCloseFromEdit": true,
+            "cases": [
+              {
+                "when": {
+                  "not": {
+                    "lineItems": { "groupId": "MEALS", "subGroupPath": ["MEAL_TYPES", "INGREDIENTS"], "match": "any" }
+                  }
+                },
+                "title": { "en": "Missing ingredients" },
+                "body": { "en": "No ingredients have been added. Do you want to exit?" },
+                "confirmLabel": { "en": "Yes" },
+                "cancelLabel": { "en": "No, continue editing" },
+                "validateOnReopen": true
+              },
+              {
+                "when": {
+                  "lineItems": {
+                    "groupId": "MEALS",
+                    "subGroupPath": ["MEAL_TYPES", "INGREDIENTS"],
+                    "when": { "any": [{ "fieldId": "QTY", "notEmpty": false }, { "fieldId": "UNIT", "notEmpty": false }] },
+                    "match": "any"
+                  }
+                },
+                "title": { "en": "Missing quantity/unit" },
+                "body": { "en": "One or more ingredients do not have a quantity and/or unit." },
+                "confirmLabel": { "en": "Close, data will be lost" },
+                "cancelLabel": { "en": "Continue editing" },
+                "highlightFirstError": true,
+                "validateOnReopen": true,
+                "onConfirmEffects": [
+                  {
+                    "type": "deleteLineItems",
+                    "groupId": "INGREDIENTS",
+                    "rowFilter": { "includeWhen": { "any": [{ "fieldId": "QTY", "notEmpty": false }, { "fieldId": "UNIT", "notEmpty": false }] } }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        ```
       - When the overlay detail view is enabled, overlayOpenActions auto-select the first row (view mode if available; otherwise edit).
       - When overlay detail is enabled, completing all header fields auto-opens the detail panel (view if available; otherwise edit).
       - If multiple actions are provided, the first matching `when` clause is used.

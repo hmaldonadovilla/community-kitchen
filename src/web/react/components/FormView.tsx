@@ -31,11 +31,14 @@ import type {
   LineItemFieldConfig,
   LineItemGroupConfigOverride,
   LineItemOverlayOpenActionConfig,
-  RowFlowActionConfirmConfig
+  OverlayCloseConfirmLike,
+  RowFlowActionEffect
 } from '../../../types';
 import { ConfirmDialogOverlay } from '../features/overlays/ConfirmDialogOverlay';
 import { useConfirmDialog } from '../features/overlays/useConfirmDialog';
 import type { ConfirmDialogOpenArgs } from '../features/overlays/useConfirmDialog';
+import { getOverlayCloseAllowCloseFromEdit, resolveOverlayCloseConfirm } from '../features/overlays/domain/overlayCloseConfirm';
+import { resolveOverlayCloseDeletePlan } from '../features/overlays/domain/overlayCloseEffects';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../types';
@@ -43,6 +46,7 @@ import { isEmptyValue } from '../utils/values';
 import {
   applyUploadConstraints,
   clearLineItemGroupErrors,
+  mergeLineItemGroupErrors,
   describeUploadItem,
   resolveFieldHelperText,
   formatOptionFilterNonMatchWarning,
@@ -150,7 +154,7 @@ interface SubgroupOverlayState {
   hideInlineSubgroups?: boolean;
   hideCloseButton?: boolean;
   closeButtonLabel?: string;
-  closeConfirm?: RowFlowActionConfirmConfig;
+  closeConfirm?: OverlayCloseConfirmLike;
   label?: string;
   contextHeader?: string;
   helperText?: string;
@@ -168,7 +172,7 @@ interface LineItemGroupOverlayState {
   source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
   hideCloseButton?: boolean;
   closeButtonLabel?: string;
-  closeConfirm?: RowFlowActionConfirmConfig;
+  closeConfirm?: OverlayCloseConfirmLike;
   /**
    * Optional override for rendering the group inside the overlay (used by guided steps to
    * restrict fields/subgroups without mutating the base definition).
@@ -787,6 +791,7 @@ const FormView: React.FC<FormViewProps> = ({
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
   const errorNavModeRef = useRef<'focus' | 'scroll'>('focus');
+  const overlayCloseValidateOnOpenRef = useRef<Record<string, boolean>>({});
   const choiceVariantLogRef = useRef<Record<string, string>>({});
   const choiceSearchLoggedRef = useRef<Set<string>>(new Set());
   const choiceSearchIndexLoggedRef = useRef<Set<string>>(new Set());
@@ -3290,8 +3295,18 @@ const FormView: React.FC<FormViewProps> = ({
         closeSubgroupOverlay();
         return;
       }
-      const confirm = subgroupOverlay.closeConfirm;
-      if (confirm && openConfirmDialogResolved) {
+      const overlayCloseCtx: VisibilityContext = {
+        getValue: fid => (valuesRef.current as any)[fid],
+        getLineValue: (_rowId: string, fid: string) => (valuesRef.current as any)[fid],
+        getLineItems: groupId => lineItemsRef.current[groupId] || [],
+        getLineItemKeys: () => Object.keys(lineItemsRef.current || {})
+      };
+      const confirmResolved = resolveOverlayCloseConfirm({
+        closeConfirm: subgroupOverlay.closeConfirm,
+        ctx: overlayCloseCtx
+      });
+      if (confirmResolved && openConfirmDialogResolved) {
+        const confirm = confirmResolved.confirm;
         const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
         const message = resolveLocalizedString(confirm.body, language, '');
         const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
@@ -3373,90 +3388,248 @@ const FormView: React.FC<FormViewProps> = ({
   const attemptCloseLineItemGroupOverlay = useCallback(
     (source: 'button' | 'escape') => {
       if (!lineItemGroupOverlay.open) return;
-      if (source === 'button' && overlayDetailSelection?.mode === 'edit') {
-        const overlayGroupId = lineItemGroupOverlay.groupId || '';
-        if (overlayGroupId && overlayDetailSelection.groupId === overlayGroupId) {
-          const groupCfg = resolveLineItemGroupForKey(overlayGroupId);
-          const overlayDetail = (groupCfg?.lineItemConfig as any)?.ui?.overlayDetail as any;
-          const overlayDetailViewMode = (overlayDetail?.body?.view?.mode || 'html').toString().trim().toLowerCase();
-          const overlayDetailHasViewTemplate = !!overlayDetail?.body?.view?.templateId;
-          const overlayDetailCanView = overlayDetailViewMode === 'html' && overlayDetailHasViewTemplate;
-          if (overlayDetailCanView) {
-            setOverlayDetailSelection({
-              groupId: overlayDetailSelection.groupId,
-              rowId: overlayDetailSelection.rowId,
-              mode: 'view'
-            });
-            onDiagnostic?.('lineItems.overlayDetail.action', {
-              groupId: overlayDetailSelection.groupId,
-              rowId: overlayDetailSelection.rowId,
-              actionId: 'view',
-              mode: 'view',
-              source: 'overlayClose'
-            });
-            return;
-          }
-        }
-      }
+      const overlayGroupId = (lineItemGroupOverlay.groupId || '').toString().trim();
       if (overlayStackRef.current.length) {
         closeLineItemGroupOverlay();
         setErrors(prev => clearLineItemGroupErrors(prev, lineItemGroupOverlay.groupId || ''));
         return;
       }
-      const nextErrors = validateLineItemGroupOverlay();
-      if (!nextErrors || Object.keys(nextErrors).length === 0) {
-        const confirm = lineItemGroupOverlay.closeConfirm;
-        if (confirm && openConfirmDialogResolved) {
-          const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
-          const message = resolveLocalizedString(confirm.body, language, '');
-          const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
-          const cancelLabel = resolveLocalizedString(confirm.cancelLabel, language, tSystem('common.cancel', language, 'Cancel'));
-          openConfirmDialogResolved({
-            title,
-            message,
-            confirmLabel,
-            cancelLabel,
-            showCancel: confirm.showCancel !== false,
-            kind: confirm.kind || 'overlayClose',
-            refId: `${lineItemGroupOverlay.groupId || ''}::close`,
-            onConfirm: () => {
-              closeLineItemGroupOverlay();
-              setErrors(prev => clearLineItemGroupErrors(prev, lineItemGroupOverlay.groupId || ''));
-            }
+
+      const nextErrors = validateLineItemGroupOverlay() || {};
+      const errorKeys = Object.keys(nextErrors);
+      const hasErrors = errorKeys.length > 0;
+
+      if (overlayGroupId && hasErrors) {
+        setErrors(prev => mergeLineItemGroupErrors(prev, overlayGroupId, nextErrors));
+      }
+
+      const overlayCloseCtx: VisibilityContext = {
+        getValue: fid => (valuesRef.current as any)[fid],
+        getLineValue: (_rowId: string, fid: string) => (valuesRef.current as any)[fid],
+        getLineItems: groupId => lineItemsRef.current[groupId] || [],
+        getLineItemKeys: () => Object.keys(lineItemsRef.current || {})
+      };
+      const scope =
+        overlayGroupId && overlayDetailSelection?.groupId === overlayGroupId && overlayDetailSelection?.rowId
+          ? { rowId: overlayDetailSelection.rowId, linePrefix: overlayGroupId }
+          : undefined;
+      const closeConfirmResolved = resolveOverlayCloseConfirm({
+        closeConfirm: lineItemGroupOverlay.closeConfirm,
+        ctx: overlayCloseCtx,
+        scope
+      });
+      const allowCloseFromEdit = getOverlayCloseAllowCloseFromEdit(lineItemGroupOverlay.closeConfirm);
+
+      if (
+        source === 'button' &&
+        !allowCloseFromEdit &&
+        !hasErrors &&
+        overlayDetailSelection?.mode === 'edit' &&
+        overlayGroupId &&
+        overlayDetailSelection.groupId === overlayGroupId
+      ) {
+        const groupCfg = resolveLineItemGroupForKey(overlayGroupId);
+        const overlayDetail = (groupCfg?.lineItemConfig as any)?.ui?.overlayDetail as any;
+        const overlayDetailViewMode = (overlayDetail?.body?.view?.mode || 'html').toString().trim().toLowerCase();
+        const overlayDetailHasViewTemplate = !!overlayDetail?.body?.view?.templateId;
+        const overlayDetailCanView = overlayDetailViewMode === 'html' && overlayDetailHasViewTemplate;
+        if (overlayDetailCanView) {
+          setOverlayDetailSelection({
+            groupId: overlayDetailSelection.groupId,
+            rowId: overlayDetailSelection.rowId,
+            mode: 'view'
           });
-          onDiagnostic?.('lineItemGroup.overlay.close.confirm.open', { source });
+          onDiagnostic?.('lineItems.overlayDetail.action', {
+            groupId: overlayDetailSelection.groupId,
+            rowId: overlayDetailSelection.rowId,
+            actionId: 'view',
+            mode: 'view',
+            source: 'overlayClose'
+          });
           return;
         }
-        closeLineItemGroupOverlay();
-        setErrors(prev => clearLineItemGroupErrors(prev, lineItemGroupOverlay.groupId || ''));
+      }
+
+      const firstErrorLabel = (() => {
+        if (!hasErrors) return '';
+        const firstKey = errorKeys[0] || '';
+        const parts = firstKey.split('__');
+        if (parts.length !== 3) return '';
+        const groupKey = parts[0] || '';
+        const fieldId = parts[1] || '';
+        if (!groupKey || !fieldId) return '';
+        const group = resolveLineItemGroupForKey(groupKey);
+        const fields = (group?.lineItemConfig as any)?.fields || [];
+        const field = Array.isArray(fields) ? fields.find((f: any) => (f?.id || '').toString() === fieldId) : null;
+        return resolveFieldLabel(field, language, fieldId);
+      })();
+
+      const openCloseConfirm = (args: {
+        confirm: any;
+        onConfirmEffects: RowFlowActionEffect[];
+        validateOnReopen: boolean;
+        highlightFirstError: boolean;
+      }) => {
+        if (!openConfirmDialogResolved) return false;
+        const confirm = args.confirm;
+        const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+        const baseMessage = resolveLocalizedString(confirm.body, language, '');
+        const hint = args.highlightFirstError && firstErrorLabel ? ` First issue: ${firstErrorLabel}.` : '';
+        const message = `${baseMessage || ''}${hint}`.trim();
+        const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
+        const cancelLabel = resolveLocalizedString(confirm.cancelLabel, language, tSystem('common.cancel', language, 'Cancel'));
+
+        openConfirmDialogResolved({
+          title,
+          message,
+          confirmLabel,
+          cancelLabel,
+          showCancel: confirm.showCancel !== false,
+          kind: confirm.kind || 'overlayClose',
+          refId: `${overlayGroupId || ''}::close`,
+          onConfirm: () => {
+            if (overlayGroupId && args.onConfirmEffects.length) {
+              const deletePlan = resolveOverlayCloseDeletePlan({
+                effects: args.onConfirmEffects,
+                overlayGroupId,
+                overlayRowId: scope?.rowId,
+                topValues: (valuesRef.current || {}) as any,
+                lineItems: lineItemsRef.current
+              });
+              if (deletePlan.length) {
+                const deletedByGroup = new Map<string, Set<string>>();
+                deletePlan.forEach(entry => deletedByGroup.set(entry.groupKey, new Set(entry.rowIds)));
+                setLineItems(prev => {
+                  let changed = false;
+                  const next: LineItemState = { ...prev };
+                  deletePlan.forEach(entry => {
+                    const rows = next[entry.groupKey] || prev[entry.groupKey] || [];
+                    if (!rows.length) return;
+                    const deleted = deletedByGroup.get(entry.groupKey);
+                    if (!deleted || !deleted.size) return;
+                    const filtered = rows.filter(r => !deleted.has((r.id || '').toString()));
+                    if (filtered.length === rows.length) return;
+                    next[entry.groupKey] = filtered;
+                    changed = true;
+                  });
+                  return changed ? next : prev;
+                });
+                setErrors(prev => {
+                  let changed = false;
+                  const next: FormErrors = {};
+                  Object.entries(prev || {}).forEach(([key, val]) => {
+                    const parts = key.split('__');
+                    if (parts.length === 3) {
+                      const groupKey = parts[0];
+                      const rowId = parts[2];
+                      const deleted = deletedByGroup.get(groupKey);
+                      if (deleted && deleted.has(rowId)) {
+                        changed = true;
+                        return;
+                      }
+                    }
+                    next[key] = val;
+                  });
+                  return changed ? next : prev;
+                });
+                onDiagnostic?.('lineItemGroup.overlay.close.effects.deleteLineItems', {
+                  groupId: overlayGroupId,
+                  deleteGroups: deletePlan.map(p => ({ groupKey: p.groupKey, count: p.rowIds.length }))
+                });
+              }
+            }
+
+            if (overlayGroupId && (args.validateOnReopen || hasErrors)) {
+              overlayCloseValidateOnOpenRef.current[overlayGroupId] = true;
+            }
+            closeLineItemGroupOverlay();
+            if (!hasErrors && overlayGroupId) {
+              setErrors(prev => clearLineItemGroupErrors(prev, overlayGroupId));
+            }
+            onDiagnostic?.('lineItemGroup.overlay.close.confirmed', {
+              groupId: overlayGroupId,
+              source,
+              hadErrors: hasErrors,
+              validateOnReopen: args.validateOnReopen
+            });
+          }
+        });
+        return true;
+      };
+
+      if (closeConfirmResolved && openCloseConfirm(closeConfirmResolved)) {
+        onDiagnostic?.('lineItemGroup.overlay.close.confirm.open', {
+          source,
+          groupId: overlayGroupId,
+          hadErrors: hasErrors,
+          configSource: closeConfirmResolved.source
+        });
         return;
       }
-      setErrors(nextErrors);
-      errorNavRequestRef.current += 1;
-      errorNavModeRef.current = 'focus';
-      onDiagnostic?.('validation.navigate.request', {
-        attempt: errorNavRequestRef.current,
-        scope: 'lineItemOverlay',
-        mode: errorNavModeRef.current
-      });
-      onDiagnostic?.('lineItemGroup.overlay.close.blocked', {
-        groupId: lineItemGroupOverlay.groupId,
+
+      if (overlayGroupId && hasErrors) {
+        overlayCloseValidateOnOpenRef.current[overlayGroupId] = true;
+      }
+      closeLineItemGroupOverlay();
+      if (!hasErrors && overlayGroupId) {
+        setErrors(prev => clearLineItemGroupErrors(prev, overlayGroupId));
+      }
+      onDiagnostic?.('lineItemGroup.overlay.close.allowed', {
+        groupId: overlayGroupId,
         source,
-        errorCount: Object.keys(nextErrors).length
+        hadErrors: hasErrors,
+        confirmShown: !!closeConfirmResolved
       });
     },
     [
       closeLineItemGroupOverlay,
+      language,
       lineItemGroupOverlay.groupId,
       lineItemGroupOverlay.open,
+      lineItemGroupOverlay.closeConfirm,
+      openConfirmDialogResolved,
       onDiagnostic,
       overlayDetailSelection,
       resolveLineItemGroupForKey,
       setErrors,
+      setLineItems,
       setOverlayDetailSelection,
       validateLineItemGroupOverlay
     ]
   );
+
+  useEffect(() => {
+    if (!lineItemGroupOverlay.open || !lineItemGroupOverlay.groupId) return;
+    const groupId = (lineItemGroupOverlay.groupId || '').toString().trim();
+    if (!groupId) return;
+    if (!overlayCloseValidateOnOpenRef.current[groupId]) return;
+    delete overlayCloseValidateOnOpenRef.current[groupId];
+
+    const nextErrors = validateLineItemGroupOverlay() || {};
+    const keys = Object.keys(nextErrors);
+    if (!keys.length) {
+      setErrors(prev => clearLineItemGroupErrors(prev, groupId));
+      onDiagnostic?.('lineItemGroup.overlay.reopen.validate', { groupId, errorCount: 0 });
+      return;
+    }
+
+    setErrors(prev => mergeLineItemGroupErrors(prev, groupId, nextErrors));
+    errorNavRequestRef.current += 1;
+    errorNavModeRef.current = 'focus';
+    onDiagnostic?.('validation.navigate.request', {
+      attempt: errorNavRequestRef.current,
+      scope: 'lineItemOverlayReopen',
+      mode: errorNavModeRef.current
+    });
+    onDiagnostic?.('lineItemGroup.overlay.reopen.validate', { groupId, errorCount: keys.length });
+  }, [
+    lineItemGroupOverlay.groupId,
+    lineItemGroupOverlay.open,
+    mergeLineItemGroupErrors,
+    onDiagnostic,
+    setErrors,
+    validateLineItemGroupOverlay
+  ]);
 
   const openSubgroupOverlay = useCallback(
     (
@@ -3468,7 +3641,7 @@ const FormView: React.FC<FormViewProps> = ({
         hideInlineSubgroups?: boolean;
         hideCloseButton?: boolean;
         closeButtonLabel?: LocalizedString;
-        closeConfirm?: RowFlowActionConfirmConfig;
+        closeConfirm?: OverlayCloseConfirmLike;
         label?: string;
         contextHeader?: string;
         helperText?: string;
@@ -3549,7 +3722,7 @@ const FormView: React.FC<FormViewProps> = ({
         source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
         hideCloseButton?: boolean;
         closeButtonLabel?: LocalizedString;
-        closeConfirm?: RowFlowActionConfirmConfig;
+        closeConfirm?: OverlayCloseConfirmLike;
         label?: string;
         contextHeader?: string;
         helperText?: string;
@@ -3579,11 +3752,16 @@ const FormView: React.FC<FormViewProps> = ({
         onDiagnostic?.('overlay.stack.push', { source: 'openLineItemGroupOverlay', kind: 'lineItem' });
       }
       const group = typeof groupOrId === 'string' ? undefined : (groupOrId as WebQuestionDefinition);
+      const baseGroup =
+        group ||
+        ((definition.questions || []).find(q => q && q.type === 'LINE_ITEM_GROUP' && q.id === id) as WebQuestionDefinition | undefined);
       const rowFilter = options?.rowFilter || null;
       const hideInlineSubgroups = options?.hideInlineSubgroups === true;
       const hideCloseButton = options?.hideCloseButton === true;
-      const closeButtonLabel = resolveLocalizedString(options?.closeButtonLabel, language, '').trim();
-      const closeConfirm = options?.closeConfirm;
+      const groupUi = (baseGroup?.lineItemConfig as any)?.ui;
+      const closeButtonLabelRaw = options?.closeButtonLabel ?? groupUi?.closeButtonLabel;
+      const closeButtonLabel = resolveLocalizedString(closeButtonLabelRaw, language, '').trim();
+      const closeConfirm = options?.closeConfirm ?? groupUi?.closeConfirm;
       const label = options?.label;
       const contextHeader = options?.contextHeader;
       const helperText = options?.helperText;
@@ -3616,7 +3794,7 @@ const FormView: React.FC<FormViewProps> = ({
         onDiagnostic?.('form.overlay.closeButton.hidden', { scope: 'lineItemGroup', source });
       }
     },
-    [language, lineItemGroupOverlay, onDiagnostic, overlay.open, subgroupOverlay]
+    [definition.questions, language, lineItemGroupOverlay, onDiagnostic, overlay.open, subgroupOverlay]
   );
 
   const buildOverlayGroupOverride = (

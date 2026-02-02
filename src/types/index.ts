@@ -1091,6 +1091,20 @@ export interface LineItemGroupUiConfig {
    */
   openInOverlay?: boolean;
   /**
+   * Optional label override for the full-page overlay close button when `openInOverlay: true`.
+   *
+   * Note: Overlay openers (e.g. `ui.overlayOpenActions` / rowFlow `openOverlay`) can also provide their own
+   * `closeButtonLabel` overrides; those take precedence over this per-group default.
+   */
+  closeButtonLabel?: LocalizedString;
+  /**
+   * Optional confirm dialog shown when closing the full-page overlay when `openInOverlay: true`.
+   *
+   * Note: Overlay openers (e.g. `ui.overlayOpenActions` / rowFlow `openOverlay`) can also provide their own
+   * `closeConfirm` overrides; those take precedence over this per-group default.
+   */
+  closeConfirm?: OverlayCloseConfirmLike;
+  /**
    * Optional overlay detail layout (header/body) for full-page group overlays.
    * Requires `openInOverlay: true` to take effect.
    */
@@ -1453,7 +1467,7 @@ export interface LineItemOverlayOpenActionConfig {
   /**
    * Optional confirm dialog shown when closing the overlay.
    */
-  closeConfirm?: RowFlowActionConfirmConfig;
+  closeConfirm?: OverlayCloseConfirmLike;
   /**
    * Optional list of line-item field ids to surface inline when the target group only allows one row.
    * This keeps the data structure unchanged while flattening the UI for quick edits.
@@ -2274,6 +2288,60 @@ export interface RowFlowActionConfirmConfig {
    */
   timing?: 'before' | 'after';
 }
+
+/**
+ * Overlay close confirmation with conditional cases and optional on-confirm effects.
+ *
+ * Use this for full-page overlays (line item groups or subgroups) where closing is allowed even when invalid,
+ * but you want to present a choice (continue editing vs exit/discard).
+ */
+export interface OverlayCloseConfirmCaseConfig extends RowFlowActionConfirmConfig {
+  /**
+   * Optional condition that controls when this case applies.
+   * Evaluated in the current overlay context (scoped to the active row when available).
+   * First matching case wins.
+   */
+  when?: WhenClause;
+  /**
+   * Optional effects to run when the user confirms closing the overlay.
+   * (Example: delete incomplete ingredient rows before exit.)
+   */
+  onConfirmEffects?: RowFlowActionEffect[];
+  /**
+   * When true, the dialog copy may include a hint about the first validation error.
+   * Defaults to false.
+   */
+  highlightFirstError?: boolean;
+  /**
+   * When true, the next time this overlay opens the UI should re-run validation and focus the first issue.
+   * Defaults to false.
+   */
+  validateOnReopen?: boolean;
+}
+
+export interface OverlayCloseConfirmConfig {
+  /**
+   * Ordered list of cases. The first matching `when` wins.
+   */
+  cases: OverlayCloseConfirmCaseConfig[];
+  /**
+   * Optional fallback confirm configuration when no case matches.
+   */
+  default?: RowFlowActionConfirmConfig;
+  /**
+   * Optional effects to run when `default` is confirmed.
+   */
+  defaultOnConfirmEffects?: RowFlowActionEffect[];
+  /**
+   * When true, allow the close button to attempt to close the overlay directly from overlayDetail edit mode
+   * (instead of switching to view mode first when a view template exists).
+   *
+   * Default: false (preserve existing edit->view behavior).
+   */
+  allowCloseFromEdit?: boolean;
+}
+
+export type OverlayCloseConfirmLike = RowFlowActionConfirmConfig | OverlayCloseConfirmConfig;
 
 export type RowFlowActionEffect =
   | {

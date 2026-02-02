@@ -7117,6 +7117,112 @@ export const BUNDLED_FORM_CONFIGS = [
                           "closeButtonLabel": {
                             "en": "Back to Production"
                           },
+                          "closeConfirm": {
+                            "allowCloseFromEdit": true,
+                            "cases": [
+                              {
+                                "when": {
+                                  "not": {
+                                    "lineItems": {
+                                      "groupId": "MP_MEALS_REQUEST",
+                                      "subGroupPath": [
+                                        "MP_TYPE_LI",
+                                        "MP_INGREDIENTS_LI"
+                                      ],
+                                      "match": "any"
+                                    }
+                                  }
+                                },
+                                "title": {
+                                  "en": "Missing ingredients"
+                                },
+                                "body": {
+                                  "en": "No ingredients have been added. Do you want to exit?"
+                                },
+                                "confirmLabel": {
+                                  "en": "Yes"
+                                },
+                                "cancelLabel": {
+                                  "en": "No, continue editing"
+                                },
+                                "validateOnReopen": true
+                              },
+                              {
+                                "when": {
+                                  "lineItems": {
+                                    "groupId": "MP_MEALS_REQUEST",
+                                    "subGroupPath": [
+                                      "MP_TYPE_LI",
+                                      "MP_INGREDIENTS_LI"
+                                    ],
+                                    "when": {
+                                      "all": [
+                                        {
+                                          "fieldId": "ING",
+                                          "notEmpty": true
+                                        },
+                                        {
+                                          "any": [
+                                            {
+                                              "fieldId": "QTY",
+                                              "notEmpty": false
+                                            },
+                                            {
+                                              "fieldId": "UNIT",
+                                              "notEmpty": false
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "match": "any"
+                                  }
+                                },
+                                "title": {
+                                  "en": "Missing quantity/unit"
+                                },
+                                "body": {
+                                  "en": "One or more ingredients do not have a quantity and/or unit. If you close this page now, the ingredient selection will be lost."
+                                },
+                                "confirmLabel": {
+                                  "en": "Close, data will be lost"
+                                },
+                                "cancelLabel": {
+                                  "en": "Continue editing"
+                                },
+                                "highlightFirstError": true,
+                                "validateOnReopen": true,
+                                "onConfirmEffects": [
+                                  {
+                                    "type": "deleteLineItems",
+                                    "groupId": "MP_INGREDIENTS_LI",
+                                    "rowFilter": {
+                                      "includeWhen": {
+                                        "all": [
+                                          {
+                                            "fieldId": "ING",
+                                            "notEmpty": true
+                                          },
+                                          {
+                                            "any": [
+                                              {
+                                                "fieldId": "QTY",
+                                                "notEmpty": false
+                                              },
+                                              {
+                                                "fieldId": "UNIT",
+                                                "notEmpty": false
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
                           "groupOverride": {
                             "id": "MP_TYPE_LI",
                             "minRows": 0,
@@ -19006,6 +19112,112 @@ export const BUNDLED_FORM_CONFIGS = [
                           },
                           "closeButtonLabel": {
                             "en": "Back to Production"
+                          },
+                          "closeConfirm": {
+                            "allowCloseFromEdit": true,
+                            "cases": [
+                              {
+                                "when": {
+                                  "not": {
+                                    "lineItems": {
+                                      "groupId": "MP_MEALS_REQUEST",
+                                      "subGroupPath": [
+                                        "MP_TYPE_LI",
+                                        "MP_INGREDIENTS_LI"
+                                      ],
+                                      "match": "any"
+                                    }
+                                  }
+                                },
+                                "title": {
+                                  "en": "Missing ingredients"
+                                },
+                                "body": {
+                                  "en": "No ingredients have been added. Do you want to exit?"
+                                },
+                                "confirmLabel": {
+                                  "en": "Yes"
+                                },
+                                "cancelLabel": {
+                                  "en": "No, continue editing"
+                                },
+                                "validateOnReopen": true
+                              },
+                              {
+                                "when": {
+                                  "lineItems": {
+                                    "groupId": "MP_MEALS_REQUEST",
+                                    "subGroupPath": [
+                                      "MP_TYPE_LI",
+                                      "MP_INGREDIENTS_LI"
+                                    ],
+                                    "when": {
+                                      "all": [
+                                        {
+                                          "fieldId": "ING",
+                                          "notEmpty": true
+                                        },
+                                        {
+                                          "any": [
+                                            {
+                                              "fieldId": "QTY",
+                                              "notEmpty": false
+                                            },
+                                            {
+                                              "fieldId": "UNIT",
+                                              "notEmpty": false
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "match": "any"
+                                  }
+                                },
+                                "title": {
+                                  "en": "Missing quantity/unit"
+                                },
+                                "body": {
+                                  "en": "One or more ingredients do not have a quantity and/or unit. If you close this page now, the ingredient selection will be lost."
+                                },
+                                "confirmLabel": {
+                                  "en": "Close, data will be lost"
+                                },
+                                "cancelLabel": {
+                                  "en": "Continue editing"
+                                },
+                                "highlightFirstError": true,
+                                "validateOnReopen": true,
+                                "onConfirmEffects": [
+                                  {
+                                    "type": "deleteLineItems",
+                                    "groupId": "MP_INGREDIENTS_LI",
+                                    "rowFilter": {
+                                      "includeWhen": {
+                                        "all": [
+                                          {
+                                            "fieldId": "ING",
+                                            "notEmpty": true
+                                          },
+                                          {
+                                            "any": [
+                                              {
+                                                "fieldId": "QTY",
+                                                "notEmpty": false
+                                              },
+                                              {
+                                                "fieldId": "UNIT",
+                                                "notEmpty": false
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
                           },
                           "groupOverride": {
                             "id": "MP_TYPE_LI",

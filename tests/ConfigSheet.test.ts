@@ -54,6 +54,34 @@ describe('ConfigSheet', () => {
     expect(questions[0].ui).toEqual({ hideLabel: true });
   });
 
+  test('getQuestions preserves ui.helperText and ui.helperPlacement', () => {
+    const sheet = mockSS.insertSheet('Config: HelperText');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q1',
+        'TEXT',
+        'Created by',
+        'Created by',
+        'Created by',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"ui":{"helperText":{"en":"Enter a name"},"helperPlacement":"input control"}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: HelperText');
+    expect(questions.length).toBe(1);
+    expect(questions[0].ui).toEqual({ helperText: { en: 'Enter a name' }, helperPlacement: 'placeholder' });
+  });
+
   test('getQuestions preserves selectionEffects.id (for __ckSelectionEffectId tagging)', () => {
     const sheet = mockSS.insertSheet('Config: SelectionEffectsId');
     const exampleRows = [
@@ -158,6 +186,46 @@ describe('ConfigSheet', () => {
         addButtonPlacement: 'bottom',
         allowRemoveAutoRows: false,
         saveDisabledRows: true
+      })
+    );
+  });
+
+  test('getQuestions preserves lineItemConfig.ui.closeConfirm and closeButtonLabel (openInOverlay)', () => {
+    const sheet = mockSS.insertSheet('Config: LineItemUiCloseConfirm');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q_LI',
+        'LINE_ITEM_GROUP',
+        'Meals',
+        'Repas',
+        'Maaltijden',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"fields":[{"id":"ING","type":"CHOICE","labelEn":"Ingredient","required":true}],"ui":{"openInOverlay":true,"closeButtonLabel":{"en":"Back"},"closeConfirm":{"title":{"en":"Missing ingredients"},"body":{"en":"No ingredients have been added. Do you want to exit?"},"confirmLabel":{"en":"Yes"},"cancelLabel":{"en":"No"}}}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: LineItemUiCloseConfirm');
+    expect(questions.length).toBe(1);
+    expect(questions[0].lineItemConfig).toBeDefined();
+    expect(questions[0].lineItemConfig!.ui).toEqual(
+      expect.objectContaining({
+        openInOverlay: true,
+        closeButtonLabel: { en: 'Back' },
+        closeConfirm: {
+          title: { en: 'Missing ingredients' },
+          body: { en: 'No ingredients have been added. Do you want to exit?' },
+          confirmLabel: { en: 'Yes' },
+          cancelLabel: { en: 'No' }
+        }
       })
     );
   });

@@ -28,7 +28,7 @@ import {
   WebFormDefinition,
   WebQuestionDefinition
 } from '../../../types';
-import type { RowFlowActionConfirmConfig } from '../../../../types';
+import type { OverlayCloseConfirmLike } from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../../types';
@@ -164,7 +164,7 @@ export interface LineItemGroupQuestionCtx {
       hideInlineSubgroups?: boolean;
       hideCloseButton?: boolean;
       closeButtonLabel?: string;
-      closeConfirm?: RowFlowActionConfirmConfig;
+      closeConfirm?: OverlayCloseConfirmLike;
       label?: string;
       contextHeader?: string;
       helperText?: string;
@@ -179,7 +179,7 @@ export interface LineItemGroupQuestionCtx {
       source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
       hideCloseButton?: boolean;
       closeButtonLabel?: string;
-      closeConfirm?: RowFlowActionConfirmConfig;
+      closeConfirm?: OverlayCloseConfirmLike;
       label?: string;
       contextHeader?: string;
       helperText?: string;
@@ -4024,7 +4024,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   hideInlineSubgroups: (match as any).hideInlineSubgroups === true,
                   hideCloseButton: (match as any).hideCloseButton === true,
                   closeButtonLabel: (match as any).closeButtonLabel,
-                  closeConfirm: (match as any).closeConfirm as RowFlowActionConfirmConfig | undefined,
+                  closeConfirm: (match as any).closeConfirm as OverlayCloseConfirmLike | undefined,
                   renderMode,
                   label,
                   flattenFields,
@@ -8469,6 +8469,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     if (field.type === 'FILE_UPLOAD') {
                                       const items = toUploadItems(subRow.values[field.id]);
                                       const count = items.length;
+                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                      const helperText = helperCfg.text;
+                                      const helperNode = helperText ? <div className="ck-field-helper">{helperText}</div> : null;
                                       if (renderAsLabel) {
                                         return (
                                           <div className="ck-line-item-table__value" data-field-path={fieldPath}>
