@@ -2201,6 +2201,64 @@ Example (render **Create + Copy** as **inline buttons** instead of a menu on For
 }
 ```
 
+- **Optional: gate system actions (hide/disable + dialog)**:
+  - In the dashboard “Follow-up Config (JSON)” column, set `actionBars.system.gates` to apply config-driven rules to system actions.
+  - Gates use the standard `when` engine and can reference:
+    - regular fields (e.g. `MP_PREP_DATE`)
+    - guided steps virtual fields (e.g. `__ckStep`)
+    - system/meta fields (e.g. `status`)
+    - runtime UI virtual field `__ckView` (`list` | `form` | `summary`)
+  - Example (disable guided Next on a future prep date, hide Submit on Summary for closed records, hide Copy unless the record is closed on Summary):
+
+```json
+{
+  "actionBars": {
+    "system": {
+      "gates": {
+        "submit": [
+          {
+            "id": "blockNextIfFutureDate",
+            "when": {
+              "all": [
+                { "fieldId": "__ckView", "equals": ["form"] },
+                { "fieldId": "__ckStep", "equals": ["deliveryForm"] },
+                { "fieldId": "MP_PREP_DATE", "isInFuture": true }
+              ]
+            },
+            "disable": true,
+            "dialogTrigger": "onEnable",
+            "dialog": {
+              "message": { "en": "Ingredients receipt photo, food safety and portioning can only be recorded on the day of production." },
+              "confirmLabel": { "en": "OK" },
+              "showCancel": false,
+              "showCloseButton": false,
+              "dismissOnBackdrop": false
+            }
+          },
+          {
+            "id": "hideClosedSubmit",
+            "when": { "all": [{ "fieldId": "__ckView", "equals": ["summary"] }, { "fieldId": "status", "equals": ["Closed"] }] },
+            "hide": true
+          }
+        ],
+        "copyCurrentRecord": [
+          {
+            "id": "onlyClosedSummary",
+            "when": {
+              "any": [
+                { "not": { "fieldId": "__ckView", "equals": ["summary"] } },
+                { "not": { "fieldId": "status", "equals": ["Closed"] } }
+              ]
+            },
+            "hide": true
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
 - **Optional: configure languages (max 3)**:
   - In the dashboard “Follow-up Config (JSON)” column, set:
     - `"languages": ["EN","FR","NL"]` (or `"EN,FR,NL"`)
@@ -2261,6 +2319,25 @@ Example (render **Create + Copy** as **inline buttons** instead of a menu on For
 
 ```json
 { "copyCurrentRecordDropFields": ["DATE", "SHIFT"] }
+```
+
+- **Optional: copy only a curated subset of values**:
+  - If you need “Copy current record” to copy only specific fields (instead of copying everything and then dropping fields), set `"copyCurrentRecordProfile"`.
+  - Example (copy only Customer + Service + requested portions line items):
+
+```json
+{
+  "copyCurrentRecordProfile": {
+    "values": ["MP_DISTRIBUTOR", "MP_SERVICE"],
+    "lineItems": [
+      {
+        "groupId": "MP_MEALS_REQUEST",
+        "fields": ["MEAL_TYPE", "ORD_QTY"],
+        "includeWhen": { "fieldId": "ORD_QTY", "greaterThan": 0 }
+      }
+    ]
+  }
+}
 ```
 
 - **Optional: disable “New record” (blank record creation)**:

@@ -192,6 +192,11 @@ export const ActionBar: React.FC<{
   submitting?: boolean;
   readOnly?: boolean;
   /**
+   * Optional UI override: hide the Submit/Next primary action even if configured.
+   * Useful for hiding submit on Summary for closed records.
+   */
+  hideSubmit?: boolean;
+  /**
    * Optional UI override: hide the Edit button even if it is configured for this view.
    * Used to suppress Edit on Summary for records matching statusTransitions.onClose.
    */
@@ -249,6 +254,7 @@ export const ActionBar: React.FC<{
   submitDisabledTooltip,
   submitting,
   readOnly,
+  hideSubmit,
   hideEdit,
   createNewEnabled,
   createButtonLabel,
@@ -499,7 +505,8 @@ export const ActionBar: React.FC<{
     });
   }, [onDiagnostic, position, resolved.capsule.length, resolved.menus.length, resolved.wantsSubmit, viewKey]);
 
-  const showSubmit = resolved.wantsSubmit && (viewKey === 'form' || viewKey === 'summary') && !readOnly;
+  const showSubmit =
+    resolved.wantsSubmit && (viewKey === 'form' || viewKey === 'summary') && !readOnly && hideSubmit !== true;
 
   const hasCapsuleRow = resolved.capsule.length > 0 || showSubmit;
   const hasNoticeRow = !!notice;

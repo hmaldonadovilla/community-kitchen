@@ -300,4 +300,20 @@
     - Copy action must only be available from completed records. When action is selected by user, copy Customer, Service and Requested Portions only. Do not copy production date, Responsible cook and Volunteer cook. Do not copy production, food safety, and portioning data. Open a new draft record with:
       - customer, service and requested portions prefilled and editable
       - production date, responsible cook and volunteer cook fields empty
-  > **WIP - Codex**
+  > **DONE - Codex**
+- ck-71:
+  - On table mode we need to show the `totals` of a column as a total row ath the end of the table. Such as:
+
+  ```txt
+    Dietary category    Requested  Delivered
+  ---------------------------------------
+  Vegetarian                   50     [ 50 ]
+  Normal                       50     [ 50 ]
+  No-Salt                      50     [ 50 ]
+  Vegan                        50     [ 50 ]
+  Vegetarian                   50     [ 60 ]
+  ---------------------------------------
+  Total                       250      260
+  ```
+
+  - On the steps ui on the `deliveryForm` we are showing the totals of both the `Requested` [ORD_QTY] and `Delivered` [FINAL_QTY] columns. We need to be able to override the configuration of the line item group at the step level to onlt show the totals for the `Requested` column.
