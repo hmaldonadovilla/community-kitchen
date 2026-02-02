@@ -723,6 +723,36 @@ export interface VisibilityCondition {
    * - false: matches when the field is empty
    */
   notEmpty?: boolean;
+  /**
+   * Alias for `notEmpty: false`.
+   * - true: matches when the field is empty
+   * - false: matches when the field is non-empty
+   */
+  isEmpty?: boolean;
+  /**
+   * Date-only match against the user's local "today".
+   *
+   * Notes:
+   * - `YYYY-MM-DD` values are treated as local dates (not UTC).
+   * - Empty/invalid dates do not match.
+   */
+  isToday?: boolean;
+  /**
+   * Date-only match against dates before the user's local "today".
+   *
+   * Notes:
+   * - `YYYY-MM-DD` values are treated as local dates (not UTC).
+   * - Empty/invalid dates do not match.
+   */
+  isInPast?: boolean;
+  /**
+   * Date-only match against dates after the user's local "today".
+   *
+   * Notes:
+   * - `YYYY-MM-DD` values are treated as local dates (not UTC).
+   * - Empty/invalid dates do not match.
+   */
+  isInFuture?: boolean;
 }
 
 /**

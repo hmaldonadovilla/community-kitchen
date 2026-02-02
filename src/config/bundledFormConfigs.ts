@@ -9077,6 +9077,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C.",
                 "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt."
               },
+              "validationRules": [
+                {
+                  "when": {
+                    "all": [
+                      {
+                        "not": {
+                          "fieldId": "MP_COOK_TEMP",
+                          "equals": [
+                            "__never__"
+                          ]
+                        }
+                      },
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isInFuture": true
+                      },
+                      {
+                        "fieldId": "__ckStep",
+                        "equals": [
+                          "foodSafety"
+                        ]
+                      }
+                    ]
+                  },
+                  "message": {
+                    "en": "Food safety and portioning can only be recorded on the day of production.",
+                    "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+                    "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+                  }
+                }
+              ],
               "pair": "core_temp",
               "options": [],
               "optionsFr": [],
@@ -9094,6 +9125,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "fr": "Ajoutez une photo par marmite de cuisson.",
                 "nl": "Voeg één foto per kookpot toe."
               },
+              "validationRules": [
+                {
+                  "when": {
+                    "all": [
+                      {
+                        "not": {
+                          "fieldId": "TEMP_EVD",
+                          "equals": [
+                            "__never__"
+                          ]
+                        }
+                      },
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isInFuture": true
+                      },
+                      {
+                        "fieldId": "__ckStep",
+                        "equals": [
+                          "foodSafety"
+                        ]
+                      }
+                    ]
+                  },
+                  "message": {
+                    "en": "Food safety and portioning can only be recorded on the day of production.",
+                    "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+                    "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+                  }
+                }
+              ],
               "pair": "core_temp",
               "options": [],
               "optionsFr": [],
@@ -14374,6 +14436,37 @@ export const BUNDLED_FORM_CONFIGS = [
                   "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C.",
                   "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt."
                 },
+                "validationRules": [
+                  {
+                    "when": {
+                      "all": [
+                        {
+                          "not": {
+                            "fieldId": "MP_COOK_TEMP",
+                            "equals": [
+                              "__never__"
+                            ]
+                          }
+                        },
+                        {
+                          "fieldId": "MP_PREP_DATE",
+                          "isInFuture": true
+                        },
+                        {
+                          "fieldId": "__ckStep",
+                          "equals": [
+                            "foodSafety"
+                          ]
+                        }
+                      ]
+                    },
+                    "message": {
+                      "en": "Food safety and portioning can only be recorded on the day of production.",
+                      "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+                      "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+                    }
+                  }
+                ],
                 "pair": "core_temp",
                 "options": [],
                 "optionsFr": [],
@@ -14395,6 +14488,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "options": [],
                 "optionsFr": [],
                 "optionsNl": [],
+                "validationRules": [
+                  {
+                    "when": {
+                      "all": [
+                        {
+                          "not": {
+                            "fieldId": "TEMP_EVD",
+                            "equals": [
+                              "__never__"
+                            ]
+                          }
+                        },
+                        {
+                          "fieldId": "MP_PREP_DATE",
+                          "isInFuture": true
+                        },
+                        {
+                          "fieldId": "__ckStep",
+                          "equals": [
+                            "foodSafety"
+                          ]
+                        }
+                      ]
+                    },
+                    "message": {
+                      "en": "Food safety and portioning can only be recorded on the day of production.",
+                      "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+                      "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+                    }
+                  }
+                ],
                 "uploadConfig": {
                   "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
                   "minFiles": 1,

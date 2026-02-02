@@ -3959,6 +3959,30 @@ components:
           type: boolean
           description: |
             Alias for `notEmpty: false`. If true, condition matches when the field is empty; if false, matches when non-empty.
+        isToday:
+          type: boolean
+          description: |
+            When true, condition matches when the field value is a DATE that falls on the user's local "today".
+
+            Notes:
+            - `YYYY-MM-DD` is treated as a local date (not UTC).
+            - Empty/invalid dates do not match.
+        isInPast:
+          type: boolean
+          description: |
+            When true, condition matches when the field value is a DATE that is before the user's local "today".
+
+            Notes:
+            - `YYYY-MM-DD` is treated as a local date (not UTC).
+            - Empty/invalid dates do not match.
+        isInFuture:
+          type: boolean
+          description: |
+            When true, condition matches when the field value is a DATE that is after the user's local "today".
+
+            Notes:
+            - `YYYY-MM-DD` is treated as a local date (not UTC).
+            - Empty/invalid dates do not match.
 
     LineItemWhenClause:
       type: object
