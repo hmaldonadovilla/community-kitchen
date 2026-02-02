@@ -864,6 +864,32 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
           margin: 0;
         }
+        /* Generic field helper text (configurable per field). */
+        .ck-field-helper {
+          margin: 0;
+          font-size: calc(var(--ck-font-label) * 0.85);
+          font-weight: 500;
+          line-height: 1.25;
+          color: var(--muted);
+        }
+        .form-card .field.inline-field > .ck-field-helper,
+        .webform-overlay .field.inline-field > .ck-field-helper {
+          flex: 0 0 100%;
+          width: 100%;
+          margin: 0;
+        }
+        .ck-line-item-table__header-wrap {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .ck-line-item-table__header-helper {
+          font-size: calc(var(--ck-font-label) * 0.85);
+          font-weight: 500;
+          line-height: 1.2;
+          color: var(--muted);
+          white-space: normal;
+        }
         /* Per-field override: force *label* above the rest even for 1-up/full-width rows.
            Important: we only stack the label; the control and any action buttons (subgroup/info) should stay inline. */
         .form-card .field.inline-field.ck-label-stacked,

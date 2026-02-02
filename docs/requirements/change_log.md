@@ -250,10 +250,42 @@
 - ck-65:
   - on the `overlayDetail` where we have a header and a body, I've set validation rules for the fields in the body table `MP_INGREDIENTS_LI.QTY` and `MP_INGREDIENTS_LI.UNIT`. I expect these fields to be validated on blur and honoring `enforceFieldOrder` configuration. At the moment the user is not notified of the validation errors, only running submit/next button, the fields are highlighted.
   - The `ingredientsSelector` prompt is using the `selectorOverlay` input control and when items are added it opens the overlay. I need to control the fields that are shown in the overlay table, for this use case I only need to show the `ING` field.
+  > **DONE - Codex**
 - ck-66:
   - Auto save is not working as expected, only when I enter a photo the auto save is triggered and it starts working again. When starting a new record and entering data does not trigger the auto save unless I file upload is made.
   - "clearOnChange": true, is not working as expected, when changing the service the rest of the fields are not cleared.
   - The `changeDialog` needs to be triggered when the value of the field changes, when the field is empty it should not trigger the dialog.
+  > **DONE - Codex**
 - ck-67:
   - We need to improve the search mechanism that provides multi-select search results. When the target is a field that has options, extended with multiple columns providing additional information to the option, the search mechanism is already searching on all the columns. This is good and we want to keep it, however the search mechanism match is too permissive and it leads to incorrect results. We propose to match the whole word (case insensitive) in any of the columns. This means that if the user does not provide a value that matches the full word in any of the columns, the search results will not be shown.
-  > **WIP - Codex**
+  > **DONE - Codex**
+- ck-68:
+  - In the meal-production form on the `overlayDetail` we are already validating fields in rows and diplaying error messages, when the user click on the button to leave the overlay we need to allow the user to leave the overlay even if there are validation errors. However before the user leaves we can display a dialog, if configured for the overlay.
+  - The dialog should:
+    - Clearly explain what is missing
+    - Clearly explain what will be lost
+    - Give the user a real choice to continue or exit
+    - The dialog highligths the problem with the 1st field that has an error.
+    - If the user confirms exit, the overlay is closed. When the user comes back to the record or to the line item overlay, validation is performed and the 1st field with issues is highlighted
+    - Rows have been added
+      - Title: Missing quantity/unit
+      - Message: One or more ingredients do not have a quantity and/or unit. If you close this page now, the ingredient selection will be lost.
+      - Buttons:
+        - Continue editing
+        - Close, data will be lost
+    - No lines added
+      - Title: Missing ingredients
+      - Message: No ingredients have been added. Do you want to exit?
+      - Buttons:
+        - Yes
+        - No, continue editing
+    - Behaviour rules (for clarity, not UI text)
+      - “Continue editing” → stay on Ingredients page
+      - “Close without quantity” → close page and remove incomplete ingredient rows
+      - Do not auto-scroll or auto-focus after dismissal
+  - This respects:
+    - interruption-heavy environments
+    - user autonomy
+    - error prevention without coercion
+  - Please perform the configuration of the above example in the meal production configuration file.
+  > **WIP - Cursor**

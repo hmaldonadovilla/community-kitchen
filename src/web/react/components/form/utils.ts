@@ -30,6 +30,23 @@ export const formatOptionFilterNonMatchWarning = (args: { language: LangCode; ke
   });
 };
 
+export type FieldHelperPlacement = 'belowLabel' | 'placeholder';
+
+export const resolveFieldHelperText = (args: {
+  ui?: any;
+  language: LangCode;
+}): { text: string; placement: FieldHelperPlacement } => {
+  const ui = args.ui || {};
+  const raw = ui.helperText ?? ui.helpText ?? ui.supportingText ?? ui.helper ?? ui.hint;
+  const text = raw ? resolveLocalizedString(raw as any, args.language, '').toString().trim() : '';
+  const placementRaw = (ui.helperPlacement ?? ui.helperPlacementMode ?? ui.helperPlacementLocation ?? '').toString().trim().toLowerCase();
+  const placement: FieldHelperPlacement =
+    placementRaw === 'placeholder' || placementRaw === 'control' || placementRaw === 'inside' || placementRaw === 'insidecontrol'
+      ? 'placeholder'
+      : 'belowLabel';
+  return { text, placement };
+};
+
 export const resolveUploadRemainingHelperText = (args: {
   uploadConfig?: any;
   language: LangCode;
@@ -74,6 +91,12 @@ export const clearLineItemGroupErrors = (errors: FormErrors, groupId: string): F
     next[key] = value;
   });
   return next;
+};
+
+export const mergeLineItemGroupErrors = (errors: FormErrors, groupId: string, nextErrors: FormErrors): FormErrors => {
+  const cleared = clearLineItemGroupErrors(errors || {}, groupId);
+  const overlay = nextErrors || {};
+  return { ...cleared, ...overlay };
 };
 
 const normalizeExtensions = (extensions?: string[]) =>
@@ -429,5 +452,3 @@ export const resolveRowDisclaimerText = (args: {
 
   return interpolateTemplate(template, vars).trim();
 };
-
-

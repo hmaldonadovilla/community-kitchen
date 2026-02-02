@@ -2048,6 +2048,14 @@
               "fr": "Entrez le nombre de portions.",
               "nl": "Voer het aantal porties in."
             },
+            "ui": {
+              "helperText": {
+                "en": "Enter the number of portions.",
+                "fr": "Entrez le nombre de portions.",
+                "nl": "Voer het aantal porties in."
+              },
+              "helperPlacement": "belowLabel"
+            },
             "pair": "meal_qty",
             "options": [],
             "optionsFr": [],
@@ -7318,15 +7326,23 @@
               "labelFr": "Portions demandées",
               "labelNl": "Aantal",
               "required": true,
-              "requiredMessage": {
+            "requiredMessage": {
+              "en": "Enter the number of portions.",
+              "fr": "Entrez le nombre de portions.",
+              "nl": "Voer het aantal porties in."
+            },
+            "ui": {
+              "helperText": {
                 "en": "Enter the number of portions.",
                 "fr": "Entrez le nombre de portions.",
                 "nl": "Voer het aantal porties in."
               },
-              "pair": "meal_qty",
-              "options": [],
-              "optionsFr": [],
-              "optionsNl": [],
+              "helperPlacement": "belowLabel"
+            },
+            "pair": "meal_qty",
+            "options": [],
+            "optionsFr": [],
+            "optionsNl": [],
               "validationRules": [
                 {
                   "phase": "submit",

@@ -2254,6 +2254,74 @@ export class ConfigSheet {
       rawUi.labelLayout ?? rawUi.label_layout ?? rawUi.stackedLabel ?? rawUi.stackLabel ?? rawUi.stacked
     );
     const summaryVisibility = this.normalizeSummaryVisibility(rawUi.summaryVisibility ?? rawUi.summary_visibility);
+
+    const helperTextRaw =
+      rawUi.helperText ??
+      rawUi.helper_text ??
+      rawUi.helper ??
+      rawUi.helpText ??
+      rawUi.help_text ??
+      rawUi.supportingText ??
+      rawUi.supporting_text ??
+      rawUi.hint;
+    const helperTextObj = helperTextRaw && typeof helperTextRaw === 'object' ? helperTextRaw : null;
+    const helperTextStr = typeof helperTextRaw === 'string' ? helperTextRaw : '';
+    const hasHelperTextLangOverrides = !!(rawUi.helperTextEn || rawUi.helperTextFr || rawUi.helperTextNl);
+    const helperTextEn = rawUi.helperTextEn || (helperTextObj && helperTextObj.en) || helperTextStr || '';
+    const helperTextFr = rawUi.helperTextFr || (helperTextObj && helperTextObj.fr) || '';
+    const helperTextNl = rawUi.helperTextNl || (helperTextObj && helperTextObj.nl) || '';
+    const helperText: QuestionUiConfig['helperText'] =
+      helperTextObj ||
+      (hasHelperTextLangOverrides
+        ? ({
+            en: helperTextEn || undefined,
+            fr: helperTextFr || undefined,
+            nl: helperTextNl || undefined
+          } as any)
+        : helperTextStr
+          ? (helperTextStr as any)
+          : undefined);
+
+    const normalizeHelperPlacement = (raw: any): QuestionUiConfig['helperPlacement'] | undefined => {
+      if (raw === undefined || raw === null) return undefined;
+      const candidate = raw.toString().trim().toLowerCase();
+      switch (candidate) {
+        case 'belowlabel':
+        case 'below_label':
+        case 'below label':
+        case 'underlabel':
+        case 'under_label':
+        case 'under label':
+        case 'label':
+        case 'below':
+        case 'under':
+          return 'belowLabel';
+        case 'placeholder':
+        case 'input':
+        case 'inputcontrol':
+        case 'input_control':
+        case 'input control':
+        case 'inside':
+        case 'insideinput':
+        case 'inside_input':
+        case 'inside input':
+        case 'control':
+          return 'placeholder';
+        default:
+          return undefined;
+      }
+    };
+    const helperPlacement = normalizeHelperPlacement(
+      rawUi.helperPlacement ??
+        rawUi.helperPlacementMode ??
+        rawUi.helperPlacementLocation ??
+        rawUi.helper_placement ??
+        rawUi.helperPosition ??
+        rawUi.helper_position ??
+        rawUi.helperLocation ??
+        rawUi.helper_location
+    );
+
     const normalizeBool = (v: any): boolean | undefined => {
       if (v === undefined || v === null) return undefined;
       if (typeof v === 'boolean') return v;
@@ -2322,6 +2390,8 @@ export class ConfigSheet {
     const cfg: QuestionUiConfig = {};
     if (control) cfg.control = control;
     if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
+    if (helperText !== undefined) (cfg as any).helperText = helperText;
+    if (helperPlacement !== undefined) (cfg as any).helperPlacement = helperPlacement;
     if (hideLabel === true) cfg.hideLabel = true;
     if (summaryHideLabel !== undefined) cfg.summaryHideLabel = summaryHideLabel;
     if (summaryVisibility) cfg.summaryVisibility = summaryVisibility;
@@ -2500,6 +2570,18 @@ export class ConfigSheet {
         rawUi.overlay
     );
 
+    const closeButtonLabel =
+      rawUi.closeButtonLabel ??
+      rawUi.close_button_label ??
+      rawUi.closeLabel ??
+      rawUi.close_label ??
+      rawUi.closeButtonText ??
+      rawUi.close_button_text ??
+      rawUi.closeText ??
+      rawUi.close_text;
+
+    const closeConfirm = rawUi.closeConfirm ?? rawUi.close_confirm;
+
     const choiceSearchEnabled = normalizeBool(
       rawUi.choiceSearchEnabled ??
         rawUi.choiceSearch ??
@@ -2543,6 +2625,8 @@ export class ConfigSheet {
     if (allowRemoveAutoRows !== undefined) (cfg as any).allowRemoveAutoRows = allowRemoveAutoRows;
     if (saveDisabledRows !== undefined) (cfg as any).saveDisabledRows = saveDisabledRows;
     if (openInOverlay !== undefined) (cfg as any).openInOverlay = openInOverlay;
+    if (closeButtonLabel !== undefined) (cfg as any).closeButtonLabel = closeButtonLabel;
+    if (closeConfirm !== undefined) (cfg as any).closeConfirm = closeConfirm;
     if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
     if (nonMatchWarningMode !== undefined) (cfg as any).nonMatchWarningMode = nonMatchWarningMode;
     if (overlayDetail !== undefined) (cfg as any).overlayDetail = overlayDetail;

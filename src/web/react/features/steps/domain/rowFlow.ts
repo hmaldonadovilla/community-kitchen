@@ -5,7 +5,7 @@ import type { LineItemState } from '../../../types';
 import type {
   LineItemGroupConfigOverride,
   RowFlowActionConfig,
-  RowFlowActionConfirmConfig,
+  OverlayCloseConfirmLike,
   RowFlowActionEffect,
   RowFlowActionRef,
   RowFlowConfig,
@@ -97,7 +97,7 @@ export type RowFlowResolvedEffect =
       hideInlineSubgroups?: boolean;
       hideCloseButton?: boolean;
       closeButtonLabel?: unknown;
-      closeConfirm?: RowFlowActionConfirmConfig;
+      closeConfirm?: OverlayCloseConfirmLike;
       groupOverride?: LineItemGroupConfigOverride;
       rowFlow?: RowFlowConfig;
       overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
@@ -592,7 +592,7 @@ export const resolveRowFlowActionPlan = (args: {
         hideInlineSubgroups: effect.hideInlineSubgroups,
         hideCloseButton: (effect as any).hideCloseButton === true,
         closeButtonLabel: (effect as any).closeButtonLabel,
-        closeConfirm: (effect as any).closeConfirm as RowFlowActionConfirmConfig | undefined,
+        closeConfirm: (effect as any).closeConfirm as OverlayCloseConfirmLike | undefined,
         groupOverride: (effect as any).groupOverride as LineItemGroupConfigOverride | undefined,
         rowFlow: (effect as any).rowFlow as RowFlowConfig | undefined,
         overlayContextHeader: (effect as any).overlayContextHeader as RowFlowOverlayContextHeaderConfig | undefined,

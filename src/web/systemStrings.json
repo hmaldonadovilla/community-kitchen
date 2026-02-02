@@ -355,6 +355,11 @@
   },
   "validation": {
     "thisFieldRequired": { "en": "This field is required.", "fr": "Ce champ est requis.", "nl": "Dit veld is verplicht." },
+    "numberOnly": {
+      "en": "Only numbers are allowed in this field.",
+      "fr": "Seuls des nombres sont autorisés dans ce champ.",
+      "nl": "Alleen getallen zijn toegestaan in dit veld."
+    },
     "fixErrors": {
       "en": "You are almost done. Some required checks are missing. Review the highlighted sections.",
       "fr": "Vous avez presque terminé. Certaines vérifications obligatoires manquent. Revoyez les sections en surbrillance.",

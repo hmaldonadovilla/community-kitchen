@@ -28,7 +28,7 @@ import {
   WebFormDefinition,
   WebQuestionDefinition
 } from '../../../types';
-import type { RowFlowActionConfirmConfig } from '../../../../types';
+import type { OverlayCloseConfirmLike } from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../../types';
@@ -38,6 +38,7 @@ import {
   formatOptionFilterNonMatchWarning,
   getUploadMinRequired,
   isUploadValueComplete,
+  resolveFieldHelperText,
   resolveRowDisclaimerText,
   toDateInputValue,
   toUploadItems
@@ -163,7 +164,7 @@ export interface LineItemGroupQuestionCtx {
       hideInlineSubgroups?: boolean;
       hideCloseButton?: boolean;
       closeButtonLabel?: string;
-      closeConfirm?: RowFlowActionConfirmConfig;
+      closeConfirm?: OverlayCloseConfirmLike;
       label?: string;
       contextHeader?: string;
       helperText?: string;
@@ -178,7 +179,7 @@ export interface LineItemGroupQuestionCtx {
       source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
       hideCloseButton?: boolean;
       closeButtonLabel?: string;
-      closeConfirm?: RowFlowActionConfirmConfig;
+      closeConfirm?: OverlayCloseConfirmLike;
       label?: string;
       contextHeader?: string;
       helperText?: string;
@@ -280,6 +281,7 @@ export const LineItemGroupQuestion: React.FC<{
     setLineItems,
     submitting,
     errors,
+    setErrors,
     warningByField,
     optionState,
     setOptionState,
@@ -340,6 +342,12 @@ export const LineItemGroupQuestion: React.FC<{
     : renderRowsAll;
 
   const groupChoiceSearchDefault = (q.lineItemConfig?.ui as any)?.choiceSearchEnabled;
+  const groupHelperCfg = resolveFieldHelperText({ ui: q.ui, language });
+  const groupHelperText = groupHelperCfg.text;
+  const groupHelperNode =
+    groupHelperText && !submitting && q.readOnly !== true && q.ui?.renderAsLabel !== true
+      ? <div className="ck-field-helper">{groupHelperText}</div>
+      : null;
 
   const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
   // IMPORTANT: section selectors can commit their value on blur (e.g., SearchableSelect).
@@ -2304,7 +2312,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             );
 
             const fieldPath = `${q.id}__${field.id}__${row.id}`;
-            const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+            const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+            const isEditableField =
+              !submitting &&
+              (field as any)?.readOnly !== true &&
+              (field as any)?.ui?.renderAsLabel !== true &&
+              (field as any)?.renderAsLabel !== true &&
+              !!(field as any)?.valueMap === false;
+            const placeholder =
+              helperCfg.text && helperCfg.placement === 'placeholder' && isEditableField ? helperCfg.text : undefined;
+            const renderAsLabel =
+              (field as any)?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || (field as any)?.readOnly === true;
             const rowNonMatchWarning = useDescriptiveNonMatchWarnings ? getRowNonMatchWarning(row) : '';
             const showNonMatchWarning =
               useDescriptiveNonMatchWarnings &&
@@ -2631,6 +2649,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               );
             }
             if (field.type === 'NUMBER') {
+              const numericOnlyMessage = tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
               return (
                 <div
                   className="ck-line-item-table__control"
@@ -2643,6 +2662,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     disabled={submitting}
                     readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                     ariaLabel={resolveFieldLabel(field, language, field.id)}
+                    placeholder={placeholder}
+                    onInvalidInput={({ reason, value }) => {
+                      setErrors(prev => {
+                        const next = { ...prev };
+                        const existing = next[fieldPath];
+                        if (existing && existing !== numericOnlyMessage) return prev;
+                        if (existing === numericOnlyMessage) return prev;
+                        next[fieldPath] = numericOnlyMessage;
+                        return next;
+                      });
+                      onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
+                    }}
                     onChange={next => handleLineFieldChange(q, row.id, field, next)}
                   />
                   {warningFootnote}
@@ -2664,6 +2695,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                     readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                     rows={(field as any)?.ui?.paragraphRows || 3}
+                    placeholder={placeholder}
                   />
                   {warningFootnote}
                   {errorNode}
@@ -2702,6 +2734,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   value={fieldValue}
                   onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                   readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                  placeholder={placeholder}
                 />
                 {warningFootnote}
                 {errorNode}
@@ -2752,7 +2785,23 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           const tableColumns: LineItemTableColumn[] = [
             ...tableFields.map(field => ({
               id: field.id,
-              label: resolveFieldLabel(field, language, field.id),
+              label: (() => {
+                const labelText = resolveFieldLabel(field, language, field.id);
+                const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                const isEditableField =
+                  !submitting &&
+                  (field as any)?.readOnly !== true &&
+                  (field as any)?.ui?.renderAsLabel !== true &&
+                  (field as any)?.renderAsLabel !== true &&
+                  !!(field as any)?.valueMap === false;
+                if (!helperCfg.text || helperCfg.placement !== 'belowLabel' || !isEditableField) return labelText;
+                return (
+                  <div className="ck-line-item-table__header-wrap">
+                    <div>{labelText}</div>
+                    <div className="ck-line-item-table__header-helper">{helperCfg.text}</div>
+                  </div>
+                );
+              })(),
               style: resolveTableColumnStyle(field.id),
               renderCell: (row: any, rowIdx: number) => renderTableField(field, row, rowIdx)
             })),
@@ -2826,6 +2875,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                 <h3 style={hideGroupLabel ? { ...srOnly, margin: 0 } : { margin: 0 }}>{resolveLabel(q, language)}</h3>
               </div>
+              {groupHelperNode}
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
               {renderWarnings(q.id)}
               {shouldRenderTopToolbar ? (
@@ -3010,6 +3060,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <h3 style={hideGroupLabel ? { ...srOnly, margin: 0 } : { margin: 0 }}>{resolveLabel(q, language)}</h3>
             </div>
+              {groupHelperNode}
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
               {renderWarnings(q.id)}
             {shouldRenderTopToolbar ? (
@@ -3083,10 +3134,33 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   const showLabel = args.showLabel !== false;
                   const labelStyle = showLabel ? undefined : srOnly;
                   const labelText = args.labelOverride || resolveFieldLabel(field, language, field.id);
+                  const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                  const helperText = helperCfg.text;
+                  const supportsPlaceholder = field?.type === 'TEXT' || field?.type === 'PARAGRAPH' || field?.type === 'NUMBER';
+                  const effectivePlacement =
+                    helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
+                  const isEditableField =
+                    !submitting &&
+                    field?.readOnly !== true &&
+                    field?.ui?.renderAsLabel !== true &&
+                    (field as any)?.renderAsLabel !== true &&
+                    !field?.valueMap;
+                  const helperId =
+                    helperText && effectivePlacement === 'belowLabel'
+                      ? (isEditableField ? `ck-field-helper-${fieldPath.replace(/[^a-zA-Z0-9_-]/g, '-')}` : undefined)
+                      : undefined;
+                  const helperNode =
+                    helperText && effectivePlacement === 'belowLabel' && isEditableField ? (
+                      <div id={helperId} className="ck-field-helper">
+                        {helperText}
+                      </div>
+                    ) : null;
+                  const placeholder =
+                    helperText && effectivePlacement === 'placeholder' && isEditableField ? helperText : undefined;
                   const ctxForVisibility = buildRowFlowFieldCtx({ rowValues, parentValues: args.parentValues });
                   if (shouldHideField(field.visibility, ctxForVisibility, { rowId: args.rowEntry.row.id, linePrefix: groupKey })) return null;
 
-                  const renderAsLabel = field?.ui?.renderAsLabel === true || field?.readOnly === true;
+                  const renderAsLabel = field?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || field?.readOnly === true;
                   const renderReadOnly = (display: React.ReactNode) => (
                     <div className="field inline-field ck-readonly-field" data-field-path={fieldPath}>
                       <label style={labelStyle}>
@@ -3148,6 +3222,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               onChange: next => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, next)
                             })}
                           </div>
+                          {helperNode}
                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           {renderWarnings(fieldPath)}
                         </div>
@@ -3207,6 +3282,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               ))}
                             </div>
                           )}
+                          {helperNode}
                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           {renderWarnings(fieldPath)}
                         </div>
@@ -3216,6 +3292,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       const raw = rowValues[field.id] as any;
                       const numberText = raw === undefined || raw === null ? '' : raw.toString();
                       if (renderAsLabel) return renderReadOnly(numberText || null);
+                      const numericOnlyMessage = tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
                       return (
                         <div className="field inline-field" data-field-path={fieldPath}>
                           <label style={labelStyle}>
@@ -3227,8 +3304,22 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             disabled={submitting}
                             readOnly={field?.readOnly === true}
                             ariaLabel={labelText}
+                            ariaDescribedBy={helperId}
+                            placeholder={placeholder}
+                            onInvalidInput={({ reason, value }) => {
+                              setErrors(prev => {
+                                const next = { ...prev };
+                                const existing = next[fieldPath];
+                                if (existing && existing !== numericOnlyMessage) return prev;
+                                if (existing === numericOnlyMessage) return prev;
+                                next[fieldPath] = numericOnlyMessage;
+                                return next;
+                              });
+                              onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
+                            }}
                             onChange={next => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, next)}
                           />
+                          {helperNode}
                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           {renderWarnings(fieldPath)}
                         </div>
@@ -3249,8 +3340,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             language={language}
                             readOnly={field?.readOnly === true}
                             ariaLabel={labelText}
+                            ariaDescribedBy={helperId}
                             onChange={next => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, next)}
                           />
+                          {helperNode}
                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           {renderWarnings(fieldPath)}
                         </div>
@@ -3271,7 +3364,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             onChange={e => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, e.target.value)}
                             readOnly={field?.readOnly === true}
                             rows={(field as any)?.ui?.paragraphRows || 4}
+                            placeholder={placeholder}
+                            aria-describedby={helperId}
                           />
+                          {helperNode}
                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           {renderWarnings(fieldPath)}
                         </div>
@@ -3307,6 +3403,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           >
                             {label}
                           </button>
+                          {helperNode}
                           <input
                             ref={el => {
                               if (!el) return;
@@ -3337,7 +3434,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             value={value || ''}
                             onChange={e => handleLineFieldChange(args.groupDef, args.rowEntry!.row.id, field, e.target.value)}
                             readOnly={field?.readOnly === true}
+                            placeholder={placeholder}
+                            aria-describedby={helperId}
                           />
+                          {helperNode}
                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                           {renderWarnings(fieldPath)}
                         </div>
@@ -3924,7 +4024,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   hideInlineSubgroups: (match as any).hideInlineSubgroups === true,
                   hideCloseButton: (match as any).hideCloseButton === true,
                   closeButtonLabel: (match as any).closeButtonLabel,
-                  closeConfirm: (match as any).closeConfirm as RowFlowActionConfirmConfig | undefined,
+                  closeConfirm: (match as any).closeConfirm as OverlayCloseConfirmLike | undefined,
                   renderMode,
                   label,
                   flattenFields,
@@ -4050,7 +4150,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   if (hideField) return null;
                   ensureLineOptions(targetKey, flatField);
                   const fieldPath = `${targetKey}__${flatField.id}__${targetRow.id}`;
-                  const renderAsLabel = flatField?.ui?.renderAsLabel === true || flatField?.readOnly === true;
+                  const renderAsLabel =
+                    flatField?.ui?.renderAsLabel === true || flatField?.renderAsLabel === true || flatField?.readOnly === true;
                   const hideLabel = Boolean(flatField?.ui?.hideLabel);
                   const useStackedLabel = forceStackedLabel || flatField.ui?.labelLayout === 'stacked';
                   const labelStyle = hideLabel ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : undefined;
@@ -5043,7 +5144,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 // In grids (2-up/3-up), we must keep the label in layout to preserve row alignment.
                 // Using `srOnly` (position:absolute) would remove the label from the grid and shift controls upward.
                 const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
-                const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+                const renderAsLabel =
+                  (field as any)?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || (field as any)?.readOnly === true;
                 const overlayActionSuppressed = ctx.isOverlayOpenActionSuppressed?.(fieldPath) === true;
                 const overlayOpenAction = overlayActionSuppressed ? null : resolveOverlayOpenActionForField(field, row, overlayActionCtx);
                 const overlayOpenRenderMode = overlayOpenAction?.renderMode === 'inline' ? 'inline' : 'replace';
@@ -5226,7 +5328,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     if (hideField) return null;
                     ensureLineOptions(targetKey, flatField);
                     const fieldPath = `${targetKey}__${flatField.id}__${targetRow.id}`;
-                    const renderAsLabel = flatField?.ui?.renderAsLabel === true || flatField?.readOnly === true;
+                    const renderAsLabel =
+                      flatField?.ui?.renderAsLabel === true || flatField?.renderAsLabel === true || flatField?.readOnly === true;
                     const hideLabel = Boolean(flatField?.ui?.hideLabel);
                     const useStackedLabel = forceStackedLabel || flatField.ui?.labelLayout === 'stacked';
                     const labelStyle = hideLabel ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : undefined;
@@ -5255,6 +5358,30 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           ? fieldValue
                           : fieldValue;
                     const displayText = displayValue === undefined || displayValue === null ? '' : displayValue.toString();
+                    const helperCfg = resolveFieldHelperText({ ui: (flatField as any)?.ui, language });
+                    const helperText = helperCfg.text;
+                    const supportsPlaceholder =
+                      flatField.type === 'TEXT' || flatField.type === 'PARAGRAPH' || flatField.type === 'NUMBER';
+                    const effectivePlacement =
+                      helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
+                    const isEditableField =
+                      !submitting &&
+                      flatField?.readOnly !== true &&
+                      flatField?.ui?.renderAsLabel !== true &&
+                      flatField?.renderAsLabel !== true &&
+                      !flatField?.valueMap;
+                    const helperId =
+                      helperText && effectivePlacement === 'belowLabel' && isEditableField
+                        ? `ck-field-helper-${fieldPath.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+                        : undefined;
+                    const helperNode =
+                      helperText && effectivePlacement === 'belowLabel' && isEditableField ? (
+                        <div id={helperId} className="ck-field-helper">
+                          {helperText}
+                        </div>
+                      ) : null;
+                    const placeholder =
+                      helperText && effectivePlacement === 'placeholder' && isEditableField ? helperText : undefined;
                     const renderErrors = () => (
                       <>
                         {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
@@ -5521,6 +5648,20 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             disabled={submitting}
                             readOnly={!!flatField.valueMap || flatField.readOnly === true}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
+                            ariaDescribedBy={helperId}
+                            placeholder={placeholder}
+                            onInvalidInput={({ reason, value }) => {
+                              const numericOnlyMessage = tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
+                              setErrors(prev => {
+                                const next = { ...prev };
+                                const existing = next[fieldPath];
+                                if (existing && existing !== numericOnlyMessage) return prev;
+                                if (existing === numericOnlyMessage) return prev;
+                                next[fieldPath] = numericOnlyMessage;
+                                return next;
+                              });
+                              onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
+                            }}
                             onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
                           />
                         ) : flatField.type === 'PARAGRAPH' ? (
@@ -5530,6 +5671,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
                             readOnly={!!flatField.valueMap || flatField.readOnly === true}
                             rows={(flatField as any)?.ui?.paragraphRows || 4}
+                            placeholder={placeholder}
+                            aria-describedby={helperId}
                           />
                         ) : flatField.type === 'DATE' ? (
                           <DateInput
@@ -5537,6 +5680,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             language={language}
                             readOnly={!!flatField.valueMap || flatField.readOnly === true}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
+                            ariaDescribedBy={helperId}
                             onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
                           />
                         ) : (
@@ -5545,8 +5689,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
                             readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            placeholder={placeholder}
+                            aria-describedby={helperId}
                           />
                         )}
+                        {helperNode}
                         {renderErrors()}
                       </div>
                     );
@@ -6143,7 +6290,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               </button>
                             ) : null}
                           </div>
-                          {helperText ? <div className="ck-upload-helper">{helperText}</div> : null}
+                          {!readOnly && helperText ? <div className="ck-upload-helper">{helperText}</div> : null}
                           <div className="ck-upload-items">
                             {items.map((item: any, idx: number) => (
                               <div key={`${field.id}-file-${idx}`} className="ck-upload-item">
@@ -6204,6 +6351,29 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           : fieldValue;
                     const displayText =
                       displayValue === undefined || displayValue === null ? '' : displayValue.toString();
+                    const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                    const helperText = helperCfg.text;
+                    const supportsPlaceholder = field.type === 'TEXT' || field.type === 'PARAGRAPH' || field.type === 'NUMBER';
+                    const effectivePlacement =
+                      helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
+                    const isEditableField =
+                      !submitting &&
+                      (field as any)?.readOnly !== true &&
+                      (field as any)?.ui?.renderAsLabel !== true &&
+                      (field as any)?.renderAsLabel !== true &&
+                      !field.valueMap;
+                    const helperId =
+                      helperText && effectivePlacement === 'belowLabel' && isEditableField
+                        ? `ck-field-helper-${fieldPath.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+                        : undefined;
+                    const helperNode =
+                      helperText && effectivePlacement === 'belowLabel' && isEditableField ? (
+                        <div id={helperId} className="ck-field-helper">
+                          {helperText}
+                        </div>
+                      ) : null;
+                    const placeholder =
+                      helperText && effectivePlacement === 'placeholder' && isEditableField ? helperText : undefined;
                     if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
                       return renderOverlayOpenReplaceLine(displayText || null);
                     }
@@ -6230,6 +6400,24 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             disabled={submitting}
                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                             ariaLabel={resolveFieldLabel(field, language, field.id)}
+                            ariaDescribedBy={helperId}
+                            placeholder={placeholder}
+                            onInvalidInput={
+                              isEditableField
+                                ? ({ reason, value }) => {
+                              const numericOnlyMessage = tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
+                              setErrors(prev => {
+                                const next = { ...prev };
+                                const existing = next[fieldPath];
+                                if (existing && existing !== numericOnlyMessage) return prev;
+                                if (existing === numericOnlyMessage) return prev;
+                                next[fieldPath] = numericOnlyMessage;
+                                return next;
+                              });
+                              onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
+                            }
+                                : undefined
+                            }
                             onChange={next => handleLineFieldChange(q, row.id, field, next)}
                           />
                         ) : field.type === 'PARAGRAPH' ? (
@@ -6239,6 +6427,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                             rows={(field as any)?.ui?.paragraphRows || 4}
+                            placeholder={placeholder}
+                            aria-describedby={helperId}
                           />
                         ) : field.type === 'DATE' ? (
                           <DateInput
@@ -6246,6 +6436,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             language={language}
                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                             ariaLabel={resolveFieldLabel(field, language, field.id)}
+                            ariaDescribedBy={helperId}
                             onChange={next => handleLineFieldChange(q, row.id, field, next)}
                           />
                         ) : (
@@ -6254,8 +6445,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                            placeholder={placeholder}
+                            aria-describedby={helperId}
                           />
                         )}
+                        {helperNode}
                         {renderOverlayOpenInlineButton(displayText || null)}
                         {subgroupOpenStack}
                         {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
@@ -6310,7 +6504,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               // The title field (rendered in the row header) historically showed disabled controls.
                               // For consistency with edit rendering elsewhere, treat readOnly/renderAsLabel as "show plain text".
                               const titleAsLabel =
-                                titleLocked || (titleField as any)?.ui?.renderAsLabel === true || (titleField as any)?.readOnly === true;
+                                titleLocked ||
+                                (titleField as any)?.ui?.renderAsLabel === true ||
+                                (titleField as any)?.renderAsLabel === true ||
+                                (titleField as any)?.readOnly === true;
                               const overlayOpenTargets = overlayOpenActionTargetsForField(titleField);
                               const triggeredSubgroupIds = (() => {
                                 if (rowCollapsed) return [] as string[];
@@ -6687,7 +6884,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         (isProgressive && rowCollapsed && collapsedLabelMap[field.id] === false);
                       const inGrid = opts?.inGrid === true;
                       const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
-                      const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+                      const renderAsLabel =
+                        (field as any)?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || (field as any)?.readOnly === true;
                       const overlayActionSuppressed = ctx.isOverlayOpenActionSuppressed?.(fieldPath) === true;
                       const overlayOpenAction = overlayActionSuppressed ? null : resolveOverlayOpenActionForField(field, row, overlayActionCtx);
                       const overlayOpenRenderMode = overlayOpenAction?.renderMode === 'inline' ? 'inline' : 'replace';
@@ -7445,6 +7643,29 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               ? fieldValue
                               : fieldValue;
                         const displayText = displayValue === undefined || displayValue === null ? '' : displayValue.toString();
+                        const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                        const helperText = helperCfg.text;
+                        const supportsPlaceholder = field.type === 'TEXT' || field.type === 'PARAGRAPH' || field.type === 'NUMBER';
+                        const effectivePlacement =
+                          helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
+                        const isEditableField =
+                          !submitting &&
+                          (field as any)?.readOnly !== true &&
+                          (field as any)?.ui?.renderAsLabel !== true &&
+                          (field as any)?.renderAsLabel !== true &&
+                          !field.valueMap;
+                        const helperId =
+                          helperText && effectivePlacement === 'belowLabel' && isEditableField
+                            ? `ck-field-helper-${fieldPath.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+                            : undefined;
+                        const helperNode =
+                          helperText && effectivePlacement === 'belowLabel' && isEditableField ? (
+                            <div id={helperId} className="ck-field-helper">
+                              {helperText}
+                            </div>
+                          ) : null;
+                        const placeholder =
+                          helperText && effectivePlacement === 'placeholder' && isEditableField ? helperText : undefined;
                         if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
                           return renderOverlayOpenReplaceLine(displayText || null);
                         }
@@ -7471,6 +7692,28 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 disabled={submitting}
                                 readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                ariaDescribedBy={helperId}
+                                placeholder={placeholder}
+                                onInvalidInput={
+                                  isEditableField
+                                    ? ({ reason, value }) => {
+                                        const numericOnlyMessage = tSystem(
+                                          'validation.numberOnly',
+                                          language,
+                                          'Only numbers are allowed in this field.'
+                                        );
+                                        setErrors(prev => {
+                                          const next = { ...prev };
+                                          const existing = next[fieldPath];
+                                          if (existing && existing !== numericOnlyMessage) return prev;
+                                          if (existing === numericOnlyMessage) return prev;
+                                          next[fieldPath] = numericOnlyMessage;
+                                          return next;
+                                        });
+                                        onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
+                                      }
+                                    : undefined
+                                }
                                 onChange={next => handleLineFieldChange(q, row.id, field, next)}
                               />
                             ) : field.type === 'PARAGRAPH' ? (
@@ -7480,6 +7723,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                                 readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                 rows={(field as any)?.ui?.paragraphRows || 4}
+                                placeholder={placeholder}
+                                aria-describedby={helperId}
                               />
                             ) : field.type === 'DATE' ? (
                               <DateInput
@@ -7487,6 +7732,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 language={language}
                                 readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                ariaDescribedBy={helperId}
                                 onChange={next => handleLineFieldChange(q, row.id, field, next)}
                               />
                             ) : (
@@ -7495,8 +7741,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 value={fieldValue}
                                 onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
                                 readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                placeholder={placeholder}
+                                aria-describedby={helperId}
                               />
                             )}
+                            {helperNode}
                               {renderOverlayOpenInlineButton(displayText || null)}
                               {subgroupOpenStack}
                               {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
@@ -8109,7 +8358,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     );
 
                                     const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
-                                    const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+                                    const renderAsLabel =
+                                      (field as any)?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || (field as any)?.readOnly === true;
                                     const renderErrors = () => (
                                       <>
                                         {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
@@ -8219,6 +8469,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     if (field.type === 'FILE_UPLOAD') {
                                       const items = toUploadItems(subRow.values[field.id]);
                                       const count = items.length;
+                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                      const helperText = helperCfg.text;
+                                      const helperNode = helperText ? <div className="ck-field-helper">{helperText}</div> : null;
                                       if (renderAsLabel) {
                                         return (
                                           <div className="ck-line-item-table__value" data-field-path={fieldPath}>
@@ -8243,13 +8496,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             }}
                                             style={buttonStyles.secondary}
                                             disabled={submitting}
-                                          >
-                                            {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
-                                          </button>
-                                          {renderErrors()}
-                                        </div>
-                                      );
-                                    }
+                            >
+                              {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
+                            </button>
+                            {helperNode}
+                            {renderErrors()}
+                          </div>
+                      );
+                    }
 
                                     const mapped = field.valueMap
                                       ? resolveValueMapValue(field.valueMap, fid => {
@@ -8278,7 +8532,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         </div>
                                       );
                                     }
+                                    const isEditableField =
+                                      !submitting &&
+                                      (field as any)?.readOnly !== true &&
+                                      (field as any)?.ui?.renderAsLabel !== true &&
+                                      (field as any)?.renderAsLabel !== true &&
+                                      !!(field as any)?.valueMap === false;
                                     if (field.type === 'NUMBER') {
+                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                      const placeholder =
+                                        helperCfg.text && helperCfg.placement === 'placeholder' && isEditableField
+                                          ? helperCfg.text
+                                          : undefined;
                                       return (
                                         <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           <NumberStepper
@@ -8286,6 +8551,27 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             disabled={submitting}
                                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                            placeholder={placeholder}
+                                            onInvalidInput={
+                                              isEditableField
+                                                ? ({ reason, value }) => {
+                                                    const numericOnlyMessage = tSystem(
+                                                      'validation.numberOnly',
+                                                      language,
+                                                      'Only numbers are allowed in this field.'
+                                                    );
+                                                    setErrors(prev => {
+                                                      const next = { ...prev };
+                                                      const existing = next[fieldPath];
+                                                      if (existing && existing !== numericOnlyMessage) return prev;
+                                                      if (existing === numericOnlyMessage) return prev;
+                                                      next[fieldPath] = numericOnlyMessage;
+                                                      return next;
+                                                    });
+                                                    onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
+                                                  }
+                                                : undefined
+                                            }
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
                                           />
                                           {renderErrors()}
@@ -8293,6 +8579,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       );
                                     }
                                     if (field.type === 'PARAGRAPH') {
+                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                      const placeholder =
+                                        helperCfg.text && helperCfg.placement === 'placeholder' && isEditableField
+                                          ? helperCfg.text
+                                          : undefined;
                                       return (
                                         <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           <textarea
@@ -8301,6 +8592,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
                                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                             rows={(field as any)?.ui?.paragraphRows || 3}
+                                            placeholder={placeholder}
                                           />
                                           {renderErrors()}
                                         </div>
@@ -8320,13 +8612,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         </div>
                                       );
                                     }
+                                    const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                    const placeholder =
+                                      helperCfg.text && helperCfg.placement === 'placeholder' && isEditableField ? helperCfg.text : undefined;
                                     return (
                                       <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                         <input
                                           type="text"
                                           value={fieldValue}
-                                            onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
+                                          onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
                                           readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                          placeholder={placeholder}
                                         />
                                         {renderErrors()}
                                       </div>
@@ -8336,7 +8632,23 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   return [
                                     ...visibleFields.map(field => ({
                                       id: field.id,
-                                      label: resolveFieldLabel(field, language, field.id),
+                                      label: (() => {
+                                        const labelText = resolveFieldLabel(field, language, field.id);
+                                        const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                        const isEditableField =
+                                          !submitting &&
+                                          (field as any)?.readOnly !== true &&
+                                          (field as any)?.ui?.renderAsLabel !== true &&
+                                          (field as any)?.renderAsLabel !== true &&
+                                          !!(field as any)?.valueMap === false;
+                                        if (!helperCfg.text || helperCfg.placement !== 'belowLabel' || !isEditableField) return labelText;
+                                        return (
+                                          <div className="ck-line-item-table__header-wrap">
+                                            <div>{labelText}</div>
+                                            <div className="ck-line-item-table__header-helper">{helperCfg.text}</div>
+                                          </div>
+                                        );
+                                      })(),
                                       style: resolveSubColumnStyle(field.id),
                                       renderCell: (subRow: any) => renderSubTableField(field, subRow)
                                     })),
@@ -8461,7 +8773,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   const hideLabel = Boolean((field as any)?.ui?.hideLabel);
                                   const inGrid = opts?.inGrid === true;
                                   const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
-                                  const renderAsLabel = (field as any)?.ui?.renderAsLabel === true || (field as any)?.readOnly === true;
+                                  const renderAsLabel =
+                                    (field as any)?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || (field as any)?.readOnly === true;
 
                                   const renderReadOnlyLine = (display: React.ReactNode) => {
                                     const cls = `${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
@@ -8848,6 +9161,30 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             ? ''
                                             : (fieldValue as any).toString()
                                           : '';
+                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                      const helperText = helperCfg.text;
+                                      const supportsPlaceholder =
+                                        field.type === 'TEXT' || field.type === 'PARAGRAPH' || field.type === 'NUMBER';
+                                      const effectivePlacement =
+                                        helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
+                                      const isEditableField =
+                                        !submitting &&
+                                        (field as any)?.readOnly !== true &&
+                                        (field as any)?.ui?.renderAsLabel !== true &&
+                                        (field as any)?.renderAsLabel !== true &&
+                                        !field.valueMap;
+                                      const helperId =
+                                        helperText && effectivePlacement === 'belowLabel' && isEditableField
+                                          ? `ck-field-helper-${fieldPath.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+                                          : undefined;
+                                      const helperNode =
+                                        helperText && effectivePlacement === 'belowLabel' && isEditableField ? (
+                                          <div id={helperId} className="ck-field-helper">
+                                            {helperText}
+                                          </div>
+                                        ) : null;
+                                      const placeholder =
+                                        helperText && effectivePlacement === 'placeholder' && isEditableField ? helperText : undefined;
                                     return (
                                         <div
                                           key={field.id}
@@ -8868,6 +9205,28 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             disabled={submitting}
                                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                            ariaDescribedBy={helperId}
+                                            placeholder={placeholder}
+                                            onInvalidInput={
+                                              isEditableField
+                                                ? ({ reason, value }) => {
+                                                    const numericOnlyMessage = tSystem(
+                                                      'validation.numberOnly',
+                                                      language,
+                                                      'Only numbers are allowed in this field.'
+                                                    );
+                                                    setErrors(prev => {
+                                                      const next = { ...prev };
+                                                      const existing = next[fieldPath];
+                                                      if (existing && existing !== numericOnlyMessage) return prev;
+                                                      if (existing === numericOnlyMessage) return prev;
+                                                      next[fieldPath] = numericOnlyMessage;
+                                                      return next;
+                                                    });
+                                                    onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
+                                                  }
+                                                : undefined
+                                            }
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
                                           />
                                         ) : field.type === 'PARAGRAPH' ? (
@@ -8877,6 +9236,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
                                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                             rows={(field as any)?.ui?.paragraphRows || 4}
+                                            placeholder={placeholder}
+                                            aria-describedby={helperId}
                                           />
                                         ) : field.type === 'DATE' ? (
                                           <DateInput
@@ -8884,6 +9245,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             language={language}
                                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                            ariaDescribedBy={helperId}
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
                                           />
                                         ) : (
@@ -8892,8 +9254,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             value={fieldValue}
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
                                             readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                            placeholder={placeholder}
+                                            aria-describedby={helperId}
                                           />
                                         )}
+                                        {helperNode}
                                           {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
                                           {renderWarnings(fieldPath)}
                                       </div>
