@@ -207,7 +207,7 @@ This repo includes a deploy workflow using `clasp`, so you can deploy from GitHu
    - `doGet` serves a fast React shell:
      - For bundled config exports, the form definition is embedded in the initial HTML (no bootstrap fetch needed).
      - For sheet-backed forms, the client keeps a long-lived browser cache keyed by `CK_CACHE_VERSION` and falls back to `fetchBootstrapContext` when missing/stale. `createAllForms()` bumps the version to invalidate caches.
-     - A bootstrap fetch is started early in the HTML to overlap with bundle download when needed.
+     - Bootstrap and bundle fetches are started early in the HTML on cold-cache loads to overlap with each other when needed.
 
 ## Config Notes (LINE_ITEM_GROUP / FILE_UPLOAD)
 
