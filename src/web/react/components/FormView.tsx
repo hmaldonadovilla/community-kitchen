@@ -1773,7 +1773,8 @@ const FormView: React.FC<FormViewProps> = ({
             lineItems,
             collapsedRows,
             collapsedSubgroups,
-            requiredMode: 'stepComplete'
+            requiredMode: 'stepComplete',
+            virtualState: guidedVirtualState
           });
           setErrors(nextErrors);
           const errorCount = Object.keys(nextErrors).length;
@@ -1815,7 +1816,8 @@ const FormView: React.FC<FormViewProps> = ({
           values,
           lineItems,
           collapsedRows,
-          collapsedSubgroups
+          collapsedSubgroups,
+          virtualState: guidedVirtualState
         });
         setErrors(nextErrors);
         // For `whenValid` steps: block advancement until the step has no validation errors.
@@ -2222,7 +2224,8 @@ const FormView: React.FC<FormViewProps> = ({
           lineItems: lineItemsRef.current,
           collapsedRows: collapsedRowsRef.current,
           collapsedSubgroups: collapsedSubgroupsRef.current,
-          requiredMode
+          requiredMode,
+          virtualState: guidedVirtualState
         });
         const nextMessage = nextErrors[fp];
         setErrors(prev => {
@@ -3379,7 +3382,8 @@ const FormView: React.FC<FormViewProps> = ({
         values,
         lineItems,
         collapsedRows,
-        collapsedSubgroups
+        collapsedSubgroups,
+        virtualState: guidedVirtualState
       });
     } catch (err: any) {
       onDiagnostic?.('validation.lineItemOverlay.error', {
@@ -5642,7 +5646,8 @@ const FormView: React.FC<FormViewProps> = ({
         values,
         lineItems,
         collapsedRows,
-        collapsedSubgroups
+        collapsedSubgroups,
+        virtualState: guidedVirtualState
       });
     } catch (err: any) {
       onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
@@ -5727,7 +5732,8 @@ const FormView: React.FC<FormViewProps> = ({
           values,
           lineItems,
           collapsedRows,
-          collapsedSubgroups
+          collapsedSubgroups,
+          virtualState: guidedVirtualState
         });
       } catch (err: any) {
         onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });

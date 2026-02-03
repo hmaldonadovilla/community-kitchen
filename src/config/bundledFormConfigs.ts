@@ -6773,7 +6773,25 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "In progress"
       },
       "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
-      "copyCurrentRecordEnabled": false,
+      "copyCurrentRecordEnabled": true,
+      "copyCurrentRecordDropFields": [
+        "MP_PREP_DATE"
+      ],
+      "copyCurrentRecordProfile": {
+        "values": [
+          "MP_DISTRIBUTOR",
+          "MP_SERVICE"
+        ],
+        "lineItems": [
+          {
+            "groupId": "MP_MEALS_REQUEST",
+            "fields": [
+              "MEAL_TYPE",
+              "ORD_QTY"
+            ]
+          }
+        ]
+      },
       "createNewRecordEnabled": false,
       "actionBars": {
         "top": {
@@ -6832,6 +6850,96 @@ export const BUNDLED_FORM_CONFIGS = [
         "system": {
           "home": {
             "hideWhenActive": true
+          },
+          "gates": {
+            "submit": [
+              {
+                "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "form"
+                      ]
+                    },
+                    {
+                      "fieldId": "__ckStep",
+                      "equals": [
+                        "deliveryForm"
+                      ]
+                    },
+                    {
+                      "fieldId": "MP_PREP_DATE",
+                      "isInFuture": true
+                    }
+                  ]
+                },
+                "disable": true,
+                "dialogTrigger": "onEnable",
+                "dialog": {
+                  "message": {
+                    "en": "Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.",
+                    "fr": "La photo de réception des ingrédients, la sécurité alimentaire et le portionnement ne peuvent être enregistrés que le jour de la production.",
+                    "nl": "Foto van ingrediëntenontvangst, voedselveiligheid en portionering kunnen alleen worden vastgelegd op de dag van productie."
+                  },
+                  "confirmLabel": {
+                    "en": "OK",
+                    "fr": "OK",
+                    "nl": "OK"
+                  },
+                  "showCancel": false,
+                  "showCloseButton": false,
+                  "dismissOnBackdrop": false
+                }
+              },
+              {
+                "id": "ck-70.summary.closed.hideSubmit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "equals": [
+                        "Closed"
+                      ]
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ],
+            "copyCurrentRecord": [
+              {
+                "id": "ck-70.copy.onlyClosedSummary",
+                "when": {
+                  "any": [
+                    {
+                      "not": {
+                        "fieldId": "__ckView",
+                        "equals": [
+                          "summary"
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "fieldId": "status",
+                        "equals": [
+                          "Closed"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ]
           }
         }
       },
@@ -8062,6 +8170,11 @@ export const BUNDLED_FORM_CONFIGS = [
               "en": "Portioning",
               "fr": "Portionnement",
               "nl": "Portionering"
+            },
+            "helpText": {
+              "en": "Update the number of portions delivered to reflect reality. You must deliver at least the requested number of portions.",
+              "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées.",
+              "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren."
             }
           }
         ],
@@ -9091,6 +9204,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C.",
                 "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt."
               },
+              "validationRules": [
+                {
+                  "when": {
+                    "all": [
+                      {
+                        "not": {
+                          "fieldId": "MP_COOK_TEMP",
+                          "equals": [
+                            "__never__"
+                          ]
+                        }
+                      },
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isInFuture": true
+                      },
+                      {
+                        "fieldId": "__ckStep",
+                        "equals": [
+                          "foodSafety"
+                        ]
+                      }
+                    ]
+                  },
+                  "message": {
+                    "en": "Food safety and portioning can only be recorded on the day of production.",
+                    "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+                    "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+                  }
+                }
+              ],
               "pair": "core_temp",
               "options": [],
               "optionsFr": [],
@@ -9108,6 +9252,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "fr": "Ajoutez une photo par marmite de cuisson.",
                 "nl": "Voeg één foto per kookpot toe."
               },
+              "validationRules": [
+                {
+                  "when": {
+                    "all": [
+                      {
+                        "not": {
+                          "fieldId": "TEMP_EVD",
+                          "equals": [
+                            "__never__"
+                          ]
+                        }
+                      },
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isInFuture": true
+                      },
+                      {
+                        "fieldId": "__ckStep",
+                        "equals": [
+                          "foodSafety"
+                        ]
+                      }
+                    ]
+                  },
+                  "message": {
+                    "en": "Food safety and portioning can only be recorded on the day of production.",
+                    "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+                    "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+                  }
+                }
+              ],
               "pair": "core_temp",
               "options": [],
               "optionsFr": [],
@@ -13046,6 +13221,44 @@ export const BUNDLED_FORM_CONFIGS = [
         "optionsFr": [],
         "optionsNl": [],
         "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "any": [
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "subGroupId": "MP_TYPE_LI",
+                  "when": {
+                    "all": [
+                      {
+                        "fieldId": "PREP_TYPE",
+                        "equals": "Cook"
+                      },
+                      {
+                        "fieldId": "RECIPE",
+                        "notEmpty": true
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
+                  "when": {
+                    "fieldId": "__ckRowSource",
+                    "equals": "manual"
+                  },
+                  "parentWhen": {
+                    "fieldId": "PREP_TYPE",
+                    "equals": "Full"
+                  }
+                }
+              }
+            ]
+          }
+        },
         "uploadConfig": {
           "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
           "minFiles": 1,
@@ -14388,6 +14601,37 @@ export const BUNDLED_FORM_CONFIGS = [
                   "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C.",
                   "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt."
                 },
+                "validationRules": [
+                  {
+                    "when": {
+                      "all": [
+                        {
+                          "not": {
+                            "fieldId": "MP_COOK_TEMP",
+                            "equals": [
+                              "__never__"
+                            ]
+                          }
+                        },
+                        {
+                          "fieldId": "MP_PREP_DATE",
+                          "isInFuture": true
+                        },
+                        {
+                          "fieldId": "__ckStep",
+                          "equals": [
+                            "foodSafety"
+                          ]
+                        }
+                      ]
+                    },
+                    "message": {
+                      "en": "Food safety and portioning can only be recorded on the day of production.",
+                      "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+                      "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+                    }
+                  }
+                ],
                 "pair": "core_temp",
                 "options": [],
                 "optionsFr": [],
@@ -14409,6 +14653,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "options": [],
                 "optionsFr": [],
                 "optionsNl": [],
+                "validationRules": [
+                  {
+                    "when": {
+                      "all": [
+                        {
+                          "not": {
+                            "fieldId": "TEMP_EVD",
+                            "equals": [
+                              "__never__"
+                            ]
+                          }
+                        },
+                        {
+                          "fieldId": "MP_PREP_DATE",
+                          "isInFuture": true
+                        },
+                        {
+                          "fieldId": "__ckStep",
+                          "equals": [
+                            "foodSafety"
+                          ]
+                        }
+                      ]
+                    },
+                    "message": {
+                      "en": "Food safety and portioning can only be recorded on the day of production.",
+                      "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+                      "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+                    }
+                  }
+                ],
                 "uploadConfig": {
                   "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
                   "minFiles": 1,
@@ -18339,6 +18614,44 @@ export const BUNDLED_FORM_CONFIGS = [
           "required": true,
           "pair": "ing_ph",
           "listView": false,
+          "visibility": {
+            "showWhen": {
+              "any": [
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupId": "MP_TYPE_LI",
+                    "when": {
+                      "all": [
+                        {
+                          "fieldId": "PREP_TYPE",
+                          "equals": "Cook"
+                        },
+                        {
+                          "fieldId": "RECIPE",
+                          "notEmpty": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
+                    "when": {
+                      "fieldId": "__ckRowSource",
+                      "equals": "manual"
+                    },
+                    "parentWhen": {
+                      "fieldId": "PREP_TYPE",
+                      "equals": "Full"
+                    }
+                  }
+                }
+              ]
+            }
+          },
           "uploadConfig": {
             "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
             "minFiles": 1,
@@ -18803,7 +19116,25 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "In progress"
       },
       "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
-      "copyCurrentRecordEnabled": false,
+      "copyCurrentRecordEnabled": true,
+      "copyCurrentRecordDropFields": [
+        "MP_PREP_DATE"
+      ],
+      "copyCurrentRecordProfile": {
+        "values": [
+          "MP_DISTRIBUTOR",
+          "MP_SERVICE"
+        ],
+        "lineItems": [
+          {
+            "groupId": "MP_MEALS_REQUEST",
+            "fields": [
+              "MEAL_TYPE",
+              "ORD_QTY"
+            ]
+          }
+        ]
+      },
       "createNewRecordEnabled": false,
       "actionBars": {
         "top": {
@@ -18862,6 +19193,96 @@ export const BUNDLED_FORM_CONFIGS = [
         "system": {
           "home": {
             "hideWhenActive": true
+          },
+          "gates": {
+            "submit": [
+              {
+                "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "form"
+                      ]
+                    },
+                    {
+                      "fieldId": "__ckStep",
+                      "equals": [
+                        "deliveryForm"
+                      ]
+                    },
+                    {
+                      "fieldId": "MP_PREP_DATE",
+                      "isInFuture": true
+                    }
+                  ]
+                },
+                "disable": true,
+                "dialogTrigger": "onEnable",
+                "dialog": {
+                  "message": {
+                    "en": "Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.",
+                    "fr": "La photo de réception des ingrédients, la sécurité alimentaire et le portionnement ne peuvent être enregistrés que le jour de la production.",
+                    "nl": "Foto van ingrediëntenontvangst, voedselveiligheid en portionering kunnen alleen worden vastgelegd op de dag van productie."
+                  },
+                  "confirmLabel": {
+                    "en": "OK",
+                    "fr": "OK",
+                    "nl": "OK"
+                  },
+                  "showCancel": false,
+                  "showCloseButton": false,
+                  "dismissOnBackdrop": false
+                }
+              },
+              {
+                "id": "ck-70.summary.closed.hideSubmit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "equals": [
+                        "Closed"
+                      ]
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ],
+            "copyCurrentRecord": [
+              {
+                "id": "ck-70.copy.onlyClosedSummary",
+                "when": {
+                  "any": [
+                    {
+                      "not": {
+                        "fieldId": "__ckView",
+                        "equals": [
+                          "summary"
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "fieldId": "status",
+                        "equals": [
+                          "Closed"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ]
           }
         }
       },
@@ -20072,6 +20493,11 @@ export const BUNDLED_FORM_CONFIGS = [
               "en": "Portioning",
               "fr": "Portionnement",
               "nl": "Portionering"
+            },
+            "helpText": {
+              "en": "Update the number of portions delivered to reflect reality. You must deliver at least the requested number of portions.",
+              "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées.",
+              "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren."
             }
           }
         ],

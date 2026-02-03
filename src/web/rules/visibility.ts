@@ -15,6 +15,55 @@ const logCompoundWhenOnce = (): void => {
   }
 };
 
+let dateWhenLogged = false;
+const logDateWhenOnce = (): void => {
+  if (dateWhenLogged) return;
+  if (!whenDebugEnabled()) return;
+  dateWhenLogged = true;
+  if (typeof console === 'undefined' || typeof console.info !== 'function') return;
+  try {
+    console.info('[ReactForm][When]', 'dateComparisons.enabled', { operators: ['isToday', 'isInPast', 'isInFuture'] });
+  } catch (_) {
+    // ignore
+  }
+};
+
+const pad2 = (n: number): string => n.toString().padStart(2, '0');
+
+const formatLocalYmd = (d: Date): string => {
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+const parseDateLike = (raw: unknown): Date | null => {
+  if (raw === undefined || raw === null) return null;
+  if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
+  if (typeof raw === 'number') {
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const s = raw.toString().trim();
+  if (!s) return null;
+  // Treat YYYY-MM-DD as a local date to avoid UTC parsing surprises.
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    const y = Number(ymd[1]);
+    const m = Number(ymd[2]);
+    const d = Number(ymd[3]);
+    if (!Number.isNaN(y) && !Number.isNaN(m) && !Number.isNaN(d)) {
+      const local = new Date(y, m - 1, d, 0, 0, 0, 0);
+      return isNaN(local.getTime()) ? null : local;
+    }
+  }
+  const parsed = new Date(s);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const toLocalYmd = (raw: unknown): string => {
+  const d = parseDateLike(raw);
+  return d ? formatLocalYmd(d) : '';
+};
+
 export function matchesWhen(value: unknown, when?: VisibilityCondition | any): boolean {
   if (!when) return true;
   const values = Array.isArray(value) ? value : [value];
@@ -59,6 +108,20 @@ export function matchesWhen(value: unknown, when?: VisibilityCondition | any): b
       if (wantsEmpty && hasAny) return false;
       if (!wantsEmpty && !hasAny) return false;
     }
+  }
+
+  const wantsIsToday = (when as any).isToday === true;
+  const wantsIsInPast = (when as any).isInPast === true;
+  const wantsIsInFuture = (when as any).isInFuture === true;
+
+  if (wantsIsToday || wantsIsInPast || wantsIsInFuture) {
+    logDateWhenOnce();
+    const todayYmd = formatLocalYmd(new Date());
+    const dateYmds = candidates.map(v => toLocalYmd(v)).filter(Boolean);
+    if (!dateYmds.length) return false;
+    if (wantsIsToday && !dateYmds.some(ymd => ymd === todayYmd)) return false;
+    if (wantsIsInPast && !dateYmds.some(ymd => ymd < todayYmd)) return false;
+    if (wantsIsInFuture && !dateYmds.some(ymd => ymd > todayYmd)) return false;
   }
 
   if (when.equals !== undefined) {

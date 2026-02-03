@@ -1844,6 +1844,10 @@ export class ConfigSheet {
     if ((raw as any).greaterThan !== undefined) condition.greaterThan = (raw as any).greaterThan;
     if ((raw as any).lessThan !== undefined) condition.lessThan = (raw as any).lessThan;
     if ((raw as any).notEmpty !== undefined) condition.notEmpty = Boolean((raw as any).notEmpty);
+    if ((raw as any).isEmpty !== undefined) condition.isEmpty = Boolean((raw as any).isEmpty);
+    if ((raw as any).isToday !== undefined) condition.isToday = Boolean((raw as any).isToday);
+    if ((raw as any).isInPast !== undefined) condition.isInPast = Boolean((raw as any).isInPast);
+    if ((raw as any).isInFuture !== undefined) condition.isInFuture = Boolean((raw as any).isInFuture);
     return condition;
   }
 

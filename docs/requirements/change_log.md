@@ -288,4 +288,32 @@
     - user autonomy
     - error prevention without coercion
   - Please perform the configuration of the above example in the meal production configuration file.
-  > **WIP - Cursor**
+  > **DONE - Cursor**
+- ck-69:
+  - Perform configuration on the meal production form to prevent setting values on the `MP_COOK_TEMP` and `TEMP_EVD` line item group fields if the value of the `MP_PREP_DATE` field is greater than today.
+  > **DONE - Codex**
+- ck-70:
+  - Implement a feature to show/hide/disable system actions such as the submit button, sumarry view, edit, copy, etc... Along with dialog messages that communicate the action and the reason why it is disabled or hidden.
+  - After the feature is available we should the able to configure the following use cases for the meal production form:
+    - The next button on the `deliveryForm` is disabled when the value of the `MP_PREP_DATE` field is in the future. All visible fields in the `deliveryForm` form can be filled, however when it is time to enable the next button, the new logic kicks in, displays a dialog message `Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.` with a single button `OK` and disables the next button. (reuse existing dialog message functionality)
+    - The submit button on the summary view must be hidden when a record has been completed (status=Closed).
+    - Copy action must only be available from completed records. When action is selected by user, copy Customer, Service and Requested Portions only. Do not copy production date, Responsible cook and Volunteer cook. Do not copy production, food safety, and portioning data. Open a new draft record with:
+      - customer, service and requested portions prefilled and editable
+      - production date, responsible cook and volunteer cook fields empty
+  > **DONE - Codex**
+- ck-71:
+  - On table mode we need to show the `totals` of a column as a total row ath the end of the table. Such as:
+
+  ```txt
+    Dietary category    Requested  Delivered
+  ---------------------------------------
+  Vegetarian                   50     [ 50 ]
+  Normal                       50     [ 50 ]
+  No-Salt                      50     [ 50 ]
+  Vegan                        50     [ 50 ]
+  Vegetarian                   50     [ 60 ]
+  ---------------------------------------
+  Total                       250      260
+  ```
+
+  - On the steps ui on the `deliveryForm` we are showing the totals of both the `Requested` [ORD_QTY] and `Delivered` [FINAL_QTY] columns. We need to be able to override the configuration of the line item group at the step level to onlt show the totals for the `Requested` column.

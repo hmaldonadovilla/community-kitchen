@@ -3060,6 +3060,150 @@ components:
                 hideWhenActive:
                   type: boolean
                   description: When true, hide the Home button while on the List (home) view.
+            gates:
+              $ref: '#/components/schemas/SystemActionGatesConfig'
+              description: |
+                Optional per-system-action gating rules (hide/disable + optional dialog message).
+
+                Gates are evaluated with the same `when` engine used by visibility/validation, so they can reference:
+                - regular form fields (e.g. `MP_PREP_DATE`)
+                - guided step virtual fields (e.g. `__ckStep`)
+                - system/meta fields (e.g. `status`, `STATUS`, `pdfUrl`)
+                - runtime UI virtual fields: `__ckView` (`list` | `form` | `summary`)
+      additionalProperties: true
+
+    SystemActionGatesConfig:
+      type: object
+      description: |
+        Gate system actions in the web app (hide/disable + optional dialog).
+
+        Supported system actions:
+        - `submit`: primary action (Submit / Next in guided steps)
+        - `summary`: Summary action
+        - `edit`: Edit action
+        - `create`: Create action
+        - `home`: Home action
+        - `copyCurrentRecord`: Create menu action "Copy current record"
+
+        Notes:
+        - Each action can be configured as a single rule object or an array of rules (evaluated in order).
+        - If multiple rules match, the first `hide: true` wins, otherwise the first `disable: true` wins.
+      properties:
+        submit:
+          $ref: '#/components/schemas/SystemActionGateRuleOrList'
+        summary:
+          $ref: '#/components/schemas/SystemActionGateRuleOrList'
+        edit:
+          $ref: '#/components/schemas/SystemActionGateRuleOrList'
+        create:
+          $ref: '#/components/schemas/SystemActionGateRuleOrList'
+        home:
+          $ref: '#/components/schemas/SystemActionGateRuleOrList'
+        copyCurrentRecord:
+          $ref: '#/components/schemas/SystemActionGateRuleOrList'
+      additionalProperties: true
+
+    SystemActionGateRuleOrList:
+      oneOf:
+        - $ref: '#/components/schemas/SystemActionGateRule'
+        - type: array
+          items:
+            $ref: '#/components/schemas/SystemActionGateRule'
+
+    SystemActionGateRule:
+      type: object
+      required: [when]
+      properties:
+        id:
+          type: string
+          description: Optional stable id for logs and de-duping dialog displays.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Condition for this gate rule.
+        hide:
+          type: boolean
+          description: When true, hides the system action entirely.
+        disable:
+          type: boolean
+          description: When true, disables the system action.
+        dialogTrigger:
+          type: string
+          enum: [onAttempt, onEnable]
+          description: |
+            When the dialog should be shown:
+            - `onAttempt`: when the user tries the action
+            - `onEnable`: when the action would become enabled (e.g., guided "Next") but is blocked by this gate
+        dialog:
+          $ref: '#/components/schemas/SystemActionGateDialogConfig'
+          description: Optional dialog shown when the action is disabled by this rule.
+      additionalProperties: true
+
+    SystemActionGateDialogConfig:
+      type: object
+      required: [message]
+      properties:
+        title:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        message:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        confirmLabel:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        cancelLabel:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        showCancel:
+          type: boolean
+          description: When false, hides the cancel button (single-action message dialog). Default true.
+        showCloseButton:
+          type: boolean
+          description: When false, hides the close (×) button. Default true.
+        dismissOnBackdrop:
+          type: boolean
+          description: When false, clicking the backdrop does not dismiss the dialog. Default true.
+      additionalProperties: true
+
+    CopyCurrentRecordProfile:
+      type: object
+      description: |
+        Explicit copy profile for the "Copy current record" action.
+
+        When set, copied drafts start from a curated subset of values/line items instead of copying everything
+        and then dropping fields.
+      properties:
+        values:
+          type: array
+          description: List of top-level field ids to keep (all other top-level values are dropped).
+          items:
+            type: string
+        lineItems:
+          type: array
+          description: List of LINE_ITEM_GROUPs to copy, with per-row field keep lists.
+          items:
+            $ref: '#/components/schemas/CopyCurrentRecordLineItemProfile'
+      additionalProperties: true
+
+    CopyCurrentRecordLineItemProfile:
+      type: object
+      required: [groupId, fields]
+      properties:
+        groupId:
+          type: string
+          description: LINE_ITEM_GROUP id (group key).
+        fields:
+          type: array
+          description: List of row field ids to keep (all other row values are dropped).
+          items:
+            type: string
+        includeWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional row filter to choose which rows to copy.
       additionalProperties: true
 
     ActionBarTopConfig:
@@ -3962,6 +4106,30 @@ components:
           type: boolean
           description: |
             Alias for `notEmpty: false`. If true, condition matches when the field is empty; if false, matches when non-empty.
+        isToday:
+          type: boolean
+          description: |
+            When true, condition matches when the field value is a DATE that falls on the user's local "today".
+
+            Notes:
+            - `YYYY-MM-DD` is treated as a local date (not UTC).
+            - Empty/invalid dates do not match.
+        isInPast:
+          type: boolean
+          description: |
+            When true, condition matches when the field value is a DATE that is before the user's local "today".
+
+            Notes:
+            - `YYYY-MM-DD` is treated as a local date (not UTC).
+            - Empty/invalid dates do not match.
+        isInFuture:
+          type: boolean
+          description: |
+            When true, condition matches when the field value is a DATE that is after the user's local "today".
+
+            Notes:
+            - `YYYY-MM-DD` is treated as a local date (not UTC).
+            - Empty/invalid dates do not match.
 
     LineItemWhenClause:
       type: object
@@ -4438,6 +4606,8 @@ components:
           type: array
           items:
             type: string
+        copyCurrentRecordProfile:
+          $ref: '#/components/schemas/CopyCurrentRecordProfile'
         createButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
         copyCurrentRecordLabel:

@@ -90,6 +90,8 @@ import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
+import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
+import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
@@ -471,6 +473,91 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
   const navigateHomeBusy = useBlockingOverlay({ eventPrefix: 'navigate.home.busy', onDiagnostic: logEvent });
   const updateRecordBusyOpen = updateRecordBusy.state.open;
+
+  const [systemActionGateDialog, setSystemActionGateDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    cancelLabel: string;
+    showCancel: boolean;
+    dismissOnBackdrop: boolean;
+    showCloseButton: boolean;
+    actionId: string | null;
+    ruleId: string | null;
+    trigger: string | null;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: '',
+    cancelLabel: '',
+    showCancel: false,
+    dismissOnBackdrop: true,
+    showCloseButton: true,
+    actionId: null,
+    ruleId: null,
+    trigger: null
+  });
+
+  const closeSystemActionGateDialog = useCallback(() => {
+    setSystemActionGateDialog(prev => (prev.open ? { ...prev, open: false } : prev));
+  }, []);
+
+  const openSystemActionGateDialog = useCallback(
+    (args: {
+      actionId: string;
+      ruleId?: string;
+      trigger: 'onAttempt' | 'onEnable';
+      title?: LocalizedString | string;
+      message: LocalizedString | string;
+      confirmLabel?: LocalizedString | string;
+      cancelLabel?: LocalizedString | string;
+      showCancel?: boolean;
+      showCloseButton?: boolean;
+      dismissOnBackdrop?: boolean;
+    }) => {
+      const title = resolveLocalizedString(
+        args.title,
+        language,
+        tSystem('common.notice', language, 'Notice')
+      ).toString();
+      const message = resolveLocalizedString(args.message, language, '').toString();
+      const confirmLabel = resolveLocalizedString(
+        args.confirmLabel,
+        language,
+        tSystem('common.ok', language, 'OK')
+      ).toString();
+      const cancelLabel = resolveLocalizedString(
+        args.cancelLabel,
+        language,
+        tSystem('common.cancel', language, 'Cancel')
+      ).toString();
+      const showCancel = args.showCancel !== false;
+      const showCloseButton = args.showCloseButton !== false;
+      const dismissOnBackdrop = args.dismissOnBackdrop !== false;
+
+      setSystemActionGateDialog({
+        open: true,
+        title,
+        message,
+        confirmLabel,
+        cancelLabel,
+        showCancel,
+        dismissOnBackdrop,
+        showCloseButton,
+        actionId: args.actionId,
+        ruleId: args.ruleId || null,
+        trigger: args.trigger
+      });
+      logEvent('ui.systemActionGate.dialog.open', {
+        actionId: args.actionId,
+        ruleId: args.ruleId || null,
+        trigger: args.trigger
+      });
+    },
+    [language, logEvent]
+  );
   const autoSaveNoticeStorageKey = useMemo(() => {
     const key = (formKey || '').toString().trim() || 'default';
     return `ck.autosaveNotice.${key}`;
@@ -2653,7 +2740,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     setRecordStale(null);
     recordDataVersionRef.current = null;
     recordRowNumberRef.current = null;
-    const cleared = clearAutoIncrementFields(definition, valuesRef.current, lineItemsRef.current);
+    const profiled = applyCopyCurrentRecordProfile({
+      definition: definition as any,
+      values: valuesRef.current,
+      lineItems: lineItemsRef.current
+    });
+    if (profiled) {
+      logEvent('ui.copyCurrent.profile.applied', {
+        keepValueCount: Object.keys(profiled.values || {}).length,
+        groupCount: Object.keys(profiled.lineItems || {}).length
+      });
+    }
+    const base = profiled || { values: valuesRef.current, lineItems: lineItemsRef.current };
+    const cleared = clearAutoIncrementFields(definition, base.values, base.lineItems);
     const dropFieldsRaw = Array.isArray(definition.copyCurrentRecordDropFields) ? definition.copyCurrentRecordDropFields : [];
     const dropFields = dropFieldsRaw
       .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
@@ -6470,6 +6569,119 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       ? tSystem('actions.submitDisabledTooltip', language, 'Complete all required fields to activate.')
       : '';
 
+  const systemActionGates = definition.actionBars?.system?.gates;
+  const systemActionGateState = useMemo(() => {
+    const recordMeta = {
+      id: (selectedRecordId || selectedRecordSnapshot?.id || lastSubmissionMeta?.id || undefined) as any,
+      createdAt: (selectedRecordSnapshot?.createdAt || lastSubmissionMeta?.createdAt || undefined) as any,
+      updatedAt: (selectedRecordSnapshot?.updatedAt || lastSubmissionMeta?.updatedAt || undefined) as any,
+      status: (selectedRecordSnapshot?.status || lastSubmissionMeta?.status || null) as any,
+      pdfUrl: (selectedRecordSnapshot as any)?.pdfUrl || undefined
+    };
+
+    const guidedPrefix = (((definition as any)?.steps as any)?.stateFields?.prefix || '__ckStep').toString();
+    const guidedVirtualState =
+      guidedUiState && guidedUiState.activeStepId
+        ? ({
+            prefix: guidedPrefix,
+            activeStepId: guidedUiState.activeStepId,
+            activeStepIndex: guidedUiState.activeStepIndex || 0,
+            maxValidIndex: -1,
+            maxCompleteIndex: -1,
+            steps: []
+          } as any)
+        : null;
+
+    const evalFor = (actionId: any) => {
+      const ctx = buildSystemActionGateContext({
+        actionId,
+        view,
+        values,
+        lineItems,
+        recordMeta,
+        guidedVirtualState
+      });
+      return evaluateSystemActionGate({ gates: systemActionGates, actionId, ctx });
+    };
+
+    return {
+      submit: evalFor('submit'),
+      summary: evalFor('summary'),
+      edit: evalFor('edit'),
+      copyCurrentRecord: evalFor('copyCurrentRecord'),
+      create: evalFor('create'),
+      home: evalFor('home')
+    } as const;
+  }, [
+    definition,
+    guidedUiState,
+    lastSubmissionMeta?.createdAt,
+    lastSubmissionMeta?.id,
+    lastSubmissionMeta?.status,
+    lastSubmissionMeta?.updatedAt,
+    lineItems,
+    selectedRecordId,
+    selectedRecordSnapshot?.createdAt,
+    selectedRecordSnapshot?.id,
+    selectedRecordSnapshot?.status,
+    selectedRecordSnapshot?.updatedAt,
+    systemActionGates,
+    values,
+    view
+  ]);
+
+  const guidedNextWouldEnable =
+    view === 'form' && guidedUiState && !guidedUiState.isFinal ? !!guidedUiState.forwardGateSatisfied && !dedupNavigationBlocked : false;
+  const submitDisabledByGate = view === 'form' && guidedNextWouldEnable && systemActionGateState.submit.disabled;
+  const submitHiddenByGate = systemActionGateState.submit.hidden;
+
+  const hideEditResolved = (view === 'summary' && isClosedRecord) || systemActionGateState.edit.hidden;
+  const summaryEnabledResolved = summaryViewEnabled && !systemActionGateState.summary.hidden;
+  const copyEnabledResolved = copyCurrentRecordEnabled && !systemActionGateState.copyCurrentRecord.hidden;
+  const canCopyResolved =
+    copyEnabledResolved &&
+    !systemActionGateState.copyCurrentRecord.disabled &&
+    (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id));
+
+  const actionGateEnableDialogKeyRef = useRef<string>('');
+  const prevGuidedNextWouldEnableRef = useRef<boolean>(false);
+  useEffect(() => {
+    const prev = prevGuidedNextWouldEnableRef.current;
+    prevGuidedNextWouldEnableRef.current = guidedNextWouldEnable;
+    if (!guidedNextWouldEnable) {
+      actionGateEnableDialogKeyRef.current = '';
+      return;
+    }
+    if (prev) return;
+    if (!submitDisabledByGate) return;
+    const matched = systemActionGateState.submit.matchedRule;
+    if (!matched?.dialog) return;
+    const trigger = (matched.dialogTrigger || 'onAttempt').toString();
+    if (trigger !== 'onEnable') return;
+    const key = `submit::${systemActionGateState.submit.matchedRuleId || 'rule'}::${guidedUiState?.activeStepId || ''}`;
+    if (actionGateEnableDialogKeyRef.current === key) return;
+    actionGateEnableDialogKeyRef.current = key;
+    openSystemActionGateDialog({
+      actionId: 'submit',
+      ruleId: systemActionGateState.submit.matchedRuleId || undefined,
+      trigger: 'onEnable',
+      title: matched.dialog.title,
+      message: matched.dialog.message,
+      confirmLabel: matched.dialog.confirmLabel,
+      cancelLabel: matched.dialog.cancelLabel,
+      showCancel: matched.dialog.showCancel,
+      showCloseButton: matched.dialog.showCloseButton,
+      dismissOnBackdrop: matched.dialog.dismissOnBackdrop
+    });
+  }, [
+    guidedNextWouldEnable,
+    guidedUiState?.activeStepId,
+    openSystemActionGateDialog,
+    submitDisabledByGate,
+    systemActionGateState.submit.matchedRule,
+    systemActionGateState.submit.matchedRuleId
+  ]);
+
   return (
     <div
       className={`page${view === 'form' ? ' ck-page-form' : ''}`}
@@ -6535,19 +6747,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled)}
+        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
-        hideEdit={view === 'summary' && isClosedRecord}
+        hideSubmit={submitHiddenByGate}
+        hideEdit={hideEditResolved}
         createNewEnabled={definition.createNewRecordEnabled !== false}
         createButtonLabel={definition.createButtonLabel}
         copyCurrentRecordLabel={definition.copyCurrentRecordLabel}
         submitLabel={guidedSubmitLabel}
         summaryLabel={definition.summaryButtonLabel}
-        summaryEnabled={summaryViewEnabled}
-        copyEnabled={copyCurrentRecordEnabled}
-        canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
+        summaryEnabled={summaryEnabledResolved}
+        copyEnabled={copyEnabledResolved}
+        canCopy={canCopyResolved}
         customButtons={customButtons as any}
         actionBars={definition.actionBars}
         notice={topBarNotice}
@@ -6709,6 +6922,34 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         onConfirm={confirmSubmit}
       />
 
+      <ConfirmDialogOverlay
+        open={systemActionGateDialog.open}
+        title={systemActionGateDialog.title || tSystem('common.notice', language, 'Notice')}
+        message={systemActionGateDialog.message || ''}
+        confirmLabel={systemActionGateDialog.confirmLabel || tSystem('common.ok', language, 'OK')}
+        cancelLabel={systemActionGateDialog.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
+        showCancel={systemActionGateDialog.showCancel}
+        dismissOnBackdrop={systemActionGateDialog.dismissOnBackdrop}
+        showCloseButton={systemActionGateDialog.showCloseButton}
+        zIndex={12012}
+        onCancel={() => {
+          logEvent('ui.systemActionGate.dialog.cancel', {
+            actionId: systemActionGateDialog.actionId,
+            ruleId: systemActionGateDialog.ruleId,
+            trigger: systemActionGateDialog.trigger
+          });
+          closeSystemActionGateDialog();
+        }}
+        onConfirm={() => {
+          logEvent('ui.systemActionGate.dialog.confirm', {
+            actionId: systemActionGateDialog.actionId,
+            ruleId: systemActionGateDialog.ruleId,
+            trigger: systemActionGateDialog.trigger
+          });
+          closeSystemActionGateDialog();
+        }}
+      />
+
       <BlockingOverlay
         open={submitting}
         title={tSystem('actions.submitting', language, 'Submitting…')}
@@ -6767,19 +7008,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         language={language}
         view={view}
         disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
-        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled)}
+        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
         readOnly={view === 'form' && isClosedRecord}
-        hideEdit={view === 'summary' && isClosedRecord}
+        hideSubmit={submitHiddenByGate}
+        hideEdit={hideEditResolved}
         createNewEnabled={definition.createNewRecordEnabled !== false}
         createButtonLabel={definition.createButtonLabel}
         copyCurrentRecordLabel={definition.copyCurrentRecordLabel}
         submitLabel={guidedSubmitLabel}
         summaryLabel={definition.summaryButtonLabel}
-        summaryEnabled={summaryViewEnabled}
-        copyEnabled={copyCurrentRecordEnabled}
-        canCopy={copyCurrentRecordEnabled && (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id))}
+        summaryEnabled={summaryEnabledResolved}
+        copyEnabled={copyEnabledResolved}
+        canCopy={canCopyResolved}
         customButtons={customButtons as any}
         actionBars={definition.actionBars}
         notice={bottomBarNotice}
