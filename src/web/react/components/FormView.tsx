@@ -1226,31 +1226,6 @@ const FormView: React.FC<FormViewProps> = ({
     return out;
   }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepsCfg]);
 
-  const orderedEntryQuestions = useMemo(() => {
-    if (!orderedEntryEnabled) return [] as WebQuestionDefinition[];
-    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return definition.questions || [];
-    const steps = guidedStepsCfg.items || [];
-    const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
-    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
-    const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
-    const ordered: WebQuestionDefinition[] = [];
-    const seen = new Set<string>();
-    const questionById = new Map<string, WebQuestionDefinition>();
-    (definition.questions || []).forEach(q => questionById.set(q.id, q));
-    [...headerTargets, ...stepTargets].forEach(target => {
-      if (!target || typeof target !== 'object') return;
-      const kind = (target.kind || '').toString().trim();
-      const id = (target.id || '').toString().trim();
-      if (!id || (kind !== 'question' && kind !== 'lineGroup')) return;
-      if (seen.has(id)) return;
-      const q = questionById.get(id);
-      if (!q) return;
-      seen.add(id);
-      ordered.push(q);
-    });
-    return ordered.length ? ordered : definition.questions || [];
-  }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepIds, guidedStepsCfg, orderedEntryEnabled]);
-
   const buildGuidedStepDefinition = useCallback(
     (stepId?: string): WebFormDefinition | null => {
       if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return null;
@@ -1465,6 +1440,46 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [activeGuidedStepId, definition, guidedEnabled, guidedStepIds, guidedStepsCfg, onDiagnostic]
   );
+
+  const orderedEntryQuestions = useMemo(() => {
+    if (!orderedEntryEnabled) return [] as WebQuestionDefinition[];
+    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return definition.questions || [];
+
+    const steps = guidedStepsCfg.items || [];
+    const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
+    const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
+    const ordered: WebQuestionDefinition[] = [];
+    const seen = new Set<string>();
+
+    const questionById = new Map<string, WebQuestionDefinition>();
+    (definition.questions || []).forEach(q => questionById.set(q.id, q));
+    const scopedDefinition = buildGuidedStepDefinition(activeGuidedStepId);
+    const scopedById = new Map<string, WebQuestionDefinition>();
+    (scopedDefinition?.questions || []).forEach(q => scopedById.set(q.id, q));
+
+    [...headerTargets, ...stepTargets].forEach(target => {
+      if (!target || typeof target !== 'object') return;
+      const kind = (target.kind || '').toString().trim();
+      const id = (target.id || '').toString().trim();
+      if (!id || (kind !== 'question' && kind !== 'lineGroup')) return;
+      if (seen.has(id)) return;
+      const q = scopedById.get(id) || questionById.get(id);
+      if (!q) return;
+      seen.add(id);
+      ordered.push(q);
+    });
+
+    return ordered.length ? ordered : definition.questions || [];
+  }, [
+    activeGuidedStepId,
+    buildGuidedStepDefinition,
+    definition.questions,
+    guidedEnabled,
+    guidedStepIds,
+    guidedStepsCfg,
+    orderedEntryEnabled
+  ]);
 
   const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
   const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
@@ -5712,6 +5727,7 @@ const FormView: React.FC<FormViewProps> = ({
         language,
         values,
         lineItems,
+        errors: orderedEntryErrors,
         collapsedRows,
         resolveVisibilityValue,
         getTopValue: getTopValueNoScan,
@@ -5726,6 +5742,7 @@ const FormView: React.FC<FormViewProps> = ({
       getTopValueNoScan,
       language,
       lineItems,
+      orderedEntryErrors,
       orderedEntryEnabled,
       orderedEntryQuestions,
       resolveVisibilityValue,
