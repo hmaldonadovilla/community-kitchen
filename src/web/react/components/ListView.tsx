@@ -10,6 +10,7 @@ import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell }
 import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/listViewAdvancedSearch';
 import { normalizeToIsoDateLocal } from '../app/listViewSearch';
 import { paginateItemsForListViewUi } from '../app/listViewPagination';
+import { resolveListViewUiState } from '../app/listViewUiState';
 import { ListViewIcon } from './ListViewIcon';
 import { DateInput } from './form/DateInput';
 import { resolveStatusPillKey } from '../utils/statusPill';
@@ -100,12 +101,16 @@ const ListView: React.FC<ListViewProps> = ({
   const uiLoading = loadingProp !== undefined ? Boolean(loadingProp) : loading;
   const uiPrefetching = prefetchingProp !== undefined ? Boolean(prefetchingProp) : prefetching;
   const uiError = errorProp !== undefined ? errorProp : error;
+  const hasExternalLoadingSignal = loadingProp !== undefined;
+  const assumeInitialLoad = autoFetch || hasExternalLoadingSignal;
+  const [hasLoadedOnce, setHasLoadedOnce] = useState<boolean>(() => (cachedResponse !== undefined ? cachedResponse !== null : false));
+  const prevUiLoadingRef = useRef<boolean>(uiLoading);
 
   useEffect(() => {
-    if (cachedResponse?.items?.length) {
-      setAllItems(cachedResponse.items);
-      setTotalCount(cachedResponse.totalCount || cachedResponse.items.length);
-    }
+    if (cachedResponse === undefined || cachedResponse === null) return;
+    const items = Array.isArray(cachedResponse.items) ? cachedResponse.items : [];
+    setAllItems(items);
+    setTotalCount(cachedResponse.totalCount || items.length);
   }, [cachedResponse]);
 
   useEffect(() => {
@@ -113,6 +118,18 @@ const ListView: React.FC<ListViewProps> = ({
       setRecords(cachedRecords);
     }
   }, [cachedRecords]);
+
+  useEffect(() => {
+    setHasLoadedOnce(cachedResponse !== undefined ? cachedResponse !== null : false);
+  }, [cachedResponse, formKey, refreshToken]);
+
+  useEffect(() => {
+    const prev = prevUiLoadingRef.current;
+    prevUiLoadingRef.current = uiLoading;
+    if (prev && !uiLoading) {
+      setHasLoadedOnce(true);
+    }
+  }, [uiLoading]);
 
   const columnsAll = useMemo<ListViewColumnConfig[]>(
     () => (definition.listView?.columns as ListViewColumnConfig[]) || definition.questions.map(q => ({ fieldId: q.id, label: q.label })),
@@ -833,6 +850,14 @@ const ListView: React.FC<ListViewProps> = ({
         ? advancedActive
         : advancedActive || Boolean(searchQueryValue.trim());
   const showLoadedOfTotal = !activeSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
+  const { showNoRecords, showLoadingStatus } = resolveListViewUiState({
+    visibleCount: pagedItems.length,
+    hasLoadedOnce,
+    loading: uiLoading,
+    prefetching: uiPrefetching,
+    error: uiError,
+    assumeInitialLoad
+  });
 
   const formatDateOnly = (value: any): string | null => {
     if (value === undefined || value === null || value === '') return null;
@@ -1622,7 +1647,7 @@ const ListView: React.FC<ListViewProps> = ({
           </div>
         ) : null}
 
-        {uiLoading ? (
+        {showLoadingStatus ? (
           <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
         ) : uiPrefetching ? (
           <div className="status muted" style={{ opacity: 0.9 }}>
@@ -1699,13 +1724,13 @@ const ListView: React.FC<ListViewProps> = ({
                       ))}
                     </tr>
                   ))
-                ) : (
+                ) : showNoRecords ? (
                   <tr>
                     <td colSpan={columnsForTable.length} className="muted">
                       {tSystem('list.noRecords', language, 'No records found.')}
                     </td>
                   </tr>
-                )}
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -1759,9 +1784,9 @@ const ListView: React.FC<ListViewProps> = ({
                   ) : null}
                 </div>
               ))
-            ) : (
+            ) : showNoRecords ? (
               <div className="muted">{tSystem('list.noRecords', language, 'No records found.')}</div>
-            )}
+            ) : null}
           </div>
         )}
 
