@@ -103,6 +103,13 @@ If you want a discrete environment label (e.g., "Staging") to appear in the web 
 3. Add a property named `CK_UI_ENV_TAG` with the label you want to display (for example, `Staging`).
 4. Save the property and refresh the web app.
 
+## 5c. Config cache invalidation (performance)
+
+The web app caches form definitions in the browser (localStorage) using a cache-version key so most visits do not need to re-fetch configuration.
+
+- The cache version is bumped automatically when you run `createAllForms()` (it calls `WebFormService.invalidateServerCache('createAllForms')`).
+- After running `createAllForms()`, refresh the web app to force clients onto the new cache version.
+
 ## 6. Configure Your Forms
 
 1. **Dashboard**: Add new rows to the "Forms Dashboard" sheet for each form.
