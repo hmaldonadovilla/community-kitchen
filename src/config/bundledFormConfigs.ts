@@ -6812,7 +6812,8 @@ export const BUNDLED_FORM_CONFIGS = [
             "groupId": "MP_MEALS_REQUEST",
             "fields": [
               "MEAL_TYPE",
-              "ORD_QTY"
+              "ORD_QTY",
+              "FINAL_QTY"
             ]
           }
         ]
@@ -6824,9 +6825,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": "Record kopiëren"
         },
         "message": {
-          "en": "Select the production date and verify the customer, service and requested portions information. All changes will be auto-saved and copied record will be created.",
-          "fr": "Sélectionnez la date de production et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et l'enregistrement copié sera créé.",
-          "nl": "Selecteer de productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en de gekopieerde record wordt aangemaakt."
+          "en": "Select a future production date and verify the customer, service and requested portions information. All changes will be auto-saved and a future dated record will be created.",
+          "fr": "Sélectionnez une date de production future et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté future sera créé.",
+          "nl": "Selecteer een toekomstige productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en een toekomstige gedateerde record wordt aangemaakt."
         },
         "confirmLabel": {
           "en": "OK",
@@ -7089,6 +7090,20 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
+                "groupOverride": {
+                  "totals": [
+                    {
+                      "type": "sum",
+                      "fieldId": "ORD_QTY",
+                      "label": {
+                        "en": "Total ordered",
+                        "fr": "Total commandé",
+                        "nl": "Totaal besteld"
+                      },
+                      "decimalPlaces": 0
+                    }
+                  ]
+                },
                 "rowFlow": {
                   "mode": "progressive",
                   "references": {
@@ -8749,7 +8764,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Label EN": "Delivered Portions",
             "Label FR": "Portions livrées",
             "Label NL": "Maaltijden",
-            "Required?": false,
+            "Required?": true,
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
@@ -9005,6 +9020,14 @@ export const BUNDLED_FORM_CONFIGS = [
                     "nl": "Gevraagde porties moeten 0 of meer zijn"
                   },
                   "phase": "submit"
+                }
+              ],
+              "selectionEffects": [
+                {
+                  "id": "sync_final_qty_from_ord_qty",
+                  "type": "setValue",
+                  "fieldId": "FINAL_QTY",
+                  "value": "$row.ORD_QTY"
                 }
               ]
             },
@@ -9364,7 +9387,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Delivered Portions",
               "labelFr": "Portions livrées",
               "labelNl": "Maaltijden",
-              "required": false,
+              "required": true,
               "requiredMessage": {
                 "en": "Delivered portions must be equal to or greater than requested portions.",
                 "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
@@ -9390,14 +9413,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
                   }
                 }
-              ],
-              "derivedValue": {
-                "op": "copy",
-                "dependsOn": "ORD_QTY",
-                "applyOn": "change",
-                "copyMode": "allowIncrease",
-                "when": "always"
-              }
+              ]
             }
           ],
           "subGroups": [
@@ -14150,7 +14166,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Label EN": "Delivered Portions",
                 "Label FR": "Portions livrées",
                 "Label NL": "Maaltijden",
-                "Required?": false,
+                "Required?": true,
                 "Options (EN)": "",
                 "Options (FR)": "",
                 "Options (NL)": "",
@@ -14406,6 +14422,14 @@ export const BUNDLED_FORM_CONFIGS = [
                       "nl": "Gevraagde porties moeten 0 of meer zijn"
                     },
                     "phase": "submit"
+                  }
+                ],
+                "selectionEffects": [
+                  {
+                    "id": "sync_final_qty_from_ord_qty",
+                    "type": "setValue",
+                    "fieldId": "FINAL_QTY",
+                    "value": "$row.ORD_QTY"
                   }
                 ]
               },
@@ -14765,7 +14789,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelEn": "Delivered Portions",
                 "labelFr": "Portions livrées",
                 "labelNl": "Maaltijden",
-                "required": false,
+                "required": true,
                 "requiredMessage": {
                   "en": "Delivered portions must be equal to or greater than requested portions.",
                   "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
@@ -14791,14 +14815,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
                     }
                   }
-                ],
-                "derivedValue": {
-                  "op": "copy",
-                  "dependsOn": "ORD_QTY",
-                  "applyOn": "change",
-                  "copyMode": "allowIncrease",
-                  "when": "always"
-                }
+                ]
               }
             ],
             "subGroups": [
@@ -19180,7 +19197,8 @@ export const BUNDLED_FORM_CONFIGS = [
             "groupId": "MP_MEALS_REQUEST",
             "fields": [
               "MEAL_TYPE",
-              "ORD_QTY"
+              "ORD_QTY",
+              "FINAL_QTY"
             ]
           }
         ]
@@ -19192,9 +19210,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": "Record kopiëren"
         },
         "message": {
-          "en": "Select the production date and verify the customer, service and requested portions information. All changes will be auto-saved and copied record will be created.",
-          "fr": "Sélectionnez la date de production et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et l'enregistrement copié sera créé.",
-          "nl": "Selecteer de productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en de gekopieerde record wordt aangemaakt."
+          "en": "Select a future production date and verify the customer, service and requested portions information. All changes will be auto-saved and a future dated record will be created.",
+          "fr": "Sélectionnez une date de production future et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté future sera créé.",
+          "nl": "Selecteer een toekomstige productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en een toekomstige gedateerde record wordt aangemaakt."
         },
         "confirmLabel": {
           "en": "OK",
@@ -19437,6 +19455,20 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
+                "groupOverride": {
+                  "totals": [
+                    {
+                      "type": "sum",
+                      "fieldId": "ORD_QTY",
+                      "label": {
+                        "en": "Total ordered",
+                        "fr": "Total commandé",
+                        "nl": "Totaal besteld"
+                      },
+                      "decimalPlaces": 0
+                    }
+                  ]
+                },
                 "rowFlow": {
                   "mode": "progressive",
                   "references": {

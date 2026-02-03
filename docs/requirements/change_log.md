@@ -329,3 +329,57 @@
   ```
 
   - On the steps ui on the `deliveryForm` we are showing the totals of both the `Requested` [ORD_QTY] and `Delivered` [FINAL_QTY] columns. We need to be able to override the configuration of the line item group at the step level to onlt show the totals for the `Requested` column.
+  > **DONE - Codex**
+- ck-72:
+  - Showing 'No record found', in the list view while data is still loading is not good practice. Keep `Loading` message, and only show `No records found` after fetching data from the database and realizing that in fact there aren't any records at all available.
+  That “No records found.” is almost always a timing / rendering issue: the UI renders the table before the async fetch finishes (so the table is empty for a moment), and the component shows its default empty-state message. Then the data arrives and rows appear.
+
+  Most likely causes
+
+  - Async data load + default empty state
+    - You render the table immediately (with 0 rows), then later populate it.
+    - Many table components auto-display “No records found” when rows = 0.
+  - Filter/search is applied before data arrives
+    - Example: you bind “search by date” input to filtering logic; while data is still empty, filtering returns 0 → “No records found.”
+  - Two-step load (first clears, then fills)
+    - Code does `setRows([])` / clears `<tbody>` before appending new rows → brief empty state.
+  - Sorting/pagination library default**
+    - If you use something like DataTables (or a similar library), it shows “No records found” until it receives data.
+  (If it *stays* “No records found” permanently, then it’s a real retrieval issue: wrong sheet range, auth, wrong environment ID, query date mismatch, etc. But your screenshot shows “Loading…” too, so it looks like a flash while loading.)
+  ---
+  A) Gate the empty-state behind a “loaded” flag (recommended). Only show “No records found” after you know loading finished.
+  - Rule
+    - While loading → show **Loading…** (spinner/skeleton)
+    - After loading:
+      - If rows > 0 → show table
+      - If rows = 0 → show a calm empty state (“No activity yet.”)
+
+  **Implementation pattern (framework-agnostic):**
+
+  - `isLoading = true` initially
+  - Start fetch
+  - When fetch returns:
+    - set rows
+    - `isLoading = false`
+  - Render logic:
+    - if `isLoading` → show loading panel, hide table + empty message
+    - else if `rows.length === 0` → show empty state message
+    - else → show table
+  B) Hide the table until data is loaded (quickest fix)
+  - Set the table container `display:none` by default
+  - Show only after data is injected
+  - Keep a “Loading…” placeholder visible meanwhile
+  C) If you use DataTables (or similar)
+  - Override the empty-table string during loading.
+    - Set `language.emptyTable` to `""` (or “Loading…”)
+  - Use its “processing” UI instead of emptyTable.
+  - Initialize DataTable **after** data is loaded, or use its AJAX mode so it manages loading state properly.
+  Tiny but important
+
+  Right now you already show **“Loading…”** in a field, but the table still renders its empty state underneath. The clean fix is: **don’t render the empty table state while isLoading = true.**
+  If you tell me whether Hector is using:
+
+  - plain HTML + client JS,
+  - a table lib (DataTables),
+  - or a framework (React/Vue),
+    I’ll give you the exact snippet to implement the `isLoading` gating in your code style.

@@ -2565,6 +2565,12 @@ export interface StepLineGroupTargetConfig {
    */
   rowFlow?: RowFlowConfig;
   /**
+   * Optional step-scoped override for the line-item group configuration.
+   *
+   * Use this to adjust behavior for guided steps (e.g., totals) without changing the base group config.
+   */
+  groupOverride?: LineItemGroupConfigOverride;
+  /**
    * Allowlist of visible parent row fields for this step.
    */
   fields?: StepFieldTargetRef[];

@@ -268,6 +268,42 @@ describe('Dashboard', () => {
     expect(target?.collapsedFieldsInHeader).toBe(true);
   });
 
+  test('getForms preserves steps.include.lineGroup.groupOverride from dashboard config', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'deliveryForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                groupOverride: {
+                  totals: [{ type: 'sum', fieldId: 'ORD_QTY' }]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms.length).toBe(1);
+    const step = (forms[0].steps as any)?.items?.[0];
+    const target = step?.include?.[0];
+    expect(target?.kind).toBe('lineGroup');
+    expect(target?.groupOverride).toEqual({ totals: [{ type: 'sum', fieldId: 'ORD_QTY' }] });
+  });
+
   test('getForms preserves guided steps lineGroup/subGroup field entries with renderAsLabel', () => {
     const configJson = JSON.stringify({
       steps: {
