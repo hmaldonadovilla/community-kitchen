@@ -2,6 +2,7 @@ import { WebFormDefinition } from '../types';
 import { SYSTEM_FONT_STACK } from '../constants/typography';
 import { CACHE_VERSION_PROPERTY_KEY, DEFAULT_CACHE_VERSION, getDocumentProperties } from './webform/cache';
 import { isDebugEnabled } from './webform/debug';
+import { getUiEnvTag } from './webform/envTag';
 
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
 const SCRIPT_CLOSE_ESCAPED = String.raw`<\\/script`;
@@ -66,8 +67,20 @@ export function buildWebFormHtml(
   const defJson = escapeJsonForScript(def || null);
   const keyJson = escapeJsonForScript(formKey || def?.title || '');
   const debugJson = isDebugEnabled() ? 'true' : 'false';
-  const bootstrapJson = escapeJsonForScript(bootstrap || null);
   const bundleSrc = buildBundleSrc(bundleTarget);
+  const cacheVersion = resolveCacheVersion();
+  const cacheVersionJson = escapeJsonForScript(cacheVersion);
+  const envTag = getUiEnvTag();
+  const envTagJson = escapeJsonForScript(envTag || null);
+
+  const bootstrapPayload = (() => {
+    if (bootstrap && typeof bootstrap === 'object') {
+      const existingEnvTag = (bootstrap as any).envTag;
+      return { ...(bootstrap as any), envTag: existingEnvTag !== undefined ? existingEnvTag : (envTag || null) };
+    }
+    return { envTag: envTag || null };
+  })();
+  const bootstrapJson = escapeJsonForScript(bootstrapPayload);
 
   return `<!DOCTYPE html>
 <html>
@@ -1183,7 +1196,96 @@ export function buildWebFormHtml(
         </main>
       </div>
     </div>
-    <script>window.__WEB_FORM_DEF__ = ${defJson}; window.__WEB_FORM_KEY__ = ${keyJson}; window.__WEB_FORM_DEBUG__ = ${debugJson}; window.__WEB_FORM_BOOTSTRAP__ = ${bootstrapJson};</script>
+    <script>
+      (function () {
+        // Boot globals
+        window.__WEB_FORM_DEF__ = ${defJson};
+        window.__WEB_FORM_KEY__ = ${keyJson};
+        window.__WEB_FORM_DEBUG__ = ${debugJson};
+        window.__WEB_FORM_BOOTSTRAP__ = ${bootstrapJson};
+        window.__CK_CACHE_VERSION__ = ${cacheVersionJson};
+        window.__CK_ENV_TAG__ = ${envTagJson};
+
+        var log = function (event, payload) {
+          try {
+            if (typeof console === 'undefined' || typeof console.info !== 'function') return;
+            console.info('[ReactForm][boot]', event, payload || {});
+          } catch (e) {
+            // ignore
+          }
+        };
+
+        // Non-bundled forms: hydrate from a long-lived localStorage cache keyed by server cache version.
+        // Version bump is controlled by createAllForms() (server-side), which invalidates __CK_CACHE_VERSION__.
+        try {
+          var hasDef = !!window.__WEB_FORM_DEF__;
+          var cacheVersion = (window.__CK_CACHE_VERSION__ || '').toString().trim();
+          var formKey = (window.__WEB_FORM_KEY__ || '').toString().trim();
+          if (!hasDef && cacheVersion) {
+            var cacheKey = 'ck.formDef.v1::' + cacheVersion + '::' + formKey;
+            var raw = null;
+            try {
+              raw = window.localStorage ? window.localStorage.getItem(cacheKey) : null;
+            } catch (e) {
+              raw = null;
+            }
+            if (raw) {
+              try {
+                window.__WEB_FORM_DEF__ = JSON.parse(raw);
+                log('config.cache.hit', { formKey: formKey || null, cacheVersion: cacheVersion });
+                hasDef = !!window.__WEB_FORM_DEF__;
+              } catch (e) {
+                try {
+                  if (window.localStorage) window.localStorage.removeItem(cacheKey);
+                } catch (e2) {
+                  // ignore
+                }
+                log('config.cache.parseError', { formKey: formKey || null, cacheVersion: cacheVersion });
+              }
+            } else {
+              log('config.cache.miss', { formKey: formKey || null, cacheVersion: cacheVersion });
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Start bootstrap fetch as early as possible to overlap with bundle download.
+        try {
+          if (window.__WEB_FORM_DEF__) return;
+          if (window.__CK_BOOTSTRAP_PROMISE__) return;
+          if (!window.google || !window.google.script || !window.google.script.run) return;
+          var startedAt = Date.now();
+          var key = (window.__WEB_FORM_KEY__ || '').toString().trim();
+          log('bootstrap.prefetch.start', { formKey: key || null });
+          window.__CK_BOOTSTRAP_PROMISE__ = new Promise(function (resolve, reject) {
+            try {
+              window.google.script.run
+                .withSuccessHandler(function (res) {
+                  try {
+                    window.__WEB_FORM_BOOTSTRAP__ = res || window.__WEB_FORM_BOOTSTRAP__ || {};
+                  } catch (e) {
+                    // ignore
+                  }
+                  log('bootstrap.prefetch.success', { formKey: (res && res.formKey) ? res.formKey : (key || null), elapsedMs: Date.now() - startedAt });
+                  resolve(res);
+                })
+                .withFailureHandler(function (err) {
+                  var msg = (err && err.message) ? err.message.toString() : (err ? err.toString() : 'unknown');
+                  log('bootstrap.prefetch.error', { formKey: key || null, elapsedMs: Date.now() - startedAt, message: msg });
+                  reject(err);
+                })
+                .fetchBootstrapContext(key || null);
+            } catch (e) {
+              log('bootstrap.prefetch.error', { formKey: key || null, elapsedMs: Date.now() - startedAt, message: e ? e.toString() : 'unknown' });
+              reject(e);
+            }
+          });
+        } catch (e) {
+          // ignore
+        }
+      })();
+    </script>
     <script src="${bundleSrc}" defer></script>
   </body>
 </html>`;
