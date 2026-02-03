@@ -531,6 +531,11 @@ interface FormViewProps {
    * Optional map of dedup key field ids (used to keep dedup keys editable even if valueMap is present).
    */
   dedupKeyFieldIdMap?: Record<string, true>;
+  /**
+   * When true, block guided steps forward navigation (Next + steps bar) even if step gates are satisfied.
+   * Used to keep step navigation consistent with system action gates that disable the primary submit/next action.
+   */
+  guidedForwardNavigationBlocked?: boolean;
   language: LangCode;
   values: Record<string, FieldValue>;
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
@@ -645,6 +650,7 @@ interface FormViewProps {
 const FormView: React.FC<FormViewProps> = ({
   definition,
   dedupKeyFieldIdMap,
+  guidedForwardNavigationBlocked,
   language,
   values,
   setValues,
@@ -1201,7 +1207,10 @@ const FormView: React.FC<FormViewProps> = ({
 
       const targetModeRaw = (target.displayMode || 'inherit').toString().trim().toLowerCase();
       const stepModeRaw = stepLineGroupsDefaultMode ? stepLineGroupsDefaultMode.toString().trim().toLowerCase() : '';
-      const inheritedOverlay = !!(groupQ.lineItemConfig as any)?.ui?.openInOverlay;
+      const groupOverride = (target as any).groupOverride as LineItemGroupConfigOverride | undefined;
+      const baseLineCfg = (groupQ as any).lineItemConfig || {};
+      const lineCfg = groupOverride ? applyLineItemGroupOverride(baseLineCfg, groupOverride) : baseLineCfg;
+      const inheritedOverlay = !!(lineCfg as any)?.ui?.openInOverlay;
       const resolvedLineMode =
         targetModeRaw === 'inline' || targetModeRaw === 'overlay'
           ? (targetModeRaw as 'inline' | 'overlay')
@@ -1486,6 +1495,10 @@ const FormView: React.FC<FormViewProps> = ({
         return;
       }
 
+      const effectiveMaxReachableIndex = guidedForwardNavigationBlocked
+        ? Math.min(maxReachableGuidedIndex, currentIdx)
+        : maxReachableGuidedIndex;
+
       if (dedupNavigationBlocked) {
         onDiagnostic?.('steps.step.blocked', {
           from: activeGuidedStepId,
@@ -1497,16 +1510,17 @@ const FormView: React.FC<FormViewProps> = ({
       }
 
       // Forward navigation: use computed reachability (contiguous gating).
-      if (nextIdx > maxReachableGuidedIndex) {
-        if (submitActionRef?.current) {
+      if (nextIdx > effectiveMaxReachableIndex) {
+        // When blocked by the system action gate, do not trigger submit/next logic (it would bypass the gate).
+        if (!guidedForwardNavigationBlocked && submitActionRef?.current) {
           submitActionRef.current();
         }
         onDiagnostic?.('steps.step.blocked', {
           from: activeGuidedStepId,
           to: nextId,
-          gate: guidedDefaultForwardGate,
-          reason: 'notReachable',
-          maxReachableIndex: maxReachableGuidedIndex
+          gate: guidedForwardNavigationBlocked ? 'systemActionGate' : guidedDefaultForwardGate,
+          reason: guidedForwardNavigationBlocked ? 'forwardNavigationBlocked' : 'notReachable',
+          maxReachableIndex: effectiveMaxReachableIndex
         });
         return;
       }
@@ -1516,6 +1530,7 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [
       activeGuidedStepId,
+      guidedForwardNavigationBlocked,
       guidedDefaultForwardGate,
       guidedEnabled,
       guidedStepIds,
@@ -11717,9 +11732,24 @@ const FormView: React.FC<FormViewProps> = ({
       const presentation: 'groupEditor' | 'liftedRowFields' =
         presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
 
+      const groupOverride = (target as any).groupOverride as LineItemGroupConfigOverride | undefined;
+      const baseLineCfg = (groupQ as any).lineItemConfig || {};
+      const lineCfg = groupOverride ? applyLineItemGroupOverride(baseLineCfg, groupOverride) : baseLineCfg;
+      if (groupOverride && onDiagnostic) {
+        const logKey = `${activeGuidedStepId}::${id}::groupOverride`;
+        if (!guidedLineGroupOverrideLoggedRef.current.has(logKey)) {
+          guidedLineGroupOverrideLoggedRef.current.add(logKey);
+          onDiagnostic('steps.lineGroup.groupOverride.applied', {
+            stepId: activeGuidedStepId,
+            groupId: id,
+            keys: Object.keys(groupOverride || {})
+          });
+        }
+      }
+
       const targetModeRaw = (target.displayMode || 'inherit').toString().trim().toLowerCase();
       const stepModeRaw = stepLineGroupsDefaultMode ? stepLineGroupsDefaultMode.toString().trim().toLowerCase() : '';
-      const inheritedOverlay = !!(groupQ.lineItemConfig as any)?.ui?.openInOverlay;
+      const inheritedOverlay = !!(lineCfg as any)?.ui?.openInOverlay;
       const resolvedLineMode =
         targetModeRaw === 'inline' || targetModeRaw === 'overlay'
           ? (targetModeRaw as 'inline' | 'overlay')
@@ -11741,7 +11771,6 @@ const FormView: React.FC<FormViewProps> = ({
       const hideInlineSubgroups = resolvedSubMode === 'overlay';
 
       // Filter parent fields and (optionally) subgroup definitions/fields based on the step target allowlists.
-      const lineCfg = (groupQ as any).lineItemConfig || {};
       const rowFilter = target.rows || null;
       const normalizeLineFieldId = (groupId: string, rawId: any): string => {
         const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
@@ -12085,7 +12114,9 @@ const FormView: React.FC<FormViewProps> = ({
         steps={steps.map(s => ({ id: (s?.id || '').toString(), label: (s as any).label }))}
         status={guidedStatus.steps}
         activeStepId={activeGuidedStepId}
-        maxReachableIndex={maxReachableGuidedIndex}
+        maxReachableIndex={
+          guidedForwardNavigationBlocked ? Math.min(maxReachableGuidedIndex, activeGuidedStepIndex) : maxReachableGuidedIndex
+        }
         onSelectStep={id => selectGuidedStep(id, 'user')}
       />
     );

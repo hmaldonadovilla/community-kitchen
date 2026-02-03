@@ -6870,6 +6870,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
           dedupNavigationBlocked={dedupNavigationBlocked}
+          guidedForwardNavigationBlocked={submitDisabledByGate}
           openConfirmDialog={customConfirm.openConfirm}
           summarySubmitIntentRef={summarySubmitIntentRef}
         />
