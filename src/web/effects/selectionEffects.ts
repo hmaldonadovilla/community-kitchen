@@ -10,11 +10,18 @@ interface EffectContext {
     preset?: Record<string, PresetValue>,
     meta?: { effectContextId?: string; auto?: boolean; effectId?: string; hideRemoveButton?: boolean }
   ) => void;
-  clearLineItems?: (groupId: string, contextId?: string) => void;
+  clearLineItems?: (groupId: string, contextId?: string, meta?: { preserveManualRows?: boolean }) => void;
   updateAutoLineItems?: (
     groupId: string,
     presets: Array<Record<string, PresetValue>>,
-    meta: { effectContextId: string; numericTargets: string[]; keyFields?: string[]; effectId?: string; hideRemoveButton?: boolean }
+    meta: {
+      effectContextId: string;
+      numericTargets: string[];
+      keyFields?: string[];
+      effectId?: string;
+      hideRemoveButton?: boolean;
+      preserveManualRows?: boolean;
+    }
   ) => void;
   deleteLineItemRows?: (
     groupId: string,
@@ -1025,6 +1032,7 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
     ? aggregatedPresets.map(preset => mergePresetOverrides(preset as any, override))
     : aggregatedPresets;
   const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
+  const preserveManualRows = (effect as any)?.preserveManualRows !== false;
 
   if (ctx.updateAutoLineItems) {
     ctx.updateAutoLineItems(targetGroupId, mergedPresets, {
@@ -1032,13 +1040,14 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
       numericTargets,
       keyFields: nonNumericFieldIds,
       effectId: normalizeEffectId(effect) || undefined,
-      hideRemoveButton: hideRemoveButton || undefined
+      hideRemoveButton: hideRemoveButton || undefined,
+      preserveManualRows: preserveManualRows ? undefined : false
     });
     return;
   }
 
   if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-    ctx.clearLineItems(targetGroupId, contextId);
+    ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: preserveManualRows ? undefined : false });
   }
   mergedPresets.forEach(preset => {
     ctx.addLineItemRow(targetGroupId, preset, {

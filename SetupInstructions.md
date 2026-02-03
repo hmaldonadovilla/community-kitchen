@@ -245,6 +245,7 @@ If you want a discrete environment label (e.g., "Staging") to appear in the web 
         Notes:
         - `target.scope: "parent"` updates the parent row when used inside a subgroup (falls back to top-level for non-subgroups).
         - `target.scope: "effect"` applies to rows created by the matching `selectionEffects[].id`.
+        - `primaryAction: "cancel"` makes the Cancel button the primary/default action (useful when confirming a destructive change).
 
     - **Summary view field visibility**: By default, the Summary view only shows fields that are currently visible in the Form view (i.e., not hidden by `visibility`). You can override this per field (and per line-item field/subgroup field) via `ui.summaryVisibility`:
 
@@ -1718,6 +1719,7 @@ Use `type: "addLineItemsFromDataSource"` when you want a CHOICE/CHECKBOX fieldâ€
    - `aggregateNumericFields`: numeric fields that should be summed when aggregation occurs. All line-item fields typed as NUMBER are automatically included.
    - `scaleNumericFields`: optional explicit list of fields whose numeric values should be multiplied by the scale factor. If omitted, it reuses `aggregateNumericFields`, then NUMBER fields.
    - `clearGroupBeforeAdd`: defaults to `true`. Set to `false` to append instead of rebuilding.
+   - `preserveManualRows`: defaults to `true`. Set to `false` to delete existing manual rows in the target group when refreshing data-driven rows.
 
 3. **Optional multiplier support**:
 

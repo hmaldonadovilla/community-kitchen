@@ -113,6 +113,7 @@ import {
   resolveSubgroupKey,
   seedSubgroupDefaults
 } from '../app/lineItems';
+import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
 import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAncestors';
 import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app/bundledHtmlClientRenderer';
 import { resolveTemplateIdForRecord } from '../app/templateId';
@@ -5078,7 +5079,22 @@ const FormView: React.FC<FormViewProps> = ({
         parentId: subgroupInfo?.parentRowId,
         parentGroupId: subgroupInfo?.parentGroupKey
       };
-      const nextWithRow = { ...prev, [groupId]: [row, ...current] };
+      let nextWithRow: LineItemState = { ...prev, [groupId]: [row, ...current] };
+      if (subgroupInfo?.subGroupId === 'MP_INGREDIENTS_LI') {
+        const source = parseRowSource((rowValues as any)?.[ROW_SOURCE_KEY]);
+        if (source === 'manual') {
+          const marked = markRecipeIngredientsDirtyForGroupKey(nextWithRow, groupId);
+          if (marked.changed) {
+            nextWithRow = marked.lineItems;
+            onDiagnostic?.('ck-75.recipe.ingredientsDirty.set', {
+              groupId,
+              parentGroupKey: marked.parentGroupKey || null,
+              parentRowId: marked.parentRowId || null,
+              reason: 'rowAdded'
+            });
+          }
+        }
+      }
       const groupDefForDefaults =
         !subgroupInfo && groupDef && effectiveConfig
           ? ({
@@ -5524,6 +5540,15 @@ const FormView: React.FC<FormViewProps> = ({
     }
     const prevLineItems = lineItems;
     const cascade = cascadeRemoveLineItemRows({ lineItems: prevLineItems, roots: [{ groupId, rowId }] });
+    const marked = markRecipeIngredientsDirtyForGroupKey(cascade.lineItems, groupId);
+    if (marked.changed) {
+      onDiagnostic?.('ck-75.recipe.ingredientsDirty.set', {
+        groupId,
+        parentGroupKey: marked.parentGroupKey || null,
+        parentRowId: marked.parentRowId || null,
+        reason: 'rowRemoved'
+      });
+    }
     if (cascade.removedSubgroupKeys.length) {
       setSubgroupSelectors(prevSel => {
         const nextSel = { ...prevSel };
@@ -5534,7 +5559,7 @@ const FormView: React.FC<FormViewProps> = ({
       });
     }
     onDiagnostic?.('ui.lineItems.remove.cascade', { groupId, rowId, removedCount: cascade.removed.length });
-    const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, cascade.lineItems, {
+    const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, marked.lineItems, {
       mode: 'init'
     });
     setValues(nextValues);
@@ -6196,6 +6221,17 @@ const FormView: React.FC<FormViewProps> = ({
       row.id === rowId ? { ...row, values: nextRowValues } : row
     );
     let updatedLineItems: LineItemState = { ...currentLineItems, [group.id]: nextRows };
+    const marked = markRecipeIngredientsDirtyForGroupKey(updatedLineItems, group.id);
+    if (marked.changed) {
+      updatedLineItems = marked.lineItems;
+      onDiagnostic?.('ck-75.recipe.ingredientsDirty.set', {
+        groupId: group.id,
+        parentGroupKey: marked.parentGroupKey || null,
+        parentRowId: marked.parentRowId || null,
+        reason: 'fieldChange',
+        fieldId: (field?.id || '').toString()
+      });
+    }
     const { values: nextValues, lineItems: finalLineItems } = applyValueMapsToForm(
       definition,
       currentValues,

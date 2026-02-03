@@ -6929,6 +6929,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         message={fieldChangeDialog.state.message || ''}
         confirmLabel={fieldChangeDialog.state.confirmLabel || tSystem('common.confirm', language, 'Confirm')}
         cancelLabel={fieldChangeDialog.state.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
+        primaryAction={fieldChangeActiveRef.current?.dialog?.primaryAction === 'cancel' ? 'cancel' : 'confirm'}
         inputs={fieldChangeDialog.state.inputs}
         values={fieldChangeDialog.state.values}
         onValueChange={fieldChangeDialog.setInputValue}
