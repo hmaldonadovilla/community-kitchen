@@ -3006,6 +3006,7 @@
                       "Chicken stripes",
                       "Chicken cubes",
                       "Chicken wings",
+                      "Chicken nuggets",
                       "Chicken tenders",
                       "Cordon bleu",
                       "Fishsticks",
@@ -3099,6 +3100,7 @@
                       "Chickpeas - tinned",
                       "Red beans - tinned",
                       "White beans - tinned",
+                      "Falafel",
                       "Mackerel - tinned",
                       "Chickpeas - dry",
                       "Red lentils",
@@ -3108,6 +3110,7 @@
                       "Lanières de poulet",
                       "Dés de poulet",
                       "Ailes de poulet",
+                      "Nuggets de poulet",
                       "Aiguillettes de poulet",
                       "Cordon bleu",
                       "Bâtonnets de poisson",
@@ -3201,6 +3204,7 @@
                       "Pois chiches en conserve",
                       "Haricots rouges en conserve",
                       "Haricots blancs en conserve",
+                      "Falafel",
                       "Maquereau en conserve",
                       "Pois chiches secs",
                       "Lentilles corail",
@@ -3210,6 +3214,7 @@
                       "Kipreepjes",
                       "Kipblokjes",
                       "Kip vleugels",
+                      "Kipnuggets",
                       "Kiphaasjes",
                       "Cordon bleu",
                       "Vissticks",
@@ -3303,6 +3308,7 @@
                       "Kikkererwten – blik",
                       "Rode bonen – blik",
                       "Witte bonen – blik",
+                      "Falafel",
                       "Makreel – blik",
                       "Kikkererwten – droog",
                       "Rode linzen",
@@ -3341,6 +3347,17 @@
                         "allowedUnits": "kg, gr, piece",
                         "dietaryApplicability": "Standard, No-salt",
                         "__ckOptionValue": "Chicken wings"
+                      },
+                      {
+                        "optionEn": "Chicken nuggets",
+                        "optionFr": "Nuggets de poulet",
+                        "optionNl": "Kipnuggets",
+                        "Category": "Animal protein Halal",
+                        "Allergens": "Gluten",
+                        "Suppliers": "Ozfood",
+                        "allowedUnits": "kg, gr, piece",
+                        "dietaryApplicability": "Standard, No-salt",
+                        "__ckOptionValue": "Chicken nuggets"
                       },
                       {
                         "optionEn": "Chicken tenders",
@@ -4366,6 +4383,17 @@
                         "__ckOptionValue": "White beans - tinned"
                       },
                       {
+                        "optionEn": "Falafel",
+                        "optionFr": "Falafel",
+                        "optionNl": "Falafel",
+                        "Category": "Vegan protein",
+                        "Allergens": "None",
+                        "Suppliers": "VDS",
+                        "allowedUnits": "kg, gr, piece",
+                        "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
+                        "__ckOptionValue": "Falafel"
+                      },
+                      {
                         "optionEn": "Mackerel - tinned",
                         "optionFr": "Maquereau en conserve",
                         "optionNl": "Makreel – blik",
@@ -4496,6 +4524,7 @@
                           "Chickpeas - tinned",
                           "Red beans - tinned",
                           "White beans - tinned",
+                          "Falafel",
                           "Mackerel - tinned",
                           "Chickpeas - dry",
                           "Red lentils",
@@ -4505,6 +4534,7 @@
                           "Chicken stripes",
                           "Chicken cubes",
                           "Chicken wings",
+                          "Chicken nuggets",
                           "Chicken tenders",
                           "Cordon bleu",
                           "Fishsticks",
@@ -4598,6 +4628,7 @@
                           "Chickpeas - tinned",
                           "Red beans - tinned",
                           "White beans - tinned",
+                          "Falafel",
                           "Mackerel - tinned",
                           "Chickpeas - dry",
                           "Red lentils",
@@ -4607,6 +4638,7 @@
                           "Chicken stripes",
                           "Chicken cubes",
                           "Chicken wings",
+                          "Chicken nuggets",
                           "Chicken tenders",
                           "Cordon bleu",
                           "Fishsticks",
@@ -4699,6 +4731,7 @@
                           "Chickpeas - tinned",
                           "Red beans - tinned",
                           "White beans - tinned",
+                          "Falafel",
                           "Mackerel - tinned",
                           "Chickpeas - dry",
                           "Red lentils",
@@ -4795,6 +4828,7 @@
                           "Chickpeas - tinned",
                           "Red beans - tinned",
                           "White beans - tinned",
+                          "Falafel",
                           "Chickpeas - dry",
                           "Red lentils",
                           "Green lentils"
@@ -4887,6 +4921,7 @@
                           "Chickpeas - tinned",
                           "Red beans - tinned",
                           "White beans - tinned",
+                          "Falafel",
                           "Chickpeas - dry",
                           "Red lentils",
                           "Green lentils"
@@ -5178,6 +5213,11 @@
                           "piece"
                         ],
                         "Chicken wings": [
+                          "kg",
+                          "gr",
+                          "piece"
+                        ],
+                        "Chicken nuggets": [
                           "kg",
                           "gr",
                           "piece"
@@ -5605,6 +5645,11 @@
                           "gr",
                           "tin-2505gr"
                         ],
+                        "Falafel": [
+                          "kg",
+                          "gr",
+                          "piece"
+                        ],
                         "Mackerel - tinned": [
                           "kg",
                           "gr"
@@ -5751,6 +5796,9 @@
                           "Animal protein Halal"
                         ],
                         "Chicken wings": [
+                          "Animal protein Halal"
+                        ],
+                        "Chicken nuggets": [
                           "Animal protein Halal"
                         ],
                         "Chicken tenders": [
@@ -6032,6 +6080,9 @@
                         "White beans - tinned": [
                           "Vegan protein"
                         ],
+                        "Falafel": [
+                          "Vegan protein"
+                        ],
                         "Mackerel - tinned": [
                           "Animal protein"
                         ],
@@ -6124,6 +6175,9 @@
                           "None"
                         ],
                         "Chicken wings": [
+                          "Gluten"
+                        ],
+                        "Chicken nuggets": [
                           "Gluten"
                         ],
                         "Chicken tenders": [
@@ -6406,6 +6460,9 @@
                           "None"
                         ],
                         "White beans - tinned": [
+                          "None"
+                        ],
+                        "Falafel": [
                           "None"
                         ],
                         "Mackerel - tinned": [
@@ -8458,6 +8515,7 @@
                         "Chicken stripes",
                         "Chicken cubes",
                         "Chicken wings",
+                        "Chicken nuggets",
                         "Chicken tenders",
                         "Cordon bleu",
                         "Fishsticks",
@@ -8551,6 +8609,7 @@
                         "Chickpeas - tinned",
                         "Red beans - tinned",
                         "White beans - tinned",
+                        "Falafel",
                         "Mackerel - tinned",
                         "Chickpeas - dry",
                         "Red lentils",
@@ -8560,6 +8619,7 @@
                         "Lanières de poulet",
                         "Dés de poulet",
                         "Ailes de poulet",
+                        "Nuggets de poulet",
                         "Aiguillettes de poulet",
                         "Cordon bleu",
                         "Bâtonnets de poisson",
@@ -8653,6 +8713,7 @@
                         "Pois chiches en conserve",
                         "Haricots rouges en conserve",
                         "Haricots blancs en conserve",
+                        "Falafel",
                         "Maquereau en conserve",
                         "Pois chiches secs",
                         "Lentilles corail",
@@ -8662,6 +8723,7 @@
                         "Kipreepjes",
                         "Kipblokjes",
                         "Kip vleugels",
+                        "Kipnuggets",
                         "Kiphaasjes",
                         "Cordon bleu",
                         "Vissticks",
@@ -8755,6 +8817,7 @@
                         "Kikkererwten – blik",
                         "Rode bonen – blik",
                         "Witte bonen – blik",
+                        "Falafel",
                         "Makreel – blik",
                         "Kikkererwten – droog",
                         "Rode linzen",
@@ -8793,6 +8856,17 @@
                           "allowedUnits": "kg, gr, piece",
                           "dietaryApplicability": "Standard, No-salt",
                           "__ckOptionValue": "Chicken wings"
+                        },
+                        {
+                          "optionEn": "Chicken nuggets",
+                          "optionFr": "Nuggets de poulet",
+                          "optionNl": "Kipnuggets",
+                          "Category": "Animal protein Halal",
+                          "Allergens": "Gluten",
+                          "Suppliers": "Ozfood",
+                          "allowedUnits": "kg, gr, piece",
+                          "dietaryApplicability": "Standard, No-salt",
+                          "__ckOptionValue": "Chicken nuggets"
                         },
                         {
                           "optionEn": "Chicken tenders",
@@ -9818,6 +9892,17 @@
                           "__ckOptionValue": "White beans - tinned"
                         },
                         {
+                          "optionEn": "Falafel",
+                          "optionFr": "Falafel",
+                          "optionNl": "Falafel",
+                          "Category": "Vegan protein",
+                          "Allergens": "None",
+                          "Suppliers": "VDS",
+                          "allowedUnits": "kg, gr, piece",
+                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
+                          "__ckOptionValue": "Falafel"
+                        },
+                        {
                           "optionEn": "Mackerel - tinned",
                           "optionFr": "Maquereau en conserve",
                           "optionNl": "Makreel – blik",
@@ -9946,20 +10031,22 @@
                             "Oat milk",
                             "Green beans - tinned",
                             "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Mackerel - tinned",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ],
-                          "Standard": [
-                            "Chicken stripes",
-                            "Chicken cubes",
-                            "Chicken wings",
-                            "Chicken tenders",
-                            "Cordon bleu",
-                            "Fishsticks",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Falafel",
+                          "Mackerel - tinned",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ],
+                        "Standard": [
+                          "Chicken stripes",
+                          "Chicken cubes",
+                          "Chicken wings",
+                          "Chicken nuggets",
+                          "Chicken tenders",
+                          "Cordon bleu",
+                          "Fishsticks",
                             "Greek yogurt",
                             "Mozzarella",
                             "Rice",
@@ -10047,21 +10134,23 @@
                             "Peanut butter",
                             "Green beans - tinned",
                             "Carrots & peas - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Mackerel - tinned",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ],
-                          "No-salt": [
-                            "Chicken stripes",
-                            "Chicken cubes",
-                            "Chicken wings",
-                            "Chicken tenders",
-                            "Cordon bleu",
-                            "Fishsticks",
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Falafel",
+                          "Mackerel - tinned",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ],
+                        "No-salt": [
+                          "Chicken stripes",
+                          "Chicken cubes",
+                          "Chicken wings",
+                          "Chicken nuggets",
+                          "Chicken tenders",
+                          "Cordon bleu",
+                          "Fishsticks",
                             "Greek yogurt",
                             "Mozzarella",
                             "Rice",
@@ -10148,15 +10237,16 @@
                             "Peanut butter",
                             "Green beans - tinned",
                             "Carrots & peas - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Mackerel - tinned",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ],
-                          "Vegetarian": [
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Falafel",
+                          "Mackerel - tinned",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ],
+                        "Vegetarian": [
                             "Greek yogurt",
                             "Mozzarella",
                             "Rice",
@@ -10244,14 +10334,15 @@
                             "Peanut butter",
                             "Green beans - tinned",
                             "Carrots & peas - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ],
-                          "Vegan": [
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Falafel",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ],
+                        "Vegan": [
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -10336,15 +10427,16 @@
                             "Peanut butter",
                             "Green beans - tinned",
                             "Carrots & peas - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ]
-                        }
+                          "Chickpeas - tinned",
+                          "Red beans - tinned",
+                          "White beans - tinned",
+                          "Falafel",
+                          "Chickpeas - dry",
+                          "Red lentils",
+                          "Green lentils"
+                        ]
                       }
+                    }
                     },
                     {
                       "id": "QTY",
@@ -10630,6 +10722,11 @@
                             "piece"
                           ],
                           "Chicken wings": [
+                            "kg",
+                            "gr",
+                            "piece"
+                          ],
+                          "Chicken nuggets": [
                             "kg",
                             "gr",
                             "piece"
@@ -11057,6 +11154,11 @@
                             "gr",
                             "tin-2505gr"
                           ],
+                          "Falafel": [
+                            "kg",
+                            "gr",
+                            "piece"
+                          ],
                           "Mackerel - tinned": [
                             "kg",
                             "gr"
@@ -11203,6 +11305,9 @@
                             "Animal protein Halal"
                           ],
                           "Chicken wings": [
+                            "Animal protein Halal"
+                          ],
+                          "Chicken nuggets": [
                             "Animal protein Halal"
                           ],
                           "Chicken tenders": [
@@ -11484,6 +11589,9 @@
                           "White beans - tinned": [
                             "Vegan protein"
                           ],
+                          "Falafel": [
+                            "Vegan protein"
+                          ],
                           "Mackerel - tinned": [
                             "Animal protein"
                           ],
@@ -11576,6 +11684,9 @@
                             "None"
                           ],
                           "Chicken wings": [
+                            "Gluten"
+                          ],
+                          "Chicken nuggets": [
                             "Gluten"
                           ],
                           "Chicken tenders": [
@@ -11858,6 +11969,9 @@
                             "None"
                           ],
                           "White beans - tinned": [
+                            "None"
+                          ],
+                          "Falafel": [
                             "None"
                           ],
                           "Mackerel - tinned": [
