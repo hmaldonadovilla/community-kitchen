@@ -17,13 +17,13 @@
 - ck-bug-7: when checking for duplicates on create button, including `createRecordPreset`, disable the list view to prevent the user from navigating to existing records and compiling the actions done on server side.
   >**DONE - Codex**
 - ck-bug-8: tested using Steps UI. Ordered validation (`enforceFieldOrder`) is not working as expected on steps UI for line item groups that open in regular way. For subgroups in overlay the order validation works as expected. However for subgroups in overlay it is allowed to close the overlay without completing the required fields, which is not the case for line item groups in overlay. Finally we need a config setting to define if closing the overlay without completing the required fields is allowed or not.
-  >**BACKLOG**
+  >**DONE**
 - ck-bug-9:
   - when opening records we are unnecesarrily saving the record even if the user didn't change any data. I think this is trigering some cache inconsistencies and showing the banner to refresh the record unnecessarily.
   - we need to prevent racing conditions that would show the banner to refresh the record or the one asking to wait for file uploads to complete before leaving to the list view. I thing the best solution is that when the user taps the home button to leave the edit or summary view to the list view, we should block the navigation, disable al editing actions and show a banner asking to wait because we saving. No need to specify what is being saved or give options, just a simple message like "Please wait while we save your changes...". We use the blocking overlay dialog without buttons or posibility to dismiss it.
-  >**BACKLOG**
+  >**DONE**
 - ck-bug-10: The dedup validation of warning messages in the overlay line item and subgroup view is not working as expected.
-  >**BACKLOG**
+  >**DONE**
 - ck-bug-11:
   - In the line item overlay the `selectorOverlay` search box has 2 `x` to remove the search input text, one to clear the search results and one to clear the search query. We should only have the one to clear the search results.
   - The warning messages are not clearly defined, I would prefer that we add footnote markers that point to the warning section. Make sure to account for the `nonMatchWarningMode` modes as sometimes the footnotes and markes need to be numbered.
@@ -383,3 +383,15 @@
   - a table lib (DataTables),
   - or a framework (React/Vue),
     I’ll give you the exact snippet to implement the `isLoading` gating in your code style.
+  > **DONE - Codex**
+- ck-73:
+  - If the user changes the production date of a incomplete meal-production record, the sytem must show a modal:
+    - Title: Change production date?
+    - Message: Changing the production date of an ongoing Meal production will remove permanently all data previously saved, including customer and service. Do you want to continue?
+    - Buttons:
+      - No, keep the current production date --> No action
+      - Yes, delete permanently data previously entered--> the system clears out all data previously entered for the selected record and bring the user back to Order page with the new production date
+  - Please remove the listview action column to copy a record
+  > **DONE - Codex**
+- ck-74:
+  - Bug and performance imporvement: stale data related to dataSource projections remains in the browser's local storage and is never updated. This affects Distributor and recipes when data is changed on the other forms. Local storage should be refreshed on page load, also please retreive this data in parallel to batch data fetch for the listView, so that all data is available when needed. I've also noticed that paginated batch data fetch is also sequenctial, I would appreciate if the trigger all calls in parallel.
