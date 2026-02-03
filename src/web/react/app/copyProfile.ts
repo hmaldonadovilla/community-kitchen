@@ -4,6 +4,8 @@ import type { FieldValue, VisibilityContext } from '../../types';
 import type { LineItemState } from '../types';
 import { buildInitialLineItems } from './lineItems';
 
+const SYSTEM_ROW_VALUE_PREFIX = '__ck';
+
 const normalizeIdList = (raw: any): string[] => {
   const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
   return list
@@ -76,6 +78,13 @@ export const applyCopyCurrentRecordProfile = (args: {
         fields.forEach(fid => {
           if (Object.prototype.hasOwnProperty.call(rowValues, fid)) nextRowValues[fid] = rowValues[fid];
         });
+        // Preserve internal/system row attributes (e.g. __ckRowSource) so addMode="auto" reconciliation
+        // can correctly recognize auto-generated rows and avoid duplicate auto-add behavior.
+        Object.keys(rowValues || {}).forEach(key => {
+          if (!key || !key.startsWith(SYSTEM_ROW_VALUE_PREFIX)) return;
+          if (Object.prototype.hasOwnProperty.call(nextRowValues, key)) return;
+          nextRowValues[key] = rowValues[key];
+        });
         return { ...row, values: nextRowValues };
       });
 
@@ -84,4 +93,3 @@ export const applyCopyCurrentRecordProfile = (args: {
 
   return { values: nextValues, lineItems: nextLineItems };
 };
-

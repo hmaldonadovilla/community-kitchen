@@ -12,6 +12,7 @@ import {
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
   DedupDialogConfig,
+  CopyCurrentRecordProfile,
   FormConfig,
   GroupBehaviorConfig,
   ListViewColumnConfig,
@@ -19,6 +20,7 @@ import {
   ListViewSearchConfig,
   ListViewViewConfig,
   LocalizedString,
+  SystemActionGateDialogConfig,
   SubmitValidationConfig,
   StepsConfig
 } from '../types';
@@ -137,8 +139,10 @@ export class Dashboard {
       const summaryHtmlTemplateId = dashboardConfig?.summaryHtmlTemplateId;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
       const copyCurrentRecordDropFields = dashboardConfig?.copyCurrentRecordDropFields;
+      const copyCurrentRecordProfile = dashboardConfig?.copyCurrentRecordProfile;
       const createButtonLabel = dashboardConfig?.createButtonLabel;
       const copyCurrentRecordLabel = dashboardConfig?.copyCurrentRecordLabel;
+      const copyCurrentRecordDialog = dashboardConfig?.copyCurrentRecordDialog;
       const createNewRecordEnabled = dashboardConfig?.createNewRecordEnabled;
       const createRecordPresetButtonsEnabled = dashboardConfig?.createRecordPresetButtonsEnabled;
       const actionBars = dashboardConfig?.actionBars;
@@ -183,8 +187,10 @@ export class Dashboard {
           summaryHtmlTemplateId,
           copyCurrentRecordEnabled,
           copyCurrentRecordDropFields,
+          copyCurrentRecordProfile,
           createButtonLabel,
           copyCurrentRecordLabel,
+          copyCurrentRecordDialog,
           createNewRecordEnabled,
           createRecordPresetButtonsEnabled,
           actionBars,
@@ -247,8 +253,10 @@ export class Dashboard {
     summaryHtmlTemplateId?: FollowupConfig['pdfTemplateId'];
     copyCurrentRecordEnabled?: boolean;
     copyCurrentRecordDropFields?: string[];
+    copyCurrentRecordProfile?: CopyCurrentRecordProfile;
     createButtonLabel?: LocalizedString;
     copyCurrentRecordLabel?: LocalizedString;
+    copyCurrentRecordDialog?: SystemActionGateDialogConfig;
     createNewRecordEnabled?: boolean;
     createRecordPresetButtonsEnabled?: boolean;
     actionBars?: ActionBarsConfig;
@@ -613,6 +621,37 @@ export class Dashboard {
       return out.length ? out : undefined;
     })();
 
+    const normalizeJsonObject = (value: any): Record<string, any> | undefined => {
+      if (value === undefined || value === null || value === '') return undefined;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return undefined;
+        try {
+          const parsedValue = JSON.parse(this.sanitizeJson(trimmed));
+          if (parsedValue && typeof parsedValue === 'object') return parsedValue as any;
+        } catch {
+          return undefined;
+        }
+        return undefined;
+      }
+      if (typeof value === 'object') return value as any;
+      return undefined;
+    };
+
+    const copyNested = parsed.copy && typeof parsed.copy === 'object' ? parsed.copy : undefined;
+
+    const copyCurrentRecordProfileRaw =
+      parsed.copyCurrentRecordProfile !== undefined
+        ? parsed.copyCurrentRecordProfile
+        : parsed.copyProfile !== undefined
+          ? parsed.copyProfile
+          : copyNested && (copyNested as any).profile !== undefined
+            ? (copyNested as any).profile
+            : copyNested && (copyNested as any).copyCurrentRecordProfile !== undefined
+              ? (copyNested as any).copyCurrentRecordProfile
+              : undefined;
+    const copyCurrentRecordProfile = normalizeJsonObject(copyCurrentRecordProfileRaw) as CopyCurrentRecordProfile | undefined;
+
     const createButtonLabelRaw =
       parsed.createButtonLabel !== undefined
         ? parsed.createButtonLabel
@@ -628,6 +667,32 @@ export class Dashboard {
           ? parsed.copyLabel
           : undefined;
     const copyCurrentRecordLabel = normalizeLocalized(copyCurrentRecordLabelRaw);
+
+    const copyCurrentRecordDialogRaw =
+      parsed.copyCurrentRecordDialog !== undefined
+        ? parsed.copyCurrentRecordDialog
+        : parsed.copyDialog !== undefined
+          ? parsed.copyDialog
+          : copyNested && (copyNested as any).dialog !== undefined
+            ? (copyNested as any).dialog
+            : copyNested && (copyNested as any).copyCurrentRecordDialog !== undefined
+              ? (copyNested as any).copyCurrentRecordDialog
+              : undefined;
+    const copyCurrentRecordDialog = (() => {
+      const rawValue = normalizeJsonObject(copyCurrentRecordDialogRaw) as any;
+      if (!rawValue || typeof rawValue !== 'object') return undefined;
+
+      const title = normalizeLocalized(rawValue.title);
+      const message = normalizeLocalized(rawValue.message);
+      const confirmLabel = normalizeLocalized(rawValue.confirmLabel);
+      const cancelLabel = normalizeLocalized(rawValue.cancelLabel);
+      const out: Record<string, any> = { ...rawValue };
+      if (title !== undefined) out.title = title;
+      if (message !== undefined) out.message = message;
+      if (confirmLabel !== undefined) out.confirmLabel = confirmLabel;
+      if (cancelLabel !== undefined) out.cancelLabel = cancelLabel;
+      return out as SystemActionGateDialogConfig;
+    })();
 
     const createNewRecordEnabled = (() => {
       if (parsed.createNewRecordEnabled !== undefined) return Boolean(parsed.createNewRecordEnabled);
@@ -954,8 +1019,10 @@ export class Dashboard {
       !summaryHtmlTemplateId &&
       copyCurrentRecordEnabled === undefined &&
       !copyCurrentRecordDropFields?.length &&
+      !copyCurrentRecordProfile &&
       !createButtonLabel &&
       !copyCurrentRecordLabel &&
+      !copyCurrentRecordDialog &&
       createNewRecordEnabled === undefined &&
       createRecordPresetButtonsEnabled === undefined &&
       !actionBars &&
@@ -995,8 +1062,10 @@ export class Dashboard {
       summaryHtmlTemplateId,
       copyCurrentRecordEnabled,
       copyCurrentRecordDropFields,
+      copyCurrentRecordProfile,
       createButtonLabel,
       copyCurrentRecordLabel,
+      copyCurrentRecordDialog,
       createNewRecordEnabled,
       createRecordPresetButtonsEnabled,
       actionBars,

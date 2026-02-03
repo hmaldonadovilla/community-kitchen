@@ -301,6 +301,18 @@
       - customer, service and requested portions prefilled and editable
       - production date, responsible cook and volunteer cook fields empty
   > **DONE - Codex**
+- ck-70a:
+  - The copy record button must be only available as an action button, on each qualifying record (status=Closed), on the list view page.
+  - The `ING_EVD` field must not be visible if the `MP_PREP_DATE` is in the future, please add this additional condition to its current visibility rule.
+  - When copying a record limit the copy to only copy the `MP_DISTRIBUTOR`, `MP_SERVICE`, `MP_MEALS_REQUEST.MEAL_TYPE` and `MP_MEALS_REQUEST.ORD_QTY` line item group fields. The rest of the fields and line items must be excluded from the copy, including:
+    - In `MP_MEALS_REQUEST`: `MP_IS_REHEAT`, `LEFTOVER_INFO`, `MP_TO_COOK`, `MP_COOK_TEMP`, `TEMP_EVD`, `FINAL_QTY`
+    - All rows of `MP_TYPE_LI` and `MP_INGREDIENTS_LI`
+  - When copying the record and landing on the edit view please display an optional and configurable dialog message that explains the copy process.
+    - Title: Copying record
+    - Message: Select the production date and verify the customer, service and requested portions information. All changes will be auto-saved and copied record will be created.
+    - Buttons:
+      - OK
+  > **DONE - Codex**
 - ck-71:
   - On table mode we need to show the `totals` of a column as a total row ath the end of the table. Such as:
 
