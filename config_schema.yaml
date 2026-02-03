@@ -4612,6 +4612,17 @@ components:
           $ref: '#/components/schemas/LocalizedString'
         copyCurrentRecordLabel:
           $ref: '#/components/schemas/LocalizedString'
+        copyCurrentRecordDialog:
+          $ref: '#/components/schemas/SystemActionGateDialogConfig'
+          description: |
+            Optional informational dialog shown after copying a record into a new draft (typically single "OK").
+
+            Notes:
+            - Uses the same dialog shape as `actionBars.system.gates[*].dialog`.
+            - Defaults for this dialog are single-action (no cancel, no close, no backdrop dismiss) unless explicitly enabled:
+              - `showCancel`: default false
+              - `showCloseButton`: default false
+              - `dismissOnBackdrop`: default false
         createNewRecordEnabled:
           type: boolean
         createRecordPresetButtonsEnabled:

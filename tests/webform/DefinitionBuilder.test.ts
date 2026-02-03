@@ -26,6 +26,15 @@ describe('DefinitionBuilder', () => {
       createButtonLabel: { EN: 'New' },
       copyCurrentRecordLabel: { EN: 'Duplicate' },
       copyCurrentRecordDropFields: ['Q1'],
+      copyCurrentRecordProfile: {
+        values: ['Q1'],
+        lineItems: [{ groupId: 'LINE_ITEMS', fields: ['A', 'B'] }]
+      },
+      copyCurrentRecordDialog: {
+        title: { EN: 'Copying record' },
+        message: { EN: 'Copied into a new draft.' },
+        confirmLabel: { EN: 'OK' }
+      },
       submissionConfirmationTitle: { EN: 'Confirm submission' },
       submissionConfirmationMessage: { EN: 'Ready to submit?' },
       submissionConfirmationConfirmLabel: { EN: 'Yes, submit' },
@@ -81,6 +90,15 @@ describe('DefinitionBuilder', () => {
     expect(def.createButtonLabel).toEqual({ en: 'New' });
     expect(def.copyCurrentRecordLabel).toEqual({ en: 'Duplicate' });
     expect(def.copyCurrentRecordDropFields).toEqual(['Q1']);
+    expect(def.copyCurrentRecordProfile).toEqual({
+      values: ['Q1'],
+      lineItems: [{ groupId: 'LINE_ITEMS', fields: ['A', 'B'] }]
+    });
+    expect(def.copyCurrentRecordDialog).toEqual({
+      title: { en: 'Copying record' },
+      message: { en: 'Copied into a new draft.' },
+      confirmLabel: { en: 'OK' }
+    });
     expect(def.dedupDialog).toEqual({
       title: { en: 'No duplicates allowed' },
       intro: { en: 'Record already exists for:' },

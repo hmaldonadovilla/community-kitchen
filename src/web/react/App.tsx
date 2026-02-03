@@ -92,6 +92,7 @@ import { upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { applyCopyCurrentRecordProfile } from './app/copyProfile';
+import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
@@ -500,8 +501,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     trigger: null
   });
 
+  const [copyCurrentRecordDialog, setCopyCurrentRecordDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    cancelLabel: string;
+    showCancel: boolean;
+    dismissOnBackdrop: boolean;
+    showCloseButton: boolean;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: '',
+    cancelLabel: '',
+    showCancel: false,
+    dismissOnBackdrop: false,
+    showCloseButton: false
+  });
+
   const closeSystemActionGateDialog = useCallback(() => {
     setSystemActionGateDialog(prev => (prev.open ? { ...prev, open: false } : prev));
+  }, []);
+
+  const closeCopyCurrentRecordDialog = useCallback(() => {
+    setCopyCurrentRecordDialog(prev => (prev.open ? { ...prev, open: false } : prev));
   }, []);
 
   const openSystemActionGateDialog = useCallback(
@@ -2057,6 +2082,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     [language]
   );
 
+  const openCopyCurrentRecordDialogIfConfigured = useCallback(() => {
+    const resolved = resolveCopyCurrentRecordDialog(definition as any, languageRef.current);
+    if (!resolved) return;
+    logEvent('ui.copyCurrent.dialog.open', {
+      showCancel: resolved.showCancel,
+      dismissOnBackdrop: resolved.dismissOnBackdrop,
+      showCloseButton: resolved.showCloseButton
+    });
+    setCopyCurrentRecordDialog({
+      open: true,
+      title: resolved.title || tSystem('common.notice', languageRef.current, 'Notice'),
+      message: resolved.message || '',
+      confirmLabel: resolved.confirmLabel || tSystem('common.ok', languageRef.current, 'OK'),
+      cancelLabel: resolved.cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel'),
+      showCancel: resolved.showCancel,
+      dismissOnBackdrop: resolved.dismissOnBackdrop,
+      showCloseButton: resolved.showCloseButton
+    });
+  }, [definition, logEvent]);
+
   useEffect(() => {
     optionStateRef.current = optionState;
   }, [optionState]);
@@ -2801,8 +2846,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       setLineItems(cleared.lineItems);
     }
     setSelectedRecordId('');
+    // Keep refs in sync immediately so autosave/submit flows do not treat the copied draft
+    // as an update of the currently selected (potentially Closed) record.
+    selectedRecordIdRef.current = '';
     setSelectedRecordSnapshot(null);
+    selectedRecordSnapshotRef.current = null;
     setLastSubmissionMeta(null);
+    lastSubmissionMetaRef.current = null;
     setErrors({});
     setValidationWarnings({ top: [], byField: {} });
     setValidationAttempted(false);
@@ -2810,7 +2860,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     setStatus(null);
     setStatusLevel(null);
     setView('form');
-  }, [bumpRecordSession, definition, logEvent]);
+    openCopyCurrentRecordDialogIfConfigured();
+  }, [bumpRecordSession, definition, logEvent, openCopyCurrentRecordDialogIfConfigured]);
 
   const CK_BUTTON_IDX_TOKEN = '__ckQIdx=';
   const parseButtonRef = useCallback((ref: string): { id: string; qIdx?: number } => {
@@ -6947,6 +6998,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             trigger: systemActionGateDialog.trigger
           });
           closeSystemActionGateDialog();
+        }}
+      />
+
+      <ConfirmDialogOverlay
+        open={copyCurrentRecordDialog.open}
+        title={copyCurrentRecordDialog.title || tSystem('common.notice', language, 'Notice')}
+        message={copyCurrentRecordDialog.message || ''}
+        confirmLabel={copyCurrentRecordDialog.confirmLabel || tSystem('common.ok', language, 'OK')}
+        cancelLabel={copyCurrentRecordDialog.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
+        showCancel={copyCurrentRecordDialog.showCancel}
+        dismissOnBackdrop={copyCurrentRecordDialog.dismissOnBackdrop}
+        showCloseButton={copyCurrentRecordDialog.showCloseButton}
+        zIndex={12013}
+        onCancel={() => {
+          logEvent('ui.copyCurrent.dialog.cancel');
+          closeCopyCurrentRecordDialog();
+        }}
+        onConfirm={() => {
+          logEvent('ui.copyCurrent.dialog.confirm');
+          closeCopyCurrentRecordDialog();
         }}
       />
 

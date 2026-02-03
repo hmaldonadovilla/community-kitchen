@@ -1979,6 +1979,15 @@ export interface FormConfig {
    */
   copyCurrentRecordDropFields?: string[];
   /**
+   * Optional explicit copy profile for the "Copy current record" action.
+   *
+   * When set, copied drafts start from a curated subset of values/line items instead of copying everything
+   * and dropping fields. This is useful when you want to copy only a small set of fields.
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  copyCurrentRecordProfile?: CopyCurrentRecordProfile;
+  /**
    * Optional localized label override for the Create button in the React web app.
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
@@ -1988,6 +1997,12 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   copyCurrentRecordLabel?: LocalizedString;
+  /**
+   * Optional dialog shown after copying a record into a new draft (informational; typically single "OK").
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  copyCurrentRecordDialog?: SystemActionGateDialogConfig;
   /**
    * Enable/disable the standard "New record" create action in the React web app.
    *
@@ -2751,6 +2766,10 @@ export interface WebFormDefinition {
    * Optional localized label override for the "Copy current record" action in the React web app.
    */
   copyCurrentRecordLabel?: LocalizedString;
+  /**
+   * Optional dialog shown after copying a record into a new draft (informational; typically single "OK").
+   */
+  copyCurrentRecordDialog?: SystemActionGateDialogConfig;
   /**
    * Enable/disable the standard "New record" create action in the React web app.
    *
