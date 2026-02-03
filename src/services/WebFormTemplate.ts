@@ -88,11 +88,12 @@ export function buildWebFormHtml(
     <meta charset="UTF-8" />
     <link rel="preconnect" href="https://docs.google.com" />
     <link rel="preconnect" href="https://drive.google.com" />
-      <meta
+    <meta
       name="viewport"
       content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
-      <link rel="preload" as="script" href="${bundleSrc}" />
+    <link rel="preload" as="script" href="${bundleSrc}" />
+    <script src="${bundleSrc}" defer></script>
     <script>
       // iOS sometimes renders this Apps Script web app with a desktop-like base viewport (e.g., 980px wide),
       // which makes the UI effectively smaller and can trigger focus-zoom on inputs. Detect that early and
@@ -1252,41 +1253,39 @@ export function buildWebFormHtml(
 
         // Start bootstrap fetch as early as possible to overlap with bundle download.
         try {
-          if (window.__WEB_FORM_DEF__) return;
-          if (window.__CK_BOOTSTRAP_PROMISE__) return;
-          if (!window.google || !window.google.script || !window.google.script.run) return;
-          var startedAt = Date.now();
-          var key = (window.__WEB_FORM_KEY__ || '').toString().trim();
-          log('bootstrap.prefetch.start', { formKey: key || null });
-          window.__CK_BOOTSTRAP_PROMISE__ = new Promise(function (resolve, reject) {
-            try {
-              window.google.script.run
-                .withSuccessHandler(function (res) {
-                  try {
-                    window.__WEB_FORM_BOOTSTRAP__ = res || window.__WEB_FORM_BOOTSTRAP__ || {};
-                  } catch (e) {
-                    // ignore
-                  }
-                  log('bootstrap.prefetch.success', { formKey: (res && res.formKey) ? res.formKey : (key || null), elapsedMs: Date.now() - startedAt });
-                  resolve(res);
-                })
-                .withFailureHandler(function (err) {
-                  var msg = (err && err.message) ? err.message.toString() : (err ? err.toString() : 'unknown');
-                  log('bootstrap.prefetch.error', { formKey: key || null, elapsedMs: Date.now() - startedAt, message: msg });
-                  reject(err);
-                })
-                .fetchBootstrapContext(key || null);
-            } catch (e) {
-              log('bootstrap.prefetch.error', { formKey: key || null, elapsedMs: Date.now() - startedAt, message: e ? e.toString() : 'unknown' });
-              reject(e);
-            }
-          });
+          if (!window.__WEB_FORM_DEF__ && !window.__CK_BOOTSTRAP_PROMISE__ && window.google && window.google.script && window.google.script.run) {
+            var startedAt = Date.now();
+            var key = (window.__WEB_FORM_KEY__ || '').toString().trim();
+            log('bootstrap.prefetch.start', { formKey: key || null });
+            window.__CK_BOOTSTRAP_PROMISE__ = new Promise(function (resolve, reject) {
+              try {
+                window.google.script.run
+                  .withSuccessHandler(function (res) {
+                    try {
+                      window.__WEB_FORM_BOOTSTRAP__ = res || window.__WEB_FORM_BOOTSTRAP__ || {};
+                    } catch (e) {
+                      // ignore
+                    }
+                    log('bootstrap.prefetch.success', { formKey: (res && res.formKey) ? res.formKey : (key || null), elapsedMs: Date.now() - startedAt });
+                    resolve(res);
+                  })
+                  .withFailureHandler(function (err) {
+                    var msg = (err && err.message) ? err.message.toString() : (err ? err.toString() : 'unknown');
+                    log('bootstrap.prefetch.error', { formKey: key || null, elapsedMs: Date.now() - startedAt, message: msg });
+                    reject(err);
+                  })
+                  .fetchBootstrapContext(key || null);
+              } catch (e) {
+                log('bootstrap.prefetch.error', { formKey: key || null, elapsedMs: Date.now() - startedAt, message: e ? e.toString() : 'unknown' });
+                reject(e);
+              }
+            });
+          }
         } catch (e) {
           // ignore
         }
       })();
     </script>
-    <script src="${bundleSrc}" defer></script>
   </body>
 </html>`;
 }
