@@ -2,7 +2,7 @@ import { shouldHideField, toOptionSet } from '../../../core';
 import type { FieldValue, LangCode, VisibilityContext, WebFormDefinition, WebQuestionDefinition } from '../../../types';
 import type { LineItemState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
-import { parseSubgroupKey } from '../../app/lineItems';
+import { buildSubgroupKey, parseSubgroupKey, resolveSubgroupKey } from '../../app/lineItems';
 import { resolveParagraphUserText } from '../../app/paragraphDisclaimer';
 import { matchesWhenClause } from '../../../rules/visibility';
 import { resolveValueMapValue } from './valueMaps';
@@ -16,8 +16,10 @@ export type OrderedEntryTarget =
 export type OrderedEntryBlock = {
   missingFieldPath: string;
   scope: 'top' | 'line';
-  reason: 'missingRequired';
+  reason: 'missingRequired' | 'invalid';
 };
+
+type FormErrors = Record<string, string>;
 
 const isRequiredFieldMissing = (args: {
   field: any;
@@ -110,6 +112,7 @@ export const findOrderedEntryBlock = (args: {
   language: LangCode;
   values: Record<string, FieldValue>;
   lineItems: LineItemState;
+  errors?: FormErrors | null;
   collapsedRows?: Record<string, boolean>;
   resolveVisibilityValue: (fieldId: string) => FieldValue | undefined;
   getTopValue: (fieldId: string) => FieldValue | undefined;
@@ -129,12 +132,85 @@ export const findOrderedEntryBlock = (args: {
     target,
     targetGroup
   } = args;
+  const errors: FormErrors = (args.errors && typeof args.errors === 'object' ? args.errors : {}) as FormErrors;
   const topQuestions = orderedQuestions.length ? orderedQuestions : definition.questions || [];
   const targetTopId = (() => {
     if (target.scope === 'top') return target.questionId;
     const parsed = parseSubgroupKey(target.groupId);
     return parsed?.rootGroupId || target.groupId;
   })();
+
+  const hasAnyErrorInLineItemGroup = (groupId: string): boolean => {
+    if (!groupId) return false;
+    const keys = Object.keys(errors || {});
+    if (!keys.length) return false;
+    return keys.some(k => k === groupId || k.startsWith(`${groupId}__`) || k.startsWith(`${groupId}::`));
+  };
+
+  const findFirstErrorInGroup = (args: { groupId: string; groupCfg: any }): string => {
+    const { groupId, groupCfg } = args;
+    if (!groupId) return '';
+    if (errors[groupId]) return groupId;
+    if (!groupCfg) return '';
+    const rootRows = (lineItems[groupId] || []) as any[];
+    const fields = Array.isArray(groupCfg?.fields) ? groupCfg.fields : [];
+    const subGroups = Array.isArray(groupCfg?.subGroups) ? groupCfg.subGroups : [];
+
+    const scanGroup = (scanArgs: { groupKey: string; groupCfg: any; rows: any[] }): string => {
+      const { groupKey, groupCfg, rows } = scanArgs;
+      if (!groupKey || !groupCfg || !Array.isArray(rows) || !rows.length) return '';
+      const scanFields = Array.isArray(groupCfg?.fields) ? groupCfg.fields : [];
+      const scanSubs = Array.isArray(groupCfg?.subGroups) ? groupCfg.subGroups : [];
+
+      for (const row of rows) {
+        const rowId = (row?.id ?? '').toString();
+        if (!rowId) continue;
+        for (const field of scanFields) {
+          const fieldId = (field?.id ?? '').toString();
+          if (!fieldId) continue;
+          const key = `${groupKey}__${fieldId}__${rowId}`;
+          if (errors[key]) return key;
+        }
+        for (const sub of scanSubs) {
+          const subId = resolveSubgroupKey(sub as any);
+          if (!subId) continue;
+          const subKey = buildSubgroupKey(groupKey, rowId, subId);
+          const subRows = (lineItems[subKey] || []) as any[];
+          const hit = scanGroup({ groupKey: subKey, groupCfg: sub, rows: subRows });
+          if (hit) return hit;
+        }
+      }
+      return '';
+    };
+
+    const hit = scanGroup({ groupKey: groupId, groupCfg: { fields, subGroups }, rows: rootRows });
+    if (hit) return hit;
+
+    // Fallback (only when the group has no configured fields/subgroups): return a deterministic matching key.
+    // Important: do not fall back when the group is step-scoped/filtered; hidden fields must not block ordered entry.
+    if (!fields.length && !subGroups.length) {
+      const candidates = Object.keys(errors || {}).filter(
+        k => k === groupId || k.startsWith(`${groupId}__`) || k.startsWith(`${groupId}::`)
+      );
+      if (!candidates.length) return '';
+      candidates.sort();
+      return candidates[0];
+    }
+    return '';
+  };
+
+  const findFirstErrorInTopQuestion = (question: WebQuestionDefinition): string => {
+    if (!question) return '';
+    if (question.type !== 'LINE_ITEM_GROUP') {
+      const key = question.id;
+      return errors[key] ? key : '';
+    }
+    const groupId = question.id;
+    if (!hasAnyErrorInLineItemGroup(groupId)) return '';
+    const groupCfg = (question as any)?.lineItemConfig;
+    return findFirstErrorInGroup({ groupId, groupCfg });
+  };
+
   const targetIndex = topQuestions.findIndex((q: WebQuestionDefinition) => q.id === targetTopId);
   if (targetIndex > 0) {
     for (let idx = 0; idx < targetIndex; idx += 1) {
@@ -152,6 +228,10 @@ export const findOrderedEntryBlock = (args: {
         })
       ) {
         return { missingFieldPath: question.id, scope: 'top', reason: 'missingRequired' };
+      }
+      const errorPath = findFirstErrorInTopQuestion(question);
+      if (errorPath) {
+        return { missingFieldPath: errorPath, scope: 'top', reason: 'invalid' };
       }
     }
   }
@@ -234,6 +314,14 @@ export const findOrderedEntryBlock = (args: {
         missingFieldPath: `${target.groupId}__${field.id}__${rowId}`,
         scope: 'line',
         reason: 'missingRequired'
+      };
+    }
+    const errorKey = `${target.groupId}__${field.id}__${rowId}`;
+    if (errors[errorKey]) {
+      return {
+        missingFieldPath: errorKey,
+        scope: 'line',
+        reason: 'invalid'
       };
     }
   }
