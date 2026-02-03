@@ -21,6 +21,7 @@ import { ROW_ID_KEY, buildLineItemDedupKey, buildSubgroupKey, formatLineItemDedu
 import { resolveParagraphUserText } from './paragraphDisclaimer';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
+import { GuidedStepsVirtualState, resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -293,11 +294,17 @@ export const validateForm = (args: {
   collapsedRows?: Record<string, boolean>;
   collapsedSubgroups?: Record<string, boolean>;
   requiredMode?: 'configured' | 'stepComplete';
+  virtualState?: GuidedStepsVirtualState | null;
 }): FormErrors => {
   const { definition, language, values, lineItems, collapsedRows } = args;
   const requiredMode = args.requiredMode === 'stepComplete' ? 'stepComplete' : 'configured';
   const requireAllFields = requiredMode === 'stepComplete';
-  const ctx = buildValidationContext(values, lineItems);
+  const virtualState = args.virtualState || null;
+  const resolveVirtual = (fieldId: string): FieldValue | undefined => {
+    if (!virtualState) return undefined;
+    return resolveVirtualStepField(fieldId, virtualState);
+  };
+  const ctx = buildValidationContext(values, lineItems, virtualState);
   const stepRowFilters = collectStepRowFilters(definition);
   const allErrors: FormErrors = {};
   const applyLineItemDedupRules = (args: {
@@ -408,12 +415,18 @@ export const validateForm = (args: {
       eligibleRows.push(row as LineItemRowState);
       let rowValid = true;
       const groupCtx: VisibilityContext = {
-        getValue: fid => (contextValues as any)[fid],
+        getValue: fid => {
+          const virtual = resolveVirtual(fid);
+          if (virtual !== undefined) return virtual;
+          return (contextValues as any)[fid];
+        },
         getLineValue: (_rowId, fid) => row.values[fid],
         getLineItems: groupId => lineItems[groupId] || [],
         getLineItemKeys: () => Object.keys(lineItems || {})
       };
       const getRowValue = (fieldId: string): FieldValue => {
+        const virtual = resolveVirtual(fieldId);
+        if (virtual !== undefined) return virtual;
         const localId = normalizeFieldId(fieldId);
         if (Object.prototype.hasOwnProperty.call(row.values || {}, localId)) return (row.values || {})[localId];
         if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];

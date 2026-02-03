@@ -134,6 +134,16 @@ export interface ActionBarsConfig {
   bottom?: Partial<Record<ActionBarView, ActionBarViewConfig>>;
   system?: {
     home?: { hideWhenActive?: boolean };
+    /**
+     * Optional per-system-action gates for the web app (hide/disable + optional dialog).
+     *
+     * Gates are evaluated at runtime using the `when` condition engine, so they can reference:
+     * - normal form values (e.g. `MP_PREP_DATE`)
+     * - guided step virtual fields (e.g. `__ckStep`)
+     * - system/meta fields (e.g. `status`, `STATUS`)
+     * - runtime UI virtual fields (e.g. `__ckView`)
+     */
+    gates?: SystemActionGatesConfig;
   };
 }
 
@@ -186,6 +196,59 @@ export interface ButtonConfirmConfig {
    */
   cancelLabel?: LocalizedString | string;
 }
+
+export type SystemActionId = 'home' | 'create' | 'edit' | 'summary' | 'submit' | 'copyCurrentRecord';
+
+export type SystemActionGateDialogTrigger = 'onAttempt' | 'onEnable';
+
+export interface SystemActionGateDialogConfig extends ButtonConfirmConfig {
+  /**
+   * When false, hides the cancel button (single-action message dialog).
+   * Default: true
+   */
+  showCancel?: boolean;
+  /**
+   * When false, hides the close (×) button.
+   * Default: true
+   */
+  showCloseButton?: boolean;
+  /**
+   * When false, clicking the backdrop does not dismiss the dialog.
+   * Default: true
+   */
+  dismissOnBackdrop?: boolean;
+}
+
+export interface SystemActionGateRule {
+  /**
+   * Condition for this gate rule.
+   */
+  when: WhenClause;
+  /**
+   * When true, hides the system action entirely.
+   */
+  hide?: boolean;
+  /**
+   * When true, disables the system action.
+   */
+  disable?: boolean;
+  /**
+   * Optional dialog shown when the action is disabled by this rule.
+   */
+  dialog?: SystemActionGateDialogConfig;
+  /**
+   * When the dialog should be shown:
+   * - onAttempt: when the user tries the action
+   * - onEnable: when the action would become enabled (e.g., guided "Next") but is blocked by this gate
+   */
+  dialogTrigger?: SystemActionGateDialogTrigger;
+  /**
+   * Optional stable id for logs and de-duping dialog displays.
+   */
+  id?: string;
+}
+
+export type SystemActionGatesConfig = Partial<Record<SystemActionId, SystemActionGateRule | SystemActionGateRule[]>>;
 
 export interface RenderDocTemplateButtonConfig {
   action: 'renderDocTemplate';
@@ -723,6 +786,36 @@ export interface VisibilityCondition {
    * - false: matches when the field is empty
    */
   notEmpty?: boolean;
+  /**
+   * Alias for `notEmpty: false`.
+   * - true: matches when the field is empty
+   * - false: matches when the field is non-empty
+   */
+  isEmpty?: boolean;
+  /**
+   * Date-only match against the user's local "today".
+   *
+   * Notes:
+   * - `YYYY-MM-DD` values are treated as local dates (not UTC).
+   * - Empty/invalid dates do not match.
+   */
+  isToday?: boolean;
+  /**
+   * Date-only match against dates before the user's local "today".
+   *
+   * Notes:
+   * - `YYYY-MM-DD` values are treated as local dates (not UTC).
+   * - Empty/invalid dates do not match.
+   */
+  isInPast?: boolean;
+  /**
+   * Date-only match against dates after the user's local "today".
+   *
+   * Notes:
+   * - `YYYY-MM-DD` values are treated as local dates (not UTC).
+   * - Empty/invalid dates do not match.
+   */
+  isInFuture?: boolean;
 }
 
 /**
@@ -2638,6 +2731,13 @@ export interface WebFormDefinition {
    */
   copyCurrentRecordDropFields?: string[];
   /**
+   * Optional explicit copy profile for the "Copy current record" action.
+   *
+   * When set, copied drafts start from a curated subset of values/line items instead of copying everything
+   * and dropping fields. This is useful when you want to copy only a small set of fields.
+   */
+  copyCurrentRecordProfile?: CopyCurrentRecordProfile;
+  /**
    * Optional localized label override for the Create button in the React web app.
    */
   createButtonLabel?: LocalizedString;
@@ -2724,6 +2824,33 @@ export interface WebFormDefinition {
    * Example: "Checklist".
    */
   summaryButtonLabel?: LocalizedString;
+}
+
+export interface CopyCurrentRecordLineItemProfile {
+  /**
+   * LINE_ITEM_GROUP id (group key).
+   */
+  groupId: string;
+  /**
+   * List of row field ids to keep (all other row values are dropped).
+   */
+  fields: string[];
+  /**
+   * Optional row filter to choose which rows to copy.
+   * Evaluated against row values, with best-effort fallback to top-level values.
+   */
+  includeWhen?: WhenClause;
+}
+
+export interface CopyCurrentRecordProfile {
+  /**
+   * List of top-level field ids to keep (all other top-level values are dropped).
+   */
+  values?: string[];
+  /**
+   * List of line item groups to copy, with per-row keep lists.
+   */
+  lineItems?: CopyCurrentRecordLineItemProfile[];
 }
 
 export interface WebFormSubmission {

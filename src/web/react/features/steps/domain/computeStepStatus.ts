@@ -69,6 +69,15 @@ export function computeGuidedStepsStatus(args: {
     return { steps: [], maxCompleteIndex: -1, maxValidIndex: -1 };
   }
 
+  const guidedPrefix = (((stepsCfg as any)?.stateFields?.prefix) || '__ckStep').toString();
+  const resolveGuidedVirtualValue = (fieldId: string, stepId: string, stepIndex: number): FieldValue | undefined => {
+    const fid = (fieldId || '').toString();
+    if (!fid) return undefined;
+    if (fid === guidedPrefix) return stepId;
+    if (fid === `${guidedPrefix}Index`) return stepIndex;
+    return undefined;
+  };
+
   const questionById = new Map<string, WebQuestionDefinition>();
   (definition.questions || []).forEach(q => {
     if (q?.id) questionById.set(q.id, q);
@@ -82,8 +91,11 @@ export function computeGuidedStepsStatus(args: {
 
   const headerTargets: any[] = Array.isArray(stepsCfg.header?.include) ? stepsCfg.header!.include : [];
 
-  const evaluateTopQuestion = (q: WebQuestionDefinition): { missingComplete: number; missingValid: number; errors: number } => {
-    const hidden = shouldHideField(q.visibility, topCtx as any);
+  const evaluateTopQuestion = (
+    q: WebQuestionDefinition,
+    ctx: typeof topCtx
+  ): { missingComplete: number; missingValid: number; errors: number } => {
+    const hidden = shouldHideField(q.visibility, ctx as any);
     if (hidden) return { missingComplete: 0, missingValid: 0, errors: 0 };
     let missingComplete = 0;
     let missingValid = 0;
@@ -116,13 +128,13 @@ export function computeGuidedStepsStatus(args: {
     const rules = Array.isArray((q as any).validationRules) ? ((q as any).validationRules as any[]) : [];
     if (rules.length) {
       const errs = validateRules(rules as any, {
-        ...(topCtx as any),
+        ...(ctx as any),
         language,
         phase: 'submit',
         isHidden: (fieldId: string) => {
           const target = questionById.get(fieldId);
           if (!target) return false;
-          return shouldHideField(target.visibility, topCtx as any);
+          return shouldHideField(target.visibility, ctx as any);
         }
       } as any);
       errors = errs.filter(e => (e as any)?.fieldId === q.id).length;
@@ -130,11 +142,14 @@ export function computeGuidedStepsStatus(args: {
     return { missingComplete, missingValid, errors };
   };
 
-  const evaluateLineGroup = (target: any): { missingComplete: number; missingValid: number; errors: number } => {
+  const evaluateLineGroup = (
+    target: any,
+    ctx: typeof topCtx
+  ): { missingComplete: number; missingValid: number; errors: number } => {
     const groupId = (target?.id || '').toString().trim();
     const q = questionById.get(groupId);
     if (!q || q.type !== 'LINE_ITEM_GROUP') return { missingComplete: 0, missingValid: 0, errors: 0 };
-    const groupHidden = shouldHideField((q as any).visibility, topCtx as any);
+    const groupHidden = shouldHideField((q as any).visibility, ctx as any);
     if (groupHidden) return { missingComplete: 0, missingValid: 0, errors: 0 };
 
     const rows = (lineItems as any)[groupId] || [];
@@ -209,7 +224,7 @@ export function computeGuidedStepsStatus(args: {
       if (includedForValid) includedValidRowCount += 1;
 
       const groupCtx = {
-        getValue: (fieldId: string) => (values as any)[fieldId],
+        getValue: (fieldId: string) => (ctx as any).getValue(fieldId),
         getLineValue: (_rowId: string, fieldId: string) => (rowValues as any)[fieldId],
         getLineItems: (groupId: string) => (lineItems as any)[groupId] || [],
         getLineItemKeys: () => Object.keys(lineItems || {})
@@ -219,7 +234,7 @@ export function computeGuidedStepsStatus(args: {
         const localId = normalizeLineFieldId(fieldId);
         if (Object.prototype.hasOwnProperty.call(rowValues || {}, localId)) return (rowValues as any)[localId];
         if (Object.prototype.hasOwnProperty.call(rowValues || {}, fieldId)) return (rowValues as any)[fieldId];
-        return (values as any)[fieldId];
+        return (ctx as any).getValue(fieldId);
       };
 
       const isRowLockedByExpandGate = (() => {
@@ -382,7 +397,7 @@ export function computeGuidedStepsStatus(args: {
           if (!includedSubForComplete && !includedSubForValid) return;
 
           const subCtx = {
-            getValue: (fieldId: string) => (values as any)[fieldId],
+            getValue: (fieldId: string) => (ctx as any).getValue(fieldId),
             getLineValue: (_rowId: string, fieldId: string) => (subRowValues as any)[fieldId],
             getLineItems: (groupId: string) => (lineItems as any)[groupId] || [],
             getLineItemKeys: () => Object.keys(lineItems || {})
@@ -394,7 +409,7 @@ export function computeGuidedStepsStatus(args: {
             if (Object.prototype.hasOwnProperty.call(subRowValues || {}, fieldId)) return (subRowValues as any)[fieldId];
             if (Object.prototype.hasOwnProperty.call(rowValues || {}, localId)) return (rowValues as any)[localId];
             if (Object.prototype.hasOwnProperty.call(rowValues || {}, fieldId)) return (rowValues as any)[fieldId];
-            return (values as any)[fieldId];
+            return (ctx as any).getValue(fieldId);
           };
 
           allowedSubFieldIds.forEach(fidRaw => {
@@ -469,14 +484,14 @@ export function computeGuidedStepsStatus(args: {
     const groupRules = Array.isArray((q as any).validationRules) ? ((q as any).validationRules as any[]) : [];
     if (groupRules.length) {
       const errs = validateRules(groupRules as any, {
-        ...(topCtx as any),
+        ...(ctx as any),
         language,
         phase: 'submit',
         isHidden: (fieldId: string) => {
           if (fieldId === groupId) return groupHidden;
           const target = questionById.get(fieldId);
           if (!target) return false;
-          return shouldHideField(target.visibility, topCtx as any);
+          return shouldHideField(target.visibility, ctx as any);
         }
       } as any);
       errors += errs.length;
@@ -486,6 +501,16 @@ export function computeGuidedStepsStatus(args: {
   };
 
   const steps: GuidedStepStatus[] = (stepsCfg.items || []).map((step: any, index: number) => {
+    const stepId = (step?.id || '').toString();
+    const stepCtx = {
+      ...topCtx,
+      getValue: (fieldId: string) => {
+        const virtual = resolveGuidedVirtualValue(fieldId, stepId, index);
+        if (virtual !== undefined) return virtual;
+        return (values as any)[fieldId];
+      }
+    };
+
     const seen = new Set<string>();
     const combinedTargets: any[] = [];
     [...headerTargets, ...(Array.isArray(step.include) ? step.include : [])].forEach(t => {
@@ -507,14 +532,14 @@ export function computeGuidedStepsStatus(args: {
       if (t.kind === 'question') {
         const q = questionById.get(t.id);
         if (!q) return;
-        const { missingComplete, missingValid, errors } = evaluateTopQuestion(q);
+        const { missingComplete, missingValid, errors } = evaluateTopQuestion(q, stepCtx);
         missingRequiredCount += missingComplete;
         missingValidCount += missingValid;
         errorCount += errors;
         return;
       }
       if (t.kind === 'lineGroup') {
-        const { missingComplete, missingValid, errors } = evaluateLineGroup(t);
+        const { missingComplete, missingValid, errors } = evaluateLineGroup(t, stepCtx);
         missingRequiredCount += missingComplete;
         missingValidCount += missingValid;
         errorCount += errors;
@@ -525,7 +550,7 @@ export function computeGuidedStepsStatus(args: {
     const valid = missingValidCount === 0 && errorCount === 0;
 
     return {
-      id: (step?.id || '').toString(),
+      id: stepId,
       index,
       complete,
       valid,

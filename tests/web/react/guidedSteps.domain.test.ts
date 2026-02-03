@@ -80,6 +80,48 @@ describe('guidedSteps domain', () => {
     expect(filledOut.steps[0].valid).toBe(true);
   });
 
+  it('evaluates __ckStep when computing per-step validity', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'Q',
+          type: 'TEXT',
+          required: false,
+          label: { en: 'Q', fr: 'Q', nl: 'Q' },
+          validationRules: [
+            {
+              when: {
+                all: [{ not: { fieldId: 'Q', equals: ['__never__'] } }, { fieldId: '__ckStep', equals: ['foodSafety'] }]
+              },
+              message: { en: 'Blocked on foodSafety step.' }
+            }
+          ]
+        }
+      ],
+      steps: {
+        mode: 'guided',
+        stateFields: { prefix: '__ckStep' },
+        items: [
+          { id: 'orderInfo', include: [] },
+          { id: 'foodSafety', include: [{ kind: 'question', id: 'Q' }] }
+        ]
+      }
+    };
+
+    const out = computeGuidedStepsStatus({
+      definition,
+      language: 'EN' as any,
+      values: { Q: '' } as any,
+      lineItems: {} as any
+    });
+
+    expect(out.steps.map(s => ({ id: s.id, valid: s.valid, errorCount: s.errorCount }))).toEqual([
+      { id: 'orderInfo', valid: true, errorCount: 0 },
+      { id: 'foodSafety', valid: false, errorCount: 1 }
+    ]);
+    expect(out.maxValidIndex).toBe(0);
+  });
+
   it('applies row filtering for lifted lineGroup fields (only evaluates included rows)', () => {
     const definition: any = {
       questions: [
