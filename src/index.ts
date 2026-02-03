@@ -24,9 +24,9 @@ export function createAllForms(): void {
   const results = generator.createAllForms();
 
   if (bust.success && bust.epoch) {
-    results.unshift(`✅ Template caches flushed (epoch ${bust.epoch}).`);
+    results.unshift(`Template caches flushed (epoch ${bust.epoch}).`);
   } else {
-    results.unshift(`⚠️ Template cache flush skipped: ${(bust.message || 'unknown error').toString()}`);
+    results.unshift(`Template cache flush skipped: ${(bust.message || 'unknown error').toString()}`);
   }
   
   Logger.log('=== Form Generation Results ===');

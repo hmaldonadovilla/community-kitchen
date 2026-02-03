@@ -54,9 +54,15 @@ export class FormGenerator {
     });
 
     try {
-      WebFormService.invalidateServerCache('createAllForms');
+      const version = WebFormService.invalidateServerCache('createAllForms');
+      if (version) {
+        results.unshift(`Web app caches invalidated (CK_CACHE_VERSION -> ${version}).`);
+      } else {
+        results.unshift('Web app cache invalidation skipped (missing document properties).');
+      }
     } catch (_) {
       // Best-effort cache invalidation; continue even if it fails.
+      results.unshift('Web app cache invalidation failed.');
     }
 
     return results;

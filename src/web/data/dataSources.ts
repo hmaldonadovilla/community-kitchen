@@ -13,20 +13,61 @@ declare const google: {
 
 type CacheKey = string;
 const cache: Map<CacheKey, any> = new Map();
+const inflight: Map<CacheKey, Promise<any>> = new Map();
 const RUNNER_RETRY_DELAY = 150;
 const RUNNER_MAX_ATTEMPTS = 20;
 
 // Optional lightweight persistence for stable data sources. This is intentionally
 // conservative: only used when localStorage is available and JSON parsing succeeds.
-const PERSIST_VERSION = '1';
+const PERSIST_VERSION = '2';
 
-const getPersistKey = (id: string, lang: LangCode): string =>
-  `ck.ds.${id || 'default'}.${(lang || 'EN').toString().toUpperCase()}.v${PERSIST_VERSION}`;
+const hashToBase36 = (input: string): string => {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+};
 
-const loadPersisted = (id: string, language: LangCode): any | null => {
+const normalizeStringArray = (value: any): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(v => (v === undefined || v === null ? '' : `${v}`.trim()))
+    .filter(Boolean);
+};
+
+const normalizeDataSourceSignature = (config: DataSourceConfig): string => {
+  const projection = normalizeStringArray((config as any).projection).sort();
+  const statusAllowList = normalizeStringArray((config as any).statusAllowList)
+    .map(v => v.toLowerCase())
+    .sort();
+  const limitRaw = (config as any).limit;
+  const limit = Number.isFinite(Number(limitRaw)) ? Number(limitRaw) : null;
+  const signature = {
+    id: (config.id || 'default').toString(),
+    sheetId: ((config as any).sheetId || '').toString(),
+    tabName: ((config as any).tabName || '').toString(),
+    localeKey: ((config as any).localeKey || '').toString(),
+    mode: ((config as any).mode || '').toString(),
+    ref: ((config as any).ref || '').toString(),
+    projection,
+    statusAllowList,
+    limit
+  };
+  return hashToBase36(JSON.stringify(signature));
+};
+
+const getPersistKey = (config: DataSourceConfig, lang: LangCode): string => {
+  const idPart = encodeURIComponent((config?.id || 'default').toString());
+  const langPart = (lang || 'EN').toString().toUpperCase();
+  const sig = normalizeDataSourceSignature(config);
+  return `ck.ds.${idPart}.${langPart}.v${PERSIST_VERSION}.${sig}`;
+};
+
+const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null => {
   if (typeof window === 'undefined' || !window.localStorage) return null;
   try {
-    const raw = window.localStorage.getItem(getPersistKey(id, language));
+    const raw = window.localStorage.getItem(getPersistKey(config, language));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed : null;
@@ -35,17 +76,20 @@ const loadPersisted = (id: string, language: LangCode): any | null => {
   }
 };
 
-const savePersisted = (id: string, language: LangCode, value: any): void => {
+const savePersisted = (config: DataSourceConfig, language: LangCode, value: any): void => {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    window.localStorage.setItem(getPersistKey(id, language), JSON.stringify(value));
+    window.localStorage.setItem(getPersistKey(config, language), JSON.stringify(value));
   } catch (_) {
     // Ignore quota / private-mode errors; in-memory cache still works.
   }
 };
 
-function key(id: string, lang: LangCode): string {
-  return `${id || 'default'}::${(lang || 'EN').toString().toUpperCase()}`;
+function key(config: DataSourceConfig, lang: LangCode): string {
+  const idPart = (config?.id || 'default').toString();
+  const langPart = (lang || 'EN').toString().toUpperCase();
+  const sig = normalizeDataSourceSignature(config);
+  return `${idPart}::${langPart}::${sig}`;
 }
 
 function emitLog(
@@ -78,19 +122,28 @@ function isChoiceOrCheckbox(type: string): boolean {
 
 export async function fetchDataSource(
   config: DataSourceConfig,
-  language: LangCode
+  language: LangCode,
+  opts?: { forceRefresh?: boolean }
 ): Promise<any> {
-  const cacheKey = key(config.id, language);
-  if (cache.has(cacheKey)) return cache.get(cacheKey);
+  const cacheKey = key(config, language);
 
-  // Best-effort persisted cache for stable/master data sources.
-  const persisted = loadPersisted(config.id, language);
-  if (persisted) {
-    cache.set(cacheKey, persisted);
-    return persisted;
+  if (!opts?.forceRefresh) {
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+    const inflightExisting = inflight.get(cacheKey);
+    if (inflightExisting) return inflightExisting;
+
+    // Best-effort persisted cache for stable/master data sources.
+    const persisted = loadPersisted(config, language);
+    if (persisted) {
+      cache.set(cacheKey, persisted);
+      return persisted;
+    }
   }
 
-  return new Promise((resolve) => {
+  const inflightExisting = inflight.get(cacheKey);
+  if (inflightExisting) return inflightExisting;
+
+  const promise = new Promise((resolve) => {
     let attempts = 0;
 
     const attempt = () => {
@@ -114,36 +167,93 @@ export async function fetchDataSource(
           .withSuccessHandler((res: any) => {
             emitLog('info', '[DataSource] fetchDataSource success', {
               id: config.id,
-              itemCount: Array.isArray(res?.items) ? res.items.length : Array.isArray(res) ? res.length : 0
+              itemCount: Array.isArray(res?.items) ? res.items.length : Array.isArray(res) ? res.length : 0,
+              refreshed: Boolean(opts?.forceRefresh)
             });
             cache.set(cacheKey, res);
-            savePersisted(config.id, language, res);
+            if (res) {
+              savePersisted(config, language, res);
+            }
             resolve(res);
           })
           .withFailureHandler((err: any) => {
-            emitLog('error', '[DataSource] fetchDataSource failed', { id: config.id, err });
+            emitLog('error', '[DataSource] fetchDataSource failed', { id: config.id, err, refreshed: Boolean(opts?.forceRefresh) });
             resolve(null);
           })
           .fetchDataSource?.(config, language, config.projection, config.limit, undefined);
       } catch (_) {
-        emitLog('error', '[DataSource] fetchDataSource threw synchronously', { id: config.id });
+        emitLog('error', '[DataSource] fetchDataSource threw synchronously', { id: config.id, refreshed: Boolean(opts?.forceRefresh) });
         resolve(null);
       }
     };
 
     attempt();
+  }).finally(() => {
+    inflight.delete(cacheKey);
   });
+
+  inflight.set(cacheKey, promise);
+  return promise;
 }
 
 /**
  * Clear the in-memory client cache for fetchDataSource().
  *
- * This cache is intentionally session-only (no localStorage) so a page refresh always resets it.
- * We also expose this so the app "Refresh" action can avoid stale option/projection lookups
- * without requiring a full browser reload.
+ * Notes:
+ * - In-memory cache is session-only.
+ * - localStorage persistence (when available) is also cleared by default so the app "Refresh"
+ *   action can avoid stale option/projection lookups without requiring a full browser reload.
  */
-export function clearFetchDataSourceCache(): void {
+export function clearFetchDataSourceCache(opts?: { includePersisted?: boolean }): void {
   cache.clear();
+  inflight.clear();
+  if (opts?.includePersisted === false) return;
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const k = window.localStorage.key(i);
+      if (k) keys.push(k);
+    }
+    keys.forEach(k => {
+      if (k.startsWith('ck.ds.')) {
+        try {
+          window.localStorage.removeItem(k);
+        } catch (_) {
+          // ignore
+        }
+      }
+    });
+  } catch (_) {
+    // ignore
+  }
+}
+
+export async function prefetchDataSources(
+  configs: DataSourceConfig[],
+  language: LangCode,
+  opts?: { forceRefresh?: boolean }
+): Promise<{ requested: number; succeeded: number; failed: number }> {
+  const list = Array.isArray(configs) ? configs : [];
+  const uniqueByKey = new Map<string, DataSourceConfig>();
+  list.forEach(cfg => {
+    if (!cfg || typeof cfg !== 'object') return;
+    const id = (cfg as any).id;
+    if (!id) return;
+    uniqueByKey.set(key(cfg, language), cfg);
+  });
+
+  const unique = Array.from(uniqueByKey.values());
+  const results = await Promise.all(
+    unique.map(cfg =>
+      fetchDataSource(cfg, language, { forceRefresh: Boolean(opts?.forceRefresh) })
+        .then(res => ({ ok: Boolean(res), id: cfg.id }))
+        .catch(() => ({ ok: false, id: cfg.id }))
+    )
+  );
+
+  const succeeded = results.filter(r => r.ok).length;
+  return { requested: unique.length, succeeded, failed: unique.length - succeeded };
 }
 
 export async function resolveQuestionOptionsFromSource(

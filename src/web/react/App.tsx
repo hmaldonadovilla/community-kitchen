@@ -102,7 +102,8 @@ import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { toUploadItems } from './components/form/utils';
 import { isEmptyValue } from './utils/values';
-import { clearFetchDataSourceCache } from '../data/dataSources';
+import { clearFetchDataSourceCache, prefetchDataSources } from '../data/dataSources';
+import { collectDataSourceConfigsForPrefetch } from '../data/dataSourcePrefetch';
 import { shouldHideField } from '../rules/visibility';
 import { getSystemFieldValue } from '../rules/systemFields';
 import { computeGuidedStepsStatus } from './features/steps/domain/computeStepStatus';
@@ -1545,10 +1546,44 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const listFetchSeqRef = useRef(0);
   const listPrefetchKeyRef = useRef<string>('');
   const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
+  const dataSourcePrefetchKeyRef = useRef<string>('');
 
   useEffect(() => {
     listRecordsRef.current = listCache.records || {};
   }, [listCache.records]);
+
+  useEffect(() => {
+    const key = `${formKey}::${language}`;
+    if (dataSourcePrefetchKeyRef.current === key) return;
+    dataSourcePrefetchKeyRef.current = key;
+    const startedAt = Date.now();
+    const configs = collectDataSourceConfigsForPrefetch(definition);
+    if (!configs.length) return;
+    logEvent('dataSource.prefetch.start', {
+      formKey,
+      language,
+      dataSources: configs.length
+    });
+    void prefetchDataSources(configs, language, { forceRefresh: true })
+      .then(res => {
+        logEvent('dataSource.prefetch.done', {
+          formKey,
+          language,
+          requested: res.requested,
+          succeeded: res.succeeded,
+          failed: res.failed,
+          durationMs: Date.now() - startedAt
+        });
+      })
+      .catch((err: any) => {
+        logEvent('dataSource.prefetch.error', {
+          formKey,
+          language,
+          message: err?.message || err?.toString?.() || 'unknown',
+          durationMs: Date.now() - startedAt
+        });
+      });
+  }, [definition, formKey, language, logEvent]);
 
   const listViewProjection = useMemo(() => {
     const cols = (definition.listView?.columns || []) as any[];
@@ -1633,27 +1668,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
     void (async () => {
       try {
-        const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-        let token: string | undefined = undefined;
-        let aggregated: ListItem[] = [];
-        let pages = 0;
-        let lastList: ListResponse | null = null;
+        const encodePageTokenClient = (offset: number): string => {
+          const n = Math.max(0, Math.floor(Number(offset) || 0));
+          const text = n.toString();
+          try {
+            if (typeof globalThis !== 'undefined' && typeof (globalThis as any).btoa === 'function') {
+              return (globalThis as any).btoa(text);
+            }
+          } catch (_) {
+            // ignore
+          }
+          return text;
+        };
 
-        do {
-          // Step 1: fetch the next list page (sorted).
-          // We INCLUDE record hydration for the page to avoid N per-row roundtrips (which can hit Apps Script quotas
-          // and cause intermittent `null` responses in the client).
-          //
-          // Note: keep pageSize reasonably small via config; very large per-page hydration can still be heavy.
+        const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+        const fetchPage = async (args: {
+          token?: string;
+          pageIndex: number;
+        }): Promise<{ list: ListResponse; batch: any; token?: string; pageIndex: number }> => {
           let batch: any = null;
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            batch = await fetchSortedBatch(formKey, projection, pageSize, token, true, undefined, sort);
-            if (seq !== listFetchSeqRef.current) return;
+            batch = await fetchSortedBatch(formKey, projection, pageSize, args.token, true, undefined, sort);
+            if (seq !== listFetchSeqRef.current) return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex };
             if (batch && typeof batch === 'object') break;
-            logEvent('list.sorted.prefetch.retry', { attempt: attempt + 1, token: token || null, resType: batch === null ? 'null' : typeof batch });
+            logEvent('list.sorted.prefetch.retry', {
+              attempt: attempt + 1,
+              token: args.token || null,
+              pageIndex: args.pageIndex,
+              resType: batch === null ? 'null' : typeof batch
+            });
             await sleep(250 * (attempt + 1));
           }
-          if (seq !== listFetchSeqRef.current) return;
+          if (seq !== listFetchSeqRef.current) {
+            return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex };
+          }
           const list = (() => {
             if (batch && typeof batch === 'object') {
               const maybeList = (batch as any).list;
@@ -1665,54 +1713,115 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           if (!list || !Array.isArray((list as any).items)) {
             const resType = batch === null ? 'null' : typeof batch;
             const keys = batch && typeof batch === 'object' ? Object.keys(batch as any).slice(0, 15) : [];
-            logEvent('list.sorted.prefetch.invalidResponse', { resType, keys });
+            logEvent('list.sorted.prefetch.invalidResponse', { resType, keys, token: args.token || null, pageIndex: args.pageIndex });
             throw new Error('The server returned invalid list data (fetchSubmissionsSortedBatch).');
           }
+          return { list, batch, token: args.token, pageIndex: args.pageIndex };
+        };
 
-          lastList = list;
-          const items = (list.items || []) as ListItem[];
-          aggregated = aggregated.concat(items);
-          token = (list as any).nextPageToken;
-          pages += 1;
+        const first = await fetchPage({ token: undefined, pageIndex: 0 });
+        if (seq !== listFetchSeqRef.current) return;
 
+        const firstList = first.list;
+        const totalCountRaw = Number((firstList as any).totalCount || 0);
+        const hasNextToken = Boolean((firstList as any).nextPageToken);
+        const cappedTotalCount =
+          Number.isFinite(totalCountRaw) && totalCountRaw > 0
+            ? Math.min(totalCountRaw, 200)
+            : hasNextToken
+              ? 200
+              : Math.min((firstList.items || []).length, 200);
+        const totalPages = Math.max(1, Math.ceil(cappedTotalCount / pageSize));
+
+        const itemsByPage = new Map<number, ListItem[]>();
+        const recordsAccum: Record<string, WebFormSubmission> = {
+          ...((((first.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as any)
+        };
+        itemsByPage.set(0, (firstList.items || []) as ListItem[]);
+
+        const buildAggregated = (): ListItem[] => {
+          const aggregated: ListItem[] = [];
+          for (let page = 0; page < totalPages; page += 1) {
+            if (!itemsByPage.has(page)) break;
+            aggregated.push(...(itemsByPage.get(page) || []));
+          }
+          return aggregated;
+        };
+
+        const applyProgress = (loadedPages: number) => {
+          const aggregated = buildAggregated();
+          const hasMore = loadedPages < totalPages;
           setListCache(prev => ({
-            response: { ...list, items: aggregated },
-            records: { ...(prev.records || {}), ...(((batch as any)?.records as Record<string, WebFormSubmission>) || {}) }
+            response: {
+              ...firstList,
+              items: aggregated,
+              nextPageToken: hasMore ? ((firstList as any).nextPageToken || '__prefetching__') : undefined
+            },
+            records: { ...(prev.records || {}), ...recordsAccum }
           }));
-
           setListFetch({
-            phase: token ? 'prefetching' : 'idle',
+            phase: hasMore ? 'prefetching' : 'idle',
             loaded: aggregated.length,
-            total: (list as any).totalCount || aggregated.length,
-            pages
+            total: cappedTotalCount || aggregated.length,
+            pages: loadedPages
           });
+          return aggregated.length;
+        };
 
-          logEvent('list.sorted.prefetch.page', {
-            page: pages,
-            pageItems: items.length,
-            aggregated: aggregated.length,
-            totalCount: (list as any).totalCount,
-            hasNext: Boolean(token),
+        let loadedPages = 1;
+        applyProgress(loadedPages);
+        logEvent('list.sorted.prefetch.page', {
+          page: 1,
+          pageItems: (itemsByPage.get(0) || []).length,
+          aggregated: (itemsByPage.get(0) || []).length,
+          totalCount: cappedTotalCount,
+          hasNext: totalPages > 1,
+          durationMs: Date.now() - startedAt
+        });
+
+        if (totalPages <= 1) {
+          if (seq !== listFetchSeqRef.current) return;
+          logEvent('list.sorted.prefetch.done', {
+            pages: 1,
+            items: (itemsByPage.get(0) || []).length,
             durationMs: Date.now() - startedAt
           });
-
-          if (!token || aggregated.length >= ((list as any).totalCount || 200)) {
-            token = undefined;
-          }
-        } while (token);
-
-        if (seq !== listFetchSeqRef.current) return;
-        if (lastList) {
-          // Ensure the cached list is marked "complete" (no nextPageToken) once prefetch finishes.
-          setListCache(prev => ({
-            response: { ...lastList!, items: aggregated, nextPageToken: undefined },
-            records: prev.records
-          }));
+          return;
         }
-        setListFetch({ phase: 'idle', loaded: aggregated.length, total: lastList?.totalCount || aggregated.length, pages });
+
+        const pagePromises = Array.from({ length: totalPages - 1 }, (_, idx) => idx + 1).map(pageIndex => {
+          const offset = pageIndex * pageSize;
+          const token = encodePageTokenClient(offset);
+          const pageStartedAt = Date.now();
+          return fetchPage({ token, pageIndex })
+            .then(res => {
+              if (seq !== listFetchSeqRef.current) return;
+              const items = (res.list.items || []) as ListItem[];
+              itemsByPage.set(pageIndex, items);
+              const newRecords = (((res.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as Record<string, WebFormSubmission>;
+              Object.keys(newRecords).forEach(id => {
+                recordsAccum[id] = newRecords[id];
+              });
+              loadedPages += 1;
+              const aggregatedCount = applyProgress(loadedPages);
+              logEvent('list.sorted.prefetch.page', {
+                page: pageIndex + 1,
+                pageItems: items.length,
+                aggregated: aggregatedCount,
+                totalCount: cappedTotalCount,
+                hasNext: loadedPages < totalPages,
+                durationMs: Date.now() - startedAt,
+                pageDurationMs: Date.now() - pageStartedAt
+              });
+            });
+        });
+
+        await Promise.all(pagePromises);
+        if (seq !== listFetchSeqRef.current) return;
+        const finalAggregatedCount = applyProgress(totalPages);
         logEvent('list.sorted.prefetch.done', {
-          pages,
-          items: aggregated.length,
+          pages: totalPages,
+          items: finalAggregatedCount,
           durationMs: Date.now() - startedAt
         });
       } catch (err: any) {

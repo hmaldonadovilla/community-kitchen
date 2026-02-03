@@ -20,7 +20,7 @@ import { SubmissionService } from './webform/submissions';
 import { ListingService } from './webform/listing';
 import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
-import { buildReactShellTemplate } from './webform/template';
+import { buildReactShellTemplate, buildReactTemplate } from './webform/template';
 import { getDriveApiFile, trashDriveApiFile } from './webform/driveApi';
 import { loadDedupRules, computeDedupSignature } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
@@ -337,12 +337,29 @@ export class WebFormService {
   public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
     const targetKey = (formKey || '').toString().trim();
     const bundleTarget = ((params as any)?.app ?? (params as any)?.page ?? '').toString().trim();
+    const bundled = this.resolveBundledConfig(targetKey || undefined);
+    const configEnv = getBundledConfigEnv() || undefined;
+    const envTag = getUiEnvTag() || undefined;
+
+    const mode = bundled ? 'react-embedded' : 'react-shell';
     debugLog('renderForm.start', {
       requestedKey: targetKey || '__DEFAULT__',
-      mode: 'react-shell',
+      mode,
       bundleTarget: bundleTarget || 'full'
     });
-    const html = buildReactShellTemplate(targetKey, bundleTarget);
+
+    const html = (() => {
+      if (!bundled) return buildReactShellTemplate(targetKey, bundleTarget);
+      const def = this.buildBundledDefinition(bundled);
+      const resolvedKey =
+        targetKey ||
+        bundled.formKey ||
+        bundled.form?.configSheet ||
+        bundled.form?.title ||
+        '__DEFAULT__';
+      return buildReactTemplate(def, resolvedKey, { configSource: 'bundled', configEnv, envTag }, bundleTarget);
+    })();
+
     debugLog('renderForm.htmlBuilt', {
       formKey: targetKey || '__DEFAULT__',
       bundleTarget: bundleTarget || 'full',
@@ -462,8 +479,8 @@ export class WebFormService {
     return { success: result.success, message: result.message };
   }
 
-  public static invalidateServerCache(reason?: string): void {
-    CacheEtagManager.invalidate(getDocumentProperties(), reason);
+  public static invalidateServerCache(reason?: string): string | null {
+    return CacheEtagManager.invalidate(getDocumentProperties(), reason);
   }
 
   /**

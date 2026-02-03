@@ -94,7 +94,7 @@ describe('FormGenerator', () => {
     jest
       .spyOn(FormGenerator.prototype as any, 'generateSingleForm')
       .mockReturnValue({ destinationTab: 'Menu Responses', appUrl: 'https://example.com/app' });
-    const invalidateSpy = jest.spyOn(WebFormService, 'invalidateServerCache').mockImplementation(() => undefined);
+    const invalidateSpy = jest.spyOn(WebFormService, 'invalidateServerCache').mockImplementation(() => null);
 
     generator.createAllForms();
 
