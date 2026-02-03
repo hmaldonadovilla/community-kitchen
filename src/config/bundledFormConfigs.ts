@@ -6756,6 +6756,31 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           ],
           "openView": "auto"
+        },
+        {
+          "type": "rule",
+          "fieldId": "copy",
+          "label": {
+            "en": "Copy",
+            "fr": "Copier",
+            "nl": "Kopiëren"
+          },
+          "cases": [
+            {
+              "text": {
+                "en": "Copy",
+                "fr": "Copier",
+                "nl": "Kopiëren"
+              },
+              "when": {
+                "fieldId": "status",
+                "equals": "Closed"
+              },
+              "style": "link",
+              "icon": "copy"
+            }
+          ],
+          "openView": "copy"
         }
       ],
       "listViewSearch": {
@@ -6773,7 +6798,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "In progress"
       },
       "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
-      "copyCurrentRecordEnabled": true,
+      "copyCurrentRecordEnabled": false,
       "copyCurrentRecordDropFields": [
         "MP_PREP_DATE"
       ],
@@ -6792,22 +6817,28 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         ]
       },
+      "copyCurrentRecordDialog": {
+        "title": {
+          "en": "Copying record",
+          "fr": "Copie de l'enregistrement",
+          "nl": "Record kopiëren"
+        },
+        "message": {
+          "en": "Select the production date and verify the customer, service and requested portions information. All changes will be auto-saved and copied record will be created.",
+          "fr": "Sélectionnez la date de production et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et l'enregistrement copié sera créé.",
+          "nl": "Selecteer de productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en de gekopieerde record wordt aangemaakt."
+        },
+        "confirmLabel": {
+          "en": "OK",
+          "fr": "OK",
+          "nl": "OK"
+        },
+        "showCancel": false,
+        "showCloseButton": false,
+        "dismissOnBackdrop": false
+      },
       "createNewRecordEnabled": false,
       "actionBars": {
-        "top": {
-          "summary": {
-            "items": [
-              {
-                "type": "system",
-                "id": "create",
-                "menuBehavior": "inline",
-                "actions": [
-                  "createRecordPreset"
-                ]
-              }
-            ]
-          }
-        },
         "bottom": {
           "list": {
             "items": [
@@ -13208,6 +13239,10 @@ export const BUNDLED_FORM_CONFIGS = [
         "optionsNl": [],
         "status": "Active",
         "visibility": {
+          "hideWhen": {
+            "fieldId": "MP_PREP_DATE",
+            "isInFuture": true
+          },
           "showWhen": {
             "any": [
               {
@@ -18601,6 +18636,10 @@ export const BUNDLED_FORM_CONFIGS = [
           "pair": "ing_ph",
           "listView": false,
           "visibility": {
+            "hideWhen": {
+              "fieldId": "MP_PREP_DATE",
+              "isInFuture": true
+            },
             "showWhen": {
               "any": [
                 {
@@ -18986,6 +19025,31 @@ export const BUNDLED_FORM_CONFIGS = [
             "openView": "auto"
           },
           {
+            "type": "rule",
+            "fieldId": "copy",
+            "label": {
+              "en": "Copy",
+              "fr": "Copier",
+              "nl": "Kopiëren"
+            },
+            "cases": [
+              {
+                "text": {
+                  "en": "Copy",
+                  "fr": "Copier",
+                  "nl": "Kopiëren"
+                },
+                "when": {
+                  "fieldId": "status",
+                  "equals": "Closed"
+                },
+                "style": "link",
+                "icon": "copy"
+              }
+            ],
+            "openView": "copy"
+          },
+          {
             "fieldId": "MP_DISTRIBUTOR",
             "label": {
               "en": "Customer",
@@ -19102,7 +19166,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "In progress"
       },
       "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
-      "copyCurrentRecordEnabled": true,
+      "copyCurrentRecordEnabled": false,
       "copyCurrentRecordDropFields": [
         "MP_PREP_DATE"
       ],
@@ -19121,22 +19185,28 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         ]
       },
+      "copyCurrentRecordDialog": {
+        "title": {
+          "en": "Copying record",
+          "fr": "Copie de l'enregistrement",
+          "nl": "Record kopiëren"
+        },
+        "message": {
+          "en": "Select the production date and verify the customer, service and requested portions information. All changes will be auto-saved and copied record will be created.",
+          "fr": "Sélectionnez la date de production et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et l'enregistrement copié sera créé.",
+          "nl": "Selecteer de productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en de gekopieerde record wordt aangemaakt."
+        },
+        "confirmLabel": {
+          "en": "OK",
+          "fr": "OK",
+          "nl": "OK"
+        },
+        "showCancel": false,
+        "showCloseButton": false,
+        "dismissOnBackdrop": false
+      },
       "createNewRecordEnabled": false,
       "actionBars": {
-        "top": {
-          "summary": {
-            "items": [
-              {
-                "type": "system",
-                "id": "create",
-                "menuBehavior": "inline",
-                "actions": [
-                  "createRecordPreset"
-                ]
-              }
-            ]
-          }
-        },
         "bottom": {
           "list": {
             "items": [

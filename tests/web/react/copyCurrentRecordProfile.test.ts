@@ -32,7 +32,7 @@ describe('copyCurrentRecordProfile', () => {
       lineItems: {
         G: [
           { id: 'r1', values: { MEAL_TYPE: 'V', ORD_QTY: 0, MP_COOK_TEMP: true } },
-          { id: 'r2', values: { MEAL_TYPE: 'V', ORD_QTY: 2, MP_COOK_TEMP: true } }
+          { id: 'r2', values: { MEAL_TYPE: 'V', ORD_QTY: 2, MP_COOK_TEMP: true, __ckRowSource: 'auto' } }
         ],
         'G::r2::SUB': [{ id: 'sr1', values: { X: 'x' } }]
       } as any
@@ -41,9 +41,8 @@ describe('copyCurrentRecordProfile', () => {
     expect(out).toBeTruthy();
     expect(out?.values).toEqual({ A: 'x', B: 'y' });
     expect(out?.lineItems?.G?.map(r => ({ id: r.id, values: r.values }))).toEqual([
-      { id: 'r2', values: { MEAL_TYPE: 'V', ORD_QTY: 2 } }
+      { id: 'r2', values: { MEAL_TYPE: 'V', ORD_QTY: 2, __ckRowSource: 'auto' } }
     ]);
     expect(Object.keys(out?.lineItems || {})).toEqual(['G']);
   });
 });
-

@@ -2340,6 +2340,25 @@ Example (render **Create + Copy** as **inline buttons** instead of a menu on For
 }
 ```
 
+- **Optional: show an informational dialog after copy**:
+  - To show a message after copying a record into a new draft, set `"copyCurrentRecordDialog"`.
+  - Example (single OK button):
+
+```json
+{
+  "copyCurrentRecordDialog": {
+    "title": { "en": "Copying record" },
+    "message": {
+      "en": "Select the production date and verify the customer, service and requested portions information. All changes will be auto-saved and copied record will be created."
+    },
+    "confirmLabel": { "en": "OK" },
+    "showCancel": false,
+    "showCloseButton": false,
+    "dismissOnBackdrop": false
+  }
+}
+```
+
 - **Optional: disable “New record” (blank record creation)**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"createNewRecordEnabled": false`.
   - Behavior when disabled:
