@@ -6756,31 +6756,6 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           ],
           "openView": "auto"
-        },
-        {
-          "type": "rule",
-          "fieldId": "copy",
-          "label": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopiëren"
-          },
-          "cases": [
-            {
-              "text": {
-                "en": "Copy",
-                "fr": "Copier",
-                "nl": "Kopiëren"
-              },
-              "when": {
-                "fieldId": "status",
-                "equals": "Closed"
-              },
-              "style": "link",
-              "icon": "copy"
-            }
-          ],
-          "openView": "copy"
         }
       ],
       "listViewSearch": {
@@ -8544,6 +8519,56 @@ export const BUNDLED_FORM_CONFIGS = [
         "optionsFr": [],
         "optionsNl": [],
         "status": "Active",
+        "changeDialog": {
+          "when": {
+            "any": [
+              {
+                "fieldId": "MP_DISTRIBUTOR",
+                "notEmpty": true
+              },
+              {
+                "fieldId": "MP_SERVICE",
+                "notEmpty": true
+              },
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "match": "any"
+                }
+              }
+            ]
+          },
+          "title": {
+            "en": "Change production date?",
+            "fr": "Changer la date de production ?",
+            "nl": "Productiedatum wijzigen?"
+          },
+          "message": {
+            "en": "Changing the production date of an ongoing Meal production will remove permanently all data previously saved, including customer and service. Do you want to continue?",
+            "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données déjà enregistrées, y compris le client et le service. Voulez-vous continuer ?",
+            "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen gegevens definitief verwijderd, inclusief klant en service. Wilt u doorgaan?"
+          },
+          "confirmLabel": {
+            "en": "Yes, delete permanently data previously entered",
+            "fr": "Oui, supprimer définitivement les données déjà saisies",
+            "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
+          },
+          "cancelLabel": {
+            "en": "No, keep the current production date",
+            "fr": "Non, conserver la date de production actuelle",
+            "nl": "Nee, behoud de huidige productiedatum"
+          },
+          "dedupMode": "never"
+        },
+        "clearOnChange": true,
+        "selectionEffects": [
+          {
+            "id": "reset_step_on_prep_date_change",
+            "type": "setValue",
+            "fieldId": "__ckStep",
+            "value": "order"
+          }
+        ],
         "listViewSort": {
           "direction": "desc",
           "priority": 1
@@ -13940,6 +13965,56 @@ export const BUNDLED_FORM_CONFIGS = [
           "ui": {
             "labelLayout": "inline"
           },
+          "changeDialog": {
+            "when": {
+              "any": [
+                {
+                  "fieldId": "MP_DISTRIBUTOR",
+                  "notEmpty": true
+                },
+                {
+                  "fieldId": "MP_SERVICE",
+                  "notEmpty": true
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "match": "any"
+                  }
+                }
+              ]
+            },
+            "title": {
+              "en": "Change production date?",
+              "fr": "Changer la date de production ?",
+              "nl": "Productiedatum wijzigen?"
+            },
+            "message": {
+              "en": "Changing the production date of an ongoing Meal production will remove permanently all data previously saved, including customer and service. Do you want to continue?",
+              "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données déjà enregistrées, y compris le client et le service. Voulez-vous continuer ?",
+              "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen gegevens definitief verwijderd, inclusief klant en service. Wilt u doorgaan?"
+            },
+            "confirmLabel": {
+              "en": "Yes, delete permanently data previously entered",
+              "fr": "Oui, supprimer définitivement les données déjà saisies",
+              "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
+            },
+            "cancelLabel": {
+              "en": "No, keep the current production date",
+              "fr": "Non, conserver la date de production actuelle",
+              "nl": "Nee, behoud de huidige productiedatum"
+            },
+            "dedupMode": "never"
+          },
+          "clearOnChange": true,
+          "selectionEffects": [
+            {
+              "id": "reset_step_on_prep_date_change",
+              "type": "setValue",
+              "fieldId": "__ckStep",
+              "value": "order"
+            }
+          ],
           "listViewSort": {
             "direction": "desc",
             "priority": 1
@@ -19040,31 +19115,6 @@ export const BUNDLED_FORM_CONFIGS = [
               }
             ],
             "openView": "auto"
-          },
-          {
-            "type": "rule",
-            "fieldId": "copy",
-            "label": {
-              "en": "Copy",
-              "fr": "Copier",
-              "nl": "Kopiëren"
-            },
-            "cases": [
-              {
-                "text": {
-                  "en": "Copy",
-                  "fr": "Copier",
-                  "nl": "Kopiëren"
-                },
-                "when": {
-                  "fieldId": "status",
-                  "equals": "Closed"
-                },
-                "style": "link",
-                "icon": "copy"
-              }
-            ],
-            "openView": "copy"
           },
           {
             "fieldId": "MP_DISTRIBUTOR",
