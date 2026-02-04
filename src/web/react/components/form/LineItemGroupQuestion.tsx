@@ -978,13 +978,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       if (variant === 'icon' || iconKey) {
         const iconNode =
           iconKey === 'remove' ? (
-            <TrashIcon size={20} />
+            <TrashIcon size={40} />
           ) : iconKey === 'add' ? (
-            <PlusIcon />
+            <PlusIcon size={40} />
           ) : iconKey === 'back' ? (
-            <XIcon size={20} />
+            <XIcon size={40} />
           ) : (
-            <PencilIcon size={20} />
+            <PencilIcon size={40} />
           );
         return (
           <button
@@ -1180,6 +1180,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     const { currentRows, targetKey, anchorFieldId, desired, depVals, selectorId, selectorValue } = args;
     const autoPrefix = `${AUTO_CONTEXT_PREFIX}:${targetKey}:`;
     const contextId = `${autoPrefix}${depVals.map(v => (v === undefined || v === null ? '' : v.toString())).join('||')}`;
+    const shouldSortRowsByAnchor =
+      targetKey === 'MP_MEALS_REQUEST' && anchorFieldId === 'MEAL_TYPE' && Array.isArray(desired) && desired.length > 1;
 
     const remaining = new Set(desired);
 
@@ -1254,9 +1256,27 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     });
 
     const combinedRows = addedRows.length ? [...addedRows, ...nextRows] : nextRows;
+    const combinedSorted = shouldSortRowsByAnchor
+      ? (() => {
+          const normalized: Array<{ idx: number; key: string; row: any }> = combinedRows.map((row, idx) => ({
+            idx,
+            key: normalizeAnchorKey((row?.values as any)?.[anchorFieldId]).toLowerCase(),
+            row
+          }));
+          normalized.sort((a, b) => {
+            const aKey = a.key;
+            const bKey = b.key;
+            if (aKey === bKey) return a.idx - b.idx;
+            if (!aKey) return 1;
+            if (!bKey) return -1;
+            return aKey.localeCompare(bKey);
+          });
+          return normalized.map(entry => entry.row);
+        })()
+      : combinedRows;
     const changed =
-      combinedRows.length !== currentRows.length || combinedRows.some((row, idx) => row !== currentRows[idx]);
-    return { rows: combinedRows, changed, contextId, desiredCount: desired.length };
+      combinedSorted.length !== currentRows.length || combinedSorted.some((row, idx) => row !== currentRows[idx]);
+    return { rows: combinedSorted, changed, contextId, desiredCount: desired.length };
   };
 
   // Auto addMode: when dependsOn fields are valid, auto-create one row per allowed anchor option.

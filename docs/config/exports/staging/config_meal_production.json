@@ -1713,6 +1713,7 @@
       "ui": {
         "labelLayout": "inline"
       },
+      "optionSort": "source",
       "options": [
         "Lunch",
         "Dinner"

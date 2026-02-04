@@ -8370,6 +8370,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "ui": {
           "labelLayout": "inline"
         },
+        "optionSort": "source",
         "options": [
           "Lunch",
           "Dinner"
