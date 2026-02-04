@@ -7243,6 +7243,11 @@ export const BUNDLED_FORM_CONFIGS = [
                               }
                             ]
                           },
+                          "label": {
+                            "en": "Check the ingredients for the selected recipe. Tap 'Edit ingredients' to add, change quantity or remove ingredients to reflect what is really used to cook today's dish.",
+                            "fr": "Vérifiez les ingrédients de la recette sélectionnée. Appuyez sur « Modifier les ingrédients » pour ajouter, changer la quantité ou supprimer des ingrédients afin de refléter ce qui est réellement utilisé pour cuisiner le plat d'aujourd'hui.",
+                            "nl": "Controleer de ingrediënten voor het geselecteerde recept. Tik op 'Ingrediënten bewerken' om ingrediënten toe te voegen, hoeveelheden aan te passen of ingrediënten te verwijderen zodat het overeenkomt met wat je vandaag echt gebruikt om te koken."
+                          },
                           "closeButtonLabel": {
                             "en": "Back to Production"
                           },
@@ -7258,6 +7263,12 @@ export const BUNDLED_FORM_CONFIGS = [
                                         "MP_TYPE_LI",
                                         "MP_INGREDIENTS_LI"
                                       ],
+                                      "parentWhen": {
+                                        "fieldId": "PREP_TYPE",
+                                        "equals": [
+                                          "Cook"
+                                        ]
+                                      },
                                       "match": "any"
                                     }
                                   }
@@ -7284,6 +7295,12 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "MP_TYPE_LI",
                                       "MP_INGREDIENTS_LI"
                                     ],
+                                    "parentWhen": {
+                                      "fieldId": "PREP_TYPE",
+                                      "equals": [
+                                        "Cook"
+                                      ]
+                                    },
                                     "when": {
                                       "all": [
                                         {
@@ -7499,7 +7516,11 @@ export const BUNDLED_FORM_CONFIGS = [
                             }
                           },
                           "hideInlineSubgroups": true,
-                          "hideCloseButton": true,
+                          "closeButtonLabel": {
+                            "en": "Back to Production",
+                            "fr": "Retour à la production",
+                            "nl": "Terug naar productie"
+                          },
                           "overlayContextHeader": {
                             "fields": [
                               {
@@ -7685,7 +7706,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "Entire dish"
                                     ]
                                   },
-                                  "editAction": "editLeftoverIngredients"
+                                  "editAction": "editLeftoverIngredientsEntire"
                                 },
                                 {
                                   "fieldRef": "PREP_QTY",
@@ -7712,7 +7733,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "Part dish"
                                     ]
                                   },
-                                  "editAction": "editLeftoverIngredients",
+                                  "editAction": "editLeftoverIngredientsPart",
                                   "format": {
                                     "type": "list",
                                     "listDelimiter": ", "
@@ -7720,24 +7741,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                 }
                               ],
                               "actions": [
-                                {
-                                  "id": "back",
-                                  "showWhen": {
-                                    "any": [
-                                      {
-                                        "fieldId": "PREP_TYPE",
-                                        "equals": [
-                                          "Entire dish",
-                                          "Part dish"
-                                        ]
-                                      },
-                                      {
-                                        "fieldId": "PREP_TYPE",
-                                        "isNotEmpty": false
-                                      }
-                                    ]
-                                  }
-                                },
                                 {
                                   "id": "addLeftover",
                                   "showWhen": {
@@ -7826,19 +7829,14 @@ export const BUNDLED_FORM_CONFIGS = [
                                   "kind": "selectorOverlay",
                                   "targetRef": "ingredientsRow",
                                   "label": {
-                                    "en": "Select leftover ingredients test",
-                                    "fr": "Sélectionner les ingrédients de la restauration",
-                                    "nl": "Selecteer ingrediënten voor de restauro"
+                                    "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
+                                    "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
+                                    "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                   },
                                   "placeholder": {
                                     "en": "Search ingredients",
                                     "fr": "Rechercher des ingrédients",
                                     "nl": "Ingrediënten zoeken"
-                                  },
-                                  "helperText": {
-                                    "en": "Select the ingredient(s) representing the leftover that will be used to cook today's meal.",
-                                    "fr": "Sélectionnez les ingrédients représentant la restauration qui sera utilisée pour cuisiner le plat d'aujourd'hui.",
-                                    "nl": "Selecteer de ingrediënt(en) die de restauro voorstellen die zal worden gebruikt om vandaag te koken."
                                   },
                                   "labelLayout": "inline",
                                   "groupOverride": {
@@ -7863,13 +7861,19 @@ export const BUNDLED_FORM_CONFIGS = [
                             ],
                             "actions": [
                               {
-                                "id": "editLeftoverIngredients",
+                                "id": "editLeftoverIngredientsPart",
                                 "variant": "button",
                                 "tone": "secondary",
                                 "label": {
                                   "en": "View/Edit ingredients",
                                   "fr": "Voir/Modifier les ingrédients",
                                   "nl": "Bekijken/Bewerken van ingrediënten"
+                                },
+                                "showWhen": {
+                                  "fieldId": "PREP_TYPE",
+                                  "equals": [
+                                    "Part dish"
+                                  ]
                                 },
                                 "effects": [
                                   {
@@ -7895,14 +7899,71 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "maxRows": 200,
                                       "addOverlay": {
                                         "title": {
-                                          "en": "Select leftover ingredients test",
-                                          "fr": "Sélectionner les ingrédients de la restauration",
-                                          "nl": "Selecteer ingrediënten voor de restauro"
+                                          "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
+                                          "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
+                                          "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                         },
-                                        "helperText": {
-                                          "en": "Search and select ingredients used in the leftover dish.",
-                                          "fr": "Recherchez et sélectionnez les ingrédients utilisés dans la restauration. Vous pouvez mettre à jour les quantités après votre retour.",
-                                          "nl": "Zoek en selecteer ingrediënten die zijn gebruikt in de restauro. Je kunt de hoeveelheden daarna bijwerken."
+                                        "placeholder": {
+                                          "en": "Search leftover ingredients",
+                                          "fr": "Rechercher les ingrédients de la restauration",
+                                          "nl": "Ingrediënten voor restauro zoeken"
+                                        }
+                                      },
+                                      "ui": {
+                                        "tableColumns": [
+                                          "ING"
+                                        ],
+                                        "tableColumnWidths": {
+                                          "ING": "100%",
+                                          "__remove": "44px"
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "id": "editLeftoverIngredientsEntire",
+                                "variant": "button",
+                                "tone": "secondary",
+                                "label": {
+                                  "en": "View/Edit ingredients",
+                                  "fr": "Voir/Modifier les ingrédients",
+                                  "nl": "Bekijken/Bewerken van ingrediënten"
+                                },
+                                "showWhen": {
+                                  "fieldId": "PREP_TYPE",
+                                  "equals": [
+                                    "Entire dish"
+                                  ]
+                                },
+                                "effects": [
+                                  {
+                                    "type": "openOverlay",
+                                    "groupId": "MP_INGREDIENTS_LI",
+                                    "overlayHelperText": {
+                                      "fields": [
+                                        {
+                                          "fieldRef": "PREP_TYPE",
+                                          "label": {
+                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    "closeButtonLabel": {
+                                      "en": "Back",
+                                      "fr": "Retour",
+                                      "nl": "Terug"
+                                    },
+                                    "groupOverride": {
+                                      "minRows": 0,
+                                      "maxRows": 200,
+                                      "addOverlay": {
+                                        "title": {
+                                          "en": "Select the ingredient(s) that were used to cook the leftover dish but are missing from the original recipe.",
+                                          "fr": "Sélectionnez le(s) ingrédient(s) utilisés pour cuisiner la restauration mais manquants dans la recette originale.",
+                                          "nl": "Selecteer het/de ingrediënt(en) die zijn gebruikt om de restauro te koken maar ontbreken in het originele recept."
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
@@ -7937,38 +7998,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "type": "addLineItems"
                                   }
                                 ]
-                              },
-                              {
-                                "id": "back",
-                                "label": {
-                                  "en": "Back"
-                                },
-                                "variant": "button",
-                                "tone": "secondary",
-                                "effects": [
-                                  {
-                                    "type": "closeOverlay"
-                                  }
-                                ],
-                                "confirm": {
-                                  "title": {
-                                    "en": "Returning?",
-                                    "fr": "De retour?",
-                                    "nl": "De terug?"
-                                  },
-                                  "body": {
-                                    "en": "Don't forget to select the recipe to cook, if needed.",
-                                    "fr": "N'oubliez pas de sélectionner la recette à cuisiner, si nécessaire.",
-                                    "nl": "Vergeet niet de recept te selecteren, als dat nodig is."
-                                  },
-                                  "confirmLabel": {
-                                    "en": "Ok",
-                                    "fr": "Ok",
-                                    "nl": "Ok"
-                                  },
-                                  "showCancel": false,
-                                  "timing": "after"
-                                }
                               },
                               {
                                 "id": "removeLeftover",
@@ -9714,6 +9743,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Chicken stripes",
                         "Chicken cubes",
                         "Chicken wings",
+                        "Chicken nuggets",
                         "Chicken tenders",
                         "Cordon bleu",
                         "Fishsticks",
@@ -9807,6 +9837,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Chickpeas - tinned",
                         "Red beans - tinned",
                         "White beans - tinned",
+                        "Falafel",
                         "Mackerel - tinned",
                         "Chickpeas - dry",
                         "Red lentils",
@@ -9816,6 +9847,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Lanières de poulet",
                         "Dés de poulet",
                         "Ailes de poulet",
+                        "Nuggets de poulet",
                         "Aiguillettes de poulet",
                         "Cordon bleu",
                         "Bâtonnets de poisson",
@@ -9909,6 +9941,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Pois chiches en conserve",
                         "Haricots rouges en conserve",
                         "Haricots blancs en conserve",
+                        "Falafel",
                         "Maquereau en conserve",
                         "Pois chiches secs",
                         "Lentilles corail",
@@ -9918,6 +9951,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Kipreepjes",
                         "Kipblokjes",
                         "Kip vleugels",
+                        "Kipnuggets",
                         "Kiphaasjes",
                         "Cordon bleu",
                         "Vissticks",
@@ -10011,6 +10045,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Kikkererwten – blik",
                         "Rode bonen – blik",
                         "Witte bonen – blik",
+                        "Falafel",
                         "Makreel – blik",
                         "Kikkererwten – droog",
                         "Rode linzen",
@@ -10049,6 +10084,17 @@ export const BUNDLED_FORM_CONFIGS = [
                           "allowedUnits": "kg, gr, piece",
                           "dietaryApplicability": "Standard, No-salt",
                           "__ckOptionValue": "Chicken wings"
+                        },
+                        {
+                          "optionEn": "Chicken nuggets",
+                          "optionFr": "Nuggets de poulet",
+                          "optionNl": "Kipnuggets",
+                          "Category": "Animal protein Halal",
+                          "Allergens": "Gluten",
+                          "Suppliers": "Ozfood",
+                          "allowedUnits": "kg, gr, piece",
+                          "dietaryApplicability": "Standard, No-salt",
+                          "__ckOptionValue": "Chicken nuggets"
                         },
                         {
                           "optionEn": "Chicken tenders",
@@ -11074,6 +11120,17 @@ export const BUNDLED_FORM_CONFIGS = [
                           "__ckOptionValue": "White beans - tinned"
                         },
                         {
+                          "optionEn": "Falafel",
+                          "optionFr": "Falafel",
+                          "optionNl": "Falafel",
+                          "Category": "Vegan protein",
+                          "Allergens": "None",
+                          "Suppliers": "VDS",
+                          "allowedUnits": "kg, gr, piece",
+                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
+                          "__ckOptionValue": "Falafel"
+                        },
+                        {
                           "optionEn": "Mackerel - tinned",
                           "optionFr": "Maquereau en conserve",
                           "optionNl": "Makreel – blik",
@@ -11204,6 +11261,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Chickpeas - tinned",
                             "Red beans - tinned",
                             "White beans - tinned",
+                            "Falafel",
                             "Mackerel - tinned",
                             "Chickpeas - dry",
                             "Red lentils",
@@ -11213,6 +11271,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Chicken stripes",
                             "Chicken cubes",
                             "Chicken wings",
+                            "Chicken nuggets",
                             "Chicken tenders",
                             "Cordon bleu",
                             "Fishsticks",
@@ -11306,6 +11365,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Chickpeas - tinned",
                             "Red beans - tinned",
                             "White beans - tinned",
+                            "Falafel",
                             "Mackerel - tinned",
                             "Chickpeas - dry",
                             "Red lentils",
@@ -11315,6 +11375,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Chicken stripes",
                             "Chicken cubes",
                             "Chicken wings",
+                            "Chicken nuggets",
                             "Chicken tenders",
                             "Cordon bleu",
                             "Fishsticks",
@@ -11407,6 +11468,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Chickpeas - tinned",
                             "Red beans - tinned",
                             "White beans - tinned",
+                            "Falafel",
                             "Mackerel - tinned",
                             "Chickpeas - dry",
                             "Red lentils",
@@ -11503,6 +11565,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Chickpeas - tinned",
                             "Red beans - tinned",
                             "White beans - tinned",
+                            "Falafel",
                             "Chickpeas - dry",
                             "Red lentils",
                             "Green lentils"
@@ -11595,6 +11658,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Chickpeas - tinned",
                             "Red beans - tinned",
                             "White beans - tinned",
+                            "Falafel",
                             "Chickpeas - dry",
                             "Red lentils",
                             "Green lentils"
@@ -11886,6 +11950,11 @@ export const BUNDLED_FORM_CONFIGS = [
                             "piece"
                           ],
                           "Chicken wings": [
+                            "kg",
+                            "gr",
+                            "piece"
+                          ],
+                          "Chicken nuggets": [
                             "kg",
                             "gr",
                             "piece"
@@ -12313,6 +12382,11 @@ export const BUNDLED_FORM_CONFIGS = [
                             "gr",
                             "tin-2505gr"
                           ],
+                          "Falafel": [
+                            "kg",
+                            "gr",
+                            "piece"
+                          ],
                           "Mackerel - tinned": [
                             "kg",
                             "gr"
@@ -12459,6 +12533,9 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Animal protein Halal"
                           ],
                           "Chicken wings": [
+                            "Animal protein Halal"
+                          ],
+                          "Chicken nuggets": [
                             "Animal protein Halal"
                           ],
                           "Chicken tenders": [
@@ -12740,6 +12817,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "White beans - tinned": [
                             "Vegan protein"
                           ],
+                          "Falafel": [
+                            "Vegan protein"
+                          ],
                           "Mackerel - tinned": [
                             "Animal protein"
                           ],
@@ -12832,6 +12912,9 @@ export const BUNDLED_FORM_CONFIGS = [
                             "None"
                           ],
                           "Chicken wings": [
+                            "Gluten"
+                          ],
+                          "Chicken nuggets": [
                             "Gluten"
                           ],
                           "Chicken tenders": [
@@ -13116,6 +13199,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "White beans - tinned": [
                             "None"
                           ],
+                          "Falafel": [
+                            "None"
+                          ],
                           "Mackerel - tinned": [
                             "Fish"
                           ],
@@ -13187,21 +13273,16 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     "showItemPill": false,
                     "openInOverlay": true,
-                    "addButtonPlacement": "bottom"
+                    "addButtonPlacement": "top"
                   },
                   "minRows": 0,
                   "maxRows": 200,
                   "addMode": "overlay",
                   "addOverlay": {
                     "title": {
-                      "en": "Select leftover ingredients test",
-                      "fr": "Sélectionner les ingrédients de la restauration",
-                      "nl": "Selecteer ingrediënten voor de restauro"
-                    },
-                    "helperText": {
-                      "en": "Select the ingredient(s) representing the leftover that will be used to cook today's meal.",
-                      "fr": "Sélectionnez les ingrédients représentant la restauration qui sera utilisée pour cuisiner le plat d'aujourd'hui.",
-                      "nl": "Selecteer de ingrediënt(en) die de restauro voorstellen die zal worden gebruikt om vandaag te koken."
+                      "en": "Select the ingredient(s) not mentioned in the original recipe that you will use to cook today's dish.",
+                      "fr": "Sélectionnez le(s) ingrédient(s) non mentionné(s) dans la recette originale que vous utiliserez pour cuisiner le plat d'aujourd'hui.",
+                      "nl": "Selecteer het/de ingrediënt(en) die niet in het originele recept staan en die je zult gebruiken om het gerecht van vandaag te koken."
                     },
                     "placeholder": {
                       "en": "Search ingredients",
@@ -15183,6 +15264,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Chicken stripes",
                           "Chicken cubes",
                           "Chicken wings",
+                          "Chicken nuggets",
                           "Chicken tenders",
                           "Cordon bleu",
                           "Fishsticks",
@@ -15276,6 +15358,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Chickpeas - tinned",
                           "Red beans - tinned",
                           "White beans - tinned",
+                          "Falafel",
                           "Mackerel - tinned",
                           "Chickpeas - dry",
                           "Red lentils",
@@ -15285,6 +15368,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Lanières de poulet",
                           "Dés de poulet",
                           "Ailes de poulet",
+                          "Nuggets de poulet",
                           "Aiguillettes de poulet",
                           "Cordon bleu",
                           "Bâtonnets de poisson",
@@ -15378,6 +15462,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Pois chiches en conserve",
                           "Haricots rouges en conserve",
                           "Haricots blancs en conserve",
+                          "Falafel",
                           "Maquereau en conserve",
                           "Pois chiches secs",
                           "Lentilles corail",
@@ -15387,6 +15472,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Kipreepjes",
                           "Kipblokjes",
                           "Kip vleugels",
+                          "Kipnuggets",
                           "Kiphaasjes",
                           "Cordon bleu",
                           "Vissticks",
@@ -15480,6 +15566,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Kikkererwten – blik",
                           "Rode bonen – blik",
                           "Witte bonen – blik",
+                          "Falafel",
                           "Makreel – blik",
                           "Kikkererwten – droog",
                           "Rode linzen",
@@ -15518,6 +15605,17 @@ export const BUNDLED_FORM_CONFIGS = [
                             "allowedUnits": "kg, gr, piece",
                             "dietaryApplicability": "Standard, No-salt",
                             "__ckOptionValue": "Chicken wings"
+                          },
+                          {
+                            "optionEn": "Chicken nuggets",
+                            "optionFr": "Nuggets de poulet",
+                            "optionNl": "Kipnuggets",
+                            "Category": "Animal protein Halal",
+                            "Allergens": "Gluten",
+                            "Suppliers": "Ozfood",
+                            "allowedUnits": "kg, gr, piece",
+                            "dietaryApplicability": "Standard, No-salt",
+                            "__ckOptionValue": "Chicken nuggets"
                           },
                           {
                             "optionEn": "Chicken tenders",
@@ -16543,6 +16641,17 @@ export const BUNDLED_FORM_CONFIGS = [
                             "__ckOptionValue": "White beans - tinned"
                           },
                           {
+                            "optionEn": "Falafel",
+                            "optionFr": "Falafel",
+                            "optionNl": "Falafel",
+                            "Category": "Vegan protein",
+                            "Allergens": "None",
+                            "Suppliers": "VDS",
+                            "allowedUnits": "kg, gr, piece",
+                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
+                            "__ckOptionValue": "Falafel"
+                          },
+                          {
                             "optionEn": "Mackerel - tinned",
                             "optionFr": "Maquereau en conserve",
                             "optionNl": "Makreel – blik",
@@ -16673,6 +16782,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Chickpeas - tinned",
                               "Red beans - tinned",
                               "White beans - tinned",
+                              "Falafel",
                               "Mackerel - tinned",
                               "Chickpeas - dry",
                               "Red lentils",
@@ -16682,6 +16792,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Chicken stripes",
                               "Chicken cubes",
                               "Chicken wings",
+                              "Chicken nuggets",
                               "Chicken tenders",
                               "Cordon bleu",
                               "Fishsticks",
@@ -16775,6 +16886,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Chickpeas - tinned",
                               "Red beans - tinned",
                               "White beans - tinned",
+                              "Falafel",
                               "Mackerel - tinned",
                               "Chickpeas - dry",
                               "Red lentils",
@@ -16784,6 +16896,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Chicken stripes",
                               "Chicken cubes",
                               "Chicken wings",
+                              "Chicken nuggets",
                               "Chicken tenders",
                               "Cordon bleu",
                               "Fishsticks",
@@ -16876,6 +16989,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Chickpeas - tinned",
                               "Red beans - tinned",
                               "White beans - tinned",
+                              "Falafel",
                               "Mackerel - tinned",
                               "Chickpeas - dry",
                               "Red lentils",
@@ -16972,6 +17086,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Chickpeas - tinned",
                               "Red beans - tinned",
                               "White beans - tinned",
+                              "Falafel",
                               "Chickpeas - dry",
                               "Red lentils",
                               "Green lentils"
@@ -17064,6 +17179,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Chickpeas - tinned",
                               "Red beans - tinned",
                               "White beans - tinned",
+                              "Falafel",
                               "Chickpeas - dry",
                               "Red lentils",
                               "Green lentils"
@@ -17355,6 +17471,11 @@ export const BUNDLED_FORM_CONFIGS = [
                               "piece"
                             ],
                             "Chicken wings": [
+                              "kg",
+                              "gr",
+                              "piece"
+                            ],
+                            "Chicken nuggets": [
                               "kg",
                               "gr",
                               "piece"
@@ -17782,6 +17903,11 @@ export const BUNDLED_FORM_CONFIGS = [
                               "gr",
                               "tin-2505gr"
                             ],
+                            "Falafel": [
+                              "kg",
+                              "gr",
+                              "piece"
+                            ],
                             "Mackerel - tinned": [
                               "kg",
                               "gr"
@@ -17928,6 +18054,9 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Animal protein Halal"
                             ],
                             "Chicken wings": [
+                              "Animal protein Halal"
+                            ],
+                            "Chicken nuggets": [
                               "Animal protein Halal"
                             ],
                             "Chicken tenders": [
@@ -18209,6 +18338,9 @@ export const BUNDLED_FORM_CONFIGS = [
                             "White beans - tinned": [
                               "Vegan protein"
                             ],
+                            "Falafel": [
+                              "Vegan protein"
+                            ],
                             "Mackerel - tinned": [
                               "Animal protein"
                             ],
@@ -18301,6 +18433,9 @@ export const BUNDLED_FORM_CONFIGS = [
                               "None"
                             ],
                             "Chicken wings": [
+                              "Gluten"
+                            ],
+                            "Chicken nuggets": [
                               "Gluten"
                             ],
                             "Chicken tenders": [
@@ -18585,6 +18720,9 @@ export const BUNDLED_FORM_CONFIGS = [
                             "White beans - tinned": [
                               "None"
                             ],
+                            "Falafel": [
+                              "None"
+                            ],
                             "Mackerel - tinned": [
                               "Fish"
                             ],
@@ -18656,21 +18794,16 @@ export const BUNDLED_FORM_CONFIGS = [
                       },
                       "showItemPill": false,
                       "openInOverlay": true,
-                      "addButtonPlacement": "bottom"
+                      "addButtonPlacement": "top"
                     },
                     "minRows": 0,
                     "maxRows": 200,
                     "addMode": "overlay",
                     "addOverlay": {
                       "title": {
-                        "en": "Select leftover ingredients test",
-                        "fr": "Sélectionner les ingrédients de la restauration",
-                        "nl": "Selecteer ingrediënten voor de restauro"
-                      },
-                      "helperText": {
-                        "en": "Select the ingredient(s) representing the leftover that will be used to cook today's meal.",
-                        "fr": "Sélectionnez les ingrédients représentant la restauration qui sera utilisée pour cuisiner le plat d'aujourd'hui.",
-                        "nl": "Selecteer de ingrediënt(en) die de restauro voorstellen die zal worden gebruikt om vandaag te koken."
+                        "en": "Select the ingredient(s) not mentioned in the original recipe that you will use to cook today's dish.",
+                        "fr": "Sélectionnez le(s) ingrédient(s) non mentionné(s) dans la recette originale que vous utiliserez pour cuisiner le plat d'aujourd'hui.",
+                        "nl": "Selecteer het/de ingrediënt(en) die niet in het originele recept staan en die je zult gebruiken om het gerecht van vandaag te koken."
                       },
                       "placeholder": {
                         "en": "Search ingredients",
@@ -19752,6 +19885,11 @@ export const BUNDLED_FORM_CONFIGS = [
                               }
                             ]
                           },
+                          "label": {
+                            "en": "Check the ingredients for the selected recipe. Tap 'Edit ingredients' to add, change quantity or remove ingredients to reflect what is really used to cook today's dish.",
+                            "fr": "Vérifiez les ingrédients de la recette sélectionnée. Appuyez sur « Modifier les ingrédients » pour ajouter, changer la quantité ou supprimer des ingrédients afin de refléter ce qui est réellement utilisé pour cuisiner le plat d'aujourd'hui.",
+                            "nl": "Controleer de ingrediënten voor het geselecteerde recept. Tik op 'Ingrediënten bewerken' om ingrediënten toe te voegen, hoeveelheden aan te passen of ingrediënten te verwijderen zodat het overeenkomt met wat je vandaag echt gebruikt om te koken."
+                          },
                           "closeButtonLabel": {
                             "en": "Back to Production"
                           },
@@ -19767,6 +19905,12 @@ export const BUNDLED_FORM_CONFIGS = [
                                         "MP_TYPE_LI",
                                         "MP_INGREDIENTS_LI"
                                       ],
+                                      "parentWhen": {
+                                        "fieldId": "PREP_TYPE",
+                                        "equals": [
+                                          "Cook"
+                                        ]
+                                      },
                                       "match": "any"
                                     }
                                   }
@@ -19793,6 +19937,12 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "MP_TYPE_LI",
                                       "MP_INGREDIENTS_LI"
                                     ],
+                                    "parentWhen": {
+                                      "fieldId": "PREP_TYPE",
+                                      "equals": [
+                                        "Cook"
+                                      ]
+                                    },
                                     "when": {
                                       "all": [
                                         {
@@ -20008,7 +20158,11 @@ export const BUNDLED_FORM_CONFIGS = [
                             }
                           },
                           "hideInlineSubgroups": true,
-                          "hideCloseButton": true,
+                          "closeButtonLabel": {
+                            "en": "Back to Production",
+                            "fr": "Retour à la production",
+                            "nl": "Terug naar productie"
+                          },
                           "overlayContextHeader": {
                             "fields": [
                               {
@@ -20194,7 +20348,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "Entire dish"
                                     ]
                                   },
-                                  "editAction": "editLeftoverIngredients"
+                                  "editAction": "editLeftoverIngredientsEntire"
                                 },
                                 {
                                   "fieldRef": "PREP_QTY",
@@ -20221,7 +20375,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "Part dish"
                                     ]
                                   },
-                                  "editAction": "editLeftoverIngredients",
+                                  "editAction": "editLeftoverIngredientsPart",
                                   "format": {
                                     "type": "list",
                                     "listDelimiter": ", "
@@ -20229,24 +20383,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                 }
                               ],
                               "actions": [
-                                {
-                                  "id": "back",
-                                  "showWhen": {
-                                    "any": [
-                                      {
-                                        "fieldId": "PREP_TYPE",
-                                        "equals": [
-                                          "Entire dish",
-                                          "Part dish"
-                                        ]
-                                      },
-                                      {
-                                        "fieldId": "PREP_TYPE",
-                                        "isNotEmpty": false
-                                      }
-                                    ]
-                                  }
-                                },
                                 {
                                   "id": "addLeftover",
                                   "showWhen": {
@@ -20335,19 +20471,14 @@ export const BUNDLED_FORM_CONFIGS = [
                                   "kind": "selectorOverlay",
                                   "targetRef": "ingredientsRow",
                                   "label": {
-                                    "en": "Select leftover ingredients test",
-                                    "fr": "Sélectionner les ingrédients de la restauration",
-                                    "nl": "Selecteer ingrediënten voor de restauro"
+                                    "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
+                                    "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
+                                    "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                   },
                                   "placeholder": {
                                     "en": "Search ingredients",
                                     "fr": "Rechercher des ingrédients",
                                     "nl": "Ingrediënten zoeken"
-                                  },
-                                  "helperText": {
-                                    "en": "Select the ingredient(s) representing the leftover that will be used to cook today's meal.",
-                                    "fr": "Sélectionnez les ingrédients représentant la restauration qui sera utilisée pour cuisiner le plat d'aujourd'hui.",
-                                    "nl": "Selecteer de ingrediënt(en) die de restauro voorstellen die zal worden gebruikt om vandaag te koken."
                                   },
                                   "labelLayout": "inline",
                                   "groupOverride": {
@@ -20372,13 +20503,19 @@ export const BUNDLED_FORM_CONFIGS = [
                             ],
                             "actions": [
                               {
-                                "id": "editLeftoverIngredients",
+                                "id": "editLeftoverIngredientsPart",
                                 "variant": "button",
                                 "tone": "secondary",
                                 "label": {
                                   "en": "View/Edit ingredients",
                                   "fr": "Voir/Modifier les ingrédients",
                                   "nl": "Bekijken/Bewerken van ingrediënten"
+                                },
+                                "showWhen": {
+                                  "fieldId": "PREP_TYPE",
+                                  "equals": [
+                                    "Part dish"
+                                  ]
                                 },
                                 "effects": [
                                   {
@@ -20404,14 +20541,71 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "maxRows": 200,
                                       "addOverlay": {
                                         "title": {
-                                          "en": "Select leftover ingredients test",
-                                          "fr": "Sélectionner les ingrédients de la restauration",
-                                          "nl": "Selecteer ingrediënten voor de restauro"
+                                          "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
+                                          "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
+                                          "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                         },
-                                        "helperText": {
-                                          "en": "Search and select ingredients used in the leftover dish.",
-                                          "fr": "Recherchez et sélectionnez les ingrédients utilisés dans la restauration. Vous pouvez mettre à jour les quantités après votre retour.",
-                                          "nl": "Zoek en selecteer ingrediënten die zijn gebruikt in de restauro. Je kunt de hoeveelheden daarna bijwerken."
+                                        "placeholder": {
+                                          "en": "Search leftover ingredients",
+                                          "fr": "Rechercher les ingrédients de la restauration",
+                                          "nl": "Ingrediënten voor restauro zoeken"
+                                        }
+                                      },
+                                      "ui": {
+                                        "tableColumns": [
+                                          "ING"
+                                        ],
+                                        "tableColumnWidths": {
+                                          "ING": "100%",
+                                          "__remove": "44px"
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "id": "editLeftoverIngredientsEntire",
+                                "variant": "button",
+                                "tone": "secondary",
+                                "label": {
+                                  "en": "View/Edit ingredients",
+                                  "fr": "Voir/Modifier les ingrédients",
+                                  "nl": "Bekijken/Bewerken van ingrediënten"
+                                },
+                                "showWhen": {
+                                  "fieldId": "PREP_TYPE",
+                                  "equals": [
+                                    "Entire dish"
+                                  ]
+                                },
+                                "effects": [
+                                  {
+                                    "type": "openOverlay",
+                                    "groupId": "MP_INGREDIENTS_LI",
+                                    "overlayHelperText": {
+                                      "fields": [
+                                        {
+                                          "fieldRef": "PREP_TYPE",
+                                          "label": {
+                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    "closeButtonLabel": {
+                                      "en": "Back",
+                                      "fr": "Retour",
+                                      "nl": "Terug"
+                                    },
+                                    "groupOverride": {
+                                      "minRows": 0,
+                                      "maxRows": 200,
+                                      "addOverlay": {
+                                        "title": {
+                                          "en": "Select the ingredient(s) that were used to cook the leftover dish but are missing from the original recipe.",
+                                          "fr": "Sélectionnez le(s) ingrédient(s) utilisés pour cuisiner la restauration mais manquants dans la recette originale.",
+                                          "nl": "Selecteer het/de ingrediënt(en) die zijn gebruikt om de restauro te koken maar ontbreken in het originele recept."
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
@@ -20446,38 +20640,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "type": "addLineItems"
                                   }
                                 ]
-                              },
-                              {
-                                "id": "back",
-                                "label": {
-                                  "en": "Back"
-                                },
-                                "variant": "button",
-                                "tone": "secondary",
-                                "effects": [
-                                  {
-                                    "type": "closeOverlay"
-                                  }
-                                ],
-                                "confirm": {
-                                  "title": {
-                                    "en": "Returning?",
-                                    "fr": "De retour?",
-                                    "nl": "De terug?"
-                                  },
-                                  "body": {
-                                    "en": "Don't forget to select the recipe to cook, if needed.",
-                                    "fr": "N'oubliez pas de sélectionner la recette à cuisiner, si nécessaire.",
-                                    "nl": "Vergeet niet de recept te selecteren, als dat nodig is."
-                                  },
-                                  "confirmLabel": {
-                                    "en": "Ok",
-                                    "fr": "Ok",
-                                    "nl": "Ok"
-                                  },
-                                  "showCancel": false,
-                                  "timing": "after"
-                                }
                               },
                               {
                                 "id": "removeLeftover",

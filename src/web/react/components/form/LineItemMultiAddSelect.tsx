@@ -253,7 +253,7 @@ export const LineItemMultiAddSelect: React.FC<{
               <div className="ck-line-item-multiadd__empty">
                 {hasQuery
                   ? emptyText || tSystem('lineItems.noOptionsAvailable', language, 'No options available.')
-                  : resolvedHelperText || tSystem('lineItems.searchPrompt', language, 'Enter at least 1 character to search.')}
+                  : resolvedHelperText || null}
               </div>
             )}
           </div>

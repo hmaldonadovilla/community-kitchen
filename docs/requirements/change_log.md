@@ -414,3 +414,22 @@
     - Increase size of trash can and pencil icons on steps ui
     - Use the same size as the overlays, I think we are using 40px there.
   > **DONE - Codex**
+- ck-77:
+  - When clicking on Back from the Leftover overlay, the system shows a Modal with message "Returning? Don't forget to select the recipe to cook, if needed. The user is given the options Cancel or OK.  Both Cancel or OK lead to the same result: the system brings the user back to the Production page. This message is not useful.
+    - Suggest to replace the [Back] button that is at the bottom of the Leftover page to [Back to Production] button that is placed at the top, on the right.
+  - Helper message on the Add ingredient page for Leftover Entire dish is misleading with the word 'below list of ingredients' when the list is located above the message. The helper message should be placed above the list otherwise it is useless.
+
+- ck-78:
+  - Missing quantity/unit pop-up error message appears appears as soon as you click back to production after viewing, deleting an ingredient or adding an ingredient with quantity and unit. This happens to View/Edit ingredients for recipe to cook. This happens with le Phare 03-Feb-2026, Lunch and also with Belliard 03-Feb-2026 Belliard dinner. This is an erroneous message and has to be fixed.
+  - The [+ Add ingredient ] button of the openCookOverlay action is not visible when the list of ingredient is too long. Place it at the top next to Save changes.
+    > **IMPORTANT** the two buttons on edit view `Save changes` and `Cancel` they just take you back to the mp.ing_recipe.html overlay, A single button is sufficient.
+  - When clicking on View/Edit nfor the openCookOverlay action, the system brings me to the list of ingredients with option to Edit ingredients. Add a helper message: Check the ingredients for the selected recipe. Tap 'Edit ingredients' to add, change quantity or remove ingredients to reflect what is really used to cook today's dish.
+  - When clicking on + Add ingredient of the openCookOverlay action, the pop-up window appears and it is called Select leftover ingredient test with an irrelevant helper message: 'Select the ingredients representing the leftover that will be used to cook today's meal.' Remove "Select leftover ingredient test' from the pop-up window. Rephrase to a single title and no helper below the title or below the search box: Select the ingredient(s) not mentioned in the original recipe that you will use to cook today's dish.
+    > **IMPORTANT** please remove the helper message `Search and select one or more items. You can update quantities after you return.` This was not initially requested please keep to the requirements verbatim.
+  - When clicking on + Add ingredient for Part Dish leftover on openLeftoversOverlay action, the pop-up window appears and it is called 'Select leftover ingredient test' with an irrelevant helper message: 'Search and select ingredients used in the leftover dish.' Remove Select leftover ingredient test' from the pop-up window. Rephrase to a single title and no helper below the title or below the search box: Select the ingredient(s) representing the leftover that will be added to today's meal.
+    > **IMPORTANT**
+    > - please remove the helper message `Search and select one or more items. You can update quantities after you return.` This was not initially requested please keep to the requirements verbatim.
+    > - please remove the helper message `Part dish: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish` shown above the [+ Add ingredient] button.
+    > - I asume that you are reusing the same add ingredients overlay for Part Dish and Entire dish leftovers, do not do that because the messages are different, you should be able to define independent overlay actions.
+  - When clicking on + Add ingredient for Entire dish leftover on openLeftoversOverlay action, the pop-up window appears and it is called 'Select leftover ingredient test' with an irrelevant helper message: 'Search and select ingredients used in the leftover dish.' Remove Select leftover ingredient test' from the pop-up window. Rephrase to a single title and no helper below the title or below the search box: Select the ingredient(s) that were used to cook the leftover dish but are missing from the original recipe.
+  - Remove the message 'Enter at least 1 character to search' from all ingredient search in Recipe Management and Meal Production as it is no longer relevant.

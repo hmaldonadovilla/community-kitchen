@@ -188,13 +188,9 @@ export const LineSelectOverlay: React.FC<{
               <span style={{ fontSize: 'var(--ck-font-control)' }}>{opt.label}</span>
             </label>
           ))}
-          {!filteredOptions.length && (
-            <div className="muted">
-              {hasQuery
-                ? tSystem('lineItems.noOptionsAvailable', language, 'No options available.')
-                : tSystem('lineItems.searchPrompt', language, 'Enter at least 1 character to search.')}
-            </div>
-          )}
+          {!filteredOptions.length && hasQuery ? (
+            <div className="muted">{tSystem('lineItems.noOptionsAvailable', language, 'No options available.')}</div>
+          ) : null}
         </div>
         <div
           style={{
