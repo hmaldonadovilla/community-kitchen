@@ -433,3 +433,18 @@
     > - I asume that you are reusing the same add ingredients overlay for Part Dish and Entire dish leftovers, do not do that because the messages are different, you should be able to define independent overlay actions.
   - When clicking on + Add ingredient for Entire dish leftover on openLeftoversOverlay action, the pop-up window appears and it is called 'Select leftover ingredient test' with an irrelevant helper message: 'Search and select ingredients used in the leftover dish.' Remove Select leftover ingredient test' from the pop-up window. Rephrase to a single title and no helper below the title or below the search box: Select the ingredient(s) that were used to cook the leftover dish but are missing from the original recipe.
   - Remove the message 'Enter at least 1 character to search' from all ingredient search in Recipe Management and Meal Production as it is no longer relevant.
+- ck-79:
+  - migrate the `docs/templates/ingredients_needed.md` template to a bundled html template. Following below requirements:
+    - [Ingredients needed] displays the following message above the table:
+
+      ```txt
+        "Ingredients needed for Customer | Service | Production date | Batch number. \nThis list excluded ingredients from leftovers"
+        Example:
+        Ingredients cooked for Croix-Rouge Belliard | Lunch | Thu 29-Jan-2026 |MP-AA000969.
+        This list excluded ingredients from leftovers
+        Show the Ingredient delivery receipt evidence: Link to photo(s)
+        Show the List of ingredients - see the next issue for improved list format.
+      ```
+
+    - The CONSOLIDATED_TABLE of ingredients needs to follow the exact same format as the one used to display ingredients in the docs/templates/mp.ing_recipe.html, review the highlighted section in the attached screenshot.
+    - Submit button in the summary view is not properly working on the steps ui, when data is missing it correctly jumps to the field that needs attention, this is great, but when all data is present it jumps to the first step of the chain of steps and nothing happens. Please fix this.

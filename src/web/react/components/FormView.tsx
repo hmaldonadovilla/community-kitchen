@@ -4300,14 +4300,15 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
 
-    setOverlayDetailHtmlLoading(true);
-    setOverlayDetailHtmlError('');
-    renderBundledHtmlTemplateClient({
-      definition,
-      payload,
-      templateIdMap,
-      buttonId: `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}`
-    })
+	    setOverlayDetailHtmlLoading(true);
+	    setOverlayDetailHtmlError('');
+	    renderBundledHtmlTemplateClient({
+	      definition,
+	      payload,
+	      templateIdMap,
+	      buttonId: `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}`,
+	      onDiagnostic
+	    })
       .then(res => {
         if (res?.success && res?.html) {
           setOverlayDetailHtml(res.html);
