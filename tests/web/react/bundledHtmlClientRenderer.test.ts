@@ -173,6 +173,44 @@ describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
     expect(fetchDataSource).toHaveBeenCalledTimes(1);
   });
 
+  it('retries dataSource details fetch when google.script.run is temporarily unavailable', async () => {
+    const fetchDataSource = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('google.script.run is unavailable.'))
+      .mockResolvedValueOnce({ items: [{ DIST_NAME: 'Croix', DIST_ADDR_1: 'Rue Example 1' }] });
+    const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
+
+    const definition: any = {
+      title: 'F',
+      destinationTab: 'T',
+      languages: ['EN'],
+      questions: [
+        {
+          id: 'MP_DISTRIBUTOR',
+          type: 'CHOICE',
+          label: { en: 'Distributor', fr: 'Distributor', nl: 'Distributor' },
+          required: false,
+          dataSource: { id: 'DS1', mapping: { DIST_NAME: 'value' }, projection: ['DIST_NAME'] }
+        }
+      ]
+    };
+
+    const payload: any = { formKey: 'F', language: 'EN', id: 'R1', values: { MP_DISTRIBUTOR: 'Croix' } };
+
+    const res = await renderBundledHtmlTemplateClient({
+      definition,
+      payload,
+      templateIdMap: 'bundle:test.html',
+      fetchDataSource,
+      parseBundledTemplateId: () => 'test.html',
+      getBundledTemplateRaw: () => '<div>{{MP_DISTRIBUTOR.DIST_ADDR_1}}</div>'
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('Rue Example 1');
+    expect(fetchDataSource).toHaveBeenCalledTimes(2);
+  });
+
   it('preserves template-authored <script> blocks for bundled templates', async () => {
     const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
 
@@ -228,4 +266,3 @@ describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
     expect(res.html).not.toContain('__ck_injected');
   });
 });
-
