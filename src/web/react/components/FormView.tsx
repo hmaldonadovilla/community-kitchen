@@ -500,9 +500,11 @@ const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupCon
 
 const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
   const cfg = groupCfg?.addOverlay || {};
-  const title = cfg.title ? resolveLocalizedString(cfg.title, language, '').trim() : '';
-  const helperText = cfg.helperText ? resolveLocalizedString(cfg.helperText, language, '').trim() : '';
-  const placeholder = cfg.placeholder ? resolveLocalizedString(cfg.placeholder, language, '').trim() : '';
+  const title = cfg.title !== undefined && cfg.title !== null ? resolveLocalizedString(cfg.title, language, '').trim() : undefined;
+  const helperText =
+    cfg.helperText !== undefined && cfg.helperText !== null ? resolveLocalizedString(cfg.helperText, language, '').trim() : undefined;
+  const placeholder =
+    cfg.placeholder !== undefined && cfg.placeholder !== null ? resolveLocalizedString(cfg.placeholder, language, '').trim() : undefined;
   return { title, helperText, placeholder };
 };
 
@@ -9560,7 +9562,8 @@ const FormView: React.FC<FormViewProps> = ({
                           ...((overlayDetailSubConfig as any)?.ui || {}),
                           mode: 'table',
                           tableColumns: Array.isArray(editCfg?.tableColumns) ? editCfg.tableColumns : (overlayDetailSubConfig as any)?.ui?.tableColumns,
-                          tableColumnWidths: editCfg?.tableColumnWidths || (overlayDetailSubConfig as any)?.ui?.tableColumnWidths
+                          tableColumnWidths: editCfg?.tableColumnWidths || (overlayDetailSubConfig as any)?.ui?.tableColumnWidths,
+                          ...(overlayDetailCanView ? { addButtonPlacement: 'hidden' } : {})
                         }
                       }
                     } as any;
@@ -9615,15 +9618,112 @@ const FormView: React.FC<FormViewProps> = ({
                         overlayDetailEditSnapshotRef.current = null;
                       }
                     };
+                    const detailGroupCfg = (detailGroupDef as any)?.lineItemConfig;
+                    const detailAddModeRaw = detailGroupCfg?.addMode !== undefined && detailGroupCfg?.addMode !== null ? detailGroupCfg.addMode.toString() : '';
+                    const detailAddMode = detailAddModeRaw.trim().toLowerCase();
+                    const detailAnchorFieldId =
+                      detailGroupCfg?.anchorFieldId !== undefined && detailGroupCfg?.anchorFieldId !== null
+                        ? detailGroupCfg.anchorFieldId.toString()
+                        : '';
+                    const detailLocked = submitting || isFieldLockedByDedup(parsed?.rootGroupId || subKey);
+                    const { maxRows: detailMaxRows } = resolveLineItemRowLimits(detailGroupCfg as any);
+                    const detailCurrentCount = (lineItems[detailSubKey] || []).length;
+                    const detailMaxRowsReached = isLineItemMaxRowsReached(detailCurrentCount, detailMaxRows);
+                    const canShowDetailAddButton = overlayDetailCanView;
+                    const openDetailAddOverlay = async () => {
+                      if (detailLocked || detailMaxRowsReached) {
+                        if (detailMaxRowsReached) {
+                          onDiagnostic?.('lineItemGroup.overlay.add.blocked', {
+                            groupId: detailSubKey,
+                            reason: 'maxRows',
+                            maxRows: detailMaxRows ?? null,
+                            currentCount: detailCurrentCount
+                          });
+                        }
+                        return;
+                      }
+
+                      if (detailAddMode === 'overlay' && detailAnchorFieldId) {
+                        const anchorField = (detailGroupCfg?.fields || []).find((f: any) => f.id === detailAnchorFieldId);
+                        if (!anchorField || anchorField.type !== 'CHOICE') {
+                          addLineItemRowManual(detailSubKey, undefined, { configOverride: detailGroupCfg });
+                          return;
+                        }
+
+                        ensureLineOptions(detailSubKey, anchorField);
+                        const key = optionKey(anchorField.id, detailSubKey);
+                        let opts = optionState[key];
+                        if (!opts && anchorField.dataSource) {
+                          const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                          if (loaded) {
+                            opts = loaded;
+                            setOptionState(prev => ({ ...prev, [key]: loaded }));
+                          }
+                        }
+                        if (!opts) {
+                          opts = {
+                            en: anchorField.options || [],
+                            fr: (anchorField as any).optionsFr || [],
+                            nl: (anchorField as any).optionsNl || []
+                          };
+                        }
+
+                        const dependencyIds = (
+                          Array.isArray(anchorField.optionFilter?.dependsOn)
+                            ? anchorField.optionFilter?.dependsOn
+                            : [anchorField.optionFilter?.dependsOn || '']
+                        ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                        const depVals = dependencyIds.map((dep: string) =>
+                          toDependencyValue((detailContextValues as any)[dep])
+                        );
+                        const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
+                        const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
+                        const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
+                        const addOverlayCopy = resolveAddOverlayCopy(detailGroupCfg, language);
+
+                        setOverlay({
+                          open: true,
+                          options: localized
+                            .filter(opt => deduped.includes(opt.value))
+                            .map(opt => ({ value: opt.value, label: opt.label })),
+                          groupId: detailSubKey,
+                          anchorFieldId: anchorField.id,
+                          selected: [],
+                          title: addOverlayCopy.title,
+                          helperText: addOverlayCopy.helperText,
+                          placeholder: addOverlayCopy.placeholder
+                        });
+                        return;
+                      }
+
+                      addLineItemRowManual(detailSubKey, undefined, { configOverride: detailGroupCfg });
+                    };
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          {canShowDetailAddButton ? (
+                            <button
+                              type="button"
+                              style={withDisabled(buttonStyles.secondary, detailLocked || detailMaxRowsReached)}
+                              disabled={detailLocked || detailMaxRowsReached}
+                              onClick={openDetailAddOverlay}
+                            >
+                              <PlusIcon />
+                              {resolveLocalizedString(
+                                detailGroupCfg?.addButtonLabel,
+                                language,
+                                tSystem('lineItems.addLines', language, 'Add lines')
+                              )}
+                            </button>
+                          ) : null}
                           <button type="button" style={buttonStyles.primary} onClick={handleDetailSave}>
                             {tSystem('common.saveChanges', language, 'Save changes')}
                           </button>
-                          <button type="button" style={buttonStyles.secondary} onClick={handleDetailCancel}>
-                            {tSystem('common.cancel', language, 'Cancel')}
-                          </button>
+                          {!overlayDetailCanView ? (
+                            <button type="button" style={buttonStyles.secondary} onClick={handleDetailCancel}>
+                              {tSystem('common.cancel', language, 'Cancel')}
+                            </button>
+                          ) : null}
                         </div>
                         <LineItemGroupQuestion
                           key={detailGroupDef.id}

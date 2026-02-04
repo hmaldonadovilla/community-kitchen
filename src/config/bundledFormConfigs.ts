@@ -7879,16 +7879,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                   {
                                     "type": "openOverlay",
                                     "groupId": "MP_INGREDIENTS_LI",
-                                    "overlayHelperText": {
-                                      "fields": [
-                                        {
-                                          "fieldRef": "PREP_TYPE",
-                                          "label": {
-                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
-                                          }
-                                        }
-                                      ]
-                                    },
                                     "closeButtonLabel": {
                                       "en": "Back",
                                       "fr": "Retour",
@@ -7902,6 +7892,11 @@ export const BUNDLED_FORM_CONFIGS = [
                                           "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
                                           "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
                                           "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
+                                        },
+                                        "helperText": {
+                                          "en": "",
+                                          "fr": "",
+                                          "nl": ""
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
@@ -13283,6 +13278,11 @@ export const BUNDLED_FORM_CONFIGS = [
                       "en": "Select the ingredient(s) not mentioned in the original recipe that you will use to cook today's dish.",
                       "fr": "Sélectionnez le(s) ingrédient(s) non mentionné(s) dans la recette originale que vous utiliserez pour cuisiner le plat d'aujourd'hui.",
                       "nl": "Selecteer het/de ingrediënt(en) die niet in het originele recept staan en die je zult gebruiken om het gerecht van vandaag te koken."
+                    },
+                    "helperText": {
+                      "en": "",
+                      "fr": "",
+                      "nl": ""
                     },
                     "placeholder": {
                       "en": "Search ingredients",
@@ -18805,6 +18805,11 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Sélectionnez le(s) ingrédient(s) non mentionné(s) dans la recette originale que vous utiliserez pour cuisiner le plat d'aujourd'hui.",
                         "nl": "Selecteer het/de ingrediënt(en) die niet in het originele recept staan en die je zult gebruiken om het gerecht van vandaag te koken."
                       },
+                      "helperText": {
+                        "en": "",
+                        "fr": "",
+                        "nl": ""
+                      },
                       "placeholder": {
                         "en": "Search ingredients",
                         "fr": "Rechercher des ingrédients",
@@ -20521,16 +20526,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                   {
                                     "type": "openOverlay",
                                     "groupId": "MP_INGREDIENTS_LI",
-                                    "overlayHelperText": {
-                                      "fields": [
-                                        {
-                                          "fieldRef": "PREP_TYPE",
-                                          "label": {
-                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
-                                          }
-                                        }
-                                      ]
-                                    },
                                     "closeButtonLabel": {
                                       "en": "Back",
                                       "fr": "Retour",
@@ -20544,6 +20539,11 @@ export const BUNDLED_FORM_CONFIGS = [
                                           "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
                                           "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
                                           "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
+                                        },
+                                        "helperText": {
+                                          "en": "",
+                                          "fr": "",
+                                          "nl": ""
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
