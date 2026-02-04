@@ -1,0 +1,514 @@
+{
+  "formKey": "Config: Ingredients Management",
+  "generatedAt": "2026-02-04T09:33:14.060Z",
+  "form": {
+    "title": "Ingredients Management",
+    "configSheet": "Config: Ingredients Management",
+    "destinationTab": "Ingredients Data",
+    "description": "Manage the master list of ingredients and their attributes.",
+    "languages": [
+      "EN",
+      "FR",
+      "NL"
+    ],
+    "defaultLanguage": "EN",
+    "languageSelectorEnabled": true,
+    "autoSave": {
+      "enabled": true,
+      "debounceMs": 2000,
+      "status": "Draft"
+    },
+    "summaryViewEnabled": true,
+    "copyCurrentRecordEnabled": true,
+    "createNewRecordEnabled": true,
+    "createRecordPresetButtonsEnabled": false,
+    "followupConfig": {
+      "statusTransitions": {
+        "inProgress": "Draft",
+        "onClose": "Disabled",
+        "reOpened": "Draft"
+      }
+    },
+    "listViewTitle": "",
+    "listViewMetaColumns": [],
+    "listViewDefaultSort": {
+      "fieldId": "INGREDIENT_NAME",
+      "direction": "asc"
+    },
+    "listViewPageSize": 50,
+    "listViewPaginationControlsEnabled": true,
+    "listViewHeaderSortEnabled": false,
+    "listViewView": {
+      "mode": "cards",
+      "toggleEnabled": false,
+      "defaultMode": "cards"
+    },
+    "listViewSearch": {
+      "mode": "text",
+      "placeholder": {
+        "en": "Search ingredient",
+        "fr": "Rechercher un ingrédient",
+        "nl": "Zoek ingrediënt"
+      }
+    },
+    "listViewColumns": [
+      {
+        "type": "rule",
+        "fieldId": "action_view",
+        "label": {
+          "en": "",
+          "fr": "",
+          "nl": ""
+        },
+        "showIn": "cards",
+        "cases": [
+          {
+            "text": {
+              "en": " ",
+              "fr": " ",
+              "nl": " "
+            },
+            "style": "link",
+            "icon": "view",
+            "openView": {
+              "target": "summary",
+              "rowClick": true
+            }
+          }
+        ]
+      },
+      {
+        "type": "rule",
+        "fieldId": "action_edit",
+        "label": {
+          "en": "",
+          "fr": "",
+          "nl": ""
+        },
+        "showIn": "cards",
+        "cases": [
+          {
+            "when": {
+              "fieldId": "status",
+              "equals": "Draft"
+            },
+            "text": {
+              "en": " ",
+              "fr": " ",
+              "nl": " "
+            },
+            "style": "link",
+            "icon": "edit",
+            "openView": "form"
+          },
+          {
+            "when": {
+              "fieldId": "status",
+              "equals": "Active"
+            },
+            "text": {
+              "en": " ",
+              "fr": " ",
+              "nl": " "
+            },
+            "style": "link",
+            "icon": "edit",
+            "openView": "form"
+          }
+        ]
+      },
+      {
+        "type": "rule",
+        "fieldId": "action_copy",
+        "label": {
+          "en": "",
+          "fr": "",
+          "nl": ""
+        },
+        "showIn": "cards",
+        "cases": [
+          {
+            "when": {
+              "fieldId": "status",
+              "equals": "Active"
+            },
+            "text": {
+              "en": " ",
+              "fr": " ",
+              "nl": " "
+            },
+            "style": "link",
+            "icon": "copy",
+            "openView": "copy"
+          }
+        ]
+      }
+    ],
+    "listViewLegend": [
+      {
+        "icon": "view",
+        "text": {
+          "en": "View ingredient",
+          "fr": "Voir l’ingrédient",
+          "nl": "Ingrediënt bekijken"
+        }
+      },
+      {
+        "icon": "edit",
+        "text": {
+          "en": "Edit ingredient (Draft, Active)",
+          "fr": "Modifier l’ingrédient (Brouillon, Actif)",
+          "nl": "Ingrediënt bewerken (Concept, Actief)"
+        }
+      },
+      {
+        "icon": "copy",
+        "text": {
+          "en": "Copy ingredient (Active only)",
+          "fr": "Copier l’ingrédient (Actif uniquement)",
+          "nl": "Ingrediënt kopiëren (alleen Actief)"
+        }
+      },
+      {
+        "pill": {
+          "text": {
+            "en": "Draft",
+            "fr": "Brouillon",
+            "nl": "Concept"
+          },
+          "tone": "muted"
+        },
+        "text": {
+          "en": "Not activated; not available in Recipe Management or Meal Production.",
+          "fr": "Non activé; non disponible dans Gestion des recettes ou Production des repas.",
+          "nl": "Niet geactiveerd; niet beschikbaar in Receptbeheer of Maaltijdproductie."
+        }
+      },
+      {
+        "pill": {
+          "text": {
+            "en": "Active",
+            "fr": "Actif",
+            "nl": "Actief"
+          },
+          "tone": "strong"
+        },
+        "text": {
+          "en": "Available in Recipe Management and Meal Production.",
+          "fr": "Disponible dans Gestion des recettes et Production des repas.",
+          "nl": "Beschikbaar in Receptbeheer en Maaltijdproductie."
+        }
+      },
+      {
+        "pill": {
+          "text": {
+            "en": "Disabled",
+            "fr": "Désactivé",
+            "nl": "Uitgeschakeld"
+          },
+          "tone": "default"
+        },
+        "text": {
+          "en": "Historical only; not available in Recipe Management or Meal Production.",
+          "fr": "Historique uniquement; non disponible dans Gestion des recettes ou Production des repas.",
+          "nl": "Alleen historisch; niet beschikbaar in Receptbeheer of Maaltijdproductie."
+        }
+      }
+    ]
+  },
+  "questions": [
+    {
+      "id": "CREATED_BY",
+      "type": "TEXT",
+      "qEn": "Created by",
+      "qFr": "Créé par",
+      "qNl": "Gemaakt door",
+      "required": false,
+      "listView": false,
+      "status": "Active"
+    },
+    {
+      "id": "INGREDIENT_NAME",
+      "type": "TEXT",
+      "qEn": "Ingredient name",
+      "qFr": "Nom de l’ingrédient",
+      "qNl": "Naam van ingrediënt",
+      "required": false,
+      "listView": true,
+      "status": "Active"
+    },
+    {
+      "id": "CATEGORY",
+      "type": "CHOICE",
+      "qEn": "Category",
+      "qFr": "Catégorie",
+      "qNl": "Categorie",
+      "required": false,
+      "listView": false,
+      "options": [
+        "Animal protein",
+        "Animal protein Halal",
+        "Dairy",
+        "Dry carbohydrates",
+        "Fresh vegetables",
+        "Frozen vegetables",
+        "Herbs - spices - condiments",
+        "Tins/Pots",
+        "Vegan protein"
+      ],
+      "optionsFr": [
+        "Animal protein",
+        "Animal protein Halal",
+        "Dairy",
+        "Dry carbohydrates",
+        "Fresh vegetables",
+        "Frozen vegetables",
+        "Herbs - spices - condiments",
+        "Tins/Pots",
+        "Vegan protein"
+      ],
+      "optionsNl": [
+        "Animal protein",
+        "Animal protein Halal",
+        "Dairy",
+        "Dry carbohydrates",
+        "Fresh vegetables",
+        "Frozen vegetables",
+        "Herbs - spices - condiments",
+        "Tins/Pots",
+        "Vegan protein"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "SUPPLIER",
+      "type": "CHECKBOX",
+      "qEn": "Supplier",
+      "qFr": "Fournisseur",
+      "qNl": "Leverancier",
+      "required": false,
+      "listView": false,
+      "options": [
+        "Freshmed",
+        "Ozfood",
+        "Red Cross",
+        "Solucious",
+        "VDS"
+      ],
+      "optionsFr": [
+        "Freshmed",
+        "Ozfood",
+        "Red Cross",
+        "Solucious",
+        "VDS"
+      ],
+      "optionsNl": [
+        "Freshmed",
+        "Ozfood",
+        "Red Cross",
+        "Solucious",
+        "VDS"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "ALLERGEN",
+      "type": "CHECKBOX",
+      "qEn": "Allergen",
+      "qFr": "Allergène",
+      "qNl": "Allergeen",
+      "required": false,
+      "listView": false,
+      "options": [
+        "Egg",
+        "Fish",
+        "Gluten",
+        "Milk",
+        "None",
+        "Peanuts",
+        "Soy"
+      ],
+      "optionsFr": [
+        "Egg",
+        "Fish",
+        "Gluten",
+        "Milk",
+        "None",
+        "Peanuts",
+        "Soy"
+      ],
+      "optionsNl": [
+        "Egg",
+        "Fish",
+        "Gluten",
+        "Milk",
+        "None",
+        "Peanuts",
+        "Soy"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "ALLOWED_UNIT",
+      "type": "CHECKBOX",
+      "qEn": "Allowed unit",
+      "qFr": "Unité autorisée",
+      "qNl": "Toegestane eenheid",
+      "required": false,
+      "listView": false,
+      "options": [
+        "bag",
+        "cl",
+        "gr",
+        "kg",
+        "L",
+        "piece",
+        "Tbsp",
+        "tin-140gr",
+        "tin-220gr",
+        "tin-240gr",
+        "tin-2500gr",
+        "tin-5000gr",
+        "tin-530gr"
+      ],
+      "optionsFr": [
+        "bag",
+        "cl",
+        "gr",
+        "kg",
+        "L",
+        "piece",
+        "Tbsp",
+        "tin-140gr",
+        "tin-220gr",
+        "tin-240gr",
+        "tin-2500gr",
+        "tin-5000gr",
+        "tin-530gr"
+      ],
+      "optionsNl": [
+        "bag",
+        "cl",
+        "gr",
+        "kg",
+        "L",
+        "piece",
+        "Tbsp",
+        "tin-140gr",
+        "tin-220gr",
+        "tin-240gr",
+        "tin-2500gr",
+        "tin-5000gr",
+        "tin-530gr"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "DIETARY_APPLICABILITY",
+      "type": "CHECKBOX",
+      "qEn": "Dietary applicability",
+      "qFr": "Applicabilité diététique",
+      "qNl": "Dieettoepassing",
+      "required": false,
+      "listView": false,
+      "options": [
+        "Diabetic",
+        "No-salt",
+        "Standard",
+        "Vegan",
+        "Vegetarian"
+      ],
+      "optionsFr": [
+        "Diabetic",
+        "No-salt",
+        "Standard",
+        "Vegan",
+        "Vegetarian"
+      ],
+      "optionsNl": [
+        "Diabetic",
+        "No-salt",
+        "Standard",
+        "Vegan",
+        "Vegetarian"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "EFFECTIVE_START_DATE",
+      "type": "DATE",
+      "qEn": "Effective start date",
+      "qFr": "Date de début d’effet",
+      "qNl": "Ingangsdatum",
+      "required": false,
+      "listView": false,
+      "status": "Active"
+    },
+    {
+      "id": "EFFECTIVE_END_DATE",
+      "type": "DATE",
+      "qEn": "Effective end date",
+      "qFr": "Date de fin d’effet",
+      "qNl": "Einddatum",
+      "required": false,
+      "listView": false,
+      "status": "Active"
+    },
+    {
+      "id": "STATUS",
+      "type": "CHOICE",
+      "qEn": "Status",
+      "qFr": "Statut",
+      "qNl": "Status",
+      "required": false,
+      "readOnly": true,
+      "defaultValue": "Draft",
+      "listView": false,
+      "options": [
+        "Draft",
+        "Active",
+        "Disabled"
+      ],
+      "optionsFr": [
+        "Brouillon",
+        "Actif",
+        "Désactivé"
+      ],
+      "optionsNl": [
+        "Concept",
+        "Actief",
+        "Uitgeschakeld"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "LAST_CHANGED_BY",
+      "type": "TEXT",
+      "qEn": "Last changed by",
+      "qFr": "Dernière modification par",
+      "qNl": "Laatst gewijzigd door",
+      "required": false,
+      "readOnly": true,
+      "listView": false,
+      "status": "Active"
+    }
+  ],
+  "dedupRules": [
+    {
+      "id": "uniqueIngredientName",
+      "scope": "form",
+      "keys": [
+        "INGREDIENT_NAME"
+      ],
+      "matchMode": "caseInsensitive",
+      "onConflict": "reject",
+      "message": {
+        "en": "An ingredient with the same name already exists.",
+        "fr": "Un ingrédient portant le même nom existe déjà.",
+        "nl": "Er bestaat al een ingrediënt met dezelfde naam."
+      }
+    }
+  ],
+  "definition": {},
+  "validationErrors": []
+}

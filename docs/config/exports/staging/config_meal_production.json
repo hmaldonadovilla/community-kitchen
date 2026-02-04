@@ -3087,7 +3087,7 @@
                       "Cordon bleu",
                       "Fishsticks",
                       "Greek yogurt",
-                      "Mozzarella",
+                      "Cheese",
                       "Rice",
                       "Brown rice",
                       "Basmati rice",
@@ -3191,7 +3191,7 @@
                       "Cordon bleu",
                       "Bâtonnets de poisson",
                       "Yaourt grec",
-                      "Mozzarella",
+                      "Cheese",
                       "Riz",
                       "Riz complet",
                       "Riz basmati",
@@ -3295,7 +3295,7 @@
                       "Cordon bleu",
                       "Vissticks",
                       "Griekse yoghurt",
-                      "Mozzarella",
+                      "Cheese",
                       "Rijst",
                       "Volkorenrijst",
                       "Basmati rijst",
@@ -3480,15 +3480,15 @@
                         "__ckOptionValue": "Greek yogurt"
                       },
                       {
-                        "optionEn": "Mozzarella",
-                        "optionFr": "Mozzarella",
-                        "optionNl": "Mozzarella",
+                        "optionEn": "Cheese",
+                        "optionFr": "Fromage",
+                        "optionNl": "Kaas",
                         "Category": "Dairy",
                         "Allergens": "Milk",
                         "Suppliers": "VDS;Solucious",
                         "allowedUnits": "kg, gr",
                         "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                        "__ckOptionValue": "Mozzarella"
+                        "__ckOptionValue": "Cheese"
                       },
                       {
                         "optionEn": "Rice",
@@ -4527,7 +4527,7 @@
                           "Chicken stripes",
                           "Chicken cubes",
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Brown rice",
                           "Basmati rice",
                           "Whole wheat pasta",
@@ -4615,7 +4615,7 @@
                           "Cordon bleu",
                           "Fishsticks",
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Rice",
                           "Brown rice",
                           "Basmati rice",
@@ -4719,7 +4719,7 @@
                           "Cordon bleu",
                           "Fishsticks",
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Rice",
                           "Brown rice",
                           "Basmati rice",
@@ -4815,7 +4815,7 @@
                         ],
                         "Vegetarian": [
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Rice",
                           "Brown rice",
                           "Basmati rice",
@@ -5317,7 +5317,7 @@
                           "kg",
                           "gr"
                         ],
-                        "Mozzarella": [
+                        "Cheese": [
                           "kg",
                           "gr"
                         ],
@@ -5889,7 +5889,7 @@
                         "Greek yogurt": [
                           "Dairy"
                         ],
-                        "Mozzarella": [
+                        "Cheese": [
                           "Dairy"
                         ],
                         "Rice": [
@@ -6271,7 +6271,7 @@
                         "Greek yogurt": [
                           "Milk"
                         ],
-                        "Mozzarella": [
+                        "Cheese": [
                           "Milk"
                         ],
                         "Rice": [
@@ -8613,7 +8613,7 @@
                         "Cordon bleu",
                         "Fishsticks",
                         "Greek yogurt",
-                        "Mozzarella",
+                        "Cheese",
                         "Rice",
                         "Brown rice",
                         "Basmati rice",
@@ -8717,7 +8717,7 @@
                         "Cordon bleu",
                         "Bâtonnets de poisson",
                         "Yaourt grec",
-                        "Mozzarella",
+                        "Cheese",
                         "Riz",
                         "Riz complet",
                         "Riz basmati",
@@ -8821,7 +8821,7 @@
                         "Cordon bleu",
                         "Vissticks",
                         "Griekse yoghurt",
-                        "Mozzarella",
+                        "Cheese",
                         "Rijst",
                         "Volkorenrijst",
                         "Basmati rijst",
@@ -9006,15 +9006,15 @@
                           "__ckOptionValue": "Greek yogurt"
                         },
                         {
-                          "optionEn": "Mozzarella",
-                          "optionFr": "Mozzarella",
-                          "optionNl": "Mozzarella",
+                          "optionEn": "Cheese",
+                          "optionFr": "Fromage",
+                          "optionNl": "Kaas",
                           "Category": "Dairy",
                           "Allergens": "Milk",
                           "Suppliers": "VDS;Solucious",
                           "allowedUnits": "kg, gr",
                           "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Mozzarella"
+                          "__ckOptionValue": "Cheese"
                         },
                         {
                           "optionEn": "Rice",
@@ -10053,7 +10053,7 @@
                             "Chicken stripes",
                             "Chicken cubes",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Brown rice",
                             "Basmati rice",
                             "Whole wheat pasta",
@@ -10141,7 +10141,7 @@
                           "Cordon bleu",
                           "Fishsticks",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -10245,7 +10245,7 @@
                           "Cordon bleu",
                           "Fishsticks",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -10341,7 +10341,7 @@
                         ],
                         "Vegetarian": [
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -10843,7 +10843,7 @@
                             "kg",
                             "gr"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "kg",
                             "gr"
                           ],
@@ -11415,7 +11415,7 @@
                           "Greek yogurt": [
                             "Dairy"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "Dairy"
                           ],
                           "Rice": [
@@ -11797,7 +11797,7 @@
                           "Greek yogurt": [
                             "Milk"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "Milk"
                           ],
                           "Rice": [

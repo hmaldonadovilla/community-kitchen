@@ -3585,7 +3585,7 @@ components:
           enum: [link, warning, muted, default]
         icon:
           type: string
-          enum: [warning, check, error, info, external, lock, edit, view]
+          enum: [warning, check, error, info, external, lock, edit, copy, view]
         hrefFieldId:
           type: string
           description: |
