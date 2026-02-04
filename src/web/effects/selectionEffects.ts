@@ -369,6 +369,16 @@ function normalizeString(val: any): string {
   return val.toString().trim();
 }
 
+const BRACKET_KEY_RE = /^(.*?)\s*\[([^[\]]+)\]\s*$/;
+
+function normalizeLookupToken(value: any): { raw: string; key: string } {
+  const raw = normalizeString(value);
+  if (!raw) return { raw: '', key: '' };
+  const match = BRACKET_KEY_RE.exec(raw);
+  const key = match && match[2] ? match[2].toString().trim() : '';
+  return { raw, key };
+}
+
 function asPresetValue(raw: any): PresetValue | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw === 'string') return raw.toString();
@@ -703,6 +713,7 @@ function populateLineItemsFromDataSource({
   const cache = getOrCreateCache(question);
   const contextMap = getContextMap(cache, contextId, true)!;
   diff.removedSelections.forEach(sel => contextMap.delete(sel));
+  const preserveManualRows = effect.preserveManualRows !== false;
   if (!normalizedSelections.length) {
     contextMap.clear();
     if (debug && typeof console !== 'undefined') {
@@ -735,6 +746,12 @@ function populateLineItemsFromDataSource({
     return;
   }
   const stateToken = ++cache.token;
+
+  // When manual rows should be discarded, clear immediately so stale/manual rows
+  // don't linger while the data source fetch resolves.
+  if (!preserveManualRows && effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
+    ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: false });
+  }
 
   fetchDataSource(sourceConfig, language)
     .then(res => {
@@ -778,9 +795,16 @@ function populateLineItemsFromDataSource({
         return;
       }
       missingSelections.forEach(selectedValue => {
-        const normalizedTarget = selectedValue.toLowerCase();
+        const sel = normalizeLookupToken(selectedValue);
+        const normalizedTarget = (sel.key || sel.raw).toLowerCase();
+        if (!normalizedTarget) {
+          contextMap.delete(selectedValue);
+          return;
+        }
         const row = rows.find((candidate: any) => {
-          const candidateValue = normalizeString(candidate?.[lookupField]).toLowerCase();
+          const cand = normalizeLookupToken(candidate?.[lookupField]);
+          const candidateValue = (cand.key || cand.raw).toLowerCase();
+          if (!candidateValue) return false;
           return candidateValue === normalizedTarget;
         });
         if (!row) {
@@ -812,22 +836,72 @@ function populateLineItemsFromDataSource({
         const hasOptionFilters = targetConfig.fields.some((f: any) => !!(f as any)?.optionFilter);
         const lineFieldIds = targetConfig.fields.map((f: any) => (f?.id ?? '').toString()).filter(Boolean);
         const override = resolveEffectOverride(effect, effectOverrides);
-        const filteredEntries = hasOptionFilters
-          ? enrichedEntries.filter(entry => {
-              const presetBase = buildPreset(entry, effect, lineFieldIds);
-              const preset = mergePresetOverrides(presetBase as any, override);
-              const rowCtx = getRowContext(entry) || lineItem?.rowValues;
-              const keep = presetPassesOptionFilters(preset as any, targetConfig.fields, { rowValues: rowCtx, topValues });
-              if (!keep && debug && typeof console !== 'undefined') {
-                console.info('[SelectionEffects] addLineItemsFromDataSource filtered entry (optionFilter)', {
-                  groupId: targetGroupId,
-                  selection: selectedValue,
-                  preset
-                });
-              }
-              return keep;
-            })
-          : enrichedEntries;
+        const filteredEntries = (() => {
+          if (!hasOptionFilters) return enrichedEntries;
+
+          let removedCount = 0;
+          let firstMismatch: any = null;
+          let firstPreset: any = null;
+
+          const filterFields = targetConfig.fields
+            .filter((f: any) => !!(f as any)?.optionFilter)
+            .map((f: any) => ({ fieldId: (f?.id ?? '').toString(), filter: (f as any)?.optionFilter }))
+            .filter((f: any) => !!f.fieldId);
+          const deps = Array.from(
+            new Set(
+              filterFields.flatMap(f => {
+                const raw = (f.filter as any)?.dependsOn;
+                const ids = Array.isArray(raw) ? raw : raw ? [raw] : [];
+                return ids.map((id: any) => (id ?? '').toString().trim()).filter(Boolean);
+              })
+            )
+          );
+
+          const next = enrichedEntries.filter(entry => {
+            const presetBase = buildPreset(entry, effect, lineFieldIds);
+            const preset = mergePresetOverrides(presetBase as any, override);
+            const rowCtx = getRowContext(entry) || lineItem?.rowValues;
+            const mismatch = findFirstOptionFilterMismatch(preset as any, targetConfig.fields, { rowValues: rowCtx, topValues });
+            const keep = !mismatch;
+            if (!keep) {
+              removedCount += 1;
+              if (!firstMismatch) firstMismatch = mismatch;
+              if (!firstPreset) firstPreset = preset;
+            }
+            if (!keep && debug && typeof console !== 'undefined') {
+              const depSnapshot: Record<string, any> = {};
+              deps.forEach(depId => {
+                if (!depId) return;
+                depSnapshot[depId] = rowCtx && Object.prototype.hasOwnProperty.call(rowCtx as any, depId) ? (rowCtx as any)[depId] : undefined;
+              });
+              console.info('[SelectionEffects] addLineItemsFromDataSource filtered entry (optionFilter)', {
+                groupId: targetGroupId,
+                selection: selectedValue,
+                preset,
+                depSnapshot,
+                mismatch
+              });
+            }
+            return keep;
+          });
+
+          // Safety net: if optionFilters would eliminate every entry for a selection, fall back to unfiltered entries.
+          // This avoids wiping the whole group due to missing deps or token mismatches between the recipe data and UI options.
+          if (!next.length && enrichedEntries.length) {
+            if (debug && typeof console !== 'undefined') {
+              console.warn('[SelectionEffects] optionFilter removed all entries; falling back to unfiltered', {
+                groupId: targetGroupId,
+                selection: selectedValue,
+                removedCount,
+                samplePreset: firstPreset,
+                sampleMismatch: firstMismatch
+              });
+            }
+            return enrichedEntries;
+          }
+
+          return next;
+        })();
         contextMap.set(selectedValue, {
           value: selectedValue,
           entries: filteredEntries
@@ -958,10 +1032,32 @@ function presetPassesOptionFilters(
   fields: any[],
   ctx: { rowValues?: Record<string, any>; topValues?: Record<string, any> }
 ): boolean {
-  if (!fields || !fields.length) return true;
+  return !findFirstOptionFilterMismatch(preset, fields, ctx);
+}
+
+function findFirstOptionFilterMismatch(
+  preset: Record<string, any> | undefined,
+  fields: any[],
+  ctx: { rowValues?: Record<string, any>; topValues?: Record<string, any> }
+): {
+  fieldId: string;
+  rawValue: any;
+  depIds: string[];
+  depVals: any[];
+  allowedCount: number;
+  allowedSample: string[];
+  hasWildcard: boolean;
+  isDataSourceFilter: boolean;
+} | null {
+  if (!fields || !fields.length) return null;
   const presetValues = preset && typeof preset === 'object' ? preset : {};
   const rowValues = ctx.rowValues || {};
   const topValues = ctx.topValues || {};
+
+  const normalizeOptionValue = (val: any): string => {
+    if (val === undefined || val === null) return '';
+    return val.toString().trim();
+  };
 
   const resolveValue = (fieldId: string): any => {
     if (Object.prototype.hasOwnProperty.call(presetValues, fieldId)) return (presetValues as any)[fieldId];
@@ -982,13 +1078,36 @@ function presetPassesOptionFilters(
       .filter((d: string) => !!d);
     const depVals = depIds.map((depId: string) => toDepValue(resolveValue(depId)));
     const allowed = computeAllowedOptions(filter, { en: [] } as any, depVals);
-    const allowedSet = new Set((allowed || []).map(v => (v === undefined || v === null ? '' : v.toString())));
+    const allowedSet = new Set((allowed || []).map(v => normalizeOptionValue(v)).filter(Boolean));
 
-    const valuesToCheck = Array.isArray(raw) ? raw : [raw];
-    const ok = valuesToCheck.every(v => allowedSet.has(v === undefined || v === null ? '' : v.toString()));
-    if (!ok) return false;
+    // If the filter mapping doesn't define a wildcard and we couldn't compute any allowed options,
+    // treat this filter as non-blocking (otherwise data-driven effects can wipe whole groups due to missing deps).
+    const hasWildcard =
+      filter && typeof filter === 'object' && (filter as any).optionMap
+        ? Object.prototype.hasOwnProperty.call((filter as any).optionMap || {}, '*')
+        : false;
+    const isDataSourceFilter = !!(filter && typeof filter === 'object' && (filter as any).dataSourceField);
+    if (!allowedSet.size && !isDataSourceFilter && (filter as any).optionMap && !hasWildcard) {
+      continue;
+    }
+
+    const valuesToCheck = (Array.isArray(raw) ? raw : [raw]).map(v => normalizeOptionValue(v)).filter(Boolean);
+    if (!valuesToCheck.length) continue;
+    const ok = valuesToCheck.every(v => allowedSet.has(v));
+    if (!ok) {
+      return {
+        fieldId,
+        rawValue: raw,
+        depIds,
+        depVals,
+        allowedCount: allowedSet.size,
+        allowedSample: Array.from(allowedSet).slice(0, 8),
+        hasWildcard,
+        isDataSourceFilter
+      };
+    }
   }
-  return true;
+  return null;
 }
 
 interface RenderParams {
