@@ -664,9 +664,11 @@ const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupCon
 
 const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
   const cfg = groupCfg?.addOverlay || {};
-  const title = cfg.title ? resolveLocalizedString(cfg.title, language, '').trim() : '';
-  const helperText = cfg.helperText ? resolveLocalizedString(cfg.helperText, language, '').trim() : '';
-  const placeholder = cfg.placeholder ? resolveLocalizedString(cfg.placeholder, language, '').trim() : '';
+  const title = cfg.title !== undefined && cfg.title !== null ? resolveLocalizedString(cfg.title, language, '').trim() : undefined;
+  const helperText =
+    cfg.helperText !== undefined && cfg.helperText !== null ? resolveLocalizedString(cfg.helperText, language, '').trim() : undefined;
+  const placeholder =
+    cfg.placeholder !== undefined && cfg.placeholder !== null ? resolveLocalizedString(cfg.placeholder, language, '').trim() : undefined;
   return { title, helperText, placeholder };
 };
 

@@ -33,6 +33,7 @@ export const LineSelectOverlay: React.FC<{
   const [dedupMessage, setDedupMessage] = useState('');
   const selectedCount = (overlay.selected || []).length;
   const resolvedTitle = (overlay.title || '').toString().trim();
+  const helperConfigured = overlay.helperText !== undefined;
   const resolvedHelper = (overlay.helperText || '').toString().trim();
   const resolvedPlaceholder = (overlay.placeholder || '').toString().trim();
 
@@ -60,13 +61,16 @@ export const LineSelectOverlay: React.FC<{
   }, [overlay.options]);
 
   if (!overlay.open) return null;
-  const helpId = 'line-select-help';
   const titleText = resolvedTitle || tSystem('lineItems.selectLinesTitle', language, 'Select lines');
-  const helperText = resolvedHelper || tSystem(
-    'lineItems.selectLinesHelp',
-    language,
-    'Search and select one or more items. You can update quantities after you return.'
-  );
+  const helperText = helperConfigured
+    ? resolvedHelper
+    : tSystem(
+        'lineItems.selectLinesHelp',
+        language,
+        'Search and select one or more items. You can update quantities after you return.'
+      );
+  const showHelper = Boolean(helperText);
+  const helpId = showHelper ? 'line-select-help' : undefined;
   const placeholderText = resolvedPlaceholder || tSystem('lineItems.selectLinesSearch', language, 'Search items');
 
   return (
@@ -104,9 +108,11 @@ export const LineSelectOverlay: React.FC<{
           {titleText}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div id={helpId} className="muted">
-            {helperText}
-          </div>
+          {showHelper ? (
+            <div id={helpId} className="muted">
+              {helperText}
+            </div>
+          ) : null}
           <input
             type="text"
             value={query}
