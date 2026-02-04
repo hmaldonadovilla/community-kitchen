@@ -19,6 +19,7 @@ import { resolveLocalizedString } from '../../i18n';
 import { buildMaybeFilePayload } from './filePayload';
 import { ROW_ID_KEY, buildLineItemDedupKey, buildSubgroupKey, formatLineItemDedupValue, normalizeLineItemDedupRules, resolveSubgroupKey } from './lineItems';
 import { resolveParagraphUserText } from './paragraphDisclaimer';
+import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from './recipeIngredientsDirty';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
 import { GuidedStepsVirtualState, resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
@@ -868,6 +869,7 @@ export const buildSubmissionPayload = async (args: {
       return Promise.all(
         rowsToSave.map(async row => {
           const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
+          delete base[CK_RECIPE_INGREDIENTS_DIRTY_KEY];
 
           for (const f of fileFields) {
             base[f.id] = await buildMaybeFilePayload(base[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
@@ -989,6 +991,7 @@ export const buildDraftPayload = (args: {
 
       return rows.map(row => {
         const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
+        delete base[CK_RECIPE_INGREDIENTS_DIRTY_KEY];
         fileFields.forEach((f: any) => {
           base[f.id] = toUrlOnlyUploadString(base[f.id]);
         });

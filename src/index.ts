@@ -204,6 +204,33 @@ export function rebuildIndexes(formKey?: string): any {
   return res;
 }
 
+export function invalidateWebAppCache(reason?: string): { success: boolean; version?: string | null; message?: string } {
+  try {
+    const resolvedReason = (reason || '').toString().trim() || 'manual';
+    const version = WebFormService.invalidateServerCache(`invalidateWebAppCache:${resolvedReason}`);
+    const bust = bumpTemplateCacheEpoch();
+    const msgParts: string[] = [];
+    msgParts.push(version ? `Web app cache version bumped to ${version}.` : 'Web app cache version bump failed.');
+    msgParts.push(
+      bust.success && bust.epoch ? `Template caches flushed (epoch ${bust.epoch}).` : `Template cache flush skipped: ${(bust.message || 'unknown').toString()}`
+    );
+    try {
+      Browser.msgBox('Invalidate Web App Cache', msgParts.join('\n\n'), Browser.Buttons.OK);
+    } catch (_) {
+      // ignore
+    }
+    return { success: !!version, version, message: msgParts.join(' ') };
+  } catch (err: any) {
+    const message = (err?.message || err?.toString?.() || 'unknown').toString();
+    try {
+      Browser.msgBox('Invalidate Web App Cache', message, Browser.Buttons.OK);
+    } catch (_) {
+      // ignore
+    }
+    return { success: false, version: null, message };
+  }
+}
+
 export function saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
@@ -326,6 +353,7 @@ export function onOpen(): void {
     .addItem('Setup Forms', 'setup')
     .addItem('Install Triggers (Options + Response indexing)', 'installTriggers')
     .addItem('Create/Update All Forms', 'createAllForms')
+    .addItem('Invalidate Web App Cache', 'invalidateWebAppCache')
     .addItem('Rebuild Indexes (Data Version + Dedup)', 'rebuildIndexes')
     .addItem('Update & Translate Responses to English', 'translateAllResponses')
     .addToUi();

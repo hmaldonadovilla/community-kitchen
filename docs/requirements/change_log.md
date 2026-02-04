@@ -395,3 +395,22 @@
   > **DONE - Codex**
 - ck-74:
   - Bug and performance imporvement: stale data related to dataSource projections remains in the browser's local storage and is never updated. This affects Distributor and recipes when data is changed on the other forms. Local storage should be refreshed on page load, also please retreive this data in parallel to batch data fetch for the listView, so that all data is available when needed. I've also noticed that paginated batch data fetch is also sequenctial, I would appreciate if the trigger all calls in parallel.
+  > **WIP - Codex**
+- ck-75:
+  - When changing a recipe in the `RECIPE` field, the system is updating the list of ingredients accordingly, via `selectionEffects` configuration, but the user is not being warned before changes are discarded. This is a critical data-loss risk and needs a clear confirmation modal.
+    - Title: Change recipe?
+    - Message: You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?
+    - Buttons:
+      - Cancel (primary / default)
+      - Change recipe (destructive action)
+  - In this case if manual ingredients have been added to the `MP_INGREDIENTS_LI` group for the current `MP_TYPE_LI` row, we also need to delete the manual ingredients. It would be ideal if we can use selectionEffect or other configuration to remove the manual ingredients, otherwise we would need to increase the fucntionality of the selectionEffect to be able to define if manual rows should be deleted or not.
+  > **DONE - Codex**
+- ck-76: issues indentified on the meal production form:
+  - Elements identified in the `orderInfo` step:
+    - The `MP_SERVICE` fields order of values is in an illogical order, i.e. Dinner is shown before Lunch, it should be the reverse. However on the listView page, Dinner records should be shown first on the list for the same customer on a same date.
+    - when adding `MP_MEALS_REQUEST` via `addMode:auto` make sure to order the added rows in aplphabetical order based on the vlaues of the `MEAL_TYPE` field.
+    - The font and font size and color of 'Dietary category' and 'Ordered' table headers is not the same as the rest of the page, make sure that table headers in table mode are styled the same as the rest of the page.
+  - Elements identified in the `deliveryForm` step:
+    - Increase size of trash can and pencil icons on steps ui
+    - Use the same size as the overlays, I think we are using 40px there.
+  > **DONE - Codex**
