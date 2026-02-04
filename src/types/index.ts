@@ -703,6 +703,12 @@ export interface FieldChangeDialogConfig {
   confirmLabel?: LocalizedString;
   cancelLabel?: LocalizedString;
   /**
+   * Controls which action is visually primary / default.
+   * - confirm (default): confirm button uses the primary accent style
+   * - cancel: cancel button uses the primary accent style (useful for destructive confirmations)
+   */
+  primaryAction?: 'confirm' | 'cancel';
+  /**
    * Control whether dedup precheck should run for the change.
    * - auto (default): run when the changed field participates in a reject dedup rule.
    * - always: always run the dedup precheck.
@@ -1626,6 +1632,13 @@ export interface SelectionEffect {
   rowMultiplierFieldId?: string; // originating line-item field id whose numeric value scales results
   dataSourceMultiplierField?: string; // column/field in the data source describing the default quantity
   scaleNumericFields?: string[]; // override list of mapped numeric fields to scale (defaults to aggregateNumericFields)
+  /**
+   * When false, data-driven effects will remove existing manual rows in the target group when refreshing
+   * auto-generated rows (useful when changing a parent selector would otherwise discard edits silently).
+   *
+   * Defaults to true (preserve manual rows).
+   */
+  preserveManualRows?: boolean;
 }
 
 export interface ListViewSortConfig {

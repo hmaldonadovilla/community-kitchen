@@ -7425,6 +7425,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "scaleNumericFields": [
                                       "QTY"
                                     ],
+                                    "preserveManualRows": false,
                                     "lineItemMapping": {
                                       "ING": "ING",
                                       "QTY": "QTY",
@@ -7438,8 +7439,24 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "aggregateNumericFields": [
                                       "QTY"
                                     ]
+                                  },
+                                  {
+                                    "type": "setValue",
+                                    "fieldId": "__ckRecipeIngredientsDirty",
+                                    "value": false
                                   }
                                 ],
+                                "changeDialog": {
+                                  "when": {
+                                    "fieldId": "__ckRecipeIngredientsDirty",
+                                    "equals": true
+                                  },
+                                  "title": "Change recipe?",
+                                  "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
+                                  "cancelLabel": "Cancel",
+                                  "confirmLabel": "Change recipe",
+                                  "primaryAction": "cancel"
+                                },
                                 "ui": {
                                   "control": "select"
                                 }
@@ -7580,6 +7597,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "scaleNumericFields": [
                                       "QTY"
                                     ],
+                                    "preserveManualRows": false,
                                     "lineItemMapping": {
                                       "ING": "ING",
                                       "QTY": "QTY",
@@ -7593,8 +7611,24 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "aggregateNumericFields": [
                                       "QTY"
                                     ]
+                                  },
+                                  {
+                                    "type": "setValue",
+                                    "fieldId": "__ckRecipeIngredientsDirty",
+                                    "value": false
                                   }
                                 ],
+                                "changeDialog": {
+                                  "when": {
+                                    "fieldId": "__ckRecipeIngredientsDirty",
+                                    "equals": true
+                                  },
+                                  "title": "Change recipe?",
+                                  "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
+                                  "cancelLabel": "Cancel",
+                                  "confirmLabel": "Change recipe",
+                                  "primaryAction": "cancel"
+                                },
                                 "ui": {
                                   "control": "select",
                                   "hideLabel": true
@@ -8336,6 +8370,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "ui": {
           "labelLayout": "inline"
         },
+        "optionSort": "source",
         "options": [
           "Lunch",
           "Dinner"
@@ -9554,9 +9589,26 @@ export const BUNDLED_FORM_CONFIGS = [
                       "dataSourceMultiplierField": "NUM_PORTIONS",
                       "scaleNumericFields": [
                         "QTY"
-                      ]
+                      ],
+                      "preserveManualRows": false
+                    },
+                    {
+                      "type": "setValue",
+                      "fieldId": "__ckRecipeIngredientsDirty",
+                      "value": false
                     }
-                  ]
+                  ],
+                  "changeDialog": {
+                    "when": {
+                      "fieldId": "__ckRecipeIngredientsDirty",
+                      "equals": true
+                    },
+                    "title": "Change recipe?",
+                    "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
+                    "cancelLabel": "Cancel",
+                    "confirmLabel": "Change recipe",
+                    "primaryAction": "cancel"
+                  }
                 },
                 {
                   "id": "PREP_QTY",
@@ -15006,9 +15058,26 @@ export const BUNDLED_FORM_CONFIGS = [
                         "dataSourceMultiplierField": "NUM_PORTIONS",
                         "scaleNumericFields": [
                           "QTY"
-                        ]
+                        ],
+                        "preserveManualRows": false
+                      },
+                      {
+                        "type": "setValue",
+                        "fieldId": "__ckRecipeIngredientsDirty",
+                        "value": false
                       }
-                    ]
+                    ],
+                    "changeDialog": {
+                      "when": {
+                        "fieldId": "__ckRecipeIngredientsDirty",
+                        "equals": true
+                      },
+                      "title": "Change recipe?",
+                      "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
+                      "cancelLabel": "Cancel",
+                      "confirmLabel": "Change recipe",
+                      "primaryAction": "cancel"
+                    }
                   },
                   {
                     "id": "PREP_QTY",
@@ -19865,6 +19934,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "scaleNumericFields": [
                                       "QTY"
                                     ],
+                                    "preserveManualRows": false,
                                     "lineItemMapping": {
                                       "ING": "ING",
                                       "QTY": "QTY",
@@ -19878,8 +19948,24 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "aggregateNumericFields": [
                                       "QTY"
                                     ]
+                                  },
+                                  {
+                                    "type": "setValue",
+                                    "fieldId": "__ckRecipeIngredientsDirty",
+                                    "value": false
                                   }
                                 ],
+                                "changeDialog": {
+                                  "when": {
+                                    "fieldId": "__ckRecipeIngredientsDirty",
+                                    "equals": true
+                                  },
+                                  "title": "Change recipe?",
+                                  "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
+                                  "cancelLabel": "Cancel",
+                                  "confirmLabel": "Change recipe",
+                                  "primaryAction": "cancel"
+                                },
                                 "ui": {
                                   "control": "select"
                                 }
@@ -20020,6 +20106,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "scaleNumericFields": [
                                       "QTY"
                                     ],
+                                    "preserveManualRows": false,
                                     "lineItemMapping": {
                                       "ING": "ING",
                                       "QTY": "QTY",
@@ -20033,8 +20120,24 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "aggregateNumericFields": [
                                       "QTY"
                                     ]
+                                  },
+                                  {
+                                    "type": "setValue",
+                                    "fieldId": "__ckRecipeIngredientsDirty",
+                                    "value": false
                                   }
                                 ],
+                                "changeDialog": {
+                                  "when": {
+                                    "fieldId": "__ckRecipeIngredientsDirty",
+                                    "equals": true
+                                  },
+                                  "title": "Change recipe?",
+                                  "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
+                                  "cancelLabel": "Cancel",
+                                  "confirmLabel": "Change recipe",
+                                  "primaryAction": "cancel"
+                                },
                                 "ui": {
                                   "control": "select",
                                   "hideLabel": true

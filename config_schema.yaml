@@ -1656,6 +1656,13 @@ components:
           oneOf:
             - type: string
             - $ref: '#/components/schemas/LocalizedString'
+        primaryAction:
+          type: string
+          enum: [confirm, cancel]
+          description: |
+            Controls which dialog action is visually primary / default.
+            - confirm (default): confirm button uses the primary accent style
+            - cancel: cancel button uses the primary accent style (useful for destructive confirmations)
         dedupMode:
           type: string
           enum: [auto, always, never]
@@ -4079,6 +4086,11 @@ components:
           items:
             type: string
           description: Explicit list of mapped line-item field ids whose numeric values should be multiplied by the computed scale factor. Defaults to `aggregateNumericFields` when omitted.
+        preserveManualRows:
+          type: boolean
+          description: |
+            When false, data-driven effects (`type=addLineItemsFromDataSource`) will delete existing manual rows
+            in the target group when refreshing auto-generated rows. Defaults to true (preserve manual rows).
 
     VisibilityCondition:
       type: object

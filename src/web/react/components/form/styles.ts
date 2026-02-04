@@ -267,9 +267,9 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table th,
         .webform-overlay .ck-line-item-table th,
         .ck-form-sections .ck-line-item-table th {
-          font-size: var(--ck-font-control);
+          font-size: var(--ck-font-label);
           font-weight: 600;
-          color: var(--muted);
+          color: var(--text);
         }
         .form-card .ck-line-item-table thead th,
         .webform-overlay .ck-line-item-table thead th,

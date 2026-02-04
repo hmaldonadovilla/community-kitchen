@@ -153,14 +153,55 @@ export const FieldChangeDialogOverlay: React.FC<{
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  primaryAction?: 'confirm' | 'cancel';
   inputs: FieldChangeDialogInputState[];
   values: Record<string, FieldValue>;
   onValueChange: (id: string, value: FieldValue) => void;
   onCancel: () => void;
   onConfirm: () => void;
   zIndex?: number;
-}> = ({ open, title, message, confirmLabel, cancelLabel, inputs, values, onValueChange, onCancel, onConfirm, zIndex = 12025 }) => {
+}> = ({
+  open,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  primaryAction: primaryActionProp,
+  inputs,
+  values,
+  onValueChange,
+  onCancel,
+  onConfirm,
+  zIndex = 12025
+}) => {
   if (!open) return null;
+  const primaryAction = primaryActionProp === 'cancel' ? 'cancel' : 'confirm';
+
+  const primaryButtonStyle: React.CSSProperties = {
+    padding: '16px 22px',
+    minHeight: 'var(--control-height)',
+    borderRadius: 'var(--radius-control)',
+    border: '1px solid var(--accent)',
+    background: 'var(--accent)',
+    color: 'var(--accentText)',
+    fontWeight: 500,
+    fontSize: 'var(--ck-font-control)',
+    lineHeight: 1.1,
+    minWidth: 140
+  };
+
+  const secondaryButtonStyle: React.CSSProperties = {
+    padding: '16px 22px',
+    minHeight: 'var(--control-height)',
+    borderRadius: 'var(--radius-control)',
+    border: '1px solid var(--border)',
+    background: 'var(--card)',
+    color: 'var(--text)',
+    fontWeight: 500,
+    fontSize: 'var(--ck-font-control)',
+    lineHeight: 1.1,
+    minWidth: 140
+  };
 
   return (
     <div
@@ -242,17 +283,9 @@ export const FieldChangeDialogOverlay: React.FC<{
             type="button"
             onClick={onCancel}
             style={{
-              padding: '16px 22px',
-              minHeight: 'var(--control-height)',
-              borderRadius: 'var(--radius-control)',
-              border: '1px solid var(--border)',
-              background: 'var(--card)',
-              color: 'var(--text)',
-              fontWeight: 500,
-              fontSize: 'var(--ck-font-control)',
-              lineHeight: 1.1,
-              minWidth: 140
+              ...(primaryAction === 'cancel' ? primaryButtonStyle : secondaryButtonStyle)
             }}
+            autoFocus={primaryAction === 'cancel'}
           >
             {cancelLabel}
           </button>
@@ -260,17 +293,9 @@ export const FieldChangeDialogOverlay: React.FC<{
             type="button"
             onClick={onConfirm}
             style={{
-              padding: '16px 22px',
-              minHeight: 'var(--control-height)',
-              borderRadius: 'var(--radius-control)',
-              border: '1px solid var(--accent)',
-              background: 'var(--accent)',
-              color: 'var(--accentText)',
-              fontWeight: 500,
-              fontSize: 'var(--ck-font-control)',
-              lineHeight: 1.1,
-              minWidth: 140
+              ...(primaryAction === 'confirm' ? primaryButtonStyle : secondaryButtonStyle)
             }}
+            autoFocus={primaryAction === 'confirm'}
           >
             {confirmLabel}
           </button>
