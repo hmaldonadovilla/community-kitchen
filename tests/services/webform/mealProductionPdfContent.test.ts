@@ -176,10 +176,13 @@ describe('buildMealProductionPdfPlaceholders', () => {
   it('includes cooked and leftover sections in meal blocks', () => {
     const placeholders = buildMealProductionPdfPlaceholders({ record, questions, form });
     expect(placeholders.MEAL_BLOCKS).toContain('Vegetarian');
-    expect(placeholders.MEAL_BLOCKS).toContain('Delivered: 18 portions');
     expect(placeholders.MEAL_BLOCKS).toContain('Veg curry');
     expect(placeholders.MEAL_BLOCKS).toContain('Leftover curry');
     expect(placeholders.MEAL_BLOCKS).toContain('Spices');
+    expect(placeholders.MEAL_BLOCKS).toContain('Allergens');
+    expect(placeholders.MEAL_BLOCKS).toContain('Peas');
+    const tables = (placeholders.MEAL_BLOCKS.match(/class="ck-meal-table"/g) || []).length;
+    expect(tables).toBe(2);
     expect(placeholders.APP_HEADER_LOGO_HTML).toBe('');
   });
 });

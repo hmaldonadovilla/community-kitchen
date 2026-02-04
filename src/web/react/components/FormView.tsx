@@ -1775,9 +1775,6 @@ const FormView: React.FC<FormViewProps> = ({
     submitActionRef.current = () => {
       if (submitting) return;
       const forceFinalSubmit = summarySubmitIntentRef?.current === true;
-      if (summarySubmitIntentRef && summarySubmitIntentRef.current) {
-        summarySubmitIntentRef.current = false;
-      }
       const isGuidedFinalStep = guidedEnabled && guidedStepIds.length && activeGuidedStepIndex >= guidedStepIds.length - 1;
 
       // In guided steps, the bottom "Submit" action behaves like "Next" until the final step.

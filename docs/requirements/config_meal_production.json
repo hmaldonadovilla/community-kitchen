@@ -6244,11 +6244,11 @@
         }
       },
       "button": {
-        "action": "renderMarkdownTemplate",
+        "action": "renderHtmlTemplate",
         "templateId": {
-          "EN": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
-          "FR": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
-          "NL": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R"
+          "EN": "bundle:ingredients_needed.html",
+          "FR": "bundle:ingredients_needed.html",
+          "NL": "bundle:ingredients_needed.html"
         },
         "placements": [
           "form"
@@ -11479,11 +11479,11 @@
         "pair": "ing_ph",
         "listView": false,
         "button": {
-          "action": "renderMarkdownTemplate",
+          "action": "renderHtmlTemplate",
           "templateId": {
-            "EN": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
-            "FR": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
-            "NL": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R"
+            "EN": "bundle:ingredients_needed.html",
+            "FR": "bundle:ingredients_needed.html",
+            "NL": "bundle:ingredients_needed.html"
           },
           "placements": [
             "form"

@@ -534,7 +534,7 @@
       var titleText = mealType || 'Meal';
       var requestedText = toText(requested) ? formatPortions(requested, '') : '';
       if (requestedText) {
-        titleText += ' | Requested: ' + requestedText;
+        titleText += ' | Ordered: ' + requestedText;
       }
       title.textContent = titleText;
       mealBlock.appendChild(title);

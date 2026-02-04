@@ -387,11 +387,15 @@ export const runSelectionEffects = (args: {
             const rowParentGroup =
               (row?.values as any)?.[ROW_PARENT_GROUP_ID_KEY] !== undefined && (row?.values as any)?.[ROW_PARENT_GROUP_ID_KEY] !== null
                 ? (row.values as any)[ROW_PARENT_GROUP_ID_KEY].toString().trim()
-                : '';
+                : (row as any)?.parentGroupId !== undefined && (row as any)?.parentGroupId !== null
+                  ? (row as any).parentGroupId.toString().trim()
+                  : '';
             const rowParentRow =
               (row?.values as any)?.[ROW_PARENT_ROW_ID_KEY] !== undefined && (row?.values as any)?.[ROW_PARENT_ROW_ID_KEY] !== null
                 ? (row.values as any)[ROW_PARENT_ROW_ID_KEY].toString().trim()
-                : '';
+                : (row as any)?.parentId !== undefined && (row as any)?.parentId !== null
+                  ? (row as any).parentId.toString().trim()
+                  : '';
             if (parentGroupId && parentRowId) {
               return rowParentGroup === parentGroupId && rowParentRow === parentRowId;
             }

@@ -87,6 +87,16 @@ const formatPortions = (value: any, fallback = 0): string => {
   return `${fallback} portions`;
 };
 
+const formatCount = (value: any, fallback = '0'): string => {
+  const n = parseNumber(value);
+  if (n !== null) {
+    if (Number.isFinite(n) && Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+    return String(n);
+  }
+  const raw = normalizeText(value);
+  return raw || fallback;
+};
+
 const uniqueList = (values: string[]): string[] => {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -102,38 +112,40 @@ const uniqueList = (values: string[]): string[] => {
 };
 
 interface RecipeSection {
+  mealType: string;
   recipeName: string;
-  portionLabel: string;
-  ingredients: string[];
-  allergens: string[];
+  portionCount: string;
+  ingredientsText: string;
+  allergensText: string;
 }
 
 const buildRecipeSection = (section: RecipeSection): string => {
-  const details: string[] = [];
-  const ingredientText = section.ingredients.length ? section.ingredients.join(', ') : 'None';
-  details.push(`
-    <div class="ck-recipe-detail">
-      <span class="ck-recipe-detail-label">Ingredients:</span>
-      <span>${escapeHtml(ingredientText)}</span>
-    </div>`);
-  if (section.allergens.length) {
-    details.push(`
-      <div class="ck-recipe-detail">
-        <span class="ck-recipe-detail-label">Allergens:</span>
-        <span>${escapeHtml(section.allergens.join(', '))}</span>
-      </div>`);
-  }
-  const detailsHtml = details.join('');
   return `
-    <div class="ck-recipe-block">
-      <div class="ck-recipe-heading">
-        <div>
-          <div class="ck-recipe-title">${escapeHtml(section.recipeName || 'Recipe not set')}</div>
-        </div>
-        <div class="ck-meal-portions">${escapeHtml(section.portionLabel)}</div>
-      </div>
-      <div class="ck-recipe-details">${detailsHtml}</div>
-    </div>`;
+    <table class="ck-meal-table" role="table" aria-label="${escapeHtml(section.mealType || 'Meal')}">
+      <thead>
+        <tr>
+          <th class="ck-meal-table__title" scope="col" colspan="2">${escapeHtml(section.mealType || 'Meal')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="ck-meal-table__label">Portions</td>
+          <td class="ck-meal-table__value">${escapeHtml(section.portionCount)}</td>
+        </tr>
+        <tr>
+          <td class="ck-meal-table__label">Recipe</td>
+          <td class="ck-meal-table__value">${escapeHtml(section.recipeName || 'Recipe not set')}</td>
+        </tr>
+        <tr>
+          <td class="ck-meal-table__label">Ingredients</td>
+          <td class="ck-meal-table__value">${escapeHtml(section.ingredientsText || 'None')}</td>
+        </tr>
+        <tr>
+          <td class="ck-meal-table__label">Allergens</td>
+          <td class="ck-meal-table__value">${escapeHtml(section.allergensText || 'None')}</td>
+        </tr>
+      </tbody>
+    </table>`;
 };
 
 const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[]): string => {
@@ -171,7 +183,6 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
 
   mealRows.forEach(meal => {
     const mealLabel = normalizeText(meal.MEAL_TYPE) || 'Meal';
-    const finalQtyLabel = formatPortions(meal.FINAL_QTY, 0);
     const mealTypeRows = typesByMeal.get(meal) || [];
     const normalizedEntries = mealTypeRows.map(row => {
       const prepType = normalizeText(row.PREP_TYPE).toLowerCase();
@@ -199,8 +210,6 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
     const finalQtyNumber = parseNumber(meal.FINAL_QTY);
     const cookPortionsNumber = finalQtyNumber !== null ? Math.max(0, finalQtyNumber - entireTotal) : null;
 
-    const segments: string[] = [];
-
     const cookBucketIngredients = uniqueList([
       ...(cookEntries[0]?.ingredients || []),
       ...partialEntries.flatMap(entry => entry.ingredients)
@@ -211,61 +220,41 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
     ]);
 
     if (cookEntries.length || partialEntries.length) {
-      const portionLabel = cookPortionsNumber !== null ? `${cookPortionsNumber} portions` : finalQtyLabel;
       const recipeName = cookEntries[0]?.recipe || 'Cooked recipe';
-      segments.push(
+      blocks.push(
         buildRecipeSection({
+          mealType: mealLabel,
           recipeName,
-          portionLabel,
-          ingredients: cookBucketIngredients,
-          allergens: cookBucketAllergens
+          portionCount: cookPortionsNumber !== null ? formatCount(cookPortionsNumber, '0') : formatCount(meal.FINAL_QTY, '0'),
+          ingredientsText: cookBucketIngredients.length ? cookBucketIngredients.join(', ') : 'None',
+          allergensText: cookBucketAllergens.length ? cookBucketAllergens.join(', ') : 'None'
         })
       );
     }
 
-    if (!cookEntries.length && partialEntries.length) {
-      if (!segments.length) {
-        segments.push(
-          buildRecipeSection({
-            recipeName: 'Partial leftovers',
-            portionLabel: finalQtyLabel,
-            ingredients: cookBucketIngredients,
-            allergens: cookBucketAllergens
-          })
-        );
-      }
-    }
-
     entireEntries.forEach(entry => {
-      segments.push(
+      blocks.push(
         buildRecipeSection({
+          mealType: mealLabel,
           recipeName: entry.recipe || 'Leftover recipe',
-          portionLabel: formatPortions(entry.prepQty ?? 0, 0),
-          ingredients: uniqueList(entry.ingredients),
-          allergens: uniqueList(entry.allergens)
+          portionCount: formatCount(entry.prepQty ?? 0, '0'),
+          ingredientsText: uniqueList(entry.ingredients).length ? uniqueList(entry.ingredients).join(', ') : 'None',
+          allergensText: uniqueList(entry.allergens).length ? uniqueList(entry.allergens).join(', ') : 'None'
         })
       );
     });
 
     otherEntries.forEach(entry => {
-      segments.push(
+      blocks.push(
         buildRecipeSection({
+          mealType: mealLabel,
           recipeName: entry.recipe || 'Recipe not set',
-          portionLabel: formatPortions(entry.prepQty ?? 0, 0),
-          ingredients: uniqueList(entry.ingredients),
-          allergens: uniqueList(entry.allergens)
+          portionCount: formatCount(entry.prepQty ?? 0, '0'),
+          ingredientsText: uniqueList(entry.ingredients).length ? uniqueList(entry.ingredients).join(', ') : 'None',
+          allergensText: uniqueList(entry.allergens).length ? uniqueList(entry.allergens).join(', ') : 'None'
         })
       );
     });
-
-    blocks.push(`
-      <div class="ck-meal-block">
-        <div class="ck-meal-heading">
-          <div class="ck-meal-type">${escapeHtml(mealLabel)}</div>
-          <div class="ck-meal-portions">Delivered: ${escapeHtml(finalQtyLabel)}</div>
-        </div>
-        ${segments.join('')}
-      </div>`);
   });
 
   return blocks.join('');

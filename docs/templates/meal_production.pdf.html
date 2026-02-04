@@ -1,26 +1,20 @@
-<!--
-  Community Kitchen – Meal Production (PDF template derived from the summary template)
-
-  Notes:
-  - Designed for server-side HTML-to-PDF rendering (no script tags).
-  - Placeholders mirror the meal production summary template plus custom blocks for the meal list.
--->
-
 <style>
   .ck-pdf-template {
-    font-family: var(--ck-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif);
-    font-size: var(--ck-font-control);
-    line-height: 1.45;
-    color: var(--text);
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #000000;
     margin: 0;
+    padding: 44px 54px;
   }
 
   .ck-pdf-template * {
     box-sizing: border-box;
+    color: #000000;
   }
 
   .ck-pdf-template img {
-    max-width: 120px;
+    max-width: 56px;
     height: auto;
     display: block;
   }
@@ -28,32 +22,58 @@
   .ck-header {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 24px;
+    align-items: flex-start;
+    gap: 24px;
+    margin-bottom: 28px;
   }
 
   .ck-header-left,
   .ck-header-right {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
   .ck-header-title {
-    font-size: var(--ck-font-control);
+    font-size: 20px;
     font-weight: 600;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #000000;
+    margin-top: 2px;
   }
 
   .ck-prepared-label {
-    font-size: calc(var(--ck-font-label) * 0.85);
+    font-size: 11px;
     letter-spacing: 0;
-    color: var(--muted);
+    font-weight: 400;
+    text-transform: none;
+    color: #000000;
+    text-align: left;
   }
 
   .ck-prepared-value {
-    font-weight: 500;
-    line-height: 1.3;
+    font-size: 11px;
+    font-weight: 400;
     word-break: break-word;
+    text-align: left;
+    color: #000000;
+  }
+
+  .ck-prepared-name {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    color: #000000;
+    text-align: left;
+    word-break: break-word;
+    margin-top: 2px;
+  }
+
+  .ck-address-line {
+    font-size: 11px;
+    font-weight: 400;
+    color: #000000;
+    text-align: left;
   }
 
   .ck-section {
@@ -62,86 +82,151 @@
 
   .ck-section-title {
     margin: 0 0 8px 0;
-    font-size: var(--ck-font-label);
+    font-size: 14px;
     font-weight: 600;
+    color: #000000;
+    text-align: left;
   }
 
-  .ck-production-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 16px;
+  .ck-report-title {
+    display: none;
   }
 
-  .ck-production-label {
-    font-weight: 500;
-    font-size: calc(var(--ck-font-label) * 0.85);
-    color: var(--muted);
+  .ck-info-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    border: 0px solid #000000;
+    margin-top: 14px;
+    background: #ffffff;
   }
 
-  .ck-production-value {
+  .ck-info-table td {
+    border: 0px solid #000000;
+    padding: 10px 0;
+    vertical-align: top;
+    background: #ffffff;
+  }
+
+  .ck-info-label {
+    font-size: 11px;
     font-weight: 400;
+    color: #000000;
+    width: 28%;
+    padding-right: 18px;
+    text-align: left;
+  }
+
+  .ck-info-value {
+    font-size: 11px;
+    font-weight: 400;
+    width: 72%;
     word-break: break-word;
+    color: #000000;
+    text-align: left;
+  }
+
+  .ck-service-line {
+    margin: 26px 0 10px 0;
+    font-size: 11px;
+    font-weight: 400;
+    color: #000000;
+    text-align: left;
+  }
+
+  .ck-service-label {
+    font-weight: 400;
+  }
+
+  .ck-service-value {
+    font-weight: 400;
+  }
+
+  .ck-service-bullets {
+    margin: 10px 0 0 42px;
+    padding: 0;
+    font-size: 10px;
+    font-weight: 400;
+    color: #000000;
+    text-align: left;
+  }
+
+  .ck-service-bullets li {
+    margin: 4px 0;
   }
 
   .ck-meal-list {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 18px;
   }
 
-  .ck-meal-block {
-    border-top: 1px solid var(--border);
-    padding-top: 12px;
+  .ck-meal-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    border: 0.5px solid #000000;
+    background: #ffffff;
   }
 
-  .ck-meal-heading {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: baseline;
-    flex-wrap: wrap;
+  .ck-meal-table td,
+  .ck-meal-table th {
+    padding: 14px 14px;
+    vertical-align: middle;
+    border: 0.5px solid #000000;
+    background: #ffffff;
   }
 
-  .ck-meal-type {
-    font-size: var(--ck-font-control);
-    font-weight: 600;
+  .ck-meal-table thead th {
+    border: 0.5px solid #000000;
   }
 
-  .ck-meal-portions {
-    font-weight: 500;
-    font-size: var(--ck-font-label);
+  .ck-meal-table__title {
+    background: #b4ecce;
+    background-color: #b4ecce;
+    font-style: normal;
+    font-weight: 400;
+    font-size: 14px;
+    color: #000000;
+    text-align: left;
   }
 
-  .ck-recipe-block {
-    margin-top: 8px;
-    padding: 10px;
-    border: none;
-    border-radius: 0;
+  .ck-meal-table__label {
+    width: 30%;
+    font-size: 11px;
+    font-weight: 400;
+    color: #000000;
+    text-align: left;
   }
 
-  .ck-recipe-heading {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: baseline;
-    flex-wrap: wrap;
+  .ck-meal-table__value {
+    width: 70%;
+    font-size: 11px;
+    font-weight: 400;
+    word-break: break-word;
+    text-align: left;
+    color: #000000;
   }
 
-  .ck-recipe-title {
-    font-weight: 600;
-    font-size: var(--ck-font-label);
+  .ck-meal-table tbody tr:first-child .ck-meal-table__value {
+    text-align: right;
   }
 
-  .ck-recipe-details {
-    margin-top: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: calc(var(--ck-font-label) * 0.85);
+  .ck-total-portions {
+    margin-top: 18px;
+    font-size: 11px;
+    font-weight: 400;
+    color: #000000;
+    text-align: left;
   }
 
-  .ck-recipe-detail-label {
-    font-weight: 600;
+  .ck-total-portions strong {
+    font-weight: 400;
+  }
+
+  .ck-total-portions .ck-total-portions-value {
+    font-weight: 400;
+    text-decoration: none;
   }
 
   .ck-totals {
@@ -151,22 +236,22 @@
   }
 
   .ck-total-label {
-    font-weight: 500;
-    font-size: calc(var(--ck-font-label) * 0.85);
-    color: var(--muted);
+    font-size: 11px;
+    font-weight: 400;
+    color: #000000;
+    text-align: left;
   }
 
   .ck-total-value {
-    font-weight: 600;
-    font-size: var(--ck-font-control);
+    font-size: 11px;
+    font-weight: 400;
+    color: #000000;
+    text-align: right;
   }
 
   @media (max-width: 600px) {
     .ck-header {
       flex-direction: column;
-    }
-    .ck-production-grid {
-      grid-template-columns: 1fr;
     }
     .ck-totals {
       grid-template-columns: 1fr;
@@ -179,12 +264,12 @@
     <div class="ck-header-left">
       {{APP_HEADER_LOGO_HTML}}
       <div class="ck-header-title">Community Kitchen</div>
-      <div>Rue Capitaine Crespel 29</div>
-      <div>1050 Brussels, Belgium</div>
+      <div class="ck-address-line">Rue Capitaine Crespel 29</div>
+      <div class="ck-address-line">1050 Brussels, Belgium</div>
     </div>
     <div class="ck-header-right">
       <div class="ck-prepared-label">Prepared for</div>
-      <div class="ck-prepared-value">{{DEFAULT(MP_DISTRIBUTOR.DIST_NAME, "—")}}</div>
+      <div class="ck-prepared-name">{{DEFAULT(MP_DISTRIBUTOR.DIST_NAME, "—")}}</div>
       <div class="ck-prepared-value">{{DEFAULT(MP_DISTRIBUTOR.DIST_ADDR_1, "")}}</div>
       <div class="ck-prepared-value">{{DEFAULT(MP_DISTRIBUTOR.DIST_ADDR_2, "")}}</div>
       <div class="ck-prepared-value">
@@ -194,50 +279,38 @@
   </header>
 
   <section class="ck-section">
-    <div class="ck-section-title">Production details</div>
-    <div class="ck-production-grid">
-      <div>
-        <div class="ck-production-label">{{LABEL(MP_PREP_DATE)}}</div>
-        <div class="ck-production-value">{{MP_PREP_DATE}}</div>
-      </div>
-      <div>
-        <div class="ck-production-label">{{LABEL(MP_EXP_DATE)}}</div>
-        <div class="ck-production-value">{{MP_EXP_DATE}}</div>
-      </div>
-      <div>
-        <div class="ck-production-label">{{LABEL(MP_ID)}}</div>
-        <div class="ck-production-value">{{MP_ID}}</div>
-      </div>
-      <div>
-        <div class="ck-production-label">{{LABEL(MP_COOK_NAME)}}</div>
-        <div class="ck-production-value">{{MP_COOK_NAME}}</div>
-      </div>
-      <div>
-        <div class="ck-production-label">{{LABEL(MP_VOLUNTEER)}}</div>
-        <div class="ck-production-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</div>
-      </div>
-    </div>
+    <div class="ck-report-title">MEAL PRODUCTION &amp; DISTRIBUTION REPORT</div>
+    <table class="ck-info-table" aria-label="Production details">
+      <tbody>
+        <tr>
+          <td class="ck-info-label">{{LABEL(MP_PREP_DATE)}}:</td>
+          <td class="ck-info-value">{{MP_PREP_DATE}}</td>
+        </tr>
+        <tr>
+          <td class="ck-info-label">{{LABEL(MP_EXP_DATE)}}:</td>
+          <td class="ck-info-value">{{MP_EXP_DATE}}</td>
+        </tr>
+        <tr>
+          <td class="ck-info-label">{{LABEL(MP_ID)}}:</td>
+          <td class="ck-info-value">{{MP_ID}}</td>
+        </tr>
+      </tbody>
+    </table>
   </section>
 
   <section class="ck-section">
-    <div class="ck-section-title">Meal details</div>
+    <div class="ck-service-line"><span class="ck-service-label">Service:</span> <span class="ck-service-value">{{DEFAULT(MP_SERVICE, "—")}}</span></div>
+    <ul class="ck-service-bullets" aria-label="Storage instructions">
+      <li>Serve hot. If reheating is required, reheat thoroughly.</li>
+      <li>Keep refrigerated at ≤ 4°C.</li>
+    </ul>
     <div class="ck-meal-list">
       {{MEAL_BLOCKS}}
     </div>
   </section>
 
   <section class="ck-section">
-    <div class="ck-section-title">Totals</div>
-    <div class="ck-totals">
-      <div>
-        <div class="ck-total-label">Total {{LABEL(MP_MEALS_REQUEST.ORD_QTY)}}</div>
-        <div class="ck-total-value">{{SUM(MP_MEALS_REQUEST.ORD_QTY)}}</div>
-      </div>
-      <div>
-        <div class="ck-total-label">Total {{LABEL(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
-        <div class="ck-total-value">{{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
-      </div>
-    </div>
+    <div class="ck-section-title">Totals: {{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
   </section>
 
 </div>

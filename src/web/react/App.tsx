@@ -1543,6 +1543,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     total?: number;
     pages?: number;
   }>(() => ({ phase: 'idle' }));
+  const [listFetchNotice, setListFetchNotice] = useState<string | null>(null);
   const listFetchSeqRef = useRef(0);
   const listPrefetchKeyRef = useRef<string>('');
   const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
@@ -1651,6 +1652,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     const projection = listViewProjection.length ? listViewProjection : undefined;
     const hasExisting = Boolean(listCache.response?.items?.length);
 
+    setListFetchNotice(null);
     setListFetch({
       phase: hasExisting ? 'prefetching' : 'loading',
       loaded: hasExisting ? (listCache.response?.items?.length || 0) : 0,
@@ -1714,7 +1716,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             const resType = batch === null ? 'null' : typeof batch;
             const keys = batch && typeof batch === 'object' ? Object.keys(batch as any).slice(0, 15) : [];
             logEvent('list.sorted.prefetch.invalidResponse', { resType, keys, token: args.token || null, pageIndex: args.pageIndex });
-            throw new Error('The server returned invalid list data (fetchSubmissionsSortedBatch).');
+            const err: any = new Error(
+              'Recent activity is temporarily unavailable. Your data is safe. Please refresh the page or try again in a moment'
+            );
+            err.__ckUiTone = 'info';
+            err.__ckUiKind = 'list_prefetch_unavailable';
+            throw err;
           }
           return { list, batch, token: args.token, pageIndex: args.pageIndex };
         };
@@ -1828,6 +1835,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         if (seq !== listFetchSeqRef.current) return;
         const uiMessage = resolveUiErrorMessage(err, 'Failed to load list.');
         const logMessage = resolveLogMessage(err, 'Failed to load list.');
+        if ((err as any)?.__ckUiTone === 'info') {
+          setListFetchNotice(uiMessage || null);
+          setListFetch(prev => ({ ...prev, phase: 'idle', message: undefined }));
+          logEvent('list.sorted.prefetch.notice', {
+            kind: (err as any)?.__ckUiKind || null,
+            message: logMessage
+          });
+          return;
+        }
         if (uiMessage) {
           setListFetch(prev => ({ ...prev, phase: 'error', message: uiMessage }));
         } else {
@@ -5401,6 +5417,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   }
 
   const handleSubmit = async (submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => {
+    const bypassSubmitConfirm = summarySubmitIntentRef.current === true;
+    if (bypassSubmitConfirm) {
+      summarySubmitIntentRef.current = false;
+    }
     if (isClosedRecord) {
       setStatus(tSystem('app.closedReadOnly', language, 'Closed (read-only)'));
       setStatusLevel('info');
@@ -5546,7 +5566,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
 
     // Only show the submit confirmation overlay once the form is already valid.
-    if (!submitConfirmedRef.current) {
+    if (!submitConfirmedRef.current && !bypassSubmitConfirm) {
       setSubmitConfirmOpen(true);
       logEvent('ui.submitConfirm.openAfterValidation', {
         configuredMessage: Boolean(definition.submissionConfirmationMessage),
@@ -7015,6 +7035,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           autoFetch={false}
           loading={listFetch.phase === 'loading'}
           prefetching={listFetch.phase === 'prefetching'}
+          notice={listFetchNotice}
           error={listFetch.phase === 'error' ? (listFetch.message || 'Failed to load list.') : null}
           onSelect={handleRecordSelect}
         />

@@ -143,7 +143,7 @@
         "nl": "Record kopiëren"
       },
       "message": {
-        "en": "Select a future production date and verify the customer, service and requested portions information. All changes will be auto-saved and a future dated record will be created.",
+        "en": "Select a future production date and verify the customer, service and ordered portions information. All changes will be auto-saved and a future dated record will be created.",
         "fr": "Sélectionnez une date de production future et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté future sera créé.",
         "nl": "Selecteer een toekomstige productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en een toekomstige gedateerde record wordt aangemaakt."
       },
@@ -875,7 +875,7 @@
                             {
                               "fieldRef": "ORD_QTY",
                               "label": {
-                                "en": "| {{value}} requested portions"
+                                "en": "| {{value}} ordered portions"
                               }
                             }
                           ]
@@ -1325,7 +1325,7 @@
                             {
                               "id": "addLeftover",
                               "label": {
-                                "en": "+ another leftover",
+                                "en": "+ Add leftover",
                                 "fr": "+ une autre restauration",
                                 "nl": "+ een andere restauro"
                               },
@@ -1580,7 +1580,7 @@
             "nl": "Portionering"
           },
           "helpText": {
-            "en": "Update the number of portions delivered to reflect reality. You must deliver at least the requested number of portions.",
+            "en": "Update the number of portions delivered to reflect reality. You must deliver at least the ordered number of portions.",
             "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées.",
             "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren."
           }
@@ -1646,7 +1646,7 @@
       "optionsNl": [],
       "status": "Active",
       "visibility": {
-          "showWhen": {
+        "showWhen": {
           "fieldId": "NEVER_SHOW",
           "equals": "1"
         }
@@ -2179,7 +2179,7 @@
           "Options (EN)": "",
           "Options (FR)": "",
           "Options (NL)": "",
-          "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The maximum photo size is {mb}MB\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
+          "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
           "List View?": "",
@@ -2196,7 +2196,7 @@
           "Options (EN)": "",
           "Options (FR)": "",
           "Options (NL)": "",
-          "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"ORD_QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"ORD_QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"ORD_QTY\",\n        \"applyOn\": \"change\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
+          "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"ORD_QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"ORD_QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than ordered portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"ORD_QTY\",\n        \"applyOn\": \"change\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than ordered portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
           "List View?": "",
@@ -2451,6 +2451,14 @@
               }
             ],
             "selectionEffects": [
+              {
+                "type": "deleteLineItems",
+                "groupId": "MP_TYPE_LI",
+                "when": {
+                  "fieldId": "ORD_QTY",
+                  "equals": 0
+                }
+              },
               {
                 "id": "sync_final_qty_from_ord_qty",
                 "type": "setValue",
@@ -2775,7 +2783,7 @@
                   "nl": "Het maximum aantal foto's is {max}"
                 },
                 "maxFileSizeMb": {
-                  "en": "The maximum photo size is {mb}MB",
+                  "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
                   "fr": "La taille maximale de la photo est de {mb}MB",
                   "nl": "De maximale bestandsgrootte is {mb}MB"
                 }
@@ -2817,7 +2825,7 @@
             "labelNl": "Maaltijden",
             "required": true,
             "requiredMessage": {
-              "en": "Delivered portions must be equal to or greater than requested portions.",
+              "en": "Delivered portions must be equal to or greater than ordered portions.",
               "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
               "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
             },
@@ -2836,7 +2844,7 @@
                   "minFieldId": "ORD_QTY"
                 },
                 "message": {
-                  "en": "Delivered portions must be equal to or greater than requested portions.",
+                  "en": "Delivered portions must be equal to or greater than ordered portions.",
                   "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
                   "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
                 }
@@ -3007,6 +3015,11 @@
               "showItemPill": false,
               "addButtonPlacement": "hidden",
               "openInOverlay": true,
+              "closeButtonLabel": {
+                "en": "Back",
+                "fr": "Retour",
+                "nl": "Terug"
+              },
               "overlayDetail": {
                 "enabled": true,
                 "header": {
@@ -6574,7 +6587,7 @@
                     "cases": [
                       {
                         "text": {
-                          "en": "Please enter the `Quantity` based on the requested number of portions",
+                          "en": "Please enter the `Quantity` based on the ordered number of portions",
                           "fr": "Veuillez entrer la `Quantité` en fonction du nombre de portions demandé",
                           "nl": "Voer de `Aantal` in op basis van het gevraagde aantal porties"
                         },
@@ -6732,11 +6745,11 @@
         }
       },
       "button": {
-        "action": "renderMarkdownTemplate",
+        "action": "renderHtmlTemplate",
         "templateId": {
-          "EN": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
-          "FR": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
-          "NL": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R"
+          "EN": "bundle:ingredients_needed.html",
+          "FR": "bundle:ingredients_needed.html",
+          "NL": "bundle:ingredients_needed.html"
         },
         "placements": [
           "form"
@@ -6818,7 +6831,7 @@
             "nl": "Het maximum aantal foto's is {max}"
           },
           "maxFileSizeMb": {
-            "en": "The maximum photo size is {mb}MB",
+            "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
             "fr": "La taille maximale de la photo est de {mb}MB",
             "nl": "De maximale bestandsgrootte is {mb}MB"
           }
@@ -6855,9 +6868,9 @@
     {
       "id": "MP_NOTES",
       "type": "PARAGRAPH",
-      "qEn": "Notes (optional)",
-      "qFr": "Notes (optionnel)",
-      "qNl": "Notities (optioneel)",
+      "qEn": "Note to customer",
+      "qFr": "Note au client",
+      "qNl": "Notitie aan klant",
       "required": false,
       "ui": {
         "labelLayout": "stacked"
@@ -7705,7 +7718,7 @@
               "Options (EN)": "",
               "Options (FR)": "",
               "Options (NL)": "",
-              "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The maximum photo size is {mb}MB\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
+              "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
               "List View?": "",
@@ -7722,7 +7735,7 @@
               "Options (EN)": "",
               "Options (FR)": "",
               "Options (NL)": "",
-              "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"ORD_QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"ORD_QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"ORD_QTY\",\n        \"applyOn\": \"change\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
+              "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"ORD_QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"ORD_QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than ordered portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"ORD_QTY\",\n        \"applyOn\": \"change\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than ordered portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
               "List View?": "",
@@ -7977,6 +7990,14 @@
                 }
               ],
               "selectionEffects": [
+                {
+                "type": "deleteLineItems",
+                "groupId": "MP_TYPE_LI",
+                "when": {
+                  "fieldId": "ORD_QTY",
+                  "equals": 0
+                }
+              },
                 {
                   "id": "sync_final_qty_from_ord_qty",
                   "type": "setValue",
@@ -8301,7 +8322,7 @@
                     "nl": "Het maximum aantal foto's is {max}"
                   },
                   "maxFileSizeMb": {
-                    "en": "The maximum photo size is {mb}MB",
+                    "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
                     "fr": "La taille maximale de la photo est de {mb}MB",
                     "nl": "De maximale bestandsgrootte is {mb}MB"
                   }
@@ -8343,7 +8364,7 @@
               "labelNl": "Maaltijden",
               "required": true,
               "requiredMessage": {
-                "en": "Delivered portions must be equal to or greater than requested portions.",
+                "en": "Delivered portions must be equal to or greater than ordered portions.",
                 "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
                 "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
               },
@@ -8362,7 +8383,7 @@
                     "minFieldId": "ORD_QTY"
                   },
                   "message": {
-                    "en": "Delivered portions must be equal to or greater than requested portions.",
+                    "en": "Delivered portions must be equal to or greater than ordered portions.",
                     "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
                     "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
                   }
@@ -8533,6 +8554,11 @@
                 "showItemPill": false,
                 "addButtonPlacement": "hidden",
                 "openInOverlay": true,
+                "closeButtonLabel": {
+                  "en": "Back",
+                  "fr": "Retour",
+                  "nl": "Terug"
+                },
                 "overlayDetail": {
                   "enabled": true,
                   "header": {
@@ -12100,7 +12126,7 @@
                       "cases": [
                         {
                           "text": {
-                            "en": "Please enter the `Quantity` based on the requested number of portions",
+                            "en": "Please enter the `Quantity` based on the ordered number of portions",
                             "fr": "Veuillez entrer la `Quantité` en fonction du nombre de portions demandé",
                             "nl": "Voer de `Aantal` in op basis van het gevraagde aantal porties"
                           },
@@ -12138,6 +12164,11 @@
                     },
                     "showItemPill": false,
                     "openInOverlay": true,
+                    "closeButtonLabel": {
+                      "en": "Back",
+                      "fr": "Retour",
+                      "nl": "Terug"
+                    },
                     "addButtonPlacement": "top"
                   },
                   "minRows": 0,
@@ -12218,11 +12249,11 @@
         "pair": "ing_ph",
         "listView": false,
         "button": {
-          "action": "renderMarkdownTemplate",
+          "action": "renderHtmlTemplate",
           "templateId": {
-            "EN": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
-            "FR": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R",
-            "NL": "1sai4j_mp4_1azy7jzIv3vU2MJINvS24R"
+            "EN": "bundle:ingredients_needed.html",
+            "FR": "bundle:ingredients_needed.html",
+            "NL": "bundle:ingredients_needed.html"
           },
           "placements": [
             "form"
@@ -12340,7 +12371,7 @@
               "nl": "Het maximum aantal foto's is {max}"
             },
             "maxFileSizeMb": {
-              "en": "The maximum photo size is {mb}MB",
+              "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
               "fr": "La taille maximale de la photo est de {mb}MB",
               "nl": "De maximale bestandsgrootte is {mb}MB"
             }
@@ -12378,9 +12409,9 @@
         "id": "MP_NOTES",
         "type": "PARAGRAPH",
         "label": {
-          "en": "Notes (optional)",
-          "fr": "Notes (optionnel)",
-          "nl": "Notities (optioneel)"
+          "en": "Note to customer",
+          "fr": "Note au client",
+          "nl": "Notitie aan klant"
         },
         "required": false,
         "ui": {
@@ -12811,7 +12842,7 @@
         "nl": "Record kopiëren"
       },
       "message": {
-        "en": "Select a future production date and verify the customer, service and requested portions information. All changes will be auto-saved and a future dated record will be created.",
+        "en": "Select a future production date and verify the customer, service and ordered portions information. All changes will be auto-saved and a future dated record will be created.",
         "fr": "Sélectionnez une date de production future et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté future sera créé.",
         "nl": "Selecteer een toekomstige productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en een toekomstige gedateerde record wordt aangemaakt."
       },
@@ -13523,7 +13554,7 @@
                             {
                               "fieldRef": "ORD_QTY",
                               "label": {
-                                "en": "| {{value}} requested portions"
+                                "en": "| {{value}} ordered portions"
                               }
                             }
                           ]
@@ -13973,7 +14004,7 @@
                             {
                               "id": "addLeftover",
                               "label": {
-                                "en": "+ another leftover",
+                                "en": "+ Add leftover",
                                 "fr": "+ une autre restauration",
                                 "nl": "+ een andere restauro"
                               },
@@ -14228,7 +14259,7 @@
             "nl": "Portionering"
           },
           "helpText": {
-            "en": "Update the number of portions delivered to reflect reality. You must deliver at least the requested number of portions.",
+            "en": "Update the number of portions delivered to reflect reality. You must deliver at least the ordered number of portions.",
             "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées.",
             "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren."
           }

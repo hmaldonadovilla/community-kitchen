@@ -211,4 +211,63 @@ describe('runSelectionEffects selectionEffect id tagging', () => {
     const rows = lineItems['LINES'] || [];
     expect(rows.map((r: any) => r.id)).toEqual(['p1']);
   });
+
+  it('deletes manually-added subgroup rows when selectionEffects.deleteLineItems triggers', () => {
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'PARENTS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Parents', fr: 'Parents', nl: 'Parents' },
+          required: false,
+          lineItemConfig: {
+            fields: [{ id: 'NAME', type: 'TEXT', label: { en: 'Name', fr: 'Name', nl: 'Name' }, required: false }],
+            subGroups: [
+              {
+                id: 'CHILD',
+                label: { en: 'Child', fr: 'Child', nl: 'Child' },
+                fields: [{ id: 'ITEM', type: 'TEXT', label: { en: 'Item', fr: 'Item', nl: 'Item' }, required: false }]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+
+    let values: Record<string, any> = {};
+    let lineItems: Record<string, any> = {
+      PARENTS: [{ id: 'p1', values: { NAME: 'Parent' } }],
+      'PARENTS::p1::CHILD': [
+        { id: 'c1', values: { ITEM: 'One', __ckRowSource: 'manual' }, parentId: 'p1', parentGroupId: 'PARENTS' },
+        { id: 'c2', values: { ITEM: 'Two', __ckRowSource: 'manual' }, parentId: 'p1', parentGroupId: 'PARENTS' }
+      ]
+    };
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'TRIGGER',
+        selectionEffects: [{ type: 'deleteLineItems', groupId: 'CHILD' }]
+      } as any,
+      value: '1',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues,
+      setLineItems,
+      opts: { lineItem: { groupId: 'PARENTS', rowId: 'p1', rowValues: { NAME: 'Parent' } } }
+    });
+
+    expect(lineItems['PARENTS']?.map((r: any) => r.id)).toEqual(['p1']);
+    expect(lineItems['PARENTS::p1::CHILD']).toEqual([]);
+  });
 });
