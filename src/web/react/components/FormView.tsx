@@ -8743,6 +8743,11 @@ const FormView: React.FC<FormViewProps> = ({
               {overlayHeaderLabel ? <div>{overlayHeaderLabel}</div> : null}
               <div style={srOnly}>{subLabel}</div>
             </div>
+            {overlayHelperText ? (
+              <div className="muted" style={{ margin: '0 6px', whiteSpace: 'pre-line' }}>
+                {overlayHelperText}
+              </div>
+            ) : null}
           </div>
           <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
             <div
@@ -10623,11 +10628,6 @@ const FormView: React.FC<FormViewProps> = ({
           ) : (
             <div className="muted">No items yet. Use “Add line(s)” to start.</div>
           )}
-          {overlayHelperText ? (
-            <div className="muted" style={{ margin: '12px 6px', whiteSpace: 'pre-line' }}>
-              {overlayHelperText}
-            </div>
-          ) : null}
           </div>
         </fieldset>
       </div>,
@@ -11052,6 +11052,11 @@ const FormView: React.FC<FormViewProps> = ({
               {overlayHeaderLabel ? <div>{overlayHeaderLabel}</div> : null}
               <div style={srOnly}>{title}</div>
             </div>
+            {overlayHelperText ? (
+              <div className="muted" style={{ margin: '0 6px', whiteSpace: 'pre-line' }}>
+                {overlayHelperText}
+              </div>
+            ) : null}
           </div>
           <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
             <div
@@ -11612,11 +11617,6 @@ const FormView: React.FC<FormViewProps> = ({
                 }}
               />
             )}
-            {overlayHelperText ? (
-              <div className="muted" style={{ margin: '12px 6px', whiteSpace: 'pre-line' }}>
-                {overlayHelperText}
-              </div>
-            ) : null}
           </div>
         </fieldset>
       </div>,
