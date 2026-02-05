@@ -3,6 +3,9 @@ import { decodePageToken, encodePageToken } from './pagination';
 import { normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } from './recordSchema';
 import { debugLog } from './debug';
 
+const DATA_SOURCE_MAX_TOTAL_ROWS = 10000;
+const DATA_SOURCE_MAX_PAGE_SIZE = 500;
+
 export class DataSourceService {
   private readonly ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private dataSourceCache: Record<string, PaginatedResult<any>>;
@@ -115,10 +118,14 @@ export class DataSourceService {
 
     const offset = decodePageToken(pageToken);
     const maxRows = Math.max(0, sheet.getLastRow() - 1);
-    const cappedTotal = Math.min(maxRows, 200);
+    const cappedTotal = Math.min(maxRows, DATA_SOURCE_MAX_TOTAL_ROWS);
     if (offset >= cappedTotal) return { items: [], totalCount: cappedTotal };
 
-    const size = Math.max(1, Math.min(limit || config.limit || 50, 50));
+    const mode = (config.mode || '').toString().trim().toLowerCase();
+    const defaultPageSize = mode === 'options' ? 250 : 50;
+    const requestedRaw = limit ?? config.limit ?? defaultPageSize;
+    const requested = Number.isFinite(Number(requestedRaw)) ? Number(requestedRaw) : defaultPageSize;
+    const size = Math.max(1, Math.min(requested, DATA_SOURCE_MAX_PAGE_SIZE));
     const readCount = Math.min(size, cappedTotal - offset);
     const rawData = readCount > 0 ? sheet.getRange(2 + offset, 1, readCount, headers.length).getValues() : [];
 

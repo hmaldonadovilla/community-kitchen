@@ -85,6 +85,39 @@ describe('computeAllowedOptions', () => {
     expect(allowed).toEqual(['A', 'C']);
   });
 
+  it('dataSourceField filtering is case-insensitive and tolerant to inconsistent delimiters', () => {
+    const dataSourceFilter = {
+      dependsOn: 'diet',
+      dataSourceField: 'dietary',
+      dataSourceDelimiter: ','
+    };
+    const options = {
+      en: ['A', 'B', 'C', 'D'],
+      raw: [
+        { __ckOptionValue: 'A', dietary: 'VEGAN, VEGETARIAN' },
+        { __ckOptionValue: 'B', dietary: 'Standard / Vegetarian / Vegan' },
+        { __ckOptionValue: 'C', dietary: 'No-salt' },
+        { __ckOptionValue: 'D', dietary: 'Vegetarian' }
+      ]
+    };
+    const allowed = computeAllowedOptions(dataSourceFilter as any, options as any, ['vegetarian']);
+    expect(allowed).toEqual(['A', 'B', 'D']);
+  });
+
+  it('dataSourceField filtering trims option values for matching against options.en', () => {
+    const dataSourceFilter = {
+      dependsOn: 'diet',
+      dataSourceField: 'dietary',
+      dataSourceDelimiter: ','
+    };
+    const options = {
+      en: ['Tajine'],
+      raw: [{ __ckOptionValue: 'Tajine ', dietary: 'Standard, Vegetarian' }]
+    };
+    const allowed = computeAllowedOptions(dataSourceFilter as any, options as any, ['Vegetarian']);
+    expect(allowed).toEqual(['Tajine']);
+  });
+
   it('bypasses optionMap filtering when dependency value matches bypassValues', () => {
     const bypassFilter = {
       dependsOn: 'x',

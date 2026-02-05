@@ -6712,8 +6712,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "FR": "1eqlnWV2DAqjKCOCwRLdatAOXMtbxGm-cKwoVgdQDdxk"
         },
         "emailSubject": {
-          "en": "Meal production summary",
-          "fr": "Synthèse production"
+          "en": "Suivi de production des repas",
+          "fr": "Suivi de production des repas",
+          "nl": "Suivi de production des repas"
         },
         "emailRecipients": [
           {
@@ -8925,7 +8926,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Label EN": "Add photo",
             "Label FR": "Ajouter une photo",
             "Label NL": "Foto toevoegen",
-            "Required?": true,
+            "Required?": false,
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
@@ -9517,7 +9518,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Add photo",
               "labelFr": "Ajouter une photo",
               "labelNl": "Foto toevoegen",
-              "required": true,
+              "required": false,
               "requiredMessage": {
                 "en": "Add one photo per cooking pot.",
                 "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -9560,7 +9561,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "optionsNl": [],
               "uploadConfig": {
                 "destinationFolderId": "1xiEjwfcbMaF6XqqAPlqbA8LNd5HiwjGV",
-                "minFiles": 1,
+                "minFiles": 0,
                 "maxFiles": 5,
                 "maxFileSizeMb": 10,
                 "allowedMimeTypes": [
@@ -14495,7 +14496,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Label EN": "Add photo",
                 "Label FR": "Ajouter une photo",
                 "Label NL": "Foto toevoegen",
-                "Required?": true,
+                "Required?": false,
                 "Options (EN)": "",
                 "Options (FR)": "",
                 "Options (NL)": "",
@@ -15087,7 +15088,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelEn": "Add photo",
                 "labelFr": "Ajouter une photo",
                 "labelNl": "Foto toevoegen",
-                "required": true,
+                "required": false,
                 "requiredMessage": {
                   "en": "Add one photo per cooking pot.",
                   "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -15130,7 +15131,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 ],
                 "uploadConfig": {
                   "destinationFolderId": "1xiEjwfcbMaF6XqqAPlqbA8LNd5HiwjGV",
-                  "minFiles": 1,
+                  "minFiles": 0,
                   "maxFiles": 5,
                   "maxFileSizeMb": 10,
                   "allowedMimeTypes": [
@@ -19591,8 +19592,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "FR": "1eqlnWV2DAqjKCOCwRLdatAOXMtbxGm-cKwoVgdQDdxk"
         },
         "emailSubject": {
-          "en": "Meal production summary",
-          "fr": "Synthèse production"
+          "en": "Suivi de production des repas",
+          "fr": "Suivi de production des repas",
+          "nl": "Suivi de production des repas"
         },
         "emailRecipients": [
           {
