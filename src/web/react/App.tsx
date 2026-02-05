@@ -1292,6 +1292,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const autoSaveInFlightRef = useRef<boolean>(false);
   const autoSaveQueuedRef = useRef<boolean>(false);
   const autoSaveUserEditedRef = useRef<boolean>(false);
+  const [autoSaveHold, setAutoSaveHold] = useState<{ hold: boolean; reason?: string }>(() => ({ hold: false }));
+  const autoSaveHoldRef = useRef<{ hold: boolean; reason?: string }>({ hold: false });
+  const prevAutoSaveHoldRef = useRef<boolean>(false);
   const lastUserInteractionRef = useRef<number>(0);
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   /**
@@ -1308,6 +1311,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const syncUploadQueueSize = useCallback(() => {
     setUploadQueueSize(uploadQueueRef.current.size);
   }, []);
+
+  useEffect(() => {
+    autoSaveHoldRef.current = autoSaveHold;
+  }, [autoSaveHold]);
+
+  const setAutoSaveHoldFromUi = useCallback(
+    (hold: boolean, meta?: { reason?: string }) => {
+      const nextHold = !!hold;
+      const nextReason = (meta?.reason || '').toString().trim();
+      setAutoSaveHold(prev => {
+        if (prev.hold === nextHold && (prev.reason || '') === nextReason) return prev;
+        return { hold: nextHold, reason: nextReason || undefined };
+      });
+      if (nextHold) {
+        if (autoSaveTimerRef.current) {
+          globalThis.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+        logEvent('autosave.hold.enabled', { reason: nextReason || null });
+        return;
+      }
+      logEvent('autosave.hold.disabled', { reason: nextReason || null });
+    },
+    [logEvent]
+  );
 
   // Keep latest values in refs so autosave can run without stale closures.
   const viewRef = useRef<View>(view);
@@ -1543,6 +1571,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     total?: number;
     pages?: number;
   }>(() => ({ phase: 'idle' }));
+  const [listFetchNotice, setListFetchNotice] = useState<string | null>(null);
   const listFetchSeqRef = useRef(0);
   const listPrefetchKeyRef = useRef<string>('');
   const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
@@ -1651,6 +1680,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     const projection = listViewProjection.length ? listViewProjection : undefined;
     const hasExisting = Boolean(listCache.response?.items?.length);
 
+    setListFetchNotice(null);
     setListFetch({
       phase: hasExisting ? 'prefetching' : 'loading',
       loaded: hasExisting ? (listCache.response?.items?.length || 0) : 0,
@@ -1714,7 +1744,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             const resType = batch === null ? 'null' : typeof batch;
             const keys = batch && typeof batch === 'object' ? Object.keys(batch as any).slice(0, 15) : [];
             logEvent('list.sorted.prefetch.invalidResponse', { resType, keys, token: args.token || null, pageIndex: args.pageIndex });
-            throw new Error('The server returned invalid list data (fetchSubmissionsSortedBatch).');
+            const err: any = new Error(
+              'Recent activity is temporarily unavailable. Your data is safe. Please refresh the page or try again in a moment'
+            );
+            err.__ckUiTone = 'info';
+            err.__ckUiKind = 'list_prefetch_unavailable';
+            throw err;
           }
           return { list, batch, token: args.token, pageIndex: args.pageIndex };
         };
@@ -1828,6 +1863,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         if (seq !== listFetchSeqRef.current) return;
         const uiMessage = resolveUiErrorMessage(err, 'Failed to load list.');
         const logMessage = resolveLogMessage(err, 'Failed to load list.');
+        if ((err as any)?.__ckUiTone === 'info') {
+          setListFetchNotice(uiMessage || null);
+          setListFetch(prev => ({ ...prev, phase: 'idle', message: undefined }));
+          logEvent('list.sorted.prefetch.notice', {
+            kind: (err as any)?.__ckUiKind || null,
+            message: logMessage
+          });
+          return;
+        }
         if (uiMessage) {
           setListFetch(prev => ({ ...prev, phase: 'error', message: uiMessage }));
         } else {
@@ -2071,7 +2115,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       const message = tSystem(
         'record.stale',
         languageRef.current,
-        'This record was modified by another user. Please refresh.'
+        'This record was updated by another user or automatically by the system, tap Refresh to continue.'
       );
       const next: RecordStaleInfo = { recordId: id, message, cachedVersion, serverVersion, serverRow };
       recordStaleRef.current = next;
@@ -4344,6 +4388,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         return;
       }
 
+      if (autoSaveHoldRef.current?.hold) {
+        autoSaveQueuedRef.current = true;
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.hold', { reason, holdReason: autoSaveHoldRef.current.reason || null });
+        return;
+      }
+
       // In create-flow, do not autosave until the user actually changes a field value.
       if (createFlowRef.current && !createFlowUserEditedRef.current) return;
 
@@ -4721,6 +4772,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     setView('summary');
   }, [flushAutoSaveBeforeNavigate, summaryViewEnabled]);
 
+  // When a UI flow temporarily holds autosave (e.g., leftovers overlay), persist any queued changes
+  // immediately once the hold is released (user returns to the main steps UI).
+  useEffect(() => {
+    const prev = prevAutoSaveHoldRef.current;
+    const next = !!autoSaveHold.hold;
+    if (prev === next) return;
+    prevAutoSaveHoldRef.current = next;
+    if (!prev || next) return; // only act on true -> false
+
+    if (!autoSaveEnabled) return;
+    if (viewRef.current !== 'form') return;
+    if (submittingRef.current) return;
+    if (recordStaleRef.current) return;
+    if (!autoSaveDirtyRef.current && !autoSaveQueuedRef.current) return;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    logEvent('autosave.hold.release.flush', {
+      holdReason: autoSaveHold.reason || null,
+      dirty: autoSaveDirtyRef.current,
+      queued: autoSaveQueuedRef.current
+    });
+    void performAutoSave('autosaveHold.release');
+  }, [autoSaveEnabled, autoSaveHold.hold, autoSaveHold.reason, logEvent, performAutoSave]);
+
   // Release autosave hold after dedup evaluation completes (or keys become incomplete),
   // and persist any pending changes once it's safe.
   useEffect(() => {
@@ -4808,6 +4885,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       return;
     }
 
+    if (autoSaveHoldRef.current?.hold) {
+      autoSaveQueuedRef.current = true;
+      autoSaveDirtyRef.current = true;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      logEvent('autosave.blocked.hold', { reason: 'debouncedTrigger', holdReason: autoSaveHoldRef.current.reason || null });
+      return;
+    }
+
     autoSaveDirtyRef.current = true;
     if (uploadQueueRef.current.size > 0) {
       // Don't schedule autosave while uploads are persisting (avoid stale self-races).
@@ -4868,7 +4956,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           success: false,
           message:
             recordStaleRef.current.message ||
-            tSystem('record.stale', languageRef.current, 'This record was modified by another user. Please refresh.')
+            tSystem(
+              'record.stale',
+              languageRef.current,
+              'This record was updated by another user or automatically by the system, tap Refresh to continue.'
+            )
         };
       }
 
@@ -5401,6 +5493,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   }
 
   const handleSubmit = async (submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => {
+    const bypassSubmitConfirm = summarySubmitIntentRef.current === true;
+    if (bypassSubmitConfirm) {
+      summarySubmitIntentRef.current = false;
+    }
     if (isClosedRecord) {
       setStatus(tSystem('app.closedReadOnly', language, 'Closed (read-only)'));
       setStatusLevel('info');
@@ -5546,7 +5642,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
 
     // Only show the submit confirmation overlay once the form is already valid.
-    if (!submitConfirmedRef.current) {
+    if (!submitConfirmedRef.current && !bypassSubmitConfirm) {
       setSubmitConfirmOpen(true);
       logEvent('ui.submitConfirm.openAfterValidation', {
         configuredMessage: Boolean(definition.submissionConfirmationMessage),
@@ -6587,55 +6683,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       </div>
     ) : null;
 
-  const recordStaleTopNotice =
-    (view === 'form' || view === 'summary') && recordStale ? (
-      <div
-        role="status"
-        aria-live="polite"
-        style={{
-          padding: '12px 14px',
-          borderRadius: 14,
-          border: '1px solid var(--border)',
-          background: 'transparent',
-          color: 'var(--text)',
-          fontWeight: 600,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10
-        }}
-      >
-        <div>{recordStale.message}</div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => {
-              const id = (recordStale.recordId || selectedRecordIdRef.current || '').toString().trim();
-              if (!id) return;
-              const row = recordStale.serverRow;
-              // Cancel any pending autosave while we refresh.
-              autoSaveDirtyRef.current = false;
-              if (autoSaveTimerRef.current) {
-                globalThis.clearTimeout(autoSaveTimerRef.current);
-                autoSaveTimerRef.current = null;
-              }
-              setDraftSave({ phase: 'idle' });
-              logEvent('record.stale.refresh.click', { recordId: id, rowNumberHint: row || null });
-              void loadRecordSnapshot(id, row);
-            }}
-            style={{
-              padding: '10px 12px',
-              borderRadius: 12,
-              border: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text)',
-              fontWeight: 600
-            }}
-          >
-            {tSystem('record.refresh', language, 'Refresh record')}
-          </button>
-        </div>
-      </div>
-    ) : null;
+  const refreshStaleRecord = useCallback(() => {
+    const stale = recordStaleRef.current || recordStale;
+    const id = (stale?.recordId || selectedRecordIdRef.current || '').toString().trim();
+    if (!id) return;
+    const row = stale?.serverRow;
+    // Cancel any pending autosave while we refresh.
+    autoSaveDirtyRef.current = false;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setDraftSave({ phase: 'idle' });
+    logEvent('record.stale.refresh.click', { recordId: id, rowNumberHint: row || null, source: 'dialog' });
+    void loadRecordSnapshot(id, row || undefined);
+  }, [loadRecordSnapshot, logEvent, recordStale]);
 
   const submitTopErrorMessage = resolveLocalizedString(
     definition.submitValidation?.submitTopErrorMessage,
@@ -6663,10 +6725,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     view === 'form' && (definition as any)?.steps?.mode === 'guided' ? <div id="ck-guided-stepsbar-slot" /> : null;
 
   const topBarNotice =
-    guidedStepsTopSlot || recordStaleTopNotice || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
+    guidedStepsTopSlot || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {guidedStepsTopSlot}
-        {recordStaleTopNotice}
         {dedupCheckingNotice}
         {dedupTopNotice}
         {validationTopNotice}
@@ -6906,7 +6967,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         position="top"
         language={language}
         view={view}
-        disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
+        disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking}
         submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
@@ -6981,6 +7042,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           dedupNavigationBlocked={dedupNavigationBlocked}
           guidedForwardNavigationBlocked={submitDisabledByGate}
           openConfirmDialog={customConfirm.openConfirm}
+          setAutoSaveHold={setAutoSaveHoldFromUi}
           summarySubmitIntentRef={summarySubmitIntentRef}
         />
       ) : null}
@@ -7015,10 +7077,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           autoFetch={false}
           loading={listFetch.phase === 'loading'}
           prefetching={listFetch.phase === 'prefetching'}
+          notice={listFetchNotice}
           error={listFetch.phase === 'error' ? (listFetch.message || 'Failed to load list.') : null}
           onSelect={handleRecordSelect}
         />
       )}
+
+      <ConfirmDialogOverlay
+        open={(view === 'form' || view === 'summary') && Boolean(recordStale)}
+        title={tSystem('record.stale.title', language, 'Refresh to continue')}
+        message={
+          (recordStale?.message ||
+            tSystem(
+              'record.stale',
+              language,
+              'This record was updated by another user or automatically by the system, tap Refresh to continue.'
+            )) as any
+        }
+        confirmLabel={tSystem('record.refresh.short', language, 'Refresh')}
+        cancelLabel={tSystem('common.cancel', language, 'Cancel')}
+        showCancel={false}
+        dismissOnBackdrop={false}
+        showCloseButton={false}
+        zIndex={12060}
+        onCancel={() => undefined}
+        onConfirm={refreshStaleRecord}
+      />
 
       <ConfirmDialogOverlay
         open={autoSaveNoticeOpen && view === 'form'}
@@ -7145,6 +7229,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         message={customConfirm.state.message || ''}
         confirmLabel={customConfirm.state.confirmLabel || tSystem('common.confirm', language, 'Confirm')}
         cancelLabel={customConfirm.state.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
+        showCancel={customConfirm.state.showCancel}
+        showConfirm={customConfirm.state.showConfirm}
+        dismissOnBackdrop={customConfirm.state.dismissOnBackdrop}
+        showCloseButton={customConfirm.state.showCloseButton}
         onCancel={customConfirm.cancel}
         onConfirm={customConfirm.confirm}
       />
@@ -7189,7 +7277,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         position="bottom"
         language={language}
         view={view}
-        disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking}
+        disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking}
         submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}

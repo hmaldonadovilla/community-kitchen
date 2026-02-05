@@ -37,6 +37,7 @@ interface ListViewProps {
   autoFetch?: boolean;
   loading?: boolean;
   prefetching?: boolean;
+  notice?: string | null;
   error?: string | null;
 }
 
@@ -54,6 +55,7 @@ const ListView: React.FC<ListViewProps> = ({
   autoFetch = true,
   loading: loadingProp,
   prefetching: prefetchingProp,
+  notice: noticeProp,
   error: errorProp
 }) => {
   const uiDisabled = Boolean(disabled);
@@ -101,6 +103,7 @@ const ListView: React.FC<ListViewProps> = ({
   const uiLoading = loadingProp !== undefined ? Boolean(loadingProp) : loading;
   const uiPrefetching = prefetchingProp !== undefined ? Boolean(prefetchingProp) : prefetching;
   const uiError = errorProp !== undefined ? errorProp : error;
+  const uiNotice = noticeProp !== undefined ? noticeProp : null;
   const hasExternalLoadingSignal = loadingProp !== undefined;
   const assumeInitialLoad = autoFetch || hasExternalLoadingSignal;
   const [hasLoadedOnce, setHasLoadedOnce] = useState<boolean>(() => (cachedResponse !== undefined ? cachedResponse !== null : false));
@@ -1652,6 +1655,10 @@ const ListView: React.FC<ListViewProps> = ({
         ) : uiPrefetching ? (
           <div className="status muted" style={{ opacity: 0.9 }}>
             {tSystem('list.loadingMore', language, 'Loading more…')}
+          </div>
+        ) : uiNotice ? (
+          <div className="status muted" style={{ opacity: 0.9 }} role="note">
+            {uiNotice}
           </div>
         ) : null}
 

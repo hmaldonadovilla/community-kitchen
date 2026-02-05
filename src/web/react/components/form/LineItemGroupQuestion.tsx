@@ -31,6 +31,7 @@ import {
 import type { OverlayCloseConfirmLike } from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
+import { formatDateEeeDdMmmYyyy } from '../../utils/valueDisplay';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
 import {
@@ -554,7 +555,7 @@ export const LineItemGroupQuestion: React.FC<{
 
       const labels = rawValues.map(val => {
         if (val === undefined || val === null) return '';
-        if (field?.type === 'DATE') return toDateInputValue(val) || val.toString();
+        if (field?.type === 'DATE') return formatDateEeeDdMmmYyyy(val, language) || val.toString();
         if (typeof val === 'boolean') {
           return val ? tSystem('common.yes', language, 'Yes') : tSystem('common.no', language, 'No');
         }
@@ -586,38 +587,64 @@ export const LineItemGroupQuestion: React.FC<{
             rowValues: args.rowValues || {},
             references: args.rowFlowState.references
           });
-          if (!target?.fieldId) return '';
-          const valuesForField = (target.rows || []).flatMap(entry =>
-            normalizeValueList((entry.row?.values || {})[target.fieldId])
-          );
-          if (!valuesForField.length) return '';
-          const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
-          const format =
-            valuesForField.length > 1 ? { type: 'list' as const, listDelimiter: ', ' } : undefined;
-          const display = field
-            ? resolveRowFlowDisplayValue(
-                {
-                  id: fieldRef,
-                  config: { fieldRef, format },
-                  target,
-                  values: valuesForField
-                } as RowFlowResolvedSegment,
-                target.groupKey,
-                field,
-                target.parentValues
-              )
-            : { text: valuesForField.map(val => (val ?? '').toString()).filter(Boolean).join(', '), hasValue: true };
-          if (!display.text) return '';
+
+          const valuesForField = (() => {
+            if (target?.fieldId) {
+              return (target.rows || []).flatMap(entry => normalizeValueList((entry.row?.values || {})[target.fieldId]));
+            }
+            return [];
+          })();
+
+          const resolveFallbackText = (): string => {
+            const topVals = normalizeValueList(resolveTopValue(fieldRef));
+            if (!topVals.length) return '';
+            const text = topVals
+              .map(v => {
+                if (v === undefined || v === null) return '';
+                if (fieldRef === 'MP_PREP_DATE') return formatDateEeeDdMmmYyyy(v, language) || v.toString();
+                if (typeof v === 'boolean') {
+                  return v ? tSystem('common.yes', language, 'Yes') : tSystem('common.no', language, 'No');
+                }
+                return v.toString();
+              })
+              .filter(Boolean)
+              .join(', ');
+            return text;
+          };
+
+          const displayText = (() => {
+            if (target?.fieldId && valuesForField.length) {
+              const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
+              const format = valuesForField.length > 1 ? { type: 'list' as const, listDelimiter: ', ' } : undefined;
+              const display = field
+                ? resolveRowFlowDisplayValue(
+                    {
+                      id: fieldRef,
+                      config: { fieldRef, format },
+                      target,
+                      values: valuesForField
+                    } as RowFlowResolvedSegment,
+                    target.groupKey,
+                    field,
+                    target.parentValues
+                  )
+                : { text: valuesForField.map(val => (val ?? '').toString()).filter(Boolean).join(', '), hasValue: true };
+              return display.text || '';
+            }
+            return resolveFallbackText();
+          })();
+
+          if (!displayText) return '';
           const label = resolveLocalizedString(entry?.label, language, '');
-          if (!label) return display.text;
+          if (!label) return displayText;
           return label.includes('{{value}}')
-            ? label.replace('{{value}}', display.text)
-            : `${label}: ${display.text}`;
+            ? label.replace('{{value}}', displayText)
+            : `${label}: ${displayText}`;
         })
         .filter(Boolean);
       return parts.join(' ');
     },
-    [language, q.id, resolveRowFlowDisplayValue, resolveRowFlowFieldConfig]
+    [language, q.id, resolveRowFlowDisplayValue, resolveRowFlowFieldConfig, resolveTopValue]
   );
 
   const mergeOverlayDetailConfig = (base: any, override: any) => {
@@ -667,9 +694,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
   const title = cfg.title !== undefined && cfg.title !== null ? resolveLocalizedString(cfg.title, language, '').trim() : undefined;
   const helperText =
     cfg.helperText !== undefined && cfg.helperText !== null ? resolveLocalizedString(cfg.helperText, language, '').trim() : undefined;
+  const searchHelperText =
+    cfg.searchHelperText !== undefined && cfg.searchHelperText !== null
+      ? resolveLocalizedString(cfg.searchHelperText, language, '').trim()
+      : undefined;
   const placeholder =
     cfg.placeholder !== undefined && cfg.placeholder !== null ? resolveLocalizedString(cfg.placeholder, language, '').trim() : undefined;
-  return { title, helperText, placeholder };
+  return { title, helperText, searchHelperText, placeholder };
 };
 
   const buildOverlayGroupOverride = (group: WebQuestionDefinition, override?: LineItemGroupConfigOverride) => {
@@ -1656,12 +1687,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     indexedCount
                   });
                   const addOverlayCopy = resolveAddOverlayCopy(q.lineItemConfig, language);
-                  if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.placeholder) {
+                  if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.searchHelperText || addOverlayCopy.placeholder) {
                     onDiagnostic?.('ui.lineItems.overlay.copy.override', {
                       groupId: q.id,
                       scope: 'lineItemGroup',
                       hasTitle: !!addOverlayCopy.title,
                       hasHelperText: !!addOverlayCopy.helperText,
+                      hasSearchHelperText: !!addOverlayCopy.searchHelperText,
                       hasPlaceholder: !!addOverlayCopy.placeholder
                     });
                   }
@@ -1673,6 +1705,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     selected: [],
                     title: addOverlayCopy.title,
                     helperText: addOverlayCopy.helperText,
+                    searchHelperText: addOverlayCopy.searchHelperText,
                     placeholder: addOverlayCopy.placeholder
                   });
                 }}
@@ -2550,8 +2583,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
               const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
               const readOnly = (field as any)?.readOnly === true;
-              const showEyeIcon = readOnly || maxed || items.length > 0;
-              const LeftIcon = showEyeIcon ? EyeIcon : SlotIcon;
+              const hasFiles = items.length > 0;
+              const viewMode = readOnly || maxed || hasFiles;
+              const LeftIcon = viewMode ? EyeIcon : SlotIcon;
+              const leftLabel = viewMode
+                ? tSystem('files.view', language, 'View photos')
+                : tSystem('files.add', language, 'Add photo');
+              const cameraStyleBase = viewMode
+                ? buttonStyles.secondary
+                : isEmpty
+                  ? buttonStyles.primary
+                  : buttonStyles.secondary;
               const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
                 ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
               );
@@ -2583,6 +2625,34 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   <div className="ck-upload-row ck-upload-row--table">
                     <button
                       type="button"
+                      className="ck-upload-camera-btn"
+                      disabled={submitting}
+                      style={withDisabled(cameraStyleBase, submitting)}
+                      aria-label={leftLabel}
+                      title={leftLabel}
+                      onClick={() => {
+                        if (submitting) return;
+                        if (viewMode) {
+                          onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
+                          openFileOverlay({
+                            scope: 'line',
+                            title: resolveFieldLabel(field, language, field.id),
+                            group: q,
+                            rowId: row.id,
+                            field,
+                            fieldPath
+                          });
+                          return;
+                        }
+                        if (readOnly) return;
+                        onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
+                        fileInputsRef.current[fieldPath]?.click();
+                      }}
+                    >
+                      <LeftIcon style={{ width: '62%', height: '62%' }} />
+                    </button>
+                    <button
+                      type="button"
                       className={`ck-progress-pill ck-upload-pill-btn ck-upload-pill-btn--table ${pillClass}`}
                       aria-disabled={submitting ? 'true' : undefined}
                       aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
@@ -2603,7 +2673,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         });
                       }}
                     >
-                      <LeftIcon style={{ width: '1.1em', height: '1.1em' }} />
+                      {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
                       <span>{pillText}</span>
                       <span className="ck-progress-label">
                         {tSystem('files.open', language, tSystem('common.open', language, 'Open'))}

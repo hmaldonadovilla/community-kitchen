@@ -4307,6 +4307,9 @@ components:
         helperText:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional helper text shown under the title in the multi-select add overlay.
+        searchHelperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper text shown under the overlay search input.
         placeholder:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional placeholder text for the overlay search input.
