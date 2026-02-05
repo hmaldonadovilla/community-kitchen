@@ -16,6 +16,8 @@ const cache: Map<CacheKey, any> = new Map();
 const inflight: Map<CacheKey, Promise<any>> = new Map();
 const RUNNER_RETRY_DELAY = 150;
 const RUNNER_MAX_ATTEMPTS = 20;
+const OPTIONS_AUTO_PAGE_MAX_PAGES = 80;
+const OPTIONS_AUTO_PAGE_MAX_ITEMS = 20000;
 
 // Optional lightweight persistence for stable data sources. This is intentionally
 // conservative: only used when localStorage is available and JSON parsing succeeds.
@@ -126,6 +128,8 @@ export async function fetchDataSource(
   opts?: { forceRefresh?: boolean }
 ): Promise<any> {
   const cacheKey = key(config, language);
+  const mode = ((config as any)?.mode || '').toString().trim().toLowerCase();
+  const autoPage = mode === 'options';
 
   if (!opts?.forceRefresh) {
     if (cache.has(cacheKey)) return cache.get(cacheKey);
@@ -135,60 +139,158 @@ export async function fetchDataSource(
     // Best-effort persisted cache for stable/master data sources.
     const persisted = loadPersisted(config, language);
     if (persisted) {
-      cache.set(cacheKey, persisted);
-      return persisted;
+      const hasMore = autoPage && typeof (persisted as any)?.nextPageToken === 'string' && !!(persisted as any)?.nextPageToken;
+      if (!hasMore) {
+        cache.set(cacheKey, persisted);
+        return persisted;
+      }
+      // Fall through: complete pagination so we don't get stuck returning only the first page.
     }
   }
 
   const inflightExisting = inflight.get(cacheKey);
   if (inflightExisting) return inflightExisting;
 
-  const promise = new Promise((resolve) => {
-    let attempts = 0;
+  const promise = (async () => {
+    const callPage = async (pageToken?: string): Promise<any> => {
+      return new Promise((resolve) => {
+        let attempts = 0;
 
-    const attempt = () => {
-      const scriptRun = google?.script?.run;
-      if (!scriptRun) {
-        attempts += 1;
-        if (attempts === 1) {
-          emitLog('info', '[DataSource] google.script.run not ready, retrying', { id: config.id });
-        }
-        if (attempts > RUNNER_MAX_ATTEMPTS) {
-          emitLog('error', '[DataSource] google.script.run never became ready', { id: config.id });
-          resolve(null);
-          return;
-        }
-        setTimeout(attempt, RUNNER_RETRY_DELAY);
-        return;
-      }
-
-      try {
-        scriptRun
-          .withSuccessHandler((res: any) => {
-            emitLog('info', '[DataSource] fetchDataSource success', {
-              id: config.id,
-              itemCount: Array.isArray(res?.items) ? res.items.length : Array.isArray(res) ? res.length : 0,
-              refreshed: Boolean(opts?.forceRefresh)
-            });
-            cache.set(cacheKey, res);
-            if (res) {
-              savePersisted(config, language, res);
+        const attempt = () => {
+          const scriptRun = google?.script?.run;
+          if (!scriptRun) {
+            attempts += 1;
+            if (attempts === 1) {
+              emitLog('info', '[DataSource] google.script.run not ready, retrying', { id: config.id });
             }
-            resolve(res);
-          })
-          .withFailureHandler((err: any) => {
-            emitLog('error', '[DataSource] fetchDataSource failed', { id: config.id, err, refreshed: Boolean(opts?.forceRefresh) });
+            if (attempts > RUNNER_MAX_ATTEMPTS) {
+              emitLog('error', '[DataSource] google.script.run never became ready', { id: config.id });
+              resolve(null);
+              return;
+            }
+            setTimeout(attempt, RUNNER_RETRY_DELAY);
+            return;
+          }
+
+          try {
+            scriptRun
+              .withSuccessHandler((res: any) => resolve(res))
+              .withFailureHandler((err: any) => {
+                emitLog('error', '[DataSource] fetchDataSource failed', {
+                  id: config.id,
+                  err,
+                  refreshed: Boolean(opts?.forceRefresh),
+                  pageToken: pageToken || null
+                });
+                resolve(null);
+              })
+              .fetchDataSource?.(config, language, config.projection, config.limit, pageToken);
+          } catch (err) {
+            emitLog('error', '[DataSource] fetchDataSource threw synchronously', {
+              id: config.id,
+              refreshed: Boolean(opts?.forceRefresh),
+              pageToken: pageToken || null,
+              err
+            });
             resolve(null);
-          })
-          .fetchDataSource?.(config, language, config.projection, config.limit, undefined);
-      } catch (_) {
-        emitLog('error', '[DataSource] fetchDataSource threw synchronously', { id: config.id, refreshed: Boolean(opts?.forceRefresh) });
-        resolve(null);
-      }
+          }
+        };
+
+        attempt();
+      });
     };
 
-    attempt();
-  }).finally(() => {
+    const seedPersisted = !opts?.forceRefresh ? loadPersisted(config, language) : null;
+    const shouldSeed = autoPage && seedPersisted && typeof (seedPersisted as any)?.nextPageToken === 'string' && !!(seedPersisted as any)?.nextPageToken;
+    const seededItems: any[] = shouldSeed
+      ? Array.isArray((seedPersisted as any)?.items)
+        ? (seedPersisted as any).items
+        : Array.isArray(seedPersisted)
+          ? (seedPersisted as any)
+          : []
+      : [];
+    const seededNextPageToken: string | undefined = shouldSeed ? (seedPersisted as any)?.nextPageToken : undefined;
+
+    let pages = 0;
+    let mergedItems: any[] = seededItems.slice();
+    let pageToken: string | undefined = seededNextPageToken;
+    let firstRes: any = shouldSeed ? seedPersisted : null;
+    let lastRes: any = null;
+
+    while (true) {
+      if (!autoPage && pages > 0) break;
+      if (autoPage && pages >= OPTIONS_AUTO_PAGE_MAX_PAGES) {
+        emitLog('warn', '[DataSource] pagination stopped (max pages)', { id: config.id, pages, items: mergedItems.length });
+        break;
+      }
+      if (autoPage && mergedItems.length >= OPTIONS_AUTO_PAGE_MAX_ITEMS) {
+        emitLog('warn', '[DataSource] pagination stopped (max items)', { id: config.id, pages, items: mergedItems.length });
+        break;
+      }
+
+      const res = await callPage(pageToken);
+      pages += 1;
+      if (!res) return null;
+
+      if (!firstRes) firstRes = res;
+      lastRes = res;
+
+      if (Array.isArray(res)) {
+        // Legacy / non-paginated payload shape.
+        mergedItems = res;
+        pageToken = undefined;
+        break;
+      }
+
+      const pageItems = Array.isArray((res as any)?.items) ? (res as any).items : [];
+      if (!pageItems.length && !(res as any)?.nextPageToken) {
+        // Nothing returned and no more pages. Preserve the merged (seeded) items.
+        pageToken = undefined;
+        break;
+      }
+      mergedItems.push(...pageItems);
+
+      const next = typeof (res as any)?.nextPageToken === 'string' ? ((res as any).nextPageToken as string) : '';
+      pageToken = autoPage && next ? next : undefined;
+
+      const totalCount = Number((res as any)?.totalCount);
+      if (autoPage && Number.isFinite(totalCount) && totalCount > 0 && mergedItems.length >= totalCount) {
+        pageToken = undefined;
+      }
+
+      if (!autoPage || !pageToken) break;
+    }
+
+    const finalRes = (() => {
+      if (Array.isArray(firstRes)) return mergedItems;
+      if (firstRes && typeof firstRes === 'object') {
+        const base = firstRes || {};
+        const totalCount = Number((lastRes as any)?.totalCount ?? (base as any)?.totalCount);
+        const nextPageToken = autoPage ? undefined : (lastRes as any)?.nextPageToken ?? (base as any)?.nextPageToken;
+        return {
+          ...base,
+          items: mergedItems,
+          nextPageToken,
+          totalCount: Number.isFinite(totalCount) ? totalCount : mergedItems.length
+        };
+      }
+      return { items: mergedItems, nextPageToken: undefined, totalCount: mergedItems.length };
+    })();
+
+    emitLog('info', '[DataSource] fetchDataSource success', {
+      id: config.id,
+      itemCount: Array.isArray((finalRes as any)?.items) ? (finalRes as any).items.length : Array.isArray(finalRes) ? finalRes.length : 0,
+      pages: autoPage ? pages : 1,
+      resumedFromPersisted: Boolean(shouldSeed),
+      refreshed: Boolean(opts?.forceRefresh)
+    });
+
+    cache.set(cacheKey, finalRes);
+    if (finalRes) {
+      savePersisted(config, language, finalRes);
+    }
+    return finalRes;
+  })().finally(() => {
     inflight.delete(cacheKey);
   });
 

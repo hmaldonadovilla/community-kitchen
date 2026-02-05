@@ -141,14 +141,14 @@ export const loadOptionsFromDataSource = async (
     const rawWithValue = items.map((row: any) => {
       if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
       const rawVal = row?.[valueKey];
-      const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString();
+      const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString().trim();
       if (!val) return row;
       return { ...row, __ckOptionValue: val };
     });
     const mappedValues = items
       .map((row: any) => {
         const rawVal = row?.[valueKey];
-        const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString();
+        const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString().trim();
         if (val && dataSource.tooltipField && row?.[dataSource.tooltipField] !== undefined) {
           const tooltip = row[dataSource.tooltipField];
           if (tooltip !== null && tooltip !== undefined && tooltip !== '') {

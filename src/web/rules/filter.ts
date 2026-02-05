@@ -45,6 +45,24 @@ const splitDelimitedValues = (raw: string, delimiter?: string): string[] => {
     .filter(Boolean);
 };
 
+const normalizeToken = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return '';
+  return value.toString().trim().replace(/\s+/g, ' ').toLowerCase();
+};
+
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const containsTokenAsWord = (text: string, token: string): boolean => {
+  const t = normalizeToken(text);
+  const q = normalizeToken(token);
+  if (!t || !q) return false;
+  if (t === q) return true;
+  // Match token as a standalone "word-ish" segment (avoid partial matches like "nonvegan").
+  // Tokens may contain spaces/hyphens, so we use a boundary defined as non-alphanumeric.
+  const re = new RegExp(`(^|[^a-z0-9])${escapeRegex(q)}([^a-z0-9]|$)`, 'i');
+  return re.test(t);
+};
+
 const buildOrAllowed = (filter: OptionFilter, keys: string[]): string[] => {
   const optionMap = filter.optionMap;
   if (!optionMap) return [];
@@ -116,19 +134,12 @@ const computeAllowedFromDataSource = (
   const raw = options.raw;
   if (!dataSourceField || !Array.isArray(raw) || !raw.length) return null;
 
-  const tokens = normalizeDependencyTokens(dependencyValues);
+  const tokensRaw = normalizeDependencyTokens(dependencyValues);
+  const tokens = Array.from(new Set(tokensRaw.map(t => normalizeToken(t)).filter(Boolean)));
   if (!tokens.length) return options.en || [];
   const logKey = `${dataSourceField}::${tokens.join('|')}`;
-  if (!loggedDataSourceFilters.has(logKey)) {
-    loggedDataSourceFilters.add(logKey);
-    if (typeof console !== 'undefined' && typeof console.info === 'function') {
-      console.info('[ReactForm]', 'optionFilter.dataSource.apply', {
-        dataSourceField,
-        tokens,
-        optionCount: options.en?.length ?? 0
-      });
-    }
-  }
+  const shouldLog = !loggedDataSourceFilters.has(logKey);
+  if (shouldLog) loggedDataSourceFilters.add(logKey);
   const matchMode = normalizeMatchMode((filter as any).matchMode);
   const allowed = new Set<string>();
 
@@ -137,20 +148,43 @@ const computeAllowedFromDataSource = (
     const optionValue = resolveOptionValue(row);
     if (!optionValue) return;
     const rawValue = (row as any)[dataSourceField];
-    const rowTokens = Array.isArray(rawValue)
+    const rowTokensRaw = Array.isArray(rawValue)
       ? rawValue.map(val => normalizeValue(val)).filter(Boolean)
       : rawValue === null || rawValue === undefined
         ? []
         : splitDelimitedValues(rawValue.toString(), filter.dataSourceDelimiter);
+    if (!rowTokensRaw.length) return;
+
+    const rowTokens = rowTokensRaw.map(t => normalizeToken(t)).filter(Boolean);
     if (!rowTokens.length) return;
+    const rowTokenSet = new Set(rowTokens);
+    const rowText = normalizeValue(rawValue === null || rawValue === undefined ? '' : rawValue);
+
+    const tokenMatchesRow = (token: string): boolean => {
+      if (!token) return false;
+      if (rowTokenSet.has(token)) return true;
+      // Fallback for inconsistent delimiter usage (e.g., "Standard / Vegetarian").
+      return containsTokenAsWord(rowText, token);
+    };
+
     const matches =
       matchMode === 'or'
-        ? tokens.some(token => rowTokens.includes(token))
-        : tokens.every(token => rowTokens.includes(token));
+        ? tokens.some(token => tokenMatchesRow(token))
+        : tokens.every(token => tokenMatchesRow(token));
     if (matches) allowed.add(optionValue);
   });
 
   if (!allowed.size) return [];
+  if (shouldLog && typeof console !== 'undefined' && typeof console.info === 'function') {
+    console.info('[ReactForm]', 'optionFilter.dataSource.apply', {
+      dataSourceField,
+      tokens,
+      matchMode,
+      delimiter: (filter.dataSourceDelimiter ?? '').toString() || null,
+      optionCount: options.en?.length ?? 0,
+      matchedCount: allowed.size
+    });
+  }
   if (options.en && options.en.length) {
     return options.en.filter(value => allowed.has(value));
   }
@@ -274,7 +308,7 @@ export function computeNonMatchOptionKeys(args: {
 
 const normalizeValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined) return '';
-  return value.toString();
+  return value.toString().trim();
 };
 
 const SEARCH_INTERNAL_KEYS = new Set(['__ckOptionValue']);

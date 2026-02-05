@@ -21,8 +21,9 @@
         "FR": "1f37I-MZ4XOuojkVM0zsrMO2TqL_GJeC1DuFuEVjX7ro"
       },
       "emailSubject": {
-        "en": "Meal production summary",
-        "fr": "Synthèse production"
+        "en": "Suivi de production des repas",
+        "fr": "Suivi de production des repas",
+        "nl": "Suivi de production des repas"
       },
       "emailRecipients": [
         {
@@ -2827,7 +2828,7 @@
             "labelEn": "Add photo",
             "labelFr": "Ajouter une photo",
             "labelNl": "Foto toevoegen",
-            "required": true,
+            "required": false,
             "requiredMessage": {
               "en": "Add one photo per cooking pot.",
               "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -2870,7 +2871,7 @@
             "optionsNl": [],
             "uploadConfig": {
               "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
-              "minFiles": 1,
+              "minFiles": 0,
               "maxFiles": 5,
               "maxFileSizeMb": 10,
               "allowedMimeTypes": [
@@ -8397,7 +8398,7 @@
               "labelEn": "Add photo",
               "labelFr": "Ajouter une photo",
               "labelNl": "Foto toevoegen",
-              "required": true,
+              "required": false,
               "requiredMessage": {
                 "en": "Add one photo per cooking pot.",
                 "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -8440,7 +8441,7 @@
               ],
               "uploadConfig": {
                 "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
-                "minFiles": 1,
+                "minFiles": 0,
                 "maxFiles": 5,
                 "maxFileSizeMb": 10,
                 "allowedMimeTypes": [
@@ -12901,8 +12902,9 @@
         "FR": "1f37I-MZ4XOuojkVM0zsrMO2TqL_GJeC1DuFuEVjX7ro"
       },
       "emailSubject": {
-        "en": "Meal production summary",
-        "fr": "Synthèse production"
+        "en": "Suivi de production des repas",
+        "fr": "Suivi de production des repas",
+        "nl": "Suivi de production des repas"
       },
       "emailRecipients": [
         {
