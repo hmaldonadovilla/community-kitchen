@@ -70,6 +70,12 @@ export const ConfirmDialogOverlay: React.FC<{
         open
         aria-label={title}
         aria-modal="true"
+        onCancel={e => {
+          // Prevent the native <dialog> element from closing itself on Escape.
+          // When dismiss is allowed, route Escape to the provided onCancel handler instead.
+          e.preventDefault();
+          if (dismissOnBackdrop) onCancel();
+        }}
         style={{
           width: 'min(720px, 100%)',
           maxHeight: 'min(92vh, 980px)',

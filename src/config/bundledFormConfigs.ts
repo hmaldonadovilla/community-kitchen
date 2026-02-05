@@ -7065,6 +7065,21 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "deliveryForm",
             "include": [
               {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
+              {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "presentation": "liftedRowFields",
@@ -7558,9 +7573,27 @@ export const BUNDLED_FORM_CONFIGS = [
                           "overlayContextHeader": {
                             "fields": [
                               {
+                                "fieldRef": "MP_DISTRIBUTOR",
+                                "label": {
+                                  "en": "{{value}}"
+                                }
+                              },
+                              {
+                                "fieldRef": "MP_SERVICE",
+                                "label": {
+                                  "en": "| {{value}}"
+                                }
+                              },
+                              {
+                                "fieldRef": "MP_PREP_DATE",
+                                "label": {
+                                  "en": "| {{value}}"
+                                }
+                              },
+                              {
                                 "fieldRef": "MEAL_TYPE",
                                 "label": {
-                                  "en": "Leftovers for {{value}}"
+                                  "en": "\nLeftovers for {{value}}"
                                 }
                               },
                               {
@@ -7872,7 +7905,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "fr": "Rechercher des ingrédients",
                                     "nl": "Ingrediënten zoeken"
                                   },
-                                  "labelLayout": "inline",
+                                  "labelLayout": "stacked",
                                   "groupOverride": {
                                     "ui": {
                                       "tableColumns": [
@@ -8106,7 +8139,8 @@ export const BUNDLED_FORM_CONFIGS = [
                                 "fieldId": "PREP_TYPE",
                                 "equals": [
                                   "Entire dish",
-                                  "Part dish"
+                                  "Part dish",
+                                  ""
                                 ]
                               }
                             }
@@ -8183,6 +8217,21 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "foodSafety",
             "include": [
               {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
+              {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "presentation": "liftedRowFields",
@@ -8227,6 +8276,21 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "portioning",
             "include": [
               {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
+              {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "presentation": "liftedRowFields",
@@ -8259,10 +8323,6 @@ export const BUNDLED_FORM_CONFIGS = [
               {
                 "kind": "question",
                 "id": "MP_VOLUNTEER"
-              },
-              {
-                "kind": "question",
-                "id": "MP_CONFIRM"
               }
             ],
             "label": {
@@ -9140,6 +9200,33 @@ export const BUNDLED_FORM_CONFIGS = [
                   "phase": "submit"
                 }
               ],
+              "changeDialog": {
+                "when": {
+                  "fieldId": "ORD_QTY",
+                  "equals": 0
+                },
+                "title": {
+                  "en": "Update ordered portions",
+                  "fr": "Mettre à jour les portions demandées",
+                  "nl": "Bijwerken van gevraagde porties"
+                },
+                "message": {
+                  "en": "Changing the ordered number will remove any production data (leftover, recipe to cook, changes to ingredients, ingredients receipt photo) you may have previously entered. Do you want to proceed?",
+                  "fr": "Changer le nombre de portions commandées supprimera toutes les données de production (restes, recette à cuisiner, modifications des ingrédients, photos de réception des ingrédients) que vous avez peut-être précédemment entrées. Voulez-vous continuer ?",
+                  "nl": "Wijzigen van het aantal gevraagde porties zal alle productiedata (resten, recept te koken, wijzigingen in ingrediënten, foto's van ingrediëntenontvangst) die u mogelijk eerder hebt ingevoerd, verwijderen. Wilt u doorgaan?"
+                },
+                "confirmLabel": {
+                  "en": "Yes, change the ordered number and clear out data previously entered.",
+                  "fr": "Oui, changer le nombre de portions commandées et effacer les données précédemment entrées.",
+                  "nl": "Ja, wijzig het aantal gevraagde porties en verwijder de eerder ingevoerde data."
+                },
+                "cancelLabel": {
+                  "en": "No, keep current data and ordered number",
+                  "fr": "Non, garder les données actuelles et le nombre commandé",
+                  "nl": "Nee, houd de huidige gegevens en het bestelde aantal"
+                },
+                "primaryAction": "confirm"
+              },
               "selectionEffects": [
                 {
                   "type": "deleteLineItems",
@@ -9148,6 +9235,15 @@ export const BUNDLED_FORM_CONFIGS = [
                     "fieldId": "ORD_QTY",
                     "equals": 0
                   }
+                },
+                {
+                  "type": "setValue",
+                  "fieldId": "MP_IS_REHEAT",
+                  "when": {
+                    "fieldId": "ORD_QTY",
+                    "equals": 0
+                  },
+                  "value": null
                 },
                 {
                   "id": "sync_final_qty_from_ord_qty",
@@ -9197,6 +9293,15 @@ export const BUNDLED_FORM_CONFIGS = [
                   "groupId": "MP_TYPE_LI",
                   "id": "delete_mp_to_cook_sync",
                   "targetEffectId": "mp_to_cook_sync"
+                },
+                {
+                  "type": "deleteLineItems",
+                  "groupId": "MP_TYPE_LI",
+                  "id": "delete_mp_left_overs_init",
+                  "targetEffectId": "mp_left_overs_init",
+                  "triggerValues": [
+                    "No"
+                  ]
                 },
                 {
                   "type": "addLineItems",
@@ -13331,6 +13436,11 @@ export const BUNDLED_FORM_CONFIGS = [
                       "fr": "",
                       "nl": ""
                     },
+                    "searchHelperText": {
+                      "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                      "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                      "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                    },
                     "placeholder": {
                       "en": "Search ingredients",
                       "fr": "Rechercher des ingrédients",
@@ -13583,25 +13693,6 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active"
       },
       {
-        "id": "MP_CONFIRM",
-        "type": "CHECKBOX",
-        "qEn": "I confirm the above information is correct",
-        "qFr": "Je confirme que les informations ci-dessus sont correctes",
-        "qNl": "Ik bevestig dat bovenstaande informatie correct is",
-        "required": true,
-        "ui": {
-          "labelLayout": "stacked"
-        },
-        "group": {
-          "id": "notes"
-        },
-        "listView": false,
-        "options": [],
-        "optionsFr": [],
-        "optionsNl": [],
-        "status": "Active"
-      },
-      {
         "id": "PDF_PREVIEW",
         "type": "BUTTON",
         "qEn": "Final report",
@@ -13747,7 +13838,7 @@ export const BUNDLED_FORM_CONFIGS = [
       {
         "id": "MP_HYGIENE",
         "type": "BUTTON",
-        "qEn": "Hygiene rules document",
+        "qEn": "Hygiene rules",
         "qFr": "Règles d’hygiène",
         "qNl": "Hygiënereglement",
         "required": false,
@@ -14679,6 +14770,33 @@ export const BUNDLED_FORM_CONFIGS = [
                     "phase": "submit"
                   }
                 ],
+                "changeDialog": {
+                  "when": {
+                    "fieldId": "ORD_QTY",
+                    "equals": 0
+                  },
+                  "title": {
+                    "en": "Update ordered portions",
+                    "fr": "Mettre à jour les portions demandées",
+                    "nl": "Bijwerken van gevraagde porties"
+                  },
+                  "message": {
+                    "en": "Changing the ordered number will remove any production data (leftover, recipe to cook, changes to ingredients, ingredients receipt photo) you may have previously entered. Do you want to proceed?",
+                    "fr": "Changer le nombre de portions commandées supprimera toutes les données de production (restes, recette à cuisiner, modifications des ingrédients, photos de réception des ingrédients) que vous avez peut-être précédemment entrées. Voulez-vous continuer ?",
+                    "nl": "Wijzigen van het aantal gevraagde porties zal alle productiedata (resten, recept te koken, wijzigingen in ingrediënten, foto's van ingrediëntenontvangst) die u mogelijk eerder hebt ingevoerd, verwijderen. Wilt u doorgaan?"
+                  },
+                  "confirmLabel": {
+                    "en": "Yes, change the ordered number and clear out data previously entered.",
+                    "fr": "Oui, changer le nombre de portions commandées et effacer les données précédemment entrées.",
+                    "nl": "Ja, wijzig het aantal gevraagde porties en verwijder de eerder ingevoerde data."
+                  },
+                  "cancelLabel": {
+                    "en": "No, keep current data and ordered number",
+                    "fr": "Non, garder les données actuelles et le nombre commandé",
+                    "nl": "Nee, houd de huidige gegevens en het bestelde aantal"
+                  },
+                  "primaryAction": "confirm"
+                },
                 "selectionEffects": [
                   {
                     "type": "deleteLineItems",
@@ -14687,6 +14805,15 @@ export const BUNDLED_FORM_CONFIGS = [
                       "fieldId": "ORD_QTY",
                       "equals": 0
                     }
+                  },
+                  {
+                    "type": "setValue",
+                    "fieldId": "MP_IS_REHEAT",
+                    "when": {
+                      "fieldId": "ORD_QTY",
+                      "equals": 0
+                    },
+                    "value": null
                   },
                   {
                     "id": "sync_final_qty_from_ord_qty",
@@ -14736,6 +14863,15 @@ export const BUNDLED_FORM_CONFIGS = [
                     "groupId": "MP_TYPE_LI",
                     "id": "delete_mp_to_cook_sync",
                     "targetEffectId": "mp_to_cook_sync"
+                  },
+                  {
+                    "type": "deleteLineItems",
+                    "groupId": "MP_TYPE_LI",
+                    "id": "delete_mp_left_overs_init",
+                    "targetEffectId": "mp_left_overs_init",
+                    "triggerValues": [
+                      "No"
+                    ]
                   },
                   {
                     "type": "addLineItems",
@@ -18816,7 +18952,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "cases": [
                           {
                             "text": {
-                              "en": "Please enter the `Quantity` based on the requested number of portions",
+                              "en": "Please enter the `Quantity` based on the ordered number of portions",
                               "fr": "Veuillez entrer la `Quantité` en fonction du nombre de portions demandé",
                               "nl": "Voer de `Aantal` in op basis van het gevraagde aantal porties"
                             },
@@ -18874,6 +19010,11 @@ export const BUNDLED_FORM_CONFIGS = [
                         "en": "",
                         "fr": "",
                         "nl": ""
+                      },
+                      "searchHelperText": {
+                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
                       },
                       "placeholder": {
                         "en": "Search ingredients",
@@ -19121,23 +19262,6 @@ export const BUNDLED_FORM_CONFIGS = [
           "listView": false
         },
         {
-          "id": "MP_CONFIRM",
-          "type": "CHECKBOX",
-          "label": {
-            "en": "I confirm the above information is correct",
-            "fr": "Je confirme que les informations ci-dessus sont correctes",
-            "nl": "Ik bevestig dat bovenstaande informatie correct is"
-          },
-          "required": true,
-          "ui": {
-            "labelLayout": "stacked"
-          },
-          "group": {
-            "id": "notes"
-          },
-          "listView": false
-        },
-        {
           "id": "PDF_PREVIEW",
           "type": "BUTTON",
           "label": {
@@ -19274,7 +19398,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "id": "MP_HYGIENE",
           "type": "BUTTON",
           "label": {
-            "en": "Hygiene rules document",
+            "en": "Hygiene rules",
             "fr": "Règles d’hygiène",
             "nl": "Hygiënereglement"
           },
@@ -19742,6 +19866,21 @@ export const BUNDLED_FORM_CONFIGS = [
           {
             "id": "deliveryForm",
             "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
@@ -20236,9 +20375,27 @@ export const BUNDLED_FORM_CONFIGS = [
                           "overlayContextHeader": {
                             "fields": [
                               {
+                                "fieldRef": "MP_DISTRIBUTOR",
+                                "label": {
+                                  "en": "{{value}}"
+                                }
+                              },
+                              {
+                                "fieldRef": "MP_SERVICE",
+                                "label": {
+                                  "en": "| {{value}}"
+                                }
+                              },
+                              {
+                                "fieldRef": "MP_PREP_DATE",
+                                "label": {
+                                  "en": "| {{value}}"
+                                }
+                              },
+                              {
                                 "fieldRef": "MEAL_TYPE",
                                 "label": {
-                                  "en": "Leftovers for {{value}}"
+                                  "en": "\nLeftovers for {{value}}"
                                 }
                               },
                               {
@@ -20550,7 +20707,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "fr": "Rechercher des ingrédients",
                                     "nl": "Ingrediënten zoeken"
                                   },
-                                  "labelLayout": "inline",
+                                  "labelLayout": "stacked",
                                   "groupOverride": {
                                     "ui": {
                                       "tableColumns": [
@@ -20861,6 +21018,21 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "foodSafety",
             "include": [
               {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
+              {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "presentation": "liftedRowFields",
@@ -20905,6 +21077,21 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "portioning",
             "include": [
               {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
+              {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "presentation": "liftedRowFields",
@@ -20937,10 +21124,6 @@ export const BUNDLED_FORM_CONFIGS = [
               {
                 "kind": "question",
                 "id": "MP_VOLUNTEER"
-              },
-              {
-                "kind": "question",
-                "id": "MP_CONFIRM"
               }
             ],
             "label": {

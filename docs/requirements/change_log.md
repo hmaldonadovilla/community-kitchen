@@ -463,9 +463,9 @@
 1. Underneath the Ingredient search box in the `MP_INGREDIENTS_LI` overlays in the context of `editLeftoverIngredientsEntire`, `editLeftoverIngredientsPart`, `openCookOverlay`, add a helper message: “Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)." on deck
 2. Add a persistent read-only header showing Customer (MP_DISTRIBUTOR), Service (MP_SERVICE) and Production date (MP_PREP_DATE format EEE, dd-MMM-yyyy) on `deliveryForm`, `foodSafety`, `portioning`. On the `openLeftoversOverlay` add the info in the overlayContextHeader. Use the same typography everywhere. No new actions. No redesign. on deck
 3. Change the word "Requested" to "Ordered" everywhere on the Meal production form. DONE
-4. The helper text for Part dish leftover overlay action (`Select the ingredient(s) representing the leftover that will be added to today's meal.`) is shown as a block instead of using the entire width, which is not the case of other Helpers. Normalise the helpers to use the entire available width. on deck
+3. The helper text for Part dish leftover overlay action (`Select the ingredient(s) representing the leftover that will be added to today's meal.`) is shown as a block instead of using the entire width, which is not the case of other Helpers. Normalise the helpers to use the entire available width. on deck
 5. Change the non actionable error message "The maximum photo size is 10MB" to "The selected photo(s) exceed the 10MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode)." DONE
-6. Change the alignment of Helper text of View/Edit Recipe to cook recipe (`openCookOverlay` action) that appears at the top of a screen, from centered-aligned to left-aligned. Screenshot Untitled 14.
+4. Change the alignment of Helper text of View/Edit Recipe to cook recipe (`openCookOverlay` action) that appears at the top of a screen, from centered-aligned to left-aligned. Screenshot Untitled 14. on deck
 7. Helper texts in all forms are in different font, font size, and colors using colors that are barely visible. Normalize all helper texts to a single typography style per the UI Hygiene & Typography Contract. Same font, same size, same neutral but visible color. Remove bold, frames and do not use red, orange or green colors. Do not change wording, layout, or behavior. Helper texts must be aligned the same way as the field they support. If they support an entire screen, they should be left aligned.
 8. Apply the background blue color used for the background of [Next]  action button to the background, not the text, of the following actionable buttons and icons:
 
@@ -475,11 +475,11 @@
 9. Rename action [+another leftover] to [+Add leftover] DONE
 10. On the Portioning page, rename field label Note (optional) to Note to customer DONE
 11. Rename the action button [Close] to [Back] that is located on the top right of the +Add ingredient page for Part dish leftover screen. DONE
-12. For all non primary action buttons in the top and bottom action bars, highlighted the text in blue as clickable links.
-13. Harmonise the format, size and framing of the camera icon on table mode to the one used in the rest of the app, where the icon is detached from the pill to access the file management overlay. Use screeshot Untitled 15
-14. Message "This record was modified by another user. Please refresh." is shown at the top of the screen and is barely noticeable and it is not entirely accurate. Please show a more accurate message as a pop-up window: "This record was updated by another user or automatically by the system, tap Refresh to continue." [Refresh]
-15. Remove the word 'document' from [Hygiene rules document]
-16. On Order page,  show Total and the number in Bold. Do not change the font type or the font color. On the Portioning page, show Total  and the numbers in Bold. Do not change the font type or the font color.
-17. Remove (None) shown next to Ingredient names for ingredient without Allergens on the Ingredient list for Recipe to cook.
-18. Display list of allergens in brackets for list of Ingredients for Leftover Full dish and Leftover part dish. Do not show 'None' for ingredients without allergen.
+12. For all non primary action buttons in the top and bottom action bars, highlight the text in blue as clickable links. DONE
+13. Harmonise the format, size and framing of the camera icon on table mode to the one used in the rest of the app, where the icon is detached from the pill to access the file management overlay. DONE
+14. Message "This record was modified by another user. Please refresh." is shown at the top of the screen and is barely noticeable and it is not entirely accurate. Please show a more accurate message as a pop-up window: "This record was updated by another user or automatically by the system, tap Refresh to continue." [Refresh] DONE
+15. Remove the word 'document' from [Hygiene rules document] DONE
+16. On Order page, show Total and the number in Bold. Do not change the font type or the font color. On the Portioning page, show Total and the numbers in Bold. Do not change the font type or the font color. DONE
+17. Remove (None) shown next to Ingredient names for ingredient without Allergens on the Ingredient list for Recipe to cook. DONE
+18. On the leftover overlays where we show a list of ingredients, we need to display on alphabetical order and put the `ALLERGEN` in brackets next to the ingredient name. This essentially means that in the overlay table, when we display a field as read only we should have a feature to set another field from the same row in brackets. For the alpha order part we should define this alphabetical order when the rows are being created by the addMode:auto or the selectionEffect.
 19. When Submitting from the Summary page, the system brings to user back to the Order screen. The system should bring the user to the Portioning screen and show the Submit window on that screen.

@@ -47,6 +47,14 @@ export const FORM_VIEW_STYLES = `
           margin-top: 0;
         }
 
+        /* Action bars: make non-primary action labels look like clickable links. */
+        .ck-top-action-bar .ck-bottom-item .ck-bottom-label,
+        .ck-bottom-bar .ck-bottom-item .ck-bottom-label {
+          color: var(--accent);
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+
         /* Portrait-only mode: block landscape with a friendly rotate prompt. */
         .ck-orientation-blocker {
           position: fixed;
@@ -503,6 +511,7 @@ export const FORM_VIEW_STYLES = `
           padding-top: 10px;
           padding-bottom: 10px;
           vertical-align: top;
+          font-weight: bold;
         }
         .form-card .ck-line-item-group--table .line-item-totals,
         .webform-overlay .ck-line-item-group--table .line-item-totals {
@@ -518,6 +527,11 @@ export const FORM_VIEW_STYLES = `
           font-weight: 500;
           font-size: var(--ck-font-label);
           white-space: nowrap;
+        }
+        .form-card .ck-line-item-group--table[data-field-path="MP_MEALS_REQUEST"] .ck-line-item-table__totals-row .ck-line-item-table__total,
+        .webform-overlay .ck-line-item-group--table[data-field-path="MP_MEALS_REQUEST"] .ck-line-item-table__totals-row .ck-line-item-table__total,
+        .ck-form-sections .ck-line-item-group--table[data-field-path="MP_MEALS_REQUEST"] .ck-line-item-table__totals-row .ck-line-item-table__total {
+          font-weight: 600;
         }
         .form-card .ck-line-item-table__row--even {
           background: transparent;

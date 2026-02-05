@@ -249,6 +249,20 @@
     text-align: right;
   }
 
+  .ck-notes {
+    margin-top: 12px;
+    font-size: 11px;
+    font-weight: 400;
+    color: #000000;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .ck-notes:empty {
+    display: none;
+  }
+
   @media (max-width: 600px) {
     .ck-header {
       flex-direction: column;
@@ -311,6 +325,7 @@
 
   <section class="ck-section">
     <div class="ck-section-title">Totals: {{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
+    <div class="ck-notes">{{MP_NOTES}}</div>
   </section>
 
 </div>

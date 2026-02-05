@@ -1447,6 +1447,7 @@ export interface LineItemSelectorConfig {
 export interface LineItemAddOverlayConfig {
   title?: LocalizedString;
   helperText?: LocalizedString;
+  searchHelperText?: LocalizedString;
   placeholder?: LocalizedString;
 }
 

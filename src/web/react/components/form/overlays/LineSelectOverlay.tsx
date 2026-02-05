@@ -14,6 +14,7 @@ export interface LineOverlayState {
   selected?: string[];
   title?: string;
   helperText?: string;
+  searchHelperText?: string;
   placeholder?: string;
 }
 
@@ -35,6 +36,8 @@ export const LineSelectOverlay: React.FC<{
   const resolvedTitle = (overlay.title || '').toString().trim();
   const helperConfigured = overlay.helperText !== undefined;
   const resolvedHelper = (overlay.helperText || '').toString().trim();
+  const searchHelperConfigured = overlay.searchHelperText !== undefined;
+  const resolvedSearchHelper = (overlay.searchHelperText || '').toString().trim();
   const resolvedPlaceholder = (overlay.placeholder || '').toString().trim();
 
   useEffect(() => {
@@ -71,6 +74,10 @@ export const LineSelectOverlay: React.FC<{
       );
   const showHelper = Boolean(helperText);
   const helpId = showHelper ? 'line-select-help' : undefined;
+  const searchHelperText = searchHelperConfigured ? resolvedSearchHelper : '';
+  const showSearchHelper = Boolean(searchHelperText);
+  const searchHelpId = showSearchHelper ? 'line-select-search-help' : undefined;
+  const describedBy = [helpId, searchHelpId].filter(Boolean).join(' ') || undefined;
   const placeholderText = resolvedPlaceholder || tSystem('lineItems.selectLinesSearch', language, 'Search items');
 
   return (
@@ -117,7 +124,7 @@ export const LineSelectOverlay: React.FC<{
             type="text"
             value={query}
             placeholder={placeholderText}
-            aria-describedby={helpId}
+            aria-describedby={describedBy}
             onChange={e => {
               const next = e.target.value;
               const nextNormalized = next.trim();
@@ -137,6 +144,11 @@ export const LineSelectOverlay: React.FC<{
             }}
             style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)' }}
           />
+          {showSearchHelper ? (
+            <div id={searchHelpId} className="muted">
+              {searchHelperText}
+            </div>
+          ) : null}
         </div>
         {dedupMessage ? (
           <div className="error" style={{ marginTop: 10 }}>
