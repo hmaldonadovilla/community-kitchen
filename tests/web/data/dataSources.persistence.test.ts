@@ -1,3 +1,5 @@
+export {};
+
 type LocalStorageLike = {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
@@ -99,4 +101,3 @@ describe('web dataSources persistence', () => {
     expect(tracker.getCallCount()).toBe(1);
   });
 });
-

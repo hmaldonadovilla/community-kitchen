@@ -6716,6 +6716,8 @@ export const BUNDLED_FORM_CONFIGS = [
           "fr": "Suivi de production des repas",
           "nl": "Suivi de production des repas"
         },
+        "emailFrom": "operations@communitykitchen.be",
+        "emailFromName": "Community Kitchen Operations",
         "emailRecipients": [
           {
             "type": "dataSource",
@@ -6733,11 +6735,9 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         ],
         "emailCc": [
-          "hmaldonadovilla@outlook.com"
+          "operations@communitykitchen.be"
         ],
-        "emailBcc": [
-          "hmaldonadovilla@outlook.com"
-        ],
+        "emailBcc": [],
         "statusFieldId": "Status",
         "statusTransitions": {
           "onPdf": "PDF ready",
@@ -13615,7 +13615,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "uploadConfig": {
           "destinationFolderId": "1xiEjwfcbMaF6XqqAPlqbA8LNd5HiwjGV",
           "minFiles": 1,
-          "maxFiles": 5,
+          "maxFiles": 10,
           "maxFileSizeMb": 10,
           "allowedMimeTypes": [
             "image/*"
@@ -19186,7 +19186,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "uploadConfig": {
             "destinationFolderId": "1xiEjwfcbMaF6XqqAPlqbA8LNd5HiwjGV",
             "minFiles": 1,
-            "maxFiles": 5,
+            "maxFiles": 10,
             "maxFileSizeMb": 10,
             "allowedMimeTypes": [
               "image/*"
@@ -19596,6 +19596,8 @@ export const BUNDLED_FORM_CONFIGS = [
           "fr": "Suivi de production des repas",
           "nl": "Suivi de production des repas"
         },
+        "emailFrom": "operations@communitykitchen.be",
+        "emailFromName": "Community Kitchen Operations",
         "emailRecipients": [
           {
             "type": "dataSource",
@@ -19613,11 +19615,9 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         ],
         "emailCc": [
-          "hmaldonadovilla@outlook.com"
+          "operations@communitykitchen.be"
         ],
-        "emailBcc": [
-          "hmaldonadovilla@outlook.com"
-        ],
+        "emailBcc": [],
         "statusFieldId": "Status",
         "statusTransitions": {
           "onPdf": "PDF ready",

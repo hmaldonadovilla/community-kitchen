@@ -1598,11 +1598,22 @@ export class Dashboard {
   private buildFollowupConfig(source: any): FollowupConfig | undefined {
     if (!source || typeof source !== 'object') return undefined;
     const config: FollowupConfig = {};
+    const normalizeOptionalString = (value: any): string | undefined => {
+      if (value === undefined || value === null) return undefined;
+      const text = value.toString().trim();
+      return text ? text : undefined;
+    };
     config.pdfTemplateId = this.normalizeTemplateId(source.pdfTemplateId);
     if (source.pdfFolderId) config.pdfFolderId = source.pdfFolderId;
     if (source.pdfFileNameFieldId) config.pdfFileNameFieldId = source.pdfFileNameFieldId;
     config.emailTemplateId = this.normalizeTemplateId(source.emailTemplateId);
     if (source.emailSubject) config.emailSubject = source.emailSubject;
+    const emailFromRaw = source.emailFrom ?? source.emailSender ?? source.senderEmail ?? source.from;
+    const emailFrom = normalizeOptionalString(emailFromRaw);
+    if (emailFrom) config.emailFrom = emailFrom;
+    const emailFromNameRaw = source.emailFromName ?? source.emailSenderName ?? source.senderName ?? source.fromName;
+    const emailFromName = normalizeOptionalString(emailFromNameRaw);
+    if (emailFromName) config.emailFromName = emailFromName;
     if (source.emailRecipients) {
       config.emailRecipients = this.normalizeRecipientEntries(source.emailRecipients);
     }

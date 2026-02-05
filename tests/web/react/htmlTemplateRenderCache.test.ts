@@ -1,3 +1,5 @@
+export {};
+
 type RunnerStep = {
   withFailureHandler: (cb: (err: any) => void) => Record<string, (...args: any[]) => void>;
 };
@@ -128,5 +130,4 @@ describe('client HTML render caching (api.ts)', () => {
     expect(r3.html).toBe('<div>BTN2:1</div>');
   });
 });
-
 
