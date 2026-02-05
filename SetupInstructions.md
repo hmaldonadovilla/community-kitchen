@@ -1810,11 +1810,13 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        "en": "Meal production summary",
        "fr": "Synthèse production"
      },
+     "emailFrom": "kitchen@example.com",
+     "emailFromName": "Community Kitchen",
      "emailRecipients": [
        "ops@example.com",
        {
          "type": "dataSource",
-         "recordFieldId": "DISTRIBUTOR",
+          "recordFieldId": "DISTRIBUTOR",
          "lookupField": "Distributor",
          "valueField": "email",
          "dataSource": {
@@ -1859,6 +1861,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - `pdfFolderId` (optional): target Drive folder for generated PDFs; falls back to the spreadsheet’s parent folder.
    - `pdfFileNameFieldId` (optional): field id used to name generated PDFs + email attachments. Supports question ids or meta fields (`id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`).
    - `emailTemplateId`: Google Doc containing the email body. Same structure as `pdfTemplateId` (string, language map, or `cases` selector). Tokens work the same as in the PDF template.
+   - `emailFrom` (optional): sender email address for follow-up emails. Apps Script can only send from the script owner or a configured Gmail alias.
+   - `emailFromName` (optional): sender display name for follow-up emails.
    - `emailRecipients`: list of addresses. Entries can be plain strings (placeholders allowed) or objects describing a data source lookup:
      - `recordFieldId`: the form/line-item field whose submitted value should be used as the lookup key.
      - `dataSource`: standard data source config (sheet/tab reference, projection, limit, etc.).

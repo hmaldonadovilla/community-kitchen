@@ -25,6 +25,8 @@
         "fr": "Suivi de production des repas",
         "nl": "Suivi de production des repas"
       },
+      "emailFrom": "operations@communitykitchen.be",
+      "emailFromName": "Community Kitchen Operations",
       "emailRecipients": [
         {
           "type": "dataSource",
@@ -6925,7 +6927,7 @@
       "uploadConfig": {
           "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
           "minFiles": 1,
-          "maxFiles": 5,
+          "maxFiles": 10,
         "maxFileSizeMb": 10,
         "allowedMimeTypes": [
           "image/*"
@@ -12496,7 +12498,7 @@
         "uploadConfig": {
         "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
         "minFiles": 1,
-        "maxFiles": 5,
+        "maxFiles": 10,
           "maxFileSizeMb": 10,
           "allowedMimeTypes": [
             "image/*"
@@ -12906,6 +12908,8 @@
         "fr": "Suivi de production des repas",
         "nl": "Suivi de production des repas"
       },
+      "emailFrom": "operations@communitykitchen.be",
+      "emailFromName": "Community Kitchen Operations",
       "emailRecipients": [
         {
           "type": "dataSource",

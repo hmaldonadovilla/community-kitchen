@@ -1712,6 +1712,16 @@ export interface FollowupConfig {
   pdfFileNameFieldId?: string;
   emailTemplateId?: TemplateIdMap;
   emailSubject?: LocalizedString | string;
+  /**
+   * Optional sender email address for follow-up emails.
+   *
+   * Note: Apps Script can only send from the active user (script owner) or a configured Gmail alias.
+   */
+  emailFrom?: string;
+  /**
+   * Optional sender display name for follow-up emails.
+   */
+  emailFromName?: string;
   emailRecipients?: EmailRecipientEntry[];
   emailCc?: EmailRecipientEntry[];
   emailBcc?: EmailRecipientEntry[];

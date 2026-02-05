@@ -2119,6 +2119,17 @@ components:
           $ref: '#/components/schemas/TemplateIdMap'
         emailSubject:
           $ref: '#/components/schemas/LocalizedString'
+        emailFrom:
+          type: string
+          description: |
+            Optional sender email address for follow-up emails (Send Email action).
+
+            Notes:
+            - Apps Script can only send "from" the active user (script owner) or a configured Gmail alias.
+            - If this is set to an address that is not allowed, the send action will fail at runtime.
+        emailFromName:
+          type: string
+          description: Optional sender display name for follow-up emails (Send Email action).
         emailRecipients:
           type: array
           items:

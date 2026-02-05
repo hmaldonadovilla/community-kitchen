@@ -43,6 +43,8 @@ describe('Dashboard', () => {
   test('getForms parses follow-up config JSON', () => {
     const followupConfig = JSON.stringify({
       pdfTemplateId: 'doc123',
+      emailFrom: 'kitchen@example.com',
+      emailFromName: 'Community Kitchen',
       emailRecipients: ['ops@example.com', 'team@example.com'],
       statusTransitions: { onPdf: 'PDF ready' }
     });
@@ -57,6 +59,8 @@ describe('Dashboard', () => {
     const forms = dashboard.getForms();
     expect(forms[0].followupConfig).toBeDefined();
     expect(forms[0].followupConfig?.pdfTemplateId).toBe('doc123');
+    expect(forms[0].followupConfig?.emailFrom).toBe('kitchen@example.com');
+    expect(forms[0].followupConfig?.emailFromName).toBe('Community Kitchen');
     expect(forms[0].followupConfig?.emailRecipients).toContain('team@example.com');
     expect(forms[0].followupConfig?.statusTransitions?.onPdf).toBe('PDF ready');
   });
