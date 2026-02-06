@@ -105,6 +105,23 @@ export const applyClearOnChange = (args: {
     });
   }
 
+  const clearGroupPayloadKeys = new Set<string>();
+  clearGroupKeys.forEach(groupId => {
+    clearGroupPayloadKeys.add(groupId);
+    clearGroupPayloadKeys.add(`${groupId}_json`);
+  });
+  const clearLineItemStateKeys = new Set<string>();
+  clearGroupKeys.forEach(groupId => {
+    clearLineItemStateKeys.add(groupId);
+  });
+  Object.keys(lineItems || {}).forEach(groupKey => {
+    const normalizedKey = (groupKey || '').toString().trim();
+    if (!normalizedKey) return;
+    const rootGroupId = normalizedKey.split('.')[0] || normalizedKey;
+    if (!clearGroupKeys.has(rootGroupId)) return;
+    clearLineItemStateKeys.add(normalizedKey);
+  });
+
   const resetValues = normalizeRecordValues(definition);
   const baseValues: Record<string, FieldValue> = normalizedMode === 'full' ? { ...resetValues } : { ...args.values };
   if (normalizedMode === 'full') {
@@ -114,6 +131,9 @@ export const applyClearOnChange = (args: {
   }
   clearTopFieldIds.forEach(id => {
     baseValues[id] = resetValues[id];
+  });
+  clearGroupPayloadKeys.forEach(key => {
+    delete (baseValues as any)[key];
   });
   baseValues[normalizedFieldId] = nextValue;
 
@@ -125,8 +145,12 @@ export const applyClearOnChange = (args: {
       nextLineItems[id] = lineItems[id] || [];
     });
   }
-  clearGroupKeys.forEach(groupId => {
-    nextLineItems[groupId] = initialLineItems[groupId] || [];
+  clearLineItemStateKeys.forEach(groupKey => {
+    if (Object.prototype.hasOwnProperty.call(initialLineItems, groupKey)) {
+      nextLineItems[groupKey] = initialLineItems[groupKey] || [];
+      return;
+    }
+    delete (nextLineItems as any)[groupKey];
   });
 
   const lineGroupIds = new Set<string>(questions.filter(q => q.type === 'LINE_ITEM_GROUP').map(q => (q.id || '').toString().trim()));

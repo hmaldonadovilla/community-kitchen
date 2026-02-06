@@ -18,8 +18,8 @@ export const ConfirmDialogOverlay: React.FC<{
   dismissOnBackdrop?: boolean;
   showCloseButton?: boolean;
   zIndex?: number;
-  onCancel: () => void;
-  onConfirm: () => void;
+  onCancel: () => void | Promise<void>;
+  onConfirm: () => void | Promise<void>;
 }> = ({
   open,
   title,
@@ -34,6 +34,27 @@ export const ConfirmDialogOverlay: React.FC<{
   onCancel,
   onConfirm
 }) => {
+  const busyRef = React.useRef(false);
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) return;
+    busyRef.current = false;
+    setBusy(false);
+  }, [open]);
+
+  const runGuarded = React.useCallback(async (action: () => void | Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, []);
+
   if (!open) return null;
 
   return (
@@ -54,8 +75,9 @@ export const ConfirmDialogOverlay: React.FC<{
         type="button"
         aria-label="Close dialog"
         title="Close"
-        onClick={dismissOnBackdrop ? onCancel : undefined}
-        aria-disabled={!dismissOnBackdrop}
+        onClick={dismissOnBackdrop && !busy ? () => void runGuarded(onCancel) : undefined}
+        aria-disabled={!dismissOnBackdrop || busy}
+        disabled={busy}
         style={{
           position: 'absolute',
           inset: 0,
@@ -63,7 +85,7 @@ export const ConfirmDialogOverlay: React.FC<{
           padding: 0,
           margin: 0,
           background: 'transparent',
-          cursor: dismissOnBackdrop ? 'pointer' : 'default'
+          cursor: dismissOnBackdrop && !busy ? 'pointer' : 'default'
         }}
       />
       <dialog
@@ -74,7 +96,7 @@ export const ConfirmDialogOverlay: React.FC<{
           // Prevent the native <dialog> element from closing itself on Escape.
           // When dismiss is allowed, route Escape to the provided onCancel handler instead.
           e.preventDefault();
-          if (dismissOnBackdrop) onCancel();
+          if (dismissOnBackdrop && !busy) void runGuarded(onCancel);
         }}
         style={{
           width: 'min(720px, 100%)',
@@ -101,8 +123,10 @@ export const ConfirmDialogOverlay: React.FC<{
             title="Close"
             onClick={e => {
               e.stopPropagation();
-              onCancel();
+              if (busy) return;
+              void runGuarded(onCancel);
             }}
+            disabled={busy}
             style={{
               position: 'absolute',
               top: 10,
@@ -116,7 +140,8 @@ export const ConfirmDialogOverlay: React.FC<{
               fontWeight: 500,
               fontSize: 'var(--ck-font-label)',
               lineHeight: '1',
-              cursor: 'pointer',
+              cursor: busy ? 'not-allowed' : 'pointer',
+              opacity: busy ? 0.6 : 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
@@ -134,7 +159,8 @@ export const ConfirmDialogOverlay: React.FC<{
           {showCancel ? (
             <button
               type="button"
-              onClick={onCancel}
+              onClick={() => void runGuarded(onCancel)}
+              disabled={busy}
               style={{
                 marginRight: 'auto',
                 padding: '14px 18px',
@@ -146,7 +172,9 @@ export const ConfirmDialogOverlay: React.FC<{
                 fontWeight: 500,
                 fontSize: 'var(--ck-font-control)',
                 lineHeight: 1.1,
-                minWidth: 140
+                minWidth: 140,
+                cursor: busy ? 'not-allowed' : 'pointer',
+                opacity: busy ? 0.6 : 1
               }}
             >
               {cancelLabel}
@@ -155,7 +183,8 @@ export const ConfirmDialogOverlay: React.FC<{
           {showConfirm ? (
             <button
               type="button"
-              onClick={onConfirm}
+              onClick={() => void runGuarded(onConfirm)}
+              disabled={busy}
               style={{
                 padding: '14px 18px',
                 minHeight: 'var(--control-height)',
@@ -166,7 +195,9 @@ export const ConfirmDialogOverlay: React.FC<{
                 fontWeight: 500,
                 fontSize: 'var(--ck-font-control)',
                 lineHeight: 1.1,
-                minWidth: 140
+                minWidth: 140,
+                cursor: busy ? 'not-allowed' : 'pointer',
+                opacity: busy ? 0.6 : 1
               }}
             >
               {confirmLabel}

@@ -1200,6 +1200,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
       - Composite filters and cross-scope dependencies:
         - `dependsOn` can be a single ID or an array (for multi-field filters). When you provide an array, join dependency values with `||` in `optionMap` keys, plus `*` as a fallback.
+        - For DATE dependencies in composite keys (for example `MP_PREP_DATE`), you can add weekday-specific keys such as `Belliard||Lunch||Sunday`. If no weekday key matches, the filter falls back to the non-date composite key (for example `Belliard||Lunch`).
         - Line-item filters can depend on top-level fields; reference the parent field ID directly.
 
         ```json

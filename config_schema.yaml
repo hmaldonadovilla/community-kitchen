@@ -1547,6 +1547,7 @@ components:
               type: string
           description: |
             Mapping of parent value(s) -> allowed options for this field. For multiple dependencies, join values with `||` in the order listed in `dependsOn` (e.g., `"Carrots||Local"`). Use `"*"` as a fallback key.
+            When a composite dependency includes a DATE value, weekday aliases are supported in keys (e.g., `"Belliard||Lunch||Sunday"`), with fallback to non-date composite keys when no weekday-specific key matches.
         optionMapRef:
           $ref: '#/components/schemas/OptionMapRefConfig'
           description: |

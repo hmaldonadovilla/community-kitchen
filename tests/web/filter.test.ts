@@ -149,6 +149,40 @@ describe('computeAllowedOptions', () => {
     const allowed = computeAllowedOptions(dataSourceFilter as any, options as any, ['All']);
     expect(allowed).toEqual(options.en);
   });
+
+  it('supports weekday-aware composite optionMap keys for date dependencies', () => {
+    const filter = {
+      dependsOn: ['MP_DISTRIBUTOR', 'MP_SERVICE', 'MP_PREP_DATE'],
+      optionMap: {
+        'Belliard||Lunch||Sunday': ['Vegetarian', 'Vegan', 'Diabetic', 'No-salt', 'Standard'],
+        'Belliard||Lunch': ['Vegetarian', 'Vegan', 'Diabetic', 'No-salt'],
+        '*': ['Vegetarian']
+      }
+    };
+    const allowed = computeAllowedOptions(
+      filter as any,
+      { en: ['Vegetarian', 'Vegan', 'Diabetic', 'No-salt', 'Standard'] } as any,
+      ['Belliard', 'Lunch', '2026-02-08']
+    );
+    expect(allowed).toEqual(['Vegetarian', 'Vegan', 'Diabetic', 'No-salt', 'Standard']);
+  });
+
+  it('falls back to non-date composite keys when no weekday override key matches', () => {
+    const filter = {
+      dependsOn: ['MP_DISTRIBUTOR', 'MP_SERVICE', 'MP_PREP_DATE'],
+      optionMap: {
+        'Belliard||Lunch||Sunday': ['Vegetarian', 'Vegan', 'Diabetic', 'No-salt', 'Standard'],
+        'Belliard||Lunch': ['Vegetarian', 'Vegan', 'Diabetic', 'No-salt'],
+        '*': ['Vegetarian']
+      }
+    };
+    const allowed = computeAllowedOptions(
+      filter as any,
+      { en: ['Vegetarian', 'Vegan', 'Diabetic', 'No-salt', 'Standard'] } as any,
+      ['Belliard', 'Lunch', '2026-02-10']
+    );
+    expect(allowed).toEqual(['Vegetarian', 'Vegan', 'Diabetic', 'No-salt']);
+  });
 });
 
 describe('computeNonMatchOptionKeys', () => {

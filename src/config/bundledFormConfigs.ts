@@ -8864,7 +8864,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (EN)": "REF:PortionTypeOptions",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
+            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\", \"MP_PREP_DATE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -9171,11 +9171,19 @@ export const BUNDLED_FORM_CONFIGS = [
               "optionFilter": {
                 "dependsOn": [
                   "MP_DISTRIBUTOR",
-                  "MP_SERVICE"
+                  "MP_SERVICE",
+                  "MP_PREP_DATE"
                 ],
                 "optionMap": {
                   "HUB": [
                     "Vegetarian"
+                  ],
+                  "Belliard||Lunch||Sunday": [
+                    "Vegetarian",
+                    "Vegan",
+                    "Diabetic",
+                    "No-salt",
+                    "Standard"
                   ],
                   "Belliard||Lunch": [
                     "Vegetarian",
@@ -14443,7 +14451,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Options (EN)": "REF:PortionTypeOptions",
                 "Options (FR)": "",
                 "Options (NL)": "",
-                "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
+                "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\", \"MP_PREP_DATE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
                 "Option Filter (JSON)": "",
                 "Validation Rules (JSON)": "",
                 "List View?": "",
@@ -14750,11 +14758,19 @@ export const BUNDLED_FORM_CONFIGS = [
                 "optionFilter": {
                   "dependsOn": [
                     "MP_DISTRIBUTOR",
-                    "MP_SERVICE"
+                    "MP_SERVICE",
+                    "MP_PREP_DATE"
                   ],
                   "optionMap": {
                     "HUB": [
                       "Vegetarian"
+                    ],
+                    "Belliard||Lunch||Sunday": [
+                      "Vegetarian",
+                      "Vegan",
+                      "Diabetic",
+                      "No-salt",
+                      "Standard"
                     ],
                     "Belliard||Lunch": [
                       "Vegetarian",

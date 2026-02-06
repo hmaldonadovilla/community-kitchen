@@ -214,6 +214,81 @@ const resolveNonMatchWarningFieldIds = (fields: any[]): string[] => {
   return ids;
 };
 
+const isWrapScanHiddenElement = (el: HTMLElement): boolean => {
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'svg' || tag === 'path' || tag === 'img' || tag === 'script' || tag === 'style') return true;
+  if ((el.getAttribute('aria-hidden') || '').toString().trim().toLowerCase() === 'true') return true;
+  const className = typeof el.className === 'string' ? el.className : '';
+  if (/\bsr-only\b|\bvisually-hidden\b/i.test(className)) return true;
+  const style = globalThis.getComputedStyle?.(el);
+  if (!style) return false;
+  if (style.display === 'none' || style.visibility === 'hidden') return true;
+  const clip = (style.clip || '').toString().toLowerCase();
+  const clipPath = (style.clipPath || '').toString().toLowerCase();
+  const width = Number.parseFloat((style.width || '').toString());
+  const height = Number.parseFloat((style.height || '').toString());
+  const tiny = Number.isFinite(width) && Number.isFinite(height) && width <= 1 && height <= 1;
+  if (tiny && style.overflow === 'hidden') return true;
+  if (style.overflow === 'hidden' && (clip.includes('rect(0') || clipPath.includes('inset(50%'))) return true;
+  return false;
+};
+
+const collectButtonTextNodes = (root: Node): Text[] => {
+  const out: Text[] = [];
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text) out.push(node as Text);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as HTMLElement;
+    if (isWrapScanHiddenElement(el)) return;
+    for (let i = 0; i < node.childNodes.length; i += 1) {
+      walk(node.childNodes[i]);
+    }
+  };
+  walk(root);
+  return out;
+};
+
+const ensureButtonTextSpans = (button: HTMLButtonElement) => {
+  const directNodes = Array.from(button.childNodes);
+  directNodes.forEach(node => {
+    if (node.nodeType !== Node.TEXT_NODE) return;
+    const raw = (node.textContent || '').toString();
+    if (!raw.replace(/\s+/g, ' ').trim()) return;
+    const span = document.createElement('span');
+    span.className = 'ck-button-text';
+    span.textContent = raw;
+    button.replaceChild(span, node);
+  });
+};
+
+const buttonHasWrappedText = (button: HTMLButtonElement): boolean => {
+  if (!button.isConnected) return false;
+  const style = globalThis.getComputedStyle?.(button);
+  if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
+  const textNodes = collectButtonTextNodes(button);
+  if (!textNodes.length) return false;
+
+  const range = document.createRange();
+  const lines = new Set<number>();
+  try {
+    textNodes.forEach(node => {
+      range.selectNodeContents(node);
+      const rects = Array.from(range.getClientRects());
+      rects.forEach(rect => {
+        if (rect.width <= 0 || rect.height <= 0) return;
+        lines.add(Math.round(rect.top));
+      });
+    });
+  } finally {
+    range.detach?.();
+  }
+  return lines.size > 1;
+};
+
 // Build marker to verify deployed bundle version in UI
 const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
 
@@ -474,7 +549,36 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const fieldChangeDialog = useFieldChangeDialog({ closeOnKey: view, eventPrefix: 'ui.fieldChangeDialog', onDiagnostic: logEvent });
   const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
   const navigateHomeBusy = useBlockingOverlay({ eventPrefix: 'navigate.home.busy', onDiagnostic: logEvent });
+  const destructiveChangeBusy = useBlockingOverlay({ eventPrefix: 'fieldChange.destructive.busy', onDiagnostic: logEvent });
   const updateRecordBusyOpen = updateRecordBusy.state.open;
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.body) return;
+    let rafId: number | null = null;
+    const scan = () => {
+      rafId = null;
+      const buttons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
+      buttons.forEach(button => {
+        ensureButtonTextSpans(button);
+        const wrapped = buttonHasWrappedText(button);
+        button.classList.toggle('ck-button-wrap-left', wrapped);
+      });
+    };
+    const schedule = () => {
+      if (rafId !== null) return;
+      rafId = globalThis.requestAnimationFrame(scan);
+    };
+
+    schedule();
+    const observer = new MutationObserver(() => schedule());
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+    globalThis.addEventListener?.('resize', schedule as any);
+    return () => {
+      observer.disconnect();
+      globalThis.removeEventListener?.('resize', schedule as any);
+      if (rafId !== null) globalThis.cancelAnimationFrame(rafId);
+    };
+  }, [view, language]);
 
   const [systemActionGateDialog, setSystemActionGateDialog] = useState<{
     open: boolean;
@@ -751,6 +855,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     async (inputValues: Record<string, FieldValue>) => {
       const pending = fieldChangeActiveRef.current;
       if (!pending) return;
+      const lockSeq = destructiveChangeBusy.lock({
+        title: tSystem('common.loading', languageRef.current, 'Loading…'),
+        message: tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
+        kind: 'fieldChangeDialog',
+        diagnosticMeta: { fieldPath: pending.fieldPath, fieldId: pending.fieldId }
+      });
+      try {
       const dialogCfg = pending.dialog;
       const baseTargetScope: 'top' | 'row' = pending.scope === 'top' ? 'top' : 'row';
       const updates: FieldChangeDialogTargetUpdate[] = [
@@ -892,8 +1003,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         groupId: pending.groupId || null,
         rowId: pending.rowId || null
       });
+      } finally {
+        destructiveChangeBusy.unlock(lockSeq, { source: 'fieldChangeDialog' });
+      }
     },
-    [definition, formKey, language, logEvent, revertFieldChangePending, setExternalScrollAnchor, setLineItems, setValues]
+    [definition, destructiveChangeBusy, formKey, language, logEvent, revertFieldChangePending, setExternalScrollAnchor, setLineItems, setValues]
   );
 
   const handleFieldChangeDialogCancel = useCallback(() => {
@@ -6683,7 +6797,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       </div>
     ) : null;
 
-  const refreshStaleRecord = useCallback(() => {
+  const refreshStaleRecord = useCallback(async () => {
     const stale = recordStaleRef.current || recordStale;
     const id = (stale?.recordId || selectedRecordIdRef.current || '').toString().trim();
     if (!id) return;
@@ -6696,7 +6810,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
     setDraftSave({ phase: 'idle' });
     logEvent('record.stale.refresh.click', { recordId: id, rowNumberHint: row || null, source: 'dialog' });
-    void loadRecordSnapshot(id, row || undefined);
+    await loadRecordSnapshot(id, row || undefined);
   }, [loadRecordSnapshot, logEvent, recordStale]);
 
   const submitTopErrorMessage = resolveLocalizedString(
@@ -7118,6 +7232,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
       <FieldChangeDialogOverlay
         open={fieldChangeDialog.state.open}
+        busy={fieldChangeDialog.state.busy}
         title={fieldChangeDialog.state.title || tSystem('common.confirm', language, 'Confirm')}
         message={fieldChangeDialog.state.message || ''}
         confirmLabel={fieldChangeDialog.state.confirmLabel || tSystem('common.confirm', language, 'Confirm')}
@@ -7221,6 +7336,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         title={tSystem('actions.submitting', language, 'Submitting…')}
         message={(status || '').toString() || tSystem('actions.submitting', language, 'Submitting…')}
         zIndex={12040}
+      />
+
+      <BlockingOverlay
+        open={destructiveChangeBusy.state.open}
+        title={destructiveChangeBusy.state.title || tSystem('common.loading', language, 'Loading…')}
+        message={destructiveChangeBusy.state.message || tSystem('navigation.waitSaving', language, 'Please wait while we save your changes...')}
+        zIndex={12045}
       />
 
       <ConfirmDialogOverlay

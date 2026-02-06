@@ -43,9 +43,10 @@ const normalizeArrayValue = (value: FieldValue): string[] => {
 const renderInput = (args: {
   input: FieldChangeDialogInputState;
   value: FieldValue;
+  disabled?: boolean;
   onChange: (id: string, value: FieldValue) => void;
 }) => {
-  const { input, value, onChange } = args;
+  const { input, value, disabled = false, onChange } = args;
   const id = input.id;
   const type = input.type;
   if (type === 'paragraph') {
@@ -55,6 +56,7 @@ const renderInput = (args: {
         value={(value ?? '').toString()}
         placeholder={input.placeholder}
         onChange={e => onChange(id, e.target.value)}
+        disabled={disabled}
         style={{ ...inputBaseStyle, minHeight: 110, resize: 'vertical' }}
       />
     );
@@ -66,6 +68,7 @@ const renderInput = (args: {
         id={id}
         value={(value ?? '').toString()}
         onChange={e => onChange(id, e.target.value)}
+        disabled={disabled}
         style={inputBaseStyle}
       >
         <option value="">{''}</option>
@@ -88,6 +91,7 @@ const renderInput = (args: {
             type="checkbox"
             checked={checked}
             onChange={e => onChange(id, e.target.checked)}
+            disabled={disabled}
           />
           <span>{input.placeholder || ''}</span>
         </label>
@@ -103,6 +107,7 @@ const renderInput = (args: {
           const values = Array.from(e.target.selectedOptions).map(opt => opt.value);
           onChange(id, values);
         }}
+        disabled={disabled}
         style={{ ...inputBaseStyle, minHeight: 110 }}
       >
         {options.map(opt => (
@@ -121,6 +126,7 @@ const renderInput = (args: {
         value={value === undefined || value === null ? '' : (value as any)}
         placeholder={input.placeholder}
         onChange={e => onChange(id, e.target.value)}
+        disabled={disabled}
         style={inputBaseStyle}
       />
     );
@@ -133,6 +139,7 @@ const renderInput = (args: {
         value={(value ?? '').toString()}
         placeholder={input.placeholder}
         onChange={e => onChange(id, e.target.value)}
+        disabled={disabled}
         style={inputBaseStyle}
       />
     );
@@ -144,6 +151,7 @@ const renderInput = (args: {
       value={(value ?? '').toString()}
       placeholder={input.placeholder}
       onChange={e => onChange(id, e.target.value)}
+      disabled={disabled}
       style={inputBaseStyle}
     />
   );
@@ -151,6 +159,7 @@ const renderInput = (args: {
 
 export const FieldChangeDialogOverlay: React.FC<{
   open: boolean;
+  busy?: boolean;
   title: string;
   message: string;
   confirmLabel: string;
@@ -164,6 +173,7 @@ export const FieldChangeDialogOverlay: React.FC<{
   zIndex?: number;
 }> = ({
   open,
+  busy = false,
   title,
   message,
   confirmLabel,
@@ -223,7 +233,9 @@ export const FieldChangeDialogOverlay: React.FC<{
         type="button"
         aria-label="Close dialog"
         title="Close"
-        onClick={onCancel}
+        onClick={busy ? undefined : onCancel}
+        disabled={busy}
+        aria-disabled={busy}
         style={{
           position: 'absolute',
           inset: 0,
@@ -231,7 +243,7 @@ export const FieldChangeDialogOverlay: React.FC<{
           padding: 0,
           margin: 0,
           background: 'transparent',
-          cursor: 'pointer'
+          cursor: busy ? 'default' : 'pointer'
         }}
       />
       <dialog
@@ -274,7 +286,7 @@ export const FieldChangeDialogOverlay: React.FC<{
               <label htmlFor={input.id} style={labelStyle}>
                 {input.label}
               </label>
-              {renderInput({ input, value: values[input.id], onChange: onValueChange })}
+              {renderInput({ input, value: values[input.id], disabled: busy, onChange: onValueChange })}
               {input.required ? <div style={helperStyle}>Required</div> : null}
             </div>
           ))}
@@ -284,8 +296,11 @@ export const FieldChangeDialogOverlay: React.FC<{
           <button
             type="button"
             onClick={onCancel}
+            disabled={busy}
             style={{
-              ...(primaryAction === 'cancel' ? primaryButtonStyle : secondaryButtonStyle)
+              ...(primaryAction === 'cancel' ? primaryButtonStyle : secondaryButtonStyle),
+              cursor: busy ? 'not-allowed' : 'pointer',
+              opacity: busy ? 0.6 : 1
             }}
             autoFocus={primaryAction === 'cancel'}
           >
@@ -294,8 +309,11 @@ export const FieldChangeDialogOverlay: React.FC<{
           <button
             type="button"
             onClick={onConfirm}
+            disabled={busy}
             style={{
-              ...(primaryAction === 'confirm' ? primaryButtonStyle : secondaryButtonStyle)
+              ...(primaryAction === 'confirm' ? primaryButtonStyle : secondaryButtonStyle),
+              cursor: busy ? 'not-allowed' : 'pointer',
+              opacity: busy ? 0.6 : 1
             }}
             autoFocus={primaryAction === 'confirm'}
           >
