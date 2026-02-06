@@ -25,10 +25,12 @@ const labelStyle: React.CSSProperties = {
 };
 
 const helperStyle: React.CSSProperties = {
-  fontSize: 'calc(var(--ck-font-label) * 0.85)',
+  fontSize: 'var(--ck-font-helper)',
+  fontWeight: 400,
   marginTop: 4,
-  color: 'var(--muted)',
-  lineHeight: 1.2
+  color: 'var(--text)',
+  opacity: 'var(--ck-helper-opacity)',
+  lineHeight: 1.35
 };
 
 const normalizeArrayValue = (value: FieldValue): string[] => {

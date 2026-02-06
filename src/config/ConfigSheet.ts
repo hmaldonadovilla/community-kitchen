@@ -1967,12 +1967,46 @@ export class ConfigSheet {
     return cfg;
   }
 
-  private static parseClearOnChange(rawConfigs: Array<string | undefined>): boolean | undefined {
+  private static normalizeClearOnChange(raw: any): QuestionConfig['clearOnChange'] | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw !== 'object') return undefined;
+
+    const cfg: any = {};
+    if (raw.enabled !== undefined || raw.isEnabled !== undefined || raw.on !== undefined) {
+      cfg.enabled = Boolean(raw.enabled ?? raw.isEnabled ?? raw.on);
+    }
+    const modeRaw = (raw.mode ?? raw.strategy ?? raw.scope ?? '').toString().trim().toLowerCase();
+    if (modeRaw === 'full' || modeRaw === 'all') cfg.mode = 'full';
+    if (modeRaw === 'ordered' || modeRaw === 'after' || modeRaw === 'afterself') cfg.mode = 'ordered';
+
+    const bypassRaw =
+      raw.bypassFields ?? raw.bypass ?? raw.keepFields ?? raw.keep ?? raw.excludeFromClear ?? raw.exclude;
+    const bypassFields: string[] =
+      Array.isArray(bypassRaw)
+        ? bypassRaw
+            .map(v => (v === undefined || v === null ? '' : v.toString().trim()))
+            .filter(Boolean)
+        : typeof bypassRaw === 'string'
+          ? bypassRaw
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : [];
+    if (bypassFields.length) cfg.bypassFields = Array.from(new Set(bypassFields));
+
+    if (!Object.keys(cfg).length) {
+      return { enabled: true } as QuestionConfig['clearOnChange'];
+    }
+    return cfg as QuestionConfig['clearOnChange'];
+  }
+
+  private static parseClearOnChange(rawConfigs: Array<string | undefined>): QuestionConfig['clearOnChange'] | undefined {
     for (const raw of rawConfigs) {
       if (!raw) continue;
       const parsed = this.safeParseObject(raw);
       if (parsed && parsed.clearOnChange !== undefined) {
-        return !!parsed.clearOnChange;
+        return this.normalizeClearOnChange(parsed.clearOnChange);
       }
     }
     return undefined;
@@ -2079,6 +2113,23 @@ export class ConfigSheet {
                   ? raw.help
                   : undefined;
     if (infoRaw !== undefined && infoRaw !== null) cfg.infoText = infoRaw as any;
+
+    const infoDisplayRaw =
+      raw.infoDisplay !== undefined
+        ? raw.infoDisplay
+        : raw.info_display !== undefined
+          ? raw.info_display
+          : raw.infoMode !== undefined
+            ? raw.infoMode
+            : raw.info_mode !== undefined
+              ? raw.info_mode
+              : undefined;
+    if (infoDisplayRaw !== undefined && infoDisplayRaw !== null) {
+      const mode = infoDisplayRaw.toString().trim().toLowerCase();
+      if (mode === 'pill') cfg.infoDisplay = 'pill';
+      if (mode === 'belowtitle' || mode === 'below_title' || mode === 'title') cfg.infoDisplay = 'belowTitle';
+      if (mode === 'hidden' || mode === 'none' || mode === 'off') cfg.infoDisplay = 'hidden';
+    }
 
     // Require a title for page sections; otherwise skip (avoid emitting invalid config).
     if (cfg.title === undefined || cfg.title === null) return undefined;

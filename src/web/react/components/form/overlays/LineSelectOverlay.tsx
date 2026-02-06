@@ -227,7 +227,7 @@ export const LineSelectOverlay: React.FC<{
           <button
             type="button"
             onClick={() => setOverlay({ open: false, options: [], selected: [] })}
-            style={buttonStyles.secondary}
+            style={buttonStyles.primary}
           >
             {tSystem('common.back', language, 'Back')}
           </button>

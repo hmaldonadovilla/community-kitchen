@@ -19,6 +19,20 @@ import { tSystem } from '../../../systemStrings';
 
 type CustomButton = { id: string; label: string; action: ButtonAction; placements: ButtonPlacement[] };
 
+const PRIMARY_ACTION_LABELS = new Set([
+  'View/Edit',
+  'Ingredients Needed',
+  'View/Edit ingredients',
+  'Back to production',
+  'Back',
+  '+Add ingredient',
+  '+another leftover',
+  'Close',
+  'Refresh'
+]);
+
+const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has((label || '').toString().trim());
+
 const IconWrap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="ck-bottom-icon" aria-hidden="true">
     {children}
@@ -601,19 +615,19 @@ export const ActionBar: React.FC<{
                 {resolveLocalizedString(createButtonLabel, language, tSystem('actions.newRecord', language, 'New record'))}
               </button>
             ) : null}
-            {resolved.capsule
-              .filter(it => it.kind === 'create')
-              .flatMap(it => (it.kind === 'create' ? it.presetButtons : []))
-              .map(btn => (
-                <button
-                  key={btn.id}
-                  type="button"
-                  className="ck-bottom-menu-item"
-                  disabled={disabled || !onCustomButton}
-                  onClick={() => {
-                    setMenu(null);
-                    onCustomButton?.(btn.id);
-                  }}
+	            {resolved.capsule
+	              .filter(it => it.kind === 'create')
+	              .flatMap(it => (it.kind === 'create' ? it.presetButtons : []))
+	              .map(btn => (
+	                <button
+	                  key={btn.id}
+	                  type="button"
+	                  className={`ck-bottom-menu-item${isPrimaryActionLabel(btn.label) ? ' ck-bottom-menu-item--primary' : ''}`}
+	                  disabled={disabled || !onCustomButton}
+	                  onClick={() => {
+	                    setMenu(null);
+	                    onCustomButton?.(btn.id);
+	                  }}
                 >
                   <IconWrap>
                     <PlusIcon />
@@ -675,19 +689,19 @@ export const ActionBar: React.FC<{
               </button>
             )}
 
-            {resolved.capsule
-              .filter(it => it.kind === 'summary')
-              .flatMap(it => (it.kind === 'summary' ? it.menuButtons : []))
-              .map(btn => (
-                <button
-                  key={btn.id}
-                  type="button"
-                  className="ck-bottom-menu-item"
-                  disabled={disabled || !onCustomButton}
-                  onClick={() => {
-                    setMenu(null);
-                    onCustomButton?.(btn.id);
-                  }}
+	            {resolved.capsule
+	              .filter(it => it.kind === 'summary')
+	              .flatMap(it => (it.kind === 'summary' ? it.menuButtons : []))
+	              .map(btn => (
+	                <button
+	                  key={btn.id}
+	                  type="button"
+	                  className={`ck-bottom-menu-item${isPrimaryActionLabel(btn.label) ? ' ck-bottom-menu-item--primary' : ''}`}
+	                  disabled={disabled || !onCustomButton}
+	                  onClick={() => {
+	                    setMenu(null);
+	                    onCustomButton?.(btn.id);
+	                  }}
                 >
                   <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
                   {btn.label}
@@ -719,16 +733,16 @@ export const ActionBar: React.FC<{
 
               return (
                 <>
-                  {backItems.map((it, idx) => (
-                    <button
-                      // eslint-disable-next-line react/no-array-index-key
-                      key={`back-${idx}`}
-                      type="button"
-                      className="ck-bottom-item ck-bottom-item--back"
-                      onClick={onBack}
-                      disabled={disabled || it.disabled}
-                      aria-label={it.label}
-                    >
+	                  {backItems.map((it, idx) => (
+	                    <button
+	                      // eslint-disable-next-line react/no-array-index-key
+	                      key={`back-${idx}`}
+	                      type="button"
+	                      className="ck-bottom-item ck-bottom-item--back ck-bottom-item--primary"
+	                      onClick={onBack}
+	                      disabled={disabled || it.disabled}
+	                      aria-label={it.label}
+	                    >
                       <IconWrap>
                         <BackIcon />
                       </IconWrap>
@@ -816,17 +830,18 @@ export const ActionBar: React.FC<{
                       </button>
                     );
                   }
-                  if (it.kind === 'summary') {
-                    return (
-                      <button
-                        // eslint-disable-next-line react/no-array-index-key
-                        key={`summary-${idx}`}
-                        type="button"
-                        className={`ck-bottom-item${summaryOpen ? ' active' : ''}`}
-                        onClick={() => handleSummaryPress({ showMenu: it.showMenu })}
-                        disabled={disabled}
-                        aria-haspopup={it.showMenu ? 'dialog' : undefined}
-                        aria-expanded={it.showMenu ? summaryOpen : undefined}
+	                  if (it.kind === 'summary') {
+	                    const primary = isPrimaryActionLabel(it.label);
+	                    return (
+	                      <button
+	                        // eslint-disable-next-line react/no-array-index-key
+	                        key={`summary-${idx}`}
+	                        type="button"
+	                        className={`ck-bottom-item${summaryOpen ? ' active' : ''}${primary ? ' ck-bottom-item--primary' : ''}`}
+	                        onClick={() => handleSummaryPress({ showMenu: it.showMenu })}
+	                        disabled={disabled}
+	                        aria-haspopup={it.showMenu ? 'dialog' : undefined}
+	                        aria-expanded={it.showMenu ? summaryOpen : undefined}
                       >
                         <IconWrap>
                           <SummarySystemIcon />
@@ -835,18 +850,19 @@ export const ActionBar: React.FC<{
                       </button>
                     );
                   }
-                  if (it.kind === 'actionsMenu') {
-                    const open = menu === it.menuId;
-                    return (
-                      <button
-                        // eslint-disable-next-line react/no-array-index-key
-                        key={`actions-${idx}`}
-                        type="button"
-                        className={`ck-bottom-item${open ? ' active' : ''}`}
-                        onClick={() => setMenu(current => (current === it.menuId ? null : it.menuId))}
-                        disabled={disabled || !onCustomButton}
-                        aria-haspopup="dialog"
-                        aria-expanded={open}
+	                  if (it.kind === 'actionsMenu') {
+	                    const open = menu === it.menuId;
+	                    const primary = isPrimaryActionLabel(it.label);
+	                    return (
+	                      <button
+	                        // eslint-disable-next-line react/no-array-index-key
+	                        key={`actions-${idx}`}
+	                        type="button"
+	                        className={`ck-bottom-item${open ? ' active' : ''}${primary ? ' ck-bottom-item--primary' : ''}`}
+	                        onClick={() => setMenu(current => (current === it.menuId ? null : it.menuId))}
+	                        disabled={disabled || !onCustomButton}
+	                        aria-haspopup="dialog"
+	                        aria-expanded={open}
                       >
                         <IconWrap>
                           <SummaryIcon />
@@ -855,17 +871,18 @@ export const ActionBar: React.FC<{
                       </button>
                     );
                   }
-                  if (it.kind === 'custom') {
-                    const btn = it.button;
-                    return (
-                      <button
-                        // eslint-disable-next-line react/no-array-index-key
-                        key={`custom-${btn.id}-${idx}`}
-                        type="button"
-                        className="ck-bottom-item"
-                        onClick={() => onCustomButton?.(btn.id)}
-                        disabled={disabled || !onCustomButton}
-                      >
+	                  if (it.kind === 'custom') {
+	                    const btn = it.button;
+	                    const primary = isPrimaryActionLabel(btn.label);
+	                    return (
+	                      <button
+	                        // eslint-disable-next-line react/no-array-index-key
+	                        key={`custom-${btn.id}-${idx}`}
+	                        type="button"
+	                        className={`ck-bottom-item${primary ? ' ck-bottom-item--primary' : ''}`}
+	                        onClick={() => onCustomButton?.(btn.id)}
+	                        disabled={disabled || !onCustomButton}
+	                      >
                         <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
                         <span className="ck-bottom-label">{btn.label}</span>
                       </button>

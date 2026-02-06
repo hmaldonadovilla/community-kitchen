@@ -123,8 +123,13 @@ components:
             user before applying changes that satisfy `changeDialog.when`. See FieldChangeDialogConfig
             for interaction details with autosave and dedup rules.
         clearOnChange:
-          type: boolean
-          description: If true, changing this field clears all other fields and line items.
+          oneOf:
+            - type: boolean
+            - $ref: '#/components/schemas/ClearOnChangeConfig'
+          description: |
+            Clear behavior triggered when this field value changes.
+            - `true`: full clear (legacy) of all other fields and line items.
+            - object: configure `mode` and `bypassFields`.
         uploadConfig:
           $ref: '#/components/schemas/FileUploadConfig'
           description: Additional settings for FILE_UPLOAD questions. Provide as JSON in the `Config (JSON/REF)` column.
@@ -1044,6 +1049,33 @@ components:
         infoText:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional informational text shown on the right side of the section header (Edit view only).
+        infoDisplay:
+          type: string
+          enum: [pill, belowTitle, hidden]
+          description: |
+            How to render `infoText`.
+            - pill: right-side boxed pill (default)
+            - belowTitle: render as text under the title (no pill)
+            - hidden: do not render `infoText`
+
+    ClearOnChangeConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable/disable clear-on-change behavior. Default true when object is present.
+        mode:
+          type: string
+          enum: [full, ordered]
+          description: |
+            Clear mode:
+            - full: clear all other fields/groups
+            - ordered: clear only fields/groups defined after this field
+        bypassFields:
+          type: array
+          items:
+            type: string
+          description: Field ids that should never be cleared (applies to both modes).
 
     LineItemGroupUiConfig:
       type: object

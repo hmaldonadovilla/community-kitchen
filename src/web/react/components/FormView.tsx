@@ -119,7 +119,7 @@ import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAn
 import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app/bundledHtmlClientRenderer';
 import { resolveTemplateIdForRecord } from '../app/templateId';
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
-import { applyClearOnChange } from '../app/clearOnChange';
+import { applyClearOnChange, isClearOnChangeEnabled } from '../app/clearOnChange';
 import {
   buildParagraphDisclaimerSection,
   buildParagraphDisclaimerValue,
@@ -133,6 +133,20 @@ import { buildDraftPayload, validateForm, validateUploadCounts } from '../app/su
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
+
+const PRIMARY_ACTION_LABELS = new Set([
+  'View/Edit',
+  'Ingredients Needed',
+  'View/Edit ingredients',
+  'Back to production',
+  'Back',
+  '+Add ingredient',
+  '+another leftover',
+  'Close',
+  'Refresh'
+]);
+
+const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has((label || '').toString().trim());
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -1495,6 +1509,44 @@ const FormView: React.FC<FormViewProps> = ({
     orderedEntryEnabled
   ]);
 
+  const clearOnChangeOrderedFieldIds = useMemo(() => {
+    const byConfig = (definition.questions || [])
+      .map(q => (q?.id || '').toString().trim())
+      .filter(Boolean);
+    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return byConfig;
+
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+    const add = (idRaw: any) => {
+      const id = idRaw === undefined || idRaw === null ? '' : idRaw.toString().trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      ordered.push(id);
+    };
+
+    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header.include : [];
+    headerTargets.forEach(target => {
+      if (!target || typeof target !== 'object') return;
+      const kind = (target.kind || '').toString().trim();
+      if (kind !== 'question' && kind !== 'lineGroup') return;
+      add((target as any).id);
+    });
+
+    const steps = guidedStepsCfg.items || [];
+    steps.forEach(step => {
+      const stepTargets: any[] = Array.isArray((step as any)?.include) ? (step as any).include : [];
+      stepTargets.forEach(target => {
+        if (!target || typeof target !== 'object') return;
+        const kind = (target.kind || '').toString().trim();
+        if (kind !== 'question' && kind !== 'lineGroup') return;
+        add((target as any).id);
+      });
+    });
+
+    byConfig.forEach(add);
+    return ordered.length ? ordered : byConfig;
+  }, [definition.questions, guidedEnabled, guidedStepIds, guidedStepsCfg]);
+
   const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
   const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const guidedAutoAdvanceStateRef = useRef<{ stepId: string; lastSatisfied: boolean; armed: boolean } | null>(null);
@@ -2346,6 +2398,7 @@ const FormView: React.FC<FormViewProps> = ({
       pageSectionKey?: string;
       pageSectionTitle?: string;
       pageSectionInfoText?: string;
+      pageSectionInfoDisplay?: 'pill' | 'belowTitle' | 'hidden';
       questions: WebQuestionDefinition[];
       order: number;
     };
@@ -2391,6 +2444,11 @@ const FormView: React.FC<FormViewProps> = ({
         !isHeader && group?.pageSection?.title ? resolveLocalizedString(group.pageSection.title as any, language, '') : undefined;
       const pageSectionInfoText =
         !isHeader && group?.pageSection?.infoText ? resolveLocalizedString(group.pageSection.infoText as any, language, '') : undefined;
+      const pageSectionInfoDisplayRaw = !isHeader ? (group as any)?.pageSection?.infoDisplay : undefined;
+      const pageSectionInfoDisplay =
+        pageSectionInfoDisplayRaw === 'belowTitle' || pageSectionInfoDisplayRaw === 'hidden' || pageSectionInfoDisplayRaw === 'pill'
+          ? (pageSectionInfoDisplayRaw as 'pill' | 'belowTitle' | 'hidden')
+          : undefined;
 
       const existing = map.get(key);
       if (!existing) {
@@ -2403,6 +2461,7 @@ const FormView: React.FC<FormViewProps> = ({
           pageSectionKey,
           pageSectionTitle,
           pageSectionInfoText,
+          pageSectionInfoDisplay,
           questions: [q],
           order: order++
         });
@@ -2417,6 +2476,7 @@ const FormView: React.FC<FormViewProps> = ({
       if (!existing.pageSectionKey && pageSectionKey) existing.pageSectionKey = pageSectionKey;
       if (!existing.pageSectionTitle && pageSectionTitle) existing.pageSectionTitle = pageSectionTitle;
       if (!existing.pageSectionInfoText && pageSectionInfoText) existing.pageSectionInfoText = pageSectionInfoText;
+      if (!existing.pageSectionInfoDisplay && pageSectionInfoDisplay) existing.pageSectionInfoDisplay = pageSectionInfoDisplay;
     });
 
     return Array.from(map.values()).sort((a, b) => {
@@ -6140,7 +6200,7 @@ const FormView: React.FC<FormViewProps> = ({
     const currentValues = valuesRef.current;
     const currentLineItems = lineItemsRef.current;
     if (
-      q.clearOnChange === true &&
+      isClearOnChangeEnabled((q as any).clearOnChange) &&
       !isEmptyValue(currentValues[q.id]) &&
       !isEmptyValue(value) &&
       !areFieldValuesEqual(currentValues[q.id], value)
@@ -6150,7 +6210,8 @@ const FormView: React.FC<FormViewProps> = ({
         values: currentValues,
         lineItems: currentLineItems,
         fieldId: q.id,
-        nextValue: value
+        nextValue: value,
+        orderedFieldIds: clearOnChangeOrderedFieldIds
       });
       onDiagnostic?.('field.clearOnChange', {
         fieldId: q.id,
@@ -6997,17 +7058,20 @@ const FormView: React.FC<FormViewProps> = ({
         refId: q.id,
         onConfirm: runReset
       });
-    };
-    const renderOverlayOpenReplaceButton = (displayValue?: string | null) => {
-      const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
-      const actionButtonStyle = showResetButton
-        ? { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
-        : buttonStyles.secondary;
-      return (
-        <div
-          key={q.id}
-          className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
-          data-field-path={q.id}
+	    };
+	    const renderOverlayOpenReplaceButton = (displayValue?: string | null) => {
+	      const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
+	      const baseLabel = overlayOpenAction ? (overlayOpenAction.label || resolveLabel(q, language)) : '';
+	      const primary = overlayOpenAction ? isPrimaryActionLabel(baseLabel) : false;
+	      const baseStyle = primary ? buttonStyles.primary : buttonStyles.secondary;
+	      const actionButtonStyle = showResetButton
+	        ? { ...baseStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
+	        : baseStyle;
+	      return (
+	        <div
+	          key={q.id}
+	          className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+	          data-field-path={q.id}
           data-has-error={errors[q.id] ? 'true' : undefined}
           data-has-warning={hasWarning(q.id) ? 'true' : undefined}
         >
@@ -7024,21 +7088,21 @@ const FormView: React.FC<FormViewProps> = ({
             >
               {overlayOpenButtonText(displayValue)}
             </button>
-            {showResetButton ? (
-              <button
-                type="button"
-                onClick={handleOverlayOpenActionReset}
-                disabled={overlayOpenActionResetDisabled}
-                aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                style={withDisabled(
-                  {
-                    ...buttonStyles.secondary,
-                    borderTopLeftRadius: 0,
-                    borderBottomLeftRadius: 0,
-                    padding: '0 14px',
-                    minWidth: 44
-                  },
-                  overlayOpenActionResetDisabled
+	            {showResetButton ? (
+	              <button
+	                type="button"
+	                onClick={handleOverlayOpenActionReset}
+	                disabled={overlayOpenActionResetDisabled}
+	                aria-label={tSystem('lineItems.remove', language, 'Remove')}
+	                style={withDisabled(
+	                  {
+	                    ...baseStyle,
+	                    borderTopLeftRadius: 0,
+	                    borderBottomLeftRadius: 0,
+	                    padding: '0 14px',
+	                    minWidth: 44
+	                  },
+	                  overlayOpenActionResetDisabled
                 )}
               >
                 <TrashIcon size={40} />
@@ -7050,21 +7114,23 @@ const FormView: React.FC<FormViewProps> = ({
         </div>
       );
     };
-    const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
-      if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
-      return (
-        <div style={{ marginTop: 8 }}>
-          <button
-            type="button"
-            onClick={handleOverlayOpenAction}
-            disabled={overlayOpenDisabled}
-            style={withDisabled(buttonStyles.secondary, overlayOpenDisabled)}
-          >
-            {overlayOpenButtonText(displayValue)}
-          </button>
-        </div>
-      );
-    };
+	    const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
+	      if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
+	      const baseLabel = overlayOpenAction.label || resolveLabel(q, language);
+	      const primary = isPrimaryActionLabel(baseLabel);
+	      return (
+	        <div style={{ marginTop: 8 }}>
+	          <button
+	            type="button"
+	            onClick={handleOverlayOpenAction}
+	            disabled={overlayOpenDisabled}
+	            style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, overlayOpenDisabled)}
+	          >
+	            {overlayOpenButtonText(displayValue)}
+	          </button>
+	        </div>
+	      );
+	    };
 
     switch (q.type) {
       case 'BUTTON': {
@@ -7538,14 +7604,14 @@ const FormView: React.FC<FormViewProps> = ({
         const hasFiles = items.length > 0;
         const viewMode = readOnly || locked || maxed || hasFiles;
         const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-        const leftLabel = viewMode
-          ? tSystem('files.view', language, 'View photos')
-          : tSystem('files.add', language, 'Add photo');
-        const cameraStyleBase = viewMode ? buttonStyles.secondary : isEmpty ? buttonStyles.primary : buttonStyles.secondary;
-        if (renderAsLabel) {
-          const displayContent =
-            items.length === 0
-              ? null
+	        const leftLabel = viewMode
+	          ? tSystem('files.view', language, 'View photos')
+	          : tSystem('files.add', language, 'Add photo');
+	        const cameraStyleBase = buttonStyles.primary;
+	        if (renderAsLabel) {
+	          const displayContent =
+	            items.length === 0
+	              ? null
               : items.map((item: any, idx: number) => (
                   <div key={`${q.id}-file-${idx}`} className="ck-readonly-file">
                     {describeUploadItem(item as any)}
@@ -8886,11 +8952,11 @@ const FormView: React.FC<FormViewProps> = ({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              {!overlayHideCloseButton ? (
-                <button type="button" onClick={() => attemptCloseSubgroupOverlay('button')} style={buttonStyles.secondary}>
-                  {overlayCloseButtonLabel}
-                </button>
-              ) : null}
+	              {!overlayHideCloseButton ? (
+	                <button type="button" onClick={() => attemptCloseSubgroupOverlay('button')} style={buttonStyles.primary}>
+	                  {overlayCloseButtonLabel}
+	                </button>
+	              ) : null}
             </div>
             <div style={{ textAlign: 'center', padding: '0 8px', overflowWrap: 'anywhere' }}>
               {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
@@ -9448,13 +9514,13 @@ const FormView: React.FC<FormViewProps> = ({
                                 })),
                                 ...(overlayDetailEnabled
                                   ? (() => {
-                                      const actionButtonStyle: React.CSSProperties = {
-                                        ...buttonStyles.secondary,
-                                        padding: 6,
-                                        minHeight: 36,
-                                        minWidth: 36,
-                                        width: '100%'
-                                      };
+	                                      const actionButtonStyle: React.CSSProperties = {
+	                                        ...buttonStyles.primary,
+	                                        padding: 6,
+	                                        minHeight: 36,
+	                                        minWidth: 36,
+	                                        width: '100%'
+	                                      };
                                       const actionColumns: Array<any> = [];
                                       if (showOverlayDetailViewInHeader) {
                                         actionColumns.push({
@@ -9619,13 +9685,13 @@ const FormView: React.FC<FormViewProps> = ({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {showBodyEdit ? (
                             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                              <button
-                                type="button"
-                                style={buttonStyles.secondary}
-                                onClick={() => {
-                                  if (!overlayDetailSelectionForGroup) return;
-                                  setOverlayDetailSelection({ groupId: subKey, rowId: overlayDetailSelectionForGroup.rowId, mode: 'edit' });
-                                  onDiagnostic?.('lineItems.overlayDetail.action', {
+	                              <button
+	                                type="button"
+	                                style={isPrimaryActionLabel(overlayDetailEditLabel) ? buttonStyles.primary : buttonStyles.secondary}
+	                                onClick={() => {
+	                                  if (!overlayDetailSelectionForGroup) return;
+	                                  setOverlayDetailSelection({ groupId: subKey, rowId: overlayDetailSelectionForGroup.rowId, mode: 'edit' });
+	                                  onDiagnostic?.('lineItems.overlayDetail.action', {
                                     groupId: subKey,
                                     rowId: overlayDetailSelectionForGroup.rowId,
                                     actionId: 'edit',
@@ -10217,14 +10283,14 @@ const FormView: React.FC<FormViewProps> = ({
                         renderCell: (subRow: any) => renderSubTableField(field, subRow)
                       })),
                       ...(overlayDetailEnabled
-                        ? (() => {
-                            const actionButtonStyle: React.CSSProperties = {
-                              ...buttonStyles.secondary,
-                              padding: 6,
-                              minHeight: 36,
-                              minWidth: 36,
-                              width: '100%'
-                            };
+	                        ? (() => {
+	                            const actionButtonStyle: React.CSSProperties = {
+	                              ...buttonStyles.primary,
+	                              padding: 6,
+	                              minHeight: 36,
+	                              minWidth: 36,
+	                              width: '100%'
+	                            };
                             const actionColumns: Array<any> = [];
                             if (overlayDetailCanView) {
                               actionColumns.push({
@@ -10916,12 +10982,12 @@ const FormView: React.FC<FormViewProps> = ({
           }}
         >
           <div style={{ padding: 16, borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-control)' }}>{tSystem('common.error', language, 'Error')}</div>
-              <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
-                {tSystem('common.close', language, 'Close')}
-              </button>
-            </div>
+	            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+	              <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-control)' }}>{tSystem('common.error', language, 'Error')}</div>
+	              <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.primary}>
+	                {tSystem('common.close', language, 'Close')}
+	              </button>
+	            </div>
           </div>
           <div style={{ padding: 16 }}>
             <div className="error">
@@ -11296,11 +11362,11 @@ const FormView: React.FC<FormViewProps> = ({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              {!overlayHideCloseButton ? (
-                <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
-                  {overlayCloseButtonLabel}
-                </button>
-              ) : null}
+	              {!overlayHideCloseButton ? (
+	                <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.primary}>
+	                  {overlayCloseButtonLabel}
+	                </button>
+	              ) : null}
             </div>
             <div style={{ textAlign: 'center', padding: '0 8px', overflowWrap: 'anywhere' }}>
               {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
@@ -11500,14 +11566,14 @@ const FormView: React.FC<FormViewProps> = ({
                               return raw.toString();
                             }
                           })),
-                          ...(() => {
-                            const actionButtonStyle: React.CSSProperties = {
-                              ...buttonStyles.secondary,
-                              padding: 6,
-                              minHeight: 36,
-                              minWidth: 36,
-                              width: '100%'
-                            };
+	                          ...(() => {
+	                            const actionButtonStyle: React.CSSProperties = {
+	                              ...buttonStyles.primary,
+	                              padding: 6,
+	                              minHeight: 36,
+	                              minWidth: 36,
+	                              width: '100%'
+	                            };
                             const actionColumns: Array<any> = [];
                             if (showOverlayDetailViewInHeader) {
                               actionColumns.push({
@@ -11983,10 +12049,35 @@ const FormView: React.FC<FormViewProps> = ({
     const stepHelpText = stepCfg?.helpText ? resolveLocalizedString(stepCfg.helpText, language, '') : '';
     const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
     const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
-
-    const guidedContextHeaderIds = new Set<string>(['MP_DISTRIBUTOR', 'MP_SERVICE', 'MP_PREP_DATE']);
-    const showGuidedContextHeader =
-      activeGuidedStepId === 'deliveryForm' || activeGuidedStepId === 'foodSafety' || activeGuidedStepId === 'portioning';
+    const stepContextHeaderCfg = stepCfg?.contextHeader && typeof stepCfg.contextHeader === 'object' ? stepCfg.contextHeader : null;
+    const stepContextHeaderKeyedParts: any[] = stepContextHeaderCfg
+      ? Object.keys(stepContextHeaderCfg as any)
+          .filter(key => /^part\d+$/i.test(key))
+          .sort((a, b) => Number(a.replace(/\D+/g, '')) - Number(b.replace(/\D+/g, '')))
+          .map(key => (stepContextHeaderCfg as any)[key])
+      : [];
+    const stepContextHeaderPartsRaw: any[] = Array.isArray(stepContextHeaderCfg?.parts)
+      ? (stepContextHeaderCfg.parts as any[])
+      : Array.isArray((stepContextHeaderCfg as any)?.fields)
+        ? ((stepContextHeaderCfg as any).fields as any[])
+        : stepContextHeaderKeyedParts.length
+          ? stepContextHeaderKeyedParts
+        : [];
+    const normalizeStepContextHeaderPartId = (part: any): string => {
+      if (part === undefined || part === null) return '';
+      if (typeof part === 'object') return ((part as any).id ?? (part as any).fieldId ?? '').toString().trim();
+      return part.toString().trim();
+    };
+    const stepContextHeaderPartIds = stepContextHeaderPartsRaw
+      .map(part => normalizeStepContextHeaderPartId(part))
+      .filter(Boolean)
+      .filter((id, idx, arr) => arr.indexOf(id) === idx);
+    const guidedContextHeaderIds = new Set<string>(stepContextHeaderPartIds);
+    const guidedContextHeaderSeparator = (() => {
+      const raw = stepContextHeaderCfg?.separator;
+      const normalized = raw === undefined || raw === null ? '' : raw.toString();
+      return normalized || ' | ';
+    })();
 
     const questionById = new Map<string, WebQuestionDefinition>();
     (definition.questions || []).forEach(q => questionById.set(q.id, q));
@@ -12031,29 +12122,22 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const guidedContextHeaderNode = (() => {
-      if (!showGuidedContextHeader) return null;
-      const parts = ['MP_DISTRIBUTOR', 'MP_SERVICE', 'MP_PREP_DATE'].map(resolveGuidedContextValue).filter(Boolean);
+      if (!stepContextHeaderPartIds.length) return null;
+      const parts = stepContextHeaderPartIds.map(resolveGuidedContextValue).filter(Boolean);
       if (!parts.length) return null;
-      const text = parts.join(' | ');
       return (
-        <div
-          role="note"
-          style={{
-            fontSize: 'var(--ck-font-label)',
-            color: 'var(--text)',
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            overflowX: 'auto',
-            WebkitOverflowScrolling: 'touch',
-            scrollbarWidth: 'none'
-          }}
-        >
-          {text}
+        <div role="note" className="ck-guided-context-header">
+          {parts.map((part, idx) => (
+            <React.Fragment key={`ctx:${stepContextHeaderPartIds[idx]}:${idx}`}>
+              {idx > 0 ? guidedContextHeaderSeparator : ''}
+              {part}
+            </React.Fragment>
+          ))}
         </div>
       );
     })();
 
-    const stepTargetsFiltered = showGuidedContextHeader
+    const stepTargetsFiltered = guidedContextHeaderIds.size
       ? stepTargets.filter(t => {
           if (!t || typeof t !== 'object') return true;
           const kind = (t.kind || '').toString().trim();
@@ -12669,11 +12753,11 @@ const FormView: React.FC<FormViewProps> = ({
                           aria-label={`${pillActionLabel} section ${section.title}`}
                         >
                           <div className="ck-group-title">{section.title}</div>
-                          <span
-                            className={`ck-progress-pill ${requiredProgressClass}`}
-                            title={pillActionLabel}
-                            aria-hidden="true"
-                          >
+	                          <span
+	                            className={`ck-progress-pill ck-progress-pill--primary ${requiredProgressClass}`}
+	                            title={pillActionLabel}
+	                            aria-hidden="true"
+	                          >
                             {requiredProgressClass === 'ck-progress-good' ? (
                               <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
                             ) : null}
@@ -12720,7 +12804,12 @@ const FormView: React.FC<FormViewProps> = ({
                 if (!rendered.length) return null;
 
                 return (
-                  <PageSection key={`page-section-${block.key}-${idx}`} title={block.title} infoText={block.infoText}>
+                  <PageSection
+                    key={`page-section-${block.key}-${idx}`}
+                    title={block.title}
+                    infoText={block.infoText}
+                    infoDisplay={block.infoDisplay}
+                  >
                     <div className="ck-group-stack">{rendered}</div>
                   </PageSection>
                 );
