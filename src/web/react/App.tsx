@@ -71,6 +71,7 @@ import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns
 import {
   applyFieldChangeDialogTargets,
   evaluateFieldChangeDialogWhen,
+  resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
   resolveTargetFieldConfig,
   type FieldChangeDialogTargetUpdate
@@ -1013,8 +1014,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const handleFieldChangeDialogCancel = useCallback(() => {
     const pending = fieldChangeActiveRef.current;
     if (!pending) return;
-    revertFieldChangePending(pending, 'cancel');
-  }, [revertFieldChangePending]);
+    const cancelAction = resolveFieldChangeDialogCancelAction(pending.dialog);
+    revertFieldChangePending(
+      pending,
+      cancelAction === 'discardDraftAndGoHome' ? 'cancel.discardDraftAndGoHome' : 'cancel',
+      { cancelAction }
+    );
+    if (cancelAction !== 'discardDraftAndGoHome') return;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    dedupHoldRef.current = false;
+    autoSaveDirtyRef.current = false;
+    autoSaveQueuedRef.current = false;
+    setDraftSave({ phase: 'idle' });
+    setView('list');
+    setStatus(null);
+    setStatusLevel(null);
+    logEvent('fieldChangeDialog.cancelAction.discardDraftAndGoHome', {
+      fieldPath: pending.fieldPath,
+      fieldId: pending.fieldId,
+      groupId: pending.groupId || null,
+      rowId: pending.rowId || null
+    });
+  }, [logEvent, revertFieldChangePending]);
 
   const openFieldChangeDialog = useCallback(
     (pending: FieldChangePending) => {

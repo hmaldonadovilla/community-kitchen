@@ -82,6 +82,34 @@ describe('ConfigSheet', () => {
     expect(questions[0].ui).toEqual({ helperText: { en: 'Enter a name' }, helperPlacement: 'placeholder' });
   });
 
+  test('getQuestions parses changeDialog.cancelAction', () => {
+    const sheet = mockSS.insertSheet('Config: ChangeDialogCancelAction');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'DATE',
+        'DATE',
+        'Date',
+        'Date',
+        'Datum',
+        true,
+        '',
+        '',
+        '',
+        'Active',
+        '{"changeDialog":{"when":{"fieldId":"DATE","isInFuture":true},"cancelAction":"discardDraftAndGoHome"}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: ChangeDialogCancelAction');
+    expect(questions.length).toBe(1);
+    expect((questions[0].changeDialog as any)?.cancelAction).toBe('discardDraftAndGoHome');
+  });
+
   test('getQuestions preserves selectionEffects.id (for __ckSelectionEffectId tagging)', () => {
     const sheet = mockSS.insertSheet('Config: SelectionEffectsId');
     const exampleRows = [

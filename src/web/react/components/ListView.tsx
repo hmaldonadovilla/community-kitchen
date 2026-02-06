@@ -1680,6 +1680,7 @@ const ListView: React.FC<ListViewProps> = ({
                         maxWidth: 180,
                         whiteSpace: 'normal',
                         wordBreak: 'break-word',
+                        background: 'var(--card)',
                         cursor: isSortableColumn(col) ? 'pointer' : 'default'
                       }}
                     >

@@ -38,6 +38,8 @@ Meal Production (Steps UI) | Recipes (Home Page) | Storage and cleaning checks (
 
 - **Field-level guarded changes (ck-47)**: Configure per-field `changeDialog` rules (top-level or line-item fields) to pause autosave and confirm edits when `changeDialog.when` matches after a change. You can add dialog `inputs` to update peer fields, parent fields, or selection-effect rows (`target.scope: "row" | "parent" | "top" | "effect"` with `effectId`). On confirm, a dedup precheck runs for reject-rule keys (or `dedupMode: "always"`); on cancel/conflict, the change is reverted and autosave resumes.
   - `changeDialog.primaryAction: "cancel"` makes Cancel the primary/default action (useful when confirming a destructive change).
+  - `changeDialog.cancelAction: "discardDraftAndGoHome"` makes Cancel discard the pending draft edits and navigate to Home/List.
+- **Form-level conditional field disable rules**: Configure `fieldDisableRules` at the form/dashboard level to make the edit view read-only when a `when` condition matches, with optional `bypassFields` to keep specific fields editable (for example, lock all fields when `DATE` is in the future except `COOK`).
   - `selectionEffects[].preserveManualRows: false` (data-driven effects) deletes existing manual rows in the target group when refreshing auto-generated rows.
 
 - **Dynamic Options & Rules**: Option filtering based on another field plus cross-field validation rules (main form and line items), including non-blocking warning rules (`level: "warning"`). `when` clauses support date comparisons (`isToday`, `isInPast`, `isInFuture`) evaluated against the user's local date.

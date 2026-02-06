@@ -716,6 +716,12 @@ export interface FieldChangeDialogConfig {
    */
   dedupMode?: 'auto' | 'always' | 'never';
   /**
+   * Optional cancel behavior override.
+   * - none (default): close dialog and revert pending change.
+   * - discardDraftAndGoHome: revert pending change, discard local draft edits, and return to Home/List view.
+   */
+  cancelAction?: 'none' | 'discardDraftAndGoHome';
+  /**
    * Optional dialog input fields that update other targets on confirm.
    */
   inputs?: FieldChangeDialogInput[];
@@ -897,6 +903,21 @@ export interface LineItemWhenClause {
 }
 
 export type WhenClause = VisibilityCondition | WhenAllClause | WhenAnyClause | WhenNotClause | LineItemWhenClause;
+
+export interface FieldDisableRule {
+  /**
+   * Optional stable id for diagnostics.
+   */
+  id?: string;
+  /**
+   * When this condition matches, fields become read-only unless explicitly bypassed.
+   */
+  when: WhenClause;
+  /**
+   * Optional list of field ids that remain editable while this rule is active.
+   */
+  bypassFields?: string[];
+}
 
 export interface VisibilityConfig {
   showWhen?: WhenClause;
@@ -2147,6 +2168,12 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   summaryButtonLabel?: LocalizedString;
+  /**
+   * Optional form-level field disable rules for the React edit (form) view.
+   *
+   * When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
+   */
+  fieldDisableRules?: FieldDisableRule[];
 }
 
 export interface FormConfigExport {
@@ -2924,6 +2951,12 @@ export interface WebFormDefinition {
    * Example: "Checklist".
    */
   summaryButtonLabel?: LocalizedString;
+  /**
+   * Optional form-level field disable rules for the React edit (form) view.
+   *
+   * When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
+   */
+  fieldDisableRules?: FieldDisableRule[];
 }
 
 export interface CopyCurrentRecordLineItemProfile {

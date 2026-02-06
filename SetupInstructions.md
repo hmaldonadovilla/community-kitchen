@@ -260,6 +260,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - `target.scope: "parent"` updates the parent row when used inside a subgroup (falls back to top-level for non-subgroups).
         - `target.scope: "effect"` applies to rows created by the matching `selectionEffects[].id`.
         - `primaryAction: "cancel"` makes the Cancel button the primary/default action (useful when confirming a destructive change).
+        - `cancelAction: "discardDraftAndGoHome"` makes Cancel revert the change, discard local draft edits, and return to Home/List.
 
     - **Summary view field visibility**: By default, the Summary view only shows fields that are currently visible in the Form view (i.e., not hidden by `visibility`). You can override this per field (and per line-item field/subgroup field) via `ui.summaryVisibility`:
 
@@ -761,6 +762,20 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       ```
 
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved. The first time a user opens Create/Edit/Copy, they’ll see a one-time autosave explainer overlay (copy lives in `autosaveNotice.*` in `src/web/systemStrings.json`).
+
+    - Want to conditionally disable editing for most fields? Add `fieldDisableRules` in the same dashboard JSON column. When a rule matches, all fields become read-only except ids in `bypassFields`.
+
+      ```json
+      {
+        "fieldDisableRules": [
+          {
+            "id": "future-date-lock",
+            "when": { "fieldId": "DATE", "isInFuture": true },
+            "bypassFields": ["COOK"]
+          }
+        ]
+      }
+      ```
     - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
     - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
         - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.

@@ -26,9 +26,27 @@ export type FieldChangeDialogTargetUpdate = {
   value: FieldValue;
 };
 
+export type FieldChangeDialogCancelAction = 'none' | 'discardDraftAndGoHome';
+
 const normalizeId = (raw: any): string => {
   if (raw === undefined || raw === null) return '';
   return String(raw).trim();
+};
+
+export const resolveFieldChangeDialogCancelAction = (
+  dialog?: FieldChangeDialogConfig
+): FieldChangeDialogCancelAction => {
+  const raw = (dialog as any)?.cancelAction;
+  if (raw === undefined || raw === null) return 'none';
+  const normalized = raw.toString().trim().toLowerCase();
+  if (
+    normalized === 'discarddraftandgohome' ||
+    normalized === 'discard_draft_and_go_home' ||
+    normalized === 'discard-draft-and-go-home'
+  ) {
+    return 'discardDraftAndGoHome';
+  }
+  return 'none';
 };
 
 const isDialogEmptyValue = (value: FieldValue): boolean => {

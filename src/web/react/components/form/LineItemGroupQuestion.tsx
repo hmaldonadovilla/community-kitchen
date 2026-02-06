@@ -97,34 +97,17 @@ import {
   type RowFlowResolvedState
 } from '../../features/steps/domain/rowFlow';
 
-const normalizeActionToken = (value: string): string =>
-  (value || '')
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/^\+\s+/, '+');
-
-const PRIMARY_ACTION_LABELS = new Set([
-  'view/edit',
-  'ingredients needed',
-  'view/edit ingredients',
-  'back to production',
-  'back',
-  '+add ingredient',
-  '+another leftover',
-  '+add leftover',
-  'close',
-  'refresh',
-  'tap to collapse',
-  'tap to collaps',
-  'tap to expand'
-].map(normalizeActionToken));
-
-const PRIMARY_ACTION_IDS = new Set(['removeleftover', 'clearleftovers']);
-
-const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has(normalizeActionToken(label));
-const isPrimaryActionId = (actionId: string): boolean => PRIMARY_ACTION_IDS.has(normalizeActionToken(actionId));
+const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
+const listRowActionButtonBaseStyle: React.CSSProperties = {
+  ...buttonStyles.primary,
+  width: LIST_ROW_ACTION_BUTTON_WIDTH,
+  minWidth: LIST_ROW_ACTION_BUTTON_WIDTH,
+  maxWidth: LIST_ROW_ACTION_BUTTON_WIDTH
+};
+const withListRowActionButtonStyle = (
+  disabled?: boolean,
+  overrides?: React.CSSProperties
+): React.CSSProperties => withDisabled({ ...listRowActionButtonBaseStyle, ...(overrides || {}) }, disabled);
 
 export interface ErrorIndex {
   rowErrors: Set<string>;
@@ -1070,18 +1053,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     (args: { actionId: string; row: LineItemRowState; rowFlowState: RowFlowResolvedState }) => {
       const action = rowFlowActionById.get(args.actionId);
       if (!action) return null;
-	      const label = resolveLocalizedString(action.label, language, action.id);
-	      const iconKey = (action.icon || '').toString().trim().toLowerCase();
-	      const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
-	      const tone = (action.tone || 'secondary').toString().trim().toLowerCase();
-	      const primary = tone === 'primary' || isPrimaryActionLabel(label) || isPrimaryActionId(action.id);
-	      const disabled = submitting;
-	      const onClick = () => {
-	        if (disabled) return;
-	        runRowFlowActionWithContext({ actionId: action.id, row: args.row, rowFlowState: args.rowFlowState });
-	      };
+      const label = resolveLocalizedString(action.label, language, action.id);
+      const iconKey = (action.icon || '').toString().trim().toLowerCase();
+      const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
+      const disabled = submitting;
+      const onClick = () => {
+        if (disabled) return;
+        runRowFlowActionWithContext({ actionId: action.id, row: args.row, rowFlowState: args.rowFlowState });
+      };
 
-	      if (variant === 'icon' || iconKey) {
+      if (variant === 'icon' || iconKey) {
         const iconNode =
           iconKey === 'remove' ? (
             <TrashIcon size={40} />
@@ -1092,28 +1073,34 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           ) : (
             <PencilIcon size={40} />
           );
-	        return (
-	          <button
-	            key={action.id}
-	            type="button"
-	            aria-label={label || action.id}
-	            title={label || action.id}
-	            onClick={onClick}
-	            disabled={disabled}
-	            style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, disabled)}
-	          >
-	            {iconNode}
-	          </button>
-	        );
-	      }
+        return (
+          <button
+            key={action.id}
+            type="button"
+            aria-label={label || action.id}
+            title={label || action.id}
+            onClick={onClick}
+            disabled={disabled}
+            style={withDisabled(buttonStyles.primary, disabled)}
+          >
+            {iconNode}
+          </button>
+        );
+      }
 
-	      const buttonStyle = primary ? buttonStyles.primary : buttonStyles.secondary;
-	      return (
-	        <button key={action.id} type="button" onClick={onClick} disabled={disabled} style={withDisabled(buttonStyle, disabled)}>
-	          {label || action.id}
-	        </button>
-	      );
-	    },
+      return (
+        <button
+          key={action.id}
+          type="button"
+          className="ck-list-row-action-btn"
+          onClick={onClick}
+          disabled={disabled}
+          style={withListRowActionButtonStyle(disabled)}
+        >
+          {label || action.id}
+        </button>
+      );
+    },
     [language, rowFlowActionById, runRowFlowActionWithContext, submitting]
   );
 
@@ -1853,12 +1840,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               language,
               tSystem('lineItems.addLines', language, 'Add lines')
             );
-            const addLinesPrimary = isPrimaryActionLabel(addLinesLabel);
             return (
               <button
                 type="button"
+                className="ck-list-row-action-btn"
                 disabled={submitting || selectorIsMissing}
-                style={withDisabled(addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary, submitting || selectorIsMissing)}
+                style={withListRowActionButtonStyle(submitting || selectorIsMissing)}
                 onClick={async () => {
                   if (submitting) return;
                   if (selectorIsMissing) {
@@ -1945,10 +1932,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             language,
             tSystem('lineItems.addLine', language, 'Add line')
           );
-          const addLinePrimary = isPrimaryActionLabel(addLineLabel);
           return (
             <button
               type="button"
+              className="ck-list-row-action-btn"
               disabled={submitting || selectorIsMissing}
               onClick={() => {
                 const selectorNow = (latestSectionSelectorValueRef.current || selectorValue || '').toString().trim();
@@ -1962,7 +1949,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     : undefined;
                 addLineItemRowManual(q.id, selectorPreset);
               }}
-              style={withDisabled(addLinePrimary ? buttonStyles.primary : buttonStyles.secondary, submitting || selectorIsMissing)}
+              style={withListRowActionButtonStyle(submitting || selectorIsMissing)}
             >
               <PlusIcon />
               {addLineLabel}
@@ -4973,7 +4960,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         <button
                           key={`${fullSubKey}-open`}
                           type="button"
-                          className={`${pillBaseClass} ${pillClass}`}
+                          className={`${pillBaseClass} ck-list-row-action-btn ${pillClass}`}
                           aria-label={`${tapToOpenLabel} ${label}`}
                           onClick={() => {
                             onDiagnostic?.('subgroup.open.tap', {
@@ -6139,19 +6126,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 	                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
 	                  const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
 	                  const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
-	                  const baseLabel = overlayOpenAction ? (overlayOpenAction.label || resolveFieldLabel(field, language, field.id)) : '';
-	                  const primary = overlayOpenAction ? isPrimaryActionLabel(baseLabel) : false;
-	                  const baseStyle = primary ? buttonStyles.primary : buttonStyles.secondary;
-	                  const actionButtonStyle = showResetButton
-	                    ? { ...baseStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
-	                    : baseStyle;
+	                  const baseStyle = buttonStyles.primary;
 	                  const actionRow = (
 	                    <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
 	                      <button
                         type="button"
+                        className="ck-list-row-action-btn"
                         onClick={handleOverlayOpenAction}
                         disabled={overlayOpenDisabled}
-                        style={withDisabled(actionButtonStyle, overlayOpenDisabled)}
+                        style={withListRowActionButtonStyle(
+                          overlayOpenDisabled,
+                          showResetButton ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' } : undefined
+                        )}
                       >
                         {overlayOpenButtonText(displayValue)}
                       </button>
@@ -6264,15 +6250,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 };
 	                const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
 	                  if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
-	                  const baseLabel = overlayOpenAction.label || resolveFieldLabel(field, language, field.id);
-	                  const primary = isPrimaryActionLabel(baseLabel);
 	                  return (
 	                    <div style={{ marginTop: 8 }}>
 	                      <button
 	                        type="button"
+                          className="ck-list-row-action-btn"
 	                        onClick={handleOverlayOpenAction}
 	                        disabled={overlayOpenDisabled}
-	                        style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, overlayOpenDisabled)}
+	                        style={withListRowActionButtonStyle(overlayOpenDisabled)}
 	                      >
 	                        {overlayOpenButtonText(displayValue)}
 	                      </button>
@@ -6605,7 +6590,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <div className="ck-upload-row__actions">
                             <button
                               type="button"
-                              className="ck-progress-pill ck-upload-pill-btn"
+                              className="ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn"
                               aria-disabled={submitting || readOnly ? 'true' : undefined}
                               onClick={onAdd}
                             >
@@ -6615,7 +6600,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             {items.length ? (
                               <button
                                 type="button"
-                                className="ck-progress-pill ck-upload-pill-btn"
+                                className="ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn"
                                 aria-disabled={submitting || readOnly ? 'true' : undefined}
                                 onClick={onClearAll}
                               >
@@ -7393,19 +7378,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 	                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
 	                        const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
 	                        const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
-	                        const baseLabel = overlayOpenAction ? (overlayOpenAction.label || resolveFieldLabel(field, language, field.id)) : '';
-	                        const primary = overlayOpenAction ? isPrimaryActionLabel(baseLabel) : false;
-	                        const baseStyle = primary ? buttonStyles.primary : buttonStyles.secondary;
-	                        const actionButtonStyle = showResetButton
-	                          ? { ...baseStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
-	                          : baseStyle;
+	                        const baseStyle = buttonStyles.primary;
 	                        const actionRow = (
 	                          <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
 	                            <button
                               type="button"
+                              className="ck-list-row-action-btn"
                               onClick={handleOverlayOpenAction}
                               disabled={overlayOpenDisabled}
-                              style={withDisabled(actionButtonStyle, overlayOpenDisabled)}
+                              style={withListRowActionButtonStyle(
+                                overlayOpenDisabled,
+                                showResetButton ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' } : undefined
+                              )}
                             >
                               {overlayOpenButtonText(displayValue)}
                             </button>
@@ -7521,15 +7505,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       };
 	                      const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
 	                        if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
-	                        const baseLabel = overlayOpenAction.label || resolveFieldLabel(field, language, field.id);
-	                        const primary = isPrimaryActionLabel(baseLabel);
 	                        return (
 	                          <div style={{ marginTop: 8 }}>
 	                            <button
 	                              type="button"
+                                className="ck-list-row-action-btn"
 	                              onClick={handleOverlayOpenAction}
 	                              disabled={overlayOpenDisabled}
-	                              style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, overlayOpenDisabled)}
+	                              style={withListRowActionButtonStyle(overlayOpenDisabled)}
 	                            >
 	                              {overlayOpenButtonText(displayValue)}
 	                            </button>
@@ -7894,7 +7877,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 </button>
                                 <button
                                   type="button"
-                                  className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
+                                  className={`ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn ${pillClass}`}
                                   aria-disabled={submitting ? 'true' : undefined}
                                   aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                                     'files.title',
@@ -8495,12 +8478,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             }
                             addLineItemRowManual(subKey);
                           }}
-                          style={withDisabled(
-                            isPrimaryActionLabel(resolveLocalizedString(sub.addButtonLabel, language, 'Add line'))
-                              ? buttonStyles.primary
-                              : buttonStyles.secondary,
-                            submitting || subSelectorIsMissing
-                          )}
+                          className="ck-list-row-action-btn"
+                          style={withListRowActionButtonStyle(submitting || subSelectorIsMissing)}
                         >
                           <PlusIcon />
                           {resolveLocalizedString(sub.addButtonLabel, language, 'Add line')}
@@ -9418,7 +9397,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             </button>
                                             <button
                                               type="button"
-                                              className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
+                                              className={`ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn ${pillClass}`}
                                               aria-disabled={submitting ? 'true' : undefined}
                                               aria-label={`${tSystem(
                                                 'files.open',

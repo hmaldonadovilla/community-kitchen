@@ -677,6 +677,9 @@ export function buildWebFormHtml(
         text-align: left;
         word-break: break-word;
       }
+      .list-table th {
+        background: var(--card);
+      }
       .ck-list-sort-header {
         width: 100%;
         text-align: left;

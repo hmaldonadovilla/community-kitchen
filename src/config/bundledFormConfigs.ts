@@ -171,6 +171,20 @@ export const BUNDLED_FORM_CONFIGS = [
         "debounceMs": 2000,
         "status": "In progress"
       },
+      "fieldDisableRules": [
+        {
+          "id": "future-date-lock",
+          "when": {
+            "fieldId": "DATE",
+            "isInFuture": true
+          },
+          "bypassFields": [
+            "COOK",
+            "CHECK_FREQ",
+            "DATE"
+          ]
+        }
+      ],
       "summaryHtmlTemplateId": {
         "cases": [
           {
@@ -447,6 +461,17 @@ export const BUNDLED_FORM_CONFIGS = [
           "direction": "desc",
           "priority": 1
         },
+        "changeDialog": {
+          "when": {
+            "fieldId": "DATE",
+            "isInFuture": true
+          },
+          "title": "Future dated record",
+          "message": "You selected a date in the future. \nChecks cannot be completed in advance. Only the cook name can be selected in advance. What do you want to do?",
+          "confirmLabel": "Continue – Select & save cook name only",
+          "cancelLabel": "Cancel & delete this future record",
+          "cancelAction": "discardDraftAndGoHome"
+        },
         "derivedValue": {
           "op": "today"
         }
@@ -576,14 +601,14 @@ export const BUNDLED_FORM_CONFIGS = [
           "defaultCollapsed": false,
           "pageSection": {
             "title": {
-              "en": "Storage checks should be done at the beginning of shift",
-              "fr": "Stockage",
-              "nl": "Opslag"
+              "en": "⚠️ Storage checks - beginning of shift",
+              "fr": "⚠️ Stockage - début de la journée",
+              "nl": "⚠️ Opslag - begin van de dag"
             },
             "infoText": {
               "en": "Storage checks should be performed at the beginning of shift",
-              "fr": "Début de la journée",
-              "nl": "Begin van de dag"
+              "fr": "Stockage - début de la journée",
+              "nl": "Opslag - begin van de dag"
             },
             "infoDisplay": "hidden"
           }
@@ -1323,14 +1348,14 @@ export const BUNDLED_FORM_CONFIGS = [
           "defaultCollapsed": true,
           "pageSection": {
             "title": {
-              "en": "Cleanliness checks should be done at the end of shift",
-              "fr": "Vérifications de propreté à faire à la fin de la journée",
-              "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
+              "en": "⚠️ Cleanliness checks - end of shift",
+              "fr": "⚠️ Stockage - début de la journée",
+              "nl": "⚠️ Opslag - begin van de dag"
             },
             "infoText": {
-              "en": "Cleanliness checks should be performed at the end of shift",
-              "fr": "Fin de la journée",
-              "nl": "Einde van de dienst"
+              "en": "Cleanliness checks - end of shift",
+              "fr": "Stockage - début de la journée",
+              "nl": "Opslag - begin van de dag"
             },
             "infoDisplay": "hidden"
           }
@@ -3511,6 +3536,17 @@ export const BUNDLED_FORM_CONFIGS = [
           "listViewSort": {
             "direction": "desc",
             "priority": 1
+          },
+          "changeDialog": {
+            "when": {
+              "fieldId": "DATE",
+              "isInFuture": true
+            },
+            "title": "Future dated record",
+            "message": "You selected a date in the future. \nChecks cannot be completed in advance. Only the cook name can be selected in advance. What do you want to do?",
+            "confirmLabel": "Continue – Select & save cook name only",
+            "cancelLabel": "Cancel & delete this future record",
+            "cancelAction": "discardDraftAndGoHome"
           }
         },
         {
@@ -3643,14 +3679,14 @@ export const BUNDLED_FORM_CONFIGS = [
             "defaultCollapsed": false,
             "pageSection": {
               "title": {
-                "en": "Storage checks should be done at the beginning of shift",
-                "fr": "Stockage",
-                "nl": "Opslag"
+                "en": "⚠️ Storage checks - beginning of shift",
+                "fr": "⚠️ Stockage - début de la journée",
+                "nl": "⚠️ Opslag - begin van de dag"
               },
               "infoText": {
                 "en": "Storage checks should be performed at the beginning of shift",
-                "fr": "Début de la journée",
-                "nl": "Begin van de dag"
+                "fr": "Stockage - début de la journée",
+                "nl": "Opslag - begin van de dag"
               },
               "infoDisplay": "hidden"
             }
@@ -4368,14 +4404,14 @@ export const BUNDLED_FORM_CONFIGS = [
             "defaultCollapsed": true,
             "pageSection": {
               "title": {
-                "en": "Cleanliness checks should be done at the end of shift",
-                "fr": "Vérifications de propreté à faire à la fin de la journée",
-                "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
+                "en": "⚠️ Cleanliness checks - end of shift",
+                "fr": "⚠️ Stockage - début de la journée",
+                "nl": "⚠️ Opslag - begin van de dag"
               },
               "infoText": {
-                "en": "Cleanliness checks should be done at the end of shift",
-                "fr": "Vérifications de propreté à faire à la fin de la journée",
-                "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
+                "en": "Cleanliness checks - end of shift",
+                "fr": "Stockage - début de la journée",
+                "nl": "Stockage - début de la journée"
               },
               "infoDisplay": "hidden"
             }
@@ -6518,6 +6554,20 @@ export const BUNDLED_FORM_CONFIGS = [
         "debounceMs": 2000,
         "status": "In progress"
       },
+      "fieldDisableRules": [
+        {
+          "id": "future-date-lock",
+          "when": {
+            "fieldId": "DATE",
+            "isInFuture": true
+          },
+          "bypassFields": [
+            "COOK",
+            "CHECK_FREQ",
+            "DATE"
+          ]
+        }
+      ],
       "summaryHtmlTemplateId": {
         "cases": [
           {
