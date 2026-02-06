@@ -574,10 +574,11 @@
             "nl": "Opslag"
           },
           "infoText": {
-            "en": "Beginning of the shift",
+            "en": "Storage checks should be performed at the beginning of shift",
             "fr": "Début de la journée",
             "nl": "Begin van de dag"
-          }
+          },
+          "infoDisplay": "belowTitle"
         }
       },
       "pair": "fridge",
@@ -1320,10 +1321,11 @@
             "nl": "Keukenzuivering"
           },
           "infoText": {
-            "en": "End of the shift",
+            "en": "Cleanliness checks should be performed at the end of shift",
             "fr": "Fin de la journée",
             "nl": "Einde van de dienst"
-          }
+          },
+          "infoDisplay": "belowTitle"
         }
       },
       "listView": false,
@@ -3631,10 +3633,11 @@
               "nl": "Opslag"
             },
             "infoText": {
-              "en": "Beginning of the shift",
+              "en": "Storage checks should be performed at the beginning of shift",
               "fr": "Début de la journée",
               "nl": "Begin van de dag"
-            }
+            },
+            "infoDisplay": "belowTitle"
           }
         },
         "pair": "fridge",
@@ -4355,10 +4358,11 @@
               "nl": "Keukenzuivering"
             },
             "infoText": {
-              "en": "End of the shift",
+              "en": "Cleanliness checks should be performed at the end of shift",
               "fr": "Fin de la journée",
               "nl": "Einde van de dienst"
-            }
+            },
+            "infoDisplay": "belowTitle"
           }
         },
         "listView": false,

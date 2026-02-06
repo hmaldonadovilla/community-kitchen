@@ -346,7 +346,9 @@ This section summarizes the deployment flow and the new server-side caching, wit
    - In Apps Script, go to **Deploy → Manage deployments**.
    - Update or create a **Web app** deployment with entrypoint `doGet`.
    - Keep the same URL for existing testers where possible; query parameters (e.g. `?form=Config:+Recipes`) still route to the same forms.
-   - For multi-env deploys, you can keep `.clasp.staging.json` / `.clasp.prod.json` (different scriptIds) and set `DEPLOY_ENV=staging|prod` so `npm run deploy:apps-script` swaps the clasp config automatically.
+  - For multi-env deploys, you can keep `.clasp.staging.json` / `.clasp.prod.json` (different scriptIds) and set `DEPLOY_ENV=staging|prod` so `npm run deploy:apps-script` swaps the clasp config automatically.
+  - If only one `.env.deploy.<env>` file exists locally, the deploy script auto-detects it and loads it even when `DEPLOY_ENV` is not exported.
+  - Optional guard: set `CLASP_TARGET_WEB_APP_URL` together with `CLASP_DEPLOYMENT_ID` to fail fast when deploy/test URLs target different deployment ids.
 
 ### Server-side caching behavior
 

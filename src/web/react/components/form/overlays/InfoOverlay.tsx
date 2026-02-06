@@ -22,7 +22,7 @@ export const InfoOverlay: React.FC<InfoOverlayProps> = ({ open, language, title,
       zIndex={10020}
       title={title || tSystem('common.info', language, 'Info')}
       rightAction={
-        <button type="button" onClick={onClose} style={buttonStyles.secondary}>
+        <button type="button" onClick={onClose} style={buttonStyles.primary}>
           {tSystem('common.close', language, 'Close')}
         </button>
       }
@@ -33,5 +33,4 @@ export const InfoOverlay: React.FC<InfoOverlayProps> = ({ open, language, title,
     </FullPageOverlay>
   );
 };
-
 

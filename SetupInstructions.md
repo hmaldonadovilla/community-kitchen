@@ -57,6 +57,7 @@ Local (no GitHub compute):
    - Optional: use `.env.deploy` (or `.env.deploy.staging` / `.env.deploy.prod`) to store local deploy variables (see `.env.deploy.example`).
    - Set `DEPLOY_ENV=staging|prod` to auto-load the env-specific file, export `CK_CONFIG_ENV`,
      and swap `.clasp.<env>.json` into `.clasp.json` during deploy.
+   - If exactly one `.env.deploy.<env>` file exists locally, the deploy script auto-detects it even when `DEPLOY_ENV` is not exported.
 
 Local deploy env variables (optional):
 
@@ -65,6 +66,12 @@ Local deploy env variables (optional):
 - `CLASP_CREATE_DEPLOYMENT=1` — create a new deployment if no ID is provided
 - `CLASP_DEPLOY_DESCRIPTION="..."` — custom deployment description
 - `DEPLOY_ENV=staging|prod` — selects `.env.deploy.<env>` and the matching config bundle folder
+- `CLASP_TARGET_WEB_APP_URL="https://script.google.com/macros/s/<deploymentId>/exec?...` — optional guard; deploy fails if URL deployment id and `CLASP_DEPLOYMENT_ID` do not match
+- `CLASP_WEBAPP_ACCESS` + `CLASP_WEBAPP_EXECUTE_AS` — optional but recommended pair; writes `webapp` manifest settings during deploy to keep deployment behavior in web app mode (for example `ANYONE_ANONYMOUS` + `USER_DEPLOYING`)
+
+If `npm run deploy:apps-script` reports that the deployment is not `WEB_APP`, repair the existing deployment (same id) in Apps Script UI:
+- Deploy → Manage deployments → edit the existing deployment id → set type to **Web app**.
+- Do not create a new deployment id unless explicitly requested.
 
 CI (GitHub Actions):
 

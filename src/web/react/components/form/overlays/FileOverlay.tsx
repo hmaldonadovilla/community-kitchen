@@ -102,7 +102,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
       title={title || tSystem('files.title', language, 'Photos')}
       subtitle={selectionLabel}
       rightAction={
-        <button type="button" onClick={onClose} style={buttonStyles.secondary}>
+        <button type="button" onClick={onClose} style={buttonStyles.primary}>
           {tSystem('common.close', language, 'Close')}
         </button>
       }

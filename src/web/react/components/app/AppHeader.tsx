@@ -217,14 +217,14 @@ export const AppHeader: React.FC<{
             </button>
           </div>
 
-          <div className="ck-app-drawer-section">
-            <button
-              type="button"
-              className="ck-app-drawer-item"
-              onClick={() => {
-                setDrawerOpen(false);
-                onRefresh();
-              }}
+	          <div className="ck-app-drawer-section">
+	            <button
+	              type="button"
+	              className="ck-app-drawer-item ck-app-drawer-item--primary"
+	              onClick={() => {
+	                setDrawerOpen(false);
+	                onRefresh();
+	              }}
             >
           ⟳ {tSystem('app.refresh', language, 'Refresh')}
             </button>
@@ -257,6 +257,5 @@ export const AppHeader: React.FC<{
     </>
   );
 };
-
 
 

@@ -1780,6 +1780,31 @@ export interface PageSectionConfig {
    * Can be localized (en/fr/nl) or a plain string.
    */
   infoText?: LocalizedString | string;
+  /**
+   * How to render `infoText` in the section header.
+   * - pill: right-side pill/box (default)
+   * - belowTitle: render as a notice under the title (no pill)
+   * - hidden: ignore info text in the UI
+   */
+  infoDisplay?: 'pill' | 'belowTitle' | 'hidden';
+}
+
+export interface ClearOnChangeConfig {
+  /**
+   * Enable/disable clear-on-change behavior.
+   * Default: true when this config object is present.
+   */
+  enabled?: boolean;
+  /**
+   * Clear mode:
+   * - full: reset all other fields/groups (legacy behavior)
+   * - ordered: reset only fields/groups defined after this field in form order
+   */
+  mode?: 'full' | 'ordered';
+  /**
+   * Field ids that should never be cleared by this rule (applies to both modes).
+   */
+  bypassFields?: string[];
 }
 
 export interface QuestionGroupConfig {
@@ -1883,7 +1908,7 @@ export interface QuestionConfig {
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
   changeDialog?: FieldChangeDialogConfig;
-  clearOnChange?: boolean;
+  clearOnChange?: boolean | ClearOnChangeConfig;
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];
   listViewSort?: ListViewSortConfig;
@@ -2642,10 +2667,35 @@ export interface StepQuestionTargetConfig {
 
 export type StepTargetConfig = StepQuestionTargetConfig | StepLineGroupTargetConfig;
 
+export interface StepContextHeaderPartConfig {
+  /**
+   * Question id whose value is rendered in the guided step context header.
+   */
+  id: string;
+}
+
+export type StepContextHeaderPartRef = string | StepContextHeaderPartConfig;
+
+export interface StepContextHeaderConfig {
+  /**
+   * Ordered context header parts for this step.
+   *
+   * These values render above the step body in bold and are hidden from normal question rendering.
+   */
+  parts: StepContextHeaderPartRef[];
+  /**
+   * Optional separator between context header parts.
+   *
+   * Default: " | "
+   */
+  separator?: string;
+}
+
 export interface StepConfig {
   id: string;
   label?: LocalizedString;
   helpText?: LocalizedString;
+  contextHeader?: StepContextHeaderConfig;
   render?: StepsRenderDefaultsConfig;
   include: StepTargetConfig[];
   navigation?: StepNavigationConfig;
@@ -2726,7 +2776,7 @@ export interface WebQuestionDefinition {
   validationRules?: ValidationRule[];
   visibility?: VisibilityConfig;
   changeDialog?: FieldChangeDialogConfig;
-  clearOnChange?: boolean;
+  clearOnChange?: boolean | ClearOnChangeConfig;
   dataSource?: DataSourceConfig;
   selectionEffects?: SelectionEffect[];
   listViewSort?: ListViewSortConfig;

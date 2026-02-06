@@ -52,7 +52,7 @@ export const ReportOverlay: React.FC<{
       title={title || tSystem('report.title', language, 'Report')}
       subtitle={subtitle}
       rightAction={
-        <button type="button" onClick={onClose} style={buttonStyles.secondary}>
+        <button type="button" onClick={onClose} style={buttonStyles.primary}>
           {tSystem('common.close', language, 'Close')}
         </button>
       }

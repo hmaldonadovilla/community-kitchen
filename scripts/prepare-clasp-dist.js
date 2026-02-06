@@ -25,5 +25,26 @@ if (!fs.existsSync(srcCodePath)) {
 }
 
 const raw = fs.readFileSync(srcConfig, 'utf8');
-fs.writeFileSync(destConfig, raw, 'utf8');
+let manifest = JSON.parse(raw);
+
+const webappAccess = (process.env.CLASP_WEBAPP_ACCESS || '').toString().trim();
+const webappExecuteAs = (process.env.CLASP_WEBAPP_EXECUTE_AS || '').toString().trim();
+if (webappAccess || webappExecuteAs) {
+  if (!webappAccess || !webappExecuteAs) {
+    console.error('[prepare-clasp-dist] Both CLASP_WEBAPP_ACCESS and CLASP_WEBAPP_EXECUTE_AS are required when one is set.');
+    process.exit(1);
+  }
+  manifest = {
+    ...manifest,
+    webapp: {
+      access: webappAccess,
+      executeAs: webappExecuteAs
+    }
+  };
+  console.info(
+    `[prepare-clasp-dist] Applied webapp config access=${webappAccess} executeAs=${webappExecuteAs}`
+  );
+}
+
+fs.writeFileSync(destConfig, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 console.info('[prepare-clasp-dist] Wrote dist/apps-script/appsscript.json');

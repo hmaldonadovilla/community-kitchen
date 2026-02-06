@@ -97,6 +97,35 @@ import {
   type RowFlowResolvedState
 } from '../../features/steps/domain/rowFlow';
 
+const normalizeActionToken = (value: string): string =>
+  (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^\+\s+/, '+');
+
+const PRIMARY_ACTION_LABELS = new Set([
+  'view/edit',
+  'ingredients needed',
+  'view/edit ingredients',
+  'back to production',
+  'back',
+  '+add ingredient',
+  '+another leftover',
+  '+add leftover',
+  'close',
+  'refresh',
+  'tap to collapse',
+  'tap to collaps',
+  'tap to expand'
+].map(normalizeActionToken));
+
+const PRIMARY_ACTION_IDS = new Set(['removeleftover', 'clearleftovers']);
+
+const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has(normalizeActionToken(label));
+const isPrimaryActionId = (actionId: string): boolean => PRIMARY_ACTION_IDS.has(normalizeActionToken(actionId));
+
 export interface ErrorIndex {
   rowErrors: Set<string>;
   subgroupErrors: Set<string>;
@@ -365,6 +394,7 @@ export const LineItemGroupQuestion: React.FC<{
   const rowFlowLoggedRef = React.useRef<Set<string>>(new Set());
   const rowFlowPromptRef = React.useRef<Record<string, string>>({});
   const rowFlowPromptCompleteRef = React.useRef<Record<string, Record<string, boolean>>>({});
+  const rowFlowSelectorOverlayAutoOpenedRef = React.useRef<Record<string, boolean>>({});
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
     const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
@@ -998,17 +1028,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     (args: { actionId: string; row: LineItemRowState; rowFlowState: RowFlowResolvedState }) => {
       const action = rowFlowActionById.get(args.actionId);
       if (!action) return null;
-      const label = resolveLocalizedString(action.label, language, action.id);
-      const iconKey = (action.icon || '').toString().trim().toLowerCase();
-      const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
-      const tone = (action.tone || 'secondary').toString().trim().toLowerCase();
-      const disabled = submitting;
-      const onClick = () => {
-        if (disabled) return;
-        runRowFlowActionWithContext({ actionId: action.id, row: args.row, rowFlowState: args.rowFlowState });
-      };
+	      const label = resolveLocalizedString(action.label, language, action.id);
+	      const iconKey = (action.icon || '').toString().trim().toLowerCase();
+	      const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
+	      const tone = (action.tone || 'secondary').toString().trim().toLowerCase();
+	      const primary = tone === 'primary' || isPrimaryActionLabel(label) || isPrimaryActionId(action.id);
+	      const disabled = submitting;
+	      const onClick = () => {
+	        if (disabled) return;
+	        runRowFlowActionWithContext({ actionId: action.id, row: args.row, rowFlowState: args.rowFlowState });
+	      };
 
-      if (variant === 'icon' || iconKey) {
+	      if (variant === 'icon' || iconKey) {
         const iconNode =
           iconKey === 'remove' ? (
             <TrashIcon size={40} />
@@ -1019,28 +1050,28 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           ) : (
             <PencilIcon size={40} />
           );
-        return (
-          <button
-            key={action.id}
-            type="button"
-            aria-label={label || action.id}
-            title={label || action.id}
-            onClick={onClick}
-            disabled={disabled}
-            style={withDisabled(buttonStyles.secondary, disabled)}
-          >
-            {iconNode}
-          </button>
-        );
-      }
+	        return (
+	          <button
+	            key={action.id}
+	            type="button"
+	            aria-label={label || action.id}
+	            title={label || action.id}
+	            onClick={onClick}
+	            disabled={disabled}
+	            style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, disabled)}
+	          >
+	            {iconNode}
+	          </button>
+	        );
+	      }
 
-      const buttonStyle = tone === 'primary' ? buttonStyles.primary : buttonStyles.secondary;
-      return (
-        <button key={action.id} type="button" onClick={onClick} disabled={disabled} style={withDisabled(buttonStyle, disabled)}>
-          {label || action.id}
-        </button>
-      );
-    },
+	      const buttonStyle = primary ? buttonStyles.primary : buttonStyles.secondary;
+	      return (
+	        <button key={action.id} type="button" onClick={onClick} disabled={disabled} style={withDisabled(buttonStyle, disabled)}>
+	          {label || action.id}
+	        </button>
+	      );
+	    },
     [language, rowFlowActionById, runRowFlowActionWithContext, submitting]
   );
 
@@ -1085,6 +1116,152 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       });
     });
   }, [onDiagnostic, parentRowById, q.id, rowFlowEnabled, rowFlowStateByRowId, runRowFlowActionWithContext]);
+
+  React.useEffect(() => {
+    if (!rowFlowEnabled || !rowFlow) return;
+    rowFlowStateByRowId.forEach((state, rowId) => {
+      const row = parentRowById.get(rowId);
+      if (!row) return;
+      const activePromptId = (state.activePromptId || '').toString().trim();
+      if (!activePromptId) return;
+      const activePrompt = state.prompts.find(prompt => prompt.id === activePromptId && prompt.visible);
+      if (!activePrompt) return;
+      const inputKind = (activePrompt.config?.input?.kind || 'field').toString().trim().toLowerCase();
+      if (inputKind !== 'selectoroverlay') return;
+      const targetRef = (activePrompt.config?.input?.targetRef || '').toString().trim();
+      if (!targetRef) return;
+      const target = resolveRowFlowFieldTarget({
+        fieldRef: `${targetRef}.`,
+        groupId: q.id,
+        rowId: row.id,
+        rowValues: row.values || {},
+        references: state.references
+      });
+      if (!target?.refId) return;
+      const ref = state.references[target.refId];
+      const refGroupId = (ref?.groupId || target.groupId || '').toString().trim();
+      if (!refGroupId) return;
+      const isSubgroupRef = rowFlowSubGroupIds.includes(refGroupId);
+      const targetGroupKey =
+        target.primaryRow?.groupKey ||
+        (isSubgroupRef ? buildSubgroupKey(q.id, row.id, refGroupId) : refGroupId || target.groupKey);
+      if (!targetGroupKey) return;
+      const targetInfo = resolveRowFlowGroupConfig(targetGroupKey);
+      if (!targetInfo?.config) return;
+      const promptGroupOverride = activePrompt.config?.input?.groupOverride;
+      if (!promptGroupOverride || typeof promptGroupOverride !== 'object') return;
+      const effectiveTargetConfig = applyLineItemGroupOverride(targetInfo.config, promptGroupOverride);
+      if (!(effectiveTargetConfig as any)?.ui?.openInOverlay) return;
+      const existingRows = (lineItems[targetInfo.groupId] || []) as LineItemRowState[];
+      const autoOpenKey = `${q.id}::${rowId}::${activePrompt.id}::${targetInfo.groupId}`;
+      if (existingRows.length > 0) {
+        delete rowFlowSelectorOverlayAutoOpenedRef.current[autoOpenKey];
+        return;
+      }
+      if (rowFlowSelectorOverlayAutoOpenedRef.current[autoOpenKey]) return;
+
+      const anchorFieldId =
+        effectiveTargetConfig?.anchorFieldId !== undefined && effectiveTargetConfig?.anchorFieldId !== null
+          ? effectiveTargetConfig.anchorFieldId.toString()
+          : '';
+      const anchorField = anchorFieldId
+        ? (effectiveTargetConfig?.fields || []).find((field: any) => field.id === anchorFieldId)
+        : null;
+      if (!anchorField || anchorField.type !== 'CHOICE') return;
+
+      ensureLineOptions(targetInfo.groupId, anchorField);
+      const optionSetField: OptionSet =
+        optionState[optionKey(anchorField.id, targetInfo.groupId)] || {
+          en: anchorField.options || [],
+          fr: (anchorField as any).optionsFr || [],
+          nl: (anchorField as any).optionsNl || [],
+          raw: (anchorField as any).optionsRaw
+        };
+      const dependencyIds = (
+        Array.isArray(anchorField.optionFilter?.dependsOn)
+          ? anchorField.optionFilter?.dependsOn
+          : [anchorField.optionFilter?.dependsOn || '']
+      ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+      const depVals = dependencyIds.map((dep: string) =>
+        toDependencyValue((row.values as any)[dep] ?? (target.parentValues as any)?.[dep] ?? values[dep])
+      );
+      const allowed = computeAllowedOptions(anchorField.optionFilter, optionSetField, depVals);
+      const localized = buildLocalizedOptions(optionSetField, allowed, language, { sort: optionSortFor(anchorField) });
+      const seen = new Set<string>();
+      const overlayOptions = localized
+        .map(opt => ({ value: opt.value, label: opt.label, searchText: opt.searchText }))
+        .filter(opt => {
+          const key = (opt.value || '').toString().trim();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      if (!overlayOptions.length) return;
+
+      rowFlowSelectorOverlayAutoOpenedRef.current[autoOpenKey] = true;
+      const promptCloseButtonLabel = resolveLocalizedString(activePrompt.config?.input?.closeButtonLabel as any, language, '').trim();
+
+      if (isSubgroupRef && targetGroupKey) {
+        openSubgroupOverlay(targetGroupKey, {
+          groupOverride: promptGroupOverride,
+          source: 'system',
+          closeButtonLabel: promptCloseButtonLabel || undefined
+        });
+      } else {
+        const baseGroup = definition.questions.find(
+          question => question.id === targetInfo.groupId && question.type === 'LINE_ITEM_GROUP'
+        ) as WebQuestionDefinition | undefined;
+        const overrideGroup = baseGroup ? buildOverlayGroupOverride(baseGroup, promptGroupOverride) : undefined;
+        if (overrideGroup) {
+          openLineItemGroupOverlay(overrideGroup, {
+            source: 'system',
+            closeButtonLabel: promptCloseButtonLabel || undefined
+          });
+        }
+      }
+
+      const addOverlayCopy = resolveAddOverlayCopy(effectiveTargetConfig, language);
+      setOverlay({
+        open: true,
+        options: overlayOptions,
+        groupId: targetInfo.groupId,
+        anchorFieldId: anchorField.id,
+        selected: [],
+        title: addOverlayCopy.title,
+        helperText: addOverlayCopy.helperText,
+        searchHelperText: addOverlayCopy.searchHelperText,
+        placeholder:
+          addOverlayCopy.placeholder ||
+          resolveLocalizedString(activePrompt.config?.input?.placeholder, language, '') ||
+          undefined
+      });
+      onDiagnostic?.('lineItems.rowFlow.selector.autoOpen', {
+        groupId: q.id,
+        rowId,
+        promptId: activePrompt.id,
+        targetGroupId: targetInfo.groupId,
+        optionCount: overlayOptions.length
+      });
+    });
+  }, [
+    definition.questions,
+    ensureLineOptions,
+    language,
+    lineItems,
+    onDiagnostic,
+    openLineItemGroupOverlay,
+    openSubgroupOverlay,
+    optionState,
+    parentRowById,
+    q.id,
+    resolveRowFlowGroupConfig,
+    rowFlow,
+    rowFlowEnabled,
+    rowFlowStateByRowId,
+    rowFlowSubGroupIds,
+    setOverlay,
+    values
+  ]);
 
   const buildRowFlowGroupDefinition = (groupKey: string, groupConfig: any): WebQuestionDefinition => ({
     ...(q as any),
@@ -1629,11 +1806,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 
         const renderAddButton = () => {
           if (isOverlayAddMode && q.lineItemConfig?.anchorFieldId) {
+            const addLinesLabel = resolveLocalizedString(
+              q.lineItemConfig?.addButtonLabel,
+              language,
+              tSystem('lineItems.addLines', language, 'Add lines')
+            );
+            const addLinesPrimary = isPrimaryActionLabel(addLinesLabel);
             return (
               <button
                 type="button"
                 disabled={submitting || selectorIsMissing}
-                style={withDisabled(buttonStyles.secondary, submitting || selectorIsMissing)}
+                style={withDisabled(addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary, submitting || selectorIsMissing)}
                 onClick={async () => {
                   if (submitting) return;
                   if (selectorIsMissing) {
@@ -1711,14 +1894,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 }}
               >
                 <PlusIcon />
-                {resolveLocalizedString(
-                  q.lineItemConfig?.addButtonLabel,
-                  language,
-                  tSystem('lineItems.addLines', language, 'Add lines')
-                )}
+                {addLinesLabel}
               </button>
             );
           }
+          const addLineLabel = resolveLocalizedString(
+            q.lineItemConfig?.addButtonLabel,
+            language,
+            tSystem('lineItems.addLine', language, 'Add line')
+          );
+          const addLinePrimary = isPrimaryActionLabel(addLineLabel);
           return (
             <button
               type="button"
@@ -1735,14 +1920,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     : undefined;
                 addLineItemRowManual(q.id, selectorPreset);
               }}
-              style={withDisabled(buttonStyles.secondary, submitting || selectorIsMissing)}
+              style={withDisabled(addLinePrimary ? buttonStyles.primary : buttonStyles.secondary, submitting || selectorIsMissing)}
             >
               <PlusIcon />
-              {resolveLocalizedString(
-                q.lineItemConfig?.addButtonLabel,
-                language,
-                tSystem('lineItems.addLine', language, 'Add line')
-              )}
+              {addLineLabel}
             </button>
           );
         };
@@ -2586,17 +2767,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               const hasFiles = items.length > 0;
               const viewMode = readOnly || maxed || hasFiles;
               const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-              const leftLabel = viewMode
-                ? tSystem('files.view', language, 'View photos')
-                : tSystem('files.add', language, 'Add photo');
-              const cameraStyleBase = viewMode
-                ? buttonStyles.secondary
-                : isEmpty
-                  ? buttonStyles.primary
-                  : buttonStyles.secondary;
-              const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
-                ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-              );
+	              const leftLabel = viewMode
+	                ? tSystem('files.view', language, 'View photos')
+	                : tSystem('files.add', language, 'Add photo');
+	              const cameraStyleBase = buttonStyles.primary;
+	              const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+	                ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+	              );
               const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
                 .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                 .filter(Boolean);
@@ -3659,8 +3836,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             const shouldOpenOverlay =
                               !!promptGroupOverride && !!(effectiveTargetConfig as any)?.ui?.openInOverlay;
                             if (shouldOpenOverlay) {
+                              const promptCloseButtonLabel = resolveLocalizedString(
+                                prompt.config?.input?.closeButtonLabel as any,
+                                language,
+                                ''
+                              ).trim();
                               if (isSubgroupRef && targetGroupKey) {
-                                openSubgroupOverlay?.(targetGroupKey, { groupOverride: promptGroupOverride, source: 'system' });
+                                openSubgroupOverlay?.(targetGroupKey, {
+                                  groupOverride: promptGroupOverride,
+                                  source: 'system',
+                                  closeButtonLabel: promptCloseButtonLabel || undefined
+                                });
                               } else if (!isSubgroupRef) {
                                 const baseGroup = definition.questions.find(
                                   question => question.id === targetInfo.groupId && question.type === 'LINE_ITEM_GROUP'
@@ -3670,7 +3856,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     ? buildOverlayGroupOverride(baseGroup, promptGroupOverride)
                                     : undefined;
                                 if (overrideGroup) {
-                                  openLineItemGroupOverlay?.(overrideGroup, { source: 'system' });
+                                  openLineItemGroupOverlay?.(overrideGroup, {
+                                    source: 'system',
+                                    closeButtonLabel: promptCloseButtonLabel || undefined
+                                  });
                                 }
                               }
                             }
@@ -5905,15 +6094,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     onConfirm: runReset
                   });
                 };
-                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
-                  const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
-                  const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
-                  const actionButtonStyle = showResetButton
-                    ? { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
-                    : buttonStyles.secondary;
-                  const actionRow = (
-                    <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
-                      <button
+	                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
+	                  const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
+	                  const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
+	                  const baseLabel = overlayOpenAction ? (overlayOpenAction.label || resolveFieldLabel(field, language, field.id)) : '';
+	                  const primary = overlayOpenAction ? isPrimaryActionLabel(baseLabel) : false;
+	                  const baseStyle = primary ? buttonStyles.primary : buttonStyles.secondary;
+	                  const actionButtonStyle = showResetButton
+	                    ? { ...baseStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
+	                    : baseStyle;
+	                  const actionRow = (
+	                    <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
+	                      <button
                         type="button"
                         onClick={handleOverlayOpenAction}
                         disabled={overlayOpenDisabled}
@@ -5926,15 +6118,15 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           type="button"
                           onClick={handleOverlayOpenActionReset}
                           disabled={overlayOpenActionResetDisabled}
-                          aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                          style={withDisabled(
-                            {
-                              ...buttonStyles.secondary,
-                              borderTopLeftRadius: 0,
-                              borderBottomLeftRadius: 0,
-                              padding: '0 14px',
-                              minWidth: 44
-                            },
+	                          aria-label={tSystem('lineItems.remove', language, 'Remove')}
+	                          style={withDisabled(
+	                            {
+	                              ...baseStyle,
+	                              borderTopLeftRadius: 0,
+	                              borderBottomLeftRadius: 0,
+	                              padding: '0 14px',
+	                              minWidth: 44
+	                            },
                             overlayOpenActionResetDisabled
                           )}
                         >
@@ -6028,21 +6220,23 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     </div>
                   );
                 };
-                const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
-                  if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
-                  return (
-                    <div style={{ marginTop: 8 }}>
-                      <button
-                        type="button"
-                        onClick={handleOverlayOpenAction}
-                        disabled={overlayOpenDisabled}
-                        style={withDisabled(buttonStyles.secondary, overlayOpenDisabled)}
-                      >
-                        {overlayOpenButtonText(displayValue)}
-                      </button>
-                    </div>
-                  );
-                };
+	                const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
+	                  if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
+	                  const baseLabel = overlayOpenAction.label || resolveFieldLabel(field, language, field.id);
+	                  const primary = isPrimaryActionLabel(baseLabel);
+	                  return (
+	                    <div style={{ marginTop: 8 }}>
+	                      <button
+	                        type="button"
+	                        onClick={handleOverlayOpenAction}
+	                        disabled={overlayOpenDisabled}
+	                        style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, overlayOpenDisabled)}
+	                      >
+	                        {overlayOpenButtonText(displayValue)}
+	                      </button>
+	                    </div>
+	                  );
+	                };
                 const showNonMatchWarning =
                   useDescriptiveNonMatchWarnings &&
                   !!rowNonMatchWarning &&
@@ -7154,15 +7348,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           onConfirm: runReset
                         });
                       };
-                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
-                        const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
-                        const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
-                        const actionButtonStyle = showResetButton
-                          ? { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
-                          : buttonStyles.secondary;
-                        const actionRow = (
-                          <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
-                            <button
+	                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
+	                        const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
+	                        const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
+	                        const baseLabel = overlayOpenAction ? (overlayOpenAction.label || resolveFieldLabel(field, language, field.id)) : '';
+	                        const primary = overlayOpenAction ? isPrimaryActionLabel(baseLabel) : false;
+	                        const baseStyle = primary ? buttonStyles.primary : buttonStyles.secondary;
+	                        const actionButtonStyle = showResetButton
+	                          ? { ...baseStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
+	                          : baseStyle;
+	                        const actionRow = (
+	                          <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
+	                            <button
                               type="button"
                               onClick={handleOverlayOpenAction}
                               disabled={overlayOpenDisabled}
@@ -7175,15 +7372,15 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 type="button"
                                 onClick={handleOverlayOpenActionReset}
                                 disabled={overlayOpenActionResetDisabled}
-                                aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                                style={withDisabled(
-                                  {
-                                    ...buttonStyles.secondary,
-                                    borderTopLeftRadius: 0,
-                                    borderBottomLeftRadius: 0,
-                                    padding: '0 14px',
-                                    minWidth: 44
-                                  },
+	                                aria-label={tSystem('lineItems.remove', language, 'Remove')}
+	                                style={withDisabled(
+	                                  {
+	                                    ...baseStyle,
+	                                    borderTopLeftRadius: 0,
+	                                    borderBottomLeftRadius: 0,
+	                                    padding: '0 14px',
+	                                    minWidth: 44
+	                                  },
                                   overlayOpenActionResetDisabled
                                 )}
                               >
@@ -7280,21 +7477,23 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           </div>
                         );
                       };
-                      const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
-                        if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
-                        return (
-                          <div style={{ marginTop: 8 }}>
-                            <button
-                              type="button"
-                              onClick={handleOverlayOpenAction}
-                              disabled={overlayOpenDisabled}
-                              style={withDisabled(buttonStyles.secondary, overlayOpenDisabled)}
-                            >
-                              {overlayOpenButtonText(displayValue)}
-                            </button>
-                          </div>
-                        );
-                      };
+	                      const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
+	                        if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
+	                        const baseLabel = overlayOpenAction.label || resolveFieldLabel(field, language, field.id);
+	                        const primary = isPrimaryActionLabel(baseLabel);
+	                        return (
+	                          <div style={{ marginTop: 8 }}>
+	                            <button
+	                              type="button"
+	                              onClick={handleOverlayOpenAction}
+	                              disabled={overlayOpenDisabled}
+	                              style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, overlayOpenDisabled)}
+	                            >
+	                              {overlayOpenButtonText(displayValue)}
+	                            </button>
+	                          </div>
+	                        );
+	                      };
 
                       const overlayOpenTargets = overlayOpenActionTargetsForField(field);
                       const triggeredSubgroupIds = (() => {
@@ -7588,17 +7787,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           const hasFiles = items.length > 0;
                           const viewMode = readOnly || maxed || hasFiles;
                           const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-                          const leftLabel = viewMode
-                            ? tSystem('files.view', language, 'View photos')
-                            : tSystem('files.add', language, 'Add photo');
-                          const cameraStyleBase = viewMode
-                            ? buttonStyles.secondary
-                            : isEmpty
-                              ? buttonStyles.primary
-                              : buttonStyles.secondary;
-                          const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
-                            ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-                          );
+	                          const leftLabel = viewMode
+	                            ? tSystem('files.view', language, 'View photos')
+	                            : tSystem('files.add', language, 'Add photo');
+	                          const cameraStyleBase = buttonStyles.primary;
+	                          const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+	                            ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+	                          );
                           const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
                             .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                             .filter(Boolean);
@@ -8258,7 +8453,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             }
                             addLineItemRowManual(subKey);
                           }}
-                          style={withDisabled(buttonStyles.secondary, submitting || subSelectorIsMissing)}
+                          style={withDisabled(
+                            isPrimaryActionLabel(resolveLocalizedString(sub.addButtonLabel, language, 'Add line'))
+                              ? buttonStyles.primary
+                              : buttonStyles.secondary,
+                            submitting || subSelectorIsMissing
+                          )}
                         >
                           <PlusIcon />
                           {resolveLocalizedString(sub.addButtonLabel, language, 'Add line')}
@@ -9122,17 +9322,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       const hasFiles = items.length > 0;
                                       const viewMode = readOnly || maxed || hasFiles;
                                       const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-                                      const leftLabel = viewMode
-                                        ? tSystem('files.view', language, 'View photos')
-                                        : tSystem('files.add', language, 'Add photo');
-                                      const cameraStyleBase = viewMode
-                                        ? buttonStyles.secondary
-                                        : isEmpty
-                                          ? buttonStyles.primary
-                                          : buttonStyles.secondary;
-                                      const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
-                                        ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-                                      );
+	                                      const leftLabel = viewMode
+	                                        ? tSystem('files.view', language, 'View photos')
+	                                        : tSystem('files.add', language, 'Add photo');
+	                                      const cameraStyleBase = buttonStyles.primary;
+	                                      const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+	                                        ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+	                                      );
                                       const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
                                         .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                                         .filter(Boolean);
