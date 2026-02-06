@@ -241,6 +241,7 @@ This repo includes a deploy workflow using `clasp`, so you can deploy from GitHu
   - `ui.slotIcon` (`"camera"` | `"clip"`, optional; controls the icon shown in progressive slots)
   - `compression` (optional client-side image compression; videos are uploaded as-is — prefer enforcing `maxFileSizeMb`)
 - **Filters**: Add `optionFilter` in the Config JSON to filter CHOICE/CHECKBOX options (works in line items too). `dependsOn` accepts a single field ID or an array for multi-field dependencies; for line items, it can also reference top-level fields. Build composite keys in `optionMap` by joining dependency values with `||`, plus a `*` fallback.  
+  - If one dependency is a DATE value (for example `MP_PREP_DATE`), you can use weekday composite keys like `Distributor||Service||Sunday`. The filter also falls back to the non-date composite key (for example `Distributor||Service`) when no weekday-specific key matches.
   - Use `matchMode: "or"` to union allowed options when the dependency is multi-select; rows that don’t satisfy all selected keys are tagged with `__ckNonMatchOptions` and show warnings during editing.  
   Example (inline map): `{ "optionFilter": { "dependsOn": ["Product","Supplier"], "optionMap": { "Carrots||Local": ["Crates"], "Carrots": ["Bags","Crates"], "*": ["Bags"] } } }`  
   Example (sheet-driven map): `{ "optionFilter": { "dependsOn": "Supplier", "optionMapRef": { "ref": "REF:Supplier_Map", "keyColumn": "Supplier", "lookupColumn": "Allowed options" } } }`  

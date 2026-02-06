@@ -478,6 +478,16 @@ export function buildWebFormHtml(
         border-radius: 12px;
         cursor: pointer;
       }
+      button .ck-button-text {
+        min-width: 0;
+      }
+      button.ck-button-wrap-left .ck-button-text,
+      button.ck-button-wrap-left .ck-bottom-label {
+        display: inline-block;
+        min-width: 0;
+        white-space: normal;
+        text-align: left;
+      }
       button:disabled { opacity: 0.6; cursor: not-allowed; }
       .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
       .muted {
