@@ -28,6 +28,10 @@ const splitMultiValue = (raw: string): string[] =>
 const DEFAULT_SPLIT_REGEX = /[,;\n]/;
 const loggedDataSourceFilters = new Set<string>();
 const loggedBypassFilters = new Set<string>();
+const loggedWeekdayCompositeFilters = new Set<string>();
+const ISO_DATE_PREFIX_REGEX = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/;
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+const WEEKDAY_SHORT_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 const splitDelimitedValues = (raw: string, delimiter?: string): string[] => {
   const trimmed = raw.trim();
@@ -43,6 +47,108 @@ const splitDelimitedValues = (raw: string, delimiter?: string): string[] => {
     .split(DEFAULT_SPLIT_REGEX)
     .map(part => part.trim())
     .filter(Boolean);
+};
+
+const normalizeToken = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return '';
+  return value.toString().trim().replace(/\s+/g, ' ').toLowerCase();
+};
+
+const parseDateToken = (raw: string): Date | null => {
+  const s = raw.toString().trim();
+  if (!s) return null;
+  const ymd = s.match(ISO_DATE_PREFIX_REGEX);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const day = Number(ymd[3]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    const local = new Date(year, month - 1, day, 0, 0, 0, 0);
+    if (local.getFullYear() !== year || local.getMonth() !== month - 1 || local.getDate() !== day) return null;
+    return local;
+  }
+  const parsed = new Date(s);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const buildWeekdayAliases = (raw: string): string[] => {
+  const date = parseDateToken(raw);
+  if (!date) return [];
+  const day = date.getDay();
+  const full = WEEKDAY_NAMES[day];
+  const short = WEEKDAY_SHORT_NAMES[day];
+  return Array.from(new Set([full, short, full.toLowerCase(), short.toLowerCase(), `${day}`]));
+};
+
+const expandDateAwareKeys = (keys: string[]): string[] => {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (key: string) => {
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(key);
+  };
+  keys.forEach(key => {
+    push(key);
+    buildWeekdayAliases(key).forEach(push);
+  });
+  return out;
+};
+
+const buildCompositeOptionMapKeys = (depValues: string[]): { keys: string[]; weekdayAliasKeys: Set<string> } => {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  const weekdayAliasKeys = new Set<string>();
+  const push = (parts: string[], opts?: { weekdayAlias?: boolean }) => {
+    const key = parts.join('||');
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    keys.push(key);
+    if (opts?.weekdayAlias) weekdayAliasKeys.add(key);
+  };
+
+  if (depValues.length > 1) push(depValues);
+
+  const dateInfos = depValues
+    .map((value, index) => ({ index, aliases: buildWeekdayAliases(value) }))
+    .filter(entry => entry.aliases.length > 0);
+  if (!dateInfos.length) return { keys, weekdayAliasKeys };
+
+  let replacements: string[][] = [depValues.slice()];
+  dateInfos.forEach(info => {
+    const next: string[][] = [];
+    replacements.forEach(parts => {
+      info.aliases.forEach(alias => {
+        const updated = parts.slice();
+        updated[info.index] = alias;
+        next.push(updated);
+      });
+    });
+    replacements = next;
+  });
+  replacements.forEach(parts => {
+    if (parts.some((part, idx) => part !== depValues[idx])) push(parts, { weekdayAlias: true });
+  });
+
+  const dateIdxSet = new Set<number>(dateInfos.map(info => info.index));
+  const withoutDates = depValues.filter((_, idx) => !dateIdxSet.has(idx));
+  if (withoutDates.length > 1) push(withoutDates);
+
+  return { keys, weekdayAliasKeys };
+};
+
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const containsTokenAsWord = (text: string, token: string): boolean => {
+  const t = normalizeToken(text);
+  const q = normalizeToken(token);
+  if (!t || !q) return false;
+  if (t === q) return true;
+  // Match token as a standalone "word-ish" segment (avoid partial matches like "nonvegan").
+  // Tokens may contain spaces/hyphens, so we use a boundary defined as non-alphanumeric.
+  const re = new RegExp(`(^|[^a-z0-9])${escapeRegex(q)}([^a-z0-9]|$)`, 'i');
+  return re.test(t);
 };
 
 const buildOrAllowed = (filter: OptionFilter, keys: string[]): string[] => {
@@ -116,19 +222,12 @@ const computeAllowedFromDataSource = (
   const raw = options.raw;
   if (!dataSourceField || !Array.isArray(raw) || !raw.length) return null;
 
-  const tokens = normalizeDependencyTokens(dependencyValues);
+  const tokensRaw = normalizeDependencyTokens(dependencyValues);
+  const tokens = Array.from(new Set(tokensRaw.map(t => normalizeToken(t)).filter(Boolean)));
   if (!tokens.length) return options.en || [];
   const logKey = `${dataSourceField}::${tokens.join('|')}`;
-  if (!loggedDataSourceFilters.has(logKey)) {
-    loggedDataSourceFilters.add(logKey);
-    if (typeof console !== 'undefined' && typeof console.info === 'function') {
-      console.info('[ReactForm]', 'optionFilter.dataSource.apply', {
-        dataSourceField,
-        tokens,
-        optionCount: options.en?.length ?? 0
-      });
-    }
-  }
+  const shouldLog = !loggedDataSourceFilters.has(logKey);
+  if (shouldLog) loggedDataSourceFilters.add(logKey);
   const matchMode = normalizeMatchMode((filter as any).matchMode);
   const allowed = new Set<string>();
 
@@ -137,20 +236,43 @@ const computeAllowedFromDataSource = (
     const optionValue = resolveOptionValue(row);
     if (!optionValue) return;
     const rawValue = (row as any)[dataSourceField];
-    const rowTokens = Array.isArray(rawValue)
+    const rowTokensRaw = Array.isArray(rawValue)
       ? rawValue.map(val => normalizeValue(val)).filter(Boolean)
       : rawValue === null || rawValue === undefined
         ? []
         : splitDelimitedValues(rawValue.toString(), filter.dataSourceDelimiter);
+    if (!rowTokensRaw.length) return;
+
+    const rowTokens = rowTokensRaw.map(t => normalizeToken(t)).filter(Boolean);
     if (!rowTokens.length) return;
+    const rowTokenSet = new Set(rowTokens);
+    const rowText = normalizeValue(rawValue === null || rawValue === undefined ? '' : rawValue);
+
+    const tokenMatchesRow = (token: string): boolean => {
+      if (!token) return false;
+      if (rowTokenSet.has(token)) return true;
+      // Fallback for inconsistent delimiter usage (e.g., "Standard / Vegetarian").
+      return containsTokenAsWord(rowText, token);
+    };
+
     const matches =
       matchMode === 'or'
-        ? tokens.some(token => rowTokens.includes(token))
-        : tokens.every(token => rowTokens.includes(token));
+        ? tokens.some(token => tokenMatchesRow(token))
+        : tokens.every(token => tokenMatchesRow(token));
     if (matches) allowed.add(optionValue);
   });
 
   if (!allowed.size) return [];
+  if (shouldLog && typeof console !== 'undefined' && typeof console.info === 'function') {
+    console.info('[ReactForm]', 'optionFilter.dataSource.apply', {
+      dataSourceField,
+      tokens,
+      matchMode,
+      delimiter: (filter.dataSourceDelimiter ?? '').toString() || null,
+      optionCount: options.en?.length ?? 0,
+      matchedCount: allowed.size
+    });
+  }
   if (options.en && options.en.length) {
     return options.en.filter(value => allowed.has(value));
   }
@@ -227,16 +349,30 @@ export function computeAllowedOptions(
       depValues.length === 1 && depValues[0]?.includes('|')
         ? splitMultiValue(depValues[0])
         : depValues.filter(Boolean);
-    return buildOrAllowed(filter, keys);
+    return buildOrAllowed(filter, expandDateAwareKeys(keys));
   }
 
   const candidateKeys: string[] = [];
-  if (depValues.length > 1) candidateKeys.push(depValues.join('||'));
+  const compositeKeyMeta = buildCompositeOptionMapKeys(depValues);
+  candidateKeys.push(...compositeKeyMeta.keys);
   depValues.filter(Boolean).forEach(v => candidateKeys.push(v));
   candidateKeys.push('*');
 
-  const match = candidateKeys.reduce<string[] | undefined>((acc, key) => acc || filter.optionMap?.[key], undefined);
-  if (match) return match;
+  const matchedKey = candidateKeys.find(key => filter.optionMap?.[key] !== undefined);
+  if (matchedKey !== undefined) {
+    if (compositeKeyMeta.weekdayAliasKeys.has(matchedKey)) {
+      const logKey = `${Array.isArray(filter.dependsOn) ? filter.dependsOn.join('||') : filter.dependsOn}::${matchedKey}`;
+      if (!loggedWeekdayCompositeFilters.has(logKey) && typeof console !== 'undefined' && typeof console.info === 'function') {
+        loggedWeekdayCompositeFilters.add(logKey);
+        console.info('[ReactForm]', 'optionFilter.weekdayComposite.match', {
+          dependsOn: filter.dependsOn,
+          depValues,
+          matchedKey
+        });
+      }
+    }
+    return filter.optionMap?.[matchedKey] || [];
+  }
   return [];
 }
 
@@ -263,10 +399,11 @@ export function computeNonMatchOptionKeys(args: {
   const depValues = dependencyValues.map(v => normalize(v));
   const keys =
     depValues.length === 1 && depValues[0]?.includes('|') ? splitMultiValue(depValues[0]) : depValues.filter(Boolean);
-  if (!keys.length) return [];
+  const resolvedKeys = expandDateAwareKeys(keys);
+  if (!resolvedKeys.length) return [];
 
   const fallback = optionMap['*'] || [];
-  return keys.filter(key => {
+  return resolvedKeys.filter(key => {
     const allowed = optionMap[key] || fallback;
     return !allowed.includes(selected);
   });
@@ -274,7 +411,7 @@ export function computeNonMatchOptionKeys(args: {
 
 const normalizeValue = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined) return '';
-  return value.toString();
+  return value.toString().trim();
 };
 
 const SEARCH_INTERNAL_KEYS = new Set(['__ckOptionValue']);

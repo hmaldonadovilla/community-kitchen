@@ -167,6 +167,15 @@
     display: none;
   }
 
+  .ck-notes {
+    width: 100%;
+    white-space: pre-wrap;
+  }
+
+  .ck-notes:empty {
+    display: none;
+  }
+
   @media (max-width: 600px) {
     .ck-meta-grid,
     .ck-totals {
@@ -199,6 +208,7 @@
         <span class="ck-label">{{LABEL(MP_VOLUNTEER)}}:</span>
         <span class="ck-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</span>
       </div>
+      <div class="ck-meta-item ck-meta-item--full ck-notes ck-value">{{MP_NOTES}}</div>
     </div>
   </div>
 
@@ -262,6 +272,17 @@
     var root = document.querySelector('[data-ck-template="meal-production-summary"]');
     if (!root || root.getAttribute('data-ck-init') === '1') return;
     root.setAttribute('data-ck-init', '1');
+
+    // Hide notes when empty so it doesn't waste vertical space.
+    try {
+      var notes = root.querySelector('.ck-notes');
+      if (notes) {
+        var text = (notes.textContent || '').toString().trim();
+        if (!text || text === '—' || text === '{{MP_NOTES}}') notes.classList.add('ck-hidden');
+      }
+    } catch (_) {
+      // ignore
+    }
 
     var listContainer = root.querySelector('[data-ck-meal-list]');
     var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
@@ -534,7 +555,7 @@
       var titleText = mealType || 'Meal';
       var requestedText = toText(requested) ? formatPortions(requested, '') : '';
       if (requestedText) {
-        titleText += ' | Requested: ' + requestedText;
+        titleText += ' | Ordered: ' + requestedText;
       }
       title.textContent = titleText;
       mealBlock.appendChild(title);

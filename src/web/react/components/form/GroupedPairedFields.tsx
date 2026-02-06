@@ -37,6 +37,7 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
     pageSectionKey?: string;
     pageSectionTitle?: string;
     pageSectionInfoText?: string;
+    pageSectionInfoDisplay?: 'pill' | 'belowTitle' | 'hidden';
     fields: any[];
     order: number;
   };
@@ -54,6 +55,11 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
     const pageSectionTitle = group?.pageSection?.title ? resolveLocalizedString(group.pageSection.title as any, language, '') : undefined;
     const pageSectionInfoText =
       group?.pageSection?.infoText ? resolveLocalizedString(group.pageSection.infoText as any, language, '') : undefined;
+    const pageSectionInfoDisplayRaw = (group as any)?.pageSection?.infoDisplay;
+    const pageSectionInfoDisplay =
+      pageSectionInfoDisplayRaw === 'belowTitle' || pageSectionInfoDisplayRaw === 'hidden' || pageSectionInfoDisplayRaw === 'pill'
+        ? (pageSectionInfoDisplayRaw as 'pill' | 'belowTitle' | 'hidden')
+        : undefined;
 
     const existing = map.get(sectionKey);
     if (!existing) {
@@ -65,6 +71,7 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
         pageSectionKey,
         pageSectionTitle,
         pageSectionInfoText,
+        pageSectionInfoDisplay,
         fields: [field],
         order: order++
       });
@@ -76,6 +83,7 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
       if (!existing.pageSectionKey && pageSectionKey) existing.pageSectionKey = pageSectionKey;
       if (!existing.pageSectionTitle && pageSectionTitle) existing.pageSectionTitle = pageSectionTitle;
       if (!existing.pageSectionInfoText && pageSectionInfoText) existing.pageSectionInfoText = pageSectionInfoText;
+      if (!existing.pageSectionInfoDisplay && pageSectionInfoDisplay) existing.pageSectionInfoDisplay = pageSectionInfoDisplay;
     }
   });
 
@@ -185,7 +193,7 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
 
         if (block.kind === 'group') return renderSection(block.group as any);
         return (
-          <PageSection key={`page-section-${block.key}-${idx}`} title={block.title} infoText={block.infoText}>
+          <PageSection key={`page-section-${block.key}-${idx}`} title={block.title} infoText={block.infoText} infoDisplay={block.infoDisplay}>
             <div className="ck-group-stack ck-group-stack--compact">{block.groups.map(g => renderSection(g as any))}</div>
           </PageSection>
         );
@@ -193,5 +201,4 @@ export const GroupedPairedFields: React.FC<GroupedPairedFieldsProps> = ({
     </div>
   );
 };
-
 

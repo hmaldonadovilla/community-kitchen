@@ -1,0 +1,316 @@
+<!--
+  Community Kitchen - Ingredients Needed (HTML Template)
+
+  Notes:
+  - Keep placeholders intact (e.g., {{FIELD_ID}}).
+  - This template is used by the ING_PREVIEW report button to render a consolidated ingredient list.
+  - Ingredient table layout mirrors docs/templates/mp.ing_recipe.html (category headers + qty on the right).
+-->
+
+<style>
+  .ck-summary-template {
+    font-family: var(--ck-font-family, system-ui);
+    font-size: var(--ck-font-control, 1rem);
+    line-height: 1.4;
+    margin: -10px;
+    color: var(--text);
+  }
+
+  .ck-summary-template * {
+    box-sizing: border-box;
+    font-weight: 400;
+    max-width: 100%;
+  }
+
+  .ck-ingredients-needed__message {
+    white-space: normal;
+    margin: 0 0 6px 0;
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+
+  .ck-ingredients-needed__message-line {
+    display: block;
+    margin: 0;
+  }
+
+  .ck-ingredients-needed__evidence {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+
+  .ck-ingredients-needed__evidence:empty {
+    display: none;
+  }
+
+  .ck-file-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    border-radius: var(--radius-control, 8px);
+    padding: 4px 10px;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .ck-file-icon__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--border);
+    font-weight: 600;
+    font-size: calc(var(--ck-font-label, 0.95rem) * 0.8);
+  }
+
+  .ck-ingredients-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+
+  .ck-ingredients-table col.ck-col-name {
+    width: auto;
+  }
+
+  .ck-ingredients-table col.ck-col-qty {
+    width: 10ch;
+  }
+
+  .ck-ingredients-table th,
+  .ck-ingredients-table td {
+    text-align: left;
+    padding: 6px 0;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .ck-category-row th {
+    font-size: var(--ck-font-label, 0.95rem);
+    font-weight: 600;
+    padding-top: 12px;
+  }
+
+  .ck-category-toggle {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+  }
+
+  .ck-category-toggle__label {
+    font-weight: 800;
+  }
+
+  .ck-category-toggle:focus {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+  }
+
+  .ck-expand-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-weight: 600;
+    white-space: nowrap;
+    line-height: 1;
+  }
+
+  .ck-expand-pill__check {
+    font-weight: 700;
+  }
+
+  .ck-expand-pill__chev {
+    width: 1em;
+    flex: 0 0 auto;
+    opacity: 0.7;
+    transform: rotate(90deg);
+    transform-origin: center;
+  }
+
+  table[data-collapsed="1"] .ck-expand-pill__chev {
+    transform: rotate(0deg);
+  }
+
+  table[data-collapsed="1"] .ck-ingredient-row {
+    display: none;
+  }
+
+  .ck-ingredient-row td {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ck-ingredient-name {
+    min-width: 0;
+  }
+
+  .ck-ingredient-qty {
+    white-space: nowrap;
+    text-align: right;
+    font-weight: 500;
+    padding-left: 12px;
+    min-width: 8ch;
+  }
+
+  .ck-ingredient-allergen {
+    opacity: 0.75;
+  }
+
+  .ck-ingredient-allergen:empty {
+    display: none;
+  }
+
+  .ck-ingredient-allergen:not(:empty)::before {
+    content: " (";
+  }
+
+  .ck-ingredient-allergen:not(:empty)::after {
+    content: ")";
+  }
+
+  .ck-directives {
+    display: none;
+  }
+</style>
+
+<div class="ck-summary-template" data-ck-template="ingredients_needed">
+  <div class="ck-ingredients-needed__message" aria-label="Ingredients needed message">
+    <span class="ck-ingredients-needed__message-line">
+      Ingredients cooked for {{DEFAULT(MP_DISTRIBUTOR, "—")}} | {{DEFAULT(MP_SERVICE, "—")}} | {{DEFAULT(MP_PREP_DATE, "—")}} | {{DEFAULT(MP_ID, "—")}} |
+    </span>
+    <span class="ck-ingredients-needed__evidence">{{FILES_ICON(ING_EVD)}} {{DEFAULT(ING_EVD, "")}}</span>
+  </div>
+  <div class="ck-ingredients-needed__message" aria-label="Ingredients needed note">
+    <span class="ck-ingredients-needed__message-line">This list excluded ingredients from leftovers</span>
+  </div>
+
+  <table class="ck-ingredients-table" aria-label="Ingredients needed by category">
+    <colgroup>
+      <col class="ck-col-name" />
+      <col class="ck-col-qty" />
+    </colgroup>
+    <tbody>
+      <tr class="ck-category-row">
+        <th scope="row" colspan="2">
+          <button type="button" class="ck-category-toggle" aria-expanded="true">
+            <span class="ck-category-toggle__label">{{GROUP_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT)}}{{ORDER_BY(CAT ASC, ING ASC)}}</span>
+            <span class="ck-expand-pill" data-ck-expand-pill>
+              <span class="ck-expand-pill__check" aria-hidden="true">✓</span>
+              <span data-ck-pill-text>Tap to collapse</span>
+              <span class="ck-expand-pill__chev" aria-hidden="true">▶</span>
+            </span>
+          </button>
+        </th>
+      </tr>
+      <tr class="ck-ingredient-row">
+        <td class="ck-ingredient-name">
+          {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}
+          <span class="ck-ingredient-allergen">{{DEFAULT(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN, "")}}</span>
+          <span class="ck-directives">
+            {{EXCLUDE_WHEN_WHEN({"not":{"any":[{"all":[{"fieldId":"PREP_TYPE","equals":"Cook"},{"fieldId":"RECIPE","notEmpty":true}]},{"all":[{"fieldId":"PREP_TYPE","equals":"Full"},{"fieldId":"__ckRowSource","equals":"manual"}]}]}})}}
+            {{CONSOLIDATED_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI)}}
+          </span>
+        </td>
+        <td class="ck-ingredient-qty">
+          {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.QTY}} {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.UNIT}}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  (function () {
+    var root = document.querySelector('[data-ck-template="ingredients_needed"]');
+    if (!root || root.getAttribute('data-ck-init') === '1') return;
+    root.setAttribute('data-ck-init', '1');
+
+    // Hide "(None)" allergens for faster scanning.
+    try {
+      var allergenNodes = root.querySelectorAll('.ck-ingredient-allergen');
+      allergenNodes.forEach(function (node) {
+        var text = (node.textContent || '').toString().trim();
+        if (!text) return;
+        if (text.toLowerCase() === 'none') {
+          node.textContent = '';
+        }
+      });
+    } catch (_) {
+      // ignore
+    }
+
+    // If there is no receipt evidence, hide the evidence line.
+    try {
+      var ev = root.querySelector('.ck-ingredients-needed__evidence');
+      if (ev) {
+        var hasButton = ev.querySelector('[data-ck-file-field]');
+        var hasLink = ev.querySelector('a[href]');
+        var hasText = (ev.textContent || '').toString().trim();
+        if (!hasButton && !hasLink && !hasText) {
+          ev.style.display = 'none';
+        }
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    // Tap/click/keyboard toggle: collapse per-category table.
+    var toggles = root.querySelectorAll('.ck-category-toggle');
+    toggles.forEach(function (btn) {
+      var pillText = btn.querySelector('[data-ck-pill-text]');
+      btn.addEventListener('click', function () {
+        var table = btn.closest('table');
+        if (!table) return;
+        var collapsed = table.getAttribute('data-collapsed') === '1';
+        table.setAttribute('data-collapsed', collapsed ? '0' : '1');
+        btn.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+        if (pillText) {
+          pillText.textContent = collapsed ? 'Tap to collapse' : 'Tap to expand';
+        }
+      });
+      btn.addEventListener('keydown', function (e) {
+        if (!e) return;
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        btn.click();
+      });
+    });
+
+    // Remove empty categories (tables that ended up with no ingredient rows after directive filtering).
+    try {
+      var tables = root.querySelectorAll('table.ck-ingredients-table');
+      tables.forEach(function (table) {
+        var hasRows = table.querySelectorAll('tr.ck-ingredient-row').length > 0;
+        if (!hasRows) {
+          table.remove();
+        }
+      });
+    } catch (_) {
+      // ignore
+    }
+  })();
+</script>

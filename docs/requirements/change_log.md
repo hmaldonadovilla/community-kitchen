@@ -433,3 +433,53 @@
     > - I asume that you are reusing the same add ingredients overlay for Part Dish and Entire dish leftovers, do not do that because the messages are different, you should be able to define independent overlay actions.
   - When clicking on + Add ingredient for Entire dish leftover on openLeftoversOverlay action, the pop-up window appears and it is called 'Select leftover ingredient test' with an irrelevant helper message: 'Search and select ingredients used in the leftover dish.' Remove Select leftover ingredient test' from the pop-up window. Rephrase to a single title and no helper below the title or below the search box: Select the ingredient(s) that were used to cook the leftover dish but are missing from the original recipe.
   - Remove the message 'Enter at least 1 character to search' from all ingredient search in Recipe Management and Meal Production as it is no longer relevant.
+- ck-79:
+  - migrate the `docs/templates/ingredients_needed.md` template to a bundled html template. Following below requirements:
+    - [Ingredients needed] displays the following message above the table:
+
+      ```txt
+        "Ingredients needed for Customer | Service | Production date | Batch number. \nThis list excluded ingredients from leftovers"
+        Example:
+        Ingredients cooked for Croix-Rouge Belliard | Lunch | Thu 29-Jan-2026 |MP-AA000969.
+        This list excluded ingredients from leftovers
+        Show the Ingredient delivery receipt evidence: Link to photo(s)
+        Show the List of ingredients - see the next issue for improved list format.
+      ```
+
+    - The CONSOLIDATED_TABLE of ingredients needs to follow the exact same format as the one used to display ingredients in the docs/templates/mp.ing_recipe.html, review the highlighted section in the attached screenshot.
+    > **Adjustments**:
+    > - Please review the screenshot. I've modified the template please keep my adjsutments.
+    > - There is a lot of space being wasted by the `ck-ingredients-needed__message` section, please make sure to align closely to the top and align the message lines to the left.
+    > - When `ALLERGEN` is `None` do not show the `(None)` text.
+    > - Allow the user to Tap to collapse/Tab to expand by category showing
+    > - Layout must be mobile-first for quick visual scanning.
+    - Submit button in the summary view is not properly working on the steps ui, when data is missing it correctly jumps to the field that needs attention, this is great, but when all data is present it jumps to the first step of the chain of steps and nothing happens. Please fix this.
+    - Please adjust the [meal_production.pdf.html](docs/templates/meal_production.pdf.html)
+      - The final result needs to look exactly like the attached reference, same font color, font type, font-size
+      - Please keep the existing structural logic but instead of defining a table block per `MP_MEALS_REQUEST` row, repeat the entire table block for each qualifiyng combination of `MP_MEALS_REQUEST.MP_TYPE_LI`. For example if I have a `Standard` meal type for `MP_MEALS_REQUEST` that contains 4 `MP_TYPE_LI` rows (1 `Cook`, 2 `Entire dish` and 1 `Part dish`), the table block should be repeated three times. Once for the `Cook` (consolidating the `Part dish` ingredients) and twice for the `Entire dish`.
+      - Keep the same fields we currently have in `meal_production.pdf.html` (do not add the temperature field)
+- ck-80:
+
+1. Underneath the Ingredient search box in the `MP_INGREDIENTS_LI` overlays in the context of `editLeftoverIngredientsEntire`, `editLeftoverIngredientsPart`, `openCookOverlay`, add a helper message: “Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)." on deck
+2. Add a persistent read-only header showing Customer (MP_DISTRIBUTOR), Service (MP_SERVICE) and Production date (MP_PREP_DATE format EEE, dd-MMM-yyyy) on `deliveryForm`, `foodSafety`, `portioning`. On the `openLeftoversOverlay` add the info in the overlayContextHeader. Use the same typography everywhere. No new actions. No redesign. on deck
+3. Change the word "Requested" to "Ordered" everywhere on the Meal production form. DONE
+3. The helper text for Part dish leftover overlay action (`Select the ingredient(s) representing the leftover that will be added to today's meal.`) is shown as a block instead of using the entire width, which is not the case of other Helpers. Normalise the helpers to use the entire available width. on deck
+5. Change the non actionable error message "The maximum photo size is 10MB" to "The selected photo(s) exceed the 10MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode)." DONE
+4. Change the alignment of Helper text of View/Edit Recipe to cook recipe (`openCookOverlay` action) that appears at the top of a screen, from centered-aligned to left-aligned. Screenshot Untitled 14. on deck
+7. Helper texts in all forms are in different font, font size, and colors using colors that are barely visible. Normalize all helper texts to a single typography style per the UI Hygiene & Typography Contract. Same font, same size, same neutral but visible color. Remove bold, frames and do not use red, orange or green colors. Do not change wording, layout, or behavior. Helper texts must be aligned the same way as the field they support. If they support an entire screen, they should be left aligned.
+8. Apply the background blue color used for the background of [Next]  action button to the background, not the text, of the following actionable buttons and icons:
+
+- [View/Edit], [Ingredients Needed], [View/Edit ingredients], [Back to production], [Back], [+Add ingredient] [+another leftover], [Close], [Refresh], [Tap to collaps] and [Tap to expand]. If you find other actionable buttons, ask before changing the background color.
+- Icons: Edit, Trash used for leftover, Trash used for Ingredients of recipe to cook and Trash used for Ingredients of leftover, Camera for core temperature, View for photo of ingredient receipt and View photo for core temperature.
+
+9. Rename action [+another leftover] to [+Add leftover] DONE
+10. On the Portioning page, rename field label Note (optional) to Note to customer DONE
+11. Rename the action button [Close] to [Back] that is located on the top right of the +Add ingredient page for Part dish leftover screen. DONE
+12. For all non primary action buttons in the top and bottom action bars, highlight the text in blue as clickable links. DONE
+13. Harmonise the format, size and framing of the camera icon on table mode to the one used in the rest of the app, where the icon is detached from the pill to access the file management overlay. DONE
+14. Message "This record was modified by another user. Please refresh." is shown at the top of the screen and is barely noticeable and it is not entirely accurate. Please show a more accurate message as a pop-up window: "This record was updated by another user or automatically by the system, tap Refresh to continue." [Refresh] DONE
+15. Remove the word 'document' from [Hygiene rules document] DONE
+16. On Order page, show Total and the number in Bold. Do not change the font type or the font color. On the Portioning page, show Total and the numbers in Bold. Do not change the font type or the font color. DONE
+17. Remove (None) shown next to Ingredient names for ingredient without Allergens on the Ingredient list for Recipe to cook. DONE
+18. On the leftover overlays where we show a list of ingredients, we need to display on alphabetical order and put the `ALLERGEN` in brackets next to the ingredient name. This essentially means that in the overlay table, when we display a field as read only we should have a feature to set another field from the same row in brackets. For the alpha order part we should define this alphabetical order when the rows are being created by the addMode:auto or the selectionEffect.
+19. When Submitting from the Summary page, the system brings to user back to the Order screen. The system should bring the user to the Portioning screen and show the Submit window on that screen.

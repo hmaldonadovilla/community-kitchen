@@ -123,8 +123,13 @@ components:
             user before applying changes that satisfy `changeDialog.when`. See FieldChangeDialogConfig
             for interaction details with autosave and dedup rules.
         clearOnChange:
-          type: boolean
-          description: If true, changing this field clears all other fields and line items.
+          oneOf:
+            - type: boolean
+            - $ref: '#/components/schemas/ClearOnChangeConfig'
+          description: |
+            Clear behavior triggered when this field value changes.
+            - `true`: full clear (legacy) of all other fields and line items.
+            - object: configure `mode` and `bypassFields`.
         uploadConfig:
           $ref: '#/components/schemas/FileUploadConfig'
           description: Additional settings for FILE_UPLOAD questions. Provide as JSON in the `Config (JSON/REF)` column.
@@ -1044,6 +1049,33 @@ components:
         infoText:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional informational text shown on the right side of the section header (Edit view only).
+        infoDisplay:
+          type: string
+          enum: [pill, belowTitle, hidden]
+          description: |
+            How to render `infoText`.
+            - pill: right-side boxed pill (default)
+            - belowTitle: render as text under the title (no pill)
+            - hidden: do not render `infoText`
+
+    ClearOnChangeConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable/disable clear-on-change behavior. Default true when object is present.
+        mode:
+          type: string
+          enum: [full, ordered]
+          description: |
+            Clear mode:
+            - full: clear all other fields/groups
+            - ordered: clear only fields/groups defined after this field
+        bypassFields:
+          type: array
+          items:
+            type: string
+          description: Field ids that should never be cleared (applies to both modes).
 
     LineItemGroupUiConfig:
       type: object
@@ -1515,6 +1547,7 @@ components:
               type: string
           description: |
             Mapping of parent value(s) -> allowed options for this field. For multiple dependencies, join values with `||` in the order listed in `dependsOn` (e.g., `"Carrots||Local"`). Use `"*"` as a fallback key.
+            When a composite dependency includes a DATE value, weekday aliases are supported in keys (e.g., `"Belliard||Lunch||Sunday"`), with fallback to non-date composite keys when no weekday-specific key matches.
         optionMapRef:
           $ref: '#/components/schemas/OptionMapRefConfig'
           description: |
@@ -2119,6 +2152,17 @@ components:
           $ref: '#/components/schemas/TemplateIdMap'
         emailSubject:
           $ref: '#/components/schemas/LocalizedString'
+        emailFrom:
+          type: string
+          description: |
+            Optional sender email address for follow-up emails (Send Email action).
+
+            Notes:
+            - Apps Script can only send "from" the active user (script owner) or a configured Gmail alias.
+            - If this is set to an address that is not allowed, the send action will fail at runtime.
+        emailFromName:
+          type: string
+          description: Optional sender display name for follow-up emails (Send Email action).
         emailRecipients:
           type: array
           items:
@@ -4307,6 +4351,9 @@ components:
         helperText:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional helper text shown under the title in the multi-select add overlay.
+        searchHelperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper text shown under the overlay search input.
         placeholder:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional placeholder text for the overlay search input.

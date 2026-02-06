@@ -43,11 +43,12 @@ export type PageSectionCapable = {
   pageSectionKey?: string;
   pageSectionTitle?: string;
   pageSectionInfoText?: string;
+  pageSectionInfoDisplay?: 'pill' | 'belowTitle' | 'hidden';
 };
 
 export type PageSectionRenderBlock<T extends PageSectionCapable> =
   | { kind: 'group'; group: T }
-  | { kind: 'pageSection'; key: string; title?: string; infoText?: string; groups: T[] };
+  | { kind: 'pageSection'; key: string; title?: string; infoText?: string; infoDisplay?: 'pill' | 'belowTitle' | 'hidden'; groups: T[] };
 
 /**
  * Groups consecutive group cards into a visual "page section" wrapper (edit view only),
@@ -55,11 +56,19 @@ export type PageSectionRenderBlock<T extends PageSectionCapable> =
  */
 export const buildPageSectionBlocks = <T extends PageSectionCapable>(groups: T[]): PageSectionRenderBlock<T>[] => {
   const blocks: PageSectionRenderBlock<T>[] = [];
-  let current: { key: string; title?: string; infoText?: string; groups: T[] } | null = null;
+  let current: { key: string; title?: string; infoText?: string; infoDisplay?: 'pill' | 'belowTitle' | 'hidden'; groups: T[] } | null =
+    null;
 
   const flush = () => {
     if (!current) return;
-    blocks.push({ kind: 'pageSection', key: current.key, title: current.title, infoText: current.infoText, groups: current.groups });
+    blocks.push({
+      kind: 'pageSection',
+      key: current.key,
+      title: current.title,
+      infoText: current.infoText,
+      infoDisplay: current.infoDisplay,
+      groups: current.groups
+    });
     current = null;
   };
 
@@ -80,6 +89,7 @@ export const buildPageSectionBlocks = <T extends PageSectionCapable>(groups: T[]
         key,
         title: group.pageSectionTitle,
         infoText: group.pageSectionInfoText,
+        infoDisplay: group.pageSectionInfoDisplay,
         groups: [group]
       };
       return;
@@ -88,11 +98,11 @@ export const buildPageSectionBlocks = <T extends PageSectionCapable>(groups: T[]
     current.groups.push(group);
     if (!current.title && group.pageSectionTitle) current.title = group.pageSectionTitle;
     if (!current.infoText && group.pageSectionInfoText) current.infoText = group.pageSectionInfoText;
+    if (!current.infoDisplay && group.pageSectionInfoDisplay) current.infoDisplay = group.pageSectionInfoDisplay;
   });
 
   flush();
   return blocks;
 };
-
 
 

@@ -41,6 +41,7 @@ import { getOverlayCloseAllowCloseFromEdit, resolveOverlayCloseConfirm } from '.
 import { resolveOverlayCloseDeletePlan } from '../features/overlays/domain/overlayCloseEffects';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
+import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../types';
 import { isEmptyValue } from '../utils/values';
 import {
@@ -118,7 +119,7 @@ import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAn
 import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app/bundledHtmlClientRenderer';
 import { resolveTemplateIdForRecord } from '../app/templateId';
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
-import { applyClearOnChange } from '../app/clearOnChange';
+import { applyClearOnChange, isClearOnChangeEnabled } from '../app/clearOnChange';
 import {
   buildParagraphDisclaimerSection,
   buildParagraphDisclaimerValue,
@@ -132,6 +133,32 @@ import { buildDraftPayload, validateForm, validateUploadCounts } from '../app/su
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
+
+const normalizeActionToken = (value: string): string =>
+  (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^\+\s+/, '+');
+
+const PRIMARY_ACTION_LABELS = new Set([
+  'view/edit',
+  'ingredients needed',
+  'view/edit ingredients',
+  'back to production',
+  'back',
+  '+add ingredient',
+  '+another leftover',
+  '+add leftover',
+  'close',
+  'refresh',
+  'tap to collapse',
+  'tap to collaps',
+  'tap to expand'
+].map(normalizeActionToken));
+
+const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has(normalizeActionToken(label));
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -503,9 +530,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
   const title = cfg.title !== undefined && cfg.title !== null ? resolveLocalizedString(cfg.title, language, '').trim() : undefined;
   const helperText =
     cfg.helperText !== undefined && cfg.helperText !== null ? resolveLocalizedString(cfg.helperText, language, '').trim() : undefined;
+  const searchHelperText =
+    cfg.searchHelperText !== undefined && cfg.searchHelperText !== null
+      ? resolveLocalizedString(cfg.searchHelperText, language, '').trim()
+      : undefined;
   const placeholder =
     cfg.placeholder !== undefined && cfg.placeholder !== null ? resolveLocalizedString(cfg.placeholder, language, '').trim() : undefined;
-  return { title, helperText, placeholder };
+  return { title, helperText, searchHelperText, placeholder };
 };
 
 const collectLineItemConfigEntries = (questions: WebQuestionDefinition[]) => {
@@ -648,6 +679,10 @@ interface FormViewProps {
   } | null) => void;
   dedupNavigationBlocked?: boolean;
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
+  /**
+   * Optional hook to temporarily hold autosave (e.g., while the user completes a multi-step overlay flow).
+   */
+  setAutoSaveHold?: (hold: boolean, meta?: { reason?: string }) => void;
 }
 
 const FormView: React.FC<FormViewProps> = ({
@@ -690,7 +725,8 @@ const FormView: React.FC<FormViewProps> = ({
   onFormValidityChange,
   onGuidedUiChange,
   dedupNavigationBlocked,
-  openConfirmDialog
+  openConfirmDialog,
+  setAutoSaveHold
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
@@ -812,6 +848,7 @@ const FormView: React.FC<FormViewProps> = ({
   const fallbackConfirm = useConfirmDialog({ eventPrefix: 'ui.formConfirm', onDiagnostic });
   const openConfirmDialogResolved = openConfirmDialog || fallbackConfirm.openConfirm;
   const showFallbackConfirmOverlay = !openConfirmDialog;
+  const leftoversAutosaveHoldRef = useRef<{ rootSubKey: string } | null>(null);
   const groupScrollAnimRafRef = useRef(0);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const valuesRef = useRef(values);
@@ -1484,6 +1521,44 @@ const FormView: React.FC<FormViewProps> = ({
     orderedEntryEnabled
   ]);
 
+  const clearOnChangeOrderedFieldIds = useMemo(() => {
+    const byConfig = (definition.questions || [])
+      .map(q => (q?.id || '').toString().trim())
+      .filter(Boolean);
+    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return byConfig;
+
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+    const add = (idRaw: any) => {
+      const id = idRaw === undefined || idRaw === null ? '' : idRaw.toString().trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      ordered.push(id);
+    };
+
+    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header.include : [];
+    headerTargets.forEach(target => {
+      if (!target || typeof target !== 'object') return;
+      const kind = (target.kind || '').toString().trim();
+      if (kind !== 'question' && kind !== 'lineGroup') return;
+      add((target as any).id);
+    });
+
+    const steps = guidedStepsCfg.items || [];
+    steps.forEach(step => {
+      const stepTargets: any[] = Array.isArray((step as any)?.include) ? (step as any).include : [];
+      stepTargets.forEach(target => {
+        if (!target || typeof target !== 'object') return;
+        const kind = (target.kind || '').toString().trim();
+        if (kind !== 'question' && kind !== 'lineGroup') return;
+        add((target as any).id);
+      });
+    });
+
+    byConfig.forEach(add);
+    return ordered.length ? ordered : byConfig;
+  }, [definition.questions, guidedEnabled, guidedStepIds, guidedStepsCfg]);
+
   const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
   const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const guidedAutoAdvanceStateRef = useRef<{ stepId: string; lastSatisfied: boolean; armed: boolean } | null>(null);
@@ -1775,9 +1850,6 @@ const FormView: React.FC<FormViewProps> = ({
     submitActionRef.current = () => {
       if (submitting) return;
       const forceFinalSubmit = summarySubmitIntentRef?.current === true;
-      if (summarySubmitIntentRef && summarySubmitIntentRef.current) {
-        summarySubmitIntentRef.current = false;
-      }
       const isGuidedFinalStep = guidedEnabled && guidedStepIds.length && activeGuidedStepIndex >= guidedStepIds.length - 1;
 
       // In guided steps, the bottom "Submit" action behaves like "Next" until the final step.
@@ -2338,6 +2410,7 @@ const FormView: React.FC<FormViewProps> = ({
       pageSectionKey?: string;
       pageSectionTitle?: string;
       pageSectionInfoText?: string;
+      pageSectionInfoDisplay?: 'pill' | 'belowTitle' | 'hidden';
       questions: WebQuestionDefinition[];
       order: number;
     };
@@ -2383,6 +2456,11 @@ const FormView: React.FC<FormViewProps> = ({
         !isHeader && group?.pageSection?.title ? resolveLocalizedString(group.pageSection.title as any, language, '') : undefined;
       const pageSectionInfoText =
         !isHeader && group?.pageSection?.infoText ? resolveLocalizedString(group.pageSection.infoText as any, language, '') : undefined;
+      const pageSectionInfoDisplayRaw = !isHeader ? (group as any)?.pageSection?.infoDisplay : undefined;
+      const pageSectionInfoDisplay =
+        pageSectionInfoDisplayRaw === 'belowTitle' || pageSectionInfoDisplayRaw === 'hidden' || pageSectionInfoDisplayRaw === 'pill'
+          ? (pageSectionInfoDisplayRaw as 'pill' | 'belowTitle' | 'hidden')
+          : undefined;
 
       const existing = map.get(key);
       if (!existing) {
@@ -2395,6 +2473,7 @@ const FormView: React.FC<FormViewProps> = ({
           pageSectionKey,
           pageSectionTitle,
           pageSectionInfoText,
+          pageSectionInfoDisplay,
           questions: [q],
           order: order++
         });
@@ -2409,6 +2488,7 @@ const FormView: React.FC<FormViewProps> = ({
       if (!existing.pageSectionKey && pageSectionKey) existing.pageSectionKey = pageSectionKey;
       if (!existing.pageSectionTitle && pageSectionTitle) existing.pageSectionTitle = pageSectionTitle;
       if (!existing.pageSectionInfoText && pageSectionInfoText) existing.pageSectionInfoText = pageSectionInfoText;
+      if (!existing.pageSectionInfoDisplay && pageSectionInfoDisplay) existing.pageSectionInfoDisplay = pageSectionInfoDisplay;
     });
 
     return Array.from(map.values()).sort((a, b) => {
@@ -3321,6 +3401,7 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const closeSubgroupOverlay = useCallback(() => {
+    const closingSubKey = (subgroupOverlay.subKey || '').toString();
     const previous = overlayStackRef.current.pop();
     if (previous) {
       if (previous.kind === 'subgroup') {
@@ -3336,13 +3417,198 @@ const FormView: React.FC<FormViewProps> = ({
     overlayStackRef.current = [];
     setSubgroupOverlay({ open: false });
     onDiagnostic?.('subgroup.overlay.close');
-  }, [onDiagnostic]);
+    if (leftoversAutosaveHoldRef.current?.rootSubKey === closingSubKey) {
+      leftoversAutosaveHoldRef.current = null;
+      setAutoSaveHold?.(false, { reason: 'leftoversOverlay' });
+      onDiagnostic?.('autosave.hold.request', { hold: false, reason: 'leftoversOverlay', subKey: closingSubKey });
+    }
+  }, [onDiagnostic, setAutoSaveHold, subgroupOverlay.subKey]);
 
-  const attemptCloseSubgroupOverlay = useCallback(
+	  const attemptCloseSubgroupOverlay = useCallback(
     (source: 'button' | 'escape') => {
       if (!subgroupOverlay.open) return;
+      const subgroupKey = (subgroupOverlay.subKey || '').toString();
+      const subgroupInfo = subgroupKey ? parseSubgroupKey(subgroupKey) : null;
+      const subgroupParentGroupKey = (subgroupInfo?.parentGroupKey || '').toString();
+      const subgroupParentGroupId = (() => {
+        if (!subgroupParentGroupKey) return '';
+        const tokens = subgroupParentGroupKey.split('::').filter(Boolean);
+        return (tokens[tokens.length - 1] || '').toString();
+      })();
+      const isPartDishIngredientsOverlay =
+        subgroupParentGroupId === 'MP_TYPE_LI' && (subgroupInfo?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI';
+      const overlayFields = (subgroupOverlay.groupOverride as any)?.fields;
+      const isLeftoversOverlay =
+        Array.isArray(overlayFields) && overlayFields.some((f: any) => (f?.id || '').toString().trim() === 'PREP_TYPE');
+      const isLeftoversRoot = isLeftoversOverlay && leftoversAutosaveHoldRef.current?.rootSubKey === subgroupKey;
+      const rowsInOverlay = (() => {
+        if (!subgroupKey) return [];
+        const rowsAll = lineItemsRef.current[subgroupKey] || [];
+        if (!rowsAll.length) return [];
+        const overlayRowFilter = (subgroupOverlay as any)?.rowFilter;
+        const filtered = overlayRowFilter
+          ? rowsAll.filter((row: any) => {
+              const rowValues = (row?.values || {}) as any;
+              const includeWhen = (overlayRowFilter as any)?.includeWhen;
+              const excludeWhen = (overlayRowFilter as any)?.excludeWhen;
+              const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+              const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+              const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
+              return includeOk && !excludeMatch;
+            })
+          : rowsAll;
+        if (!isLeftoversOverlay) return filtered;
+        // Guard against preset "Cook" rows that are not part of the leftovers selection overlay.
+        return filtered.filter((row: any) => ((row?.values || {}) as any)?.PREP_TYPE?.toString?.().trim?.() !== 'Cook');
+      })();
+      const hasPrepTypeSelected = rowsInOverlay.some((row: any) => {
+        const v = ((row?.values || {}) as any)?.PREP_TYPE;
+        return typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined && (!Array.isArray(v) || v.length > 0);
+      });
+      const removeLineRowByCascade = (groupId: string, rowId: string) => {
+        if (!groupId || !rowId) return;
+        const prevLineItems = lineItemsRef.current || {};
+        const groupQuestion = definition.questions.find(q => (q?.id || '').toString() === groupId);
+        const targetRow = (prevLineItems[groupId] || []).find((r: any) => (r?.id || '').toString() === rowId);
+        if (onSelectionEffect && groupQuestion && targetRow) {
+          const effectFields = ((groupQuestion as any).lineItemConfig?.fields || []).filter(
+            (field: any) => Array.isArray(field?.selectionEffects) && field.selectionEffects.length
+          );
+          effectFields.forEach((field: any) => {
+            const contextId = buildLineContextId(groupId, rowId, (field?.id || '').toString());
+            onSelectionEffect(field as WebQuestionDefinition, null, {
+              contextId,
+              lineItem: { groupId, rowId, rowValues: (targetRow as any)?.values || {} },
+              forceContextReset: true
+            });
+          });
+        }
+        const cascade = cascadeRemoveLineItemRows({ lineItems: prevLineItems, roots: [{ groupId, rowId }] });
+        const marked = markRecipeIngredientsDirtyForGroupKey(cascade.lineItems, groupId);
+        let nextLineItemsSeeded = marked.lineItems;
+        const parsedGroupKey = parseSubgroupKey(groupId);
+        const isLeftoversGroupKey =
+          groupId === 'MP_TYPE_LI' || (parsedGroupKey?.subGroupId || '').toString() === 'MP_TYPE_LI';
+        if (isLeftoversGroupKey) {
+          const existingRows = nextLineItemsSeeded[groupId] || [];
+          const hasNonCookRow = existingRows.some((row: any) => {
+            const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
+            return (prepType || '').toString().trim().toLowerCase() !== 'cook';
+          });
+          if (!hasNonCookRow) {
+            const rowIdPrefix = (parsedGroupKey?.subGroupId || groupId || 'MP_TYPE_LI').toString();
+            const seededRow: LineItemRowState = {
+              id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
+              values: {
+                PREP_TYPE: '',
+                [ROW_SOURCE_KEY]: 'manual'
+              },
+              parentId: parsedGroupKey?.parentRowId,
+              parentGroupId: parsedGroupKey?.parentGroupKey
+            };
+            nextLineItemsSeeded = {
+              ...nextLineItemsSeeded,
+              [groupId]: [...existingRows, seededRow]
+            };
+            onDiagnostic?.('lineItems.leftovers.seedDefault', { groupKey: groupId, source: 'discardPartDish' });
+          }
+        }
+        if (cascade.removedSubgroupKeys.length) {
+          setSubgroupSelectors(prevSel => {
+            const nextSel = { ...prevSel };
+            cascade.removedSubgroupKeys.forEach(key => {
+              delete (nextSel as any)[key];
+            });
+            return nextSel;
+          });
+        }
+        const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(
+          definition,
+          (valuesRef.current || {}) as Record<string, FieldValue>,
+          nextLineItemsSeeded,
+          { mode: 'init' }
+        );
+        setValues(nextValues);
+        setLineItems(recomputed);
+        runSelectionEffectsForAncestorRows(groupId, prevLineItems, recomputed, { mode: 'init', topValues: nextValues });
+      };
+      if (source === 'button' && isPartDishIngredientsOverlay && rowsInOverlay.length === 0) {
+        const parentGroupKey = subgroupParentGroupKey || (subgroupInfo?.parentGroupId || '').toString();
+        const parentRowId = (subgroupInfo?.parentRowId || '').toString();
+        removeLineRowByCascade(parentGroupKey, parentRowId);
+        const hadOverlayStack = overlayStackRef.current.length > 0;
+        closeSubgroupOverlay();
+        onDiagnostic?.('subgroup.overlay.close.partDish.discardEmpty', {
+          source,
+          subgroupKey,
+          parentGroupKey,
+          parentRowId,
+          restoredOverlay: hadOverlayStack
+        });
+        return;
+      }
       if (overlayStackRef.current.length) {
         closeSubgroupOverlay();
+        return;
+      }
+      const discardLeftoversAndReturn = () => {
+        const parentGroupId = (subgroupInfo?.parentGroupId || subgroupInfo?.rootGroupId || '').toString();
+        const parentRowId = (subgroupInfo?.parentRowId || '').toString();
+        const parentGroupQuestion = definition.questions.find(q => (q?.id || '').toString() === parentGroupId);
+        const isReheatField = (parentGroupQuestion as any)?.lineItemConfig?.fields?.find(
+          (f: any) => (f?.id || '').toString().trim() === 'MP_IS_REHEAT'
+        );
+        setLineItems(prevLineItems => {
+          let nextLineItems = prevLineItems;
+          if (parentGroupId && parentRowId) {
+            const parentRows = nextLineItems[parentGroupId] || [];
+            const nextParentRows = parentRows.map((r: any) => {
+              if ((r?.id || '').toString() !== parentRowId) return r;
+              const rowValues = { ...(r?.values || {}) };
+              rowValues.MP_IS_REHEAT = 'No';
+              rowValues.LEFTOVER_INFO = 'No leftover';
+              return { ...r, values: rowValues };
+            });
+            nextLineItems = { ...nextLineItems, [parentGroupId]: nextParentRows };
+          }
+          return nextLineItems;
+        });
+        if (onSelectionEffect && parentGroupId && parentRowId && isReheatField) {
+          const parentRows = lineItemsRef.current[parentGroupId] || [];
+          const parentRow = parentRows.find((r: any) => (r?.id || '').toString() === parentRowId);
+          const rowValues = { ...(parentRow?.values || {}) } as any;
+          rowValues.MP_IS_REHEAT = 'No';
+          rowValues.LEFTOVER_INFO = 'No leftover';
+          onSelectionEffect(isReheatField as WebQuestionDefinition, 'No', {
+            contextId: buildLineContextId(parentGroupId, parentRowId, 'MP_IS_REHEAT'),
+            lineItem: { groupId: parentGroupId, rowId: parentRowId, rowValues },
+            forceContextReset: true
+          });
+        }
+        closeSubgroupOverlay();
+      };
+      if (source === 'button' && isLeftoversRoot && rowsInOverlay.length === 0) {
+        discardLeftoversAndReturn();
+        onDiagnostic?.('subgroup.overlay.close.leftovers.discard.empty', { source, subgroupKey });
+        return;
+      }
+      if (source === 'button' && isLeftoversRoot && rowsInOverlay.length > 0 && !hasPrepTypeSelected && openConfirmDialogResolved) {
+        openConfirmDialogResolved({
+          title: 'No leftover type selected',
+          message:
+            'You selected “Yes” for leftovers, but no leftover type was chosen. Do you want to go back to production and discard the leftover entry, or continue to select a leftover type?',
+          confirmLabel: 'Back to production (discard leftover)',
+          cancelLabel: 'Select leftover type',
+          dismissOnBackdrop: false,
+          showCloseButton: false,
+          kind: 'leftoversOverlayDiscard',
+          refId: `${subgroupKey}::leftoversDiscard`,
+          onConfirm: discardLeftoversAndReturn,
+          onCancel: () => {
+            // Stay in overlay so the user can select a leftover type.
+          }
+        });
+        onDiagnostic?.('subgroup.overlay.close.confirm.open', { source, kind: 'leftoversOverlayDiscard' });
         return;
       }
       const overlayCloseCtx: VisibilityContext = {
@@ -3376,16 +3642,70 @@ const FormView: React.FC<FormViewProps> = ({
       }
       closeSubgroupOverlay();
     },
-    [
-      closeSubgroupOverlay,
-      language,
-      onDiagnostic,
-      openConfirmDialogResolved,
-      subgroupOverlay.closeConfirm,
-      subgroupOverlay.open,
-      subgroupOverlay.subKey
-    ]
-  );
+	    [
+	      closeSubgroupOverlay,
+	      definition.questions,
+	      language,
+	      onDiagnostic,
+	      onSelectionEffect,
+	      openConfirmDialogResolved,
+	      setAutoSaveHold,
+	      setLineItems,
+	      subgroupOverlay.closeConfirm,
+	      subgroupOverlay.groupOverride,
+	      subgroupOverlay.open,
+	      subgroupOverlay.rowFilter,
+	      subgroupOverlay.subKey
+	    ]
+	  );
+
+  const handleLineSelectOverlayBack = useCallback(() => {
+    const groupKey = (overlay.groupId || '').toString();
+    const subgroupInfo = groupKey ? parseSubgroupKey(groupKey) : null;
+    const subgroupParentGroupKey = (subgroupInfo?.parentGroupKey || '').toString();
+    const subgroupParentGroupId = (() => {
+      if (!subgroupParentGroupKey) return '';
+      const tokens = subgroupParentGroupKey.split('::').filter(Boolean);
+      return (tokens[tokens.length - 1] || '').toString();
+    })();
+    const isPartDishIngredientsOverlay =
+      subgroupParentGroupId === 'MP_TYPE_LI' && (subgroupInfo?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI';
+
+    setOverlay({ open: false, options: [], selected: [] });
+    if (!isPartDishIngredientsOverlay || !groupKey) return;
+
+    const rowsAll = lineItemsRef.current[groupKey] || [];
+    const rowFilter =
+      subgroupOverlay.open && subgroupOverlay.subKey === groupKey ? subgroupOverlay.rowFilter : null;
+    const rowsFiltered = rowFilter
+      ? rowsAll.filter((row: any) => {
+          const rowValues = (row?.values || {}) as any;
+          const includeWhen = (rowFilter as any)?.includeWhen;
+          const excludeWhen = (rowFilter as any)?.excludeWhen;
+          const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+          const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+          const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
+          return includeOk && !excludeMatch;
+        })
+      : rowsAll;
+
+    if (rowsFiltered.length > 0) return;
+
+    onDiagnostic?.('lineItems.overlay.back.partDish.discardEmpty', {
+      groupKey,
+      subgroupParentGroupKey,
+      subgroupParentGroupId
+    });
+    attemptCloseSubgroupOverlay('button');
+  }, [
+    attemptCloseSubgroupOverlay,
+    onDiagnostic,
+    overlay.groupId,
+    setOverlay,
+    subgroupOverlay.open,
+    subgroupOverlay.rowFilter,
+    subgroupOverlay.subKey
+  ]);
 
   const closeLineItemGroupOverlay = useCallback(() => {
     const previous = overlayStackRef.current.pop();
@@ -3724,9 +4044,34 @@ const FormView: React.FC<FormViewProps> = ({
       }
       const rowFilter = options?.rowFilter || null;
       const groupOverride = options?.groupOverride;
+      const groupOverrideFields = (groupOverride as any)?.fields;
+      const isLeftoversOverlay =
+        Array.isArray(groupOverrideFields) && groupOverrideFields.some((f: any) => (f?.id || '').toString().trim() === 'PREP_TYPE');
+      if (isLeftoversOverlay) {
+        if (!leftoversAutosaveHoldRef.current || leftoversAutosaveHoldRef.current.rootSubKey !== subKey) {
+          leftoversAutosaveHoldRef.current = { rootSubKey: subKey };
+          setAutoSaveHold?.(true, { reason: 'leftoversOverlay' });
+          onDiagnostic?.('autosave.hold.request', { hold: true, reason: 'leftoversOverlay', subKey });
+        }
+      }
       const hideInlineSubgroups = options?.hideInlineSubgroups === true;
       const hideCloseButton = options?.hideCloseButton === true;
-      const closeButtonLabel = resolveLocalizedString(options?.closeButtonLabel, language, '').trim();
+      const subgroupDefaults = resolveSubgroupDefs(subKey);
+      const subgroupParsed = parseSubgroupKey(subKey);
+      const subgroupParentGroupId = (() => {
+        const parentGroupKey = (subgroupParsed?.parentGroupKey || '').toString();
+        if (!parentGroupKey) return '';
+        const tokens = parentGroupKey.split('::').filter(Boolean);
+        return (tokens[tokens.length - 1] || '').toString();
+      })();
+      const isPartDishIngredientsOverlay =
+        (subgroupParsed?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI' && subgroupParentGroupId === 'MP_TYPE_LI';
+      const closeButtonLabelRaw =
+        options?.closeButtonLabel ??
+        (groupOverride as any)?.ui?.closeButtonLabel ??
+        (subgroupDefaults?.sub as any)?.ui?.closeButtonLabel;
+      const closeButtonLabelDefault = isPartDishIngredientsOverlay ? tSystem('actions.back', language, 'Back') : '';
+      const closeButtonLabel = resolveLocalizedString(closeButtonLabelRaw, language, '').trim() || closeButtonLabelDefault;
       const closeConfirm = options?.closeConfirm;
       const label = options?.label;
       const contextHeader = options?.contextHeader;
@@ -3761,7 +4106,7 @@ const FormView: React.FC<FormViewProps> = ({
         onDiagnostic?.('form.overlay.closeButton.hidden', { scope: 'subgroup', source });
       }
     },
-    [language, lineItemGroupOverlay, onDiagnostic, overlay.open, subgroupOverlay]
+    [language, lineItemGroupOverlay, onDiagnostic, overlay.open, resolveSubgroupDefs, setAutoSaveHold, subgroupOverlay]
   );
 
   const openLineItemGroupOverlay = useCallback(
@@ -4300,14 +4645,15 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
 
-    setOverlayDetailHtmlLoading(true);
-    setOverlayDetailHtmlError('');
-    renderBundledHtmlTemplateClient({
-      definition,
-      payload,
-      templateIdMap,
-      buttonId: `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}`
-    })
+	    setOverlayDetailHtmlLoading(true);
+	    setOverlayDetailHtmlError('');
+	    renderBundledHtmlTemplateClient({
+	      definition,
+	      payload,
+	      templateIdMap,
+	      buttonId: `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}`,
+	      onDiagnostic
+	    })
       .then(res => {
         if (res?.success && res?.html) {
           setOverlayDetailHtml(res.html);
@@ -6026,7 +6372,7 @@ const FormView: React.FC<FormViewProps> = ({
     const currentValues = valuesRef.current;
     const currentLineItems = lineItemsRef.current;
     if (
-      q.clearOnChange === true &&
+      isClearOnChangeEnabled((q as any).clearOnChange) &&
       !isEmptyValue(currentValues[q.id]) &&
       !isEmptyValue(value) &&
       !areFieldValuesEqual(currentValues[q.id], value)
@@ -6036,7 +6382,8 @@ const FormView: React.FC<FormViewProps> = ({
         values: currentValues,
         lineItems: currentLineItems,
         fieldId: q.id,
-        nextValue: value
+        nextValue: value,
+        orderedFieldIds: clearOnChangeOrderedFieldIds
       });
       onDiagnostic?.('field.clearOnChange', {
         fieldId: q.id,
@@ -6883,17 +7230,20 @@ const FormView: React.FC<FormViewProps> = ({
         refId: q.id,
         onConfirm: runReset
       });
-    };
-    const renderOverlayOpenReplaceButton = (displayValue?: string | null) => {
-      const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
-      const actionButtonStyle = showResetButton
-        ? { ...buttonStyles.secondary, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
-        : buttonStyles.secondary;
-      return (
-        <div
-          key={q.id}
-          className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
-          data-field-path={q.id}
+	    };
+	    const renderOverlayOpenReplaceButton = (displayValue?: string | null) => {
+	      const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
+	      const baseLabel = overlayOpenAction ? (overlayOpenAction.label || resolveLabel(q, language)) : '';
+	      const primary = overlayOpenAction ? isPrimaryActionLabel(baseLabel) : false;
+	      const baseStyle = primary ? buttonStyles.primary : buttonStyles.secondary;
+	      const actionButtonStyle = showResetButton
+	        ? { ...baseStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
+	        : baseStyle;
+	      return (
+	        <div
+	          key={q.id}
+	          className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+	          data-field-path={q.id}
           data-has-error={errors[q.id] ? 'true' : undefined}
           data-has-warning={hasWarning(q.id) ? 'true' : undefined}
         >
@@ -6910,21 +7260,21 @@ const FormView: React.FC<FormViewProps> = ({
             >
               {overlayOpenButtonText(displayValue)}
             </button>
-            {showResetButton ? (
-              <button
-                type="button"
-                onClick={handleOverlayOpenActionReset}
-                disabled={overlayOpenActionResetDisabled}
-                aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                style={withDisabled(
-                  {
-                    ...buttonStyles.secondary,
-                    borderTopLeftRadius: 0,
-                    borderBottomLeftRadius: 0,
-                    padding: '0 14px',
-                    minWidth: 44
-                  },
-                  overlayOpenActionResetDisabled
+	            {showResetButton ? (
+	              <button
+	                type="button"
+	                onClick={handleOverlayOpenActionReset}
+	                disabled={overlayOpenActionResetDisabled}
+	                aria-label={tSystem('lineItems.remove', language, 'Remove')}
+	                style={withDisabled(
+	                  {
+	                    ...baseStyle,
+	                    borderTopLeftRadius: 0,
+	                    borderBottomLeftRadius: 0,
+	                    padding: '0 14px',
+	                    minWidth: 44
+	                  },
+	                  overlayOpenActionResetDisabled
                 )}
               >
                 <TrashIcon size={40} />
@@ -6936,21 +7286,23 @@ const FormView: React.FC<FormViewProps> = ({
         </div>
       );
     };
-    const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
-      if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
-      return (
-        <div style={{ marginTop: 8 }}>
-          <button
-            type="button"
-            onClick={handleOverlayOpenAction}
-            disabled={overlayOpenDisabled}
-            style={withDisabled(buttonStyles.secondary, overlayOpenDisabled)}
-          >
-            {overlayOpenButtonText(displayValue)}
-          </button>
-        </div>
-      );
-    };
+	    const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
+	      if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
+	      const baseLabel = overlayOpenAction.label || resolveLabel(q, language);
+	      const primary = isPrimaryActionLabel(baseLabel);
+	      return (
+	        <div style={{ marginTop: 8 }}>
+	          <button
+	            type="button"
+	            onClick={handleOverlayOpenAction}
+	            disabled={overlayOpenDisabled}
+	            style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, overlayOpenDisabled)}
+	          >
+	            {overlayOpenButtonText(displayValue)}
+	          </button>
+	        </div>
+	      );
+	    };
 
     switch (q.type) {
       case 'BUTTON': {
@@ -6971,6 +7323,7 @@ const FormView: React.FC<FormViewProps> = ({
         if (action === 'openUrlField' && !(q as any)?.button?.fieldId) return null;
 
         const label = resolveLabel(q, language);
+        const primary = isPrimaryActionLabel(label);
         const busyThis = !!reportBusy && reportBusyId === q.id;
         const disabled = submitting || !onReportButton || !!reportBusy;
         const buttonLabelStyle = inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly;
@@ -6985,7 +7338,7 @@ const FormView: React.FC<FormViewProps> = ({
               type="button"
               onClick={() => onReportButton?.(q.id)}
               disabled={disabled}
-              style={withDisabled(buttonStyles.secondary, disabled)}
+              style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, disabled)}
             >
               {busyThis ? tSystem('common.loading', language, 'Loading…') : label}
             </button>
@@ -7424,14 +7777,14 @@ const FormView: React.FC<FormViewProps> = ({
         const hasFiles = items.length > 0;
         const viewMode = readOnly || locked || maxed || hasFiles;
         const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-        const leftLabel = viewMode
-          ? tSystem('files.view', language, 'View photos')
-          : tSystem('files.add', language, 'Add photo');
-        const cameraStyleBase = viewMode ? buttonStyles.secondary : isEmpty ? buttonStyles.primary : buttonStyles.secondary;
-        if (renderAsLabel) {
-          const displayContent =
-            items.length === 0
-              ? null
+	        const leftLabel = viewMode
+	          ? tSystem('files.view', language, 'View photos')
+	          : tSystem('files.add', language, 'Add photo');
+	        const cameraStyleBase = buttonStyles.primary;
+	        if (renderAsLabel) {
+	          const displayContent =
+	            items.length === 0
+	              ? null
               : items.map((item: any, idx: number) => (
                   <div key={`${q.id}-file-${idx}`} className="ck-readonly-file">
                     {describeUploadItem(item as any)}
@@ -8620,10 +8973,12 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       if (isSubOverlayAddMode && subConfig.anchorFieldId) {
+        const addLinesLabel = resolveLocalizedString(subConfig.addButtonLabel, language, 'Add lines');
+        const addLinesPrimary = isPrimaryActionLabel(addLinesLabel);
                         return (
                           <button
                             type="button"
-            style={withDisabled(buttonStyles.secondary, submitting || subSelectorIsMissing || subMaxRowsReached)}
+            style={withDisabled(addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary, submitting || subSelectorIsMissing || subMaxRowsReached)}
             disabled={submitting || subSelectorIsMissing || subMaxRowsReached}
                             onClick={async () => {
               if (subMaxRowsReached) {
@@ -8667,12 +9022,13 @@ const FormView: React.FC<FormViewProps> = ({
                               const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
                               const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
                               const addOverlayCopy = resolveAddOverlayCopy(subConfig, language);
-                              if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.placeholder) {
+                              if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.searchHelperText || addOverlayCopy.placeholder) {
                                 onDiagnostic?.('ui.lineItems.overlay.copy.override', {
                                   groupId: subKey,
                                   scope: 'subgroup',
                                   hasTitle: !!addOverlayCopy.title,
                                   hasHelperText: !!addOverlayCopy.helperText,
+                                  hasSearchHelperText: !!addOverlayCopy.searchHelperText,
                                   hasPlaceholder: !!addOverlayCopy.placeholder
                                 });
                               }
@@ -8686,18 +9042,21 @@ const FormView: React.FC<FormViewProps> = ({
                                 selected: [],
                                 title: addOverlayCopy.title,
                                 helperText: addOverlayCopy.helperText,
+                                searchHelperText: addOverlayCopy.searchHelperText,
                                 placeholder: addOverlayCopy.placeholder
                               });
                             }}
                           >
             <PlusIcon />
-            {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add lines')}
+            {addLinesLabel}
                           </button>
                         );
                       }
       if (canUseSubSelectorOverlay) {
         return null;
       }
+      const addLineLabel = resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line');
+      const addLinePrimary = isPrimaryActionLabel(addLineLabel);
                       return (
         <button
           type="button"
@@ -8723,10 +9082,10 @@ const FormView: React.FC<FormViewProps> = ({
             }
             addLineItemRowManual(subKey, Object.keys(preset).length ? preset : undefined, subAddRowOptions);
           }}
-          style={withDisabled(buttonStyles.secondary, subSelectorIsMissing || subMaxRowsReached)}
+          style={withDisabled(addLinePrimary ? buttonStyles.primary : buttonStyles.secondary, subSelectorIsMissing || subMaxRowsReached)}
         >
           <PlusIcon />
-          {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line')}
+          {addLineLabel}
                         </button>
                       );
                     };
@@ -8770,15 +9129,15 @@ const FormView: React.FC<FormViewProps> = ({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              {!overlayHideCloseButton ? (
-                <button type="button" onClick={() => attemptCloseSubgroupOverlay('button')} style={buttonStyles.secondary}>
-                  {overlayCloseButtonLabel}
-                </button>
-              ) : null}
+	              {!overlayHideCloseButton ? (
+	                <button type="button" onClick={() => attemptCloseSubgroupOverlay('button')} style={buttonStyles.primary}>
+	                  {overlayCloseButtonLabel}
+	                </button>
+	              ) : null}
             </div>
             <div style={{ textAlign: 'center', padding: '0 8px', overflowWrap: 'anywhere' }}>
               {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
-              {overlayHeaderLabel ? <div>{overlayHeaderLabel}</div> : null}
+              {overlayHeaderLabel ? <div style={{ textAlign: 'left' }}>{overlayHeaderLabel}</div> : null}
               <div style={srOnly}>{subLabel}</div>
             </div>
             {overlayHelperText ? (
@@ -9332,13 +9691,13 @@ const FormView: React.FC<FormViewProps> = ({
                                 })),
                                 ...(overlayDetailEnabled
                                   ? (() => {
-                                      const actionButtonStyle: React.CSSProperties = {
-                                        ...buttonStyles.secondary,
-                                        padding: 6,
-                                        minHeight: 36,
-                                        minWidth: 36,
-                                        width: '100%'
-                                      };
+	                                      const actionButtonStyle: React.CSSProperties = {
+	                                        ...buttonStyles.primary,
+	                                        padding: 6,
+	                                        minHeight: 36,
+	                                        minWidth: 36,
+	                                        width: '100%'
+	                                      };
                                       const actionColumns: Array<any> = [];
                                       if (showOverlayDetailViewInHeader) {
                                         actionColumns.push({
@@ -9503,13 +9862,13 @@ const FormView: React.FC<FormViewProps> = ({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {showBodyEdit ? (
                             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                              <button
-                                type="button"
-                                style={buttonStyles.secondary}
-                                onClick={() => {
-                                  if (!overlayDetailSelectionForGroup) return;
-                                  setOverlayDetailSelection({ groupId: subKey, rowId: overlayDetailSelectionForGroup.rowId, mode: 'edit' });
-                                  onDiagnostic?.('lineItems.overlayDetail.action', {
+	                              <button
+	                                type="button"
+	                                style={isPrimaryActionLabel(overlayDetailEditLabel) ? buttonStyles.primary : buttonStyles.secondary}
+	                                onClick={() => {
+	                                  if (!overlayDetailSelectionForGroup) return;
+	                                  setOverlayDetailSelection({ groupId: subKey, rowId: overlayDetailSelectionForGroup.rowId, mode: 'edit' });
+	                                  onDiagnostic?.('lineItems.overlayDetail.action', {
                                     groupId: subKey,
                                     rowId: overlayDetailSelectionForGroup.rowId,
                                     actionId: 'edit',
@@ -9691,6 +10050,7 @@ const FormView: React.FC<FormViewProps> = ({
                           selected: [],
                           title: addOverlayCopy.title,
                           helperText: addOverlayCopy.helperText,
+                          searchHelperText: addOverlayCopy.searchHelperText,
                           placeholder: addOverlayCopy.placeholder
                         });
                         return;
@@ -10100,14 +10460,14 @@ const FormView: React.FC<FormViewProps> = ({
                         renderCell: (subRow: any) => renderSubTableField(field, subRow)
                       })),
                       ...(overlayDetailEnabled
-                        ? (() => {
-                            const actionButtonStyle: React.CSSProperties = {
-                              ...buttonStyles.secondary,
-                              padding: 6,
-                              minHeight: 36,
-                              minWidth: 36,
-                              width: '100%'
-                            };
+	                        ? (() => {
+	                            const actionButtonStyle: React.CSSProperties = {
+	                              ...buttonStyles.primary,
+	                              padding: 6,
+	                              minHeight: 36,
+	                              minWidth: 36,
+	                              width: '100%'
+	                            };
                             const actionColumns: Array<any> = [];
                             if (overlayDetailCanView) {
                               actionColumns.push({
@@ -10799,12 +11159,12 @@ const FormView: React.FC<FormViewProps> = ({
           }}
         >
           <div style={{ padding: 16, borderBottom: '1px solid var(--border)', background: 'var(--card)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-control)' }}>{tSystem('common.error', language, 'Error')}</div>
-              <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
-                {tSystem('common.close', language, 'Close')}
-              </button>
-            </div>
+	            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+	              <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-control)' }}>{tSystem('common.error', language, 'Error')}</div>
+	              <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.primary}>
+	                {tSystem('common.close', language, 'Close')}
+	              </button>
+	            </div>
           </div>
           <div style={{ padding: 16 }}>
             <div className="error">
@@ -11022,11 +11382,13 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       if (isOverlayAddMode && groupCfg.anchorFieldId) {
+        const addLinesLabel = resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLines', language, 'Add lines'));
+        const addLinesPrimary = isPrimaryActionLabel(addLinesLabel);
         return (
           <button
             type="button"
             disabled={locked || selectorIsMissing || maxRowsReached}
-            style={withDisabled(buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
+            style={withDisabled(addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
             onClick={async () => {
               if (locked || selectorIsMissing || maxRowsReached) {
                 if (maxRowsReached) {
@@ -11070,12 +11432,13 @@ const FormView: React.FC<FormViewProps> = ({
               const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
               const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
               const addOverlayCopy = resolveAddOverlayCopy(groupCfg, language);
-              if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.placeholder) {
+              if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.searchHelperText || addOverlayCopy.placeholder) {
                 onDiagnostic?.('ui.lineItems.overlay.copy.override', {
                   groupId,
                   scope: 'lineItemGroup',
                   hasTitle: !!addOverlayCopy.title,
                   hasHelperText: !!addOverlayCopy.helperText,
+                  hasSearchHelperText: !!addOverlayCopy.searchHelperText,
                   hasPlaceholder: !!addOverlayCopy.placeholder
                 });
               }
@@ -11089,18 +11452,21 @@ const FormView: React.FC<FormViewProps> = ({
                 selected: [],
                 title: addOverlayCopy.title,
                 helperText: addOverlayCopy.helperText,
+                searchHelperText: addOverlayCopy.searchHelperText,
                 placeholder: addOverlayCopy.placeholder
               });
             }}
           >
             <PlusIcon />
-            {resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLines', language, 'Add lines'))}
+            {addLinesLabel}
           </button>
         );
       }
       if (canUseSelectorOverlay) {
         return null;
       }
+      const addLineLabel = resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLine', language, 'Add line'));
+      const addLinePrimary = isPrimaryActionLabel(addLineLabel);
       return (
         <button
           type="button"
@@ -11123,10 +11489,10 @@ const FormView: React.FC<FormViewProps> = ({
                 : undefined;
             addLineItemRowManual(groupId, selectorPreset, groupAddRowOptions);
           }}
-          style={withDisabled(buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
+          style={withDisabled(addLinePrimary ? buttonStyles.primary : buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
         >
           <PlusIcon />
-          {resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLine', language, 'Add line'))}
+          {addLineLabel}
         </button>
       );
     };
@@ -11177,15 +11543,15 @@ const FormView: React.FC<FormViewProps> = ({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              {!overlayHideCloseButton ? (
-                <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.secondary}>
-                  {overlayCloseButtonLabel}
-                </button>
-              ) : null}
+	              {!overlayHideCloseButton ? (
+	                <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.primary}>
+	                  {overlayCloseButtonLabel}
+	                </button>
+	              ) : null}
             </div>
             <div style={{ textAlign: 'center', padding: '0 8px', overflowWrap: 'anywhere' }}>
               {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
-              {overlayHeaderLabel ? <div>{overlayHeaderLabel}</div> : null}
+              {overlayHeaderLabel ? <div style={{ textAlign: 'left' }}>{overlayHeaderLabel}</div> : null}
               <div style={srOnly}>{title}</div>
             </div>
             {overlayHelperText ? (
@@ -11381,14 +11747,14 @@ const FormView: React.FC<FormViewProps> = ({
                               return raw.toString();
                             }
                           })),
-                          ...(() => {
-                            const actionButtonStyle: React.CSSProperties = {
-                              ...buttonStyles.secondary,
-                              padding: 6,
-                              minHeight: 36,
-                              minWidth: 36,
-                              width: '100%'
-                            };
+	                          ...(() => {
+	                            const actionButtonStyle: React.CSSProperties = {
+	                              ...buttonStyles.primary,
+	                              padding: 6,
+	                              minHeight: 36,
+	                              minWidth: 36,
+	                              width: '100%'
+	                            };
                             const actionColumns: Array<any> = [];
                             if (showOverlayDetailViewInHeader) {
                               actionColumns.push({
@@ -11507,7 +11873,7 @@ const FormView: React.FC<FormViewProps> = ({
                               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                 <button
                                   type="button"
-                                  style={buttonStyles.secondary}
+                                  style={isPrimaryActionLabel(overlayDetailEditLabel) ? buttonStyles.primary : buttonStyles.secondary}
                                   onClick={() => {
                                     if (!overlayDetailSelectionForGroup) return;
                                     setOverlayDetailSelection({ groupId, rowId: overlayDetailSelectionForGroup.rowId, mode: 'edit' });
@@ -11864,6 +12230,102 @@ const FormView: React.FC<FormViewProps> = ({
     const stepHelpText = stepCfg?.helpText ? resolveLocalizedString(stepCfg.helpText, language, '') : '';
     const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
     const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
+    const stepContextHeaderCfg = stepCfg?.contextHeader && typeof stepCfg.contextHeader === 'object' ? stepCfg.contextHeader : null;
+    const stepContextHeaderKeyedParts: any[] = stepContextHeaderCfg
+      ? Object.keys(stepContextHeaderCfg as any)
+          .filter(key => /^part\d+$/i.test(key))
+          .sort((a, b) => Number(a.replace(/\D+/g, '')) - Number(b.replace(/\D+/g, '')))
+          .map(key => (stepContextHeaderCfg as any)[key])
+      : [];
+    const stepContextHeaderPartsRaw: any[] = Array.isArray(stepContextHeaderCfg?.parts)
+      ? (stepContextHeaderCfg.parts as any[])
+      : Array.isArray((stepContextHeaderCfg as any)?.fields)
+        ? ((stepContextHeaderCfg as any).fields as any[])
+        : stepContextHeaderKeyedParts.length
+          ? stepContextHeaderKeyedParts
+        : [];
+    const normalizeStepContextHeaderPartId = (part: any): string => {
+      if (part === undefined || part === null) return '';
+      if (typeof part === 'object') return ((part as any).id ?? (part as any).fieldId ?? '').toString().trim();
+      return part.toString().trim();
+    };
+    const stepContextHeaderPartIds = stepContextHeaderPartsRaw
+      .map(part => normalizeStepContextHeaderPartId(part))
+      .filter(Boolean)
+      .filter((id, idx, arr) => arr.indexOf(id) === idx);
+    const guidedContextHeaderIds = new Set<string>(stepContextHeaderPartIds);
+    const guidedContextHeaderSeparator = (() => {
+      const raw = stepContextHeaderCfg?.separator;
+      const normalized = raw === undefined || raw === null ? '' : raw.toString();
+      return normalized || ' | ';
+    })();
+
+    const questionById = new Map<string, WebQuestionDefinition>();
+    (definition.questions || []).forEach(q => questionById.set(q.id, q));
+
+    const resolveTargetQuestion = (target: any): WebQuestionDefinition | null => {
+      if (!target || typeof target !== 'object') return null;
+      const id = (target.id || '').toString().trim();
+      if (!id) return null;
+      const q = questionById.get(id) || null;
+      if (!q) return null;
+      const renderAsLabel = (target as any)?.renderAsLabel === true;
+      if (!renderAsLabel) return q;
+      return { ...(q as any), readOnly: true, ui: { ...((q as any).ui || {}), renderAsLabel: true } } as WebQuestionDefinition;
+    };
+
+    const resolveGuidedContextValue = (fieldId: string): string => {
+      const q = questionById.get(fieldId);
+      const raw = values[fieldId];
+      if (raw === undefined || raw === null || raw === '') return '';
+      if (!q) return raw.toString();
+
+      if (q.type === 'DATE') return formatDateEeeDdMmmYyyy(raw, language);
+
+      if (q.type === 'CHOICE' || q.type === 'CHECKBOX') {
+        const optionSet = renderOptions(q);
+        const dependencyValues = (dependsOn: string | string[]) => {
+          const ids = Array.isArray(dependsOn) ? dependsOn : [dependsOn];
+          return ids.map(id => toDependencyValue(values[id]));
+        };
+        const allowed = computeAllowedOptions(q.optionFilter, optionSet, dependencyValues(q.optionFilter?.dependsOn || []));
+        const rawList = Array.isArray(raw) ? raw : [raw];
+        const ensuredAllowed = Array.from(new Set([...allowed, ...rawList.map(v => (v ?? '').toString()).filter(Boolean)]));
+        const opts = buildLocalizedOptions(optionSet, ensuredAllowed, language, { sort: optionSortFor(q) });
+        const labels = rawList
+          .map(v => (v ?? '').toString())
+          .filter(Boolean)
+          .map(v => opts.find(o => o.value === v)?.label || v);
+        return labels.filter(Boolean).join(', ');
+      }
+
+      return raw.toString();
+    };
+
+    const guidedContextHeaderNode = (() => {
+      if (!stepContextHeaderPartIds.length) return null;
+      const parts = stepContextHeaderPartIds.map(resolveGuidedContextValue).filter(Boolean);
+      if (!parts.length) return null;
+      return (
+        <div role="note" className="ck-guided-context-header">
+          {parts.map((part, idx) => (
+            <React.Fragment key={`ctx:${stepContextHeaderPartIds[idx]}:${idx}`}>
+              {idx > 0 ? guidedContextHeaderSeparator : ''}
+              {part}
+            </React.Fragment>
+          ))}
+        </div>
+      );
+    })();
+
+    const stepTargetsFiltered = guidedContextHeaderIds.size
+      ? stepTargets.filter(t => {
+          if (!t || typeof t !== 'object') return true;
+          const kind = (t.kind || '').toString().trim();
+          const id = (t.id || '').toString().trim();
+          return !(kind === 'question' && guidedContextHeaderIds.has(id));
+        })
+      : stepTargets;
 
     const renderTarget = (target: any, keyPrefix: string): React.ReactNode => {
       if (!target || typeof target !== 'object') return null;
@@ -11872,7 +12334,7 @@ const FormView: React.FC<FormViewProps> = ({
       if (!kind || !id) return null;
 
       if (kind === 'question') {
-        const q = definition.questions.find(q2 => q2.id === id);
+        const q = resolveTargetQuestion(target);
         if (!q) return null;
         return <React.Fragment key={`${keyPrefix}:q:${q.id}`}>{renderQuestion(q)}</React.Fragment>;
       }
@@ -12195,7 +12657,7 @@ const FormView: React.FC<FormViewProps> = ({
           const id = (target.id || '').toString().trim();
           if (!kind || !id) return null;
           if (kind === 'question') {
-            const q = definition.questions.find(q2 => q2.id === id);
+            const q = resolveTargetQuestion(target);
             if (!q) return null;
             if (shouldHideField(q.visibility, topVisibilityCtx)) return null;
             return { type: 'question', q, key: `${keyPrefix}:q:${q.id}:${idx}` };
@@ -12283,13 +12745,14 @@ const FormView: React.FC<FormViewProps> = ({
         {stepsBarPortal}
         {stepsBarInline}
         <div ref={guidedStepBodyRef} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {guidedContextHeaderNode}
           {stepHelpText ? (
             <div role="note" className="ck-step-help-text">
               {stepHelpText}
             </div>
           ) : null}
           {renderTargetsWithPairing(headerTargets, 'header')}
-          {renderTargetsWithPairing(stepTargets, `step:${activeGuidedStepId}`)}
+          {renderTargetsWithPairing(stepTargetsFiltered, `step:${activeGuidedStepId}`)}
         </div>
       </div>
     );
@@ -12471,11 +12934,11 @@ const FormView: React.FC<FormViewProps> = ({
                           aria-label={`${pillActionLabel} section ${section.title}`}
                         >
                           <div className="ck-group-title">{section.title}</div>
-                          <span
-                            className={`ck-progress-pill ${requiredProgressClass}`}
-                            title={pillActionLabel}
-                            aria-hidden="true"
-                          >
+	                          <span
+	                            className={`ck-progress-pill ck-progress-pill--primary ${requiredProgressClass}`}
+	                            title={pillActionLabel}
+	                            aria-hidden="true"
+	                          >
                             {requiredProgressClass === 'ck-progress-good' ? (
                               <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
                             ) : null}
@@ -12522,7 +12985,12 @@ const FormView: React.FC<FormViewProps> = ({
                 if (!rendered.length) return null;
 
                 return (
-                  <PageSection key={`page-section-${block.key}-${idx}`} title={block.title} infoText={block.infoText}>
+                  <PageSection
+                    key={`page-section-${block.key}-${idx}`}
+                    title={block.title}
+                    infoText={block.infoText}
+                    infoDisplay={block.infoDisplay}
+                  >
                     <div className="ck-group-stack">{rendered}</div>
                   </PageSection>
                 );
@@ -12537,6 +13005,7 @@ const FormView: React.FC<FormViewProps> = ({
         language={language}
         submitting={submitting}
         onDiagnostic={onDiagnostic}
+        onBack={handleLineSelectOverlayBack}
         addLineItemRowManual={addLineItemRowManual}
       />
       {showFallbackConfirmOverlay ? (

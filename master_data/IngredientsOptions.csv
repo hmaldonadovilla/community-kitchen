@@ -1,101 +1,103 @@
 optionEn,optionFr,optionNl,Category,Allergens,Suppliers,allowedUnits,dietaryApplicability
-Chicken stripes,Lani√®res de poulet,Kipreepjes,Animal protein Halal,None,VDS,"kg, gr","Diabetic, Standard, No-salt"
-Chicken cubes,D√©s de poulet,Kipblokjes,Animal protein Halal,None,VDS,"kg, gr, piece","Diabetic, Standard, No-salt"
-Chicken wings,Ailes de poulet,Kip vleugels,Animal protein Halal,Gluten,Ozfood,"kg, gr, piece","Standard, No-salt"
-Chicken tenders,Aiguillettes de poulet,Kiphaasjes,Animal protein Halal,Gluten,Ozfood,"kg, gr, piece","Standard, No-salt"
-Cordon bleu,Cordon bleu,Cordon bleu,Animal protein Halal,"Gluten, Milk, Egg",VDS
-Fishsticks,B√¢tonnets de poisson,Vissticks,Animal protein Halal,"Gluten, Fish",VDS,"kg, gr, piece","Standard, No-salt"
-Greek yogurt,Yaourt grec,Griekse yoghurt,Dairy,Milk,VDS
-Cheese,Fromage,Kaas,Dairy,Milk,VDS
-Rice,Riz,Rijst,Dry carbohydrates,None,Red Cross,"kg, gr","Vegan, Vegetarian, Standard, No-salt"
-Brown rice,Riz complet,Volkorenrijst,Dry carbohydrates,None,Freshmed
-Basmati rice,Riz basmati,Basmati rijst,Dry carbohydrates,None,Freshmed
-Couscous,Couscous,Couscous,Dry carbohydrates,Gluten,Freshmed,"kg, gr","Vegan, Vegetarian, Standard, No-salt"
-Bulgur,Boulgour,Bulgur,Dry carbohydrates,Gluten,Freshmed,"kg, gr","Vegan, Vegetarian, Standard, No-salt"
-Orzo,Orzo,Orzo,Dry carbohydrates,Gluten,Freshmed
-Pasta,P√¢tes,Pasta,Dry carbohydrates,Gluten,VDS
-Whole wheat pasta,P√¢tes compl√®tes,Volkoren pasta,Dry carbohydrates,Gluten,VDS
-Onion,Oignon,Ui,Fresh vegetables,None,Freshmed
-Potato,Pomme de terre,Aardappel,Fresh vegetables,None,Freshmed
-Broccoli,Brocoli,Broccoli,Fresh vegetables,None,Freshmed
-Aubergine,Aubergine,Aubergine,Fresh vegetables,None,Freshmed
-Carrot,Carotte,Wortel,Fresh vegetables,None,Freshmed
-Tomato,Tomate,Tomaat,Fresh vegetables,None,Freshmed
-Pepper,Poivron,Paprika,Fresh vegetables,None,Freshmed
-Cauliflower,Chou-fleur,Bloemkool,Fresh vegetables,None,Freshmed
-Squash,Courge,Pompoen (squash),Fresh vegetables,None,Freshmed
-Sweet potato,Patate douce,Zoete aardappel,Fresh vegetables,None,Freshmed
-Butternut,Butternut,Butternut,Fresh vegetables,None,Freshmed
-Pumpkin,Potiron,Pompoen,Fresh vegetables,None,Freshmed
-Pleurotte mushroom,Pleurote,Oesterzwam,Fresh vegetables,None,Freshmed
-Spaghetti squash,Courge spaghetti,Spaghettipompoen,Fresh vegetables,None,Freshmed
-Courgette,Courgette,Courgette,Fresh vegetables,None,Freshmed
-Leek,Poireau,Prei,Fresh vegetables,None,Freshmed
-Mushroom,Champignon,Champignon,Fresh vegetables,None,Freshmed
-Parsnip,Panais,Pastinaak,Fresh vegetables,None,Freshmed
-Turnip,Navet,Raap,Fresh vegetables,None,Freshmed
-Green beans - frozen,Haricots verts surgel√©s,Sperziebonen ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Chinese mix,M√©lange chinois surgel√©,Chinese mix ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Corn - frozen,Ma√Øs surgel√©,Ma√Øs ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Leek - frozen,Poireau surgel√©,Prei ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Mushroom - frozen,Champignon surgel√©,Champignon ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Carrot - frozen,Carotte surgel√©e,Wortel ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Vegan, Vegetarian, Standard, No-salt"
-Couscous vegetables mix,M√©lange legumes couscous surgel√©,Couscousmix ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Ratatouille mix,M√©lange ratatouille surgel√©,Ratatouillemix ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Courgette - frozen,Courgette surgel√©e,Courgette ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Pumpkin - frozen,Potiron surgel√©,Pompoen ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Pepper - frozen,Poivron surgel√©,Paprika ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Spinach - frozen,√âpinards surgel√©s,Spinazie ‚Äì diepvries,Frozen vegetables,None,VDS
-Red Beans - frozen,Haricots rouges surgel√©s,Rode bonen ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Onion - frozen,Oignon surgel√©,Ui ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Green peas - frozen,Petits pois surgel√©s,Erwten ‚Äì diepvries,Frozen vegetables,None,Freshmed
-Cauliflower - frozen,Chou-fleur surgel√©,Bloemkool ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Broccoli - frozen,Brocoli surgel√©,Broccoli ‚Äì diepvries,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Broccoli mix - frozen,M√©lange de brocolis,Broccoli mix,Frozen vegetables,None,VDS,"kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Parsley - fresh,Persil frais,Peterselie ‚Äì vers,Herbs - spices - condiments,None,Freshmed
-Basil - fresh,Basilic frais,Basilicum ‚Äì vers,Herbs - spices - condiments,None,Freshmed
-Dill - fresh,Aneth frais,Dille ‚Äì vers,Herbs - spices - condiments,None,Freshmed
-Bouillon powder,Bouillon en poudre,Bouillonpoeder,Herbs - spices - condiments,Soy,Solucious
-Salt,Sel,Zout,Herbs - spices - condiments,None,Freshmed
-Sugar,Sucre,Suiker,Herbs - spices - condiments,None,Freshmed
-Curry madras,Curry madras,Madras curry,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Coriander powder,Coriandre en poudre,Korianderpoeder,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Cayenne,Piment de Cayenne,Cayennepeper,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Turmeric,Curcuma,Kurkuma,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Black pepper,Poivre noir,Zwarte peper,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Paprika,Paprika,Paprika,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Cumin,Cumin,Komijn,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Cinnamon,Cannelle,Kaneel,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Mint - fresh,Menthe fra√Æche,Munt ‚Äì vers,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Oregano -fresh,Origan frais,Oregano ‚Äì vers,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Parsley - dried,Persil s√©ch√©,Peterselie ‚Äì gedroogd,Herbs - spices - condiments,None,Freshmed
-Dill - dried,Aneth s√©ch√©,Dille ‚Äì gedroogd,Herbs - spices - condiments,None,Freshmed
-Mint - dried,Menthe s√©ch√©e,Munt ‚Äì gedroogd,Herbs - spices - condiments,None,Freshmed
-Oregano - dried,Origan s√©ch√©,Oregano ‚Äì gedroogd,Herbs - spices - condiments,None,Freshmed
-Bay leaf,Feuille de laurier,Laurierblad,Herbs - spices - condiments,None,Freshmed
-Nutmeg,Noix de muscade,Nootmuskaat,Herbs - spices - condiments,None,Freshmed,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Basil - dried,Basilic s√©ch√©,Basilicum ‚Äì gedroogd,Herbs - spices - condiments,None,Freshmed
-Soy sauce,Sauce soja,Sojasaus,Herbs - spices - condiments,Soy,VDS,cl,"Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Miso paste,P√¢te miso,Miso pasta,Herbs - spices - condiments,Soy,VDS,"gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Sunflower oil,Huile de tournesol,Zonnebloemolie,Herbs - spices - condiments,None,Red Cross,cl,"Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Olive oil,Huile d‚Äôolive,Olijfolie,Herbs - spices - condiments,None,VDS
-Vinegar,Vinaigre,Azijn,Herbs - spices - condiments,None,VDS
-Tomato pulp,Pulpe de tomate,Tomatenpulp,Tins/Pots,None,VDS,"kg, gr, tin-240gr, tin-5000gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Tomato paste,Concentr√© de tomate,Tomatenpuree,Tins/Pots,None,VDS,"kg, gr, tin-140gr, tin-2500gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Diced tomatoes,Tomates concass√©es,Gehakte tomaten,Tins/Pots,None,Red Cross,"kg, gr, tin-240gr, tin-5000gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Garlic paste,Pur√©e d‚Äôail,Knoflookpasta,Tins/Pots,None,Freshmed,"kg, gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Ginger paste,Pur√©e de gingembre,Gemberpasta,Tins/Pots,None,Freshmed,"kg, gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Cream,Cr√®me,Room,Tins/Pots,Milk,VDS,"L, cl","Diabetic, Vegetarian, Standard, No-salt"
-Yellow curry,Curry jaune,Gele curry,Tins/Pots,None,VDS,"kg, gr, Tbsp","Vegan, Vegetarian, Standard, No-salt"
-Coconut milk,Lait de coco,Kokosmelk,Tins/Pots,None,VDS,"L, cl","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Oat milk,Lait d‚Äôavoine,Havermelk,Tins/Pots,None,Solucious,"L, cl","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Peanut butter,Beurre de cacahu√®te,Pindakaas,Tins/Pots,Peanuts,Freshmed,"kg, gr, Tbsp","Vegan, Vegetarian, Standard, No-salt"
-Green beans - tinned,Haricots verts en conserve,Sperziebonen ‚Äì blik,Tins/Pots,None,Red Cross,"kg, gr, tin-220gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Carrots & peas - tinned,Carottes & petits pois en conserve,Wortelen & erwten ‚Äì blik,Tins/Pots,None,Red Cross,"kg, gr, tin-530gr","Vegan, Vegetarian, Standard, No-salt"
-Chickpeas - tinned,Pois chiches en conserve,Kikkererwten ‚Äì blik,Vegan protein,None,VDS
-Red beans - tinned,Haricots rouges en conserve,Rode bonen ‚Äì blik,Vegan protein,None,VDS
-White beans - tinned,Haricots blancs en conserve,Witte bonen ‚Äì blik,Vegan protein,None,VDS
-Mackerel - tinned,Maquereau en conserve,Makreel ‚Äì blik,Animal protein,Fish,Solucious,"kg, gr","Diabetic, Standard, No-salt"
-Chickpeas - dry,Pois chiches secs,Kikkererwten ‚Äì droog,Vegan protein,None,Freshmed,"kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Red lentils,Lentilles corail,Rode linzen,Vegan protein,None,Freshmed,"kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
-Green lentils,Lentilles vertes,Groene linzen,Vegan protein,None,Freshmed,"kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Aubergine","Aubergine","Aubergine","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Basil - dried","Basilic séché","Basilicum – gedroogd","Herbs - spices - condiments","None","Freshmed;VDS","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Basil - fresh","Basilic frais","Basilicum – vers","Herbs - spices - condiments","None","Freshmed;Mabru;VDS","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Basmati rice","Riz basmati","Basmati rijst","Dry carbohydrates","None","Freshmed;Solucious;VDS","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Bay leaf","Feuille de laurier","Laurierblad","Herbs - spices - condiments","None","Freshmed;VDS","leaf","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Black pepper","Poivre noir","Zwarte peper","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Bouillon powder","Bouillon en poudre","Bouillonpoeder","Herbs - spices - condiments","Soy","Solucious;VDS","gr, Tbsp","Vegan, Vegetarian, Standard, No-salt"
+"Broccoli","Brocoli","Broccoli","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Broccoli - frozen","Brocoli surgelé","Broccoli – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Broccoli mix - frozen","Mélange de brocolis","Broccoli mix","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Brown rice","Riz complet","Volkorenrijst","Dry carbohydrates","None","Freshmed;Solucious;VDS","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Bulgur","Boulgour","Bulgur","Dry carbohydrates","Gluten","Freshmed","kg, gr","Vegan, Vegetarian, Standard, No-salt"
+"Butternut","Butternut","Butternut","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Carrot","Carotte","Wortel","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Vegan, Vegetarian, Standard, No-salt"
+"Carrot - frozen","Carotte surgelée","Wortel – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Vegan, Vegetarian, Standard, No-salt"
+"Carrots & peas - tinned","Carottes & petits pois en conserve","Wortelen & erwten – blik","Tins/Pots","None","Red Cross","kg, gr, tin-530gr","Vegan, Vegetarian, Standard, No-salt"
+"Cauliflower","Chou-fleur","Bloemkool","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Cauliflower - frozen","Chou-fleur surgelé","Bloemkool – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Cayenne","Piment de Cayenne","Cayennepeper","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Cheese","Fromage","Kaas","Dairy","Milk","VDS;Solucious","kg, gr","Diabetic, Vegetarian, Standard, No-salt"
+"Chicken cubes","Dés de poulet","Kipblokjes","Animal protein Halal","None","VDS","kg, gr, piece","Diabetic, Standard, No-salt"
+"Chicken nuggets","Nuggets de poulet","Kipnuggets","Animal protein Halal","Gluten","Ozfood","kg, gr, piece","Standard, No-salt"
+"Chicken stripes","Lanières de poulet","Kipreepjes","Animal protein Halal","None","VDS","kg, gr","Diabetic, Standard, No-salt"
+"Chicken tenders","Aiguillettes de poulet","Kiphaasjes","Animal protein Halal","Gluten","Ozfood","kg, gr, piece","Standard, No-salt"
+"Chicken wings","Ailes de poulet","Kip vleugels","Animal protein Halal","Gluten","Ozfood","kg, gr, piece","Standard, No-salt"
+"Chickpeas - dry","Pois chiches secs","Kikkererwten – droog","Vegan protein","None","Freshmed","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Chickpeas - tinned","Pois chiches en conserve","Kikkererwten – blik","Vegan protein","None","VDS;Solucious","kg, gr, tin-2655gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Chinese mix","Mélange chinois surgelé","Chinese mix – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Cinnamon","Cannelle","Kaneel","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Coconut milk","Lait de coco","Kokosmelk","Tins/Pots","None","VDS","L, cl","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Cordon bleu","Cordon bleu","Cordon bleu","Animal protein Halal","Gluten, Milk, Egg","VDS;Solucious","kg, gr, piece","Standard, No-salt"
+"Coriander powder","Coriandre en poudre","Korianderpoeder","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Corn - frozen","Maïs surgelé","Maïs – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Vegan, Vegetarian, Standard, No-salt"
+"Courgette","Courgette","Courgette","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Courgette - frozen","Courgette surgelée","Courgette – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Couscous","Couscous","Couscous","Dry carbohydrates","Gluten","Freshmed","kg, gr","Vegan, Vegetarian, Standard, No-salt"
+"Couscous vegetables mix","Mélange legumes couscous surgelé","Couscousmix – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Cream","Crème","Room","Tins/Pots","Milk","VDS","L, cl","Diabetic, Vegetarian, Standard, No-salt"
+"Cumin","Cumin","Komijn","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Curry madras","Curry madras","Madras curry","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Diced tomatoes","Tomates concassées","Gehakte tomaten","Tins/Pots","None","Red Cross","kg, gr, tin-240gr, tin-5000gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Dill - dried","Aneth séché","Dille – gedroogd","Herbs - spices - condiments","None","Freshmed;VDS","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Dill - fresh","Aneth frais","Dille – vers","Herbs - spices - condiments","None","Freshmed;Mabru;VDS","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Falafel","Falafel","Falafel","Vegan protein","None","VDS","kg, gr, piece","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Fishsticks","Bâtonnets de poisson","Vissticks","Animal protein Halal","Gluten, Fish","VDS","kg, gr, piece","Diabetic, Standard, No-salt"
+"Garlic paste","Purée d’ail","Knoflookpasta","Tins/Pots","None","Freshmed","kg, gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Ginger paste","Purée de gingembre","Gemberpasta","Tins/Pots","None","Freshmed","kg, gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Greek yogurt","Yaourt grec","Griekse yoghurt","Dairy","Milk","VDS;Solucious","kg, gr","Diabetic, Vegetarian, Standard, No-salt"
+"Green beans - frozen","Haricots verts surgelés","Sperziebonen – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Green beans - tinned","Haricots verts en conserve","Sperziebonen – blik","Tins/Pots","None","Red Cross","kg, gr, tin-220gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Green lentils","Lentilles vertes","Groene linzen","Vegan protein","None","Freshmed","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Green peas - frozen","Petits pois surgelés","Erwten – diepvries","Frozen vegetables","None","Freshmed;VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Leek","Poireau","Prei","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Leek - frozen","Poireau surgelé","Prei – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Mackerel - tinned","Maquereau en conserve","Makreel – blik","Animal protein","Fish","Solucious","kg, gr","Diabetic, Standard, No-salt"
+"Mint - dried","Menthe séchée","Munt – gedroogd","Herbs - spices - condiments","None","Freshmed;VDS","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Mint - fresh","Menthe fraîche","Munt – vers","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Miso paste","Pâte miso","Miso pasta","Herbs - spices - condiments","Soy","VDS","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Mushroom","Champignon","Champignon","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Mushroom - frozen","Champignon surgelé","Champignon – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Nutmeg","Noix de muscade","Nootmuskaat","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Oat milk","Lait d’avoine","Havermelk","Tins/Pots","None","Solucious","L, cl","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Olive oil","Huile d’olive","Olijfolie","Herbs - spices - condiments","None","VDS;Solucious","cl","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Onion","Oignon","Ui","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Onion - frozen","Oignon surgelé","Ui – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Oregano - dried","Origan séché","Oregano – gedroogd","Herbs - spices - condiments","None","Freshmed;VDS","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Oregano -fresh","Origan frais","Oregano – vers","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Orzo","Orzo","Orzo","Dry carbohydrates","Gluten","Freshmed;Solucious","kg, gr","Vegan, Vegetarian, Standard, No-salt"
+"Paprika","Paprika","Paprika","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Parsley - dried","Persil séché","Peterselie – gedroogd","Herbs - spices - condiments","None","Freshmed;VDS","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Parsley - fresh","Persil frais","Peterselie – vers","Herbs - spices - condiments","None","Freshmed;Mabru;VDS","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Parsnip","Panais","Pastinaak","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Pasta","Pâtes","Pasta","Dry carbohydrates","Gluten","VDS;Solucious","kg, gr","Vegan, Vegetarian, Standard, No-salt"
+"Peanut butter","Beurre de cacahuète","Pindakaas","Tins/Pots","Peanuts","Freshmed","kg, gr, Tbsp","Vegan, Vegetarian, Standard, No-salt"
+"Pepper","Poivron","Paprika","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Pepper - frozen","Poivron surgelé","Paprika – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Pleurotte mushroom","Pleurote","Oesterzwam","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Potato","Pomme de terre","Aardappel","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Pumpkin","Potiron","Pompoen","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Pumpkin - frozen","Potiron surgelé","Pompoen – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Ratatouille mix","Mélange ratatouille surgelé","Ratatouillemix – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Red Beans - frozen","Haricots rouges surgelés","Rode bonen – diepvries","Frozen vegetables","None","VDS","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Red beans - tinned","Haricots rouges en conserve","Rode bonen – blik","Vegan protein","None","VDS;Solucious","kg, gr, tin-2505gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Red lentils","Lentilles corail","Rode linzen","Vegan protein","None","Freshmed","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Rice","Riz","Rijst","Dry carbohydrates","None","Red Cross","kg, gr","Vegan, Vegetarian, Standard, No-salt"
+"Salt","Sel","Zout","Herbs - spices - condiments","None","Freshmed;Solucious;VDS","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard"
+"Soy sauce","Sauce soja","Sojasaus","Herbs - spices - condiments","Soy","VDS","cl","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Spaghetti squash","Courge spaghetti","Spaghettipompoen","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Spinach - frozen","Épinards surgelés","Spinazie – diepvries","Frozen vegetables","None","VDS;Solucious","kg, gr, bag","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Squash","Courge","Pompoen (squash)","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Sugar","Sucre","Suiker","Herbs - spices - condiments","None","Freshmed;Solucious;VDS","gr, Tbsp","Vegan, Vegetarian, Standard, No-salt"
+"Sunflower oil","Huile de tournesol","Zonnebloemolie","Herbs - spices - condiments","None","Red Cross","cl","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Sweet potato","Patate douce","Zoete aardappel","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Vegan, Vegetarian, Standard, No-salt"
+"Tomato","Tomate","Tomaat","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Tomato paste","Concentré de tomate","Tomatenpuree","Tins/Pots","None","VDS","kg, gr, tin-140gr, tin-2500gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Tomato pulp","Pulpe de tomate","Tomatenpulp","Tins/Pots","None","VDS","kg, gr, tin-240gr, tin-5000gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Turmeric","Curcuma","Kurkuma","Herbs - spices - condiments","None","Freshmed","gr, Tbsp","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Turnip","Navet","Raap","Fresh vegetables","None","Freshmed;Mabru;VDS","kg, gr, bucket","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Vinegar","Vinaigre","Azijn","Herbs - spices - condiments","None","VDS;Solucious","cl","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"White beans - tinned","Haricots blancs en conserve","Witte bonen – blik","Vegan protein","None","VDS;Solucious","kg, gr, tin-2505gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Whole wheat pasta","Pâtes complètes","Volkoren pasta","Dry carbohydrates","Gluten","VDS;Solucious","kg, gr","Diabetic, Vegan, Vegetarian, Standard, No-salt"
+"Yellow curry","Curry jaune","Gele curry","Tins/Pots","None","VDS","kg, gr, Tbsp","Vegan, Vegetarian, Standard, No-salt"

@@ -15,6 +15,7 @@ export type FieldChangeDialogInputState = {
 
 export type FieldChangeDialogState = {
   open: boolean;
+  busy: boolean;
   title: string;
   message: string;
   confirmLabel: string;
@@ -34,8 +35,8 @@ export type FieldChangeDialogOpenArgs = {
   values?: Record<string, FieldValue>;
   kind?: string;
   refId?: string;
-  onConfirm: (values: Record<string, FieldValue>) => void;
-  onCancel?: () => void;
+  onConfirm: (values: Record<string, FieldValue>) => void | Promise<void>;
+  onCancel?: () => void | Promise<void>;
 };
 
 export const useFieldChangeDialog = (opts?: {
@@ -46,6 +47,7 @@ export const useFieldChangeDialog = (opts?: {
   const eventPrefix = (opts?.eventPrefix || 'ui.fieldChangeDialog').toString();
   const [state, setState] = useState<FieldChangeDialogState>({
     open: false,
+    busy: false,
     title: '',
     message: '',
     confirmLabel: '',
@@ -55,8 +57,8 @@ export const useFieldChangeDialog = (opts?: {
     kind: undefined,
     refId: undefined
   });
-  const confirmRef = useRef<((values: Record<string, FieldValue>) => void) | null>(null);
-  const cancelRef = useRef<(() => void) | null>(null);
+  const confirmRef = useRef<((values: Record<string, FieldValue>) => void | Promise<void>) | null>(null);
+  const cancelRef = useRef<(() => void | Promise<void>) | null>(null);
   const openedOnKeyRef = useRef<unknown>(undefined);
 
   const setInputValue = useCallback((id: string, value: FieldValue) => {
@@ -68,11 +70,12 @@ export const useFieldChangeDialog = (opts?: {
   }, []);
 
   const cancel = useCallback(() => {
+    if (state.busy) return;
     const handler = cancelRef.current;
-    setState(prev => (prev.open ? { ...prev, open: false } : prev));
+    setState(prev => (prev.open ? { ...prev, open: false, busy: false } : prev));
     opts?.onDiagnostic?.(`${eventPrefix}.cancel`, { kind: state.kind || null, refId: state.refId || null });
     try {
-      handler?.();
+      void handler?.();
     } catch (err: any) {
       opts?.onDiagnostic?.(`${eventPrefix}.cancel.exception`, {
         kind: state.kind || null,
@@ -83,23 +86,27 @@ export const useFieldChangeDialog = (opts?: {
     confirmRef.current = null;
     cancelRef.current = null;
     openedOnKeyRef.current = undefined;
-  }, [eventPrefix, opts, state.kind, state.refId]);
+  }, [eventPrefix, opts, state.busy, state.kind, state.refId]);
 
-  const confirm = useCallback(() => {
+  const confirm = useCallback(async () => {
+    if (state.busy) return;
     const handler = confirmRef.current;
     const values = state.values;
     const meta = { kind: state.kind || null, refId: state.refId || null };
-    setState(prev => (prev.open ? { ...prev, open: false } : prev));
-    confirmRef.current = null;
-    cancelRef.current = null;
-    openedOnKeyRef.current = undefined;
-    opts?.onDiagnostic?.(`${eventPrefix}.confirm`, meta);
+    setState(prev => (prev.open ? { ...prev, busy: true } : prev));
+    opts?.onDiagnostic?.(`${eventPrefix}.confirm.start`, meta);
     try {
-      handler?.(values);
+      await handler?.(values);
+      setState(prev => (prev.open ? { ...prev, open: false, busy: false } : prev));
+      confirmRef.current = null;
+      cancelRef.current = null;
+      openedOnKeyRef.current = undefined;
+      opts?.onDiagnostic?.(`${eventPrefix}.confirm`, meta);
     } catch (err: any) {
+      setState(prev => (prev.open ? { ...prev, busy: false } : prev));
       opts?.onDiagnostic?.(`${eventPrefix}.confirm.exception`, { ...meta, message: err?.message || err || 'unknown' });
     }
-  }, [eventPrefix, opts, state.kind, state.refId, state.values]);
+  }, [eventPrefix, opts, state.busy, state.kind, state.refId, state.values]);
 
   const open = useCallback(
     (args: FieldChangeDialogOpenArgs) => {
@@ -115,6 +122,7 @@ export const useFieldChangeDialog = (opts?: {
       openedOnKeyRef.current = opts?.closeOnKey;
       setState({
         open: true,
+        busy: false,
         title,
         message,
         confirmLabel,
@@ -131,6 +139,7 @@ export const useFieldChangeDialog = (opts?: {
 
   useEffect(() => {
     if (!state.open) return;
+    if (state.busy) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         opts?.onDiagnostic?.(`${eventPrefix}.escape`, { kind: state.kind || null, refId: state.refId || null });
@@ -139,15 +148,16 @@ export const useFieldChangeDialog = (opts?: {
     };
     globalThis.addEventListener?.('keydown', onKeyDown as any);
     return () => globalThis.removeEventListener?.('keydown', onKeyDown as any);
-  }, [cancel, eventPrefix, opts, state.kind, state.open, state.refId]);
+  }, [cancel, eventPrefix, opts, state.busy, state.kind, state.open, state.refId]);
 
   useEffect(() => {
     if (!state.open) return;
+    if (state.busy) return;
     if (openedOnKeyRef.current === undefined) return;
     if (opts?.closeOnKey === openedOnKeyRef.current) return;
     opts?.onDiagnostic?.(`${eventPrefix}.autoClose`, { kind: state.kind || null, refId: state.refId || null });
     cancel();
-  }, [cancel, eventPrefix, opts?.closeOnKey, opts, state.kind, state.open, state.refId]);
+  }, [cancel, eventPrefix, opts?.closeOnKey, opts, state.busy, state.kind, state.open, state.refId]);
 
   return { state, open, cancel, confirm, setInputValue } as const;
 };

@@ -20,6 +20,7 @@ import { getBundledHtmlTemplateRaw, parseBundledHtmlTemplateId } from '../../../
 import { extractScriptTags, restoreScriptTags, stripScriptTags } from '../../../services/webform/followup/scriptTags';
 
 type HtmlRenderCacheEntry = { result: RenderHtmlTemplateResult; cachedAtMs: number };
+type DiagnosticFn = (event: string, payload?: Record<string, any>) => void;
 
 const MAX_RENDER_CACHE_ENTRIES = 40;
 const renderedBundleHtmlCache = new Map<string, HtmlRenderCacheEntry>();
@@ -28,7 +29,6 @@ const renderedBundleInflight = new Map<string, Promise<RenderHtmlTemplateResult>
 const MAX_DS_DETAILS_CACHE_ENTRIES = 80;
 const dsDetailsCache = new Map<string, Record<string, string> | null>();
 const dsDetailsInflight = new Map<string, Promise<Record<string, string> | null>>();
-const DS_PERSIST_VERSION = '1';
 const STATUS_PILL_KEYS: StatusTransitionKey[] = ['onClose', 'inProgress', 'reOpened'];
 
 const pruneMap = (map: Map<string, any>, max: number) => {
@@ -205,23 +205,43 @@ const normalizeMatchValue = (value: any): string => {
     .replace(/\s+/g, ' ');
 };
 
-const buildPersistKey = (id: string, language: string): string =>
-  `ck.ds.${id || 'default'}.${(language || 'EN').toString().toUpperCase()}.v${DS_PERSIST_VERSION}`;
+const forEachPersistedDataSourceEntry = (
+  args: { id: string; language: string; maxEntries?: number },
+  fn: (entry: any) => boolean
+): boolean => {
+  if (typeof window === 'undefined') return false;
+  const lang = (args.language || 'EN').toString().toUpperCase();
+  const idRaw = (args.id || 'default').toString();
+  const idEncoded = encodeURIComponent(idRaw);
+  const prefixes = [`ck.ds.${idEncoded}.${lang}.`, `ck.ds.${idRaw}.${lang}.`];
+  const maxEntries = Number.isFinite(Number(args.maxEntries)) ? Number(args.maxEntries) : 25;
+  const storages: Array<Storage | null | undefined> = [window.localStorage, window.sessionStorage];
 
-const loadPersistedDataSource = (id: string, language: string): any | null => {
-  if (typeof window === 'undefined') return null;
-  const readStorage = (storage: Storage | undefined | null): any | null => {
-    if (!storage) return null;
+  for (const storage of storages) {
+    if (!storage) continue;
     try {
-      const raw = storage.getItem(buildPersistKey(id, language));
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : null;
+      let scanned = 0;
+      for (let i = 0; i < storage.length; i += 1) {
+        const key = storage.key(i);
+        if (!key) continue;
+        if (!prefixes.some(p => key.startsWith(p))) continue;
+        scanned += 1;
+        if (scanned > maxEntries) break;
+        try {
+          const raw = storage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (!parsed) continue;
+          if (fn(parsed)) return true;
+        } catch (_) {
+          // ignore parse errors; keep scanning
+        }
+      }
     } catch (_) {
-      return null;
+      // ignore storage access errors (e.g. Safari private mode)
     }
-  };
-  return readStorage(window.localStorage) || readStorage(window.sessionStorage);
+  }
+  return false;
 };
 
 const stringifyAny = (value: any): string => {
@@ -240,12 +260,24 @@ const stringifyAny = (value: any): string => {
   }
 };
 
+const sleepMs = async (ms: number): Promise<void> => {
+  const delay = Number(ms);
+  if (!Number.isFinite(delay) || delay <= 0) return;
+  await new Promise<void>(resolve => setTimeout(resolve, delay));
+};
+
+const isRunnerUnavailableError = (err: any): boolean => {
+  const msg = (err?.message || err?.toString?.() || '').toString().trim().toLowerCase();
+  return msg.includes('google.script.run is unavailable');
+};
+
 const lookupDataSourceDetailsClient = async (args: {
   dataSource: DataSourceConfig;
   selectedValue: string;
   language: string;
   limit?: number;
   fetchDataSource?: typeof fetchDataSourceApi;
+  onDiagnostic?: DiagnosticFn;
 }): Promise<Record<string, string> | null> => {
   const { dataSource, selectedValue, language, limit } = args;
   const fetcher = args.fetchDataSource || fetchDataSourceApi;
@@ -268,78 +300,137 @@ const lookupDataSourceDetailsClient = async (args: {
   const inflight = dsDetailsInflight.get(dsKey);
   if (inflight) return inflight;
 
-  const promise = (async () => {
-    try {
-      const detailsSource: any = { ...(dataSource as any) };
-      // Mirror server placeholder lookup behavior: allow any projection key by reading full row details.
-      detailsSource.projection = undefined;
-      detailsSource.mapping = undefined;
-      const res = await fetcher({
+	  const promise = (async () => {
+	    try {
+	      const lookupFields = buildLookupFields(dataSource);
+	      const isRecord = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
+	      const toDetails = (item: Record<string, any>): Record<string, string> => {
+	        const out: Record<string, string> = {};
+	        Object.entries(item).forEach(([k, v]) => {
+	          if (v === undefined || v === null) return;
+	          const text = stringifyAny(v);
+	          if (!text) return;
+	          const sanitizedKey = k.split(/\s+/).join('_').toUpperCase();
+	          out[sanitizedKey] = text;
+	        });
+	        return out;
+	      };
+
+	      const resolveFromRows = (inputRows: Record<string, any>[]): Record<string, string> | null => {
+	        let fallback: Record<string, any> | null = null;
+	        for (const item of inputRows) {
+	          const matchField = lookupFields.find(f => Object.prototype.hasOwnProperty.call(item, f));
+	          if (matchField && normalizeMatchValue(item[matchField]) === normalized) {
+	            return toDetails(item);
+	          }
+	          if (!fallback) {
+	            const values = Object.values(item);
+	            if (values.some(val => normalizeMatchValue(val) === normalized)) {
+	              fallback = item;
+	            }
+	          }
+	        }
+	        if (fallback) return toDetails(fallback);
+	        return null;
+	      };
+
+	      // Fast path: attempt to resolve from already-persisted dataSource caches.
+	      // The main data source cache uses versioned keys with signatures; older builds used a simpler v1 key.
+	      // Safari/iOS can fail to resolve details if `google.script.run` isn't ready yet, but options data is often
+	      // already cached in localStorage. Scanning persisted entries avoids network calls and fixes that race.
+	      let persistedDetails: Record<string, string> | null = null;
+	      forEachPersistedDataSourceEntry({ id: dataSource.id || 'default', language, maxEntries: 40 }, entry => {
+	        const items = Array.isArray((entry as any)?.items)
+	          ? (entry as any).items
+	          : Array.isArray(entry)
+	            ? entry
+	            : [];
+	        if (!items.length) return false;
+	        const rows = items.filter(isRecord);
+	        if (!rows.length) return false;
+	        const hit = resolveFromRows(rows);
+	        if (!hit) return false;
+	        persistedDetails = hit;
+	        return true;
+	      });
+	      if (persistedDetails) {
+	        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.persisted.hit', {
+	          dataSourceId: dataSource.id,
+	          selectedValue: rawSelected
+	        });
+	        dsDetailsCache.set(dsKey, persistedDetails);
+	        pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
+	        return persistedDetails;
+	      }
+
+	      const detailsSource: any = { ...(dataSource as any) };
+	      // Mirror server placeholder lookup behavior: allow any projection key by reading full row details.
+	      detailsSource.projection = undefined;
+	      detailsSource.mapping = undefined;
+      const req: any = {
         source: detailsSource,
         locale: (language || 'EN').toString().toUpperCase() as any,
         projection: undefined,
         limit: limit !== undefined ? limit : (dataSource as any)?.limit
-      } as any);
-      const items = Array.isArray((res as any)?.items) ? (res as any).items : [];
-      const lookupFields = buildLookupFields(dataSource);
+      };
+      const retryDelayMs = typeof window === 'undefined' ? 0 : 150;
+      const maxAttempts = typeof window === 'undefined' ? 2 : 20;
 
-      const isRecord = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
-      const rows = items.filter(isRecord);
-      const toDetails = (item: Record<string, any>): Record<string, string> => {
-        const out: Record<string, string> = {};
-        Object.entries(item).forEach(([k, v]) => {
-          if (v === undefined || v === null) return;
-          const text = stringifyAny(v);
-          if (!text) return;
-          const sanitizedKey = k.split(/\s+/).join('_').toUpperCase();
-          out[sanitizedKey] = text;
+	      let res: any = null;
+	      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+	        try {
+	          // Safari/iOS can invoke template rendering before `google.script.run` becomes available.
+	          // Retry so projection lookups don't permanently fall back to DEFAULT(...) placeholders.
+	          res = await fetcher(req);
+	          break;
+	        } catch (err) {
+	          if (!isRunnerUnavailableError(err) || attempt === maxAttempts) throw err;
+	          if (attempt === 1) {
+	            args.onDiagnostic?.('htmlTemplate.dataSourceDetails.fetch.defer', {
+	              dataSourceId: dataSource.id,
+	              selectedValue: rawSelected
+	            });
+	          }
+	          await sleepMs(retryDelayMs);
+	        }
+	      }
+
+	      const items = Array.isArray((res as any)?.items) ? (res as any).items : [];
+	      const rows = items.filter(isRecord);
+
+	      const resolved = resolveFromRows(rows);
+	      if (resolved) {
+	        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.fetch.hit', {
+	          dataSourceId: dataSource.id,
+	          selectedValue: rawSelected
         });
-        return out;
-      };
-
-      const resolveFromRows = (inputRows: Record<string, any>[]): Record<string, string> | null => {
-        let fallback: Record<string, any> | null = null;
-        for (const item of inputRows) {
-          const matchField = lookupFields.find(f => Object.prototype.hasOwnProperty.call(item, f));
-          if (matchField && normalizeMatchValue(item[matchField]) === normalized) {
-            return toDetails(item);
-          }
-          if (!fallback) {
-            const values = Object.values(item);
-            if (values.some(val => normalizeMatchValue(val) === normalized)) {
-              fallback = item;
-            }
-          }
-        }
-        if (fallback) return toDetails(fallback);
-        return null;
-      };
-
-      const persisted = loadPersistedDataSource(dataSource.id, language);
-      const persistedItems = Array.isArray((persisted as any)?.items)
-        ? (persisted as any).items
-        : Array.isArray(persisted)
-          ? persisted
-          : [];
-      const persistedRows = persistedItems.filter(isRecord);
-      const persistedDetails = persistedRows.length ? resolveFromRows(persistedRows) : null;
-      if (persistedDetails) {
-        dsDetailsCache.set(dsKey, persistedDetails);
-        pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
-        return persistedDetails;
-      }
-
-      const resolved = resolveFromRows(rows);
-      if (resolved) {
         dsDetailsCache.set(dsKey, resolved);
         pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
         return resolved;
       }
 
+      args.onDiagnostic?.('htmlTemplate.dataSourceDetails.miss', {
+        dataSourceId: dataSource.id,
+        selectedValue: rawSelected
+      });
       dsDetailsCache.set(dsKey, null);
       pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
       return null;
-    } catch (_) {
+    } catch (err) {
+      // If Apps Script runner isn't ready yet (common on Safari/iOS), don't cache the miss:
+      // allow subsequent renders to retry once the platform initializes.
+      if (isRunnerUnavailableError(err)) {
+        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.fetch.unavailable', {
+          dataSourceId: dataSource.id,
+          selectedValue: rawSelected
+        });
+        return null;
+      }
+      args.onDiagnostic?.('htmlTemplate.dataSourceDetails.fetch.failed', {
+        dataSourceId: dataSource.id,
+        selectedValue: rawSelected,
+        message: (err as any)?.message || String(err || '')
+      });
       dsDetailsCache.set(dsKey, null);
       pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
       return null;
@@ -635,6 +726,7 @@ const collectLineItemDataSourceDetails = async (args: {
   configMap: Record<string, any>;
   language: string;
   fetchDataSource?: typeof fetchDataSourceApi;
+  onDiagnostic?: DiagnosticFn;
 }): Promise<Map<string, Record<string, string> | null>> => {
   const { lineItemRows, configMap, language, fetchDataSource } = args;
   const detailsByKey = new Map<string, Record<string, string> | null>();
@@ -660,6 +752,7 @@ const collectLineItemDataSourceDetails = async (args: {
 
   if (!lookups.length) return detailsByKey;
 
+  args.onDiagnostic?.('htmlTemplate.dataSourceDetails.batch.start', { count: lookups.length });
   await Promise.all(
     lookups.map(async lookup => {
       const details = await lookupDataSourceDetailsClient({
@@ -667,11 +760,13 @@ const collectLineItemDataSourceDetails = async (args: {
         selectedValue: lookup.value,
         language,
         limit: lookup.limit,
-        fetchDataSource
+        fetchDataSource,
+        onDiagnostic: args.onDiagnostic
       });
       detailsByKey.set(lookup.key, details);
     })
   );
+  args.onDiagnostic?.('htmlTemplate.dataSourceDetails.batch.done', { count: lookups.length });
 
   return detailsByKey;
 };
@@ -696,6 +791,10 @@ export const renderBundledHtmlTemplateClient = async (args: {
    * Optional dependency injection for tests.
    */
   fetchDataSource?: typeof fetchDataSourceApi;
+  /**
+   * Optional diagnostic hook (wired to FormView onDiagnostic).
+   */
+  onDiagnostic?: DiagnosticFn;
   /**
    * Optional dependency injection for tests (override how bundle: ids are resolved).
    */
@@ -752,24 +851,26 @@ export const renderBundledHtmlTemplateClient = async (args: {
           dataSourceDetailsByFieldId[fieldId] = null;
           continue;
         }
-        const details = await lookupDataSourceDetailsClient({
-          dataSource: ds,
-          selectedValue: selectedValue.toString(),
-          language,
-          limit: (ds as any)?.limit,
-          fetchDataSource: args.fetchDataSource
-        });
-        dataSourceDetailsByFieldId[fieldId] = details;
-      }
+	        const details = await lookupDataSourceDetailsClient({
+	          dataSource: ds,
+	          selectedValue: selectedValue.toString(),
+	          language,
+	          limit: (ds as any)?.limit,
+	          fetchDataSource: args.fetchDataSource,
+	          onDiagnostic: args.onDiagnostic
+	        });
+	        dataSourceDetailsByFieldId[fieldId] = details;
+	      }
 
       const lineItemRows = collectLineItemRows(record as any, definition.questions as any);
       const lineItemConfigMap = buildLineItemConfigMap(definition.questions || []);
-      const lineItemDataSourceDetails = await collectLineItemDataSourceDetails({
-        lineItemRows,
-        configMap: lineItemConfigMap,
-        language,
-        fetchDataSource: args.fetchDataSource
-      });
+	      const lineItemDataSourceDetails = await collectLineItemDataSourceDetails({
+	        lineItemRows,
+	        configMap: lineItemConfigMap,
+	        language,
+	        fetchDataSource: args.fetchDataSource,
+	        onDiagnostic: args.onDiagnostic
+	      });
       const lineItemDataSources =
         lineItemDataSourceDetails.size > 0
           ? {
@@ -825,4 +926,3 @@ export const renderBundledHtmlTemplateClient = async (args: {
   renderedBundleInflight.set(cacheKey, promise);
   return promise;
 };
-

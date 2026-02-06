@@ -16,6 +16,8 @@ describe('WebFormService', () => {
     const followupJson = JSON.stringify({
       pdfTemplateId: { EN: 'pdf-template-en', FR: 'pdf-template-fr' },
       emailTemplateId: { EN: 'email-template-en', FR: 'email-template-fr' },
+      emailFrom: 'kitchen@example.com',
+      emailFromName: 'Community Kitchen',
       emailRecipients: [
         'ops@example.com',
         {
@@ -191,6 +193,8 @@ describe('WebFormService', () => {
     expect(recipientArg).toContain('acme@example.com');
     expect(optionsArg.cc).toBe('chef@example.com');
     expect(optionsArg.bcc).toBe('audit@example.com');
+    expect(optionsArg.from).toBe('kitchen@example.com');
+    expect(optionsArg.name).toBe('Community Kitchen');
   });
 
   test('emailTemplateId supports conditional cases based on record field values', () => {

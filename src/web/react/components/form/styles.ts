@@ -13,6 +13,18 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay .ck-full-width {
           width: 100%;
         }
+        .ck-guided-context-header {
+          font-size: var(--ck-font-label);
+          color: var(--text);
+          font-weight: 700;
+          white-space: nowrap;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .ck-guided-context-header::-webkit-scrollbar {
+          display: none;
+        }
 
         /* Top action bar (below header): match the BottomActionBar styling exactly (capsule + pill items). */
         .ck-top-action-bar {
@@ -46,6 +58,14 @@ export const FORM_VIEW_STYLES = `
         .ck-top-action-bar[data-notice-only="1"] .ck-actionbar-notice-inner {
           margin-top: 0;
         }
+
+	        /* Action bars: make non-primary action labels look like clickable links. */
+	        .ck-top-action-bar .ck-bottom-item:not(.ck-bottom-item--primary) .ck-bottom-label,
+	        .ck-bottom-bar .ck-bottom-item:not(.ck-bottom-item--primary) .ck-bottom-label {
+	          color: var(--accent);
+	          text-decoration: underline;
+	          text-underline-offset: 2px;
+	        }
 
         /* Portrait-only mode: block landscape with a friendly rotate prompt. */
         .ck-orientation-blocker {
@@ -288,16 +308,16 @@ export const FORM_VIEW_STYLES = `
           white-space: nowrap;
           text-align: right;
         }
-        .ck-line-item-table__remove-button,
-        .form-card .ck-line-item-table__remove-button,
-        .webform-overlay .ck-line-item-table__remove-button {
-          border: 1px solid var(--border) !important;
-          background: var(--card) !important;
-          color: var(--text) !important;
-          border-radius: 10px;
-          width: 40px !important;
-          height: 40px !important;
-          min-width: 40px !important;
+	        .ck-line-item-table__remove-button,
+	        .form-card .ck-line-item-table__remove-button,
+	        .webform-overlay .ck-line-item-table__remove-button {
+	          border: 1px solid var(--accent) !important;
+	          background: var(--accent) !important;
+	          color: var(--accentText) !important;
+	          border-radius: 10px;
+	          width: 40px !important;
+	          height: 40px !important;
+	          min-width: 40px !important;
           min-height: 40px !important;
           padding: 0 !important;
           box-sizing: border-box;
@@ -503,6 +523,7 @@ export const FORM_VIEW_STYLES = `
           padding-top: 10px;
           padding-bottom: 10px;
           vertical-align: top;
+          font-weight: bold;
         }
         .form-card .ck-line-item-group--table .line-item-totals,
         .webform-overlay .ck-line-item-group--table .line-item-totals {
@@ -518,6 +539,11 @@ export const FORM_VIEW_STYLES = `
           font-weight: 500;
           font-size: var(--ck-font-label);
           white-space: nowrap;
+        }
+        .form-card .ck-line-item-group--table[data-field-path="MP_MEALS_REQUEST"] .ck-line-item-table__totals-row .ck-line-item-table__total,
+        .webform-overlay .ck-line-item-group--table[data-field-path="MP_MEALS_REQUEST"] .ck-line-item-table__totals-row .ck-line-item-table__total,
+        .ck-form-sections .ck-line-item-group--table[data-field-path="MP_MEALS_REQUEST"] .ck-line-item-table__totals-row .ck-line-item-table__total {
+          font-weight: 600;
         }
         .form-card .ck-line-item-table__row--even {
           background: transparent;
@@ -867,10 +893,11 @@ export const FORM_VIEW_STYLES = `
         /* Generic field helper text (configurable per field). */
         .ck-field-helper {
           margin: 0;
-          font-size: calc(var(--ck-font-label) * 0.85);
-          font-weight: 500;
-          line-height: 1.25;
-          color: var(--muted);
+          font-size: var(--ck-font-helper);
+          font-weight: 400;
+          line-height: 1.35;
+          color: var(--text);
+          opacity: var(--ck-helper-opacity);
         }
         .form-card .field.inline-field > .ck-field-helper,
         .webform-overlay .field.inline-field > .ck-field-helper {
@@ -878,16 +905,26 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
           margin: 0;
         }
+        /* Upload helper text (e.g., remaining files): match generic helper typography. */
+        .ck-upload-helper {
+          margin: 0;
+          font-size: var(--ck-font-helper);
+          font-weight: 400;
+          line-height: 1.35;
+          color: var(--text);
+          opacity: var(--ck-helper-opacity);
+        }
         .ck-line-item-table__header-wrap {
           display: flex;
           flex-direction: column;
           gap: 2px;
         }
         .ck-line-item-table__header-helper {
-          font-size: calc(var(--ck-font-label) * 0.85);
-          font-weight: 500;
-          line-height: 1.2;
-          color: var(--muted);
+          font-size: var(--ck-font-helper);
+          font-weight: 400;
+          line-height: 1.35;
+          color: var(--text);
+          opacity: var(--ck-helper-opacity);
           white-space: normal;
         }
         /* Per-field override: force *label* above the rest even for 1-up/full-width rows.
@@ -1597,13 +1634,33 @@ export const FORM_VIEW_STYLES = `
           gap: 14px;
           padding: 0 4px; /* subtle alignment with card edges */
         }
+        .ck-page-section__title-wrap {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
         .ck-page-section__title {
           margin: 0;
           font-weight: 600;
-          font-size: var(--ck-font-group-title);
+          font-size: calc(var(--ck-font-group-title) * 1.14);
+          line-height: 1.1;
           letter-spacing: 0;
           text-transform: none;
           color: var(--text);
+        }
+        .ck-page-section[data-info-display="hidden"] .ck-page-section__title {
+          color: var(--accent);
+        }
+        .ck-page-section__notice {
+          margin: 0;
+          color: var(--muted);
+          font-weight: 600;
+          font-size: calc(var(--ck-font-label) * 0.9);
+          line-height: 1.25;
+        }
+        .ck-page-section[data-info-display="belowTitle"] .ck-page-section__header {
+          justify-content: flex-start;
         }
         .ck-page-section__info {
           flex: 0 0 auto;
@@ -1614,7 +1671,7 @@ export const FORM_VIEW_STYLES = `
           background: transparent;
           color: var(--muted);
           font-weight: 400;
-          font-size: calc(var(--ck-font-label) * 0.85);
+          font-size: calc(var(--ck-font-label) * 1);
           line-height: 1.25;
         }
         .ck-page-section__body {
@@ -1710,11 +1767,20 @@ export const FORM_VIEW_STYLES = `
           border-color: var(--danger);
           color: var(--danger);
         }
-        .ck-progress-pill.ck-progress-neutral {
-          background: transparent;
-          border-color: var(--border);
-          color: var(--muted);
-        }
+	        .ck-progress-pill.ck-progress-neutral {
+	          background: transparent;
+	          border-color: var(--border);
+	          color: var(--muted);
+	        }
+	        .ck-progress-pill.ck-progress-pill--primary {
+	          background: var(--accent);
+	          border-color: var(--accent);
+	          color: var(--accentText);
+	        }
+	        .ck-progress-pill.ck-progress-pill--primary .ck-progress-label,
+	        .ck-progress-pill.ck-progress-pill--primary .ck-progress-caret {
+	          opacity: 1;
+	        }
         /* Row toggle wrapper (line-item progressive rows): make the whole "Row X + pill" area tappable */
         .ck-row-toggle {
           appearance: none;
@@ -1816,6 +1882,7 @@ export const FORM_VIEW_STYLES = `
           .ck-page-section__info {
             max-width: none;
             width: 100%;
+            font-weight: bold;
           }
 
           /* iOS date inputs are very wide; if a paired row contains a DATE field, stack it on mobile to prevent overflow. */

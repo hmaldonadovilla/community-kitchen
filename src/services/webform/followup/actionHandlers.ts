@@ -193,11 +193,24 @@ export const handleSendEmailAction = (args: {
     const subject =
       resolveLocalizedStringValue(followup.emailSubject, ctx.record.language) ||
       `${form.title || 'Form'} submission ${ctx.record.id}`;
+    const from = followup.emailFrom ? applyPlaceholders(followup.emailFrom, placeholders).toString().trim() : '';
+    const name = followup.emailFromName ? applyPlaceholders(followup.emailFromName, placeholders).toString().trim() : '';
+    debugLog('followup.email.send', {
+      templateId,
+      toCount: toRecipients.length,
+      ccCount: ccRecipients.length,
+      bccCount: bccRecipients.length,
+      hasAttachment: Boolean(pdfArtifact?.blob),
+      from: from || undefined,
+      name: name || undefined
+    });
     GmailApp.sendEmail(toRecipients.join(','), subject || 'Form submission', body || 'See attached PDF.', {
       htmlBody,
       attachments: pdfArtifact?.blob ? [pdfArtifact.blob] : undefined,
       cc: ccRecipients.length ? ccRecipients.join(',') : undefined,
-      bcc: bccRecipients.length ? bccRecipients.join(',') : undefined
+      bcc: bccRecipients.length ? bccRecipients.join(',') : undefined,
+      from: from || undefined,
+      name: name || undefined
     });
   } catch (err) {
     debugLog('followup.email.failed', { error: err ? err.toString() : 'unknown' });

@@ -57,6 +57,7 @@ Local (no GitHub compute):
    - Optional: use `.env.deploy` (or `.env.deploy.staging` / `.env.deploy.prod`) to store local deploy variables (see `.env.deploy.example`).
    - Set `DEPLOY_ENV=staging|prod` to auto-load the env-specific file, export `CK_CONFIG_ENV`,
      and swap `.clasp.<env>.json` into `.clasp.json` during deploy.
+   - If exactly one `.env.deploy.<env>` file exists locally, the deploy script auto-detects it even when `DEPLOY_ENV` is not exported.
 
 Local deploy env variables (optional):
 
@@ -65,6 +66,12 @@ Local deploy env variables (optional):
 - `CLASP_CREATE_DEPLOYMENT=1` — create a new deployment if no ID is provided
 - `CLASP_DEPLOY_DESCRIPTION="..."` — custom deployment description
 - `DEPLOY_ENV=staging|prod` — selects `.env.deploy.<env>` and the matching config bundle folder
+- `CLASP_TARGET_WEB_APP_URL="https://script.google.com/macros/s/<deploymentId>/exec?...` — optional guard; deploy fails if URL deployment id and `CLASP_DEPLOYMENT_ID` do not match
+- `CLASP_WEBAPP_ACCESS` + `CLASP_WEBAPP_EXECUTE_AS` — optional but recommended pair; writes `webapp` manifest settings during deploy to keep deployment behavior in web app mode (for example `ANYONE_ANONYMOUS` + `USER_DEPLOYING`)
+
+If `npm run deploy:apps-script` reports that the deployment is not `WEB_APP`, repair the existing deployment (same id) in Apps Script UI:
+- Deploy → Manage deployments → edit the existing deployment id → set type to **Web app**.
+- Do not create a new deployment id unless explicitly requested.
 
 CI (GitHub Actions):
 
@@ -1193,6 +1200,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
       - Composite filters and cross-scope dependencies:
         - `dependsOn` can be a single ID or an array (for multi-field filters). When you provide an array, join dependency values with `||` in `optionMap` keys, plus `*` as a fallback.
+        - For DATE dependencies in composite keys (for example `MP_PREP_DATE`), you can add weekday-specific keys such as `Belliard||Lunch||Sunday`. If no weekday key matches, the filter falls back to the non-date composite key (for example `Belliard||Lunch`).
         - Line-item filters can depend on top-level fields; reference the parent field ID directly.
 
         ```json
@@ -1810,11 +1818,13 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        "en": "Meal production summary",
        "fr": "Synthèse production"
      },
+     "emailFrom": "kitchen@example.com",
+     "emailFromName": "Community Kitchen",
      "emailRecipients": [
        "ops@example.com",
        {
          "type": "dataSource",
-         "recordFieldId": "DISTRIBUTOR",
+          "recordFieldId": "DISTRIBUTOR",
          "lookupField": "Distributor",
          "valueField": "email",
          "dataSource": {
@@ -1859,6 +1869,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - `pdfFolderId` (optional): target Drive folder for generated PDFs; falls back to the spreadsheet’s parent folder.
    - `pdfFileNameFieldId` (optional): field id used to name generated PDFs + email attachments. Supports question ids or meta fields (`id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`).
    - `emailTemplateId`: Google Doc containing the email body. Same structure as `pdfTemplateId` (string, language map, or `cases` selector). Tokens work the same as in the PDF template.
+   - `emailFrom` (optional): sender email address for follow-up emails. Apps Script can only send from the script owner or a configured Gmail alias.
+   - `emailFromName` (optional): sender display name for follow-up emails.
    - `emailRecipients`: list of addresses. Entries can be plain strings (placeholders allowed) or objects describing a data source lookup:
      - `recordFieldId`: the form/line-item field whose submitted value should be used as the lookup key.
      - `dataSource`: standard data source config (sheet/tab reference, projection, limit, etc.).

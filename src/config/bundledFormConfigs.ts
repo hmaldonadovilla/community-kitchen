@@ -576,15 +576,16 @@ export const BUNDLED_FORM_CONFIGS = [
           "defaultCollapsed": false,
           "pageSection": {
             "title": {
-              "en": "Storage",
+              "en": "Storage checks should be done at the beginning of shift",
               "fr": "Stockage",
               "nl": "Opslag"
             },
             "infoText": {
-              "en": "Beginning of the shift",
+              "en": "Storage checks should be performed at the beginning of shift",
               "fr": "Début de la journée",
               "nl": "Begin van de dag"
-            }
+            },
+            "infoDisplay": "hidden"
           }
         },
         "pair": "fridge",
@@ -1331,7 +1332,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "id": "kitchen_cleanliness",
           "header": false,
           "title": {
-            "en": "Kitchen check",
+            "en": "Kitchen & Portioning areas",
             "fr": "Vérification de la cuisine",
             "nl": "Keukencontrole"
           },
@@ -1339,15 +1340,16 @@ export const BUNDLED_FORM_CONFIGS = [
           "defaultCollapsed": true,
           "pageSection": {
             "title": {
-              "en": "Cleanliness",
-              "fr": "Propreté",
-              "nl": "Keukenzuivering"
+              "en": "Cleanliness checks should be done at the end of shift",
+              "fr": "Vérifications de propreté à faire à la fin de la journée",
+              "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
             },
             "infoText": {
-              "en": "End of the shift",
+              "en": "Cleanliness checks should be performed at the end of shift",
               "fr": "Fin de la journée",
               "nl": "Einde van de dienst"
-            }
+            },
+            "infoDisplay": "hidden"
           }
         },
         "listView": false,
@@ -1528,7 +1530,15 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others",
+          "header": false,
+          "title": {
+            "en": "Others",
+            "fr": "Autres",
+            "nl": "Andere"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true
         },
         "listView": false,
         "options": [],
@@ -1558,7 +1568,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1588,7 +1598,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1618,7 +1628,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1648,7 +1658,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1678,7 +1688,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1708,7 +1718,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1738,7 +1748,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1768,7 +1778,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -3650,15 +3660,16 @@ export const BUNDLED_FORM_CONFIGS = [
             "defaultCollapsed": false,
             "pageSection": {
               "title": {
-                "en": "Storage",
+                "en": "Storage checks should be done at the beginning of shift",
                 "fr": "Stockage",
                 "nl": "Opslag"
               },
               "infoText": {
-                "en": "Beginning of the shift",
+                "en": "Storage checks should be performed at the beginning of shift",
                 "fr": "Début de la journée",
                 "nl": "Begin van de dag"
-              }
+              },
+              "infoDisplay": "hidden"
             }
           },
           "pair": "fridge",
@@ -4383,7 +4394,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "kitchen_cleanliness",
             "header": false,
             "title": {
-              "en": "Kitchen check",
+              "en": "Kitchen & Portioning areas",
               "fr": "Vérification de la cuisine",
               "nl": "Keukencontrole"
             },
@@ -4391,15 +4402,16 @@ export const BUNDLED_FORM_CONFIGS = [
             "defaultCollapsed": true,
             "pageSection": {
               "title": {
-                "en": "Cleanliness",
-                "fr": "Propreté",
-                "nl": "Keukenzuivering"
+                "en": "Cleanliness checks should be done at the end of shift",
+                "fr": "Vérifications de propreté à faire à la fin de la journée",
+                "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
               },
               "infoText": {
-                "en": "End of the shift",
-                "fr": "Fin de la journée",
-                "nl": "Einde van de dienst"
-              }
+                "en": "Cleanliness checks should be done at the end of shift",
+                "fr": "Vérifications de propreté à faire à la fin de la journée",
+                "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
+              },
+              "infoDisplay": "hidden"
             }
           },
           "listView": false,
@@ -4568,7 +4580,15 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others",
+            "header": false,
+            "title": {
+              "en": "Others",
+              "fr": "Autres",
+              "nl": "Andere"
+            },
+            "collapsible": true,
+            "defaultCollapsed": true
           },
           "listView": false,
           "visibility": {
@@ -4596,7 +4616,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4624,7 +4644,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4652,7 +4672,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4680,7 +4700,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4708,7 +4728,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4736,7 +4756,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4764,7 +4784,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4792,7 +4812,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -6712,9 +6732,12 @@ export const BUNDLED_FORM_CONFIGS = [
           "FR": "1eqlnWV2DAqjKCOCwRLdatAOXMtbxGm-cKwoVgdQDdxk"
         },
         "emailSubject": {
-          "en": "Meal production summary",
-          "fr": "Synthèse production"
+          "en": "Suivi de production des repas",
+          "fr": "Suivi de production des repas",
+          "nl": "Suivi de production des repas"
         },
+        "emailFrom": "operations@communitykitchen.be",
+        "emailFromName": "Community Kitchen Operations",
         "emailRecipients": [
           {
             "type": "dataSource",
@@ -6808,22 +6831,47 @@ export const BUNDLED_FORM_CONFIGS = [
       },
       "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
       "copyCurrentRecordEnabled": false,
-      "createNewRecordEnabled": false,
-      "actionBars": {
-        "top": {
-          "summary": {
-            "items": [
-              {
-                "type": "system",
-                "id": "create",
-                "menuBehavior": "inline",
-                "actions": [
-                  "createRecordPreset"
-                ]
-              }
+      "copyCurrentRecordDropFields": [
+        "MP_PREP_DATE"
+      ],
+      "copyCurrentRecordProfile": {
+        "values": [
+          "MP_DISTRIBUTOR",
+          "MP_SERVICE"
+        ],
+        "lineItems": [
+          {
+            "groupId": "MP_MEALS_REQUEST",
+            "fields": [
+              "MEAL_TYPE",
+              "ORD_QTY",
+              "FINAL_QTY"
             ]
           }
+        ]
+      },
+      "copyCurrentRecordDialog": {
+        "title": {
+          "en": "Copying record",
+          "fr": "Copie de l'enregistrement",
+          "nl": "Record kopiëren"
         },
+        "message": {
+          "en": "Select a future production date and verify the customer, service and ordered portions information. All changes will be auto-saved and a future dated record will be created.",
+          "fr": "Sélectionnez une date de production future et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté future sera créé.",
+          "nl": "Selecteer een toekomstige productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en een toekomstige gedateerde record wordt aangemaakt."
+        },
+        "confirmLabel": {
+          "en": "OK",
+          "fr": "OK",
+          "nl": "OK"
+        },
+        "showCancel": false,
+        "showCloseButton": false,
+        "dismissOnBackdrop": false
+      },
+      "createNewRecordEnabled": false,
+      "actionBars": {
         "bottom": {
           "list": {
             "items": [
@@ -6948,7 +6996,29 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "deliveryForm",
+            "contextHeader": {
+              "parts": [
+                "MP_DISTRIBUTOR",
+                "MP_SERVICE",
+                "MP_PREP_DATE"
+              ]
+            },
             "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
@@ -7443,15 +7513,33 @@ export const BUNDLED_FORM_CONFIGS = [
                           "overlayContextHeader": {
                             "fields": [
                               {
+                                "fieldRef": "MP_DISTRIBUTOR",
+                                "label": {
+                                  "en": "{{value}}"
+                                }
+                              },
+                              {
+                                "fieldRef": "MP_SERVICE",
+                                "label": {
+                                  "en": "| {{value}}"
+                                }
+                              },
+                              {
+                                "fieldRef": "MP_PREP_DATE",
+                                "label": {
+                                  "en": "| {{value}}"
+                                }
+                              },
+                              {
                                 "fieldRef": "MEAL_TYPE",
                                 "label": {
-                                  "en": "Leftovers for {{value}}"
+                                  "en": "\nLeftovers for {{value}}"
                                 }
                               },
                               {
                                 "fieldRef": "ORD_QTY",
                                 "label": {
-                                  "en": "| {{value}} requested portions"
+                                  "en": "| {{value}} ordered portions"
                                 }
                               }
                             ]
@@ -7753,12 +7841,36 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                   },
                                   "placeholder": {
-                                    "en": "Search ingredients",
-                                    "fr": "Rechercher des ingrédients",
-                                    "nl": "Ingrediënten zoeken"
+                                    "en": "Search leftover ingredients",
+                                    "fr": "Rechercher les ingrédients de la restauration",
+                                    "nl": "Ingrediënten voor restauro zoeken"
                                   },
-                                  "labelLayout": "inline",
+                                  "labelLayout": "stacked",
+                                  "closeButtonLabel": {
+                                    "en": "Back",
+                                    "fr": "Retour",
+                                    "nl": "Terug"
+                                  },
                                   "groupOverride": {
+                                    "minRows": 0,
+                                    "maxRows": 200,
+                                    "addOverlay": {
+                                      "title": {
+                                        "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
+                                        "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
+                                        "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
+                                      },
+                                      "searchHelperText": {
+                                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                      },
+                                      "placeholder": {
+                                        "en": "Search leftover ingredients",
+                                        "fr": "Rechercher les ingrédients de la restauration",
+                                        "nl": "Ingrediënten voor restauro zoeken"
+                                      }
+                                    },
                                     "ui": {
                                       "tableColumns": [
                                         "ING"
@@ -7803,7 +7915,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                         {
                                           "fieldRef": "PREP_TYPE",
                                           "label": {
-                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
+                                            "en": "{{value}}: Add ingredients from previously cooked leftovers that will be added to today's cooked meal",
+                                            "fr": "{{value}}: Ajouter les ingrédients des restes précédemment cuisinés qui seront ajoutés au plat cuisiné d'aujourd'hui",
+                                            "nl": "{{value}}: Voeg ingrediënten toe van eerder gekookte resten die aan de huidige gekookte maaltijd worden toegevoegd"
                                           }
                                         }
                                       ]
@@ -7821,6 +7935,11 @@ export const BUNDLED_FORM_CONFIGS = [
                                           "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
                                           "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
                                           "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
+                                        },
+                                        "searchHelperText": {
+                                          "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                          "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                          "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
@@ -7865,7 +7984,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                         {
                                           "fieldRef": "PREP_TYPE",
                                           "label": {
-                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
+                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish",
+                                            "fr": "{{value}}: Revoir et modifier la liste ci-dessous en ajoutant ou en supprimant pour refléter les ingrédients corrects qui ont été utilisés pour cuisiner la restauration",
+                                            "nl": "{{value}}: Bekijk en bewerk de lijst hieronder door ingrediënten toe te voegen of te verwijderen om de juiste ingrediënten weer te geven die zijn gebruikt om de restauro te koken"
                                           }
                                         }
                                       ]
@@ -7906,7 +8027,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               {
                                 "id": "addLeftover",
                                 "label": {
-                                  "en": "+ another leftover",
+                                  "en": "+ Add leftover",
                                   "fr": "+ une autre restauration",
                                   "nl": "+ een andere restauro"
                                 },
@@ -7996,7 +8117,8 @@ export const BUNDLED_FORM_CONFIGS = [
                                 "fieldId": "PREP_TYPE",
                                 "equals": [
                                   "Entire dish",
-                                  "Part dish"
+                                  "Part dish",
+                                  ""
                                 ]
                               }
                             }
@@ -8071,7 +8193,29 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "foodSafety",
+            "contextHeader": {
+              "parts": [
+                "MP_DISTRIBUTOR",
+                "MP_SERVICE",
+                "MP_PREP_DATE"
+              ]
+            },
             "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
@@ -8115,7 +8259,29 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "portioning",
+            "contextHeader": {
+              "parts": [
+                "MP_DISTRIBUTOR",
+                "MP_SERVICE",
+                "MP_PREP_DATE"
+              ]
+            },
             "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
@@ -8149,16 +8315,17 @@ export const BUNDLED_FORM_CONFIGS = [
               {
                 "kind": "question",
                 "id": "MP_VOLUNTEER"
-              },
-              {
-                "kind": "question",
-                "id": "MP_CONFIRM"
               }
             ],
             "label": {
               "en": "Portioning",
               "fr": "Portionnement",
               "nl": "Portionering"
+            },
+            "helpText": {
+              "en": "Update the number of portions delivered to reflect reality. You must deliver at least the ordered number of portions.",
+              "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées.",
+              "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren."
             }
           }
         ],
@@ -8296,7 +8463,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Annuleren"
           }
         },
-        "clearOnChange": true,
+        "clearOnChange": {
+          "mode": "ordered"
+        },
         "listViewSort": {
           "direction": "asc",
           "priority": 3
@@ -8367,7 +8536,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Annuleren"
           }
         },
-        "clearOnChange": true,
+        "clearOnChange": {
+          "mode": "ordered"
+        },
         "listViewSort": {
           "direction": "asc",
           "priority": 2
@@ -8497,6 +8668,58 @@ export const BUNDLED_FORM_CONFIGS = [
         "optionsFr": [],
         "optionsNl": [],
         "status": "Active",
+        "changeDialog": {
+          "when": {
+            "any": [
+              {
+                "fieldId": "MP_DISTRIBUTOR",
+                "notEmpty": true
+              },
+              {
+                "fieldId": "MP_SERVICE",
+                "notEmpty": true
+              },
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "match": "any"
+                }
+              }
+            ]
+          },
+          "title": {
+            "en": "Change production date?",
+            "fr": "Changer la date de production ?",
+            "nl": "Productiedatum wijzigen?"
+          },
+          "message": {
+            "en": "Changing the production date of an ongoing Meal production will remove permanently all service data previously saved. Do you want to continue?",
+            "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
+            "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
+          },
+          "confirmLabel": {
+            "en": "Yes, delete permanently data previously entered",
+            "fr": "Oui, supprimer définitivement les données déjà saisies",
+            "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
+          },
+          "cancelLabel": {
+            "en": "No, keep the current production date",
+            "fr": "Non, conserver la date de production actuelle",
+            "nl": "Nee, behoud de huidige productiedatum"
+          },
+          "dedupMode": "never"
+        },
+        "clearOnChange": {
+          "mode": "ordered"
+        },
+        "selectionEffects": [
+          {
+            "id": "reset_step_on_prep_date_change",
+            "type": "setValue",
+            "fieldId": "__ckStep",
+            "value": "order"
+          }
+        ],
         "listViewSort": {
           "direction": "desc",
           "priority": 1
@@ -8585,7 +8808,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (EN)": "REF:PortionTypeOptions",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
+            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\", \"MP_PREP_DATE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -8704,7 +8927,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The maximum photo size is {mb}MB\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
+            "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -8721,7 +8944,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"ORD_QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"ORD_QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"ORD_QTY\",\n        \"applyOn\": \"change\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
+            "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"ORD_QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"ORD_QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than ordered portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"ORD_QTY\",\n        \"applyOn\": \"change\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than ordered portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -8892,11 +9115,19 @@ export const BUNDLED_FORM_CONFIGS = [
               "optionFilter": {
                 "dependsOn": [
                   "MP_DISTRIBUTOR",
-                  "MP_SERVICE"
+                  "MP_SERVICE",
+                  "MP_PREP_DATE"
                 ],
                 "optionMap": {
                   "HUB": [
                     "Vegetarian"
+                  ],
+                  "Belliard||Lunch||Sunday": [
+                    "Vegetarian",
+                    "Vegan",
+                    "Diabetic",
+                    "No-salt",
+                    "Standard"
                   ],
                   "Belliard||Lunch": [
                     "Vegetarian",
@@ -8974,6 +9205,58 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   "phase": "submit"
                 }
+              ],
+              "changeDialog": {
+                "when": {
+                  "fieldId": "ORD_QTY",
+                  "equals": 0
+                },
+                "title": {
+                  "en": "Update ordered portions",
+                  "fr": "Mettre à jour les portions demandées",
+                  "nl": "Bijwerken van gevraagde porties"
+                },
+                "message": {
+                  "en": "Changing the ordered number will remove any production data (leftover, recipe to cook, changes to ingredients, ingredients receipt photo) you may have previously entered. Do you want to proceed?",
+                  "fr": "Changer le nombre de portions commandées supprimera toutes les données de production (restes, recette à cuisiner, modifications des ingrédients, photos de réception des ingrédients) que vous avez peut-être précédemment entrées. Voulez-vous continuer ?",
+                  "nl": "Wijzigen van het aantal gevraagde porties zal alle productiedata (resten, recept te koken, wijzigingen in ingrediënten, foto's van ingrediëntenontvangst) die u mogelijk eerder hebt ingevoerd, verwijderen. Wilt u doorgaan?"
+                },
+                "confirmLabel": {
+                  "en": "Yes, change the ordered number and clear out data previously entered.",
+                  "fr": "Oui, changer le nombre de portions commandées et effacer les données précédemment entrées.",
+                  "nl": "Ja, wijzig het aantal gevraagde porties en verwijder de eerder ingevoerde data."
+                },
+                "cancelLabel": {
+                  "en": "No, keep current data and ordered number",
+                  "fr": "Non, garder les données actuelles et le nombre commandé",
+                  "nl": "Nee, houd de huidige gegevens en het bestelde aantal"
+                },
+                "primaryAction": "confirm"
+              },
+              "selectionEffects": [
+                {
+                  "type": "deleteLineItems",
+                  "groupId": "MP_TYPE_LI",
+                  "when": {
+                    "fieldId": "ORD_QTY",
+                    "equals": 0
+                  }
+                },
+                {
+                  "type": "setValue",
+                  "fieldId": "MP_IS_REHEAT",
+                  "when": {
+                    "fieldId": "ORD_QTY",
+                    "equals": 0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "sync_final_qty_from_ord_qty",
+                  "type": "setValue",
+                  "fieldId": "FINAL_QTY",
+                  "value": "$row.ORD_QTY"
+                }
               ]
             },
             {
@@ -9016,6 +9299,15 @@ export const BUNDLED_FORM_CONFIGS = [
                   "groupId": "MP_TYPE_LI",
                   "id": "delete_mp_to_cook_sync",
                   "targetEffectId": "mp_to_cook_sync"
+                },
+                {
+                  "type": "deleteLineItems",
+                  "groupId": "MP_TYPE_LI",
+                  "id": "delete_mp_left_overs_init",
+                  "targetEffectId": "mp_left_overs_init",
+                  "triggerValues": [
+                    "No"
+                  ]
                 },
                 {
                   "type": "addLineItems",
@@ -9200,7 +9492,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Add photo",
               "labelFr": "Ajouter une photo",
               "labelNl": "Foto toevoegen",
-              "required": true,
+              "required": false,
               "requiredMessage": {
                 "en": "Add one photo per cooking pot.",
                 "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -9211,8 +9503,8 @@ export const BUNDLED_FORM_CONFIGS = [
               "optionsFr": [],
               "optionsNl": [],
               "uploadConfig": {
-                "destinationFolderId": "1xiEjwfcbMaF6XqqAPlqbA8LNd5HiwjGV",
-                "minFiles": 1,
+                "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+                "minFiles": 0,
                 "maxFiles": 5,
                 "maxFileSizeMb": 10,
                 "allowedMimeTypes": [
@@ -9230,7 +9522,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "nl": "Het maximum aantal foto's is {max}"
                   },
                   "maxFileSizeMb": {
-                    "en": "The maximum photo size is {mb}MB",
+                    "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
                     "fr": "La taille maximale de la photo est de {mb}MB",
                     "nl": "De maximale bestandsgrootte is {mb}MB"
                   }
@@ -9272,7 +9564,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelNl": "Maaltijden",
               "required": false,
               "requiredMessage": {
-                "en": "Delivered portions must be equal to or greater than requested portions.",
+                "en": "Delivered portions must be equal to or greater than ordered portions.",
                 "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
                 "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
               },
@@ -9291,7 +9583,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "minFieldId": "ORD_QTY"
                   },
                   "message": {
-                    "en": "Delivered portions must be equal to or greater than requested portions.",
+                    "en": "Delivered portions must be equal to or greater than ordered portions.",
                     "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
                     "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
                   }
@@ -9469,6 +9761,11 @@ export const BUNDLED_FORM_CONFIGS = [
                 "showItemPill": false,
                 "addButtonPlacement": "hidden",
                 "openInOverlay": true,
+                "closeButtonLabel": {
+                  "en": "Back",
+                  "fr": "Retour",
+                  "nl": "Terug"
+                },
                 "overlayDetail": {
                   "enabled": true,
                   "header": {
@@ -9927,7 +10224,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Allergens": "Gluten, Fish",
                           "Suppliers": "VDS",
                           "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Standard, No-salt",
                           "__ckOptionValue": "Fishsticks"
                         },
                         {
@@ -10235,7 +10532,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Allergens": "None",
                           "Suppliers": "Freshmed;Mabru;VDS",
                           "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                           "__ckOptionValue": "Parsnip"
                         },
                         {
@@ -10246,7 +10543,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Allergens": "None",
                           "Suppliers": "Freshmed;Mabru;VDS",
                           "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                           "__ckOptionValue": "Turnip"
                         },
                         {
@@ -10988,6 +11285,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Diabetic": [
                             "Chicken stripes",
                             "Chicken cubes",
+                            "Fishsticks",
                             "Greek yogurt",
                             "Cheese",
                             "Brown rice",
@@ -11008,6 +11306,8 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Courgette",
                             "Leek",
                             "Mushroom",
+                            "Parsnip",
+                            "Turnip",
                             "Green beans - frozen",
                             "Chinese mix",
                             "Leek - frozen",
@@ -13036,7 +13336,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "cases": [
                         {
                           "text": {
-                            "en": "Please enter the `Quantity` based on the requested number of portions",
+                            "en": "Please enter the `Quantity` based on the ordered number of portions",
                             "fr": "Veuillez entrer la `Quantité` en fonction du nombre de portions demandé",
                             "nl": "Voer de `Aantal` in op basis van het gevraagde aantal porties"
                           },
@@ -13084,6 +13384,16 @@ export const BUNDLED_FORM_CONFIGS = [
                       "en": "Select the ingredient(s) not mentioned in the original recipe that you will use to cook today's dish.",
                       "fr": "Sélectionnez le(s) ingrédient(s) non mentionné(s) dans la recette originale que vous utiliserez pour cuisiner le plat d'aujourd'hui.",
                       "nl": "Selecteer het/de ingrediënt(en) die niet in het originele recept staan en die je zult gebruiken om het gerecht van vandaag te koken."
+                    },
+                    "helperText": {
+                      "en": "",
+                      "fr": "",
+                      "nl": ""
+                    },
+                    "searchHelperText": {
+                      "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                      "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                      "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
                     },
                     "placeholder": {
                       "en": "Search ingredients",
@@ -13189,11 +13499,11 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         "button": {
-          "action": "renderMarkdownTemplate",
+          "action": "renderHtmlTemplate",
           "templateId": {
-            "EN": "1IRi_p2_cfXtONkB6qCr0MxZNS4Pvh4j9",
-            "FR": "1IRi_p2_cfXtONkB6qCr0MxZNS4Pvh4j9",
-            "NL": "1IRi_p2_cfXtONkB6qCr0MxZNS4Pvh4j9"
+            "EN": "bundle:ingredients_needed.html",
+            "FR": "bundle:ingredients_needed.html",
+            "NL": "bundle:ingredients_needed.html"
           },
           "placements": [
             "form"
@@ -13216,7 +13526,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "uploadConfig": {
           "destinationFolderId": "1xiEjwfcbMaF6XqqAPlqbA8LNd5HiwjGV",
           "minFiles": 1,
-          "maxFiles": 5,
+          "maxFiles": 10,
           "maxFileSizeMb": 10,
           "allowedMimeTypes": [
             "image/*"
@@ -13233,7 +13543,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Het maximum aantal foto's is {max}"
             },
             "maxFileSizeMb": {
-              "en": "The maximum photo size is {mb}MB",
+              "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
               "fr": "La taille maximale de la photo est de {mb}MB",
               "nl": "De maximale bestandsgrootte is {mb}MB"
             }
@@ -13270,9 +13580,9 @@ export const BUNDLED_FORM_CONFIGS = [
       {
         "id": "MP_NOTES",
         "type": "PARAGRAPH",
-        "qEn": "Notes (optional)",
-        "qFr": "Notes (optionnel)",
-        "qNl": "Notities (optioneel)",
+        "qEn": "Note to customer",
+        "qFr": "Note au client",
+        "qNl": "Notitie aan klant",
         "required": false,
         "ui": {
           "labelLayout": "stacked"
@@ -13287,25 +13597,6 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           "collapsible": true,
           "defaultCollapsed": false
-        },
-        "listView": false,
-        "options": [],
-        "optionsFr": [],
-        "optionsNl": [],
-        "status": "Active"
-      },
-      {
-        "id": "MP_CONFIRM",
-        "type": "CHECKBOX",
-        "qEn": "I confirm the above information is correct",
-        "qFr": "Je confirme que les informations ci-dessus sont correctes",
-        "qNl": "Ik bevestig dat bovenstaande informatie correct is",
-        "required": true,
-        "ui": {
-          "labelLayout": "stacked"
-        },
-        "group": {
-          "id": "notes"
         },
         "listView": false,
         "options": [],
@@ -13459,7 +13750,7 @@ export const BUNDLED_FORM_CONFIGS = [
       {
         "id": "MP_HYGIENE",
         "type": "BUTTON",
-        "qEn": "Hygiene rules document",
+        "qEn": "Hygiene rules",
         "qFr": "Règles d’hygiène",
         "qNl": "Hygiënereglement",
         "required": false,
@@ -13655,7 +13946,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Annuleren"
             }
           },
-          "clearOnChange": true,
+          "clearOnChange": {
+            "mode": "ordered"
+          },
           "listViewSort": {
             "direction": "asc",
             "priority": 3
@@ -13728,7 +14021,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Annuleren"
             }
           },
-          "clearOnChange": true,
+          "clearOnChange": {
+            "mode": "ordered"
+          },
           "listViewSort": {
             "direction": "asc",
             "priority": 2
@@ -13857,6 +14152,58 @@ export const BUNDLED_FORM_CONFIGS = [
           "ui": {
             "labelLayout": "inline"
           },
+          "changeDialog": {
+            "when": {
+              "any": [
+                {
+                  "fieldId": "MP_DISTRIBUTOR",
+                  "notEmpty": true
+                },
+                {
+                  "fieldId": "MP_SERVICE",
+                  "notEmpty": true
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "match": "any"
+                  }
+                }
+              ]
+            },
+            "title": {
+              "en": "Change production date?",
+              "fr": "Changer la date de production ?",
+              "nl": "Productiedatum wijzigen?"
+            },
+            "message": {
+              "en": "Changing the production date of an ongoing Meal production will remove permanently all service data previously saved. Do you want to continue?",
+              "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
+              "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
+            },
+            "confirmLabel": {
+              "en": "Yes, delete permanently data previously entered",
+              "fr": "Oui, supprimer définitivement les données déjà saisies",
+              "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
+            },
+            "cancelLabel": {
+              "en": "No, keep the current production date",
+              "fr": "Non, conserver la date de production actuelle",
+              "nl": "Nee, behoud de huidige productiedatum"
+            },
+            "dedupMode": "never"
+          },
+          "clearOnChange": {
+            "mode": "ordered"
+          },
+          "selectionEffects": [
+            {
+              "id": "reset_step_on_prep_date_change",
+              "type": "setValue",
+              "fieldId": "__ckStep",
+              "value": "order"
+            }
+          ],
           "listViewSort": {
             "direction": "desc",
             "priority": 1
@@ -13951,7 +14298,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Options (EN)": "REF:PortionTypeOptions",
                 "Options (FR)": "",
                 "Options (NL)": "",
-                "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
+                "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\", \"MP_PREP_DATE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
                 "Option Filter (JSON)": "",
                 "Validation Rules (JSON)": "",
                 "List View?": "",
@@ -14070,7 +14417,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Options (EN)": "",
                 "Options (FR)": "",
                 "Options (NL)": "",
-                "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The maximum photo size is {mb}MB\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
+                "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
                 "Option Filter (JSON)": "",
                 "Validation Rules (JSON)": "",
                 "List View?": "",
@@ -14087,7 +14434,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Options (EN)": "",
                 "Options (FR)": "",
                 "Options (NL)": "",
-                "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"ORD_QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"ORD_QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"ORD_QTY\",\n        \"applyOn\": \"change\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than requested portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
+                "Config (JSON/REF)": "{\n    \"pair\": \"meal_qty\",\n    \"validationRules\": [\n        {\n            \"when\": {\n                \"fieldId\": \"ORD_QTY\",\n                \"notEmpty\": true\n            },\n            \"then\": {\n                \"fieldId\": \"FINAL_QTY\",\n                \"minFieldId\": \"ORD_QTY\"\n            },\n            \"message\": {\n                \"en\": \"Delivered portions must be equal to or greater than ordered portions.\",\n                \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n                \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n            }\n        }\n    ],\n    \"derivedValue\": {\n        \"op\": \"copy\",\n        \"dependsOn\": \"ORD_QTY\",\n        \"applyOn\": \"change\",\n        \"when\": \"always\",\n        \"copyMode\": \"allowIncrease\"\n    },\n    \"requiredMessage\": {\n      \"en\": \"Delivered portions must be equal to or greater than ordered portions.\",\n      \"fr\": \"Les portions livrées doivent être égales ou supérieures aux portions demandées.\",\n      \"nl\": \"De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties.\"\n    }\n  }",
                 "Option Filter (JSON)": "",
                 "Validation Rules (JSON)": "",
                 "List View?": "",
@@ -14258,11 +14605,19 @@ export const BUNDLED_FORM_CONFIGS = [
                 "optionFilter": {
                   "dependsOn": [
                     "MP_DISTRIBUTOR",
-                    "MP_SERVICE"
+                    "MP_SERVICE",
+                    "MP_PREP_DATE"
                   ],
                   "optionMap": {
                     "HUB": [
                       "Vegetarian"
+                    ],
+                    "Belliard||Lunch||Sunday": [
+                      "Vegetarian",
+                      "Vegan",
+                      "Diabetic",
+                      "No-salt",
+                      "Standard"
                     ],
                     "Belliard||Lunch": [
                       "Vegetarian",
@@ -14340,6 +14695,58 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     "phase": "submit"
                   }
+                ],
+                "changeDialog": {
+                  "when": {
+                    "fieldId": "ORD_QTY",
+                    "equals": 0
+                  },
+                  "title": {
+                    "en": "Update ordered portions",
+                    "fr": "Mettre à jour les portions demandées",
+                    "nl": "Bijwerken van gevraagde porties"
+                  },
+                  "message": {
+                    "en": "Changing the ordered number will remove any production data (leftover, recipe to cook, changes to ingredients, ingredients receipt photo) you may have previously entered. Do you want to proceed?",
+                    "fr": "Changer le nombre de portions commandées supprimera toutes les données de production (restes, recette à cuisiner, modifications des ingrédients, photos de réception des ingrédients) que vous avez peut-être précédemment entrées. Voulez-vous continuer ?",
+                    "nl": "Wijzigen van het aantal gevraagde porties zal alle productiedata (resten, recept te koken, wijzigingen in ingrediënten, foto's van ingrediëntenontvangst) die u mogelijk eerder hebt ingevoerd, verwijderen. Wilt u doorgaan?"
+                  },
+                  "confirmLabel": {
+                    "en": "Yes, change the ordered number and clear out data previously entered.",
+                    "fr": "Oui, changer le nombre de portions commandées et effacer les données précédemment entrées.",
+                    "nl": "Ja, wijzig het aantal gevraagde porties en verwijder de eerder ingevoerde data."
+                  },
+                  "cancelLabel": {
+                    "en": "No, keep current data and ordered number",
+                    "fr": "Non, garder les données actuelles et le nombre commandé",
+                    "nl": "Nee, houd de huidige gegevens en het bestelde aantal"
+                  },
+                  "primaryAction": "confirm"
+                },
+                "selectionEffects": [
+                  {
+                    "type": "deleteLineItems",
+                    "groupId": "MP_TYPE_LI",
+                    "when": {
+                      "fieldId": "ORD_QTY",
+                      "equals": 0
+                    }
+                  },
+                  {
+                    "type": "setValue",
+                    "fieldId": "MP_IS_REHEAT",
+                    "when": {
+                      "fieldId": "ORD_QTY",
+                      "equals": 0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "sync_final_qty_from_ord_qty",
+                    "type": "setValue",
+                    "fieldId": "FINAL_QTY",
+                    "value": "$row.ORD_QTY"
+                  }
                 ]
               },
               {
@@ -14382,6 +14789,15 @@ export const BUNDLED_FORM_CONFIGS = [
                     "groupId": "MP_TYPE_LI",
                     "id": "delete_mp_to_cook_sync",
                     "targetEffectId": "mp_to_cook_sync"
+                  },
+                  {
+                    "type": "deleteLineItems",
+                    "groupId": "MP_TYPE_LI",
+                    "id": "delete_mp_left_overs_init",
+                    "targetEffectId": "mp_left_overs_init",
+                    "triggerValues": [
+                      "No"
+                    ]
                   },
                   {
                     "type": "addLineItems",
@@ -14566,7 +14982,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelEn": "Add photo",
                 "labelFr": "Ajouter une photo",
                 "labelNl": "Foto toevoegen",
-                "required": true,
+                "required": false,
                 "requiredMessage": {
                   "en": "Add one photo per cooking pot.",
                   "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -14577,8 +14993,8 @@ export const BUNDLED_FORM_CONFIGS = [
                 "optionsFr": [],
                 "optionsNl": [],
                 "uploadConfig": {
-                  "destinationFolderId": "1xiEjwfcbMaF6XqqAPlqbA8LNd5HiwjGV",
-                  "minFiles": 1,
+                  "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+                  "minFiles": 0,
                   "maxFiles": 5,
                   "maxFileSizeMb": 10,
                   "allowedMimeTypes": [
@@ -14596,7 +15012,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "nl": "Het maximum aantal foto's is {max}"
                     },
                     "maxFileSizeMb": {
-                      "en": "The maximum photo size is {mb}MB",
+                      "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
                       "fr": "La taille maximale de la photo est de {mb}MB",
                       "nl": "De maximale bestandsgrootte is {mb}MB"
                     }
@@ -14638,7 +15054,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelNl": "Maaltijden",
                 "required": false,
                 "requiredMessage": {
-                  "en": "Delivered portions must be equal to or greater than requested portions.",
+                  "en": "Delivered portions must be equal to or greater than ordered portions.",
                   "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
                   "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
                 },
@@ -14657,7 +15073,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "minFieldId": "ORD_QTY"
                     },
                     "message": {
-                      "en": "Delivered portions must be equal to or greater than requested portions.",
+                      "en": "Delivered portions must be equal to or greater than ordered portions.",
                       "fr": "Les portions livrées doivent être égales ou supérieures aux portions demandées.",
                       "nl": "De geleverde porties moeten gelijk of groter zijn dan de gevraagde porties."
                     }
@@ -14835,6 +15251,11 @@ export const BUNDLED_FORM_CONFIGS = [
                   "showItemPill": false,
                   "addButtonPlacement": "hidden",
                   "openInOverlay": true,
+                  "closeButtonLabel": {
+                    "en": "Back",
+                    "fr": "Retour",
+                    "nl": "Terug"
+                  },
                   "overlayDetail": {
                     "enabled": true,
                     "header": {
@@ -15293,7 +15714,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Allergens": "Gluten, Fish",
                             "Suppliers": "VDS",
                             "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Standard, No-salt",
+                            "dietaryApplicability": "Diabetic, Standard, No-salt",
                             "__ckOptionValue": "Fishsticks"
                           },
                           {
@@ -15601,7 +16022,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Allergens": "None",
                             "Suppliers": "Freshmed;Mabru;VDS",
                             "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                             "__ckOptionValue": "Parsnip"
                           },
                           {
@@ -15612,7 +16033,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Allergens": "None",
                             "Suppliers": "Freshmed;Mabru;VDS",
                             "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                             "__ckOptionValue": "Turnip"
                           },
                           {
@@ -16354,6 +16775,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Diabetic": [
                               "Chicken stripes",
                               "Chicken cubes",
+                              "Fishsticks",
                               "Greek yogurt",
                               "Cheese",
                               "Brown rice",
@@ -16374,6 +16796,8 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Courgette",
                               "Leek",
                               "Mushroom",
+                              "Parsnip",
+                              "Turnip",
                               "Green beans - frozen",
                               "Chinese mix",
                               "Leek - frozen",
@@ -18402,7 +18826,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "cases": [
                           {
                             "text": {
-                              "en": "Please enter the `Quantity` based on the requested number of portions",
+                              "en": "Please enter the `Quantity` based on the ordered number of portions",
                               "fr": "Veuillez entrer la `Quantité` en fonction du nombre de portions demandé",
                               "nl": "Voer de `Aantal` in op basis van het gevraagde aantal porties"
                             },
@@ -18440,6 +18864,11 @@ export const BUNDLED_FORM_CONFIGS = [
                       },
                       "showItemPill": false,
                       "openInOverlay": true,
+                      "closeButtonLabel": {
+                        "en": "Back",
+                        "fr": "Retour",
+                        "nl": "Terug"
+                      },
                       "addButtonPlacement": "top"
                     },
                     "minRows": 0,
@@ -18450,6 +18879,16 @@ export const BUNDLED_FORM_CONFIGS = [
                         "en": "Select the ingredient(s) not mentioned in the original recipe that you will use to cook today's dish.",
                         "fr": "Sélectionnez le(s) ingrédient(s) non mentionné(s) dans la recette originale que vous utiliserez pour cuisiner le plat d'aujourd'hui.",
                         "nl": "Selecteer het/de ingrediënt(en) die niet in het originele recept staan en die je zult gebruiken om het gerecht van vandaag te koken."
+                      },
+                      "helperText": {
+                        "en": "",
+                        "fr": "",
+                        "nl": ""
+                      },
+                      "searchHelperText": {
+                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
                       },
                       "placeholder": {
                         "en": "Search ingredients",
@@ -18515,11 +18954,11 @@ export const BUNDLED_FORM_CONFIGS = [
           "pair": "ing_ph",
           "listView": false,
           "button": {
-            "action": "renderMarkdownTemplate",
+            "action": "renderHtmlTemplate",
             "templateId": {
-              "EN": "1IRi_p2_cfXtONkB6qCr0MxZNS4Pvh4j9",
-              "FR": "1IRi_p2_cfXtONkB6qCr0MxZNS4Pvh4j9",
-              "NL": "1IRi_p2_cfXtONkB6qCr0MxZNS4Pvh4j9"
+              "EN": "bundle:ingredients_needed.html",
+              "FR": "bundle:ingredients_needed.html",
+              "NL": "bundle:ingredients_needed.html"
             },
             "placements": [
               "form"
@@ -18578,7 +19017,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "uploadConfig": {
             "destinationFolderId": "1xiEjwfcbMaF6XqqAPlqbA8LNd5HiwjGV",
             "minFiles": 1,
-            "maxFiles": 5,
+            "maxFiles": 10,
             "maxFileSizeMb": 10,
             "allowedMimeTypes": [
               "image/*"
@@ -18595,7 +19034,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "nl": "Het maximum aantal foto's is {max}"
               },
               "maxFileSizeMb": {
-                "en": "The maximum photo size is {mb}MB",
+                "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
                 "fr": "La taille maximale de la photo est de {mb}MB",
                 "nl": "De maximale bestandsgrootte is {mb}MB"
               }
@@ -18633,9 +19072,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "id": "MP_NOTES",
           "type": "PARAGRAPH",
           "label": {
-            "en": "Notes (optional)",
-            "fr": "Notes (optionnel)",
-            "nl": "Notities (optioneel)"
+            "en": "Note to customer",
+            "fr": "Note au client",
+            "nl": "Notitie aan klant"
           },
           "required": false,
           "ui": {
@@ -18651,23 +19090,6 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "collapsible": true,
             "defaultCollapsed": false
-          },
-          "listView": false
-        },
-        {
-          "id": "MP_CONFIRM",
-          "type": "CHECKBOX",
-          "label": {
-            "en": "I confirm the above information is correct",
-            "fr": "Je confirme que les informations ci-dessus sont correctes",
-            "nl": "Ik bevestig dat bovenstaande informatie correct is"
-          },
-          "required": true,
-          "ui": {
-            "labelLayout": "stacked"
-          },
-          "group": {
-            "id": "notes"
           },
           "listView": false
         },
@@ -18808,7 +19230,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "id": "MP_HYGIENE",
           "type": "BUTTON",
           "label": {
-            "en": "Hygiene rules document",
+            "en": "Hygiene rules",
             "fr": "Règles d’hygiène",
             "nl": "Hygiënereglement"
           },
@@ -19001,9 +19423,12 @@ export const BUNDLED_FORM_CONFIGS = [
           "FR": "1eqlnWV2DAqjKCOCwRLdatAOXMtbxGm-cKwoVgdQDdxk"
         },
         "emailSubject": {
-          "en": "Meal production summary",
-          "fr": "Synthèse production"
+          "en": "Suivi de production des repas",
+          "fr": "Suivi de production des repas",
+          "nl": "Suivi de production des repas"
         },
+        "emailFrom": "operations@communitykitchen.be",
+        "emailFromName": "Community Kitchen Operations",
         "emailRecipients": [
           {
             "type": "dataSource",
@@ -19040,22 +19465,47 @@ export const BUNDLED_FORM_CONFIGS = [
       },
       "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
       "copyCurrentRecordEnabled": false,
-      "createNewRecordEnabled": false,
-      "actionBars": {
-        "top": {
-          "summary": {
-            "items": [
-              {
-                "type": "system",
-                "id": "create",
-                "menuBehavior": "inline",
-                "actions": [
-                  "createRecordPreset"
-                ]
-              }
+      "copyCurrentRecordDropFields": [
+        "MP_PREP_DATE"
+      ],
+      "copyCurrentRecordProfile": {
+        "values": [
+          "MP_DISTRIBUTOR",
+          "MP_SERVICE"
+        ],
+        "lineItems": [
+          {
+            "groupId": "MP_MEALS_REQUEST",
+            "fields": [
+              "MEAL_TYPE",
+              "ORD_QTY",
+              "FINAL_QTY"
             ]
           }
+        ]
+      },
+      "copyCurrentRecordDialog": {
+        "title": {
+          "en": "Copying record",
+          "fr": "Copie de l'enregistrement",
+          "nl": "Record kopiëren"
         },
+        "message": {
+          "en": "Select a future production date and verify the customer, service and ordered portions information. All changes will be auto-saved and a future dated record will be created.",
+          "fr": "Sélectionnez une date de production future et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté future sera créé.",
+          "nl": "Selecteer een toekomstige productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en een toekomstige gedateerde record wordt aangemaakt."
+        },
+        "confirmLabel": {
+          "en": "OK",
+          "fr": "OK",
+          "nl": "OK"
+        },
+        "showCancel": false,
+        "showCloseButton": false,
+        "dismissOnBackdrop": false
+      },
+      "createNewRecordEnabled": false,
+      "actionBars": {
         "bottom": {
           "list": {
             "items": [
@@ -19160,7 +19610,29 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "deliveryForm",
+            "contextHeader": {
+              "parts": [
+                "MP_DISTRIBUTOR",
+                "MP_SERVICE",
+                "MP_PREP_DATE"
+              ]
+            },
             "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
@@ -19655,15 +20127,33 @@ export const BUNDLED_FORM_CONFIGS = [
                           "overlayContextHeader": {
                             "fields": [
                               {
+                                "fieldRef": "MP_DISTRIBUTOR",
+                                "label": {
+                                  "en": "{{value}}"
+                                }
+                              },
+                              {
+                                "fieldRef": "MP_SERVICE",
+                                "label": {
+                                  "en": "| {{value}}"
+                                }
+                              },
+                              {
+                                "fieldRef": "MP_PREP_DATE",
+                                "label": {
+                                  "en": "| {{value}}"
+                                }
+                              },
+                              {
                                 "fieldRef": "MEAL_TYPE",
                                 "label": {
-                                  "en": "Leftovers for {{value}}"
+                                  "en": "\nLeftovers for {{value}}"
                                 }
                               },
                               {
                                 "fieldRef": "ORD_QTY",
                                 "label": {
-                                  "en": "| {{value}} requested portions"
+                                  "en": "| {{value}} ordered portions"
                                 }
                               }
                             ]
@@ -19965,12 +20455,36 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                   },
                                   "placeholder": {
-                                    "en": "Search ingredients",
-                                    "fr": "Rechercher des ingrédients",
-                                    "nl": "Ingrediënten zoeken"
+                                    "en": "Search leftover ingredients",
+                                    "fr": "Rechercher les ingrédients de la restauration",
+                                    "nl": "Ingrediënten voor restauro zoeken"
                                   },
-                                  "labelLayout": "inline",
+                                  "labelLayout": "stacked",
+                                  "closeButtonLabel": {
+                                    "en": "Back",
+                                    "fr": "Retour",
+                                    "nl": "Terug"
+                                  },
                                   "groupOverride": {
+                                    "minRows": 0,
+                                    "maxRows": 200,
+                                    "addOverlay": {
+                                      "title": {
+                                        "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
+                                        "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
+                                        "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
+                                      },
+                                      "searchHelperText": {
+                                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                      },
+                                      "placeholder": {
+                                        "en": "Search leftover ingredients",
+                                        "fr": "Rechercher les ingrédients de la restauration",
+                                        "nl": "Ingrediënten voor restauro zoeken"
+                                      }
+                                    },
                                     "ui": {
                                       "tableColumns": [
                                         "ING"
@@ -20015,7 +20529,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                         {
                                           "fieldRef": "PREP_TYPE",
                                           "label": {
-                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
+                                            "en": "{{value}}: Add ingredients from previously cooked leftovers that will be added to today's cooked meal",
+                                            "fr": "{{value}}: Ajouter les ingrédients des restes précédemment cuisinés qui seront ajoutés au plat cuisiné d'aujourd'hui",
+                                            "nl": "{{value}}: Voeg ingrediënten toe van eerder gekookte resten die aan de huidige gekookte maaltijd worden toegevoegd"
                                           }
                                         }
                                       ]
@@ -20033,6 +20549,11 @@ export const BUNDLED_FORM_CONFIGS = [
                                           "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
                                           "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
                                           "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
+                                        },
+                                        "searchHelperText": {
+                                          "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                          "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                          "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
@@ -20077,7 +20598,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                         {
                                           "fieldRef": "PREP_TYPE",
                                           "label": {
-                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
+                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish",
+                                            "fr": "{{value}}: Revoir et modifier la liste ci-dessous en ajoutant ou en supprimant pour refléter les ingrédients corrects qui ont été utilisés pour cuisiner la restauration",
+                                            "nl": "{{value}}: Bekijk en bewerk de lijst hieronder door ingrediënten toe te voegen of te verwijderen om de juiste ingrediënten weer te geven die zijn gebruikt om de restauro te koken"
                                           }
                                         }
                                       ]
@@ -20118,7 +20641,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               {
                                 "id": "addLeftover",
                                 "label": {
-                                  "en": "+ another leftover",
+                                  "en": "+ Add leftover",
                                   "fr": "+ une autre restauration",
                                   "nl": "+ een andere restauro"
                                 },
@@ -20283,7 +20806,29 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "foodSafety",
+            "contextHeader": {
+              "parts": [
+                "MP_DISTRIBUTOR",
+                "MP_SERVICE",
+                "MP_PREP_DATE"
+              ]
+            },
             "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
@@ -20327,7 +20872,29 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "portioning",
+            "contextHeader": {
+              "parts": [
+                "MP_DISTRIBUTOR",
+                "MP_SERVICE",
+                "MP_PREP_DATE"
+              ]
+            },
             "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
@@ -20361,16 +20928,17 @@ export const BUNDLED_FORM_CONFIGS = [
               {
                 "kind": "question",
                 "id": "MP_VOLUNTEER"
-              },
-              {
-                "kind": "question",
-                "id": "MP_CONFIRM"
               }
             ],
             "label": {
               "en": "Portioning",
               "fr": "Portionnement",
               "nl": "Portionering"
+            },
+            "helpText": {
+              "en": "Update the number of portions delivered to reflect reality. You must deliver at least the ordered number of portions.",
+              "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées.",
+              "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren."
             }
           }
         ],

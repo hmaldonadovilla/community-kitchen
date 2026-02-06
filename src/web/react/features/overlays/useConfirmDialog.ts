@@ -8,6 +8,8 @@ export type ConfirmDialogState = {
   cancelLabel: string;
   showCancel?: boolean;
   showConfirm?: boolean;
+  dismissOnBackdrop?: boolean;
+  showCloseButton?: boolean;
   kind?: string;
   refId?: string;
 };
@@ -19,6 +21,8 @@ export type ConfirmDialogOpenArgs = {
   cancelLabel: string;
   showCancel?: boolean;
   showConfirm?: boolean;
+  dismissOnBackdrop?: boolean;
+  showCloseButton?: boolean;
   kind?: string;
   refId?: string;
   onConfirm: () => void;
@@ -50,6 +54,8 @@ export const useConfirmDialog = (opts?: {
     cancelLabel: '',
     showCancel: true,
     showConfirm: true,
+    dismissOnBackdrop: true,
+    showCloseButton: true,
     kind: undefined,
     refId: undefined
   });
@@ -94,6 +100,8 @@ export const useConfirmDialog = (opts?: {
       const cancelLabel = (args?.cancelLabel || '').toString();
       const showCancel = args?.showCancel !== false;
       const showConfirm = args?.showConfirm !== false;
+      const dismissOnBackdrop = args?.dismissOnBackdrop !== false;
+      const showCloseButton = args?.showCloseButton !== false;
       const kind = (args?.kind || '').toString() || undefined;
       const refId = (args?.refId || '').toString() || undefined;
       confirmRef.current = args?.onConfirm || null;
@@ -107,6 +115,8 @@ export const useConfirmDialog = (opts?: {
         cancelLabel,
         showCancel,
         showConfirm,
+        dismissOnBackdrop,
+        showCloseButton,
         kind,
         refId
       });

@@ -1339,6 +1339,47 @@ export class Dashboard {
       return out;
     };
 
+    const normalizeStepContextHeaderPart = (raw: any): any => {
+      if (raw === undefined || raw === null) return null;
+      if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
+        const id = normalizeString(raw);
+        return id ? id : null;
+      }
+      if (typeof raw !== 'object') return null;
+      const id = normalizeString((raw as any).id ?? (raw as any).fieldId ?? (raw as any).field);
+      return id ? { id } : null;
+    };
+
+    const normalizeStepContextHeader = (raw: any): any => {
+      if (raw === undefined || raw === null) return undefined;
+      const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : { parts: raw };
+      const keyedParts = Object.keys(source as any)
+        .filter(key => /^part\d+$/i.test(key))
+        .sort((a, b) => Number(a.replace(/\D+/g, '')) - Number(b.replace(/\D+/g, '')))
+        .map(key => (source as any)[key]);
+      const partsRaw =
+        (source as any).parts ??
+        (source as any).fields ??
+        (source as any).include ??
+        (keyedParts.length ? keyedParts : undefined);
+      const partsList: any[] = Array.isArray(partsRaw)
+        ? partsRaw
+        : typeof partsRaw === 'string'
+          ? partsRaw
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : partsRaw
+            ? [partsRaw]
+            : [];
+      const parts = partsList.map(entry => normalizeStepContextHeaderPart(entry)).filter(Boolean);
+      if (!parts.length) return undefined;
+      const out: any = { parts };
+      const separator = normalizeString((source as any).separator);
+      if (separator) out.separator = separator;
+      return out;
+    };
+
     const normalizeTarget = (raw: any): any => {
       if (!raw) return null;
       // Allow compact string as a question id
@@ -1505,6 +1546,8 @@ export class Dashboard {
       if (label) step.label = label;
       const helpText = normalizeLocalized((stepRaw as any).helpText);
       if (helpText) step.helpText = helpText;
+      const contextHeader = normalizeStepContextHeader((stepRaw as any).contextHeader ?? (stepRaw as any).guidedContextHeader);
+      if (contextHeader) step.contextHeader = contextHeader;
       const navRaw = (stepRaw as any).navigation;
       if (navRaw && typeof navRaw === 'object') {
         const nav: any = {};
@@ -1598,11 +1641,22 @@ export class Dashboard {
   private buildFollowupConfig(source: any): FollowupConfig | undefined {
     if (!source || typeof source !== 'object') return undefined;
     const config: FollowupConfig = {};
+    const normalizeOptionalString = (value: any): string | undefined => {
+      if (value === undefined || value === null) return undefined;
+      const text = value.toString().trim();
+      return text ? text : undefined;
+    };
     config.pdfTemplateId = this.normalizeTemplateId(source.pdfTemplateId);
     if (source.pdfFolderId) config.pdfFolderId = source.pdfFolderId;
     if (source.pdfFileNameFieldId) config.pdfFileNameFieldId = source.pdfFileNameFieldId;
     config.emailTemplateId = this.normalizeTemplateId(source.emailTemplateId);
     if (source.emailSubject) config.emailSubject = source.emailSubject;
+    const emailFromRaw = source.emailFrom ?? source.emailSender ?? source.senderEmail ?? source.from;
+    const emailFrom = normalizeOptionalString(emailFromRaw);
+    if (emailFrom) config.emailFrom = emailFrom;
+    const emailFromNameRaw = source.emailFromName ?? source.emailSenderName ?? source.senderName ?? source.fromName;
+    const emailFromName = normalizeOptionalString(emailFromNameRaw);
+    if (emailFromName) config.emailFromName = emailFromName;
     if (source.emailRecipients) {
       config.emailRecipients = this.normalizeRecipientEntries(source.emailRecipients);
     }

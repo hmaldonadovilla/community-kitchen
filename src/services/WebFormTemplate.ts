@@ -147,6 +147,8 @@ export function buildWebFormHtml(
         --ck-font-group-title: 36px;
         --ck-font-pill: 26px;
         --ck-font-caret: 38px;
+        --ck-font-helper: calc(var(--ck-font-label) * 0.85);
+        --ck-helper-opacity: 0.78;
 
         /* Typography */
         --ck-font-family: ${SYSTEM_FONT_STACK};
@@ -476,14 +478,31 @@ export function buildWebFormHtml(
         border-radius: 12px;
         cursor: pointer;
       }
+      button .ck-button-text {
+        min-width: 0;
+      }
+      button.ck-button-wrap-left .ck-button-text,
+      button.ck-button-wrap-left .ck-bottom-label {
+        display: inline-block;
+        min-width: 0;
+        white-space: normal;
+        text-align: left;
+      }
       button:disabled { opacity: 0.6; cursor: not-allowed; }
       .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
-      .muted { color: var(--muted); font-size: calc(var(--ck-font-label) * 0.85); font-weight: 400; }
+      .muted {
+        color: var(--text);
+        opacity: var(--ck-helper-opacity);
+        font-size: var(--ck-font-helper);
+        font-weight: 400;
+        line-height: 1.35;
+      }
       .ck-step-help-text {
         margin: 0 0 12px;
-        color: var(--muted);
-        font-size: calc(var(--ck-font-control) * 0.85);
-        line-height: 1.4;
+        color: var(--text);
+        opacity: var(--ck-helper-opacity);
+        font-size: var(--ck-font-helper);
+        line-height: 1.35;
         font-weight: 400;
       }
       .status { margin-top: 8px; padding: 8px 10px; background: transparent; border: 1px solid var(--border); border-radius: 12px; color: var(--text); }
@@ -1087,6 +1106,15 @@ export function buildWebFormHtml(
         background: var(--ck-secondary-bg);
         border-color: var(--ck-secondary-border);
         color: var(--ck-secondary-text);
+      }
+      .ck-bottom-item.ck-bottom-item--primary,
+      .ck-bottom-item.ck-bottom-item--primary.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accentText);
+      }
+      .ck-bottom-item.ck-bottom-item--primary:disabled {
+        opacity: 0.6;
       }
       .ck-bottom-item--back {
         /* Guided steps Back button: visually primary, but distinct from the Next/Submit accent color. */
