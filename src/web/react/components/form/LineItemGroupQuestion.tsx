@@ -944,6 +944,48 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             changed = true;
           }
 
+          const isLeftoversGroupKey = (groupKey: string): boolean => {
+            const key = (groupKey || '').toString().trim();
+            if (!key) return false;
+            if (key === 'MP_TYPE_LI') return true;
+            const parsed = parseSubgroupKey(key);
+            return (parsed?.subGroupId || '').toString() === 'MP_TYPE_LI';
+          };
+          const leftoversGroupKey = isLeftoversGroupKey(q.id)
+            ? q.id
+            : deleteRoots.map(root => root.groupId).find(groupKey => isLeftoversGroupKey(groupKey)) || '';
+          if (leftoversGroupKey) {
+            const existingRows = (next[leftoversGroupKey] || []) as LineItemRowState[];
+            const hasNonCookRow = existingRows.some(row => {
+              const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
+              return (prepType || '').toString().trim().toLowerCase() !== 'cook';
+            });
+            if (!hasNonCookRow) {
+              const parsedLeftovers = parseSubgroupKey(leftoversGroupKey);
+              const rowIdPrefix = (parsedLeftovers?.subGroupId || leftoversGroupKey || 'MP_TYPE_LI').toString();
+              const seededRow: LineItemRowState = {
+                id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
+                values: {
+                  PREP_TYPE: '',
+                  [ROW_SOURCE_KEY]: 'manual'
+                },
+                parentId: parsedLeftovers?.parentRowId,
+                parentGroupId: parsedLeftovers?.parentGroupKey
+              };
+              next = {
+                ...next,
+                [leftoversGroupKey]: [...existingRows, seededRow]
+              };
+              changed = true;
+              onDiagnostic?.('lineItems.leftovers.seedDefault', {
+                groupId: q.id,
+                rowId: row.id,
+                targetKey: leftoversGroupKey,
+                source: 'rowFlow.deleteRow'
+              });
+            }
+          }
+
           if (!changed) return prev;
           const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
             mode: 'init'
