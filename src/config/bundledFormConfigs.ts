@@ -7881,12 +7881,36 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                   },
                                   "placeholder": {
-                                    "en": "Search ingredients",
-                                    "fr": "Rechercher des ingrédients",
-                                    "nl": "Ingrediënten zoeken"
+                                    "en": "Search leftover ingredients",
+                                    "fr": "Rechercher les ingrédients de la restauration",
+                                    "nl": "Ingrediënten voor restauro zoeken"
                                   },
                                   "labelLayout": "stacked",
+                                  "closeButtonLabel": {
+                                    "en": "Back",
+                                    "fr": "Retour",
+                                    "nl": "Terug"
+                                  },
                                   "groupOverride": {
+                                    "minRows": 0,
+                                    "maxRows": 200,
+                                    "addOverlay": {
+                                      "title": {
+                                        "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
+                                        "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
+                                        "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
+                                      },
+                                      "searchHelperText": {
+                                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                      },
+                                      "placeholder": {
+                                        "en": "Search leftover ingredients",
+                                        "fr": "Rechercher les ingrédients de la restauration",
+                                        "nl": "Ingrediënten voor restauro zoeken"
+                                      }
+                                    },
                                     "ui": {
                                       "tableColumns": [
                                         "ING"
@@ -7926,6 +7950,18 @@ export const BUNDLED_FORM_CONFIGS = [
                                   {
                                     "type": "openOverlay",
                                     "groupId": "MP_INGREDIENTS_LI",
+                                    "overlayHelperText": {
+                                      "fields": [
+                                        {
+                                          "fieldRef": "PREP_TYPE",
+                                          "label": {
+                                            "en": "{{value}}: Add ingredients from previously cooked leftovers that will be added to today's cooked meal",
+                                            "fr": "{{value}}: Ajouter les ingrédients des restes précédemment cuisinés qui seront ajoutés au plat cuisiné d'aujourd'hui",
+                                            "nl": "{{value}}: Voeg ingrediënten toe van eerder gekookte resten die aan de huidige gekookte maaltijd worden toegevoegd"
+                                          }
+                                        }
+                                      ]
+                                    },
                                     "closeButtonLabel": {
                                       "en": "Back",
                                       "fr": "Retour",
@@ -7940,10 +7976,10 @@ export const BUNDLED_FORM_CONFIGS = [
                                           "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
                                           "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                         },
-                                        "helperText": {
-                                          "en": "",
-                                          "fr": "",
-                                          "nl": ""
+                                        "searchHelperText": {
+                                          "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                          "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                          "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
@@ -7988,7 +8024,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                         {
                                           "fieldRef": "PREP_TYPE",
                                           "label": {
-                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
+                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish",
+                                            "fr": "{{value}}: Revoir et modifier la liste ci-dessous en ajoutant ou en supprimant pour refléter les ingrédients corrects qui ont été utilisés pour cuisiner la restauration",
+                                            "nl": "{{value}}: Bekijk en bewerk de lijst hieronder door ingrediënten toe te voegen of te verwijderen om de juiste ingrediënten weer te geven die zijn gebruikt om de restauro te koken"
                                           }
                                         }
                                       ]
@@ -8695,9 +8733,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Productiedatum wijzigen?"
           },
           "message": {
-            "en": "Changing the production date of an ongoing Meal production will remove permanently all data previously saved, including customer and service. Do you want to continue?",
-            "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données déjà enregistrées, y compris le client et le service. Voulez-vous continuer ?",
-            "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen gegevens definitief verwijderd, inclusief klant en service. Wilt u doorgaan?"
+            "en": "Changing the production date of an ongoing Meal production will remove permanently all service data previously saved. Do you want to continue?",
+            "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
+            "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
           },
           "confirmLabel": {
             "en": "Yes, delete permanently data previously entered",
@@ -14265,9 +14303,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Productiedatum wijzigen?"
             },
             "message": {
-              "en": "Changing the production date of an ongoing Meal production will remove permanently all data previously saved, including customer and service. Do you want to continue?",
-              "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données déjà enregistrées, y compris le client et le service. Voulez-vous continuer ?",
-              "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen gegevens definitief verwijderd, inclusief klant en service. Wilt u doorgaan?"
+              "en": "Changing the production date of an ongoing Meal production will remove permanently all service data previously saved. Do you want to continue?",
+              "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
+              "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
             },
             "confirmLabel": {
               "en": "Yes, delete permanently data previously entered",
@@ -20719,12 +20757,36 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                   },
                                   "placeholder": {
-                                    "en": "Search ingredients",
-                                    "fr": "Rechercher des ingrédients",
-                                    "nl": "Ingrediënten zoeken"
+                                    "en": "Search leftover ingredients",
+                                    "fr": "Rechercher les ingrédients de la restauration",
+                                    "nl": "Ingrediënten voor restauro zoeken"
                                   },
                                   "labelLayout": "stacked",
+                                  "closeButtonLabel": {
+                                    "en": "Back",
+                                    "fr": "Retour",
+                                    "nl": "Terug"
+                                  },
                                   "groupOverride": {
+                                    "minRows": 0,
+                                    "maxRows": 200,
+                                    "addOverlay": {
+                                      "title": {
+                                        "en": "Select the ingredient(s) representing the leftover that will be added to today's meal.",
+                                        "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
+                                        "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
+                                      },
+                                      "searchHelperText": {
+                                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                      },
+                                      "placeholder": {
+                                        "en": "Search leftover ingredients",
+                                        "fr": "Rechercher les ingrédients de la restauration",
+                                        "nl": "Ingrediënten voor restauro zoeken"
+                                      }
+                                    },
                                     "ui": {
                                       "tableColumns": [
                                         "ING"
@@ -20764,6 +20826,18 @@ export const BUNDLED_FORM_CONFIGS = [
                                   {
                                     "type": "openOverlay",
                                     "groupId": "MP_INGREDIENTS_LI",
+                                    "overlayHelperText": {
+                                      "fields": [
+                                        {
+                                          "fieldRef": "PREP_TYPE",
+                                          "label": {
+                                            "en": "{{value}}: Add ingredients from previously cooked leftovers that will be added to today's cooked meal",
+                                            "fr": "{{value}}: Ajouter les ingrédients des restes précédemment cuisinés qui seront ajoutés au plat cuisiné d'aujourd'hui",
+                                            "nl": "{{value}}: Voeg ingrediënten toe van eerder gekookte resten die aan de huidige gekookte maaltijd worden toegevoegd"
+                                          }
+                                        }
+                                      ]
+                                    },
                                     "closeButtonLabel": {
                                       "en": "Back",
                                       "fr": "Retour",
@@ -20778,10 +20852,10 @@ export const BUNDLED_FORM_CONFIGS = [
                                           "fr": "Sélectionnez le(s) ingrédient(s) représentant la restauration qui sera ajoutée au plat d'aujourd'hui.",
                                           "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                         },
-                                        "helperText": {
-                                          "en": "",
-                                          "fr": "",
-                                          "nl": ""
+                                        "searchHelperText": {
+                                          "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                          "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                                          "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
@@ -20826,7 +20900,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                         {
                                           "fieldRef": "PREP_TYPE",
                                           "label": {
-                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish"
+                                            "en": "{{value}}: Review and edit below list of ingredients by removing or adding to reflect the correct ingredients that were used to cook the leftover dish",
+                                            "fr": "{{value}}: Revoir et modifier la liste ci-dessous en ajoutant ou en supprimant pour refléter les ingrédients corrects qui ont été utilisés pour cuisiner la restauration",
+                                            "nl": "{{value}}: Bekijk en bewerk de lijst hieronder door ingrediënten toe te voegen of te verwijderen om de juiste ingrediënten weer te geven die zijn gebruikt om de restauro te koken"
                                           }
                                         }
                                       ]

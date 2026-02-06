@@ -24,6 +24,21 @@ description: Development Rules
 - Run unit tests to ensure the new feature works as expected. Fix failures and update the tests to cover the new feature.
 - Run `npm run build` to ensure the application can be compiled successfully.
 
+## Deployment flow (staging only, mandatory)
+
+- Only deploy using `npm run deploy:apps-script`.
+- Do not deploy by manually copy/pasting `dist/Code.js` in the Apps Script editor.
+- Do not run `clasp push` or `clasp deploy` directly.
+- Do not create new web app deployments for this project.
+- Always deploy to **staging** only.
+- Keep `DEPLOY_ENV=staging` in `.env.deploy.staging`.
+- The human developer owns `CLASP_DEPLOYMENT_ID` and `CLASP_TARGET_WEB_APP_URL` values in `.env.deploy.staging`.
+- Honor `.env.deploy.staging` as the source of truth for deployment id and target web URL.
+- Do not override, regenerate, or replace deployment id / web URL values unless the human developer explicitly asks for it.
+- Before deploying, run `npm run build` (or rely on the build step inside `npm run deploy:apps-script`).
+- After deploying, refresh the page before validating behavior.
+- After deployment changes, run validation tests using Playwright.
+
 ## Architecture, separation of concerns, and scalability
 
 - Prefer clear boundaries: **UI (React components)**, **state (hooks/store)**, **domain logic (pure TS)**, and **infrastructure (API/IO)** must be separated.

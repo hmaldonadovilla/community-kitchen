@@ -19,19 +19,31 @@ import { tSystem } from '../../../systemStrings';
 
 type CustomButton = { id: string; label: string; action: ButtonAction; placements: ButtonPlacement[] };
 
-const PRIMARY_ACTION_LABELS = new Set([
-  'View/Edit',
-  'Ingredients Needed',
-  'View/Edit ingredients',
-  'Back to production',
-  'Back',
-  '+Add ingredient',
-  '+another leftover',
-  'Close',
-  'Refresh'
-]);
+const normalizeActionToken = (value: string): string =>
+  (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^\+\s+/, '+');
 
-const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has((label || '').toString().trim());
+const PRIMARY_ACTION_LABELS = new Set([
+  'view/edit',
+  'ingredients needed',
+  'view/edit ingredients',
+  'back to production',
+  'back',
+  '+add ingredient',
+  '+another leftover',
+  '+add leftover',
+  'close',
+  'refresh',
+  'tap to collapse',
+  'tap to collaps',
+  'tap to expand'
+].map(normalizeActionToken));
+
+const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has(normalizeActionToken(label));
 
 const IconWrap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="ck-bottom-icon" aria-hidden="true">

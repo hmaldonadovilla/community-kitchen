@@ -134,19 +134,31 @@ import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
 
-const PRIMARY_ACTION_LABELS = new Set([
-  'View/Edit',
-  'Ingredients Needed',
-  'View/Edit ingredients',
-  'Back to production',
-  'Back',
-  '+Add ingredient',
-  '+another leftover',
-  'Close',
-  'Refresh'
-]);
+const normalizeActionToken = (value: string): string =>
+  (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^\+\s+/, '+');
 
-const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has((label || '').toString().trim());
+const PRIMARY_ACTION_LABELS = new Set([
+  'view/edit',
+  'ingredients needed',
+  'view/edit ingredients',
+  'back to production',
+  'back',
+  '+add ingredient',
+  '+another leftover',
+  '+add leftover',
+  'close',
+  'refresh',
+  'tap to collapse',
+  'tap to collaps',
+  'tap to expand'
+].map(normalizeActionToken));
+
+const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has(normalizeActionToken(label));
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -3415,11 +3427,16 @@ const FormView: React.FC<FormViewProps> = ({
 	  const attemptCloseSubgroupOverlay = useCallback(
     (source: 'button' | 'escape') => {
       if (!subgroupOverlay.open) return;
-      if (overlayStackRef.current.length) {
-        closeSubgroupOverlay();
-        return;
-      }
       const subgroupKey = (subgroupOverlay.subKey || '').toString();
+      const subgroupInfo = subgroupKey ? parseSubgroupKey(subgroupKey) : null;
+      const subgroupParentGroupKey = (subgroupInfo?.parentGroupKey || '').toString();
+      const subgroupParentGroupId = (() => {
+        if (!subgroupParentGroupKey) return '';
+        const tokens = subgroupParentGroupKey.split('::').filter(Boolean);
+        return (tokens[tokens.length - 1] || '').toString();
+      })();
+      const isPartDishIngredientsOverlay =
+        subgroupParentGroupId === 'MP_TYPE_LI' && (subgroupInfo?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI';
       const overlayFields = (subgroupOverlay.groupOverride as any)?.fields;
       const isLeftoversOverlay =
         Array.isArray(overlayFields) && overlayFields.some((f: any) => (f?.id || '').toString().trim() === 'PREP_TYPE');
@@ -3448,6 +3465,110 @@ const FormView: React.FC<FormViewProps> = ({
         const v = ((row?.values || {}) as any)?.PREP_TYPE;
         return typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined && (!Array.isArray(v) || v.length > 0);
       });
+      const removeLineRowByCascade = (groupId: string, rowId: string) => {
+        if (!groupId || !rowId) return;
+        const prevLineItems = lineItemsRef.current || {};
+        const groupQuestion = definition.questions.find(q => (q?.id || '').toString() === groupId);
+        const targetRow = (prevLineItems[groupId] || []).find((r: any) => (r?.id || '').toString() === rowId);
+        if (onSelectionEffect && groupQuestion && targetRow) {
+          const effectFields = ((groupQuestion as any).lineItemConfig?.fields || []).filter(
+            (field: any) => Array.isArray(field?.selectionEffects) && field.selectionEffects.length
+          );
+          effectFields.forEach((field: any) => {
+            const contextId = buildLineContextId(groupId, rowId, (field?.id || '').toString());
+            onSelectionEffect(field as WebQuestionDefinition, null, {
+              contextId,
+              lineItem: { groupId, rowId, rowValues: (targetRow as any)?.values || {} },
+              forceContextReset: true
+            });
+          });
+        }
+        const cascade = cascadeRemoveLineItemRows({ lineItems: prevLineItems, roots: [{ groupId, rowId }] });
+        const marked = markRecipeIngredientsDirtyForGroupKey(cascade.lineItems, groupId);
+        if (cascade.removedSubgroupKeys.length) {
+          setSubgroupSelectors(prevSel => {
+            const nextSel = { ...prevSel };
+            cascade.removedSubgroupKeys.forEach(key => {
+              delete (nextSel as any)[key];
+            });
+            return nextSel;
+          });
+        }
+        const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(
+          definition,
+          (valuesRef.current || {}) as Record<string, FieldValue>,
+          marked.lineItems,
+          { mode: 'init' }
+        );
+        setValues(nextValues);
+        setLineItems(recomputed);
+        runSelectionEffectsForAncestorRows(groupId, prevLineItems, recomputed, { mode: 'init', topValues: nextValues });
+      };
+      if (source === 'button' && isPartDishIngredientsOverlay && rowsInOverlay.length === 0) {
+        const parentGroupKey = subgroupParentGroupKey || (subgroupInfo?.parentGroupId || '').toString();
+        const parentRowId = (subgroupInfo?.parentRowId || '').toString();
+        removeLineRowByCascade(parentGroupKey, parentRowId);
+        overlayStackRef.current = [];
+        setSubgroupOverlay({ open: false });
+        onDiagnostic?.('subgroup.overlay.close');
+        if (leftoversAutosaveHoldRef.current?.rootSubKey === subgroupKey) {
+          leftoversAutosaveHoldRef.current = null;
+          setAutoSaveHold?.(false, { reason: 'leftoversOverlay' });
+          onDiagnostic?.('autosave.hold.request', { hold: false, reason: 'leftoversOverlay', subKey: subgroupKey });
+        }
+        onDiagnostic?.('subgroup.overlay.close.partDish.discardEmpty', {
+          source,
+          subgroupKey,
+          parentGroupKey,
+          parentRowId
+        });
+        return;
+      }
+      if (overlayStackRef.current.length) {
+        closeSubgroupOverlay();
+        return;
+      }
+      const discardLeftoversAndReturn = () => {
+        const parentGroupId = (subgroupInfo?.parentGroupId || subgroupInfo?.rootGroupId || '').toString();
+        const parentRowId = (subgroupInfo?.parentRowId || '').toString();
+        const parentGroupQuestion = definition.questions.find(q => (q?.id || '').toString() === parentGroupId);
+        const isReheatField = (parentGroupQuestion as any)?.lineItemConfig?.fields?.find(
+          (f: any) => (f?.id || '').toString().trim() === 'MP_IS_REHEAT'
+        );
+        setLineItems(prevLineItems => {
+          let nextLineItems = prevLineItems;
+          if (parentGroupId && parentRowId) {
+            const parentRows = nextLineItems[parentGroupId] || [];
+            const nextParentRows = parentRows.map((r: any) => {
+              if ((r?.id || '').toString() !== parentRowId) return r;
+              const rowValues = { ...(r?.values || {}) };
+              rowValues.MP_IS_REHEAT = 'No';
+              rowValues.LEFTOVER_INFO = 'No leftover';
+              return { ...r, values: rowValues };
+            });
+            nextLineItems = { ...nextLineItems, [parentGroupId]: nextParentRows };
+          }
+          return nextLineItems;
+        });
+        if (onSelectionEffect && parentGroupId && parentRowId && isReheatField) {
+          const parentRows = lineItemsRef.current[parentGroupId] || [];
+          const parentRow = parentRows.find((r: any) => (r?.id || '').toString() === parentRowId);
+          const rowValues = { ...(parentRow?.values || {}) } as any;
+          rowValues.MP_IS_REHEAT = 'No';
+          rowValues.LEFTOVER_INFO = 'No leftover';
+          onSelectionEffect(isReheatField as WebQuestionDefinition, 'No', {
+            contextId: buildLineContextId(parentGroupId, parentRowId, 'MP_IS_REHEAT'),
+            lineItem: { groupId: parentGroupId, rowId: parentRowId, rowValues },
+            forceContextReset: true
+          });
+        }
+        closeSubgroupOverlay();
+      };
+      if (source === 'button' && isLeftoversRoot && rowsInOverlay.length === 0) {
+        discardLeftoversAndReturn();
+        onDiagnostic?.('subgroup.overlay.close.leftovers.discard.empty', { source, subgroupKey });
+        return;
+      }
       if (source === 'button' && isLeftoversRoot && rowsInOverlay.length > 0 && !hasPrepTypeSelected && openConfirmDialogResolved) {
         openConfirmDialogResolved({
           title: 'No leftover type selected',
@@ -3459,43 +3580,7 @@ const FormView: React.FC<FormViewProps> = ({
           showCloseButton: false,
           kind: 'leftoversOverlayDiscard',
           refId: `${subgroupKey}::leftoversDiscard`,
-          onConfirm: () => {
-            const subgroupInfo = subgroupKey ? parseSubgroupKey(subgroupKey) : null;
-            const parentGroupId = (subgroupInfo?.parentGroupId || subgroupInfo?.rootGroupId || '').toString();
-            const parentRowId = (subgroupInfo?.parentRowId || '').toString();
-            const parentGroupQuestion = definition.questions.find(q => (q?.id || '').toString() === parentGroupId);
-            const isReheatField = (parentGroupQuestion as any)?.lineItemConfig?.fields?.find(
-              (f: any) => (f?.id || '').toString().trim() === 'MP_IS_REHEAT'
-            );
-            setLineItems(prevLineItems => {
-              let nextLineItems = prevLineItems;
-              if (parentGroupId && parentRowId) {
-                const parentRows = nextLineItems[parentGroupId] || [];
-                const nextParentRows = parentRows.map((r: any) => {
-                  if ((r?.id || '').toString() !== parentRowId) return r;
-                  const rowValues = { ...(r?.values || {}) };
-                  rowValues.MP_IS_REHEAT = 'No';
-                  rowValues.LEFTOVER_INFO = 'No leftover';
-                  return { ...r, values: rowValues };
-                });
-                nextLineItems = { ...nextLineItems, [parentGroupId]: nextParentRows };
-              }
-              return nextLineItems;
-            });
-            if (onSelectionEffect && parentGroupId && parentRowId && isReheatField) {
-              const parentRows = lineItemsRef.current[parentGroupId] || [];
-              const parentRow = parentRows.find((r: any) => (r?.id || '').toString() === parentRowId);
-              const rowValues = { ...(parentRow?.values || {}) } as any;
-              rowValues.MP_IS_REHEAT = 'No';
-              rowValues.LEFTOVER_INFO = 'No leftover';
-              onSelectionEffect(isReheatField as WebQuestionDefinition, 'No', {
-                contextId: buildLineContextId(parentGroupId, parentRowId, 'MP_IS_REHEAT'),
-                lineItem: { groupId: parentGroupId, rowId: parentRowId, rowValues },
-                forceContextReset: true
-              });
-            }
-            closeSubgroupOverlay();
-          },
+          onConfirm: discardLeftoversAndReturn,
           onCancel: () => {
             // Stay in overlay so the user can select a leftover type.
           }
@@ -3541,6 +3626,7 @@ const FormView: React.FC<FormViewProps> = ({
 	      onDiagnostic,
 	      onSelectionEffect,
 	      openConfirmDialogResolved,
+	      setAutoSaveHold,
 	      setLineItems,
 	      subgroupOverlay.closeConfirm,
 	      subgroupOverlay.groupOverride,
@@ -3549,6 +3635,54 @@ const FormView: React.FC<FormViewProps> = ({
 	      subgroupOverlay.subKey
 	    ]
 	  );
+
+  const handleLineSelectOverlayBack = useCallback(() => {
+    const groupKey = (overlay.groupId || '').toString();
+    const subgroupInfo = groupKey ? parseSubgroupKey(groupKey) : null;
+    const subgroupParentGroupKey = (subgroupInfo?.parentGroupKey || '').toString();
+    const subgroupParentGroupId = (() => {
+      if (!subgroupParentGroupKey) return '';
+      const tokens = subgroupParentGroupKey.split('::').filter(Boolean);
+      return (tokens[tokens.length - 1] || '').toString();
+    })();
+    const isPartDishIngredientsOverlay =
+      subgroupParentGroupId === 'MP_TYPE_LI' && (subgroupInfo?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI';
+
+    setOverlay({ open: false, options: [], selected: [] });
+    if (!isPartDishIngredientsOverlay || !groupKey) return;
+
+    const rowsAll = lineItemsRef.current[groupKey] || [];
+    const rowFilter =
+      subgroupOverlay.open && subgroupOverlay.subKey === groupKey ? subgroupOverlay.rowFilter : null;
+    const rowsFiltered = rowFilter
+      ? rowsAll.filter((row: any) => {
+          const rowValues = (row?.values || {}) as any;
+          const includeWhen = (rowFilter as any)?.includeWhen;
+          const excludeWhen = (rowFilter as any)?.excludeWhen;
+          const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+          const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+          const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
+          return includeOk && !excludeMatch;
+        })
+      : rowsAll;
+
+    if (rowsFiltered.length > 0) return;
+
+    onDiagnostic?.('lineItems.overlay.back.partDish.discardEmpty', {
+      groupKey,
+      subgroupParentGroupKey,
+      subgroupParentGroupId
+    });
+    attemptCloseSubgroupOverlay('button');
+  }, [
+    attemptCloseSubgroupOverlay,
+    onDiagnostic,
+    overlay.groupId,
+    setOverlay,
+    subgroupOverlay.open,
+    subgroupOverlay.rowFilter,
+    subgroupOverlay.subKey
+  ]);
 
   const closeLineItemGroupOverlay = useCallback(() => {
     const previous = overlayStackRef.current.pop();
@@ -3899,7 +4033,22 @@ const FormView: React.FC<FormViewProps> = ({
       }
       const hideInlineSubgroups = options?.hideInlineSubgroups === true;
       const hideCloseButton = options?.hideCloseButton === true;
-      const closeButtonLabel = resolveLocalizedString(options?.closeButtonLabel, language, '').trim();
+      const subgroupDefaults = resolveSubgroupDefs(subKey);
+      const subgroupParsed = parseSubgroupKey(subKey);
+      const subgroupParentGroupId = (() => {
+        const parentGroupKey = (subgroupParsed?.parentGroupKey || '').toString();
+        if (!parentGroupKey) return '';
+        const tokens = parentGroupKey.split('::').filter(Boolean);
+        return (tokens[tokens.length - 1] || '').toString();
+      })();
+      const isPartDishIngredientsOverlay =
+        (subgroupParsed?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI' && subgroupParentGroupId === 'MP_TYPE_LI';
+      const closeButtonLabelRaw =
+        options?.closeButtonLabel ??
+        (groupOverride as any)?.ui?.closeButtonLabel ??
+        (subgroupDefaults?.sub as any)?.ui?.closeButtonLabel;
+      const closeButtonLabelDefault = isPartDishIngredientsOverlay ? tSystem('actions.back', language, 'Back') : '';
+      const closeButtonLabel = resolveLocalizedString(closeButtonLabelRaw, language, '').trim() || closeButtonLabelDefault;
       const closeConfirm = options?.closeConfirm;
       const label = options?.label;
       const contextHeader = options?.contextHeader;
@@ -3934,7 +4083,7 @@ const FormView: React.FC<FormViewProps> = ({
         onDiagnostic?.('form.overlay.closeButton.hidden', { scope: 'subgroup', source });
       }
     },
-    [language, lineItemGroupOverlay, onDiagnostic, overlay.open, setAutoSaveHold, subgroupOverlay]
+    [language, lineItemGroupOverlay, onDiagnostic, overlay.open, resolveSubgroupDefs, setAutoSaveHold, subgroupOverlay]
   );
 
   const openLineItemGroupOverlay = useCallback(
@@ -7151,6 +7300,7 @@ const FormView: React.FC<FormViewProps> = ({
         if (action === 'openUrlField' && !(q as any)?.button?.fieldId) return null;
 
         const label = resolveLabel(q, language);
+        const primary = isPrimaryActionLabel(label);
         const busyThis = !!reportBusy && reportBusyId === q.id;
         const disabled = submitting || !onReportButton || !!reportBusy;
         const buttonLabelStyle = inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly;
@@ -7165,7 +7315,7 @@ const FormView: React.FC<FormViewProps> = ({
               type="button"
               onClick={() => onReportButton?.(q.id)}
               disabled={disabled}
-              style={withDisabled(buttonStyles.secondary, disabled)}
+              style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, disabled)}
             >
               {busyThis ? tSystem('common.loading', language, 'Loading…') : label}
             </button>
@@ -8800,10 +8950,12 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       if (isSubOverlayAddMode && subConfig.anchorFieldId) {
+        const addLinesLabel = resolveLocalizedString(subConfig.addButtonLabel, language, 'Add lines');
+        const addLinesPrimary = isPrimaryActionLabel(addLinesLabel);
                         return (
                           <button
                             type="button"
-            style={withDisabled(buttonStyles.secondary, submitting || subSelectorIsMissing || subMaxRowsReached)}
+            style={withDisabled(addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary, submitting || subSelectorIsMissing || subMaxRowsReached)}
             disabled={submitting || subSelectorIsMissing || subMaxRowsReached}
                             onClick={async () => {
               if (subMaxRowsReached) {
@@ -8873,13 +9025,15 @@ const FormView: React.FC<FormViewProps> = ({
                             }}
                           >
             <PlusIcon />
-            {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add lines')}
+            {addLinesLabel}
                           </button>
                         );
                       }
       if (canUseSubSelectorOverlay) {
         return null;
       }
+      const addLineLabel = resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line');
+      const addLinePrimary = isPrimaryActionLabel(addLineLabel);
                       return (
         <button
           type="button"
@@ -8905,10 +9059,10 @@ const FormView: React.FC<FormViewProps> = ({
             }
             addLineItemRowManual(subKey, Object.keys(preset).length ? preset : undefined, subAddRowOptions);
           }}
-          style={withDisabled(buttonStyles.secondary, subSelectorIsMissing || subMaxRowsReached)}
+          style={withDisabled(addLinePrimary ? buttonStyles.primary : buttonStyles.secondary, subSelectorIsMissing || subMaxRowsReached)}
         >
           <PlusIcon />
-          {resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line')}
+          {addLineLabel}
                         </button>
                       );
                     };
@@ -11205,11 +11359,13 @@ const FormView: React.FC<FormViewProps> = ({
         );
       }
       if (isOverlayAddMode && groupCfg.anchorFieldId) {
+        const addLinesLabel = resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLines', language, 'Add lines'));
+        const addLinesPrimary = isPrimaryActionLabel(addLinesLabel);
         return (
           <button
             type="button"
             disabled={locked || selectorIsMissing || maxRowsReached}
-            style={withDisabled(buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
+            style={withDisabled(addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
             onClick={async () => {
               if (locked || selectorIsMissing || maxRowsReached) {
                 if (maxRowsReached) {
@@ -11279,13 +11435,15 @@ const FormView: React.FC<FormViewProps> = ({
             }}
           >
             <PlusIcon />
-            {resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLines', language, 'Add lines'))}
+            {addLinesLabel}
           </button>
         );
       }
       if (canUseSelectorOverlay) {
         return null;
       }
+      const addLineLabel = resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLine', language, 'Add line'));
+      const addLinePrimary = isPrimaryActionLabel(addLineLabel);
       return (
         <button
           type="button"
@@ -11308,10 +11466,10 @@ const FormView: React.FC<FormViewProps> = ({
                 : undefined;
             addLineItemRowManual(groupId, selectorPreset, groupAddRowOptions);
           }}
-          style={withDisabled(buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
+          style={withDisabled(addLinePrimary ? buttonStyles.primary : buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
         >
           <PlusIcon />
-          {resolveLocalizedString(groupCfg.addButtonLabel, language, tSystem('lineItems.addLine', language, 'Add line'))}
+          {addLineLabel}
         </button>
       );
     };
@@ -11692,7 +11850,7 @@ const FormView: React.FC<FormViewProps> = ({
                               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                 <button
                                   type="button"
-                                  style={buttonStyles.secondary}
+                                  style={isPrimaryActionLabel(overlayDetailEditLabel) ? buttonStyles.primary : buttonStyles.secondary}
                                   onClick={() => {
                                     if (!overlayDetailSelectionForGroup) return;
                                     setOverlayDetailSelection({ groupId, rowId: overlayDetailSelectionForGroup.rowId, mode: 'edit' });
@@ -12824,6 +12982,7 @@ const FormView: React.FC<FormViewProps> = ({
         language={language}
         submitting={submitting}
         onDiagnostic={onDiagnostic}
+        onBack={handleLineSelectOverlayBack}
         addLineItemRowManual={addLineItemRowManual}
       />
       {showFallbackConfirmOverlay ? (

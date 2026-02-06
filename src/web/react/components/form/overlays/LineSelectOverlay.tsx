@@ -24,12 +24,13 @@ export const LineSelectOverlay: React.FC<{
   language: LangCode;
   submitting: boolean;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
+  onBack?: () => void;
   addLineItemRowManual: (
     groupId: string,
     preset?: Record<string, any>,
     options?: { configOverride?: any; rowFilter?: { includeWhen?: any; excludeWhen?: any } | null }
   ) => LineItemAddResult | undefined;
-}> = ({ overlay, setOverlay, language, submitting, onDiagnostic, addLineItemRowManual }) => {
+}> = ({ overlay, setOverlay, language, submitting, onDiagnostic, onBack, addLineItemRowManual }) => {
   const [query, setQuery] = useState('');
   const [dedupMessage, setDedupMessage] = useState('');
   const selectedCount = (overlay.selected || []).length;
@@ -226,7 +227,13 @@ export const LineSelectOverlay: React.FC<{
         >
           <button
             type="button"
-            onClick={() => setOverlay({ open: false, options: [], selected: [] })}
+            onClick={() => {
+              if (onBack) {
+                onBack();
+                return;
+              }
+              setOverlay({ open: false, options: [], selected: [] });
+            }}
             style={buttonStyles.primary}
           >
             {tSystem('common.back', language, 'Back')}
