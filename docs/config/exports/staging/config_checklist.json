@@ -569,7 +569,7 @@
         "defaultCollapsed": false,
         "pageSection": {
           "title": {
-            "en": "Storage",
+            "en": "Storage checks should be done at the beginning of shift",
             "fr": "Stockage",
             "nl": "Opslag"
           },
@@ -578,7 +578,7 @@
             "fr": "Début de la journée",
             "nl": "Begin van de dag"
           },
-          "infoDisplay": "belowTitle"
+          "infoDisplay": "hidden"
         }
       },
       "pair": "fridge",
@@ -1308,7 +1308,7 @@
         "id": "kitchen_cleanliness",
         "header": false,
         "title": {
-          "en": "Kitchen check",
+          "en": "Kitchen & Portioning areas",
           "fr": "Vérification de la cuisine",
           "nl": "Keukencontrole"
         },
@@ -1316,16 +1316,16 @@
         "defaultCollapsed": true,
         "pageSection": {
           "title": {
-            "en": "Cleanliness",
-            "fr": "Propreté",
-            "nl": "Keukenzuivering"
+            "en": "Cleanliness checks should be done at the end of shift",
+            "fr": "Vérifications de propreté à faire à la fin de la journée",
+            "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
           },
           "infoText": {
             "en": "Cleanliness checks should be performed at the end of shift",
             "fr": "Fin de la journée",
             "nl": "Einde van de dienst"
           },
-          "infoDisplay": "belowTitle"
+          "infoDisplay": "hidden"
         }
       },
       "listView": false,
@@ -1506,7 +1506,15 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others",
+        "header": false,
+        "title": {
+          "en": "Others",
+          "fr": "Autres",
+          "nl": "Andere"
+        },
+        "collapsible": true,
+        "defaultCollapsed": true
       },
       "listView": false,
       "options": [],
@@ -1536,7 +1544,7 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others"
       },
       "listView": false,
       "options": [],
@@ -1566,7 +1574,7 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others"
       },
       "listView": false,
       "options": [],
@@ -1596,7 +1604,7 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others"
       },
       "listView": false,
       "options": [],
@@ -1626,7 +1634,7 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others"
       },
       "listView": false,
       "options": [],
@@ -1656,7 +1664,7 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others"
       },
       "listView": false,
       "options": [],
@@ -1686,7 +1694,7 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others"
       },
       "listView": false,
       "options": [],
@@ -1716,7 +1724,7 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others"
       },
       "listView": false,
       "options": [],
@@ -1746,7 +1754,7 @@
         "nl": ""
       },
       "group": {
-        "id": "kitchen_cleanliness"
+        "id": "kitchen_others"
       },
       "listView": false,
       "options": [],
@@ -3628,7 +3636,7 @@
           "defaultCollapsed": false,
           "pageSection": {
             "title": {
-              "en": "Storage",
+              "en": "Storage checks should be done at the beginning of shift",
               "fr": "Stockage",
               "nl": "Opslag"
             },
@@ -3637,7 +3645,7 @@
               "fr": "Début de la journée",
               "nl": "Begin van de dag"
             },
-            "infoDisplay": "belowTitle"
+            "infoDisplay": "hidden"
           }
         },
         "pair": "fridge",
@@ -4345,7 +4353,7 @@
           "id": "kitchen_cleanliness",
           "header": false,
           "title": {
-            "en": "Kitchen check",
+            "en": "Kitchen & Portioning areas",
             "fr": "Vérification de la cuisine",
             "nl": "Keukencontrole"
           },
@@ -4353,16 +4361,16 @@
           "defaultCollapsed": true,
           "pageSection": {
             "title": {
-              "en": "Cleanliness",
-              "fr": "Propreté",
-              "nl": "Keukenzuivering"
+              "en": "Cleanliness checks should be done at the end of shift",
+              "fr": "Vérifications de propreté à faire à la fin de la journée",
+              "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
             },
             "infoText": {
-              "en": "Cleanliness checks should be performed at the end of shift",
-              "fr": "Fin de la journée",
-              "nl": "Einde van de dienst"
+              "en": "Cleanliness checks should be done at the end of shift",
+              "fr": "Vérifications de propreté à faire à la fin de la journée",
+              "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
             },
-            "infoDisplay": "belowTitle"
+            "infoDisplay": "hidden"
           }
         },
         "listView": false,
@@ -4531,7 +4539,15 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others",
+          "header": false,
+          "title": {
+            "en": "Others",
+            "fr": "Autres",
+            "nl": "Andere"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true
         },
         "listView": false,
         "visibility": {
@@ -4559,7 +4575,7 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "visibility": {
@@ -4587,7 +4603,7 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "visibility": {
@@ -4615,7 +4631,7 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "visibility": {
@@ -4643,7 +4659,7 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "visibility": {
@@ -4671,7 +4687,7 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "visibility": {
@@ -4699,7 +4715,7 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "visibility": {
@@ -4727,7 +4743,7 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "visibility": {
@@ -4755,7 +4771,7 @@
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "visibility": {
