@@ -576,7 +576,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "defaultCollapsed": false,
           "pageSection": {
             "title": {
-              "en": "Storage",
+              "en": "Storage checks should be done at the beginning of shift",
               "fr": "Stockage",
               "nl": "Opslag"
             },
@@ -585,7 +585,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "fr": "Début de la journée",
               "nl": "Begin van de dag"
             },
-            "infoDisplay": "belowTitle"
+            "infoDisplay": "hidden"
           }
         },
         "pair": "fridge",
@@ -1315,7 +1315,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "id": "kitchen_cleanliness",
           "header": false,
           "title": {
-            "en": "Kitchen check",
+            "en": "Kitchen & Portioning areas",
             "fr": "Vérification de la cuisine",
             "nl": "Keukencontrole"
           },
@@ -1323,16 +1323,16 @@ export const BUNDLED_FORM_CONFIGS = [
           "defaultCollapsed": true,
           "pageSection": {
             "title": {
-              "en": "Cleanliness",
-              "fr": "Propreté",
-              "nl": "Keukenzuivering"
+              "en": "Cleanliness checks should be done at the end of shift",
+              "fr": "Vérifications de propreté à faire à la fin de la journée",
+              "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
             },
             "infoText": {
               "en": "Cleanliness checks should be performed at the end of shift",
               "fr": "Fin de la journée",
               "nl": "Einde van de dienst"
             },
-            "infoDisplay": "belowTitle"
+            "infoDisplay": "hidden"
           }
         },
         "listView": false,
@@ -1513,7 +1513,15 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others",
+          "header": false,
+          "title": {
+            "en": "Others",
+            "fr": "Autres",
+            "nl": "Andere"
+          },
+          "collapsible": true,
+          "defaultCollapsed": true
         },
         "listView": false,
         "options": [],
@@ -1543,7 +1551,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1573,7 +1581,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1603,7 +1611,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1633,7 +1641,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1663,7 +1671,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1693,7 +1701,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1723,7 +1731,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -1753,7 +1761,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": ""
         },
         "group": {
-          "id": "kitchen_cleanliness"
+          "id": "kitchen_others"
         },
         "listView": false,
         "options": [],
@@ -3635,7 +3643,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "defaultCollapsed": false,
             "pageSection": {
               "title": {
-                "en": "Storage",
+                "en": "Storage checks should be done at the beginning of shift",
                 "fr": "Stockage",
                 "nl": "Opslag"
               },
@@ -3644,7 +3652,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "fr": "Début de la journée",
                 "nl": "Begin van de dag"
               },
-              "infoDisplay": "belowTitle"
+              "infoDisplay": "hidden"
             }
           },
           "pair": "fridge",
@@ -4352,7 +4360,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "kitchen_cleanliness",
             "header": false,
             "title": {
-              "en": "Kitchen check",
+              "en": "Kitchen & Portioning areas",
               "fr": "Vérification de la cuisine",
               "nl": "Keukencontrole"
             },
@@ -4360,16 +4368,16 @@ export const BUNDLED_FORM_CONFIGS = [
             "defaultCollapsed": true,
             "pageSection": {
               "title": {
-                "en": "Cleanliness",
-                "fr": "Propreté",
-                "nl": "Keukenzuivering"
+                "en": "Cleanliness checks should be done at the end of shift",
+                "fr": "Vérifications de propreté à faire à la fin de la journée",
+                "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
               },
               "infoText": {
-                "en": "Cleanliness checks should be performed at the end of shift",
-                "fr": "Fin de la journée",
-                "nl": "Einde van de dienst"
+                "en": "Cleanliness checks should be done at the end of shift",
+                "fr": "Vérifications de propreté à faire à la fin de la journée",
+                "nl": "Keukenzuiveringen moeten worden uitgevoerd aan het einde van de dienst"
               },
-              "infoDisplay": "belowTitle"
+              "infoDisplay": "hidden"
             }
           },
           "listView": false,
@@ -4538,7 +4546,15 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others",
+            "header": false,
+            "title": {
+              "en": "Others",
+              "fr": "Autres",
+              "nl": "Andere"
+            },
+            "collapsible": true,
+            "defaultCollapsed": true
           },
           "listView": false,
           "visibility": {
@@ -4566,7 +4582,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4594,7 +4610,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4622,7 +4638,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4650,7 +4666,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4678,7 +4694,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4706,7 +4722,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4734,7 +4750,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -4762,7 +4778,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": ""
           },
           "group": {
-            "id": "kitchen_cleanliness"
+            "id": "kitchen_others"
           },
           "listView": false,
           "visibility": {
@@ -10311,7 +10327,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Allergens": "Gluten, Fish",
                           "Suppliers": "VDS",
                           "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Standard, No-salt",
                           "__ckOptionValue": "Fishsticks"
                         },
                         {
@@ -10619,7 +10635,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Allergens": "None",
                           "Suppliers": "Freshmed;Mabru;VDS",
                           "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                           "__ckOptionValue": "Parsnip"
                         },
                         {
@@ -10630,7 +10646,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Allergens": "None",
                           "Suppliers": "Freshmed;Mabru;VDS",
                           "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                           "__ckOptionValue": "Turnip"
                         },
                         {
@@ -11372,6 +11388,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Diabetic": [
                             "Chicken stripes",
                             "Chicken cubes",
+                            "Fishsticks",
                             "Greek yogurt",
                             "Mozzarella",
                             "Brown rice",
@@ -11392,6 +11409,8 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Courgette",
                             "Leek",
                             "Mushroom",
+                            "Parsnip",
+                            "Turnip",
                             "Green beans - frozen",
                             "Chinese mix",
                             "Leek - frozen",
@@ -15887,7 +15906,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Allergens": "Gluten, Fish",
                             "Suppliers": "VDS",
                             "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Standard, No-salt",
+                            "dietaryApplicability": "Diabetic, Standard, No-salt",
                             "__ckOptionValue": "Fishsticks"
                           },
                           {
@@ -16195,7 +16214,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Allergens": "None",
                             "Suppliers": "Freshmed;Mabru;VDS",
                             "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                             "__ckOptionValue": "Parsnip"
                           },
                           {
@@ -16206,7 +16225,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Allergens": "None",
                             "Suppliers": "Freshmed;Mabru;VDS",
                             "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                             "__ckOptionValue": "Turnip"
                           },
                           {
@@ -16948,6 +16967,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Diabetic": [
                               "Chicken stripes",
                               "Chicken cubes",
+                              "Fishsticks",
                               "Greek yogurt",
                               "Mozzarella",
                               "Brown rice",
@@ -16968,6 +16988,8 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Courgette",
                               "Leek",
                               "Mushroom",
+                              "Parsnip",
+                              "Turnip",
                               "Green beans - frozen",
                               "Chinese mix",
                               "Leek - frozen",

@@ -3651,7 +3651,7 @@
                         "Allergens": "Gluten, Fish",
                         "Suppliers": "VDS",
                         "allowedUnits": "kg, gr, piece",
-                        "dietaryApplicability": "Standard, No-salt",
+                        "dietaryApplicability": "Diabetic, Standard, No-salt",
                         "__ckOptionValue": "Fishsticks"
                       },
                       {
@@ -3959,7 +3959,7 @@
                         "Allergens": "None",
                         "Suppliers": "Freshmed;Mabru;VDS",
                         "allowedUnits": "kg, gr, bucket",
-                        "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                        "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                         "__ckOptionValue": "Parsnip"
                       },
                       {
@@ -3970,7 +3970,7 @@
                         "Allergens": "None",
                         "Suppliers": "Freshmed;Mabru;VDS",
                         "allowedUnits": "kg, gr, bucket",
-                        "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                        "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                         "__ckOptionValue": "Turnip"
                       },
                       {
@@ -4712,6 +4712,7 @@
                         "Diabetic": [
                           "Chicken stripes",
                           "Chicken cubes",
+                          "Fishsticks",
                           "Greek yogurt",
                           "Mozzarella",
                           "Brown rice",
@@ -4732,6 +4733,8 @@
                           "Courgette",
                           "Leek",
                           "Mushroom",
+                          "Parsnip",
+                          "Turnip",
                           "Green beans - frozen",
                           "Chinese mix",
                           "Leek - frozen",
@@ -9227,7 +9230,7 @@
                           "Allergens": "Gluten, Fish",
                           "Suppliers": "VDS",
                           "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Standard, No-salt",
                           "__ckOptionValue": "Fishsticks"
                         },
                         {
@@ -9535,7 +9538,7 @@
                           "Allergens": "None",
                           "Suppliers": "Freshmed;Mabru;VDS",
                           "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                           "__ckOptionValue": "Parsnip"
                         },
                         {
@@ -9546,7 +9549,7 @@
                           "Allergens": "None",
                           "Suppliers": "Freshmed;Mabru;VDS",
                           "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
+                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
                           "__ckOptionValue": "Turnip"
                         },
                         {
@@ -10288,6 +10291,7 @@
                           "Diabetic": [
                             "Chicken stripes",
                             "Chicken cubes",
+                            "Fishsticks",
                             "Greek yogurt",
                             "Mozzarella",
                             "Brown rice",
@@ -10308,6 +10312,8 @@
                             "Courgette",
                             "Leek",
                             "Mushroom",
+                            "Parsnip",
+                            "Turnip",
                             "Green beans - frozen",
                             "Chinese mix",
                             "Leek - frozen",

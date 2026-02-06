@@ -1649,6 +1649,9 @@ export const FORM_VIEW_STYLES = `
           text-transform: none;
           color: var(--text);
         }
+        .ck-page-section[data-info-display="hidden"] .ck-page-section__title {
+          color: var(--accent);
+        }
         .ck-page-section__notice {
           margin: 0;
           color: var(--muted);
