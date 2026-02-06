@@ -3485,6 +3485,34 @@ const FormView: React.FC<FormViewProps> = ({
         }
         const cascade = cascadeRemoveLineItemRows({ lineItems: prevLineItems, roots: [{ groupId, rowId }] });
         const marked = markRecipeIngredientsDirtyForGroupKey(cascade.lineItems, groupId);
+        let nextLineItemsSeeded = marked.lineItems;
+        const parsedGroupKey = parseSubgroupKey(groupId);
+        const isLeftoversGroupKey =
+          groupId === 'MP_TYPE_LI' || (parsedGroupKey?.subGroupId || '').toString() === 'MP_TYPE_LI';
+        if (isLeftoversGroupKey) {
+          const existingRows = nextLineItemsSeeded[groupId] || [];
+          const hasNonCookRow = existingRows.some((row: any) => {
+            const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
+            return (prepType || '').toString().trim().toLowerCase() !== 'cook';
+          });
+          if (!hasNonCookRow) {
+            const rowIdPrefix = (parsedGroupKey?.subGroupId || groupId || 'MP_TYPE_LI').toString();
+            const seededRow: LineItemRowState = {
+              id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
+              values: {
+                PREP_TYPE: '',
+                [ROW_SOURCE_KEY]: 'manual'
+              },
+              parentId: parsedGroupKey?.parentRowId,
+              parentGroupId: parsedGroupKey?.parentGroupKey
+            };
+            nextLineItemsSeeded = {
+              ...nextLineItemsSeeded,
+              [groupId]: [...existingRows, seededRow]
+            };
+            onDiagnostic?.('lineItems.leftovers.seedDefault', { groupKey: groupId, source: 'discardPartDish' });
+          }
+        }
         if (cascade.removedSubgroupKeys.length) {
           setSubgroupSelectors(prevSel => {
             const nextSel = { ...prevSel };
@@ -3497,7 +3525,7 @@ const FormView: React.FC<FormViewProps> = ({
         const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(
           definition,
           (valuesRef.current || {}) as Record<string, FieldValue>,
-          marked.lineItems,
+          nextLineItemsSeeded,
           { mode: 'init' }
         );
         setValues(nextValues);
@@ -3508,19 +3536,14 @@ const FormView: React.FC<FormViewProps> = ({
         const parentGroupKey = subgroupParentGroupKey || (subgroupInfo?.parentGroupId || '').toString();
         const parentRowId = (subgroupInfo?.parentRowId || '').toString();
         removeLineRowByCascade(parentGroupKey, parentRowId);
-        overlayStackRef.current = [];
-        setSubgroupOverlay({ open: false });
-        onDiagnostic?.('subgroup.overlay.close');
-        if (leftoversAutosaveHoldRef.current?.rootSubKey === subgroupKey) {
-          leftoversAutosaveHoldRef.current = null;
-          setAutoSaveHold?.(false, { reason: 'leftoversOverlay' });
-          onDiagnostic?.('autosave.hold.request', { hold: false, reason: 'leftoversOverlay', subKey: subgroupKey });
-        }
+        const hadOverlayStack = overlayStackRef.current.length > 0;
+        closeSubgroupOverlay();
         onDiagnostic?.('subgroup.overlay.close.partDish.discardEmpty', {
           source,
           subgroupKey,
           parentGroupKey,
-          parentRowId
+          parentRowId,
+          restoredOverlay: hadOverlayStack
         });
         return;
       }
