@@ -1693,7 +1693,7 @@ export const FORM_VIEW_STYLES = `
         .ck-page-section__title {
           margin: 0;
           font-weight: 600;
-          font-size: calc(var(--ck-font-group-title) * 1.30);
+          font-size: calc(var(--ck-font-group-title) * 1.15);
           line-height: 1.1;
           letter-spacing: 0;
           text-transform: none;
