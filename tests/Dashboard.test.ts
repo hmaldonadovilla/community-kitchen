@@ -551,6 +551,39 @@ describe('Dashboard', () => {
     expect(forms[0].dedupDeleteOnKeyChange).toBe(true);
   });
 
+  test('getForms parses audit logging config from dashboard config', () => {
+    const configJson = JSON.stringify({
+      auditLogging: {
+        enabled: true,
+        statuses: ['Ready for production'],
+        snapshotButtons: ['READY_PROD'],
+        sheetName: 'Meal Production Audit'
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      [
+        'Form Title',
+        'Configuration Sheet Name',
+        'Destination Tab Name',
+        'Description',
+        'Web App URL (?form=ConfigSheetName)',
+        'Follow-up Config (JSON)'
+      ],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].auditLogging).toEqual({
+      enabled: true,
+      statuses: ['Ready for production'],
+      snapshotButtons: ['READY_PROD'],
+      sheetName: 'Meal Production Audit'
+    });
+  });
+
   test('getForms parses language config from dashboard config', () => {
     const configJson = JSON.stringify({
       languages: ['EN', 'FR', 'NL'],

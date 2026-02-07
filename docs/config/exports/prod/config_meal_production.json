@@ -6834,7 +6834,7 @@
                 "dedupRules": [
                   {
                     "fields": [
-                      "ING"
+                      "ING", "UNIT"
                     ],
                     "message": {
                       "en": "{value} is already in the list, change the quantity",
@@ -12430,7 +12430,7 @@
                   "dedupRules": [
                     {
                       "fields": [
-                        "ING"
+                        "ING", "UNIT"
                       ],
                       "message": {
                         "en": "{value} is already in the list, change the quantity",

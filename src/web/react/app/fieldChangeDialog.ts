@@ -63,6 +63,43 @@ const isDialogEmptyValue = (value: FieldValue): boolean => {
   return false;
 };
 
+export const shouldSuppressInitialDateChangeDialog = (args: {
+  scope: FieldChangeDialogScope;
+  fieldType?: string;
+  fieldPath: string;
+  fieldId: string;
+  prevValue: FieldValue;
+  nextValue: FieldValue;
+  baselineValues?: Record<string, FieldValue> | null;
+  initialEntryInProgressByFieldPath: Record<string, boolean>;
+  initialEntryCompletedByFieldPath: Record<string, boolean>;
+}): boolean => {
+  const fieldPath = normalizeId(args.fieldPath);
+  if (!fieldPath) return false;
+  const fieldType = normalizeId(args.fieldType).toUpperCase();
+  if (args.scope !== 'top' || fieldType !== 'DATE') return false;
+  if (args.initialEntryCompletedByFieldPath[fieldPath]) return false;
+  void args.baselineValues;
+  void args.fieldId;
+  if (isDialogEmptyValue(args.prevValue) && !isDialogEmptyValue(args.nextValue)) {
+    args.initialEntryInProgressByFieldPath[fieldPath] = true;
+  }
+  return args.initialEntryInProgressByFieldPath[fieldPath] === true;
+};
+
+export const finalizeInitialDateChangeDialogEntry = (args: {
+  fieldPath: string;
+  initialEntryInProgressByFieldPath: Record<string, boolean>;
+  initialEntryCompletedByFieldPath: Record<string, boolean>;
+}): boolean => {
+  const fieldPath = normalizeId(args.fieldPath);
+  if (!fieldPath) return false;
+  if (!args.initialEntryInProgressByFieldPath[fieldPath]) return false;
+  delete args.initialEntryInProgressByFieldPath[fieldPath];
+  args.initialEntryCompletedByFieldPath[fieldPath] = true;
+  return true;
+};
+
 const resolveLineItemFieldConfig = (
   definition: WebFormDefinition,
   groupId: string,

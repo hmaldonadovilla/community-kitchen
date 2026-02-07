@@ -2252,6 +2252,19 @@ components:
             status:
               type: string
               description: Status value written during autosave. Defaults to `statusTransitions.inProgress` (or "In progress").
+        auditLogging:
+          $ref: '#/components/schemas/AuditLoggingConfig'
+          description: |
+            Optional audit logging behavior for this form.
+
+            When enabled, changes are written to a dedicated audit sheet, including:
+            - `fieldPath`
+            - `beforeValue` / `afterValue`
+            - `date_time`
+            - `auditType` (`change` or `snapshot`)
+            - `auditStatus` (for snapshot button actions)
+            - `snapshot` (full record JSON for snapshot actions)
+            - `deviceInfo`
         summaryViewEnabled:
           type: boolean
           description: |
@@ -2345,6 +2358,35 @@ components:
             Notes:
             - Uses the same dedup precheck/autosave gating behavior as create flow.
             - Intended for forms where dedup keys define immutable business identity.
+      additionalProperties: true
+
+    AuditLoggingConfig:
+      type: object
+      description: |
+        Optional per-form audit logging configuration.
+      properties:
+        enabled:
+          type: boolean
+          description: Enable/disable audit logging.
+        sheetName:
+          type: string
+          description: |
+            Optional audit destination sheet name.
+            When omitted, the app writes to `<destination tab> Audit`.
+        statuses:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of status values for which `auditType="change"` rows are written.
+            Matching is case-insensitive and checks both previous and next status values.
+        snapshotButtons:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of custom button ids that trigger snapshot rows.
+            Snapshot rows set `auditType="snapshot"` and store the full record JSON in `snapshot`.
       additionalProperties: true
 
     AppHeaderConfig:
@@ -4720,6 +4762,8 @@ components:
           type: object
           description: Draft autosave configuration (dashboard-level).
           additionalProperties: true
+        auditLogging:
+          $ref: '#/components/schemas/AuditLoggingConfig'
         summaryViewEnabled:
           type: boolean
         summaryHtmlTemplateId:

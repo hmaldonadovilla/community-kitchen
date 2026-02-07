@@ -8464,7 +8464,16 @@ export const BUNDLED_FORM_CONFIGS = [
         "NL"
       ],
       "defaultLanguage": "EN",
-      "languageSelectorEnabled": true
+      "languageSelectorEnabled": true,
+      "auditLogging": {
+        "enabled": true,
+        "statuses": [
+          "Ready for production"
+        ],
+        "snapshotButtons": [
+          "READY_PROD"
+        ]
+      }
     },
     "questions": [
       {
@@ -13563,7 +13572,8 @@ export const BUNDLED_FORM_CONFIGS = [
                   "dedupRules": [
                     {
                       "fields": [
-                        "ING"
+                        "ING",
+                        "UNIT"
                       ],
                       "message": {
                         "en": "{value} is already in the list, change the quantity",
@@ -19159,7 +19169,8 @@ export const BUNDLED_FORM_CONFIGS = [
                     "dedupRules": [
                       {
                         "fields": [
-                          "ING"
+                          "ING",
+                          "UNIT"
                         ],
                         "message": {
                           "en": "{value} is already in the list, change the quantity",
@@ -21370,6 +21381,15 @@ export const BUNDLED_FORM_CONFIGS = [
         "openLabel": {
           "en": "Open existing record"
         }
+      },
+      "auditLogging": {
+        "enabled": true,
+        "statuses": [
+          "Ready for production"
+        ],
+        "snapshotButtons": [
+          "READY_PROD"
+        ]
       }
     },
     "validationErrors": []

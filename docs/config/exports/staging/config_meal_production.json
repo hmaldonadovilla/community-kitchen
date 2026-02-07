@@ -1737,7 +1737,16 @@
       "NL"
     ],
     "defaultLanguage": "EN",
-    "languageSelectorEnabled": true
+    "languageSelectorEnabled": true,
+    "auditLogging": {
+      "enabled": true,
+      "statuses": [
+        "Ready for production"
+      ],
+      "snapshotButtons": [
+        "READY_PROD"
+      ]
+    }
   },
   "questions": [
     {
@@ -2103,8 +2112,7 @@
         "summaryVisibility": "always"
       },
       "listView": false,
-      "options": [
-      ],
+      "options": [],
       "optionsFr": [],
       "optionsNl": [],
       "status": "Active",
@@ -6837,7 +6845,7 @@
                 "dedupRules": [
                   {
                     "fields": [
-                      "ING"
+                      "ING", "UNIT"
                     ],
                     "message": {
                       "en": "{value} is already in the list, change the quantity",
@@ -6993,9 +7001,9 @@
         }
       },
       "uploadConfig": {
-          "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
-          "minFiles": 1,
-          "maxFiles": 10,
+        "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+        "minFiles": 1,
+        "maxFiles": 10,
         "maxFileSizeMb": 10,
         "allowedMimeTypes": [
           "image/*"
@@ -10378,22 +10386,22 @@
                             "Oat milk",
                             "Green beans - tinned",
                             "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Falafel",
-                          "Mackerel - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "Standard": [
-                          "Chicken stripes",
-                          "Chicken cubes",
-                          "Chicken wings",
-                          "Chicken nuggets",
-                          "Chicken tenders",
-                          "Cordon bleu",
-                          "Fishsticks",
+                            "Red beans - tinned",
+                            "White beans - tinned",
+                            "Falafel",
+                            "Mackerel - tinned",
+                            "Chickpeas - dry",
+                            "Red lentils",
+                            "Green lentils"
+                          ],
+                          "Standard": [
+                            "Chicken stripes",
+                            "Chicken cubes",
+                            "Chicken wings",
+                            "Chicken nuggets",
+                            "Chicken tenders",
+                            "Cordon bleu",
+                            "Fishsticks",
                             "Greek yogurt",
                             "Cheese",
                             "Rice",
@@ -10481,23 +10489,23 @@
                             "Peanut butter",
                             "Green beans - tinned",
                             "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Falafel",
-                          "Mackerel - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "No-salt": [
-                          "Chicken stripes",
-                          "Chicken cubes",
-                          "Chicken wings",
-                          "Chicken nuggets",
-                          "Chicken tenders",
-                          "Cordon bleu",
-                          "Fishsticks",
+                            "Chickpeas - tinned",
+                            "Red beans - tinned",
+                            "White beans - tinned",
+                            "Falafel",
+                            "Mackerel - tinned",
+                            "Chickpeas - dry",
+                            "Red lentils",
+                            "Green lentils"
+                          ],
+                          "No-salt": [
+                            "Chicken stripes",
+                            "Chicken cubes",
+                            "Chicken wings",
+                            "Chicken nuggets",
+                            "Chicken tenders",
+                            "Cordon bleu",
+                            "Fishsticks",
                             "Greek yogurt",
                             "Cheese",
                             "Rice",
@@ -10584,16 +10592,16 @@
                             "Peanut butter",
                             "Green beans - tinned",
                             "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Falafel",
-                          "Mackerel - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "Vegetarian": [
+                            "Chickpeas - tinned",
+                            "Red beans - tinned",
+                            "White beans - tinned",
+                            "Falafel",
+                            "Mackerel - tinned",
+                            "Chickpeas - dry",
+                            "Red lentils",
+                            "Green lentils"
+                          ],
+                          "Vegetarian": [
                             "Greek yogurt",
                             "Cheese",
                             "Rice",
@@ -10681,15 +10689,15 @@
                             "Peanut butter",
                             "Green beans - tinned",
                             "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Falafel",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "Vegan": [
+                            "Chickpeas - tinned",
+                            "Red beans - tinned",
+                            "White beans - tinned",
+                            "Falafel",
+                            "Chickpeas - dry",
+                            "Red lentils",
+                            "Green lentils"
+                          ],
+                          "Vegan": [
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -10774,16 +10782,16 @@
                             "Peanut butter",
                             "Green beans - tinned",
                             "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Falafel",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ]
+                            "Chickpeas - tinned",
+                            "Red beans - tinned",
+                            "White beans - tinned",
+                            "Falafel",
+                            "Chickpeas - dry",
+                            "Red lentils",
+                            "Green lentils"
+                          ]
+                        }
                       }
-                    }
                     },
                     {
                       "id": "QTY",
@@ -12433,7 +12441,7 @@
                   "dedupRules": [
                     {
                       "fields": [
-                        "ING"
+                        "ING", "UNIT"
                       ],
                       "message": {
                         "en": "{value} is already in the list, change the quantity",
@@ -12548,46 +12556,46 @@
             "isInFuture": true
           },
           "showWhen": {
-          "any": [
-            {
-              "lineItems": {
-                "groupId": "MP_MEALS_REQUEST",
-                "subGroupId": "MP_TYPE_LI",
-                "when": {
-                  "all": [
-                    {
-                      "fieldId": "PREP_TYPE",
-                      "equals": "Cook"
-                    },
-                    {
-                      "fieldId": "RECIPE",
-                      "notEmpty": true
-                    }
-                  ]
+            "any": [
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "subGroupId": "MP_TYPE_LI",
+                  "when": {
+                    "all": [
+                      {
+                        "fieldId": "PREP_TYPE",
+                        "equals": "Cook"
+                      },
+                      {
+                        "fieldId": "RECIPE",
+                        "notEmpty": true
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
+                  "when": {
+                    "fieldId": "__ckRowSource",
+                    "equals": "manual"
+                  },
+                  "parentWhen": {
+                    "fieldId": "PREP_TYPE",
+                    "equals": "Full"
+                  }
                 }
               }
-            },
-            {
-              "lineItems": {
-                "groupId": "MP_MEALS_REQUEST",
-                "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
-                "when": {
-                  "fieldId": "__ckRowSource",
-                  "equals": "manual"
-                },
-                "parentWhen": {
-                  "fieldId": "PREP_TYPE",
-                  "equals": "Full"
-                }
-              }
-            }
-          ]
-        }
-      },
+            ]
+          }
+        },
         "uploadConfig": {
-        "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
-        "minFiles": 1,
-        "maxFiles": 10,
+          "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+          "minFiles": 1,
+          "maxFiles": 10,
           "maxFileSizeMb": 10,
           "allowedMimeTypes": [
             "image/*"
@@ -14644,6 +14652,15 @@
       "openLabel": {
         "en": "Open existing record"
       }
+    },
+    "auditLogging": {
+      "enabled": true,
+      "statuses": [
+        "Ready for production"
+      ],
+      "snapshotButtons": [
+        "READY_PROD"
+      ]
     }
   },
   "validationErrors": []

@@ -72,9 +72,11 @@ import { hasIncompleteRejectDedupKeys } from './app/dedupKeyUtils';
 import {
   applyFieldChangeDialogTargets,
   evaluateFieldChangeDialogWhen,
+  finalizeInitialDateChangeDialogEntry,
   resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
   resolveTargetFieldConfig,
+  shouldSuppressInitialDateChangeDialog,
   type FieldChangeDialogTargetUpdate
 } from './app/fieldChangeDialog';
 import {
@@ -720,6 +722,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
   const fieldChangePendingRef = useRef<Record<string, FieldChangePending>>({});
   const fieldChangeActiveRef = useRef<FieldChangePending | null>(null);
+  const fieldChangeDateInitialEntryInProgressRef = useRef<Record<string, boolean>>({});
+  const fieldChangeDateInitialEntryCompletedRef = useRef<Record<string, boolean>>({});
 
   const resolveOptionGroupKey = (args: {
     targetScope: 'top' | 'row' | 'parent' | 'effect';
@@ -1335,16 +1339,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             fieldId,
             groupId: args.groupId
           });
+          const changeType = (source?.question?.type || source?.field?.type || '').toString().toUpperCase();
           const prevValue =
             args.scope === 'line' && args.groupId && args.rowId
               ? (lineItemsRef.current[args.groupId] || []).find(row => row.id === args.rowId)?.values?.[fieldId]
               : valuesRef.current[fieldId];
+          const suppressInitialDateDialog = shouldSuppressInitialDateChangeDialog({
+            scope: args.scope,
+            fieldType: changeType,
+            fieldPath: fieldKey,
+            fieldId,
+            prevValue: prevValue as FieldValue,
+            nextValue: args.nextValue as FieldValue,
+            baselineValues: lastAutoSaveSeenRef.current?.values || null,
+            initialEntryInProgressByFieldPath: fieldChangeDateInitialEntryInProgressRef.current,
+            initialEntryCompletedByFieldPath: fieldChangeDateInitialEntryCompletedRef.current
+          });
           const hasNonEmptyChange =
             !isEmptyValue(prevValue as FieldValue) &&
             !isEmptyValue(args.nextValue as FieldValue) &&
             prevValue !== args.nextValue;
           const dialogCfg = source?.dialog;
-          if (dialogCfg?.when && hasNonEmptyChange) {
+          if (dialogCfg?.when && hasNonEmptyChange && !suppressInitialDateDialog) {
             const shouldTrigger = evaluateFieldChangeDialogWhen({
               when: dialogCfg.when,
               scope: args.scope,
@@ -1385,9 +1401,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
                 groupId: args.groupId || null,
                 rowId: args.rowId || null
               });
-              const changeType = (source?.question?.type || source?.field?.type || '').toString().toUpperCase();
               const openOnChange =
-                changeType === 'CHOICE' || changeType === 'CHECKBOX' || changeType === 'DATE' || changeType === 'FILE_UPLOAD';
+                changeType === 'CHOICE' || changeType === 'CHECKBOX' || changeType === 'FILE_UPLOAD';
               if (openOnChange) {
                 openFieldChangeDialog(pending);
               }
@@ -1401,6 +1416,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         }
 
         if (args?.event === 'blur' && fieldKey) {
+          const finalizedInitialDateEntry = finalizeInitialDateChangeDialogEntry({
+            fieldPath: fieldKey,
+            initialEntryInProgressByFieldPath: fieldChangeDateInitialEntryInProgressRef.current,
+            initialEntryCompletedByFieldPath: fieldChangeDateInitialEntryCompletedRef.current
+          });
+          if (finalizedInitialDateEntry && fieldChangePendingRef.current[fieldKey]) {
+            delete fieldChangePendingRef.current[fieldKey];
+            logEvent('fieldChangeDialog.pending.cleared', {
+              fieldPath: fieldKey,
+              fieldId,
+              reason: 'initialDateEntry.completed'
+            });
+            return;
+          }
           const pending = fieldChangePendingRef.current[fieldKey];
           if (pending) {
             const stillValid = evaluateFieldChangeDialogWhen({
@@ -5790,6 +5819,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   useEffect(() => {
     // Avoid autosaving due to initial bootstrap hydration.
     autoSaveDirtyRef.current = false;
+    fieldChangeDateInitialEntryInProgressRef.current = {};
+    fieldChangeDateInitialEntryCompletedRef.current = {};
     if (autoSaveTimerRef.current) {
       globalThis.clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;

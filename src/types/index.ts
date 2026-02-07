@@ -1780,6 +1780,27 @@ export interface AutoSaveConfig {
   status?: string;
 }
 
+export interface AuditLoggingConfig {
+  /**
+   * Enable/disable audit logging for this form.
+   */
+  enabled?: boolean;
+  /**
+   * Optional explicit destination sheet name for audit rows.
+   * Defaults to "<destination tab> Audit" when omitted.
+   */
+  sheetName?: string;
+  /**
+   * Optional list of status values for which change-audit rows are written.
+   * Matching is case-insensitive.
+   */
+  statuses?: string[];
+  /**
+   * Optional list of custom button ids that trigger snapshot audits.
+   */
+  snapshotButtons?: string[];
+}
+
 export interface DataSourceConfig {
   id: string;
   ref?: string; // optional reference key used by backend
@@ -2037,6 +2058,11 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   autoSave?: AutoSaveConfig;
+  /**
+   * Optional audit logging behavior for this form.
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  auditLogging?: AuditLoggingConfig;
   /**
    * Enable/disable the Summary view in the React web app.
    * When false, list-row clicks always open the Form view

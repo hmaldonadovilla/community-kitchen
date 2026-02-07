@@ -1903,7 +1903,25 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
     - `reOpened`: value written when explicitly re-opening a closed record.
     - `onPdf`, `onEmail`, `onClose`: values written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
  - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes `autoSave.status` (or `statusTransitions.inProgress`, default `In progress`). If the record’s status matches `statusTransitions.onClose`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI shows a “Refresh record” banner to avoid overwriting remote changes. The first time a user opens Create/Edit/Copy, a one-time autosave explainer overlay is shown (customize via `autosaveNotice.*` in `src/web/systemStrings.json`).
-- `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
+ - `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
+ - `auditLogging` (optional): writes change/snapshot rows to a separate audit sheet.
+   - `enabled`: turn audit logging on/off.
+   - `statuses`: only write `auditType: "change"` rows when the record status matches one of these values (case-insensitive; previous or next status).
+   - `snapshotButtons`: list of custom BUTTON ids that trigger snapshot rows (`auditType: "snapshot"`, `auditStatus: <buttonId>`, full record JSON in `snapshot`).
+   - `sheetName` (optional): custom audit tab name; defaults to `<Destination Tab Name> Audit`.
+
+  Example:
+
+  ```json
+  {
+    "auditLogging": {
+      "enabled": true,
+      "statuses": ["Ready for production"],
+      "snapshotButtons": ["READY_PROD"],
+      "sheetName": "Meal Production Audit"
+    }
+  }
+  ```
 
 2. **Provide templates**:
    - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).

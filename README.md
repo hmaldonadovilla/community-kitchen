@@ -78,6 +78,7 @@ Meal Production (Steps UI) | Recipes (Home Page) | Storage and cleaning checks (
 ### Reliability and scale
 
 - **Record versioning + indexing (scale)**: Destination tabs include a server-owned `Data Version` column and the app maintains a hidden per-tab index sheet (`__CK_INDEX__...`) for fast record id -> row lookups and indexed dedup (no full-sheet scans). The React client validates cached records via `getRecordVersion` and shows a Refresh record banner when the sheet version is newer. Draft autosave + submit use optimistic locking (client version must match server version) to prevent overwriting changes made by other users.
+- **Separate audit sheet logging**: You can enable `auditLogging` in dashboard JSON to write change rows to a dedicated audit tab. Each row stores `fieldPath`, `beforeValue`, `afterValue`, `date_time`, `auditType`, and `deviceInfo`. You can scope change logs to specific statuses (`auditLogging.statuses`) and trigger full-record snapshots with `auditLogging.snapshotButtons` (writes `auditStatus=<buttonId>` and full JSON in `snapshot`).
 - **Drag & Drop Uploads**: React forms ship with keyboard-accessible dropzones that enforce file caps, surface total size + remaining slots, and expose per-file remove/clear controls with live announcements.
 
 ## Architecture

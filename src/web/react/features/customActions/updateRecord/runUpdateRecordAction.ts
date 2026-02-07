@@ -178,6 +178,8 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       }) as any;
       draft.__ckSaveMode = 'draft';
       draft.__ckAllowClosedUpdate = '1';
+      draft.__ckAuditAction = (req.buttonId || '').toString();
+      deps.logEvent('button.updateRecord.auditAction.attached', { buttonId: req.buttonId, qIdx: req.qIdx ?? null, recordId });
       const baseVersion = deps.refs.recordDataVersionRef.current;
       if (recordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
         draft.__ckClientDataVersion = Number(baseVersion);
@@ -327,4 +329,3 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
     deps.busy.unlock(busySeq, { buttonId: req.buttonId, qIdx: req.qIdx ?? null });
   }
 }
-
