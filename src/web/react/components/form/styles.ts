@@ -866,9 +866,9 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left,
         .webform-overlay .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left,
         .ck-form-sections .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left {
-          width: var(--ck-list-row-action-width);
-          min-width: var(--ck-list-row-action-width);
-          max-width: var(--ck-list-row-action-width);
+          width: fit-content;
+          min-width: min(var(--ck-list-row-action-width), 100%);
+          max-width: 100%;
           background: var(--accent);
           border-color: var(--accent);
           color: var(--accentText);
@@ -1885,10 +1885,15 @@ export const FORM_VIEW_STYLES = `
         .line-item-row .ck-subgroup-open-stack {
           align-items: flex-start;
         }
+        .form-card .ck-list-row-action-btn,
+        .webform-overlay .ck-list-row-action-btn,
+        .ck-form-sections .ck-list-row-action-btn {
+          white-space: nowrap;
+        }
         .line-item-row .ck-list-row-action-btn {
-          width: var(--ck-list-row-action-width);
-          min-width: var(--ck-list-row-action-width);
-          max-width: var(--ck-list-row-action-width);
+          width: fit-content;
+          min-width: min(var(--ck-list-row-action-width), 100%);
+          max-width: 100%;
         }
         .line-item-row .ck-progress-pill.ck-list-row-action-btn {
           background: var(--accent);
@@ -1937,7 +1942,7 @@ export const FORM_VIEW_STYLES = `
           .form-card,
           .webform-overlay,
           .ck-form-sections {
-            --ck-list-row-action-width: 160px;
+            --ck-list-row-action-width: 220px;
           }
           /* On very narrow viewports, allow control rows to wrap (select + buttons). */
           .ck-control-row {

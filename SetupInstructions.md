@@ -788,9 +788,11 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`). Search indexes include extra columns from `optionsRef`/data sources when available.
           - `ui.mode: "table"`: render line items as a compact table (also supported on subgroups)
           - `ui.tableColumns`: ordered list of field ids to show as table columns (defaults to the line-item field order)
-         - `ui.tableColumnWidths`: optional per-column widths map. Keys can be field ids plus action keys
+          - `ui.tableColumnWidths`: optional per-column widths map. Keys can be field ids plus action keys
            (`__remove`, `__view`, `__edit` and `_remove`, `_view`, `_edit` for overlay header action columns).
            Example: `{ "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" }`
+          - `ui.readOnlyAppendFieldId`: when a table field is read-only (`readOnly: true` or `ui.renderAsLabel: true`), append a sibling field value in parentheses from the same row (example: `Bulgur (Gluten)`).
+          - `ui.readOnlyAppendHideValues`: optional appendix values to suppress (case-insensitive exact match), e.g. `["None"]`.
           - `ui.nonMatchWarningMode`: choose how optionFilter non-match warnings show in the table legend (`descriptive`, `validation`, or `both`)
           - `ui.tableHideUntilAnchor`: when true (default), hide non-anchor columns until the anchor field has a value
           - `ui.needsAttentionMessage`: localized override for the “Needs attention” helper shown when this line item group or subgroup requires review

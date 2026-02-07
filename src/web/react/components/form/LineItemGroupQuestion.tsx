@@ -40,6 +40,7 @@ import {
   getUploadMinRequired,
   isUploadValueComplete,
   resolveFieldHelperText,
+  resolveLineItemTableReadOnlyDisplay,
   resolveRowDisclaimerText,
   toDateInputValue,
   toUploadItems
@@ -100,9 +101,9 @@ import {
 const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
 const listRowActionButtonBaseStyle: React.CSSProperties = {
   ...buttonStyles.primary,
-  width: LIST_ROW_ACTION_BUTTON_WIDTH,
-  minWidth: LIST_ROW_ACTION_BUTTON_WIDTH,
-  maxWidth: LIST_ROW_ACTION_BUTTON_WIDTH
+  width: 'fit-content',
+  minWidth: `min(${LIST_ROW_ACTION_BUTTON_WIDTH}, 100%)`,
+  maxWidth: '100%'
 };
 const withListRowActionButtonStyle = (
   disabled?: boolean,
@@ -2628,7 +2629,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
                     <span className="ck-line-item-table__value-text">
-                      {selected?.label || choiceVal || '—'}
+                      {resolveLineItemTableReadOnlyDisplay({
+                        baseValue: selected?.label || choiceVal,
+                        field,
+                        rowValues: (row.values || {}) as Record<string, FieldValue>,
+                        language
+                      })}
                       {warningFootnote}
                     </span>
                     {errorNode}
@@ -2686,7 +2692,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
                     <span className="ck-line-item-table__value-text">
-                      {labels.length ? labels.join(', ') : '—'}
+                      {resolveLineItemTableReadOnlyDisplay({
+                        baseValue: labels.length ? labels.join(', ') : '',
+                        field,
+                        rowValues: (row.values || {}) as Record<string, FieldValue>,
+                        language
+                      })}
                       {warningFootnote}
                     </span>
                     {errorNode}
@@ -2816,7 +2827,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     data-has-warning={showWarningHighlight ? 'true' : undefined}
                     data-has-error={hasFieldError ? 'true' : undefined}
                   >
-                    <span className="ck-line-item-table__value-text">{count ? `${count}` : '—'}</span>
+                    <span className="ck-line-item-table__value-text">
+                      {resolveLineItemTableReadOnlyDisplay({
+                        baseValue: count ? `${count}` : '',
+                        field,
+                        rowValues: (row.values || {}) as Record<string, FieldValue>,
+                        language
+                      })}
+                    </span>
                     {errorNode}
                   </div>
                 );
@@ -2939,7 +2957,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   data-has-error={hasFieldError ? 'true' : undefined}
                 >
                   <span className="ck-line-item-table__value-text">
-                    {display || '—'}
+                    {resolveLineItemTableReadOnlyDisplay({
+                      baseValue: display,
+                      field,
+                      rowValues: (row.values || {}) as Record<string, FieldValue>,
+                      language
+                    })}
                     {warningFootnote}
                   </span>
                   {errorNode}
@@ -8700,7 +8723,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         const selected = optsField.find(opt => opt.value === choiceVal);
                                         return (
                                           <div className="ck-line-item-table__value" data-field-path={fieldPath}>
-                                            {selected?.label || choiceVal || '—'}
+                                            {resolveLineItemTableReadOnlyDisplay({
+                                              baseValue: selected?.label || choiceVal,
+                                              field,
+                                              rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                              language
+                                            })}
                                           </div>
                                         );
                                       }
@@ -8734,7 +8762,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           .filter(Boolean);
                                         return (
                                           <div className="ck-line-item-table__value" data-field-path={fieldPath}>
-                                            {labels.length ? labels.join(', ') : '—'}
+                                            {resolveLineItemTableReadOnlyDisplay({
+                                              baseValue: labels.length ? labels.join(', ') : '',
+                                              field,
+                                              rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                              language
+                                            })}
                                           </div>
                                         );
                                       }
@@ -8794,7 +8827,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       if (renderAsLabel) {
                                         return (
                                           <div className="ck-line-item-table__value" data-field-path={fieldPath}>
-                                            {count ? `${count}` : '—'}
+                                            {resolveLineItemTableReadOnlyDisplay({
+                                              baseValue: count ? `${count}` : '',
+                                              field,
+                                              rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                              language
+                                            })}
                                           </div>
                                         );
                                       }
@@ -8847,7 +8885,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             : fieldValue;
                                       return (
                                         <div className="ck-line-item-table__value" data-field-path={fieldPath}>
-                                          {display || '—'}
+                                          {resolveLineItemTableReadOnlyDisplay({
+                                            baseValue: display,
+                                            field,
+                                            rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                            language
+                                          })}
                                         </div>
                                       );
                                     }

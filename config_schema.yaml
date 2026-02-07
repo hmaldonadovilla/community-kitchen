@@ -914,6 +914,26 @@ components:
             Where to render `helperText`.
             - `belowLabel`: render as supporting text below the field control (default)
             - `placeholder`: render inside the control as a placeholder (when supported; falls back to belowLabel)
+        renderAsLabel:
+          type: boolean
+          description: |
+            When true, render the field value as a read-only label in the edit view.
+        readOnlyAppendFieldId:
+          type: string
+          description: |
+            Optional sibling field id to append in parentheses when this field is rendered as a read-only value
+            inside line-item table cells (including overlay table editors).
+
+            Example output: `Bulgur (Gluten)`.
+        readOnlyAppendHideValues:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional appendix values to hide when using `readOnlyAppendFieldId`
+            (case-insensitive exact match after trim).
+
+            Example: `["None"]` keeps `Bulgur` instead of `Bulgur (None)`.
         summaryHideLabel:
           type: boolean
           description: |

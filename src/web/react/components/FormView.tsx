@@ -54,6 +54,7 @@ import {
   getUploadMinRequired,
   isUploadValueComplete,
   resolveRowDisclaimerText,
+  resolveLineItemTableReadOnlyDisplay,
   toDateInputValue,
   toUploadItems
 } from './form/utils';
@@ -147,6 +148,7 @@ const PRIMARY_ACTION_LABELS = new Set([
   'view/edit',
   'ingredients needed',
   'view/edit ingredients',
+  'edit ingredients',
   'back to production',
   'back',
   'add ingredient',
@@ -167,9 +169,9 @@ const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.h
 
 const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
 const listRowActionButtonWidthStyle: React.CSSProperties = {
-  width: LIST_ROW_ACTION_BUTTON_WIDTH,
-  minWidth: LIST_ROW_ACTION_BUTTON_WIDTH,
-  maxWidth: LIST_ROW_ACTION_BUTTON_WIDTH
+  width: 'fit-content',
+  minWidth: `min(${LIST_ROW_ACTION_BUTTON_WIDTH}, 100%)`,
+  maxWidth: '100%'
 };
 const withListRowActionButtonStyle = (
   baseStyle: React.CSSProperties,
@@ -9540,7 +9542,16 @@ const FormView: React.FC<FormViewProps> = ({
                                   const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
                                   if (renderAsLabel) {
                                     const selected = optsField.find(opt => opt.value === choiceVal);
-                                    return <div className="ck-line-item-table__value">{selected?.label || choiceVal || '—'}</div>;
+                                    return (
+                                      <div className="ck-line-item-table__value">
+                                        {resolveLineItemTableReadOnlyDisplay({
+                                          baseValue: selected?.label || choiceVal,
+                                          field,
+                                          rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                          language
+                                        })}
+                                      </div>
+                                    );
                                   }
                                   return (
                                     <div className="ck-line-item-table__control" {...controlAttrs}>
@@ -9579,7 +9590,16 @@ const FormView: React.FC<FormViewProps> = ({
                                             : tSystem('common.no', language, 'No')
                                         ]
                                       : selected.map(val => optsField.find(opt => opt.value === val)?.label || val).filter(Boolean);
-                                    return <div className="ck-line-item-table__value">{labels.length ? labels.join(', ') : '—'}</div>;
+                                    return (
+                                      <div className="ck-line-item-table__value">
+                                        {resolveLineItemTableReadOnlyDisplay({
+                                          baseValue: labels.length ? labels.join(', ') : '',
+                                          field,
+                                          rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                          language
+                                        })}
+                                      </div>
+                                    );
                                   }
                                   if (isConsentCheckbox) {
                                     return (
@@ -9653,7 +9673,16 @@ const FormView: React.FC<FormViewProps> = ({
                                   const items = toUploadItems(subRow.values[field.id]);
                                   const count = items.length;
                                   if (renderAsLabel) {
-                                    return <div className="ck-line-item-table__value">{count ? `${count}` : '—'}</div>;
+                                    return (
+                                      <div className="ck-line-item-table__value">
+                                        {resolveLineItemTableReadOnlyDisplay({
+                                          baseValue: count ? `${count}` : '',
+                                          field,
+                                          rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                          language
+                                        })}
+                                      </div>
+                                    );
                                   }
                                   return (
                                     <div className="ck-line-item-table__control" {...controlAttrs}>
@@ -9706,7 +9735,16 @@ const FormView: React.FC<FormViewProps> = ({
                                       : field.type === 'DATE'
                                         ? fieldValue
                                         : fieldValue;
-                                  return <div className="ck-line-item-table__value">{display || '—'}</div>;
+                                  return (
+                                    <div className="ck-line-item-table__value">
+                                      {resolveLineItemTableReadOnlyDisplay({
+                                        baseValue: display,
+                                        field,
+                                        rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                        language
+                                      })}
+                                    </div>
+                                  );
                                 }
                                 if (field.type === 'NUMBER') {
                                   return (
@@ -10145,7 +10183,7 @@ const FormView: React.FC<FormViewProps> = ({
                           {canShowDetailAddButton ? (
                             <button
                               type="button"
-                              style={withDisabled(buttonStyles.secondary, detailLocked || detailMaxRowsReached)}
+                              style={withDisabled(buttonStyles.primary, detailLocked || detailMaxRowsReached)}
                               disabled={detailLocked || detailMaxRowsReached}
                               onClick={openDetailAddOverlay}
                             >
@@ -10340,7 +10378,16 @@ const FormView: React.FC<FormViewProps> = ({
                         const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
                         if (renderAsLabel) {
                           const selected = optsField.find(opt => opt.value === choiceVal);
-                          return <div className="ck-line-item-table__value">{selected?.label || choiceVal || '—'}</div>;
+                          return (
+                            <div className="ck-line-item-table__value">
+                              {resolveLineItemTableReadOnlyDisplay({
+                                baseValue: selected?.label || choiceVal,
+                                field,
+                                rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                language
+                              })}
+                            </div>
+                          );
                         }
                         return (
                           <div className="ck-line-item-table__control" {...controlAttrs}>
@@ -10379,7 +10426,16 @@ const FormView: React.FC<FormViewProps> = ({
                                   : tSystem('common.no', language, 'No')
                               ]
                             : selected.map(val => optsField.find(opt => opt.value === val)?.label || val).filter(Boolean);
-                          return <div className="ck-line-item-table__value">{labels.length ? labels.join(', ') : '—'}</div>;
+                          return (
+                            <div className="ck-line-item-table__value">
+                              {resolveLineItemTableReadOnlyDisplay({
+                                baseValue: labels.length ? labels.join(', ') : '',
+                                field,
+                                rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                language
+                              })}
+                            </div>
+                          );
                         }
                         if (isConsentCheckbox) {
                           return (
@@ -10453,7 +10509,16 @@ const FormView: React.FC<FormViewProps> = ({
                         const items = toUploadItems(subRow.values[field.id]);
                         const count = items.length;
                         if (renderAsLabel) {
-                          return <div className="ck-line-item-table__value">{count ? `${count}` : '—'}</div>;
+                          return (
+                            <div className="ck-line-item-table__value">
+                              {resolveLineItemTableReadOnlyDisplay({
+                                baseValue: count ? `${count}` : '',
+                                field,
+                                rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                language
+                              })}
+                            </div>
+                          );
                         }
                         return (
                           <div className="ck-line-item-table__control" {...controlAttrs}>
@@ -10506,7 +10571,16 @@ const FormView: React.FC<FormViewProps> = ({
                             : field.type === 'DATE'
                               ? fieldValue
                               : fieldValue;
-                        return <div className="ck-line-item-table__value">{display || '—'}</div>;
+                        return (
+                          <div className="ck-line-item-table__value">
+                            {resolveLineItemTableReadOnlyDisplay({
+                              baseValue: display,
+                              field,
+                              rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                              language
+                            })}
+                          </div>
+                        );
                       }
                       if (field.type === 'NUMBER') {
                         return (

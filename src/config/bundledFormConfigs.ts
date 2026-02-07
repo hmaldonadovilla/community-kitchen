@@ -7809,7 +7809,8 @@ export const BUNDLED_FORM_CONFIGS = [
                                   },
                                   "label": {
                                     "en": "{{value}} leftover"
-                                  }
+                                  },
+                                  "editAction": "editLeftoverIngredientsPart"
                                 },
                                 {
                                   "fieldRef": "RECIPE",
@@ -7836,20 +7837,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "en": "Yields {{value}} portions",
                                     "fr": "Donne {{value}} portions",
                                     "nl": "Geeft {{value}} porties"
-                                  }
-                                },
-                                {
-                                  "fieldRef": "ingredientsRow.ING",
-                                  "showWhen": {
-                                    "fieldId": "PREP_TYPE",
-                                    "equals": [
-                                      "Part dish"
-                                    ]
-                                  },
-                                  "editAction": "editLeftoverIngredientsPart",
-                                  "format": {
-                                    "type": "list",
-                                    "listDelimiter": ", "
                                   }
                                 }
                               ],
@@ -9995,7 +9982,11 @@ export const BUNDLED_FORM_CONFIGS = [
                       "labelNl": "Ingrediënt",
                       "required": true,
                       "ui": {
-                        "labelLayout": "stacked"
+                        "labelLayout": "stacked",
+                        "readOnlyAppendFieldId": "ALLERGEN",
+                        "readOnlyAppendHideValues": [
+                          "None"
+                        ]
                       },
                       "readOnly": true,
                       "options": [
@@ -10007,7 +9998,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Cordon bleu",
                         "Fishsticks",
                         "Greek yogurt",
-                        "Mozzarella",
+                        "Cheese",
                         "Rice",
                         "Brown rice",
                         "Basmati rice",
@@ -10111,7 +10102,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Cordon bleu",
                         "Bâtonnets de poisson",
                         "Yaourt grec",
-                        "Mozzarella",
+                        "Cheese",
                         "Riz",
                         "Riz complet",
                         "Riz basmati",
@@ -10215,7 +10206,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "Cordon bleu",
                         "Vissticks",
                         "Griekse yoghurt",
-                        "Mozzarella",
+                        "Cheese",
                         "Rijst",
                         "Volkorenrijst",
                         "Basmati rijst",
@@ -10400,15 +10391,15 @@ export const BUNDLED_FORM_CONFIGS = [
                           "__ckOptionValue": "Greek yogurt"
                         },
                         {
-                          "optionEn": "Mozzarella",
-                          "optionFr": "Mozzarella",
-                          "optionNl": "Mozzarella",
+                          "optionEn": "Cheese",
+                          "optionFr": "Cheese",
+                          "optionNl": "Cheese",
                           "Category": "Dairy",
                           "Allergens": "Milk",
                           "Suppliers": "VDS;Solucious",
                           "allowedUnits": "kg, gr",
                           "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Mozzarella"
+                          "__ckOptionValue": "Cheese"
                         },
                         {
                           "optionEn": "Rice",
@@ -11448,7 +11439,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Chicken cubes",
                             "Fishsticks",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Brown rice",
                             "Basmati rice",
                             "Whole wheat pasta",
@@ -11538,7 +11529,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Cordon bleu",
                             "Fishsticks",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -11642,7 +11633,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Cordon bleu",
                             "Fishsticks",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -11738,7 +11729,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ],
                           "Vegetarian": [
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -12240,7 +12231,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "kg",
                             "gr"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "kg",
                             "gr"
                           ],
@@ -12812,7 +12803,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Greek yogurt": [
                             "Dairy"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "Dairy"
                           ],
                           "Rice": [
@@ -13194,7 +13185,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Greek yogurt": [
                             "Milk"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "Milk"
                           ],
                           "Rice": [
@@ -15582,7 +15573,11 @@ export const BUNDLED_FORM_CONFIGS = [
                         "labelNl": "Ingrediënt",
                         "required": true,
                         "ui": {
-                          "labelLayout": "stacked"
+                          "labelLayout": "stacked",
+                          "readOnlyAppendFieldId": "ALLERGEN",
+                          "readOnlyAppendHideValues": [
+                            "None"
+                          ]
                         },
                         "readOnly": true,
                         "options": [
@@ -15594,7 +15589,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Cordon bleu",
                           "Fishsticks",
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Rice",
                           "Brown rice",
                           "Basmati rice",
@@ -15698,7 +15693,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Cordon bleu",
                           "Bâtonnets de poisson",
                           "Yaourt grec",
-                          "Mozzarella",
+                          "Cheese",
                           "Riz",
                           "Riz complet",
                           "Riz basmati",
@@ -15802,7 +15797,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "Cordon bleu",
                           "Vissticks",
                           "Griekse yoghurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Rijst",
                           "Volkorenrijst",
                           "Basmati rijst",
@@ -15987,15 +15982,15 @@ export const BUNDLED_FORM_CONFIGS = [
                             "__ckOptionValue": "Greek yogurt"
                           },
                           {
-                            "optionEn": "Mozzarella",
-                            "optionFr": "Mozzarella",
-                            "optionNl": "Mozzarella",
+                            "optionEn": "Cheese",
+                            "optionFr": "Cheese",
+                            "optionNl": "Cheese",
                             "Category": "Dairy",
                             "Allergens": "Milk",
                             "Suppliers": "VDS;Solucious",
                             "allowedUnits": "kg, gr",
                             "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Mozzarella"
+                            "__ckOptionValue": "Cheese"
                           },
                           {
                             "optionEn": "Rice",
@@ -17035,7 +17030,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Chicken cubes",
                               "Fishsticks",
                               "Greek yogurt",
-                              "Mozzarella",
+                              "Cheese",
                               "Brown rice",
                               "Basmati rice",
                               "Whole wheat pasta",
@@ -17125,7 +17120,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Cordon bleu",
                               "Fishsticks",
                               "Greek yogurt",
-                              "Mozzarella",
+                              "Cheese",
                               "Rice",
                               "Brown rice",
                               "Basmati rice",
@@ -17229,7 +17224,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "Cordon bleu",
                               "Fishsticks",
                               "Greek yogurt",
-                              "Mozzarella",
+                              "Cheese",
                               "Rice",
                               "Brown rice",
                               "Basmati rice",
@@ -17325,7 +17320,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             ],
                             "Vegetarian": [
                               "Greek yogurt",
-                              "Mozzarella",
+                              "Cheese",
                               "Rice",
                               "Brown rice",
                               "Basmati rice",
@@ -17827,7 +17822,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "kg",
                               "gr"
                             ],
-                            "Mozzarella": [
+                            "Cheese": [
                               "kg",
                               "gr"
                             ],
@@ -18399,7 +18394,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Greek yogurt": [
                               "Dairy"
                             ],
-                            "Mozzarella": [
+                            "Cheese": [
                               "Dairy"
                             ],
                             "Rice": [
@@ -18781,7 +18776,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "Greek yogurt": [
                               "Milk"
                             ],
-                            "Mozzarella": [
+                            "Cheese": [
                               "Milk"
                             ],
                             "Rice": [
@@ -20707,7 +20702,8 @@ export const BUNDLED_FORM_CONFIGS = [
                                   },
                                   "label": {
                                     "en": "{{value}} leftover"
-                                  }
+                                  },
+                                  "editAction": "editLeftoverIngredientsPart"
                                 },
                                 {
                                   "fieldRef": "RECIPE",
@@ -20734,20 +20730,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "en": "Yields {{value}} portions",
                                     "fr": "Donne {{value}} portions",
                                     "nl": "Geeft {{value}} porties"
-                                  }
-                                },
-                                {
-                                  "fieldRef": "ingredientsRow.ING",
-                                  "showWhen": {
-                                    "fieldId": "PREP_TYPE",
-                                    "equals": [
-                                      "Part dish"
-                                    ]
-                                  },
-                                  "editAction": "editLeftoverIngredientsPart",
-                                  "format": {
-                                    "type": "list",
-                                    "listDelimiter": ", "
                                   }
                                 }
                               ],

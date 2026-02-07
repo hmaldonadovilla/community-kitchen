@@ -449,6 +449,20 @@ export interface QuestionUiConfig {
    */
   renderAsLabel?: boolean;
   /**
+   * Optional sibling field id to append in parentheses when this field is rendered as a read-only value
+   * inside line-item table cells (including overlay table editors).
+   *
+   * Example output: `Bulgur (Gluten)`.
+   */
+  readOnlyAppendFieldId?: string;
+  /**
+   * Optional list of appendix values that should be hidden when using `readOnlyAppendFieldId`
+   * (case-insensitive exact match after trim).
+   *
+   * Example: `["None"]` keeps `Bulgur` instead of `Bulgur (None)`.
+   */
+  readOnlyAppendHideValues?: string[];
+  /**
    * Summary-only override for label visibility.
    *
    * - When omitted, the Summary view inherits from `hideLabel`.

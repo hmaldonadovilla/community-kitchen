@@ -47,6 +47,50 @@ export const resolveFieldHelperText = (args: {
   return { text, placement };
 };
 
+const toInlineDisplayText = (value: unknown, language: LangCode): string => {
+  if (value === undefined || value === null) return '';
+  if (value instanceof Date) return toDateInputValue(value);
+  if (Array.isArray(value)) {
+    const parts = value
+      .map(item => toInlineDisplayText(item, language))
+      .map(part => part.trim())
+      .filter(Boolean);
+    return parts.join(', ');
+  }
+  if (typeof value === 'boolean') {
+    return value ? tSystem('common.yes', language, 'Yes') : tSystem('common.no', language, 'No');
+  }
+  const raw = value.toString().trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}([T\s].*)?$/.test(raw)) return toDateInputValue(raw) || raw;
+  return raw;
+};
+
+export const resolveLineItemTableReadOnlyDisplay = (args: {
+  baseValue: unknown;
+  field?: { ui?: any } | null;
+  rowValues?: Record<string, FieldValue> | null;
+  language: LangCode;
+}): string => {
+  const baseText = toInlineDisplayText(args.baseValue, args.language);
+  if (!baseText) return '—';
+
+  const appendFieldId = (args.field?.ui?.readOnlyAppendFieldId || '').toString().trim();
+  if (!appendFieldId || !args.rowValues) return baseText;
+  const appendRaw = (args.rowValues || {})[appendFieldId];
+  const appendText = toInlineDisplayText(appendRaw, args.language);
+  if (!appendText) return baseText;
+
+  const hiddenValues = Array.isArray(args.field?.ui?.readOnlyAppendHideValues)
+    ? (args.field?.ui?.readOnlyAppendHideValues as any[])
+        .map(v => (v !== undefined && v !== null ? v.toString().trim().toLowerCase() : ''))
+        .filter(Boolean)
+    : [];
+  if (hiddenValues.includes(appendText.toLowerCase())) return baseText;
+
+  return `${baseText} (${appendText})`;
+};
+
 export const resolveUploadRemainingHelperText = (args: {
   uploadConfig?: any;
   language: LangCode;

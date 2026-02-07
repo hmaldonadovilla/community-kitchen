@@ -1443,7 +1443,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
   const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const summarySubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const summarySubmitIntentRef = useRef<boolean>(false);
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
@@ -5755,6 +5754,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     if (Object.keys(nextErrors).length) {
       submitConfirmedRef.current = false;
       logEvent('submit.validate.failed');
+      if (bypassSubmitConfirm && viewRef.current === 'summary') {
+        setView('form');
+        logEvent('summary.submit.validationFailedNavigateForm', {
+          errorCount: Object.keys(nextErrors).length
+        });
+      }
       return;
     }
 
@@ -6058,39 +6063,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       submitLabelOverridden: Boolean(definition.submitButtonLabel),
       view: 'summary'
     });
-    if (viewRef.current === 'form') {
-      formSubmitActionRef.current?.();
-      return;
-    }
-    setView('form');
-    if (summarySubmitTimerRef.current) {
-      globalThis.clearTimeout(summarySubmitTimerRef.current);
-      summarySubmitTimerRef.current = null;
-    }
-    const startedAt = Date.now();
-    let attempt = 0;
-    const maxAttempts = 40;
-    const delayMs = 80;
-    const tick = () => {
-      attempt += 1;
-      const inForm = viewRef.current === 'form';
-      const submitAction = formSubmitActionRef.current;
-      const hasAction = typeof submitAction === 'function';
-      if (!inForm || !hasAction) {
-        if (attempt >= maxAttempts) {
-          summarySubmitIntentRef.current = false;
-          logEvent('summary.submit.timeout', { attempt, inForm, hasAction });
-          return;
-        }
-        summarySubmitTimerRef.current = globalThis.setTimeout(tick, delayMs);
-        return;
-      }
-      summarySubmitTimerRef.current = null;
-      logEvent('summary.submit.fire', { attempt, waitMs: Date.now() - startedAt });
-      submitAction?.();
-    };
-    tick();
-  }, [definition.submitButtonLabel, logEvent, recordLoadingId, setView, submitting, updateRecordBusyOpen]);
+    logEvent('summary.submit.fire', { sourceView: viewRef.current });
+    void handleSubmit();
+  }, [definition.submitButtonLabel, handleSubmit, logEvent, recordLoadingId, submitting, updateRecordBusyOpen]);
 
   const handleRecordSelect = (
     row: ListItem,
