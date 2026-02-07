@@ -62,14 +62,15 @@
   }
 
   .ck-panel-action {
-    border: 1px solid var(--border);
-    background: transparent;
+    border: 1px solid var(--accent);
+    background: var(--accent);
     padding: 6px 12px;
     border-radius: var(--radius-control, 8px);
     font: inherit;
-    font-weight: 500;
-    color: inherit;
+    font-weight: 600;
+    color: var(--accentText);
     cursor: pointer;
+    white-space: nowrap;
   }
 
   .ck-ingredients-table {
@@ -219,6 +220,16 @@
     var root = document.querySelector('[data-ck-template="mp.ing_recipe"]');
     if (!root || root.getAttribute('data-ck-init') === '1') return;
     root.setAttribute('data-ck-init', '1');
+
+    var allergens = root.querySelectorAll('.ck-ingredient-allergen');
+    Array.prototype.forEach.call(allergens, function (node) {
+      var raw = (node.textContent || '').toString().trim();
+      if (!raw || raw.toLowerCase() === 'none') {
+        node.textContent = '';
+        return;
+      }
+      node.textContent = raw;
+    });
 
     var tabs = root.querySelectorAll('[data-tab-target]');
     var panels = root.querySelectorAll('[data-tab-panel]');

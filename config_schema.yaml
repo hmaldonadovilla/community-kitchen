@@ -914,6 +914,26 @@ components:
             Where to render `helperText`.
             - `belowLabel`: render as supporting text below the field control (default)
             - `placeholder`: render inside the control as a placeholder (when supported; falls back to belowLabel)
+        renderAsLabel:
+          type: boolean
+          description: |
+            When true, render the field value as a read-only label in the edit view.
+        readOnlyAppendFieldId:
+          type: string
+          description: |
+            Optional sibling field id to append in parentheses when this field is rendered as a read-only value
+            inside line-item table cells (including overlay table editors).
+
+            Example output: `Bulgur (Gluten)`.
+        readOnlyAppendHideValues:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional appendix values to hide when using `readOnlyAppendFieldId`
+            (case-insensitive exact match after trim).
+
+            Example: `["None"]` keeps `Bulgur` instead of `Bulgur (None)`.
         summaryHideLabel:
           type: boolean
           description: |
@@ -1704,6 +1724,13 @@ components:
             - auto (default): run when the changed field participates in a reject dedup rule
             - always: always run the dedup precheck
             - never: skip the dedup precheck
+        cancelAction:
+          type: string
+          enum: [none, discardDraftAndGoHome]
+          description: |
+            Optional cancel behavior override.
+            - none (default): close dialog and revert the pending field change
+            - discardDraftAndGoHome: revert pending change, discard local draft edits, and navigate to Home/List
         inputs:
           type: array
           items:
@@ -2298,6 +2325,14 @@ components:
           description: |
             Optional per-view configuration for the top and bottom action bars (system + custom buttons).
             When omitted, the app uses the default layout.
+        fieldDisableRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldDisableRule'
+          description: |
+            Optional form-level field disable rules for the React edit (form) view.
+
+            When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
       additionalProperties: true
 
     AppHeaderConfig:
@@ -4268,6 +4303,24 @@ components:
               $ref: '#/components/schemas/WhenClause'
           additionalProperties: false
 
+    FieldDisableRule:
+      type: object
+      required: [when]
+      properties:
+        id:
+          type: string
+          description: Optional stable id for diagnostics.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Condition that activates this disable rule.
+        bypassFields:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of field ids that remain editable while this rule is active.
+      additionalProperties: false
+
     VisibilityConfig:
       type: object
       properties:
@@ -4712,6 +4765,14 @@ components:
           $ref: '#/components/schemas/LocalizedString'
         summaryButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
+        fieldDisableRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldDisableRule'
+          description: |
+            Optional form-level field disable rules for the React edit (form) view.
+
+            When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
       additionalProperties: true
     BuildBundleConfig:
       type: object

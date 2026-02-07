@@ -81,6 +81,34 @@ describe('Dashboard', () => {
     expect(forms[0].listViewMetaColumns).toEqual(['createdAt', 'status', 'pdfUrl']);
   });
 
+  test('getForms parses field disable rules with bypass fields from dashboard config', () => {
+    const configJson = JSON.stringify({
+      fieldDisableRules: [
+        {
+          id: 'future-date-lock',
+          when: { fieldId: 'DATE', isInFuture: true },
+          bypassFields: ['COOK']
+        }
+      ]
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].fieldDisableRules).toEqual([
+      {
+        id: 'future-date-lock',
+        when: { fieldId: 'DATE', isInFuture: true },
+        bypassFields: ['COOK']
+      }
+    ]);
+  });
+
   test('getForms parses list view legend from dashboard config', () => {
     const configJson = JSON.stringify({
       listViewLegend: [

@@ -1,4 +1,7 @@
-import { applyFieldChangeDialogTargets } from '../../src/web/react/app/fieldChangeDialog';
+import {
+  applyFieldChangeDialogTargets,
+  resolveFieldChangeDialogCancelAction
+} from '../../src/web/react/app/fieldChangeDialog';
 
 describe('applyFieldChangeDialogTargets', () => {
   it('updates top-level values', () => {
@@ -64,5 +67,21 @@ describe('applyFieldChangeDialogTargets', () => {
       context: { scope: 'top' }
     });
     expect(result.effectOverrides.effectA.QTY).toEqual(5);
+  });
+});
+
+describe('resolveFieldChangeDialogCancelAction', () => {
+  it('defaults to none', () => {
+    expect(resolveFieldChangeDialogCancelAction(undefined as any)).toBe('none');
+    expect(resolveFieldChangeDialogCancelAction({ when: { fieldId: 'DATE', notEmpty: true } } as any)).toBe('none');
+  });
+
+  it('resolves discardDraftAndGoHome action', () => {
+    expect(
+      resolveFieldChangeDialogCancelAction({
+        when: { fieldId: 'DATE', isInFuture: true },
+        cancelAction: 'discardDraftAndGoHome'
+      } as any)
+    ).toBe('discardDraftAndGoHome');
   });
 });

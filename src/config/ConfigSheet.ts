@@ -1933,6 +1933,20 @@ export class ConfigSheet {
         cfg.dedupMode = mode as FieldChangeDialogConfig['dedupMode'];
       }
     }
+    const cancelActionRaw = raw.cancelAction ?? raw.onCancel;
+    if (typeof cancelActionRaw === 'string') {
+      const action = cancelActionRaw.trim();
+      const normalized = action.toLowerCase();
+      if (normalized === 'none') {
+        cfg.cancelAction = 'none';
+      } else if (
+        normalized === 'discarddraftandgohome' ||
+        normalized === 'discard_draft_and_go_home' ||
+        normalized === 'discard-draft-and-go-home'
+      ) {
+        cfg.cancelAction = 'discardDraftAndGoHome';
+      }
+    }
     if (Array.isArray(raw.inputs)) {
       const inputs = raw.inputs.map((entry: any) => {
         if (!entry || typeof entry !== 'object') return null;

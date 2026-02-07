@@ -235,6 +235,7 @@ const buttonBase: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   lineHeight: 1,
+  whiteSpace: 'nowrap',
   gap: 10
 };
 

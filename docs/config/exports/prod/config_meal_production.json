@@ -1080,7 +1080,8 @@
                                 },
                                 "label": {
                                   "en": "{{value}} leftover"
-                                }
+                                },
+                                "editAction": "editLeftoverIngredientsPart"
                               },
                               {
                                 "fieldRef": "RECIPE",
@@ -1107,20 +1108,6 @@
                                   "en": "Yields {{value}} portions",
                                   "fr": "Donne {{value}} portions",
                                   "nl": "Geeft {{value}} porties"
-                                }
-                              },
-                              {
-                                "fieldRef": "ingredientsRow.ING",
-                                "showWhen": {
-                                  "fieldId": "PREP_TYPE",
-                                  "equals": [
-                                    "Part dish"
-                                  ]
-                                },
-                                "editAction": "editLeftoverIngredientsPart",
-                                "format": {
-                                  "type": "list",
-                                  "listDelimiter": ", "
                                 }
                               }
                             ],
@@ -3267,7 +3254,11 @@
                     "labelNl": "Ingrediënt",
                     "required": true,
                     "ui": {
-                      "labelLayout": "stacked"
+                      "labelLayout": "stacked",
+                      "readOnlyAppendFieldId": "ALLERGEN",
+                      "readOnlyAppendHideValues": [
+                        "None"
+                      ]
                     },
                     "readOnly": true,
                     "options": [
@@ -3279,7 +3270,7 @@
                       "Cordon bleu",
                       "Fishsticks",
                       "Greek yogurt",
-                      "Mozzarella",
+                      "Cheese",
                       "Rice",
                       "Brown rice",
                       "Basmati rice",
@@ -3383,7 +3374,7 @@
                       "Cordon bleu",
                       "Bâtonnets de poisson",
                       "Yaourt grec",
-                      "Mozzarella",
+                      "Cheese",
                       "Riz",
                       "Riz complet",
                       "Riz basmati",
@@ -3487,7 +3478,7 @@
                       "Cordon bleu",
                       "Vissticks",
                       "Griekse yoghurt",
-                      "Mozzarella",
+                      "Cheese",
                       "Rijst",
                       "Volkorenrijst",
                       "Basmati rijst",
@@ -3672,15 +3663,15 @@
                         "__ckOptionValue": "Greek yogurt"
                       },
                       {
-                        "optionEn": "Mozzarella",
-                        "optionFr": "Mozzarella",
-                        "optionNl": "Mozzarella",
+                        "optionEn": "Cheese",
+                        "optionFr": "Fromage",
+                        "optionNl": "Kaas",
                         "Category": "Dairy",
                         "Allergens": "Milk",
                         "Suppliers": "VDS;Solucious",
                         "allowedUnits": "kg, gr",
                         "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                        "__ckOptionValue": "Mozzarella"
+                        "__ckOptionValue": "Cheese"
                       },
                       {
                         "optionEn": "Rice",
@@ -4720,7 +4711,7 @@
                           "Chicken cubes",
                           "Fishsticks",
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Brown rice",
                           "Basmati rice",
                           "Whole wheat pasta",
@@ -4810,7 +4801,7 @@
                           "Cordon bleu",
                           "Fishsticks",
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Rice",
                           "Brown rice",
                           "Basmati rice",
@@ -4914,7 +4905,7 @@
                           "Cordon bleu",
                           "Fishsticks",
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Rice",
                           "Brown rice",
                           "Basmati rice",
@@ -5010,7 +5001,7 @@
                         ],
                         "Vegetarian": [
                           "Greek yogurt",
-                          "Mozzarella",
+                          "Cheese",
                           "Rice",
                           "Brown rice",
                           "Basmati rice",
@@ -5512,7 +5503,7 @@
                           "kg",
                           "gr"
                         ],
-                        "Mozzarella": [
+                        "Cheese": [
                           "kg",
                           "gr"
                         ],
@@ -6084,7 +6075,7 @@
                         "Greek yogurt": [
                           "Dairy"
                         ],
-                        "Mozzarella": [
+                        "Cheese": [
                           "Dairy"
                         ],
                         "Rice": [
@@ -6466,7 +6457,7 @@
                         "Greek yogurt": [
                           "Milk"
                         ],
-                        "Mozzarella": [
+                        "Cheese": [
                           "Milk"
                         ],
                         "Rice": [
@@ -7235,11 +7226,11 @@
       "optionsNl": [],
       "status": "Active",
       "button": {
-        "action": "renderHtmlTemplate",
+        "action": "renderMarkdownTemplate",
         "templateId": {
-          "EN": "bundle:procedure_meal_production.html",
-          "FR": "bundle:procedure_meal_production.html",
-          "NL": "bundle:procedure_meal_production.html"
+          "EN": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv",
+          "FR": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv",
+          "NL": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv"
         },
         "placements": [
           "topBarList"
@@ -8854,7 +8845,11 @@
                       "labelNl": "Ingrediënt",
                       "required": true,
                       "ui": {
-                        "labelLayout": "stacked"
+                        "labelLayout": "stacked",
+                        "readOnlyAppendFieldId": "ALLERGEN",
+                        "readOnlyAppendHideValues": [
+                          "None"
+                        ]
                       },
                       "readOnly": true,
                       "options": [
@@ -8866,7 +8861,7 @@
                         "Cordon bleu",
                         "Fishsticks",
                         "Greek yogurt",
-                        "Mozzarella",
+                        "Cheese",
                         "Rice",
                         "Brown rice",
                         "Basmati rice",
@@ -8970,7 +8965,7 @@
                         "Cordon bleu",
                         "Bâtonnets de poisson",
                         "Yaourt grec",
-                        "Mozzarella",
+                        "Cheese",
                         "Riz",
                         "Riz complet",
                         "Riz basmati",
@@ -9074,7 +9069,7 @@
                         "Cordon bleu",
                         "Vissticks",
                         "Griekse yoghurt",
-                        "Mozzarella",
+                        "Cheese",
                         "Rijst",
                         "Volkorenrijst",
                         "Basmati rijst",
@@ -9259,15 +9254,15 @@
                           "__ckOptionValue": "Greek yogurt"
                         },
                         {
-                          "optionEn": "Mozzarella",
-                          "optionFr": "Mozzarella",
-                          "optionNl": "Mozzarella",
+                          "optionEn": "Cheese",
+                          "optionFr": "Fromage",
+                          "optionNl": "Kaas",
                           "Category": "Dairy",
                           "Allergens": "Milk",
                           "Suppliers": "VDS;Solucious",
                           "allowedUnits": "kg, gr",
                           "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Mozzarella"
+                          "__ckOptionValue": "Cheese"
                         },
                         {
                           "optionEn": "Rice",
@@ -10307,7 +10302,7 @@
                             "Chicken cubes",
                             "Fishsticks",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Brown rice",
                             "Basmati rice",
                             "Whole wheat pasta",
@@ -10397,7 +10392,7 @@
                           "Cordon bleu",
                           "Fishsticks",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -10501,7 +10496,7 @@
                           "Cordon bleu",
                           "Fishsticks",
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -10597,7 +10592,7 @@
                         ],
                         "Vegetarian": [
                             "Greek yogurt",
-                            "Mozzarella",
+                            "Cheese",
                             "Rice",
                             "Brown rice",
                             "Basmati rice",
@@ -11099,7 +11094,7 @@
                             "kg",
                             "gr"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "kg",
                             "gr"
                           ],
@@ -11671,7 +11666,7 @@
                           "Greek yogurt": [
                             "Dairy"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "Dairy"
                           ],
                           "Rice": [
@@ -12053,7 +12048,7 @@
                           "Greek yogurt": [
                             "Milk"
                           ],
-                          "Mozzarella": [
+                          "Cheese": [
                             "Milk"
                           ],
                           "Rice": [
@@ -12809,11 +12804,11 @@
         "required": false,
         "listView": false,
         "button": {
-          "action": "renderHtmlTemplate",
+          "action": "renderMarkdownTemplate",
           "templateId": {
-            "EN": "bundle:procedure_meal_production.html",
-            "FR": "bundle:procedure_meal_production.html",
-            "NL": "bundle:procedure_meal_production.html"
+            "EN": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv",
+            "FR": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv",
+            "NL": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv"
           },
           "placements": [
             "topBarList"
@@ -13977,7 +13972,8 @@
                                 },
                                 "label": {
                                   "en": "{{value}} leftover"
-                                }
+                                },
+                                "editAction": "editLeftoverIngredientsPart"
                               },
                               {
                                 "fieldRef": "RECIPE",
@@ -14004,20 +14000,6 @@
                                   "en": "Yields {{value}} portions",
                                   "fr": "Donne {{value}} portions",
                                   "nl": "Geeft {{value}} porties"
-                                }
-                              },
-                              {
-                                "fieldRef": "ingredientsRow.ING",
-                                "showWhen": {
-                                  "fieldId": "PREP_TYPE",
-                                  "equals": [
-                                    "Part dish"
-                                  ]
-                                },
-                                "editAction": "editLeftoverIngredientsPart",
-                                "format": {
-                                  "type": "list",
-                                  "listDelimiter": ", "
                                 }
                               }
                             ],

@@ -54,6 +54,7 @@ import {
   getUploadMinRequired,
   isUploadValueComplete,
   resolveRowDisclaimerText,
+  resolveLineItemTableReadOnlyDisplay,
   toDateInputValue,
   toUploadItems
 } from './form/utils';
@@ -120,6 +121,7 @@ import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app
 import { resolveTemplateIdForRecord } from '../app/templateId';
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
 import { applyClearOnChange, isClearOnChangeEnabled } from '../app/clearOnChange';
+import { isFieldDisabledByRule, resolveActiveFieldDisableRule } from '../app/fieldDisableRules';
 import {
   buildParagraphDisclaimerSection,
   buildParagraphDisclaimerValue,
@@ -146,8 +148,13 @@ const PRIMARY_ACTION_LABELS = new Set([
   'view/edit',
   'ingredients needed',
   'view/edit ingredients',
+  'edit ingredients',
   'back to production',
   'back',
+  'add ingredient',
+  'add ingredients',
+  'add line',
+  'add lines',
   '+add ingredient',
   '+another leftover',
   '+add leftover',
@@ -159,6 +166,17 @@ const PRIMARY_ACTION_LABELS = new Set([
 ].map(normalizeActionToken));
 
 const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has(normalizeActionToken(label));
+
+const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
+const listRowActionButtonWidthStyle: React.CSSProperties = {
+  width: 'fit-content',
+  minWidth: `min(${LIST_ROW_ACTION_BUTTON_WIDTH}, 100%)`,
+  maxWidth: '100%'
+};
+const withListRowActionButtonStyle = (
+  baseStyle: React.CSSProperties,
+  disabled: boolean
+): React.CSSProperties => withDisabled({ ...baseStyle, ...listRowActionButtonWidthStyle }, disabled);
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -765,7 +783,6 @@ const FormView: React.FC<FormViewProps> = ({
     () => resolveStatusPillKey(recordStatusText, definition.followup?.statusTransitions),
     [definition.followup?.statusTransitions, recordStatusText]
   );
-  const isFieldLockedByDedup = (_fieldId: string): boolean => false;
   const dedupKeyFieldIds = useMemo(() => {
     if (dedupKeyFieldIdMap) {
       return new Set<string>(Object.keys(dedupKeyFieldIdMap || {}));
@@ -5960,6 +5977,33 @@ const FormView: React.FC<FormViewProps> = ({
     }),
     [lineItems, resolveVisibilityValue]
   );
+  const activeFieldDisableRule = useMemo(
+    () =>
+      resolveActiveFieldDisableRule({
+        rules: definition.fieldDisableRules,
+        matchesWhen: when => matchesWhenClause(when, topVisibilityCtx)
+      }),
+    [definition.fieldDisableRules, topVisibilityCtx]
+  );
+  const activeFieldDisableRuleKeyRef = useRef<string>('');
+  useEffect(() => {
+    if (!onDiagnostic) return;
+    const nextKey = activeFieldDisableRule
+      ? `${activeFieldDisableRule.id || '__anonymous__'}::${(activeFieldDisableRule.bypassFields || []).join(',')}`
+      : '';
+    if (activeFieldDisableRuleKeyRef.current === nextKey) return;
+    activeFieldDisableRuleKeyRef.current = nextKey;
+    onDiagnostic('fieldDisableRules.state', {
+      active: Boolean(activeFieldDisableRule),
+      ruleId: activeFieldDisableRule?.id || null,
+      bypassFields: activeFieldDisableRule?.bypassFields || [],
+      reason: activeFieldDisableRule ? 'matched' : 'noMatch'
+    });
+  }, [activeFieldDisableRule, onDiagnostic]);
+  const isFieldLockedByDedup = useCallback(
+    (fieldId: string): boolean => isFieldDisabledByRule(fieldId, activeFieldDisableRule),
+    [activeFieldDisableRule]
+  );
 
   const resolveTopValueNoScan = useCallback(
     (sourceValues: Record<string, FieldValue>, fieldId: string): FieldValue | undefined => {
@@ -6352,7 +6396,7 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
     if (isFieldLockedByDedup(q.id)) {
-      onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'dedupConflict' });
+      onDiagnostic?.('field.change.blocked', { scope: 'top', fieldId: q.id, reason: 'fieldDisableRule' });
       return;
     }
     const orderedBlock = resolveOrderedEntryBlock({ scope: 'top', questionId: q.id });
@@ -6455,7 +6499,7 @@ const FormView: React.FC<FormViewProps> = ({
       onDiagnostic?.('field.change.blocked', {
         scope: 'line',
         fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
-        reason: 'dedupConflict'
+        reason: 'fieldDisableRule'
       });
       return;
     }
@@ -7325,7 +7369,7 @@ const FormView: React.FC<FormViewProps> = ({
         const label = resolveLabel(q, language);
         const primary = isPrimaryActionLabel(label);
         const busyThis = !!reportBusy && reportBusyId === q.id;
-        const disabled = submitting || !onReportButton || !!reportBusy;
+        const disabled = submitting || isFieldLockedByDedup(q.id) || !onReportButton || !!reportBusy;
         const buttonLabelStyle = inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly;
         return (
           <div
@@ -8960,11 +9004,12 @@ const FormView: React.FC<FormViewProps> = ({
         return (
           <button
             type="button"
+            className="ck-list-row-action-btn"
             onClick={() => {
               if (subMaxRowsReached) return;
               addLineItemRowManual(subKey, undefined, subAddRowOptions);
             }}
-            style={withDisabled(buttonStyles.secondary, subMaxRowsReached)}
+            style={withListRowActionButtonStyle(buttonStyles.secondary, subMaxRowsReached)}
             disabled={subMaxRowsReached}
           >
             <PlusIcon />
@@ -8976,11 +9021,15 @@ const FormView: React.FC<FormViewProps> = ({
         const addLinesLabel = resolveLocalizedString(subConfig.addButtonLabel, language, 'Add lines');
         const addLinesPrimary = isPrimaryActionLabel(addLinesLabel);
                         return (
-                          <button
-                            type="button"
-            style={withDisabled(addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary, submitting || subSelectorIsMissing || subMaxRowsReached)}
-            disabled={submitting || subSelectorIsMissing || subMaxRowsReached}
-                            onClick={async () => {
+	                          <button
+	                            type="button"
+	                            className="ck-list-row-action-btn"
+	            style={withListRowActionButtonStyle(
+                addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary,
+                submitting || subSelectorIsMissing || subMaxRowsReached
+              )}
+	            disabled={submitting || subSelectorIsMissing || subMaxRowsReached}
+	                            onClick={async () => {
               if (subMaxRowsReached) {
                 onDiagnostic?.('subgroup.overlay.add.blocked', {
                   groupId: subKey,
@@ -9058,10 +9107,11 @@ const FormView: React.FC<FormViewProps> = ({
       const addLineLabel = resolveLocalizedString(subConfig.addButtonLabel, language, 'Add line');
       const addLinePrimary = isPrimaryActionLabel(addLineLabel);
                       return (
-        <button
-          type="button"
-          disabled={subSelectorIsMissing || subMaxRowsReached}
-          onClick={() => {
+	        <button
+	          type="button"
+          className="ck-list-row-action-btn"
+	          disabled={subSelectorIsMissing || subMaxRowsReached}
+	          onClick={() => {
             if (subMaxRowsReached) {
               onDiagnostic?.('subgroup.overlay.add.blocked', {
                 groupId: subKey,
@@ -9082,8 +9132,11 @@ const FormView: React.FC<FormViewProps> = ({
             }
             addLineItemRowManual(subKey, Object.keys(preset).length ? preset : undefined, subAddRowOptions);
           }}
-          style={withDisabled(addLinePrimary ? buttonStyles.primary : buttonStyles.secondary, subSelectorIsMissing || subMaxRowsReached)}
-        >
+	          style={withListRowActionButtonStyle(
+              addLinePrimary ? buttonStyles.primary : buttonStyles.secondary,
+              subSelectorIsMissing || subMaxRowsReached
+            )}
+	        >
           <PlusIcon />
           {addLineLabel}
                         </button>
@@ -9489,7 +9542,16 @@ const FormView: React.FC<FormViewProps> = ({
                                   const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
                                   if (renderAsLabel) {
                                     const selected = optsField.find(opt => opt.value === choiceVal);
-                                    return <div className="ck-line-item-table__value">{selected?.label || choiceVal || '—'}</div>;
+                                    return (
+                                      <div className="ck-line-item-table__value">
+                                        {resolveLineItemTableReadOnlyDisplay({
+                                          baseValue: selected?.label || choiceVal,
+                                          field,
+                                          rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                          language
+                                        })}
+                                      </div>
+                                    );
                                   }
                                   return (
                                     <div className="ck-line-item-table__control" {...controlAttrs}>
@@ -9509,6 +9571,11 @@ const FormView: React.FC<FormViewProps> = ({
                                 }
 
                                 if (field.type === 'CHECKBOX') {
+                                  const hasAnyOption =
+                                    !!((optionSetField.en && optionSetField.en.length) ||
+                                      ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                                      ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                                  const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
                                   const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
                                   const allowedWithSelected = selected.reduce((acc, val) => {
                                     if (val && !acc.includes(val)) acc.push(val);
@@ -9516,10 +9583,44 @@ const FormView: React.FC<FormViewProps> = ({
                                   }, [...allowedField]);
                                   const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
                                   if (renderAsLabel) {
-                                    const labels = selected
-                                      .map(val => optsField.find(opt => opt.value === val)?.label || val)
-                                      .filter(Boolean);
-                                    return <div className="ck-line-item-table__value">{labels.length ? labels.join(', ') : '—'}</div>;
+                                    const labels = isConsentCheckbox
+                                      ? [
+                                          subRow.values[field.id]
+                                            ? tSystem('common.yes', language, 'Yes')
+                                            : tSystem('common.no', language, 'No')
+                                        ]
+                                      : selected.map(val => optsField.find(opt => opt.value === val)?.label || val).filter(Boolean);
+                                    return (
+                                      <div className="ck-line-item-table__value">
+                                        {resolveLineItemTableReadOnlyDisplay({
+                                          baseValue: labels.length ? labels.join(', ') : '',
+                                          field,
+                                          rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                          language
+                                        })}
+                                      </div>
+                                    );
+                                  }
+                                  if (isConsentCheckbox) {
+                                    return (
+                                      <div className="ck-line-item-table__control ck-line-item-table__control--consent" {...controlAttrs}>
+                                        <label className="inline">
+                                          <input
+                                            type="checkbox"
+                                            className="ck-line-item-table__consent-checkbox"
+                                            checked={!!subRow.values[field.id]}
+                                            aria-label={resolveFieldLabel(field, language, field.id)}
+                                            disabled={submitting || (field as any)?.readOnly === true}
+                                            onChange={e => {
+                                              if (submitting || (field as any)?.readOnly === true) return;
+                                              handleLineFieldChange(subGroupDef, subRow.id, field, e.target.checked);
+                                            }}
+                                          />
+                                          <span style={srOnly}>{resolveFieldLabel(field, language, field.id)}</span>
+                                        </label>
+                                        {renderErrors()}
+                                      </div>
+                                    );
                                   }
                                   const controlOverride = ((field as any)?.ui?.control || '').toString().trim().toLowerCase();
                                   const renderAsMultiSelect = controlOverride === 'select';
@@ -9572,7 +9673,16 @@ const FormView: React.FC<FormViewProps> = ({
                                   const items = toUploadItems(subRow.values[field.id]);
                                   const count = items.length;
                                   if (renderAsLabel) {
-                                    return <div className="ck-line-item-table__value">{count ? `${count}` : '—'}</div>;
+                                    return (
+                                      <div className="ck-line-item-table__value">
+                                        {resolveLineItemTableReadOnlyDisplay({
+                                          baseValue: count ? `${count}` : '',
+                                          field,
+                                          rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                          language
+                                        })}
+                                      </div>
+                                    );
                                   }
                                   return (
                                     <div className="ck-line-item-table__control" {...controlAttrs}>
@@ -9625,7 +9735,16 @@ const FormView: React.FC<FormViewProps> = ({
                                       : field.type === 'DATE'
                                         ? fieldValue
                                         : fieldValue;
-                                  return <div className="ck-line-item-table__value">{display || '—'}</div>;
+                                  return (
+                                    <div className="ck-line-item-table__value">
+                                      {resolveLineItemTableReadOnlyDisplay({
+                                        baseValue: display,
+                                        field,
+                                        rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                        language
+                                      })}
+                                    </div>
+                                  );
                                 }
                                 if (field.type === 'NUMBER') {
                                   return (
@@ -10064,7 +10183,7 @@ const FormView: React.FC<FormViewProps> = ({
                           {canShowDetailAddButton ? (
                             <button
                               type="button"
-                              style={withDisabled(buttonStyles.secondary, detailLocked || detailMaxRowsReached)}
+                              style={withDisabled(buttonStyles.primary, detailLocked || detailMaxRowsReached)}
                               disabled={detailLocked || detailMaxRowsReached}
                               onClick={openDetailAddOverlay}
                             >
@@ -10259,7 +10378,16 @@ const FormView: React.FC<FormViewProps> = ({
                         const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
                         if (renderAsLabel) {
                           const selected = optsField.find(opt => opt.value === choiceVal);
-                          return <div className="ck-line-item-table__value">{selected?.label || choiceVal || '—'}</div>;
+                          return (
+                            <div className="ck-line-item-table__value">
+                              {resolveLineItemTableReadOnlyDisplay({
+                                baseValue: selected?.label || choiceVal,
+                                field,
+                                rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                language
+                              })}
+                            </div>
+                          );
                         }
                         return (
                           <div className="ck-line-item-table__control" {...controlAttrs}>
@@ -10279,6 +10407,11 @@ const FormView: React.FC<FormViewProps> = ({
                       }
 
                       if (field.type === 'CHECKBOX') {
+                        const hasAnyOption =
+                          !!((optionSetField.en && optionSetField.en.length) ||
+                            ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                            ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                        const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
                         const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
                         const allowedWithSelected = selected.reduce((acc, val) => {
                           if (val && !acc.includes(val)) acc.push(val);
@@ -10286,10 +10419,44 @@ const FormView: React.FC<FormViewProps> = ({
                         }, [...allowedField]);
                         const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
                         if (renderAsLabel) {
-                          const labels = selected
-                            .map(val => optsField.find(opt => opt.value === val)?.label || val)
-                            .filter(Boolean);
-                          return <div className="ck-line-item-table__value">{labels.length ? labels.join(', ') : '—'}</div>;
+                          const labels = isConsentCheckbox
+                            ? [
+                                subRow.values[field.id]
+                                  ? tSystem('common.yes', language, 'Yes')
+                                  : tSystem('common.no', language, 'No')
+                              ]
+                            : selected.map(val => optsField.find(opt => opt.value === val)?.label || val).filter(Boolean);
+                          return (
+                            <div className="ck-line-item-table__value">
+                              {resolveLineItemTableReadOnlyDisplay({
+                                baseValue: labels.length ? labels.join(', ') : '',
+                                field,
+                                rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                language
+                              })}
+                            </div>
+                          );
+                        }
+                        if (isConsentCheckbox) {
+                          return (
+                            <div className="ck-line-item-table__control ck-line-item-table__control--consent" {...controlAttrs}>
+                              <label className="inline">
+                                <input
+                                  type="checkbox"
+                                  className="ck-line-item-table__consent-checkbox"
+                                  checked={!!subRow.values[field.id]}
+                                  aria-label={resolveFieldLabel(field, language, field.id)}
+                                  disabled={submitting || (field as any)?.readOnly === true}
+                                  onChange={e => {
+                                    if (submitting || (field as any)?.readOnly === true) return;
+                                    handleLineFieldChange(subGroupDef, subRow.id, field, e.target.checked);
+                                  }}
+                                />
+                                <span style={srOnly}>{resolveFieldLabel(field, language, field.id)}</span>
+                              </label>
+                              {renderErrors()}
+                            </div>
+                          );
                         }
                         const controlOverride = ((field as any)?.ui?.control || '').toString().trim().toLowerCase();
                         const renderAsMultiSelect = controlOverride === 'select';
@@ -10342,7 +10509,16 @@ const FormView: React.FC<FormViewProps> = ({
                         const items = toUploadItems(subRow.values[field.id]);
                         const count = items.length;
                         if (renderAsLabel) {
-                          return <div className="ck-line-item-table__value">{count ? `${count}` : '—'}</div>;
+                          return (
+                            <div className="ck-line-item-table__value">
+                              {resolveLineItemTableReadOnlyDisplay({
+                                baseValue: count ? `${count}` : '',
+                                field,
+                                rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                                language
+                              })}
+                            </div>
+                          );
                         }
                         return (
                           <div className="ck-line-item-table__control" {...controlAttrs}>
@@ -10395,7 +10571,16 @@ const FormView: React.FC<FormViewProps> = ({
                             : field.type === 'DATE'
                               ? fieldValue
                               : fieldValue;
-                        return <div className="ck-line-item-table__value">{display || '—'}</div>;
+                        return (
+                          <div className="ck-line-item-table__value">
+                            {resolveLineItemTableReadOnlyDisplay({
+                              baseValue: display,
+                              field,
+                              rowValues: (subRow.values || {}) as Record<string, FieldValue>,
+                              language
+                            })}
+                          </div>
+                        );
                       }
                       if (field.type === 'NUMBER') {
                         return (
@@ -11369,11 +11554,12 @@ const FormView: React.FC<FormViewProps> = ({
         return (
           <button
             type="button"
+            className="ck-list-row-action-btn"
             onClick={() => {
               if (locked || maxRowsReached) return;
               addLineItemRowManual(groupId, undefined, groupAddRowOptions);
             }}
-            style={withDisabled(buttonStyles.secondary, locked || maxRowsReached)}
+            style={withListRowActionButtonStyle(buttonStyles.secondary, locked || maxRowsReached)}
             disabled={locked || maxRowsReached}
           >
             <PlusIcon />
@@ -11387,8 +11573,12 @@ const FormView: React.FC<FormViewProps> = ({
         return (
           <button
             type="button"
+            className="ck-list-row-action-btn"
             disabled={locked || selectorIsMissing || maxRowsReached}
-            style={withDisabled(addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
+            style={withListRowActionButtonStyle(
+              addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary,
+              locked || selectorIsMissing || maxRowsReached
+            )}
             onClick={async () => {
               if (locked || selectorIsMissing || maxRowsReached) {
                 if (maxRowsReached) {
@@ -11470,6 +11660,7 @@ const FormView: React.FC<FormViewProps> = ({
       return (
         <button
           type="button"
+          className="ck-list-row-action-btn"
           disabled={locked || selectorIsMissing || maxRowsReached}
           onClick={() => {
             if (maxRowsReached) {
@@ -11489,7 +11680,10 @@ const FormView: React.FC<FormViewProps> = ({
                 : undefined;
             addLineItemRowManual(groupId, selectorPreset, groupAddRowOptions);
           }}
-          style={withDisabled(addLinePrimary ? buttonStyles.primary : buttonStyles.secondary, locked || selectorIsMissing || maxRowsReached)}
+          style={withListRowActionButtonStyle(
+            addLinePrimary ? buttonStyles.primary : buttonStyles.secondary,
+            locked || selectorIsMissing || maxRowsReached
+          )}
         >
           <PlusIcon />
           {addLineLabel}

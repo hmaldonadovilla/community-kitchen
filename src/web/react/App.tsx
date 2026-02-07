@@ -71,6 +71,7 @@ import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns
 import {
   applyFieldChangeDialogTargets,
   evaluateFieldChangeDialogWhen,
+  resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
   resolveTargetFieldConfig,
   type FieldChangeDialogTargetUpdate
@@ -1013,8 +1014,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const handleFieldChangeDialogCancel = useCallback(() => {
     const pending = fieldChangeActiveRef.current;
     if (!pending) return;
-    revertFieldChangePending(pending, 'cancel');
-  }, [revertFieldChangePending]);
+    const cancelAction = resolveFieldChangeDialogCancelAction(pending.dialog);
+    revertFieldChangePending(
+      pending,
+      cancelAction === 'discardDraftAndGoHome' ? 'cancel.discardDraftAndGoHome' : 'cancel',
+      { cancelAction }
+    );
+    if (cancelAction !== 'discardDraftAndGoHome') return;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    dedupHoldRef.current = false;
+    autoSaveDirtyRef.current = false;
+    autoSaveQueuedRef.current = false;
+    setDraftSave({ phase: 'idle' });
+    setView('list');
+    setStatus(null);
+    setStatusLevel(null);
+    logEvent('fieldChangeDialog.cancelAction.discardDraftAndGoHome', {
+      fieldPath: pending.fieldPath,
+      fieldId: pending.fieldId,
+      groupId: pending.groupId || null,
+      rowId: pending.rowId || null
+    });
+  }, [logEvent, revertFieldChangePending]);
 
   const openFieldChangeDialog = useCallback(
     (pending: FieldChangePending) => {
@@ -1419,7 +1443,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
   const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const summarySubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const summarySubmitIntentRef = useRef<boolean>(false);
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
@@ -2449,7 +2472,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
   // Close the submit confirmation dialog when navigating away.
   useEffect(() => {
-    if (view === 'form') return;
+    if (view === 'form' || view === 'summary') return;
     if (!submitConfirmOpen) return;
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = false;
@@ -4266,6 +4289,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const cancelSubmitConfirm = useCallback(() => {
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = false;
+    summarySubmitIntentRef.current = false;
     logEvent('ui.submitConfirm.cancel');
   }, [logEvent]);
 
@@ -4273,8 +4297,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = true;
     logEvent('ui.submitConfirm.confirm');
+    if (viewRef.current === 'summary') {
+      void handleSubmit();
+      return;
+    }
     formSubmitActionRef.current?.();
-  }, [logEvent]);
+  }, [handleSubmit, logEvent]);
 
   const autoSaveDebounceMs = (() => {
     const raw = definition.autoSave?.debounceMs;
@@ -5606,11 +5634,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     });
   }
 
-  const handleSubmit = async (submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => {
-    const bypassSubmitConfirm = summarySubmitIntentRef.current === true;
-    if (bypassSubmitConfirm) {
-      summarySubmitIntentRef.current = false;
-    }
+  async function handleSubmit(submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) {
+    const submitRequestedFromSummary = summarySubmitIntentRef.current === true;
     if (isClosedRecord) {
       setStatus(tSystem('app.closedReadOnly', language, 'Closed (read-only)'));
       setStatusLevel('info');
@@ -5731,6 +5756,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     if (Object.keys(nextErrors).length) {
       submitConfirmedRef.current = false;
       logEvent('submit.validate.failed');
+      if (submitRequestedFromSummary && viewRef.current === 'summary') {
+        summarySubmitIntentRef.current = false;
+        setView('form');
+        logEvent('summary.submit.validationFailedNavigateForm', {
+          errorCount: Object.keys(nextErrors).length
+        });
+      }
       return;
     }
 
@@ -5756,7 +5788,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
 
     // Only show the submit confirmation overlay once the form is already valid.
-    if (!submitConfirmedRef.current && !bypassSubmitConfirm) {
+    if (!submitConfirmedRef.current) {
       setSubmitConfirmOpen(true);
       logEvent('ui.submitConfirm.openAfterValidation', {
         configuredMessage: Boolean(definition.submissionConfirmationMessage),
@@ -5767,6 +5799,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       return;
     }
     submitConfirmedRef.current = false;
+    summarySubmitIntentRef.current = false;
 
     setSubmitting(true);
     // Keep ref in sync immediately so background work (autosave/uploads) can't start in the same tick.
@@ -6022,7 +6055,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   const handleSummarySubmit = useCallback(() => {
     if (submitting) return;
@@ -6034,39 +6067,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       submitLabelOverridden: Boolean(definition.submitButtonLabel),
       view: 'summary'
     });
-    if (viewRef.current === 'form') {
-      formSubmitActionRef.current?.();
-      return;
-    }
-    setView('form');
-    if (summarySubmitTimerRef.current) {
-      globalThis.clearTimeout(summarySubmitTimerRef.current);
-      summarySubmitTimerRef.current = null;
-    }
-    const startedAt = Date.now();
-    let attempt = 0;
-    const maxAttempts = 40;
-    const delayMs = 80;
-    const tick = () => {
-      attempt += 1;
-      const inForm = viewRef.current === 'form';
-      const submitAction = formSubmitActionRef.current;
-      const hasAction = typeof submitAction === 'function';
-      if (!inForm || !hasAction) {
-        if (attempt >= maxAttempts) {
-          summarySubmitIntentRef.current = false;
-          logEvent('summary.submit.timeout', { attempt, inForm, hasAction });
-          return;
-        }
-        summarySubmitTimerRef.current = globalThis.setTimeout(tick, delayMs);
-        return;
-      }
-      summarySubmitTimerRef.current = null;
-      logEvent('summary.submit.fire', { attempt, waitMs: Date.now() - startedAt });
-      submitAction?.();
-    };
-    tick();
-  }, [definition.submitButtonLabel, logEvent, recordLoadingId, setView, submitting, updateRecordBusyOpen]);
+    logEvent('summary.submit.fire', { sourceView: viewRef.current });
+    void handleSubmit();
+  }, [definition.submitButtonLabel, handleSubmit, logEvent, recordLoadingId, submitting, updateRecordBusyOpen]);
 
   const handleRecordSelect = (
     row: ListItem,
@@ -7273,7 +7276,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       />
 
       <ConfirmDialogOverlay
-        open={submitConfirmOpen && view === 'form'}
+        open={submitConfirmOpen && (view === 'form' || view === 'summary')}
         title={submitConfirmTitle}
         message={submitConfirmMessage}
         confirmLabel={submitConfirmConfirmLabelResolved}
