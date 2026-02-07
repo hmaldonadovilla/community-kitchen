@@ -98,6 +98,13 @@ export class MockSheet {
   hideColumns(col: number, num: number) { }
   activate() { return this; }
   appendRow(row: any[]) { this.data.push(row); }
+  deleteRow(row: number) {
+    if (!Number.isFinite(Number(row))) return this;
+    const idx = Math.floor(Number(row)) - 1;
+    if (idx < 0 || idx >= this.data.length) return this;
+    this.data.splice(idx, 1);
+    return this;
+  }
   getValues() { return this.data; }
   private ensureSize(targetRow: number, targetCol: number) {
     while (this.data.length < targetRow) {

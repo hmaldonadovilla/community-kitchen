@@ -118,6 +118,7 @@
       "debounceMs": 2000,
       "status": "In progress"
     },
+    "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [
@@ -13032,6 +13033,7 @@
       "debounceMs": 2000,
       "status": "In progress"
     },
+    "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [
