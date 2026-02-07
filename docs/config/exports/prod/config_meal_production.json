@@ -1080,7 +1080,8 @@
                                 },
                                 "label": {
                                   "en": "{{value}} leftover"
-                                }
+                                },
+                                "editAction": "editLeftoverIngredientsPart"
                               },
                               {
                                 "fieldRef": "RECIPE",
@@ -1107,20 +1108,6 @@
                                   "en": "Yields {{value}} portions",
                                   "fr": "Donne {{value}} portions",
                                   "nl": "Geeft {{value}} porties"
-                                }
-                              },
-                              {
-                                "fieldRef": "ingredientsRow.ING",
-                                "showWhen": {
-                                  "fieldId": "PREP_TYPE",
-                                  "equals": [
-                                    "Part dish"
-                                  ]
-                                },
-                                "editAction": "editLeftoverIngredientsPart",
-                                "format": {
-                                  "type": "list",
-                                  "listDelimiter": ", "
                                 }
                               }
                             ],
@@ -3267,7 +3254,11 @@
                     "labelNl": "Ingrediënt",
                     "required": true,
                     "ui": {
-                      "labelLayout": "stacked"
+                      "labelLayout": "stacked",
+                      "readOnlyAppendFieldId": "ALLERGEN",
+                      "readOnlyAppendHideValues": [
+                        "None"
+                      ]
                     },
                     "readOnly": true,
                     "options": [
@@ -8854,7 +8845,11 @@
                       "labelNl": "Ingrediënt",
                       "required": true,
                       "ui": {
-                        "labelLayout": "stacked"
+                        "labelLayout": "stacked",
+                        "readOnlyAppendFieldId": "ALLERGEN",
+                        "readOnlyAppendHideValues": [
+                          "None"
+                        ]
                       },
                       "readOnly": true,
                       "options": [
@@ -13977,7 +13972,8 @@
                                 },
                                 "label": {
                                   "en": "{{value}} leftover"
-                                }
+                                },
+                                "editAction": "editLeftoverIngredientsPart"
                               },
                               {
                                 "fieldRef": "RECIPE",
@@ -14004,20 +14000,6 @@
                                   "en": "Yields {{value}} portions",
                                   "fr": "Donne {{value}} portions",
                                   "nl": "Geeft {{value}} porties"
-                                }
-                              },
-                              {
-                                "fieldRef": "ingredientsRow.ING",
-                                "showWhen": {
-                                  "fieldId": "PREP_TYPE",
-                                  "equals": [
-                                    "Part dish"
-                                  ]
-                                },
-                                "editAction": "editLeftoverIngredientsPart",
-                                "format": {
-                                  "type": "list",
-                                  "listDelimiter": ", "
                                 }
                               }
                             ],

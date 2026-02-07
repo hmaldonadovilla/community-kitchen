@@ -3666,8 +3666,8 @@
                       },
                       {
                         "optionEn": "Cheese",
-                        "optionFr": "Cheese",
-                        "optionNl": "Cheese",
+                        "optionFr": "Fromage",
+                        "optionNl": "Kaas",
                         "Category": "Dairy",
                         "Allergens": "Milk",
                         "Suppliers": "VDS;Solucious",
@@ -9257,8 +9257,8 @@
                         },
                         {
                           "optionEn": "Cheese",
-                          "optionFr": "Cheese",
-                          "optionNl": "Cheese",
+                          "optionFr": "Fromage",
+                          "optionNl": "Kaas",
                           "Category": "Dairy",
                           "Allergens": "Milk",
                           "Suppliers": "VDS;Solucious",
