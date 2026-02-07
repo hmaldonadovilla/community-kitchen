@@ -68,9 +68,11 @@ import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { detectDebug } from './app/utils';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
+import { hasIncompleteRejectDedupKeys } from './app/dedupKeyUtils';
 import {
   applyFieldChangeDialogTargets,
   evaluateFieldChangeDialogWhen,
+  resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
   resolveTargetFieldConfig,
   type FieldChangeDialogTargetUpdate
@@ -164,9 +166,10 @@ const computeDedupSignatureFromValues = (rulesRaw: any, values: Record<string, a
   return parts.sort().join('|');
 };
 
-const computeDedupKeyFieldIdMap = (rulesRaw: any): Record<string, true> => {
+const collectDedupKeyFieldIds = (rulesRaw: any): string[] => {
   const rules: any[] = Array.isArray(rulesRaw) ? rulesRaw : [];
-  const map: Record<string, true> = {};
+  const seen = new Set<string>();
+  const out: string[] = [];
   rules.forEach(rule => {
     if (!rule) return;
     const keys = Array.isArray(rule.keys) ? rule.keys : [];
@@ -175,12 +178,34 @@ const computeDedupKeyFieldIdMap = (rulesRaw: any): Record<string, true> => {
     if (onConflict !== 'reject') return;
     keys.forEach((k: any) => {
       const id = (k || '').toString().trim();
-      if (!id) return;
-      map[id] = true;
-      map[id.toLowerCase()] = true;
+      const lower = id.toLowerCase();
+      if (!id || seen.has(lower)) return;
+      seen.add(lower);
+      out.push(id);
     });
   });
+  return out;
+};
+
+const computeDedupKeyFieldIdMap = (rulesRaw: any): Record<string, true> => {
+  const map: Record<string, true> = {};
+  collectDedupKeyFieldIds(rulesRaw).forEach(id => {
+    if (!id) return;
+    map[id] = true;
+    map[id.toLowerCase()] = true;
+  });
   return map;
+};
+
+const computeDedupKeyFingerprint = (rulesRaw: any, values: Record<string, any>): string => {
+  const ids = collectDedupKeyFieldIds(rulesRaw);
+  if (!ids.length) return '';
+  const normalize = (raw: any): string => {
+    if (raw === undefined || raw === null) return '';
+    if (Array.isArray(raw)) return raw.map(v => (v === undefined || v === null ? '' : v.toString())).join('|');
+    return raw.toString();
+  };
+  return ids.map(id => `${id}=${normalize((values as any)?.[id])}`).join('|');
 };
 
 const whenContainsFieldId = (when: any, targetFieldId: string): boolean => {
@@ -851,6 +876,148 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     [logEvent, setLineItems, setValues]
   );
 
+  const triggerDedupDeleteOnKeyChange = useCallback(
+    async (source: string, extra?: Record<string, unknown>): Promise<boolean> => {
+      const dedupDeleteOnKeyChangeEnabledLocal =
+        (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
+      if (!dedupDeleteOnKeyChangeEnabledLocal) return false;
+      if (submittingRef.current) return false;
+      if (dedupDeleteOnKeyChangeInFlightRef.current) return false;
+
+      const existingRecordId = resolveExistingRecordId({
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+      });
+      if (!existingRecordId) return false;
+
+      const currentFingerprint = computeDedupKeyFingerprint((definition as any)?.dedupRules, valuesRef.current as any);
+      const baselineFingerprint = (dedupKeyFingerprintBaselineRef.current || '').toString();
+      if (!baselineFingerprint || baselineFingerprint === currentFingerprint) return false;
+
+      const previousDedupHold = dedupHoldRef.current;
+      dedupDeleteOnKeyChangeInFlightRef.current = true;
+      dedupHoldRef.current = true;
+      autoSaveDirtyRef.current = false;
+      autoSaveQueuedRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      logEvent('dedupDeleteOnKeyChange.delete.start', {
+        source,
+        recordId: existingRecordId,
+        ...extra
+      });
+      try {
+        const waitStartedAt = Date.now();
+        if (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
+          logEvent('dedupDeleteOnKeyChange.delete.waitBackground.start', {
+            source,
+            recordId: existingRecordId,
+            autosaveInFlight: autoSaveInFlightRef.current,
+            uploadsInFlight: uploadQueueRef.current.size,
+            ...extra
+          });
+        }
+        while (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
+          if (Date.now() - waitStartedAt > 12_000) {
+            logEvent('dedupDeleteOnKeyChange.delete.waitBackground.timeout', {
+              source,
+              recordId: existingRecordId,
+              durationMs: Date.now() - waitStartedAt,
+              autosaveInFlight: autoSaveInFlightRef.current,
+              uploadsInFlight: uploadQueueRef.current.size,
+              ...extra
+            });
+            return false;
+          }
+          await new Promise<void>(resolve => globalThis.setTimeout(resolve, 80));
+        }
+        if (Date.now() - waitStartedAt > 0) {
+          logEvent('dedupDeleteOnKeyChange.delete.waitBackground.done', {
+            source,
+            recordId: existingRecordId,
+            durationMs: Date.now() - waitStartedAt,
+            ...extra
+          });
+        }
+
+        const payload = buildDraftPayload({
+          definition,
+          formKey,
+          language: languageRef.current,
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current,
+          existingRecordId
+        }) as any;
+        payload.__ckSaveMode = 'draft';
+        payload.__ckDeleteRecordId = existingRecordId;
+        const baseVersion = recordDataVersionRef.current;
+        if (Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
+          payload.__ckClientDataVersion = Number(baseVersion);
+        }
+
+        const res = await submit(payload);
+        if (!res?.success) {
+          logEvent('dedupDeleteOnKeyChange.delete.failed', {
+            source,
+            recordId: existingRecordId,
+            message: (res?.message || 'Failed to delete previous record.').toString(),
+            ...extra
+          });
+          return false;
+        }
+
+        setSelectedRecordId('');
+        selectedRecordIdRef.current = '';
+        setSelectedRecordSnapshot(null);
+        selectedRecordSnapshotRef.current = null;
+        setLastSubmissionMeta(null);
+        lastSubmissionMetaRef.current = null;
+        recordDataVersionRef.current = null;
+        recordRowNumberRef.current = null;
+        recordStaleRef.current = null;
+        setRecordStale(null);
+        recordSessionRef.current += 1;
+        createFlowRef.current = true;
+        createFlowUserEditedRef.current = false;
+        autoSaveUserEditedRef.current = false;
+        dedupHoldRef.current = false;
+        dedupBaselineSignatureRef.current = '';
+        dedupKeyFingerprintBaselineRef.current = '';
+        autoSaveDirtyRef.current = false;
+        autoSaveQueuedRef.current = false;
+        if (autoSaveTimerRef.current) {
+          globalThis.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+        setDraftSave({ phase: 'idle' });
+
+        logEvent('dedupDeleteOnKeyChange.delete.success', {
+          source,
+          deletedRecordId: existingRecordId,
+          ...extra
+        });
+        return true;
+      } catch (err: any) {
+        logEvent('dedupDeleteOnKeyChange.delete.exception', {
+          source,
+          recordId: existingRecordId,
+          message: resolveLogMessage(err, 'Failed to delete previous record.'),
+          ...extra
+        });
+        return false;
+      } finally {
+        if (dedupHoldRef.current) {
+          dedupHoldRef.current = previousDedupHold;
+        }
+        dedupDeleteOnKeyChangeInFlightRef.current = false;
+      }
+    },
+    [definition, formKey, logEvent, setSelectedRecordId, submit]
+  );
+
   const handleFieldChangeDialogConfirm = useCallback(
     async (inputValues: Record<string, FieldValue>) => {
       const pending = fieldChangeActiveRef.current;
@@ -886,6 +1053,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         context: { scope: pending.scope, groupId: pending.groupId, rowId: pending.rowId }
       });
       const mapped = applyValueMapsToForm(definition, applied.values, applied.lineItems, { mode: 'change' });
+      const dedupDeleteEnabled =
+        (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
+      const topFieldId = pending.scope === 'top' ? (pending.fieldId || '').toString() : '';
+      const isTopDedupKeyChange = Boolean(
+        topFieldId &&
+          (dedupKeyFieldIdsRef.current[topFieldId] || dedupKeyFieldIdsRef.current[topFieldId.toLowerCase()]) &&
+          dedupDeleteEnabled
+      );
 
       const dedupMode = (dialogCfg.dedupMode || 'auto') as 'auto' | 'always' | 'never';
       const hasDedupKeyUpdate = updates.some(update => {
@@ -959,9 +1134,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       setLineItems(mapped.lineItems);
       valuesRef.current = mapped.values;
       lineItemsRef.current = mapped.lineItems;
-      dedupHoldRef.current = false;
-      autoSaveDirtyRef.current = true;
-      setDraftSave({ phase: 'dirty' });
+      dedupHoldRef.current = isTopDedupKeyChange;
+      if (isTopDedupKeyChange) {
+        autoSaveDirtyRef.current = false;
+        autoSaveQueuedRef.current = false;
+        setDraftSave({ phase: 'paused' });
+      } else {
+        autoSaveDirtyRef.current = true;
+        setDraftSave({ phase: 'dirty' });
+      }
 
       const selectionEffects = pending.selectionEffects || [];
       if (selectionEffects.length && pending.effectQuestion) {
@@ -995,6 +1176,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         });
       }
 
+      if (isTopDedupKeyChange) {
+        await triggerDedupDeleteOnKeyChange('fieldChangeDialog.confirm', {
+          fieldId: topFieldId,
+          fieldPath: pending.fieldPath
+        });
+      }
+
       fieldChangeActiveRef.current = null;
       delete fieldChangePendingRef.current[pending.fieldPath];
       logEvent('fieldChangeDialog.applied', {
@@ -1007,14 +1195,48 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         destructiveChangeBusy.unlock(lockSeq, { source: 'fieldChangeDialog' });
       }
     },
-    [definition, destructiveChangeBusy, formKey, language, logEvent, revertFieldChangePending, setExternalScrollAnchor, setLineItems, setValues]
+    [
+      definition,
+      destructiveChangeBusy,
+      formKey,
+      language,
+      logEvent,
+      revertFieldChangePending,
+      setExternalScrollAnchor,
+      setLineItems,
+      setValues,
+      triggerDedupDeleteOnKeyChange
+    ]
   );
 
   const handleFieldChangeDialogCancel = useCallback(() => {
     const pending = fieldChangeActiveRef.current;
     if (!pending) return;
-    revertFieldChangePending(pending, 'cancel');
-  }, [revertFieldChangePending]);
+    const cancelAction = resolveFieldChangeDialogCancelAction(pending.dialog);
+    revertFieldChangePending(
+      pending,
+      cancelAction === 'discardDraftAndGoHome' ? 'cancel.discardDraftAndGoHome' : 'cancel',
+      { cancelAction }
+    );
+    if (cancelAction !== 'discardDraftAndGoHome') return;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    dedupHoldRef.current = false;
+    autoSaveDirtyRef.current = false;
+    autoSaveQueuedRef.current = false;
+    setDraftSave({ phase: 'idle' });
+    setView('list');
+    setStatus(null);
+    setStatusLevel(null);
+    logEvent('fieldChangeDialog.cancelAction.discardDraftAndGoHome', {
+      fieldPath: pending.fieldPath,
+      fieldId: pending.fieldId,
+      groupId: pending.groupId || null,
+      rowId: pending.rowId || null
+    });
+  }, [logEvent, revertFieldChangePending]);
 
   const openFieldChangeDialog = useCallback(
     (pending: FieldChangePending) => {
@@ -1226,6 +1448,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               event: args?.event || null
             });
           }
+          if (args?.event === 'blur') {
+            void triggerDedupDeleteOnKeyChange('dedupKey.blur', {
+              fieldId: fieldId || null,
+              fieldPath: fieldPath || null
+            });
+          }
         }
 
         // Warnings UX: recompute and show inline warnings for the field that just blurred.
@@ -1263,7 +1491,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         // ignore
       }
     },
-    [dedupNotice, definition, logEvent, openFieldChangeDialog]
+    [dedupNotice, definition, logEvent, openFieldChangeDialog, triggerDedupDeleteOnKeyChange]
   );
 
   useEffect(() => {
@@ -1419,7 +1647,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
   const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const summarySubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const summarySubmitIntentRef = useRef<boolean>(false);
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
@@ -1482,6 +1709,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const dedupHoldRef = useRef<boolean>(false);
   // Initialize immediately so the very first user interaction can be dedup-held (before effects run).
   const dedupKeyFieldIdsRef = useRef<Record<string, true>>(computeDedupKeyFieldIdMap((definition as any)?.dedupRules));
+  // Baseline dedup identity of the currently loaded record (used by optional delete-on-key-change flow).
+  const dedupBaselineSignatureRef = useRef<string>('');
+  const dedupKeyFingerprintBaselineRef = useRef<string>('');
+  const dedupDeleteOnKeyChangeInFlightRef = useRef<boolean>(false);
+  const dedupDeleteOnKeyChangeEnabled =
+    (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
 
   useEffect(() => {
     viewRef.current = view;
@@ -2077,8 +2310,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         const baseline = computeDedupSignatureFromValues((definition as any)?.dedupRules, mapped.values as any);
         lastDedupCheckedSignatureRef.current = (baseline || '').toString();
         dedupSignatureRef.current = lastDedupCheckedSignatureRef.current;
+        dedupBaselineSignatureRef.current = lastDedupCheckedSignatureRef.current;
+        dedupKeyFingerprintBaselineRef.current = computeDedupKeyFingerprint(
+          (definition as any)?.dedupRules,
+          mapped.values as any
+        );
       } catch (_) {
         lastDedupCheckedSignatureRef.current = '';
+        dedupBaselineSignatureRef.current = '';
+        dedupKeyFingerprintBaselineRef.current = '';
+        dedupDeleteOnKeyChangeInFlightRef.current = false;
       }
       // Avoid autosaving immediately due to state hydration from a server snapshot.
       autoSaveDirtyRef.current = false;
@@ -2449,7 +2690,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
   // Close the submit confirmation dialog when navigating away.
   useEffect(() => {
-    if (view === 'form') return;
+    if (view === 'form' || view === 'summary') return;
     if (!submitConfirmOpen) return;
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = false;
@@ -3008,6 +3249,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       dedupCheckingRef.current = false;
       dedupConflictRef.current = null;
       lastDedupCheckedSignatureRef.current = '';
+      dedupBaselineSignatureRef.current = '';
+      dedupKeyFingerprintBaselineRef.current = '';
+      dedupDeleteOnKeyChangeInFlightRef.current = false;
       recordStaleRef.current = null;
       setRecordStale(null);
       recordDataVersionRef.current = null;
@@ -3048,6 +3292,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     dedupCheckingRef.current = false;
     dedupConflictRef.current = null;
     lastDedupCheckedSignatureRef.current = '';
+    dedupBaselineSignatureRef.current = '';
+    dedupKeyFingerprintBaselineRef.current = '';
+    dedupDeleteOnKeyChangeInFlightRef.current = false;
     recordStaleRef.current = null;
     setRecordStale(null);
     recordDataVersionRef.current = null;
@@ -3794,6 +4041,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       dedupCheckingRef.current = false;
       dedupConflictRef.current = null;
       lastDedupCheckedSignatureRef.current = '';
+      dedupBaselineSignatureRef.current = '';
+      dedupKeyFingerprintBaselineRef.current = '';
+      dedupDeleteOnKeyChangeInFlightRef.current = false;
       recordStaleRef.current = null;
       setRecordStale(null);
       recordDataVersionRef.current = null;
@@ -4266,6 +4516,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const cancelSubmitConfirm = useCallback(() => {
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = false;
+    summarySubmitIntentRef.current = false;
     logEvent('ui.submitConfirm.cancel');
   }, [logEvent]);
 
@@ -4273,8 +4524,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = true;
     logEvent('ui.submitConfirm.confirm');
+    if (viewRef.current === 'summary') {
+      void handleSubmit();
+      return;
+    }
     formSubmitActionRef.current?.();
-  }, [logEvent]);
+  }, [handleSubmit, logEvent]);
 
   const autoSaveDebounceMs = (() => {
     const raw = definition.autoSave?.debounceMs;
@@ -4529,9 +4784,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       const lineItemsSnapshot = lineItemsRef.current;
       const languageSnapshot = languageRef.current;
 
+      const createFlowDedupKeysIncomplete =
+        isCreateFlow && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesSnapshot as any);
+      if (createFlowDedupKeysIncomplete) {
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.dedup.keysIncomplete', { reason, isCreateFlow: true });
+        return;
+      }
+
       // If this is a CREATE flow and dedup keys are populated, avoid saving drafts until the precheck completes.
       const currentDedupSignature = computeDedupSignatureFromValues((definition as any)?.dedupRules, valuesSnapshot as any);
-      if (isCreateFlow && currentDedupSignature) {
+      const currentDedupFingerprint = dedupDeleteOnKeyChangeEnabled
+        ? computeDedupKeyFingerprint((definition as any)?.dedupRules, valuesSnapshot as any)
+        : '';
+
+      const requiresDedupPrecheck = currentDedupSignature && isCreateFlow;
+      if (requiresDedupPrecheck) {
         if (dedupCheckingRef.current) {
           // Keep dirty so we retry once the check completes.
           autoSaveDirtyRef.current = true;
@@ -4624,7 +4892,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           // so we can show the dedup banner (instead of a generic autosave error).
           if (currentDedupSignature) {
             try {
-              const chk = await checkDedupConflictApi(payload);
+              const chk = await checkDedupConflictApi(payload as any);
               const conflict = (chk as any)?.conflict || null;
               if ((chk as any)?.success && conflict && conflict.message) {
                 const conflictObj = {
@@ -4723,6 +4991,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion)) ? Number((res as any).meta.dataVersion) : prev?.dataVersion,
           status: statusForSave
         }));
+        dedupBaselineSignatureRef.current = (currentDedupSignature || '').toString();
+        dedupKeyFingerprintBaselineRef.current = currentDedupFingerprint;
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
         logEvent('autosave.success', {
           reason,
@@ -4770,6 +5040,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       resolveAutoSaveStatus,
       closedStatusLabel,
       definition,
+      dedupDeleteOnKeyChangeEnabled,
       formKey,
       language,
       loadRecordSnapshot,
@@ -4920,6 +5191,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       dedupHoldRef.current = false;
       return;
     }
+    if (fieldChangeDialog.state.open || fieldChangeActiveRef.current) return;
     if (!dedupHoldRef.current) return;
 
     const signature = (dedupSignature || '').toString();
@@ -4938,6 +5210,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
     // In create-flow, autosave must still wait for the first real user edit.
     if (createFlowRef.current && !createFlowUserEditedRef.current) return;
+    if (createFlowRef.current && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesRef.current as any)) return;
     if (!autoSaveUserEditedRef.current) return;
     // If the record is stale, do not resume autosave; user must refresh first.
     if (recordStaleRef.current) return;
@@ -4956,7 +5229,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     autoSaveTimerRef.current = globalThis.setTimeout(() => {
       void performAutoSave('dedupHold.release');
     }, autoSaveDebounceMs) as any;
-  }, [autoSaveDebounceMs, autoSaveEnabled, dedupChecking, dedupConflict, dedupSignature, performAutoSave, view]);
+  }, [
+    autoSaveDebounceMs,
+    autoSaveEnabled,
+    definition,
+    dedupChecking,
+    dedupConflict,
+    dedupSignature,
+    fieldChangeDialog.state.open,
+    performAutoSave,
+    view
+  ]);
 
   // Debounced autosave trigger on edits.
   useEffect(() => {
@@ -4986,6 +5269,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
     // In create-flow, do not autosave until the user actually changes a field value.
     if (createFlowRef.current && !createFlowUserEditedRef.current) return;
+    if (createFlowRef.current && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, values as any)) {
+      autoSaveDirtyRef.current = true;
+      return;
+    }
     if (!autoSaveUserEditedRef.current) return;
     // If the record is stale (modified elsewhere), do not schedule autosave.
     if (recordStaleRef.current) {
@@ -5048,7 +5335,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         autoSaveTimerRef.current = null;
       }
     };
-  }, [autoSaveDebounceMs, autoSaveEnabled, isClosedRecord, performAutoSave, submitting, view, values, lineItems]);
+  }, [autoSaveDebounceMs, autoSaveEnabled, definition, isClosedRecord, performAutoSave, submitting, view, values, lineItems]);
 
   const uploadFieldUrls = useCallback(
     async (args: {
@@ -5517,8 +5804,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         initialLineItems
       );
       lastAutoSaveSeenRef.current = { values: mappedValues, lineItems: mappedLineItems };
+      dedupBaselineSignatureRef.current = computeDedupSignatureFromValues((definition as any)?.dedupRules, mappedValues as any);
+      dedupKeyFingerprintBaselineRef.current = computeDedupKeyFingerprint((definition as any)?.dedupRules, mappedValues as any);
       setValues(mappedValues);
       setLineItems(mappedLineItems);
+    } else {
+      dedupBaselineSignatureRef.current = '';
+      dedupKeyFingerprintBaselineRef.current = '';
+      dedupDeleteOnKeyChangeInFlightRef.current = false;
     }
     if (record?.id) {
       setSelectedRecordId(record.id);
@@ -5606,11 +5899,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     });
   }
 
-  const handleSubmit = async (submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => {
-    const bypassSubmitConfirm = summarySubmitIntentRef.current === true;
-    if (bypassSubmitConfirm) {
-      summarySubmitIntentRef.current = false;
-    }
+  async function handleSubmit(submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) {
+    const submitRequestedFromSummary = summarySubmitIntentRef.current === true;
     if (isClosedRecord) {
       setStatus(tSystem('app.closedReadOnly', language, 'Closed (read-only)'));
       setStatusLevel('info');
@@ -5731,6 +6021,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     if (Object.keys(nextErrors).length) {
       submitConfirmedRef.current = false;
       logEvent('submit.validate.failed');
+      if (submitRequestedFromSummary && viewRef.current === 'summary') {
+        summarySubmitIntentRef.current = false;
+        setView('form');
+        logEvent('summary.submit.validationFailedNavigateForm', {
+          errorCount: Object.keys(nextErrors).length
+        });
+      }
       return;
     }
 
@@ -5756,7 +6053,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
 
     // Only show the submit confirmation overlay once the form is already valid.
-    if (!submitConfirmedRef.current && !bypassSubmitConfirm) {
+    if (!submitConfirmedRef.current) {
       setSubmitConfirmOpen(true);
       logEvent('ui.submitConfirm.openAfterValidation', {
         configuredMessage: Boolean(definition.submissionConfirmationMessage),
@@ -5767,6 +6064,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       return;
     }
     submitConfirmedRef.current = false;
+    summarySubmitIntentRef.current = false;
 
     setSubmitting(true);
     // Keep ref in sync immediately so background work (autosave/uploads) can't start in the same tick.
@@ -5851,11 +6149,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         return;
       }
 
-      const existingRecordId = resolveExistingRecordId({
+      let existingRecordId = resolveExistingRecordId({
         selectedRecordId: selectedRecordIdRef.current,
         selectedRecordSnapshot: selectedRecordSnapshotRef.current,
         lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
       });
+      const submitDedupSignature = computeDedupSignatureFromValues((definition as any)?.dedupRules, valuesRef.current as any);
+      const submitDedupFingerprint = dedupDeleteOnKeyChangeEnabled
+        ? computeDedupKeyFingerprint((definition as any)?.dedupRules, valuesRef.current as any)
+        : '';
+      const submitDedupBaselineFingerprint = (dedupKeyFingerprintBaselineRef.current || '').toString();
+      const dedupKeysChangedForExistingRecord =
+        dedupDeleteOnKeyChangeEnabled &&
+        !createFlowRef.current &&
+        !!existingRecordId &&
+        !!submitDedupBaselineFingerprint &&
+        submitDedupBaselineFingerprint !== submitDedupFingerprint &&
+        !!submitDedupSignature;
+      if (dedupKeysChangedForExistingRecord) {
+        const deleted = await triggerDedupDeleteOnKeyChange('submit.detectKeyChange', {
+          recordId: existingRecordId || null
+        });
+        if (!deleted) {
+          const msg = tSystem('actions.submitFailed', languageRef.current, 'Submit failed');
+          setStatus(msg);
+          setStatusLevel('error');
+          logEvent('submit.blocked.dedupDeleteOnKeyChange.deleteFailed', { recordId: existingRecordId || null });
+          return;
+        }
+        existingRecordId = resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        });
+      }
       const payload = await buildSubmissionPayload({
         definition,
         formKey,
@@ -5908,6 +6235,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
       const recordId = (((res as any)?.meta?.id) || existingRecordId || selectedRecordId || '').toString();
       if (recordId) setSelectedRecordId(recordId);
+      dedupBaselineSignatureRef.current = (submitDedupSignature || '').toString();
+      dedupKeyFingerprintBaselineRef.current = submitDedupFingerprint;
 
       setLastSubmissionMeta(prev => ({
         id: recordId || prev?.id || selectedRecordId,
@@ -6022,7 +6351,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   const handleSummarySubmit = useCallback(() => {
     if (submitting) return;
@@ -6034,39 +6363,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       submitLabelOverridden: Boolean(definition.submitButtonLabel),
       view: 'summary'
     });
-    if (viewRef.current === 'form') {
-      formSubmitActionRef.current?.();
-      return;
-    }
-    setView('form');
-    if (summarySubmitTimerRef.current) {
-      globalThis.clearTimeout(summarySubmitTimerRef.current);
-      summarySubmitTimerRef.current = null;
-    }
-    const startedAt = Date.now();
-    let attempt = 0;
-    const maxAttempts = 40;
-    const delayMs = 80;
-    const tick = () => {
-      attempt += 1;
-      const inForm = viewRef.current === 'form';
-      const submitAction = formSubmitActionRef.current;
-      const hasAction = typeof submitAction === 'function';
-      if (!inForm || !hasAction) {
-        if (attempt >= maxAttempts) {
-          summarySubmitIntentRef.current = false;
-          logEvent('summary.submit.timeout', { attempt, inForm, hasAction });
-          return;
-        }
-        summarySubmitTimerRef.current = globalThis.setTimeout(tick, delayMs);
-        return;
-      }
-      summarySubmitTimerRef.current = null;
-      logEvent('summary.submit.fire', { attempt, waitMs: Date.now() - startedAt });
-      submitAction?.();
-    };
-    tick();
-  }, [definition.submitButtonLabel, logEvent, recordLoadingId, setView, submitting, updateRecordBusyOpen]);
+    logEvent('summary.submit.fire', { sourceView: viewRef.current });
+    void handleSubmit();
+  }, [definition.submitButtonLabel, handleSubmit, logEvent, recordLoadingId, submitting, updateRecordBusyOpen]);
 
   const handleRecordSelect = (
     row: ListItem,
@@ -7273,7 +7572,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       />
 
       <ConfirmDialogOverlay
-        open={submitConfirmOpen && view === 'form'}
+        open={submitConfirmOpen && (view === 'form' || view === 'summary')}
         title={submitConfirmTitle}
         message={submitConfirmMessage}
         confirmLabel={submitConfirmConfirmLabelResolved}

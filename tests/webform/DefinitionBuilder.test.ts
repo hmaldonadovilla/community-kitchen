@@ -51,7 +51,15 @@ describe('DefinitionBuilder', () => {
       defaultLanguage: 'FR',
       languageSelectorEnabled: false,
       createRecordPresetButtonsEnabled: false,
-      actionBars: { system: { home: { hideWhenActive: true } } }
+      actionBars: { system: { home: { hideWhenActive: true } } },
+      dedupDeleteOnKeyChange: true,
+      fieldDisableRules: [
+        {
+          id: 'future-date-lock',
+          when: { fieldId: 'DATE', isInFuture: true },
+          bypassFields: ['COOK']
+        }
+      ]
     });
     dashboardSheet?.setMockData([
       [],
@@ -85,6 +93,13 @@ describe('DefinitionBuilder', () => {
     expect(def.listView?.headerSortEnabled).toBe(false);
     expect(def.listView?.view).toEqual({ mode: 'cards', toggleEnabled: true, defaultMode: 'cards' });
     expect(def.listView?.search).toEqual({ mode: 'advanced', fields: ['Q1', 'status'] });
+    expect(def.fieldDisableRules).toEqual([
+      {
+        id: 'future-date-lock',
+        when: { fieldId: 'DATE', isInFuture: true },
+        bypassFields: ['COOK']
+      }
+    ]);
     const action = (def.listView?.columns || []).find(c => (c as any).type === 'rule' && (c as any).fieldId === 'action') as any;
     expect(action?.showIn).toEqual(['cards']);
     expect(def.createButtonLabel).toEqual({ en: 'New' });
@@ -125,6 +140,7 @@ describe('DefinitionBuilder', () => {
     const def = builder.buildDefinition('Config: Pantry');
     expect(def.createRecordPresetButtonsEnabled).toBe(false);
     expect(def.actionBars?.system?.home?.hideWhenActive).toBe(true);
+    expect(def.dedupDeleteOnKeyChange).toBe(true);
   });
 
   test('buildDefinition includes submission confirmation button label overrides from the dashboard', () => {

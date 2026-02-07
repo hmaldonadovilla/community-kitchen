@@ -147,7 +147,9 @@ export class DefinitionBuilder {
       submissionConfirmationCancelLabel: form.submissionConfirmationCancelLabel,
       dedupDialog: form.dedupDialog,
       submitButtonLabel: form.submitButtonLabel,
-      summaryButtonLabel: form.summaryButtonLabel
+      summaryButtonLabel: form.summaryButtonLabel,
+      fieldDisableRules: form.fieldDisableRules,
+      dedupDeleteOnKeyChange: form.dedupDeleteOnKeyChange
     };
   }
 

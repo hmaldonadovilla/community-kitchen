@@ -118,6 +118,7 @@
       "debounceMs": 2000,
       "status": "In progress"
     },
+    "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [
@@ -1082,7 +1083,8 @@
                                 },
                                 "label": {
                                   "en": "{{value}} leftover"
-                                }
+                                },
+                                "editAction": "editLeftoverIngredientsPart"
                               },
                               {
                                 "fieldRef": "RECIPE",
@@ -1109,20 +1111,6 @@
                                   "en": "Yields {{value}} portions",
                                   "fr": "Donne {{value}} portions",
                                   "nl": "Geeft {{value}} porties"
-                                }
-                              },
-                              {
-                                "fieldRef": "ingredientsRow.ING",
-                                "showWhen": {
-                                  "fieldId": "PREP_TYPE",
-                                  "equals": [
-                                    "Part dish"
-                                  ]
-                                },
-                                "editAction": "editLeftoverIngredientsPart",
-                                "format": {
-                                  "type": "list",
-                                  "listDelimiter": ", "
                                 }
                               }
                             ],
@@ -3269,7 +3257,11 @@
                     "labelNl": "Ingrediënt",
                     "required": true,
                     "ui": {
-                      "labelLayout": "stacked"
+                      "labelLayout": "stacked",
+                      "readOnlyAppendFieldId": "ALLERGEN",
+                      "readOnlyAppendHideValues": [
+                        "None"
+                      ]
                     },
                     "readOnly": true,
                     "options": [
@@ -7237,11 +7229,11 @@
       "optionsNl": [],
       "status": "Active",
       "button": {
-        "action": "renderHtmlTemplate",
+        "action": "renderMarkdownTemplate",
         "templateId": {
-          "EN": "bundle:procedure_meal_production.html",
-          "FR": "bundle:procedure_meal_production.html",
-          "NL": "bundle:procedure_meal_production.html"
+          "EN": "1BZoGddKAGoUat3rZWxkPlW3f2v9wIpOz",
+          "FR": "1BZoGddKAGoUat3rZWxkPlW3f2v9wIpOz",
+          "NL": "1BZoGddKAGoUat3rZWxkPlW3f2v9wIpOz"
         },
         "placements": [
           "topBarList"
@@ -8856,7 +8848,11 @@
                       "labelNl": "Ingrediënt",
                       "required": true,
                       "ui": {
-                        "labelLayout": "stacked"
+                        "labelLayout": "stacked",
+                        "readOnlyAppendFieldId": "ALLERGEN",
+                        "readOnlyAppendHideValues": [
+                          "None"
+                        ]
                       },
                       "readOnly": true,
                       "options": [
@@ -12811,11 +12807,11 @@
         "required": false,
         "listView": false,
         "button": {
-          "action": "renderHtmlTemplate",
+          "action": "renderMarkdownTemplate",
           "templateId": {
-            "EN": "bundle:procedure_meal_production.html",
-            "FR": "bundle:procedure_meal_production.html",
-            "NL": "bundle:procedure_meal_production.html"
+            "EN": "1BZoGddKAGoUat3rZWxkPlW3f2v9wIpOz",
+            "FR": "1BZoGddKAGoUat3rZWxkPlW3f2v9wIpOz",
+            "NL": "1BZoGddKAGoUat3rZWxkPlW3f2v9wIpOz"
           },
           "placements": [
             "topBarList"
@@ -13037,6 +13033,7 @@
       "debounceMs": 2000,
       "status": "In progress"
     },
+    "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [
@@ -13981,7 +13978,8 @@
                                 },
                                 "label": {
                                   "en": "{{value}} leftover"
-                                }
+                                },
+                                "editAction": "editLeftoverIngredientsPart"
                               },
                               {
                                 "fieldRef": "RECIPE",
@@ -14008,20 +14006,6 @@
                                   "en": "Yields {{value}} portions",
                                   "fr": "Donne {{value}} portions",
                                   "nl": "Geeft {{value}} porties"
-                                }
-                              },
-                              {
-                                "fieldRef": "ingredientsRow.ING",
-                                "showWhen": {
-                                  "fieldId": "PREP_TYPE",
-                                  "equals": [
-                                    "Part dish"
-                                  ]
-                                },
-                                "editAction": "editLeftoverIngredientsPart",
-                                "format": {
-                                  "type": "list",
-                                  "listDelimiter": ", "
                                 }
                               }
                             ],

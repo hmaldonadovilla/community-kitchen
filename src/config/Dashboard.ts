@@ -9,6 +9,7 @@ import {
   ButtonAction,
   FollowupConfig,
   FollowupStatusConfig,
+  FieldDisableRule,
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
   DedupDialogConfig,
@@ -161,6 +162,8 @@ export class Dashboard {
       const defaultLanguage = dashboardConfig?.defaultLanguage;
       const languageSelectorEnabled = dashboardConfig?.languageSelectorEnabled;
       const steps = dashboardConfig?.steps;
+      const fieldDisableRules = dashboardConfig?.fieldDisableRules;
+      const dedupDeleteOnKeyChange = dashboardConfig?.dedupDeleteOnKeyChange;
       if (title && configSheetName) {
         forms.push({
           title,
@@ -206,9 +209,11 @@ export class Dashboard {
           dedupDialog,
           submitButtonLabel,
           summaryButtonLabel,
+          fieldDisableRules,
           languages,
           defaultLanguage,
-          languageSelectorEnabled
+          languageSelectorEnabled,
+          dedupDeleteOnKeyChange
         });
       }
     });
@@ -275,6 +280,8 @@ export class Dashboard {
     defaultLanguage?: 'EN' | 'FR' | 'NL';
     languageSelectorEnabled?: boolean;
     steps?: StepsConfig;
+    fieldDisableRules?: FieldDisableRule[];
+    dedupDeleteOnKeyChange?: boolean;
   } | undefined {
     if (!raw || (typeof raw === 'string' && raw.trim() === '')) return undefined;
     const value = raw.toString().trim();
@@ -422,6 +429,54 @@ export class Dashboard {
       if (s === 'false' || s === '0' || s === 'no' || s === 'n') return false;
       return Boolean(input);
     };
+    const normalizeFieldIdList = (input: any): string[] | undefined => {
+      if (input === undefined || input === null || input === '') return undefined;
+      const list = Array.isArray(input)
+        ? input
+        : typeof input === 'string'
+          ? input.split(',').map((entry: string) => entry.trim())
+          : [input];
+      const ids = list
+        .map(value => (value === undefined || value === null ? '' : value.toString().trim()))
+        .filter(Boolean);
+      return ids.length ? Array.from(new Set(ids)) : undefined;
+    };
+    const normalizeFieldDisableRules = (rawRules: any): FieldDisableRule[] | undefined => {
+      if (rawRules === undefined || rawRules === null || rawRules === '') return undefined;
+      const list = Array.isArray(rawRules) ? rawRules : [rawRules];
+      const rules = list
+        .map((entry: any): FieldDisableRule | null => {
+          if (!entry || typeof entry !== 'object') return null;
+          const whenCandidate =
+            entry.when !== undefined
+              ? entry.when
+              : entry.whenClause !== undefined
+                ? entry.whenClause
+                : entry.condition !== undefined
+                  ? entry.condition
+                  : (entry.fieldId !== undefined || entry.all !== undefined || entry.any !== undefined || entry.not !== undefined || entry.lineItems !== undefined)
+                    ? entry
+                    : undefined;
+          if (!whenCandidate || typeof whenCandidate !== 'object') return null;
+          const idRaw = entry.id !== undefined && entry.id !== null ? entry.id.toString().trim() : '';
+          const bypassFields = normalizeFieldIdList(
+            entry.bypassFields !== undefined
+              ? entry.bypassFields
+              : entry.bypass !== undefined
+                ? entry.bypass
+                : entry.excludeFields !== undefined
+                  ? entry.excludeFields
+                  : entry.allowFields
+          );
+          return {
+            id: idRaw || undefined,
+            when: whenCandidate,
+            bypassFields
+          };
+        })
+        .filter(Boolean) as FieldDisableRule[];
+      return rules.length ? rules : undefined;
+    };
 
     const listViewObj =
       parsed.listView !== undefined && parsed.listView !== null && typeof parsed.listView === 'object' ? parsed.listView : undefined;
@@ -559,6 +614,37 @@ export class Dashboard {
                 ? (listViewObj as any).ui
                 : undefined;
     const listViewView = this.normalizeListViewView(listViewViewRaw);
+    const fieldDisableRulesRaw =
+      (parsed as any).fieldDisableRules !== undefined
+        ? (parsed as any).fieldDisableRules
+        : (parsed as any).disableFieldsRules !== undefined
+          ? (parsed as any).disableFieldsRules
+          : (parsed as any).disableFieldRules !== undefined
+            ? (parsed as any).disableFieldRules
+            : (parsed as any).disableAllFieldsRules !== undefined
+              ? (parsed as any).disableAllFieldsRules
+              : undefined;
+    const fieldDisableRules = (() => {
+      const normalized = normalizeFieldDisableRules(fieldDisableRulesRaw);
+      if (normalized && normalized.length) return normalized;
+      const whenShorthand =
+        (parsed as any).disableAllFieldsWhen !== undefined
+          ? (parsed as any).disableAllFieldsWhen
+          : (parsed as any).disableFieldsWhen !== undefined
+            ? (parsed as any).disableFieldsWhen
+            : (parsed as any).fieldDisableWhen !== undefined
+              ? (parsed as any).fieldDisableWhen
+              : undefined;
+      if (!whenShorthand || typeof whenShorthand !== 'object') return undefined;
+      const bypassFields = normalizeFieldIdList(
+        (parsed as any).disableAllFieldsBypass !== undefined
+          ? (parsed as any).disableAllFieldsBypass
+          : (parsed as any).disableFieldsBypass !== undefined
+            ? (parsed as any).disableFieldsBypass
+            : (parsed as any).fieldDisableBypassFields
+      );
+      return [{ when: whenShorthand, bypassFields }];
+    })();
     const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
     const summaryViewEnabled = (() => {
       if (parsed.summaryViewEnabled !== undefined) return Boolean(parsed.summaryViewEnabled);
@@ -980,6 +1066,19 @@ export class Dashboard {
           ? parsed.summaryLabel
           : undefined;
     const summaryButtonLabel = normalizeLocalized(summaryButtonLabelRaw);
+    const dedupDeleteOnKeyChangeRaw =
+      (parsed as any).dedupDeleteOnKeyChange !== undefined
+        ? (parsed as any).dedupDeleteOnKeyChange
+        : (parsed as any).dedupRecreateOnKeyChange !== undefined
+          ? (parsed as any).dedupRecreateOnKeyChange
+        : (parsed as any).recreateOnDedupKeyChange !== undefined
+          ? (parsed as any).recreateOnDedupKeyChange
+          : (parsed as any).dedupKeyChangeRecreate !== undefined
+            ? (parsed as any).dedupKeyChangeRecreate
+            : (parsed as any).recreateRecordOnDedupKeyChange !== undefined
+              ? (parsed as any).recreateRecordOnDedupKeyChange
+              : (parsed as any).deleteRecordOnDedupKeyChange;
+    const dedupDeleteOnKeyChange = normalizeBoolean(dedupDeleteOnKeyChangeRaw);
 
     const uiObj = parsed.ui !== undefined && parsed.ui !== null && typeof parsed.ui === 'object' ? parsed.ui : undefined;
 
@@ -1037,10 +1136,12 @@ export class Dashboard {
       !dedupDialog &&
       !submitButtonLabel &&
       !summaryButtonLabel &&
+      !fieldDisableRules?.length &&
       !languages &&
       defaultLanguage === undefined &&
       languageSelectorEnabled === undefined &&
-      !steps
+      !steps &&
+      dedupDeleteOnKeyChange === undefined
     ) {
       return undefined;
     }
@@ -1080,10 +1181,12 @@ export class Dashboard {
       dedupDialog,
       submitButtonLabel,
       summaryButtonLabel,
+      fieldDisableRules,
       languages,
       defaultLanguage,
       languageSelectorEnabled,
-      steps
+      steps,
+      dedupDeleteOnKeyChange
     };
   }
 

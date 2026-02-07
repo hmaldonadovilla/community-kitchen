@@ -260,6 +260,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - `target.scope: "parent"` updates the parent row when used inside a subgroup (falls back to top-level for non-subgroups).
         - `target.scope: "effect"` applies to rows created by the matching `selectionEffects[].id`.
         - `primaryAction: "cancel"` makes the Cancel button the primary/default action (useful when confirming a destructive change).
+        - `cancelAction: "discardDraftAndGoHome"` makes Cancel revert the change, discard local draft edits, and return to Home/List.
 
     - **Summary view field visibility**: By default, the Summary view only shows fields that are currently visible in the Form view (i.e., not hidden by `visibility`). You can override this per field (and per line-item field/subgroup field) via `ui.summaryVisibility`:
 
@@ -761,6 +762,21 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       ```
 
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved. The first time a user opens Create/Edit/Copy, they’ll see a one-time autosave explainer overlay (copy lives in `autosaveNotice.*` in `src/web/systemStrings.json`).
+    - Want dedup-key edits to delete the current record instead of mutating it? Add `"dedupDeleteOnKeyChange": true` in the same dashboard JSON column. When enabled, if a user changes a top-level field that participates in a reject dedup rule, the current record is deleted immediately (after confirm/blur + selection effects). Then standard create-flow dedup/autosave rules apply.
+
+    - Want to conditionally disable editing for most fields? Add `fieldDisableRules` in the same dashboard JSON column. When a rule matches, all fields become read-only except ids in `bypassFields`.
+
+      ```json
+      {
+        "fieldDisableRules": [
+          {
+            "id": "future-date-lock",
+            "when": { "fieldId": "DATE", "isInFuture": true },
+            "bypassFields": ["COOK"]
+          }
+        ]
+      }
+      ```
     - **Status**: Set to "Active" to include in the form, or "Archived" to remove it (keeping data).
     - **Line items**: Set `Type` to `LINE_ITEM_GROUP` and use the `Config (JSON/REF)` column with JSON or `REF:SheetName` pointing to a line-item sheet (columns: ID, Type, Label EN, Label FR, Label NL, Required?, Options (EN), Options (FR), Options (NL), Config JSON). Line-item field types can be DATE, TEXT, PARAGRAPH, NUMBER, CHOICE, CHECKBOX, FILE_UPLOAD.
         - Line-item fields also support `group`, `pair`, and `ui` (including `ui.control` and `ui.labelLayout`) the same way top-level questions do.
@@ -773,9 +789,11 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - `ui.choiceSearchEnabled`: default type-to-search behavior for CHOICE selects inside this group (can be overridden per field via `field.ui.choiceSearchEnabled`). Search indexes include extra columns from `optionsRef`/data sources when available.
           - `ui.mode: "table"`: render line items as a compact table (also supported on subgroups)
           - `ui.tableColumns`: ordered list of field ids to show as table columns (defaults to the line-item field order)
-         - `ui.tableColumnWidths`: optional per-column widths map. Keys can be field ids plus action keys
+          - `ui.tableColumnWidths`: optional per-column widths map. Keys can be field ids plus action keys
            (`__remove`, `__view`, `__edit` and `_remove`, `_view`, `_edit` for overlay header action columns).
            Example: `{ "ING": "50%", "QTY": "25%", "UNIT": "25%", "__remove": "44px" }`
+          - `ui.readOnlyAppendFieldId`: when a table field is read-only (`readOnly: true` or `ui.renderAsLabel: true`), append a sibling field value in parentheses from the same row (example: `Bulgur (Gluten)`).
+          - `ui.readOnlyAppendHideValues`: optional appendix values to suppress (case-insensitive exact match), e.g. `["None"]`.
           - `ui.nonMatchWarningMode`: choose how optionFilter non-match warnings show in the table legend (`descriptive`, `validation`, or `both`)
           - `ui.tableHideUntilAnchor`: when true (default), hide non-anchor columns until the anchor field has a value
           - `ui.needsAttentionMessage`: localized override for the “Needs attention” helper shown when this line item group or subgroup requires review
@@ -1846,7 +1864,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        "enabled": true,
        "debounceMs": 2000,
        "status": "In progress"
-     }
+     },
+     "dedupDeleteOnKeyChange": true
    }
    ```
 
@@ -1884,6 +1903,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
     - `reOpened`: value written when explicitly re-opening a closed record.
     - `onPdf`, `onEmail`, `onClose`: values written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
  - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes `autoSave.status` (or `statusTransitions.inProgress`, default `In progress`). If the record’s status matches `statusTransitions.onClose`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI shows a “Refresh record” banner to avoid overwriting remote changes. The first time a user opens Create/Edit/Copy, a one-time autosave explainer overlay is shown (customize via `autosaveNotice.*` in `src/web/systemStrings.json`).
+- `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
 
 2. **Provide templates**:
    - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).

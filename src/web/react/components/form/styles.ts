@@ -1,4 +1,12 @@
 export const FORM_VIEW_STYLES = `
+        .webform-overlay [data-overlay-scroll-container="true"] {
+          margin: 0 30px 50px 30px;
+        }
+        .form-card,
+        .webform-overlay,
+        .ck-form-sections {
+          --ck-list-row-action-width: 220px;
+        }
         .form-card .ck-form-grid,
         .webform-overlay .ck-form-grid {
           display: flex;
@@ -249,7 +257,8 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__control--consent,
         .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__control--consent,
         .ck-form-sections .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-line-item-table__control--consent {
-          align-items: flex-end;
+          align-items: center;
+          justify-content: center;
         }
         .form-card .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-row,
         .webform-overlay .ck-line-item-table td:not(:first-child):not(.ck-line-item-table__actions) .ck-upload-row,
@@ -297,7 +306,7 @@ export const FORM_VIEW_STYLES = `
           position: sticky;
           top: 0;
           z-index: 2;
-          background: transparent;
+          background: var(--card);
           box-shadow: none;
         }
         .form-card .ck-line-item-table__actions,
@@ -337,7 +346,10 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__control textarea,
         .webform-overlay .ck-line-item-table__control input,
         .webform-overlay .ck-line-item-table__control select,
-        .webform-overlay .ck-line-item-table__control textarea {
+        .webform-overlay .ck-line-item-table__control textarea,
+        .ck-form-sections .ck-line-item-table__control input,
+        .ck-form-sections .ck-line-item-table__control select,
+        .ck-form-sections .ck-line-item-table__control textarea {
           width: 100%;
           min-width: 0;
           max-width: 100%;
@@ -347,7 +359,20 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__control--consent,
         .ck-form-sections .ck-line-item-table__control--consent,
         .webform-overlay .ck-line-item-table__control--consent {
+          display: flex;
+          flex-direction: row;
           align-items: center;
+          justify-content: center;
+          width: 100%;
+        }
+        .form-card .ck-line-item-table__control--consent > label.inline,
+        .ck-form-sections .ck-line-item-table__control--consent > label.inline,
+        .webform-overlay .ck-line-item-table__control--consent > label.inline {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0;
+          width: auto;
         }
         .form-card .ck-line-item-table__control .ck-line-item-table__consent-checkbox,
         .ck-form-sections .ck-line-item-table__control .ck-line-item-table__consent-checkbox,
@@ -362,8 +387,10 @@ export const FORM_VIEW_STYLES = `
         }
         .form-card .ck-line-item-table__control,
         .webform-overlay .ck-line-item-table__control,
+        .ck-form-sections .ck-line-item-table__control,
         .form-card .ck-line-item-table__value,
-        .webform-overlay .ck-line-item-table__value {
+        .webform-overlay .ck-line-item-table__value,
+        .ck-form-sections .ck-line-item-table__value {
           position: relative;
           display: flex;
           flex-direction: column;
@@ -373,7 +400,9 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__control[data-has-warning="true"],
         .form-card .ck-line-item-table__value[data-has-warning="true"],
         .webform-overlay .ck-line-item-table__control[data-has-warning="true"],
-        .webform-overlay .ck-line-item-table__value[data-has-warning="true"] {
+        .webform-overlay .ck-line-item-table__value[data-has-warning="true"],
+        .ck-form-sections .ck-line-item-table__control[data-has-warning="true"],
+        .ck-form-sections .ck-line-item-table__value[data-has-warning="true"] {
           box-shadow: none;
           border-radius: 0;
           background: transparent;
@@ -381,7 +410,9 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__control[data-has-error="true"],
         .form-card .ck-line-item-table__value[data-has-error="true"],
         .webform-overlay .ck-line-item-table__control[data-has-error="true"],
-        .webform-overlay .ck-line-item-table__value[data-has-error="true"] {
+        .webform-overlay .ck-line-item-table__value[data-has-error="true"],
+        .ck-form-sections .ck-line-item-table__control[data-has-error="true"],
+        .ck-form-sections .ck-line-item-table__value[data-has-error="true"] {
           box-shadow: none;
           border-radius: 6px;
           background: transparent;
@@ -831,6 +862,25 @@ export const FORM_VIEW_STYLES = `
           flex: 1 1 180px;
           min-width: 0;
           justify-content: center;
+        }
+        .form-card .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left,
+        .webform-overlay .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left,
+        .ck-form-sections .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left {
+          width: fit-content;
+          min-width: min(var(--ck-list-row-action-width), 100%);
+          max-width: 100%;
+          background: var(--accent);
+          border-color: var(--accent);
+          color: var(--accentText);
+        }
+        .form-card .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left .ck-progress-label,
+        .form-card .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left .ck-progress-caret,
+        .webform-overlay .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left .ck-progress-label,
+        .webform-overlay .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left .ck-progress-caret,
+        .ck-form-sections .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left .ck-progress-label,
+        .ck-form-sections .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left .ck-progress-caret {
+          color: inherit;
+          opacity: 1;
         }
         .ck-progress-pill.ck-progress-info {
           background: transparent;
@@ -1643,7 +1693,7 @@ export const FORM_VIEW_STYLES = `
         .ck-page-section__title {
           margin: 0;
           font-weight: 600;
-          font-size: calc(var(--ck-font-group-title) * 1.14);
+          font-size: calc(var(--ck-font-group-title) * 1.15);
           line-height: 1.1;
           letter-spacing: 0;
           text-transform: none;
@@ -1832,6 +1882,29 @@ export const FORM_VIEW_STYLES = `
           margin-top: 12px;
           border-bottom: 1px solid var(--border);
         }
+        .line-item-row .ck-subgroup-open-stack {
+          align-items: flex-start;
+        }
+        .form-card .ck-list-row-action-btn,
+        .webform-overlay .ck-list-row-action-btn,
+        .ck-form-sections .ck-list-row-action-btn {
+          white-space: nowrap;
+        }
+        .line-item-row .ck-list-row-action-btn {
+          width: fit-content;
+          min-width: min(var(--ck-list-row-action-width), 100%);
+          max-width: 100%;
+        }
+        .line-item-row .ck-progress-pill.ck-list-row-action-btn {
+          background: var(--accent);
+          border-color: var(--accent);
+          color: var(--accentText);
+        }
+        .line-item-row .ck-progress-pill.ck-list-row-action-btn .ck-progress-label,
+        .line-item-row .ck-progress-pill.ck-list-row-action-btn .ck-progress-caret {
+          opacity: 1;
+          color: inherit;
+        }
         .ck-row-toggle:active .ck-progress-pill {
           transform: translateY(1px);
         }
@@ -1866,6 +1939,11 @@ export const FORM_VIEW_STYLES = `
         }
 
         @media (max-width: 520px) {
+          .form-card,
+          .webform-overlay,
+          .ck-form-sections {
+            --ck-list-row-action-width: 220px;
+          }
           /* On very narrow viewports, allow control rows to wrap (select + buttons). */
           .ck-control-row {
             flex-wrap: wrap;

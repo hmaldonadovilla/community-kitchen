@@ -485,7 +485,7 @@ export function buildWebFormHtml(
       button.ck-button-wrap-left .ck-bottom-label {
         display: inline-block;
         min-width: 0;
-        white-space: normal;
+        white-space: nowrap;
         text-align: left;
       }
       button:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -676,6 +676,9 @@ export function buildWebFormHtml(
         border-bottom: 1px solid var(--border);
         text-align: left;
         word-break: break-word;
+      }
+      .list-table th {
+        background: var(--card);
       }
       .ck-list-sort-header {
         width: 100%;

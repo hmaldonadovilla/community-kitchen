@@ -449,6 +449,20 @@ export interface QuestionUiConfig {
    */
   renderAsLabel?: boolean;
   /**
+   * Optional sibling field id to append in parentheses when this field is rendered as a read-only value
+   * inside line-item table cells (including overlay table editors).
+   *
+   * Example output: `Bulgur (Gluten)`.
+   */
+  readOnlyAppendFieldId?: string;
+  /**
+   * Optional list of appendix values that should be hidden when using `readOnlyAppendFieldId`
+   * (case-insensitive exact match after trim).
+   *
+   * Example: `["None"]` keeps `Bulgur` instead of `Bulgur (None)`.
+   */
+  readOnlyAppendHideValues?: string[];
+  /**
    * Summary-only override for label visibility.
    *
    * - When omitted, the Summary view inherits from `hideLabel`.
@@ -716,6 +730,12 @@ export interface FieldChangeDialogConfig {
    */
   dedupMode?: 'auto' | 'always' | 'never';
   /**
+   * Optional cancel behavior override.
+   * - none (default): close dialog and revert pending change.
+   * - discardDraftAndGoHome: revert pending change, discard local draft edits, and return to Home/List view.
+   */
+  cancelAction?: 'none' | 'discardDraftAndGoHome';
+  /**
    * Optional dialog input fields that update other targets on confirm.
    */
   inputs?: FieldChangeDialogInput[];
@@ -897,6 +917,21 @@ export interface LineItemWhenClause {
 }
 
 export type WhenClause = VisibilityCondition | WhenAllClause | WhenAnyClause | WhenNotClause | LineItemWhenClause;
+
+export interface FieldDisableRule {
+  /**
+   * Optional stable id for diagnostics.
+   */
+  id?: string;
+  /**
+   * When this condition matches, fields become read-only unless explicitly bypassed.
+   */
+  when: WhenClause;
+  /**
+   * Optional list of field ids that remain editable while this rule is active.
+   */
+  bypassFields?: string[];
+}
 
 export interface VisibilityConfig {
   showWhen?: WhenClause;
@@ -2147,6 +2182,23 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   summaryButtonLabel?: LocalizedString;
+  /**
+   * Optional form-level field disable rules for the React edit (form) view.
+   *
+   * When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
+   */
+  fieldDisableRules?: FieldDisableRule[];
+  /**
+   * When true, changing any top-level field that participates in a reject dedup rule
+   * deletes the current record immediately (after confirm/blur + field automations).
+   *
+   * Behavior:
+   * - This feature performs deletion only; it does not force recreation.
+   * - After deletion, normal create-flow dedup precheck/autosave behavior applies.
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  dedupDeleteOnKeyChange?: boolean;
 }
 
 export interface FormConfigExport {
@@ -2924,6 +2976,19 @@ export interface WebFormDefinition {
    * Example: "Checklist".
    */
   summaryButtonLabel?: LocalizedString;
+  /**
+   * Optional form-level field disable rules for the React edit (form) view.
+   *
+   * When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
+   */
+  fieldDisableRules?: FieldDisableRule[];
+  /**
+   * When true, changing any top-level field that participates in a reject dedup rule
+   * deletes the current record immediately (after confirm/blur + field automations).
+   *
+   * This feature performs deletion only; normal create-flow dedup/autosave behavior applies after delete.
+   */
+  dedupDeleteOnKeyChange?: boolean;
 }
 
 export interface CopyCurrentRecordLineItemProfile {
