@@ -92,6 +92,10 @@ export class SubmissionService {
       : (formObject as any).language;
     const languageRaw = (langValue || 'EN').toString().toUpperCase();
     const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
+    const deleteRecordIdRaw = ((formObject as any).__ckDeleteRecordId || '').toString().trim();
+    const dedupDeleteOnKeyChange =
+      form.dedupDeleteOnKeyChange === true || (form as any).dedupRecreateOnKeyChange === true;
+    const deleteRecordId = dedupDeleteOnKeyChange ? deleteRecordIdRaw : '';
 
     const lock = (() => {
       try {
@@ -113,16 +117,38 @@ export class SubmissionService {
       }
 
       const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+      const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
+
+      if (deleteRecordId) {
+        const deleted = this.deleteRecordById(sheet, columns, destinationName, dedupRules, deleteRecordId);
+        if (!deleted.deleted) {
+          return {
+            success: false,
+            message: 'Failed to delete previous record.',
+            meta: { id: deleteRecordId }
+          } as any;
+        }
+        this.cacheManager.bumpSheetEtag(sheet, columns, 'saveSubmission.deleteOnly');
+        return {
+          success: true,
+          message: 'Deleted previous record.',
+          meta: {
+            id: deleteRecordId,
+            rowNumber: deleted.rowNumber,
+            updatedAt: new Date().toISOString()
+          }
+        } as any;
+      }
 
     const now = new Date();
-    const incomingId = ((formObject as any).id && (formObject as any).id.trim)
-      ? ((formObject as any).id as any).trim()
-      : (formObject as any).id;
+    const incomingId =
+      ((formObject as any).id && (formObject as any).id.trim)
+        ? ((formObject as any).id as any).trim()
+        : (formObject as any).id;
     const recordId = incomingId || this.generateUuid();
 
     // Find existing row by id
     let existingRowIdx = -1;
-    const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
     // Prefer the record index (fast, avoids scanning 100k ids).
     try {
       const idx = ensureRecordIndexSheet(this.ss, destinationName, dedupRules);
@@ -452,7 +478,7 @@ export class SubmissionService {
       rowNumber: destinationRowNumber
     };
 
-    const newEtag = this.cacheManager.bumpSheetEtag(
+    let newEtag = this.cacheManager.bumpSheetEtag(
       sheet,
       columns,
       existingRowIdx >= 0 ? 'saveSubmission.update' : 'saveSubmission.create'
@@ -495,6 +521,50 @@ export class SubmissionService {
         // ignore
       }
     }
+  }
+
+  private deleteRecordById(
+    destinationSheet: GoogleAppsScript.Spreadsheet.Sheet,
+    destinationColumns: HeaderColumns,
+    destinationName: string,
+    dedupRules: DedupRule[],
+    recordId: string
+  ): { deleted: boolean; rowNumber?: number } {
+    const targetId = (recordId || '').toString().trim();
+    if (!targetId) return { deleted: false };
+
+    let rowNumber = -1;
+    let indexSheet: GoogleAppsScript.Spreadsheet.Sheet | null = null;
+    try {
+      const idx = ensureRecordIndexSheet(this.ss, destinationName, dedupRules);
+      indexSheet = idx.sheet;
+      const indexedRow = findRowNumberInRecordIndex(idx.sheet, targetId);
+      if (indexedRow >= 2) {
+        rowNumber = indexedRow;
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    if (rowNumber < 2) {
+      const found = this.findRowIndexById(destinationSheet, destinationColumns, targetId);
+      rowNumber = found >= 2 ? found : -1;
+    }
+    if (rowNumber < 2) return { deleted: false };
+
+    try {
+      destinationSheet.deleteRow(rowNumber);
+    } catch (_) {
+      return { deleted: false };
+    }
+
+    try {
+      if (indexSheet) indexSheet.deleteRow(rowNumber);
+    } catch (_) {
+      // ignore
+    }
+
+    return { deleted: true, rowNumber };
   }
 
   /**

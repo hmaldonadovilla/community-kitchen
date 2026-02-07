@@ -39,7 +39,8 @@ describe('WebFormService', () => {
         }
       ],
       statusTransitions: { onEmail: 'Emailed' },
-      listViewMetaColumns: ['createdAt', 'status']
+      listViewMetaColumns: ['createdAt', 'status'],
+      dedupDeleteOnKeyChange: true
     });
     const dashboardData = [
       [],
@@ -283,6 +284,78 @@ describe('WebFormService', () => {
     expect(mealCol).toBeGreaterThanOrEqual(0);
     expect(values[1][mealCol]).toBe('MP-AA000001');
     expect(values[2][mealCol]).toBe('MP-AA000002');
+  });
+
+  test('saveSubmissionWithId ignores __ckRecreateFromRecordId and updates the same record id', () => {
+    const initial = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(initial.success).toBe(true);
+
+    const updated = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-1',
+      __ckRecreateFromRecordId: 'REC-1',
+      Q1: 'Bob',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(updated.success).toBe(true);
+    const updatedId = ((updated as any)?.meta?.id || '').toString();
+    expect(updatedId).toBe('REC-1');
+
+    const sheet = ss.getSheetByName('Deliveries');
+    expect(sheet).toBeDefined();
+    const values = sheet!.getRange(1, 1, sheet!.getLastRow(), sheet!.getLastColumn()).getValues();
+    expect(sheet!.getLastRow()).toBe(2);
+
+    const header = values[0].map((h: any) => (h || '').toString().trim());
+    const idCol = header.findIndex((h: string) => h.toLowerCase() === 'record id');
+    const q1Col = header.findIndex((h: string) => /\[Q1\]\s*$/.test(h));
+    expect(idCol).toBeGreaterThanOrEqual(0);
+    expect(q1Col).toBeGreaterThanOrEqual(0);
+    expect((values[1][idCol] || '').toString()).toBe('REC-1');
+    expect((values[1][q1Col] || '').toString()).toBe('Bob');
+  });
+
+  test('saveSubmissionWithId can delete an existing record immediately for dedup delete-on-key-change flow', () => {
+    const initial = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DEL',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(initial.success).toBe(true);
+
+    const deleted = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DEL',
+      __ckDeleteRecordId: 'REC-DEL',
+      __ckSaveMode: 'draft'
+    } as any);
+    expect(deleted.success).toBe(true);
+
+    const sheet = ss.getSheetByName('Deliveries');
+    expect(sheet).toBeDefined();
+    expect(sheet!.getLastRow()).toBe(1);
   });
 
   test('updateRecord (draft) can re-open a Closed record when __ckAllowClosedUpdate is set', () => {

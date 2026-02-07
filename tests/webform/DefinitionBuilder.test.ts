@@ -52,6 +52,7 @@ describe('DefinitionBuilder', () => {
       languageSelectorEnabled: false,
       createRecordPresetButtonsEnabled: false,
       actionBars: { system: { home: { hideWhenActive: true } } },
+      dedupDeleteOnKeyChange: true,
       fieldDisableRules: [
         {
           id: 'future-date-lock',
@@ -139,6 +140,7 @@ describe('DefinitionBuilder', () => {
     const def = builder.buildDefinition('Config: Pantry');
     expect(def.createRecordPresetButtonsEnabled).toBe(false);
     expect(def.actionBars?.system?.home?.hideWhenActive).toBe(true);
+    expect(def.dedupDeleteOnKeyChange).toBe(true);
   });
 
   test('buildDefinition includes submission confirmation button label overrides from the dashboard', () => {

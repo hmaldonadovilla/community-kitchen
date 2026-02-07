@@ -163,6 +163,7 @@ export class Dashboard {
       const languageSelectorEnabled = dashboardConfig?.languageSelectorEnabled;
       const steps = dashboardConfig?.steps;
       const fieldDisableRules = dashboardConfig?.fieldDisableRules;
+      const dedupDeleteOnKeyChange = dashboardConfig?.dedupDeleteOnKeyChange;
       if (title && configSheetName) {
         forms.push({
           title,
@@ -211,7 +212,8 @@ export class Dashboard {
           fieldDisableRules,
           languages,
           defaultLanguage,
-          languageSelectorEnabled
+          languageSelectorEnabled,
+          dedupDeleteOnKeyChange
         });
       }
     });
@@ -279,6 +281,7 @@ export class Dashboard {
     languageSelectorEnabled?: boolean;
     steps?: StepsConfig;
     fieldDisableRules?: FieldDisableRule[];
+    dedupDeleteOnKeyChange?: boolean;
   } | undefined {
     if (!raw || (typeof raw === 'string' && raw.trim() === '')) return undefined;
     const value = raw.toString().trim();
@@ -1063,6 +1066,19 @@ export class Dashboard {
           ? parsed.summaryLabel
           : undefined;
     const summaryButtonLabel = normalizeLocalized(summaryButtonLabelRaw);
+    const dedupDeleteOnKeyChangeRaw =
+      (parsed as any).dedupDeleteOnKeyChange !== undefined
+        ? (parsed as any).dedupDeleteOnKeyChange
+        : (parsed as any).dedupRecreateOnKeyChange !== undefined
+          ? (parsed as any).dedupRecreateOnKeyChange
+        : (parsed as any).recreateOnDedupKeyChange !== undefined
+          ? (parsed as any).recreateOnDedupKeyChange
+          : (parsed as any).dedupKeyChangeRecreate !== undefined
+            ? (parsed as any).dedupKeyChangeRecreate
+            : (parsed as any).recreateRecordOnDedupKeyChange !== undefined
+              ? (parsed as any).recreateRecordOnDedupKeyChange
+              : (parsed as any).deleteRecordOnDedupKeyChange;
+    const dedupDeleteOnKeyChange = normalizeBoolean(dedupDeleteOnKeyChangeRaw);
 
     const uiObj = parsed.ui !== undefined && parsed.ui !== null && typeof parsed.ui === 'object' ? parsed.ui : undefined;
 
@@ -1124,7 +1140,8 @@ export class Dashboard {
       !languages &&
       defaultLanguage === undefined &&
       languageSelectorEnabled === undefined &&
-      !steps
+      !steps &&
+      dedupDeleteOnKeyChange === undefined
     ) {
       return undefined;
     }
@@ -1168,7 +1185,8 @@ export class Dashboard {
       languages,
       defaultLanguage,
       languageSelectorEnabled,
-      steps
+      steps,
+      dedupDeleteOnKeyChange
     };
   }
 

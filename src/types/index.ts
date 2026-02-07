@@ -2188,6 +2188,17 @@ export interface FormConfig {
    * When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
    */
   fieldDisableRules?: FieldDisableRule[];
+  /**
+   * When true, changing any top-level field that participates in a reject dedup rule
+   * deletes the current record immediately (after confirm/blur + field automations).
+   *
+   * Behavior:
+   * - This feature performs deletion only; it does not force recreation.
+   * - After deletion, normal create-flow dedup precheck/autosave behavior applies.
+   *
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  dedupDeleteOnKeyChange?: boolean;
 }
 
 export interface FormConfigExport {
@@ -2971,6 +2982,13 @@ export interface WebFormDefinition {
    * When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
    */
   fieldDisableRules?: FieldDisableRule[];
+  /**
+   * When true, changing any top-level field that participates in a reject dedup rule
+   * deletes the current record immediately (after confirm/blur + field automations).
+   *
+   * This feature performs deletion only; normal create-flow dedup/autosave behavior applies after delete.
+   */
+  dedupDeleteOnKeyChange?: boolean;
 }
 
 export interface CopyCurrentRecordLineItemProfile {

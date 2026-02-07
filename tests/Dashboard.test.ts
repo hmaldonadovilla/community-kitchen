@@ -528,6 +528,29 @@ describe('Dashboard', () => {
     expect(forms[0].autoSave?.status).toBe('In progress');
   });
 
+  test('getForms parses dedup delete-on-key-change setting from dashboard config aliases', () => {
+    const configJson = JSON.stringify({
+      recreateOnDedupKeyChange: true
+    });
+    const mockData = [
+      [],
+      [],
+      [
+        'Form Title',
+        'Configuration Sheet Name',
+        'Destination Tab Name',
+        'Description',
+        'Web App URL (?form=ConfigSheetName)',
+        'Follow-up Config (JSON)'
+      ],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].dedupDeleteOnKeyChange).toBe(true);
+  });
+
   test('getForms parses language config from dashboard config', () => {
     const configJson = JSON.stringify({
       languages: ['EN', 'FR', 'NL'],

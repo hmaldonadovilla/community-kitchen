@@ -148,7 +148,8 @@ export class DefinitionBuilder {
       dedupDialog: form.dedupDialog,
       submitButtonLabel: form.submitButtonLabel,
       summaryButtonLabel: form.summaryButtonLabel,
-      fieldDisableRules: form.fieldDisableRules
+      fieldDisableRules: form.fieldDisableRules,
+      dedupDeleteOnKeyChange: form.dedupDeleteOnKeyChange
     };
   }
 
