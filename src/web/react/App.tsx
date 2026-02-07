@@ -2472,7 +2472,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
   // Close the submit confirmation dialog when navigating away.
   useEffect(() => {
-    if (view === 'form') return;
+    if (view === 'form' || view === 'summary') return;
     if (!submitConfirmOpen) return;
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = false;
@@ -4289,6 +4289,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const cancelSubmitConfirm = useCallback(() => {
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = false;
+    summarySubmitIntentRef.current = false;
     logEvent('ui.submitConfirm.cancel');
   }, [logEvent]);
 
@@ -4296,8 +4297,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     setSubmitConfirmOpen(false);
     submitConfirmedRef.current = true;
     logEvent('ui.submitConfirm.confirm');
+    if (viewRef.current === 'summary') {
+      void handleSubmit();
+      return;
+    }
     formSubmitActionRef.current?.();
-  }, [logEvent]);
+  }, [handleSubmit, logEvent]);
 
   const autoSaveDebounceMs = (() => {
     const raw = definition.autoSave?.debounceMs;
@@ -5629,11 +5634,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     });
   }
 
-  const handleSubmit = async (submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => {
-    const bypassSubmitConfirm = summarySubmitIntentRef.current === true;
-    if (bypassSubmitConfirm) {
-      summarySubmitIntentRef.current = false;
-    }
+  async function handleSubmit(submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) {
+    const submitRequestedFromSummary = summarySubmitIntentRef.current === true;
     if (isClosedRecord) {
       setStatus(tSystem('app.closedReadOnly', language, 'Closed (read-only)'));
       setStatusLevel('info');
@@ -5754,7 +5756,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     if (Object.keys(nextErrors).length) {
       submitConfirmedRef.current = false;
       logEvent('submit.validate.failed');
-      if (bypassSubmitConfirm && viewRef.current === 'summary') {
+      if (submitRequestedFromSummary && viewRef.current === 'summary') {
+        summarySubmitIntentRef.current = false;
         setView('form');
         logEvent('summary.submit.validationFailedNavigateForm', {
           errorCount: Object.keys(nextErrors).length
@@ -5785,7 +5788,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
 
     // Only show the submit confirmation overlay once the form is already valid.
-    if (!submitConfirmedRef.current && !bypassSubmitConfirm) {
+    if (!submitConfirmedRef.current) {
       setSubmitConfirmOpen(true);
       logEvent('ui.submitConfirm.openAfterValidation', {
         configuredMessage: Boolean(definition.submissionConfirmationMessage),
@@ -5796,6 +5799,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       return;
     }
     submitConfirmedRef.current = false;
+    summarySubmitIntentRef.current = false;
 
     setSubmitting(true);
     // Keep ref in sync immediately so background work (autosave/uploads) can't start in the same tick.
@@ -6051,7 +6055,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   const handleSummarySubmit = useCallback(() => {
     if (submitting) return;
@@ -7272,7 +7276,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       />
 
       <ConfirmDialogOverlay
-        open={submitConfirmOpen && view === 'form'}
+        open={submitConfirmOpen && (view === 'form' || view === 'summary')}
         title={submitConfirmTitle}
         message={submitConfirmMessage}
         confirmLabel={submitConfirmConfirmLabelResolved}

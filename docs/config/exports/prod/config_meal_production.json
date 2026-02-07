@@ -7226,11 +7226,11 @@
       "optionsNl": [],
       "status": "Active",
       "button": {
-        "action": "renderHtmlTemplate",
+        "action": "renderMarkdownTemplate",
         "templateId": {
-          "EN": "bundle:procedure_meal_production.html",
-          "FR": "bundle:procedure_meal_production.html",
-          "NL": "bundle:procedure_meal_production.html"
+          "EN": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv",
+          "FR": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv",
+          "NL": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv"
         },
         "placements": [
           "topBarList"
@@ -12804,11 +12804,11 @@
         "required": false,
         "listView": false,
         "button": {
-          "action": "renderHtmlTemplate",
+          "action": "renderMarkdownTemplate",
           "templateId": {
-            "EN": "bundle:procedure_meal_production.html",
-            "FR": "bundle:procedure_meal_production.html",
-            "NL": "bundle:procedure_meal_production.html"
+            "EN": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv",
+            "FR": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv",
+            "NL": "1T7ffxFfQlw3DH1gPVIre5qRJYrwHrGpv"
           },
           "placements": [
             "topBarList"
