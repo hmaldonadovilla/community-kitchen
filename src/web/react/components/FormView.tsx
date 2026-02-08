@@ -7440,6 +7440,9 @@ const FormView: React.FC<FormViewProps> = ({
         const primary = resolveButtonTonePrimary(label, (q as any)?.button?.tone);
         const busyThis = !!reportBusy && reportBusyId === q.id;
         const disabled = submitting || isFieldLockedByDedup(q.id) || !onReportButton || !!reportBusy;
+        const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
+        const helperText = helperCfg.text;
+        const helperNode = helperText ? <div className="ck-field-helper">{helperText}</div> : null;
         const buttonLabelStyle = inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly;
         return (
           <div
@@ -7456,6 +7459,7 @@ const FormView: React.FC<FormViewProps> = ({
             >
               {busyThis ? tSystem('common.loading', language, 'Loading…') : label}
             </button>
+            {helperNode}
           </div>
         );
       }

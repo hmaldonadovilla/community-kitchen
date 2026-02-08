@@ -203,6 +203,34 @@ export const evaluateFieldChangeDialogWhen = (args: {
   return matchesWhenClause(when, ctx, { rowId: normalizedRowId, linePrefix: normalizedGroupId });
 };
 
+export const evaluateFieldChangeDialogWhenWithFallback = (args: {
+  when: WhenClause | undefined;
+  scope: FieldChangeDialogScope;
+  fieldId: string;
+  groupId?: string;
+  rowId?: string;
+  nextValue: FieldValue;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  fallbackValues?: Record<string, FieldValue>;
+  fallbackLineItems?: LineItemState;
+}): { matches: boolean; matchedOn: 'current' | 'fallback' | null } => {
+  const { fallbackValues, fallbackLineItems, ...baseArgs } = args;
+  if (evaluateFieldChangeDialogWhen(baseArgs)) {
+    return { matches: true, matchedOn: 'current' };
+  }
+  if (!fallbackValues || !fallbackLineItems) {
+    return { matches: false, matchedOn: null };
+  }
+  const fallbackMatches = evaluateFieldChangeDialogWhen({
+    ...baseArgs,
+    values: fallbackValues,
+    lineItems: fallbackLineItems
+  });
+  if (!fallbackMatches) return { matches: false, matchedOn: null };
+  return { matches: true, matchedOn: 'fallback' };
+};
+
 const updateRowField = (
   lineItems: LineItemState,
   groupKey: string,

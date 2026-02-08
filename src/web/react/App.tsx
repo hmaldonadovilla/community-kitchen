@@ -76,6 +76,7 @@ import {
 import {
   applyFieldChangeDialogTargets,
   evaluateFieldChangeDialogWhen,
+  evaluateFieldChangeDialogWhenWithFallback,
   finalizeInitialDateChangeDialogEntry,
   resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
@@ -626,10 +627,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       rafId = null;
       const buttons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
       buttons.forEach(button => {
-        if (button.classList.contains('ck-dialog-action-button')) {
-          button.classList.remove('ck-button-wrap-left');
-          return;
-        }
         ensureButtonTextSpans(button);
         const wrapped = buttonHasWrappedText(button);
         button.classList.toggle('ck-button-wrap-left', wrapped);
@@ -1491,7 +1488,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           }
           const pending = fieldChangePendingRef.current[fieldKey];
           if (pending) {
-            const stillValid = evaluateFieldChangeDialogWhen({
+            const validity = evaluateFieldChangeDialogWhenWithFallback({
               when: pending.dialog?.when,
               scope: pending.scope,
               fieldId: pending.fieldId,
@@ -1499,12 +1496,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               rowId: pending.rowId,
               nextValue: pending.nextValue,
               values: valuesRef.current,
-              lineItems: lineItemsRef.current
+              lineItems: lineItemsRef.current,
+              fallbackValues: pending.prevSnapshot.values,
+              fallbackLineItems: pending.prevSnapshot.lineItems
             });
-            if (!stillValid) {
+            if (!validity.matches) {
               delete fieldChangePendingRef.current[fieldKey];
               logEvent('fieldChangeDialog.pending.cleared', { fieldPath: fieldKey, fieldId });
               return;
+            }
+            if (validity.matchedOn === 'fallback') {
+              logEvent('fieldChangeDialog.pending.revalidatedFromSnapshot', {
+                fieldPath: fieldKey,
+                fieldId: pending.fieldId,
+                groupId: pending.groupId || null,
+                rowId: pending.rowId || null
+              });
             }
             openFieldChangeDialog(pending);
             return;

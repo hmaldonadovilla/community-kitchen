@@ -416,6 +416,9 @@
           }
         },
         {
+          "helpText": {
+            "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish."
+          },
           "id": "deliveryForm",
           "contextHeader": {
             "parts": [
@@ -1782,7 +1785,7 @@
     "auditLogging": {
       "enabled": true,
       "statuses": [
-        "Ready for production"
+        "In production"
       ],
       "snapshotButtons": [
         "MP_READY_FOR_PRODUCTION"
@@ -1795,7 +1798,7 @@
           "all": [
             {
               "fieldId": "status",
-              "equals": "Ready for Production"
+              "equals": "In production"
             },
             {
               "fieldId": "__ckStep",
@@ -1804,7 +1807,6 @@
           ]
         },
         "bypassFields": [
-          "ORD_QTY"
         ],
         "unlockStatus": "In progress"
       }
@@ -6958,6 +6960,12 @@
       "required": false,
       "pair": "ing_ph",
       "listView": false,
+      "ui": {
+        "helperText": {
+          "en": "Use \"Ingredients needed\" as the reference shopping list"
+        },
+        "helperPlacement": "belowLabel"
+      },
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -7021,6 +7029,12 @@
       "required": true,
       "pair": "ing_ph",
       "listView": false,
+      "ui": {
+        "helperText": {
+          "en": "Take a photo of delivery tags before cooking."
+        },
+        "helperPlacement": "belowLabel"
+      },
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -7408,7 +7422,7 @@
         ],
         "tone": "primary",
         "set": {
-          "status": "Ready for Production"
+          "status": "In production"
         },
         "navigateTo": "form",
         "confirm": {
@@ -7447,7 +7461,7 @@
           "all": [
             {
               "fieldId": "status",
-              "equals": "Ready for Production"
+              "equals": "In production"
             },
             {
               "fieldId": "__ckRequestParam_admin",
@@ -12668,6 +12682,12 @@
         "required": false,
         "pair": "ing_ph",
         "listView": false,
+        "ui": {
+          "helperText": {
+            "en": "Use \"Ingredients needed\" as the reference shopping list"
+          },
+          "helperPlacement": "belowLabel"
+        },
         "button": {
           "action": "renderHtmlTemplate",
           "templateId": {
@@ -12729,6 +12749,12 @@
         "required": true,
         "pair": "ing_ph",
         "listView": false,
+        "ui": {
+          "helperText": {
+            "en": "Take a photo of delivery tags before cooking."
+          },
+          "helperPlacement": "belowLabel"
+        },
         "visibility": {
           "hideWhen": {
             "fieldId": "MP_PREP_DATE",
@@ -13090,7 +13116,7 @@
           ],
           "tone": "primary",
           "set": {
-            "status": "Ready for Production"
+            "status": "In production"
           },
           "navigateTo": "form",
           "confirm": {
@@ -13129,7 +13155,7 @@
             "all": [
               {
                 "fieldId": "status",
-                "equals": "Ready for Production"
+                "equals": "In production"
               },
               {
                 "fieldId": "__ckRequestParam_admin",
@@ -13603,6 +13629,9 @@
           }
         },
         {
+          "helpText": {
+            "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
+          },
           "id": "deliveryForm",
           "contextHeader": {
             "parts": [
@@ -14981,7 +15010,7 @@
     "auditLogging": {
       "enabled": true,
       "statuses": [
-        "Ready for production"
+        "In production"
       ],
       "snapshotButtons": [
         "MP_READY_FOR_PRODUCTION"
@@ -14994,7 +15023,7 @@
           "all": [
             {
               "fieldId": "status",
-              "equals": "Ready for Production"
+              "equals": "In production"
             },
             {
               "fieldId": "__ckStep",
@@ -15003,7 +15032,6 @@
           ]
         },
         "bypassFields": [
-          "ORD_QTY"
         ],
         "unlockStatus": "In progress"
       }

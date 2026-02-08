@@ -7143,6 +7143,9 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
+            "helpText": {
+              "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish."
+            },
             "id": "deliveryForm",
             "contextHeader": {
               "parts": [
@@ -8509,7 +8512,7 @@ export const BUNDLED_FORM_CONFIGS = [
       "auditLogging": {
         "enabled": true,
         "statuses": [
-          "Ready for production"
+          "In production"
         ],
         "snapshotButtons": [
           "MP_READY_FOR_PRODUCTION"
@@ -8522,7 +8525,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "all": [
               {
                 "fieldId": "status",
-                "equals": "Ready for Production"
+                "equals": "In production"
               },
               {
                 "fieldId": "__ckStep",
@@ -8530,9 +8533,7 @@ export const BUNDLED_FORM_CONFIGS = [
               }
             ]
           },
-          "bypassFields": [
-            "ORD_QTY"
-          ],
+          "bypassFields": [],
           "unlockStatus": "In progress"
         }
       ]
@@ -13685,6 +13686,12 @@ export const BUNDLED_FORM_CONFIGS = [
         "required": false,
         "pair": "ing_ph",
         "listView": false,
+        "ui": {
+          "helperText": {
+            "en": "Use \"Ingredients needed\" as the reference shopping list"
+          },
+          "helperPlacement": "belowLabel"
+        },
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -13748,6 +13755,12 @@ export const BUNDLED_FORM_CONFIGS = [
         "required": true,
         "pair": "ing_ph",
         "listView": false,
+        "ui": {
+          "helperText": {
+            "en": "Take a photo of delivery tags before cooking."
+          },
+          "helperPlacement": "belowLabel"
+        },
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -14135,7 +14148,7 @@ export const BUNDLED_FORM_CONFIGS = [
           ],
           "tone": "primary",
           "set": {
-            "status": "Ready for Production"
+            "status": "In production"
           },
           "navigateTo": "form",
           "confirm": {
@@ -14174,7 +14187,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "all": [
               {
                 "fieldId": "status",
-                "equals": "Ready for Production"
+                "equals": "In production"
               },
               {
                 "fieldId": "__ckRequestParam_admin",
@@ -19395,6 +19408,12 @@ export const BUNDLED_FORM_CONFIGS = [
           "required": false,
           "pair": "ing_ph",
           "listView": false,
+          "ui": {
+            "helperText": {
+              "en": "Use \"Ingredients needed\" as the reference shopping list"
+            },
+            "helperPlacement": "belowLabel"
+          },
           "button": {
             "action": "renderHtmlTemplate",
             "templateId": {
@@ -19456,6 +19475,12 @@ export const BUNDLED_FORM_CONFIGS = [
           "required": true,
           "pair": "ing_ph",
           "listView": false,
+          "ui": {
+            "helperText": {
+              "en": "Take a photo of delivery tags before cooking."
+            },
+            "helperPlacement": "belowLabel"
+          },
           "visibility": {
             "hideWhen": {
               "fieldId": "MP_PREP_DATE",
@@ -19817,7 +19842,7 @@ export const BUNDLED_FORM_CONFIGS = [
             ],
             "tone": "primary",
             "set": {
-              "status": "Ready for Production"
+              "status": "In production"
             },
             "navigateTo": "form",
             "confirm": {
@@ -19856,7 +19881,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "all": [
                 {
                   "fieldId": "status",
-                  "equals": "Ready for Production"
+                  "equals": "In production"
                 },
                 {
                   "fieldId": "__ckRequestParam_admin",
@@ -20330,6 +20355,9 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
+            "helpText": {
+              "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
+            },
             "id": "deliveryForm",
             "contextHeader": {
               "parts": [
@@ -21708,7 +21736,7 @@ export const BUNDLED_FORM_CONFIGS = [
       "auditLogging": {
         "enabled": true,
         "statuses": [
-          "Ready for production"
+          "In production"
         ],
         "snapshotButtons": [
           "MP_READY_FOR_PRODUCTION"
@@ -21721,7 +21749,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "all": [
               {
                 "fieldId": "status",
-                "equals": "Ready for Production"
+                "equals": "In production"
               },
               {
                 "fieldId": "__ckStep",
@@ -21729,9 +21757,7 @@ export const BUNDLED_FORM_CONFIGS = [
               }
             ]
           },
-          "bypassFields": [
-            "ORD_QTY"
-          ],
+          "bypassFields": [],
           "unlockStatus": "In progress"
         }
       ]
