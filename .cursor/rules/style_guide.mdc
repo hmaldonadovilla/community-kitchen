@@ -128,6 +128,15 @@ Frames are allowed only to:
 
 Decorative frames or frames mixing actions, navigation, and information are forbidden.
 
+## Button Label Alignment (Authoritative)
+
+Button labels must follow this alignment rule:
+
+- Single-line labels: centered
+- Two or more lines: left-aligned
+
+This rule applies to all action buttons, including dialog actions.
+
 ## Expanded Framing Rules (Authoritative)
 
 Frames are structural elements. They are not decorative and not expressive.

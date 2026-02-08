@@ -337,6 +337,19 @@ export class WebFormService {
   public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
     const targetKey = (formKey || '').toString().trim();
     const bundleTarget = ((params as any)?.app ?? (params as any)?.page ?? '').toString().trim();
+    const requestParams = (() => {
+      if (!params || typeof params !== 'object') return {} as Record<string, string>;
+      const out: Record<string, string> = {};
+      Object.keys(params).forEach(key => {
+        if (!key) return;
+        const raw = (params as any)[key];
+        if (raw === undefined || raw === null) return;
+        const value = raw.toString();
+        if (!value) return;
+        out[key] = value;
+      });
+      return out;
+    })();
     const bundled = this.resolveBundledConfig(targetKey || undefined);
     const configEnv = getBundledConfigEnv() || undefined;
     const envTag = getUiEnvTag() || undefined;
@@ -349,7 +362,7 @@ export class WebFormService {
     });
 
     const html = (() => {
-      if (!bundled) return buildReactShellTemplate(targetKey, bundleTarget);
+      if (!bundled) return buildReactShellTemplate(targetKey, bundleTarget, requestParams);
       const def = this.buildBundledDefinition(bundled);
       const resolvedKey =
         targetKey ||
@@ -357,7 +370,7 @@ export class WebFormService {
         bundled.form?.configSheet ||
         bundled.form?.title ||
         '__DEFAULT__';
-      return buildReactTemplate(def, resolvedKey, { configSource: 'bundled', configEnv, envTag }, bundleTarget);
+      return buildReactTemplate(def, resolvedKey, { configSource: 'bundled', configEnv, envTag }, bundleTarget, requestParams);
     })();
 
     debugLog('renderForm.htmlBuilt', {

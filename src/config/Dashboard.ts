@@ -1,10 +1,12 @@
 import {
   AutoSaveConfig,
+  AuditLoggingConfig,
   AppHeaderConfig,
   ActionBarsConfig,
   ActionBarItemConfig,
   ActionBarViewConfig,
   ActionBarSystemButton,
+  DedupIncompleteHomeDialogConfig,
   ButtonPlacement,
   ButtonAction,
   FollowupConfig,
@@ -136,6 +138,7 @@ export class Dashboard {
       const listViewSearch = dashboardConfig?.listViewSearch;
       const listViewView = dashboardConfig?.listViewView;
       const autoSave = dashboardConfig?.autoSave;
+      const auditLogging = dashboardConfig?.auditLogging;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const summaryHtmlTemplateId = dashboardConfig?.summaryHtmlTemplateId;
       const copyCurrentRecordEnabled = dashboardConfig?.copyCurrentRecordEnabled;
@@ -186,6 +189,7 @@ export class Dashboard {
           listViewSearch,
           listViewView,
           autoSave,
+          auditLogging,
           summaryViewEnabled,
           summaryHtmlTemplateId,
           copyCurrentRecordEnabled,
@@ -254,6 +258,7 @@ export class Dashboard {
     listViewSearch?: ListViewSearchConfig;
     listViewView?: ListViewViewConfig;
     autoSave?: AutoSaveConfig;
+    auditLogging?: AuditLoggingConfig;
     summaryViewEnabled?: boolean;
     summaryHtmlTemplateId?: FollowupConfig['pdfTemplateId'];
     copyCurrentRecordEnabled?: boolean;
@@ -646,6 +651,17 @@ export class Dashboard {
       return [{ when: whenShorthand, bypassFields }];
     })();
     const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
+    const auditLogging = this.normalizeAuditLogging(
+      parsed.auditLogging !== undefined
+        ? parsed.auditLogging
+        : parsed.audit !== undefined
+        ? parsed.audit
+        : parsed.auditLog !== undefined
+        ? parsed.auditLog
+        : parsed.changeAudit !== undefined
+        ? parsed.changeAudit
+        : undefined
+    );
     const summaryViewEnabled = (() => {
       if (parsed.summaryViewEnabled !== undefined) return Boolean(parsed.summaryViewEnabled);
       if (parsed.summaryView !== undefined) return Boolean(parsed.summaryView);
@@ -1114,6 +1130,7 @@ export class Dashboard {
       !listViewSearch &&
       !listViewView &&
       !autoSave &&
+      !auditLogging &&
       summaryViewEnabled === undefined &&
       !summaryHtmlTemplateId &&
       copyCurrentRecordEnabled === undefined &&
@@ -1159,6 +1176,7 @@ export class Dashboard {
       listViewSearch,
       listViewView,
       autoSave,
+      auditLogging,
       summaryViewEnabled,
       summaryHtmlTemplateId,
       copyCurrentRecordEnabled,
@@ -1252,6 +1270,23 @@ export class Dashboard {
       return unique.length ? unique : undefined;
     };
 
+    const normalizeLocalized = (value: any): LocalizedString | undefined => {
+      if (value === undefined || value === null) return undefined;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof value !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(value).forEach(([key, rawVal]) => {
+        if (typeof rawVal !== 'string') return;
+        const trimmed = rawVal.trim();
+        if (!trimmed) return;
+        out[key.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? (out as LocalizedString) : undefined;
+    };
+
     const normalizeItems = (raw: any): ActionBarItemConfig[] | undefined => {
       if (raw === undefined || raw === null) return undefined;
       const itemsRaw: any[] = Array.isArray(raw) ? raw : [raw];
@@ -1331,9 +1366,47 @@ export class Dashboard {
     const systemRaw = (value as any).system ?? (value as any).systemButtons;
     if (systemRaw && typeof systemRaw === 'object') {
       const homeRaw = (systemRaw as any).home;
-      if (homeRaw && typeof homeRaw === 'object' && (homeRaw as any).hideWhenActive !== undefined) {
-        cfg.system = cfg.system || {};
-        cfg.system.home = { hideWhenActive: Boolean((homeRaw as any).hideWhenActive) };
+      if (homeRaw && typeof homeRaw === 'object') {
+        const homeCfg: {
+          hideWhenActive?: boolean;
+          dedupIncompleteDialog?: DedupIncompleteHomeDialogConfig;
+        } = {};
+        if ((homeRaw as any).hideWhenActive !== undefined) {
+          homeCfg.hideWhenActive = Boolean((homeRaw as any).hideWhenActive);
+        }
+        const dedupIncompleteDialogRaw =
+          (homeRaw as any).dedupIncompleteDialog ??
+          (homeRaw as any).incompleteDedupDialog ??
+          (homeRaw as any).missingDedupDialog;
+        if (dedupIncompleteDialogRaw && typeof dedupIncompleteDialogRaw === 'object') {
+          const rawDialog = dedupIncompleteDialogRaw as any;
+          const dialog: DedupIncompleteHomeDialogConfig = { ...rawDialog };
+          const title = normalizeLocalized(rawDialog.title);
+          const message = normalizeLocalized(rawDialog.message);
+          const confirmLabel = normalizeLocalized(rawDialog.confirmLabel);
+          const cancelLabel = normalizeLocalized(rawDialog.cancelLabel);
+          const deleteFailedMessage = normalizeLocalized(rawDialog.deleteFailedMessage);
+          if (title !== undefined) dialog.title = title;
+          if (message !== undefined) dialog.message = message;
+          if (confirmLabel !== undefined) dialog.confirmLabel = confirmLabel;
+          if (cancelLabel !== undefined) dialog.cancelLabel = cancelLabel;
+          if (deleteFailedMessage !== undefined) dialog.deleteFailedMessage = deleteFailedMessage;
+          if (rawDialog.enabled !== undefined) dialog.enabled = Boolean(rawDialog.enabled);
+          if (rawDialog.showCancel !== undefined) dialog.showCancel = Boolean(rawDialog.showCancel);
+          if (rawDialog.showCloseButton !== undefined) dialog.showCloseButton = Boolean(rawDialog.showCloseButton);
+          if (rawDialog.dismissOnBackdrop !== undefined) dialog.dismissOnBackdrop = Boolean(rawDialog.dismissOnBackdrop);
+          if (rawDialog.primaryAction === 'cancel' || rawDialog.primaryAction === 'confirm') {
+            dialog.primaryAction = rawDialog.primaryAction;
+          }
+          if (rawDialog.deleteRecordOnConfirm !== undefined) {
+            dialog.deleteRecordOnConfirm = Boolean(rawDialog.deleteRecordOnConfirm);
+          }
+          homeCfg.dedupIncompleteDialog = dialog;
+        }
+        if (Object.keys(homeCfg).length) {
+          cfg.system = cfg.system || {};
+          cfg.system.home = homeCfg;
+        }
       }
     }
 
@@ -1738,6 +1811,73 @@ export class Dashboard {
       const s = (value as any).status.toString().trim();
       if (s) cfg.status = s;
     }
+    return Object.keys(cfg).length ? cfg : undefined;
+  }
+
+  private normalizeAuditLogging(value: any): AuditLoggingConfig | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'boolean') return { enabled: value };
+    if (typeof value !== 'object') return undefined;
+
+    const cfg: AuditLoggingConfig = {};
+    if ((value as any).enabled !== undefined) cfg.enabled = Boolean((value as any).enabled);
+
+    const sheetNameRaw =
+      (value as any).sheetName !== undefined
+        ? (value as any).sheetName
+        : (value as any).sheet !== undefined
+        ? (value as any).sheet
+        : (value as any).destinationSheet !== undefined
+        ? (value as any).destinationSheet
+        : (value as any).tabName !== undefined
+        ? (value as any).tabName
+        : undefined;
+    if (sheetNameRaw !== undefined && sheetNameRaw !== null) {
+      const sheetName = sheetNameRaw.toString().trim();
+      if (sheetName) cfg.sheetName = sheetName;
+    }
+
+    const normalizeStringList = (raw: any): string[] | undefined => {
+      if (raw === undefined || raw === null || raw === '') return undefined;
+      const list = Array.isArray(raw)
+        ? raw
+        : raw
+            .toString()
+            .split(',')
+            .map((entry: string) => entry.trim());
+      const items = list
+        .map((entry: any) => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+        .filter(Boolean);
+      if (!items.length) return undefined;
+      return Array.from(new Set(items));
+    };
+
+    const statusesRaw =
+      (value as any).statuses !== undefined
+        ? (value as any).statuses
+        : (value as any).enabledStatuses !== undefined
+        ? (value as any).enabledStatuses
+        : (value as any).statusAllowList !== undefined
+        ? (value as any).statusAllowList
+        : (value as any).statusesAllowList !== undefined
+        ? (value as any).statusesAllowList
+        : undefined;
+    const statuses = normalizeStringList(statusesRaw);
+    if (statuses?.length) cfg.statuses = statuses;
+
+    const snapshotButtonsRaw =
+      (value as any).snapshotButtons !== undefined
+        ? (value as any).snapshotButtons
+        : (value as any).snapshotOnButtons !== undefined
+        ? (value as any).snapshotOnButtons
+        : (value as any).snapshotButtonIds !== undefined
+        ? (value as any).snapshotButtonIds
+        : (value as any).lockButtons !== undefined
+        ? (value as any).lockButtons
+        : undefined;
+    const snapshotButtons = normalizeStringList(snapshotButtonsRaw);
+    if (snapshotButtons?.length) cfg.snapshotButtons = snapshotButtons;
+
     return Object.keys(cfg).length ? cfg : undefined;
   }
 

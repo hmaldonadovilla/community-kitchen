@@ -122,7 +122,9 @@ import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app
 import { resolveTemplateIdForRecord } from '../app/templateId';
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
 import { applyClearOnChange, isClearOnChangeEnabled } from '../app/clearOnChange';
+import { isPrimaryActionLabel, resolveButtonTonePrimary } from '../app/buttonTone';
 import { isFieldDisabledByRule, resolveActiveFieldDisableRule } from '../app/fieldDisableRules';
+import { removeUnlockParamFromHref, resolveUnlockRecordId, shouldBypassReadyForProductionLock } from '../app/readyForProductionLock';
 import {
   buildParagraphDisclaimerSection,
   buildParagraphDisclaimerValue,
@@ -136,37 +138,6 @@ import { buildDraftPayload, validateForm, validateUploadCounts } from '../app/su
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
-
-const normalizeActionToken = (value: string): string =>
-  (value || '')
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/^\+\s+/, '+');
-
-const PRIMARY_ACTION_LABELS = new Set([
-  'view/edit',
-  'ingredients needed',
-  'view/edit ingredients',
-  'edit ingredients',
-  'back to production',
-  'back',
-  'add ingredient',
-  'add ingredients',
-  'add line',
-  'add lines',
-  '+add ingredient',
-  '+another leftover',
-  '+add leftover',
-  'close',
-  'refresh',
-  'tap to collapse',
-  'tap to collaps',
-  'tap to expand'
-].map(normalizeActionToken));
-
-const isPrimaryActionLabel = (label: string): boolean => PRIMARY_ACTION_LABELS.has(normalizeActionToken(label));
 
 const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
 const listRowActionButtonWidthStyle: React.CSSProperties = {
@@ -5978,6 +5949,78 @@ const FormView: React.FC<FormViewProps> = ({
     }),
     [lineItems, resolveVisibilityValue]
   );
+  const unlockResolution = useMemo(() => {
+    const globalAny = globalThis as any;
+    const locationSearch = (() => {
+      try {
+        return globalAny?.location?.search || '';
+      } catch (_) {
+        return '';
+      }
+    })();
+    const locationHash = (() => {
+      try {
+        return globalAny?.location?.hash || '';
+      } catch (_) {
+        return '';
+      }
+    })();
+    const locationHref = (() => {
+      try {
+        return globalAny?.location?.href || '';
+      } catch (_) {
+        return '';
+      }
+    })();
+    return resolveUnlockRecordId({
+      requestParams: globalAny?.__WEB_FORM_REQUEST_PARAMS__,
+      bootstrap: globalAny?.__WEB_FORM_BOOTSTRAP__,
+      search: locationSearch,
+      hash: locationHash,
+      href: locationHref
+    });
+  }, []);
+  useEffect(() => {
+    if (!onDiagnostic || !unlockResolution.unlockRecordId) return;
+    onDiagnostic('readyForProduction.unlock.query', {
+      unlockRecordId: unlockResolution.unlockRecordId,
+      source: unlockResolution.source
+    });
+  }, [onDiagnostic, unlockResolution]);
+  useEffect(() => {
+    if (!unlockResolution.unlockRecordId) return;
+    try {
+      const globalAny = globalThis as any;
+      const tryScrubWindowHref = (target: any, scope: 'self' | 'top'): boolean => {
+        if (!target) return false;
+        const hrefRaw = (target?.location?.href || '').toString();
+        if (!hrefRaw) return false;
+        const cleaned = removeUnlockParamFromHref(hrefRaw);
+        if (!cleaned.changed || !cleaned.href || cleaned.href === hrefRaw) return false;
+        const historyApi = target?.history;
+        if (!historyApi || typeof historyApi.replaceState !== 'function') return false;
+        historyApi.replaceState(historyApi.state || null, '', cleaned.href);
+        onDiagnostic?.('readyForProduction.unlock.urlScrubbed', {
+          source: unlockResolution.source,
+          scope,
+          changed: true
+        });
+        return true;
+      };
+      tryScrubWindowHref(globalAny, 'self');
+      if (globalAny?.top && globalAny.top !== globalAny) {
+        try {
+          tryScrubWindowHref(globalAny.top, 'top');
+        } catch (_) {
+          // ignore cross-origin access failures
+        }
+      }
+    } catch (_) {
+      onDiagnostic?.('readyForProduction.unlock.urlScrubbed.error', {
+        source: unlockResolution.source
+      });
+    }
+  }, [onDiagnostic, unlockResolution.unlockRecordId, unlockResolution.source]);
   const activeFieldDisableRule = useMemo(
     () =>
       resolveActiveFieldDisableRule({
@@ -5986,24 +6029,48 @@ const FormView: React.FC<FormViewProps> = ({
       }),
     [definition.fieldDisableRules, topVisibilityCtx]
   );
+  const bypassReadyForProductionLock = useMemo(
+    () =>
+      shouldBypassReadyForProductionLock({
+        activeRuleId: activeFieldDisableRule?.id,
+        unlockRecordId: unlockResolution.unlockRecordId,
+        recordId: recordMeta?.id !== undefined && recordMeta?.id !== null ? recordMeta.id.toString() : undefined
+      }),
+    [activeFieldDisableRule?.id, recordMeta?.id, unlockResolution.unlockRecordId]
+  );
+  const effectiveFieldDisableRule = bypassReadyForProductionLock ? undefined : activeFieldDisableRule;
   const activeFieldDisableRuleKeyRef = useRef<string>('');
   useEffect(() => {
     if (!onDiagnostic) return;
-    const nextKey = activeFieldDisableRule
-      ? `${activeFieldDisableRule.id || '__anonymous__'}::${(activeFieldDisableRule.bypassFields || []).join(',')}`
-      : '';
+    const nextKey = effectiveFieldDisableRule
+      ? `${effectiveFieldDisableRule.id || '__anonymous__'}::${(effectiveFieldDisableRule.bypassFields || []).join(',')}`
+      : bypassReadyForProductionLock
+        ? `unlock::${unlockResolution.unlockRecordId || ''}::${(recordMeta?.id || '').toString()}`
+        : '';
     if (activeFieldDisableRuleKeyRef.current === nextKey) return;
     activeFieldDisableRuleKeyRef.current = nextKey;
     onDiagnostic('fieldDisableRules.state', {
-      active: Boolean(activeFieldDisableRule),
-      ruleId: activeFieldDisableRule?.id || null,
-      bypassFields: activeFieldDisableRule?.bypassFields || [],
-      reason: activeFieldDisableRule ? 'matched' : 'noMatch'
+      active: Boolean(effectiveFieldDisableRule),
+      ruleId: effectiveFieldDisableRule?.id || null,
+      matchedRuleId: activeFieldDisableRule?.id || null,
+      bypassFields: effectiveFieldDisableRule?.bypassFields || [],
+      unlockOverrideActive: bypassReadyForProductionLock,
+      unlockRecordId: unlockResolution.unlockRecordId || null,
+      unlockSource: unlockResolution.source,
+      recordId: recordMeta?.id || null,
+      reason: bypassReadyForProductionLock ? 'unlockOverride' : effectiveFieldDisableRule ? 'matched' : 'noMatch'
     });
-  }, [activeFieldDisableRule, onDiagnostic]);
+  }, [
+    activeFieldDisableRule?.id,
+    bypassReadyForProductionLock,
+    effectiveFieldDisableRule,
+    onDiagnostic,
+    recordMeta?.id,
+    unlockResolution
+  ]);
   const isFieldLockedByDedup = useCallback(
-    (fieldId: string): boolean => isFieldDisabledByRule(fieldId, activeFieldDisableRule),
-    [activeFieldDisableRule]
+    (fieldId: string): boolean => isFieldDisabledByRule(fieldId, effectiveFieldDisableRule),
+    [effectiveFieldDisableRule]
   );
 
   const resolveTopValueNoScan = useCallback(
@@ -7134,15 +7201,18 @@ const FormView: React.FC<FormViewProps> = ({
     const opts = buildLocalizedOptions(optionSet, allowedWithCurrent, language, { sort: optionSortFor(q) });
     const hidden = shouldHideField(q.visibility, topVisibilityCtx);
     if (hidden) return null;
-    const forceStackedLabel = q.ui?.labelLayout === 'stacked';
     const hideFieldLabel = q.ui?.hideLabel === true;
     const inGrid = renderOpts?.inGrid === true;
+    const labelLayoutRaw = (((q.ui as any)?.labelLayout || '') as string).toString().trim().toLowerCase();
+    const forceStackedLabel = labelLayoutRaw === 'stacked';
+    const forceInlineLabel = labelLayoutRaw === 'inline';
+    const labelLayoutClass = forceStackedLabel ? ' ck-label-stacked' : forceInlineLabel ? ' ck-label-inline' : '';
     // In paired grids, keep the label in layout so control rows align even when a label is hidden/missing.
     const labelStyle = hideFieldLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
     const renderAsLabel = q.ui?.renderAsLabel === true || q.readOnly === true;
-    const renderReadOnly = (display: React.ReactNode, opts?: { stacked?: boolean }) => {
+    const renderReadOnly = (display: React.ReactNode, opts?: { stacked?: boolean; inline?: boolean }) => {
       const cls = `${q.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-        opts?.stacked ? ' ck-label-stacked' : ''
+        opts?.stacked ? ' ck-label-stacked' : opts?.inline ? ' ck-label-inline' : ''
       } ck-readonly-field`;
       const label = resolveFieldLabel(q, language, q.id);
       return (
@@ -7287,7 +7357,7 @@ const FormView: React.FC<FormViewProps> = ({
 	      return (
 	        <div
 	          key={q.id}
-	          className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+	          className={`field inline-field ck-full-width${labelLayoutClass}`}
 	          data-field-path={q.id}
           data-has-error={errors[q.id] ? 'true' : undefined}
           data-has-warning={hasWarning(q.id) ? 'true' : undefined}
@@ -7368,9 +7438,12 @@ const FormView: React.FC<FormViewProps> = ({
         if (action === 'openUrlField' && !(q as any)?.button?.fieldId) return null;
 
         const label = resolveLabel(q, language);
-        const primary = isPrimaryActionLabel(label);
+        const primary = resolveButtonTonePrimary(label, (q as any)?.button?.tone);
         const busyThis = !!reportBusy && reportBusyId === q.id;
         const disabled = submitting || isFieldLockedByDedup(q.id) || !onReportButton || !!reportBusy;
+        const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
+        const helperText = helperCfg.text;
+        const helperNode = helperText ? <div className="ck-field-helper">{helperText}</div> : null;
         const buttonLabelStyle = inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly;
         return (
           <div
@@ -7387,6 +7460,7 @@ const FormView: React.FC<FormViewProps> = ({
             >
               {busyThis ? tSystem('common.loading', language, 'Loading…') : label}
             </button>
+            {helperNode}
           </div>
         );
       }
@@ -7457,7 +7531,7 @@ const FormView: React.FC<FormViewProps> = ({
           return renderOverlayOpenReplaceButton(displayText || null);
         }
         if (renderAsLabel) {
-          return renderReadOnly(displayValue || null, { stacked: forceStackedLabel });
+          return renderReadOnly(displayValue || null, { stacked: forceStackedLabel, inline: forceInlineLabel });
         }
         if (q.type === 'NUMBER') {
           const placeholder = helperText && helperPlacement === 'placeholder' && isEditableField ? helperText : undefined;
@@ -7465,7 +7539,7 @@ const FormView: React.FC<FormViewProps> = ({
           return (
             <div
               key={q.id}
-              className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+              className={`field inline-field${labelLayoutClass}`}
               data-field-path={q.id}
               data-has-error={errors[q.id] ? 'true' : undefined}
               data-has-warning={hasWarning(q.id) ? 'true' : undefined}
@@ -7510,7 +7584,7 @@ const FormView: React.FC<FormViewProps> = ({
           <div
             key={q.id}
             className={`${q.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-              forceStackedLabel ? ' ck-label-stacked' : ''
+              labelLayoutClass
             }${q.type === 'DATE' && !forceStackedLabel ? ' ck-date-inline' : ''}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
@@ -7604,12 +7678,12 @@ const FormView: React.FC<FormViewProps> = ({
           return renderOverlayOpenReplaceButton(display);
         }
         if (renderAsLabel) {
-          return renderReadOnly(display, { stacked: forceStackedLabel });
+          return renderReadOnly(display, { stacked: forceStackedLabel, inline: forceInlineLabel });
         }
         return (
           <div
             key={q.id}
-            className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+            className={`field inline-field ck-full-width${labelLayoutClass}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
             data-has-warning={hasWarning(q.id) ? 'true' : undefined}
@@ -7668,14 +7742,14 @@ const FormView: React.FC<FormViewProps> = ({
           return renderOverlayOpenReplaceButton(display);
         }
         if (renderAsLabel) {
-          return renderReadOnly(display, { stacked: forceStackedLabel });
+          return renderReadOnly(display, { stacked: forceStackedLabel, inline: forceInlineLabel });
         }
         if (isConsentCheckbox) {
           const consentLabel = resolveLabel(q, language);
           return (
             <div
               key={q.id}
-              className={`field inline-field ck-consent-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+              className={`field inline-field ck-consent-field${labelLayoutClass}`}
               data-field-path={q.id}
               data-has-error={errors[q.id] ? 'true' : undefined}
               data-has-warning={hasWarning(q.id) ? 'true' : undefined}
@@ -7710,7 +7784,7 @@ const FormView: React.FC<FormViewProps> = ({
         return (
           <div
             key={q.id}
-            className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+            className={`field inline-field${labelLayoutClass}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
             data-has-warning={hasWarning(q.id) ? 'true' : undefined}
@@ -7832,12 +7906,12 @@ const FormView: React.FC<FormViewProps> = ({
                   </div>
                 ));
           const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
-          return renderReadOnly(displayNode, { stacked: forceStackedLabel });
+          return renderReadOnly(displayNode, { stacked: forceStackedLabel, inline: forceInlineLabel });
         }
         return (
           <div
             key={q.id}
-            className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+            className={`field inline-field${labelLayoutClass}`}
             data-field-path={q.id}
             data-has-error={errors[q.id] ? 'true' : undefined}
             data-has-warning={hasWarning(q.id) ? 'true' : undefined}
@@ -8174,7 +8248,7 @@ const FormView: React.FC<FormViewProps> = ({
           return (
             <div
               key={q.id}
-              className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
+              className={`field inline-field ck-full-width${labelLayoutClass}`}
               data-field-path={q.id}
               data-has-error={groupHasAnyError ? 'true' : undefined}
               data-has-warning={hasWarning(q.id) ? 'true' : undefined}
@@ -8226,7 +8300,9 @@ const FormView: React.FC<FormViewProps> = ({
               setValues,
               lineItems,
               setLineItems,
+              isSubmitting: submitting,
               submitting: locked,
+              isFieldLockedByDedup,
               errors,
               setErrors,
               warningByField,
@@ -9371,7 +9447,9 @@ const FormView: React.FC<FormViewProps> = ({
                 setValues,
                 lineItems,
                 setLineItems,
+                isSubmitting: submitting,
                 submitting: submitting || isFieldLockedByDedup(subKey),
+                isFieldLockedByDedup,
                 errors,
                 setErrors,
                 warningByField,
@@ -10213,7 +10291,9 @@ const FormView: React.FC<FormViewProps> = ({
                               setValues,
                             lineItems,
                             setLineItems,
+                            isSubmitting: submitting,
                             submitting: submitting || isFieldLockedByDedup(parsed?.rootGroupId || subKey),
+                            isFieldLockedByDedup,
                             errors,
                             setErrors,
                             warningByField,
@@ -12198,7 +12278,9 @@ const FormView: React.FC<FormViewProps> = ({
                               setValues,
                               lineItems,
                               setLineItems,
+                              isSubmitting: submitting,
                               submitting: submitting || isFieldLockedByDedup(groupId),
+                              isFieldLockedByDedup,
                               errors,
                               setErrors,
                               warningByField,
@@ -12265,7 +12347,9 @@ const FormView: React.FC<FormViewProps> = ({
                   setValues,
                   lineItems,
                   setLineItems,
+                  isSubmitting: submitting,
                   submitting: submitting || isFieldLockedByDedup(groupId),
+                  isFieldLockedByDedup,
                   errors,
                   setErrors,
                   warningByField,
@@ -12790,7 +12874,9 @@ const FormView: React.FC<FormViewProps> = ({
             setValues,
             lineItems,
             setLineItems,
+            isSubmitting: submitting,
             submitting: locked,
+            isFieldLockedByDedup,
             errors,
             setErrors,
             warningByField,

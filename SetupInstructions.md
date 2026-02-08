@@ -540,6 +540,87 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
       **UX note**: After the user confirms, the UI shows a **full-screen blocking overlay** (spinner + message) and locks interaction until the update completes.
 
+    - Want a guided-step **Ready for Production** lock from the `Order` step? Add an inline BUTTON with `button.action: "updateRecord"` that sets status to `"Ready for Production"`, and add a form-level `fieldDisableRules` rule scoped to `__ckStep`.
+
+      Example:
+
+      ```json
+      {
+        "steps": {
+          "mode": "guided",
+          "items": [
+            {
+              "id": "orderInfo",
+              "include": [
+                { "kind": "question", "id": "MP_DISTRIBUTOR" },
+                { "kind": "question", "id": "MP_PREP_DATE" },
+                { "kind": "question", "id": "MP_SERVICE" },
+                { "kind": "question", "id": "MP_COOK_NAME" },
+                { "kind": "question", "id": "MP_READY_FOR_PRODUCTION" }
+              ]
+            }
+          ]
+        },
+        "fieldDisableRules": [
+          {
+            "id": "ready-for-production-order-lock",
+            "when": {
+              "all": [
+                { "fieldId": "status", "equals": "Ready for Production" },
+                { "fieldId": "__ckStep", "equals": "orderInfo" }
+              ]
+            },
+            "bypassFields": [],
+            "unlockStatus": "In progress"
+          }
+        ]
+      }
+      ```
+
+      Example button question:
+
+      ```json
+      {
+        "id": "MP_READY_FOR_PRODUCTION",
+        "type": "BUTTON",
+        "qEn": "Ready for Production",
+        "button": {
+          "action": "updateRecord",
+          "placements": ["form"],
+          "tone": "primary",
+          "set": { "status": "Ready for Production" },
+          "navigateTo": "form",
+          "confirm": {
+            "message": {
+              "en": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\\n- these fields can no longer be changed\\n- production data will be protected from accidental deletion\\n- This action cannot be undone.\\nDo you want to continue?"
+            },
+            "confirmLabel": { "en": "Yes, lock for production" },
+            "cancelLabel": { "en": "Cancel" }
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "all": [
+              { "fieldId": "__ckStep", "equals": "orderInfo" },
+              { "fieldId": "status", "equals": "In progress" }
+            ]
+          }
+        }
+      }
+      ```
+
+      Admin unlock button (recommended):
+      - Add a Summary `updateRecord` button that sets `status` back to `"In progress"` and `navigateTo: "form"`.
+      - Gate the button with `visibility.showWhen` using:
+        - `{ "fieldId": "status", "equals": "Ready for Production" }`
+        - `{ "fieldId": "__ckRequestParam_admin", "equals": ["true", "1", "yes"] }`
+      - Then only users opening the app with `?admin=true` can see the unlock button.
+
+      Optional emergency unlock (legacy):
+      - Add `?unlock=<record_id>` to the web-app URL to bypass the `ready-for-production-order-lock` rule for that record.
+      - This override is intentionally scoped to that specific lock-rule id and matching record id.
+      - If that rule defines `unlockStatus` (for example `"In progress"`), the app automatically updates the record status once the unlocked record is opened in form view.
+
     - Want a **logo** in the app header? Set `appHeader.logo` in the dashboard “Follow-up Config (JSON)” column. You can provide a Google Drive file id, a Drive share URL, or a direct `https://...` image URL:
 
       ```json
@@ -763,6 +844,32 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved. The first time a user opens Create/Edit/Copy, they’ll see a one-time autosave explainer overlay (copy lives in `autosaveNotice.*` in `src/web/systemStrings.json`).
     - Want dedup-key edits to delete the current record instead of mutating it? Add `"dedupDeleteOnKeyChange": true` in the same dashboard JSON column. When enabled, if a user changes a top-level field that participates in a reject dedup rule, the current record is deleted immediately (after confirm/blur + selection effects). Then standard create-flow dedup/autosave rules apply.
+    - Want a confirmation dialog when users press **Home** with incomplete dedup keys? Add `actionBars.system.home.dedupIncompleteDialog`. On confirm, the app leaves the form and (by default) deletes the current persisted record first.
+
+      ```json
+      {
+        "actionBars": {
+          "system": {
+            "home": {
+              "dedupIncompleteDialog": {
+                "message": {
+                  "en": "A record can only exist when all dedup fields are filled in."
+                },
+                "confirmLabel": {
+                  "en": "Continue and delete the record"
+                },
+                "cancelLabel": {
+                  "en": "Cancel and continue editing"
+                },
+                "primaryAction": "cancel",
+                "deleteRecordOnConfirm": true
+              }
+            }
+          }
+        }
+      }
+      ```
+      - Set `dedupIncompleteDialog.title` to an empty string to remove the dialog title line.
 
     - Want to conditionally disable editing for most fields? Add `fieldDisableRules` in the same dashboard JSON column. When a rule matches, all fields become read-only except ids in `bypassFields`.
 
@@ -1903,7 +2010,25 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
     - `reOpened`: value written when explicitly re-opening a closed record.
     - `onPdf`, `onEmail`, `onClose`: values written when `CREATE_PDF`, `SEND_EMAIL`, or `CLOSE_RECORD` complete.
  - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes `autoSave.status` (or `statusTransitions.inProgress`, default `In progress`). If the record’s status matches `statusTransitions.onClose`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI shows a “Refresh record” banner to avoid overwriting remote changes. The first time a user opens Create/Edit/Copy, a one-time autosave explainer overlay is shown (customize via `autosaveNotice.*` in `src/web/systemStrings.json`).
-- `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
+ - `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
+ - `auditLogging` (optional): writes change/snapshot rows to a separate audit sheet.
+   - `enabled`: turn audit logging on/off.
+   - `statuses`: only write `auditType: "change"` rows when the record status matches one of these values (case-insensitive; previous or next status).
+   - `snapshotButtons`: list of custom BUTTON ids that trigger snapshot rows (`auditType: "snapshot"`, full record JSON in `snapshot`).
+   - `sheetName` (optional): custom audit tab name; defaults to `<Destination Tab Name> Audit`.
+
+  Example:
+
+  ```json
+  {
+    "auditLogging": {
+      "enabled": true,
+      "statuses": ["Ready for production"],
+      "snapshotButtons": ["MP_READY_FOR_PRODUCTION"],
+      "sheetName": "Meal Production Audit"
+    }
+  }
+  ```
 
 2. **Provide templates**:
    - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).

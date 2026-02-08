@@ -188,6 +188,16 @@ export const FieldChangeDialogOverlay: React.FC<{
 }) => {
   if (!open) return null;
   const primaryAction = primaryActionProp === 'cancel' ? 'cancel' : 'confirm';
+  const actionButtonTextStyle: React.CSSProperties = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    textOverflow: 'clip',
+    textAlign: 'center',
+    maxWidth: '100%',
+    minWidth: 0,
+    flex: '1 1 220px'
+  };
 
   const primaryButtonStyle: React.CSSProperties = {
     padding: '16px 22px',
@@ -199,7 +209,8 @@ export const FieldChangeDialogOverlay: React.FC<{
     fontWeight: 500,
     fontSize: 'var(--ck-font-control)',
     lineHeight: 1.1,
-    minWidth: 140
+    minWidth: 140,
+    ...actionButtonTextStyle
   };
 
   const secondaryButtonStyle: React.CSSProperties = {
@@ -212,7 +223,8 @@ export const FieldChangeDialogOverlay: React.FC<{
     fontWeight: 500,
     fontSize: 'var(--ck-font-control)',
     lineHeight: 1.1,
-    minWidth: 140
+    minWidth: 140,
+    ...actionButtonTextStyle
   };
 
   return (
@@ -292,11 +304,12 @@ export const FieldChangeDialogOverlay: React.FC<{
           ))}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 4 }}>
+        <div className="ck-dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={onCancel}
             disabled={busy}
+            className="ck-dialog-action-button"
             style={{
               ...(primaryAction === 'cancel' ? primaryButtonStyle : secondaryButtonStyle),
               cursor: busy ? 'not-allowed' : 'pointer',
@@ -310,6 +323,7 @@ export const FieldChangeDialogOverlay: React.FC<{
             type="button"
             onClick={onConfirm}
             disabled={busy}
+            className="ck-dialog-action-button"
             style={{
               ...(primaryAction === 'confirm' ? primaryButtonStyle : secondaryButtonStyle),
               cursor: busy ? 'not-allowed' : 'pointer',

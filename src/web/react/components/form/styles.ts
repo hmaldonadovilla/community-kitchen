@@ -863,6 +863,18 @@ export const FORM_VIEW_STYLES = `
           min-width: 0;
           justify-content: center;
         }
+        /* Button label alignment rule:
+           - single-line label: centered
+           - multi-line label: left-aligned */
+        button.ck-button-wrap-left,
+        .ck-progress-pill.ck-button-wrap-left {
+          text-align: left !important;
+          justify-content: flex-start !important;
+        }
+        button.ck-button-wrap-left > .ck-button-text {
+          width: 100%;
+          text-align: left;
+        }
         .form-card .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left,
         .webform-overlay .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left,
         .ck-form-sections .ck-progress-pill.ck-upload-pill-btn.ck-button-wrap-left {

@@ -51,7 +51,20 @@ describe('DefinitionBuilder', () => {
       defaultLanguage: 'FR',
       languageSelectorEnabled: false,
       createRecordPresetButtonsEnabled: false,
-      actionBars: { system: { home: { hideWhenActive: true } } },
+      actionBars: {
+        system: {
+          home: {
+            hideWhenActive: true,
+            dedupIncompleteDialog: {
+              enabled: true,
+              message: { EN: 'Dedup incomplete.' },
+              confirmLabel: { EN: 'Continue and delete the record' },
+              cancelLabel: { EN: 'Cancel and continue editing' },
+              deleteRecordOnConfirm: true
+            }
+          }
+        }
+      },
       dedupDeleteOnKeyChange: true,
       fieldDisableRules: [
         {
@@ -140,6 +153,13 @@ describe('DefinitionBuilder', () => {
     const def = builder.buildDefinition('Config: Pantry');
     expect(def.createRecordPresetButtonsEnabled).toBe(false);
     expect(def.actionBars?.system?.home?.hideWhenActive).toBe(true);
+    expect((def.actionBars as any)?.system?.home?.dedupIncompleteDialog).toEqual({
+      enabled: true,
+      message: { en: 'Dedup incomplete.' },
+      confirmLabel: { en: 'Continue and delete the record' },
+      cancelLabel: { en: 'Cancel and continue editing' },
+      deleteRecordOnConfirm: true
+    });
     expect(def.dedupDeleteOnKeyChange).toBe(true);
   });
 
