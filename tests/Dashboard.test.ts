@@ -625,7 +625,21 @@ describe('Dashboard', () => {
     const configJson = JSON.stringify({
       createRecordPresetButtonsEnabled: false,
       actionBars: {
-        system: { home: { hideWhenActive: true } },
+        system: {
+          home: {
+            hideWhenActive: true,
+            dedupIncompleteDialog: {
+              enabled: true,
+              message: { EN: 'Dedup incomplete.' },
+              confirmLabel: { EN: 'Continue and delete the record' },
+              cancelLabel: { EN: 'Cancel and continue editing' },
+              showCancel: true,
+              showCloseButton: false,
+              dismissOnBackdrop: false,
+              deleteRecordOnConfirm: true
+            }
+          }
+        },
         top: {
           sticky: true,
           list: {
@@ -653,6 +667,16 @@ describe('Dashboard', () => {
     const forms = dashboard.getForms();
     expect(forms[0].createRecordPresetButtonsEnabled).toBe(false);
     expect(forms[0].actionBars?.system?.home?.hideWhenActive).toBe(true);
+    expect((forms[0].actionBars as any)?.system?.home?.dedupIncompleteDialog).toEqual({
+      enabled: true,
+      message: { en: 'Dedup incomplete.' },
+      confirmLabel: { en: 'Continue and delete the record' },
+      cancelLabel: { en: 'Cancel and continue editing' },
+      showCancel: true,
+      showCloseButton: false,
+      dismissOnBackdrop: false,
+      deleteRecordOnConfirm: true
+    });
     expect((forms[0].actionBars as any)?.top?.sticky).toBe(true);
     expect((forms[0].actionBars as any)?.top?.list?.items?.length).toBeGreaterThan(0);
   });

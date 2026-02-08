@@ -13,6 +13,7 @@ export const ConfirmDialogOverlay: React.FC<{
   message: React.ReactNode;
   confirmLabel: string;
   cancelLabel: string;
+  primaryAction?: 'confirm' | 'cancel';
   showCancel?: boolean;
   showConfirm?: boolean;
   dismissOnBackdrop?: boolean;
@@ -26,6 +27,7 @@ export const ConfirmDialogOverlay: React.FC<{
   message,
   confirmLabel,
   cancelLabel,
+  primaryAction: primaryActionProp,
   showCancel = true,
   showConfirm = true,
   dismissOnBackdrop = true,
@@ -36,6 +38,45 @@ export const ConfirmDialogOverlay: React.FC<{
 }) => {
   const busyRef = React.useRef(false);
   const [busy, setBusy] = React.useState(false);
+  const primaryAction = primaryActionProp === 'cancel' ? 'cancel' : 'confirm';
+  const actionButtonTextStyle: React.CSSProperties = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    textOverflow: 'clip',
+    textAlign: 'center',
+    maxWidth: '100%',
+    minWidth: 0,
+    flex: '1 1 220px'
+  };
+
+  const primaryButtonStyle: React.CSSProperties = {
+    padding: '14px 18px',
+    minHeight: 'var(--control-height)',
+    borderRadius: 'var(--radius-control)',
+    border: '1px solid var(--accent)',
+    background: 'var(--accent)',
+    color: 'var(--accentText)',
+    fontWeight: 500,
+    fontSize: 'var(--ck-font-control)',
+    lineHeight: 1.1,
+    minWidth: 140,
+    ...actionButtonTextStyle
+  };
+
+  const secondaryButtonStyle: React.CSSProperties = {
+    padding: '14px 18px',
+    minHeight: 'var(--control-height)',
+    borderRadius: 'var(--radius-control)',
+    border: '1px solid var(--border)',
+    background: 'var(--card)',
+    color: 'var(--text)',
+    fontWeight: 500,
+    fontSize: 'var(--ck-font-control)',
+    lineHeight: 1.1,
+    minWidth: 140,
+    ...actionButtonTextStyle
+  };
 
   React.useEffect(() => {
     if (open) return;
@@ -90,7 +131,7 @@ export const ConfirmDialogOverlay: React.FC<{
       />
       <dialog
         open
-        aria-label={title}
+        aria-label={title || 'Confirmation dialog'}
         aria-modal="true"
         onCancel={e => {
           // Prevent the native <dialog> element from closing itself on Escape.
@@ -152,30 +193,23 @@ export const ConfirmDialogOverlay: React.FC<{
         ) : null}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 'var(--ck-font-group-title)', fontWeight: 600, lineHeight: 1.2 }}>{title}</div>
+          {title ? <div style={{ fontSize: 'var(--ck-font-group-title)', fontWeight: 600, lineHeight: 1.2 }}>{title}</div> : null}
           <div style={{ fontSize: 'var(--ck-font-control)', lineHeight: 1.4 }}>{message}</div>
         </div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 4, flexWrap: 'wrap' }}>
+        <div className="ck-dialog-actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 4, flexWrap: 'wrap' }}>
           {showCancel ? (
             <button
               type="button"
               onClick={() => void runGuarded(onCancel)}
               disabled={busy}
+              className="ck-dialog-action-button"
               style={{
                 marginRight: 'auto',
-                padding: '14px 18px',
-                minHeight: 'var(--control-height)',
-                borderRadius: 'var(--radius-control)',
-                border: '1px solid var(--border)',
-                background: 'var(--card)',
-                color: 'var(--text)',
-                fontWeight: 500,
-                fontSize: 'var(--ck-font-control)',
-                lineHeight: 1.1,
-                minWidth: 140,
+                ...(primaryAction === 'cancel' ? primaryButtonStyle : secondaryButtonStyle),
                 cursor: busy ? 'not-allowed' : 'pointer',
                 opacity: busy ? 0.6 : 1
               }}
+              autoFocus={primaryAction === 'cancel'}
             >
               {cancelLabel}
             </button>
@@ -185,20 +219,13 @@ export const ConfirmDialogOverlay: React.FC<{
               type="button"
               onClick={() => void runGuarded(onConfirm)}
               disabled={busy}
+              className="ck-dialog-action-button"
               style={{
-                padding: '14px 18px',
-                minHeight: 'var(--control-height)',
-                borderRadius: 'var(--radius-control)',
-                border: '1px solid var(--accent)',
-                background: 'var(--accent)',
-                color: 'var(--accentText)',
-                fontWeight: 500,
-                fontSize: 'var(--ck-font-control)',
-                lineHeight: 1.1,
-                minWidth: 140,
+                ...(primaryAction === 'confirm' ? primaryButtonStyle : secondaryButtonStyle),
                 cursor: busy ? 'not-allowed' : 'pointer',
                 opacity: busy ? 0.6 : 1
               }}
+              autoFocus={primaryAction === 'confirm'}
             >
               {confirmLabel}
             </button>

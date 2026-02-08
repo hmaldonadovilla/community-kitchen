@@ -6921,6 +6921,16 @@ export const BUNDLED_FORM_CONFIGS = [
                   "renderMarkdownTemplate"
                 ]
               },
+              {
+                "type": "custom",
+                "placements": [
+                  "summaryBar"
+                ],
+                "actions": [
+                  "updateRecord"
+                ],
+                "display": "inline"
+              },
               "edit"
             ],
             "primary": [
@@ -6930,7 +6940,27 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "system": {
           "home": {
-            "hideWhenActive": true
+            "hideWhenActive": true,
+            "dedupIncompleteDialog": {
+              "enabled": true,
+              "title": {
+                "en": "Incomplete meal production record"
+              },
+              "message": {
+                "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone."
+              },
+              "confirmLabel": {
+                "en": "Continue — Delete the record"
+              },
+              "cancelLabel": {
+                "en": "Cancel — Continue editing"
+              },
+              "showCancel": true,
+              "showCloseButton": true,
+              "dismissOnBackdrop": false,
+              "deleteRecordOnConfirm": true,
+              "primaryAction": "cancel"
+            }
           },
           "gates": {
             "submit": [
@@ -7079,6 +7109,10 @@ export const BUNDLED_FORM_CONFIGS = [
                 "id": "MP_SERVICE"
               },
               {
+                "kind": "question",
+                "id": "MP_COOK_NAME"
+              },
+              {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "presentation": "liftedRowFields",
@@ -7091,10 +7125,17 @@ export const BUNDLED_FORM_CONFIGS = [
                 ],
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline"
+              },
+              {
+                "kind": "question",
+                "id": "MP_READY_FOR_PRODUCTION"
               }
             ],
             "label": {
               "en": "Order"
+            },
+            "helpText": {
+              "en": "To create a meal production record, you must select a customer, a service, and a production date.\nUntil all three are selected, no record is created and no production data can be entered."
             },
             "navigation": {
               "forwardGate": "whenValid",
@@ -8471,9 +8512,30 @@ export const BUNDLED_FORM_CONFIGS = [
           "Ready for production"
         ],
         "snapshotButtons": [
-          "READY_PROD"
+          "MP_READY_FOR_PRODUCTION"
         ]
-      }
+      },
+      "fieldDisableRules": [
+        {
+          "id": "ready-for-production-order-lock",
+          "when": {
+            "all": [
+              {
+                "fieldId": "status",
+                "equals": "Ready for Production"
+              },
+              {
+                "fieldId": "__ckStep",
+                "equals": "orderInfo"
+              }
+            ]
+          },
+          "bypassFields": [
+            "ORD_QTY"
+          ],
+          "unlockStatus": "In progress"
+        }
+      ]
     },
     "questions": [
       {
@@ -8542,26 +8604,26 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "changeDialog": {
           "when": {
-            "fieldId": "MP_DISTRIBUTOR",
+            "fieldId": "MP_PREP_DATE",
             "notEmpty": true
           },
           "title": {
-            "en": "Change Customer?",
+            "en": "Incomplete meal production record",
             "fr": "Changer de client?",
             "nl": "Klant wijzigen?"
           },
           "message": {
-            "en": "Changing the customer will clear the order information you entered and all production data you may have entered, do you wish to continue?",
+            "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
             "fr": "Changer de client effacera toutes les informations d'ordre que vous avez entrées et toutes les données de production que vous avez entrées, voulez-vous continuer?",
             "nl": "Wijzigen van de klant zal alle orderinformatie die u hebt ingevoerd en alle productiedata die u hebt ingevoerd wissen, wilt u doorgaan?"
           },
           "confirmLabel": {
-            "en": "Continue and clear portions",
+            "en": "Continue — Delete the record",
             "fr": "Continuer et effacer les portions",
             "nl": "Doorgaan en klaren de porties"
           },
           "cancelLabel": {
-            "en": "Cancel",
+            "en": "Cancel — Continue editing",
             "fr": "Annuler",
             "nl": "Annuleren"
           }
@@ -8615,26 +8677,44 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "changeDialog": {
           "when": {
-            "fieldId": "MP_SERVICE",
-            "notEmpty": true
+            "any": [
+              {
+                "fieldId": "MP_COOK_NAME",
+                "notEmpty": true
+              },
+              {
+                "fieldId": "MP_VOLUNTEER",
+                "notEmpty": true
+              },
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "when": {
+                    "fieldId": "ORD_QTY",
+                    "greaterThan": 0
+                  },
+                  "match": "any"
+                }
+              }
+            ]
           },
           "title": {
-            "en": "Change Service?",
+            "en": "Change service",
             "fr": "Changer de service?",
             "nl": "Service wijzigen?"
           },
           "message": {
-            "en": "Changing the service will clear the portions you entered and production data you may have entered, do you wish to continue?",
+            "en": "Changing the service will permanently delete any data or photos entered after the service.\n\nThis action cannot be undone.",
             "fr": "Changer de service effacera toutes les portions que vous avez entrées et toutes les données de production que vous avez entrées, voulez-vous continuer?",
             "nl": "Wijzigen van de service zal alle portions die u hebt ingevoerd en alle productiedata die u hebt ingevoerd wissen, wilt u doorgaan?"
           },
           "confirmLabel": {
-            "en": "Continue and clear portions",
+            "en": "Continue — Delete subsequent data",
             "fr": "Continuer et effacer les portions",
             "nl": "Doorgaan en klaren de porties"
           },
           "cancelLabel": {
-            "en": "Cancel",
+            "en": "Cancel — Keep current service",
             "fr": "Annuler",
             "nl": "Annuleren"
           }
@@ -8773,40 +8853,26 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "changeDialog": {
           "when": {
-            "any": [
-              {
-                "fieldId": "MP_DISTRIBUTOR",
-                "notEmpty": true
-              },
-              {
-                "fieldId": "MP_SERVICE",
-                "notEmpty": true
-              },
-              {
-                "lineItems": {
-                  "groupId": "MP_MEALS_REQUEST",
-                  "match": "any"
-                }
-              }
-            ]
+            "fieldId": "MP_SERVICE",
+            "notEmpty": true
           },
           "title": {
-            "en": "Change production date?",
+            "en": "Incomplete meal production record",
             "fr": "Changer la date de production ?",
             "nl": "Productiedatum wijzigen?"
           },
           "message": {
-            "en": "Changing the production date of an ongoing Meal production will remove permanently all service data previously saved. Do you want to continue?",
+            "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
             "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
             "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
           },
           "confirmLabel": {
-            "en": "Yes, delete permanently data previously entered",
+            "en": "Continue — Delete the record",
             "fr": "Oui, supprimer définitivement les données déjà saisies",
             "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
           },
           "cancelLabel": {
-            "en": "No, keep the current production date",
+            "en": "Cancel — Continue editing",
             "fr": "Non, conserver la date de production actuelle",
             "nl": "Nee, behoud de huidige productiedatum"
           },
@@ -14035,6 +14101,113 @@ export const BUNDLED_FORM_CONFIGS = [
             "MP_DISTRIBUTOR": "Le Phare"
           }
         }
+      },
+      {
+        "id": "MP_READY_FOR_PRODUCTION",
+        "type": "BUTTON",
+        "qEn": "Ready for Production",
+        "qFr": "Ready for Production",
+        "qNl": "Ready for Production",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "all": [
+              {
+                "fieldId": "__ckStep",
+                "equals": "orderInfo"
+              },
+              {
+                "fieldId": "status",
+                "equals": "In progress"
+              }
+            ]
+          }
+        },
+        "button": {
+          "action": "updateRecord",
+          "placements": [
+            "form"
+          ],
+          "tone": "primary",
+          "set": {
+            "status": "Ready for Production"
+          },
+          "navigateTo": "form",
+          "confirm": {
+            "message": {
+              "en": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?",
+              "fr": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?",
+              "nl": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?"
+            },
+            "confirmLabel": {
+              "en": "Yes, lock for production",
+              "fr": "Yes, lock for production",
+              "nl": "Yes, lock for production"
+            },
+            "cancelLabel": {
+              "en": "Cancel",
+              "fr": "Cancel",
+              "nl": "Cancel"
+            }
+          }
+        }
+      },
+      {
+        "id": "MP_UNLOCK_FOR_EDIT",
+        "type": "BUTTON",
+        "qEn": "Unlock for Editing",
+        "qFr": "Unlock for Editing",
+        "qNl": "Unlock for Editing",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "all": [
+              {
+                "fieldId": "status",
+                "equals": "Ready for Production"
+              },
+              {
+                "fieldId": "__ckRequestParam_admin",
+                "equals": [
+                  "true",
+                  "1",
+                  "yes"
+                ]
+              }
+            ]
+          }
+        },
+        "button": {
+          "action": "updateRecord",
+          "placements": [
+            "summaryBar"
+          ],
+          "set": {
+            "status": "In progress"
+          },
+          "navigateTo": "form",
+          "confirm": {
+            "message": {
+              "en": "Unlock this record to return it to In progress so you can edit order details again?"
+            },
+            "confirmLabel": {
+              "en": "Unlock and edit"
+            },
+            "cancelLabel": {
+              "en": "Cancel"
+            }
+          }
+        }
       }
     ],
     "dedupRules": [
@@ -14127,26 +14300,26 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           "changeDialog": {
             "when": {
-              "fieldId": "MP_DISTRIBUTOR",
+              "fieldId": "MP_PREP_DATE",
               "notEmpty": true
             },
             "title": {
-              "en": "Change Customer?",
+              "en": "Incomplete meal production record",
               "fr": "Changer de client?",
               "nl": "Klant wijzigen?"
             },
             "message": {
-              "en": "Changing the customer will clear the order information you entered and all production data you may have entered, do you wish to continue?",
+              "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
               "fr": "Changer de client effacera toutes les informations d'ordre que vous avez entrées et toutes les données de production que vous avez entrées, voulez-vous continuer?",
               "nl": "Wijzigen van de klant zal alle orderinformatie die u hebt ingevoerd en alle productiedata die u hebt ingevoerd wissen, wilt u doorgaan?"
             },
             "confirmLabel": {
-              "en": "Continue and clear portions",
+              "en": "Continue — Delete the record",
               "fr": "Continuer et effacer les portions",
               "nl": "Doorgaan en klaren de porties"
             },
             "cancelLabel": {
-              "en": "Cancel",
+              "en": "Cancel — Continue editing",
               "fr": "Annuler",
               "nl": "Annuleren"
             }
@@ -14202,26 +14375,44 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           "changeDialog": {
             "when": {
-              "fieldId": "MP_SERVICE",
-              "notEmpty": true
+              "any": [
+                {
+                  "fieldId": "MP_COOK_NAME",
+                  "notEmpty": true
+                },
+                {
+                  "fieldId": "MP_VOLUNTEER",
+                  "notEmpty": true
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "when": {
+                      "fieldId": "ORD_QTY",
+                      "greaterThan": 0
+                    },
+                    "match": "any"
+                  }
+                }
+              ]
             },
             "title": {
-              "en": "Change Service?",
+              "en": "Change service",
               "fr": "Changer de service?",
               "nl": "Service wijzigen?"
             },
             "message": {
-              "en": "Changing the service will clear the portions you entered and production data you may have entered, do you wish to continue?",
+              "en": "Changing the service will permanently delete any data or photos entered after the service.\n\nThis action cannot be undone.",
               "fr": "Changer de service effacera toutes les portions que vous avez entrées et toutes les données de production que vous avez entrées, voulez-vous continuer?",
               "nl": "Wijzigen van de service zal alle portions die u hebt ingevoerd en alle productiedata die u hebt ingevoerd wissen, wilt u doorgaan?"
             },
             "confirmLabel": {
-              "en": "Continue and clear portions",
+              "en": "Continue — Delete subsequent data",
               "fr": "Continuer et effacer les portions",
               "nl": "Doorgaan en klaren de porties"
             },
             "cancelLabel": {
-              "en": "Cancel",
+              "en": "Cancel — Keep current service",
               "fr": "Annuler",
               "nl": "Annuleren"
             }
@@ -14359,40 +14550,26 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           "changeDialog": {
             "when": {
-              "any": [
-                {
-                  "fieldId": "MP_DISTRIBUTOR",
-                  "notEmpty": true
-                },
-                {
-                  "fieldId": "MP_SERVICE",
-                  "notEmpty": true
-                },
-                {
-                  "lineItems": {
-                    "groupId": "MP_MEALS_REQUEST",
-                    "match": "any"
-                  }
-                }
-              ]
+              "fieldId": "MP_SERVICE",
+              "notEmpty": true
             },
             "title": {
-              "en": "Change production date?",
+              "en": "Incomplete meal production record",
               "fr": "Changer la date de production ?",
               "nl": "Productiedatum wijzigen?"
             },
             "message": {
-              "en": "Changing the production date of an ongoing Meal production will remove permanently all service data previously saved. Do you want to continue?",
+              "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
               "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
               "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
             },
             "confirmLabel": {
-              "en": "Yes, delete permanently data previously entered",
+              "en": "Continue — Delete the record",
               "fr": "Oui, supprimer définitivement les données déjà saisies",
               "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
             },
             "cancelLabel": {
-              "en": "No, keep the current production date",
+              "en": "Cancel — Continue editing",
               "fr": "Non, conserver la date de production actuelle",
               "nl": "Nee, behoud de huidige productiedatum"
             },
@@ -19608,6 +19785,111 @@ export const BUNDLED_FORM_CONFIGS = [
               "MP_DISTRIBUTOR": "Le Phare"
             }
           }
+        },
+        {
+          "id": "MP_READY_FOR_PRODUCTION",
+          "type": "BUTTON",
+          "label": {
+            "en": "Ready for Production",
+            "fr": "Ready for Production",
+            "nl": "Ready for Production"
+          },
+          "required": false,
+          "listView": false,
+          "visibility": {
+            "showWhen": {
+              "all": [
+                {
+                  "fieldId": "__ckStep",
+                  "equals": "orderInfo"
+                },
+                {
+                  "fieldId": "status",
+                  "equals": "In progress"
+                }
+              ]
+            }
+          },
+          "button": {
+            "action": "updateRecord",
+            "placements": [
+              "form"
+            ],
+            "tone": "primary",
+            "set": {
+              "status": "Ready for Production"
+            },
+            "navigateTo": "form",
+            "confirm": {
+              "message": {
+                "en": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?",
+                "fr": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?",
+                "nl": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?"
+              },
+              "confirmLabel": {
+                "en": "Yes, lock for production",
+                "fr": "Yes, lock for production",
+                "nl": "Yes, lock for production"
+              },
+              "cancelLabel": {
+                "en": "Cancel",
+                "fr": "Cancel",
+                "nl": "Cancel"
+              }
+            }
+          }
+        },
+        {
+          "id": "MP_UNLOCK_FOR_EDIT",
+          "type": "BUTTON",
+          "qEn": "Unlock for Editing",
+          "qFr": "Unlock for Editing",
+          "qNl": "Unlock for Editing",
+          "required": false,
+          "listView": false,
+          "options": [],
+          "optionsFr": [],
+          "optionsNl": [],
+          "status": "Active",
+          "visibility": {
+            "showWhen": {
+              "all": [
+                {
+                  "fieldId": "status",
+                  "equals": "Ready for Production"
+                },
+                {
+                  "fieldId": "__ckRequestParam_admin",
+                  "equals": [
+                    "true",
+                    "1",
+                    "yes"
+                  ]
+                }
+              ]
+            }
+          },
+          "button": {
+            "action": "updateRecord",
+            "placements": [
+              "summaryBar"
+            ],
+            "set": {
+              "status": "In progress"
+            },
+            "navigateTo": "form",
+            "confirm": {
+              "message": {
+                "en": "Unlock this record to return it to In progress so you can edit order details again?"
+              },
+              "confirmLabel": {
+                "en": "Unlock and edit"
+              },
+              "cancelLabel": {
+                "en": "Cancel"
+              }
+            }
+          }
         }
       ],
       "dataSources": [],
@@ -19846,6 +20128,16 @@ export const BUNDLED_FORM_CONFIGS = [
                   "renderMarkdownTemplate"
                 ]
               },
+              {
+                "type": "custom",
+                "placements": [
+                  "summaryBar"
+                ],
+                "actions": [
+                  "updateRecord"
+                ],
+                "display": "inline"
+              },
               "edit"
             ],
             "primary": [
@@ -19855,7 +20147,27 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "system": {
           "home": {
-            "hideWhenActive": true
+            "hideWhenActive": true,
+            "dedupIncompleteDialog": {
+              "enabled": true,
+              "title": {
+                "en": "Incomplete meal production record"
+              },
+              "message": {
+                "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone."
+              },
+              "confirmLabel": {
+                "en": "Continue — Delete the record"
+              },
+              "cancelLabel": {
+                "en": "Cancel — Continue editing"
+              },
+              "showCancel": true,
+              "showCloseButton": true,
+              "dismissOnBackdrop": false,
+              "deleteRecordOnConfirm": true,
+              "primaryAction": "cancel"
+            }
           },
           "gates": {
             "submit": [
@@ -19984,6 +20296,10 @@ export const BUNDLED_FORM_CONFIGS = [
                 "id": "MP_SERVICE"
               },
               {
+                "kind": "question",
+                "id": "MP_COOK_NAME"
+              },
+              {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "presentation": "liftedRowFields",
@@ -19996,10 +20312,17 @@ export const BUNDLED_FORM_CONFIGS = [
                 ],
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline"
+              },
+              {
+                "kind": "question",
+                "id": "MP_READY_FOR_PRODUCTION"
               }
             ],
             "label": {
               "en": "Order"
+            },
+            "helpText": {
+              "en": "To create a meal production record, you must select a customer, a service, and a production date.\nUntil all three are selected, no record is created and no production data can be entered."
             },
             "navigation": {
               "forwardGate": "whenValid",
@@ -21388,9 +21711,30 @@ export const BUNDLED_FORM_CONFIGS = [
           "Ready for production"
         ],
         "snapshotButtons": [
-          "READY_PROD"
+          "MP_READY_FOR_PRODUCTION"
         ]
-      }
+      },
+      "fieldDisableRules": [
+        {
+          "id": "ready-for-production-order-lock",
+          "when": {
+            "all": [
+              {
+                "fieldId": "status",
+                "equals": "Ready for Production"
+              },
+              {
+                "fieldId": "__ckStep",
+                "equals": "orderInfo"
+              }
+            ]
+          },
+          "bypassFields": [
+            "ORD_QTY"
+          ],
+          "unlockStatus": "In progress"
+        }
+      ]
     },
     "validationErrors": []
   }

@@ -6,6 +6,7 @@ import {
   ActionBarItemConfig,
   ActionBarViewConfig,
   ActionBarSystemButton,
+  DedupIncompleteHomeDialogConfig,
   ButtonPlacement,
   ButtonAction,
   FollowupConfig,
@@ -1269,6 +1270,23 @@ export class Dashboard {
       return unique.length ? unique : undefined;
     };
 
+    const normalizeLocalized = (value: any): LocalizedString | undefined => {
+      if (value === undefined || value === null) return undefined;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof value !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(value).forEach(([key, rawVal]) => {
+        if (typeof rawVal !== 'string') return;
+        const trimmed = rawVal.trim();
+        if (!trimmed) return;
+        out[key.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? (out as LocalizedString) : undefined;
+    };
+
     const normalizeItems = (raw: any): ActionBarItemConfig[] | undefined => {
       if (raw === undefined || raw === null) return undefined;
       const itemsRaw: any[] = Array.isArray(raw) ? raw : [raw];
@@ -1348,9 +1366,47 @@ export class Dashboard {
     const systemRaw = (value as any).system ?? (value as any).systemButtons;
     if (systemRaw && typeof systemRaw === 'object') {
       const homeRaw = (systemRaw as any).home;
-      if (homeRaw && typeof homeRaw === 'object' && (homeRaw as any).hideWhenActive !== undefined) {
-        cfg.system = cfg.system || {};
-        cfg.system.home = { hideWhenActive: Boolean((homeRaw as any).hideWhenActive) };
+      if (homeRaw && typeof homeRaw === 'object') {
+        const homeCfg: {
+          hideWhenActive?: boolean;
+          dedupIncompleteDialog?: DedupIncompleteHomeDialogConfig;
+        } = {};
+        if ((homeRaw as any).hideWhenActive !== undefined) {
+          homeCfg.hideWhenActive = Boolean((homeRaw as any).hideWhenActive);
+        }
+        const dedupIncompleteDialogRaw =
+          (homeRaw as any).dedupIncompleteDialog ??
+          (homeRaw as any).incompleteDedupDialog ??
+          (homeRaw as any).missingDedupDialog;
+        if (dedupIncompleteDialogRaw && typeof dedupIncompleteDialogRaw === 'object') {
+          const rawDialog = dedupIncompleteDialogRaw as any;
+          const dialog: DedupIncompleteHomeDialogConfig = { ...rawDialog };
+          const title = normalizeLocalized(rawDialog.title);
+          const message = normalizeLocalized(rawDialog.message);
+          const confirmLabel = normalizeLocalized(rawDialog.confirmLabel);
+          const cancelLabel = normalizeLocalized(rawDialog.cancelLabel);
+          const deleteFailedMessage = normalizeLocalized(rawDialog.deleteFailedMessage);
+          if (title !== undefined) dialog.title = title;
+          if (message !== undefined) dialog.message = message;
+          if (confirmLabel !== undefined) dialog.confirmLabel = confirmLabel;
+          if (cancelLabel !== undefined) dialog.cancelLabel = cancelLabel;
+          if (deleteFailedMessage !== undefined) dialog.deleteFailedMessage = deleteFailedMessage;
+          if (rawDialog.enabled !== undefined) dialog.enabled = Boolean(rawDialog.enabled);
+          if (rawDialog.showCancel !== undefined) dialog.showCancel = Boolean(rawDialog.showCancel);
+          if (rawDialog.showCloseButton !== undefined) dialog.showCloseButton = Boolean(rawDialog.showCloseButton);
+          if (rawDialog.dismissOnBackdrop !== undefined) dialog.dismissOnBackdrop = Boolean(rawDialog.dismissOnBackdrop);
+          if (rawDialog.primaryAction === 'cancel' || rawDialog.primaryAction === 'confirm') {
+            dialog.primaryAction = rawDialog.primaryAction;
+          }
+          if (rawDialog.deleteRecordOnConfirm !== undefined) {
+            dialog.deleteRecordOnConfirm = Boolean(rawDialog.deleteRecordOnConfirm);
+          }
+          homeCfg.dedupIncompleteDialog = dialog;
+        }
+        if (Object.keys(homeCfg).length) {
+          cfg.system = cfg.system || {};
+          cfg.system.home = homeCfg;
+        }
       }
     }
 

@@ -15,6 +15,10 @@ export type UpsertListCacheArgs = {
   rowNumber?: number | null;
 };
 
+export type RemoveListCacheArgs = {
+  recordId: string;
+};
+
 const metaKeys = new Set(['id', '__rowNumber', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
 
 const resolveFieldIdsForNewRow = (definition: WebFormDefinition): Set<string> => {
@@ -121,4 +125,39 @@ export const upsertListCacheRowPure = (args: {
 
   const nextTotal = Math.max(Number((response as any).totalCount || 0) || 0, nextItems.length);
   return { response: { ...(response as any), items: nextItems, totalCount: nextTotal }, records: nextRecords };
+};
+
+export const removeListCacheRowPure = (args: {
+  prev: ListCacheState;
+  remove: RemoveListCacheArgs;
+}): ListCacheState => {
+  const { prev, remove } = args;
+  const recordId = (remove.recordId || '').toString();
+  if (!recordId) return prev;
+
+  const hasRecord = Object.prototype.hasOwnProperty.call(prev.records || {}, recordId);
+  const nextRecords = hasRecord ? { ...(prev.records || {}) } : (prev.records || {});
+  if (hasRecord) {
+    delete (nextRecords as any)[recordId];
+  }
+
+  const response = prev.response;
+  if (!response || !Array.isArray((response as any).items)) {
+    if (!hasRecord) return prev;
+    return { response: prev.response, records: nextRecords };
+  }
+
+  const prevItems = (response.items || []) as any[];
+  const nextItems = prevItems.filter((row: any) => !row || row.id !== recordId);
+  const removedCount = Math.max(0, prevItems.length - nextItems.length);
+  if (!removedCount && !hasRecord) return prev;
+
+  const prevTotalRaw = Number((response as any).totalCount || 0);
+  const prevTotal = Number.isFinite(prevTotalRaw) && prevTotalRaw > 0 ? prevTotalRaw : prevItems.length;
+  const nextTotal = Math.max(nextItems.length, prevTotal - removedCount);
+
+  return {
+    response: { ...(response as any), items: nextItems, totalCount: nextTotal },
+    records: nextRecords
+  };
 };

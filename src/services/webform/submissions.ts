@@ -1338,7 +1338,6 @@ export class SubmissionService {
           this.serializeAuditValue(change.beforeValue),
           this.serializeAuditValue(change.afterValue),
           '',
-          '',
           normalizedDeviceInfo
         ]);
       });
@@ -1362,7 +1361,6 @@ export class SubmissionService {
         '',
         '',
         '',
-        actionId,
         snapshotValue,
         normalizedDeviceInfo
       ]);
@@ -1371,7 +1369,9 @@ export class SubmissionService {
     if (!auditRows.length) return;
     const auditSheet = this.ensureAuditSheet(destinationName, cfg.sheetName);
     const startRow = Math.max(2, auditSheet.getLastRow() + 1);
-    auditSheet.getRange(startRow, 1, auditRows.length, 9).setValues(auditRows);
+    const width = auditRows[0]?.length || 0;
+    if (!width) return;
+    auditSheet.getRange(startRow, 1, auditRows.length, width).setValues(auditRows);
   }
 
   private resolveAuditLoggingConfig(value?: AuditLoggingConfig): AuditLoggingConfig | undefined {
@@ -1513,7 +1513,7 @@ export class SubmissionService {
     if (!sheet) {
       sheet = this.ss.insertSheet(sheetName);
     }
-    const headers = ['date_time', 'recordId', 'auditType', 'fieldPath', 'beforeValue', 'afterValue', 'auditStatus', 'snapshot', 'deviceInfo'];
+    const headers = ['date_time', 'recordId', 'auditType', 'fieldPath', 'beforeValue', 'afterValue', 'snapshot', 'deviceInfo'];
     const existing = this.normalizeRowValues(sheet.getRange(1, 1, 1, headers.length).getValues()[0] || [], headers.length).map(v =>
       v === undefined || v === null ? '' : v.toString()
     );

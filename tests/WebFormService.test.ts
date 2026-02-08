@@ -457,13 +457,13 @@ describe('WebFormService', () => {
     const fieldPathIdx = col('fieldPath');
     const beforeIdx = col('beforeValue');
     const afterIdx = col('afterValue');
-    const auditStatusIdx = col('auditStatus');
     const snapshotIdx = col('snapshot');
     const deviceInfoIdx = col('deviceInfo');
     const recordIdIdx = col('recordId');
 
     expect(auditTypeIdx).toBeGreaterThanOrEqual(0);
     expect(fieldPathIdx).toBeGreaterThanOrEqual(0);
+    expect(col('auditStatus')).toBe(-1);
     expect(deviceInfoIdx).toBeGreaterThanOrEqual(0);
 
     const changeRows = rowData.filter(r => (r[auditTypeIdx] || '').toString() === 'change');
@@ -479,7 +479,6 @@ describe('WebFormService', () => {
     expect((q1Change?.[recordIdIdx] || '').toString()).toBe('REC-AUDIT-1');
 
     const snapshotRow = snapshotRows[0];
-    expect((snapshotRow[auditStatusIdx] || '').toString()).toBe('READY_PROD');
     expect((snapshotRow[snapshotIdx] || '').toString()).toContain('REC-AUDIT-1');
   });
 

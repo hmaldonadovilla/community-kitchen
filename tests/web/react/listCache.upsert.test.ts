@@ -1,4 +1,4 @@
-import { upsertListCacheRowPure, ListCacheState } from '../../../src/web/react/app/listCache';
+import { removeListCacheRowPure, upsertListCacheRowPure, ListCacheState } from '../../../src/web/react/app/listCache';
 import { WebFormDefinition } from '../../../src/types';
 
 const baseDefinition: WebFormDefinition = {
@@ -101,6 +101,53 @@ describe('upsertListCacheRowPure', () => {
       formKey: 'f',
       language: 'en'
     });
+    expect(next).toBe(prev);
+  });
+});
+
+describe('removeListCacheRowPure', () => {
+  it('removes the record snapshot and list row when present', () => {
+    const prev: ListCacheState = {
+      response: {
+        items: [
+          { id: 'r1', name: 'Row 1' },
+          { id: 'r2', name: 'Row 2' }
+        ],
+        totalCount: 2
+      } as any,
+      records: {
+        r1: { id: 'r1', values: { name: 'Row 1' } } as any,
+        r2: { id: 'r2', values: { name: 'Row 2' } } as any
+      }
+    };
+
+    const next = removeListCacheRowPure({
+      prev,
+      remove: { recordId: 'r1' }
+    });
+
+    expect(next.records.r1).toBeUndefined();
+    expect(next.records.r2).toBeDefined();
+    expect(next.response?.items?.map((row: any) => row.id)).toEqual(['r2']);
+    expect(next.response?.totalCount).toBe(1);
+  });
+
+  it('returns previous state when nothing matches', () => {
+    const prev: ListCacheState = {
+      response: {
+        items: [{ id: 'r1', name: 'Row 1' }],
+        totalCount: 1
+      } as any,
+      records: {
+        r1: { id: 'r1', values: { name: 'Row 1' } } as any
+      }
+    };
+
+    const next = removeListCacheRowPure({
+      prev,
+      remove: { recordId: 'missing' }
+    });
+
     expect(next).toBe(prev);
   });
 });
