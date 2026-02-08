@@ -1,6 +1,6 @@
 {
   "formKey": "Config: Ingredients Management",
-  "generatedAt": "2026-02-04T09:33:14.060Z",
+  "generatedAt": "2026-02-07T16:42:43.964Z",
   "form": {
     "title": "Ingredients Management",
     "configSheet": "Config: Ingredients Management",
@@ -25,7 +25,7 @@
     "followupConfig": {
       "statusTransitions": {
         "inProgress": "Draft",
-        "onClose": "Disabled",
+        "onClose": "Active",
         "reOpened": "Draft"
       }
     },
@@ -214,7 +214,108 @@
           "nl": "Alleen historisch; niet beschikbaar in Receptbeheer of Maaltijdproductie."
         }
       }
-    ]
+    ],
+    "actionBars": {
+      "top": {
+        "list": {
+          "items": [
+            "create"
+          ]
+        }
+      },
+      "bottom": {
+        "list": {
+          "items": [
+            "home",
+            {
+              "type": "system",
+              "id": "actions",
+              "placements": [
+                "listBar"
+              ],
+              "menuBehavior": "auto"
+            }
+          ]
+        },
+        "form": {
+          "items": [
+            "home",
+            {
+              "type": "system",
+              "id": "summary",
+              "summaryBehavior": "navigate"
+            }
+          ],
+          "primary": [
+            "submit"
+          ]
+        },
+        "summary": {
+          "items": [
+            "home",
+            "edit",
+            {
+              "type": "system",
+              "id": "actions",
+              "placements": [
+                "summaryBar"
+              ],
+              "menuBehavior": "auto"
+            }
+          ]
+        }
+      },
+      "system": {
+        "home": {
+          "hideWhenActive": true
+        },
+        "gates": {
+          "edit": [
+            {
+              "id": "ingredients.edit.disabledHidden",
+              "when": {
+                "fieldId": "status",
+                "equals": [
+                  "Disabled"
+                ]
+              },
+              "hide": true
+            }
+          ],
+          "copyCurrentRecord": [
+            {
+              "id": "ingredients.copy.onlyActiveSummary",
+              "when": {
+                "any": [
+                  {
+                    "not": {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "fieldId": "status",
+                      "equals": [
+                        "Active"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "hide": true
+            }
+          ]
+        }
+      }
+    },
+    "submitButtonLabel": {
+      "en": "Activate",
+      "fr": "Activer",
+      "nl": "Activeren"
+    }
   },
   "questions": [
     {
@@ -223,7 +324,7 @@
       "qEn": "Created by",
       "qFr": "Créé par",
       "qNl": "Gemaakt door",
-      "required": false,
+      "required": true,
       "listView": false,
       "status": "Active"
     },
@@ -233,7 +334,7 @@
       "qEn": "Ingredient name",
       "qFr": "Nom de l’ingrédient",
       "qNl": "Naam van ingrediënt",
-      "required": false,
+      "required": true,
       "listView": true,
       "status": "Active"
     },
@@ -243,7 +344,7 @@
       "qEn": "Category",
       "qFr": "Catégorie",
       "qNl": "Categorie",
-      "required": false,
+      "required": true,
       "listView": false,
       "options": [
         "Animal protein",
@@ -286,10 +387,11 @@
       "qEn": "Supplier",
       "qFr": "Fournisseur",
       "qNl": "Leverancier",
-      "required": false,
+      "required": true,
       "listView": false,
       "options": [
         "Freshmed",
+        "Mabru",
         "Ozfood",
         "Red Cross",
         "Solucious",
@@ -297,6 +399,7 @@
       ],
       "optionsFr": [
         "Freshmed",
+        "Mabru",
         "Ozfood",
         "Red Cross",
         "Solucious",
@@ -304,12 +407,16 @@
       ],
       "optionsNl": [
         "Freshmed",
+        "Mabru",
         "Ozfood",
         "Red Cross",
         "Solucious",
         "VDS"
       ],
-      "status": "Active"
+      "status": "Active",
+      "ui": {
+        "control": "select"
+      }
     },
     {
       "id": "ALLERGEN",
@@ -317,7 +424,7 @@
       "qEn": "Allergen",
       "qFr": "Allergène",
       "qNl": "Allergeen",
-      "required": false,
+      "required": true,
       "listView": false,
       "options": [
         "Egg",
@@ -346,7 +453,36 @@
         "Peanuts",
         "Soy"
       ],
-      "status": "Active"
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "ALLERGEN",
+            "equals": [
+              "None"
+            ]
+          },
+          "then": {
+            "fieldId": "ALLERGEN",
+            "disallowed": [
+              "Egg",
+              "Fish",
+              "Gluten",
+              "Milk",
+              "Peanuts",
+              "Soy"
+            ]
+          },
+          "message": {
+            "en": "Select either None or allergens, not both.",
+            "fr": "Sélectionnez soit Aucun, soit des allergènes, pas les deux.",
+            "nl": "Selecteer ofwel Geen of allergenen, niet beide."
+          }
+        }
+      ],
+      "status": "Active",
+      "ui": {
+        "control": "select"
+      }
     },
     {
       "id": "ALLOWED_UNIT",
@@ -354,54 +490,69 @@
       "qEn": "Allowed unit",
       "qFr": "Unité autorisée",
       "qNl": "Toegestane eenheid",
-      "required": false,
+      "required": true,
       "listView": false,
       "options": [
         "bag",
+        "bucket",
         "cl",
         "gr",
         "kg",
         "L",
+        "leaf",
         "piece",
         "Tbsp",
         "tin-140gr",
         "tin-220gr",
         "tin-240gr",
         "tin-2500gr",
+        "tin-2505gr",
+        "tin-2655gr",
         "tin-5000gr",
         "tin-530gr"
       ],
       "optionsFr": [
         "bag",
+        "bucket",
         "cl",
         "gr",
         "kg",
         "L",
+        "leaf",
         "piece",
         "Tbsp",
         "tin-140gr",
         "tin-220gr",
         "tin-240gr",
         "tin-2500gr",
+        "tin-2505gr",
+        "tin-2655gr",
         "tin-5000gr",
         "tin-530gr"
       ],
       "optionsNl": [
         "bag",
+        "bucket",
         "cl",
         "gr",
         "kg",
         "L",
+        "leaf",
         "piece",
         "Tbsp",
         "tin-140gr",
         "tin-220gr",
         "tin-240gr",
         "tin-2500gr",
+        "tin-2505gr",
+        "tin-2655gr",
         "tin-5000gr",
         "tin-530gr"
       ],
-      "status": "Active"
+      "status": "Active",
+      "ui": {
+        "control": "select"
+      }
     },
     {
       "id": "DIETARY_APPLICABILITY",
@@ -409,7 +560,7 @@
       "qEn": "Dietary applicability",
       "qFr": "Applicabilité diététique",
       "qNl": "Dieettoepassing",
-      "required": false,
+      "required": true,
       "listView": false,
       "options": [
         "Diabetic",
@@ -432,7 +583,10 @@
         "Vegan",
         "Vegetarian"
       ],
-      "status": "Active"
+      "status": "Active",
+      "ui": {
+        "control": "select"
+      }
     },
     {
       "id": "EFFECTIVE_START_DATE",
@@ -463,7 +617,7 @@
       "required": false,
       "readOnly": true,
       "defaultValue": "Draft",
-      "listView": false,
+      "listView": true,
       "options": [
         "Draft",
         "Active",

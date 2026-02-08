@@ -5,8 +5,10 @@
  * - master_data/SyncIngredientsToBundle.csv
  *
  * Outputs:
- * - Updates docs/config/staging/config_ingredients_mgmt.json options for:
+ * - Updates Ingredients config options for:
  *   CATEGORY, SUPPLIER, ALLERGEN, ALLOWED_UNIT, DIETARY_APPLICABILITY
+ * - Enforces selector UI (`ui.control = "select"`) for large multi-select CHECKBOX fields:
+ *   SUPPLIER, ALLERGEN, ALLOWED_UNIT, DIETARY_APPLICABILITY
  * - Writes docs/config/staging/ingredients_data_seed.csv (ready to paste/import into the destination tab)
  */
 
@@ -26,6 +28,7 @@ const configPaths = [
 const seedOutPath = path.join(root, 'docs', 'config', 'staging', 'ingredients_data_seed.csv');
 
 const META_HEADERS = ['Record ID', 'Data Version', 'Created At', 'Updated At', 'Status', 'PDF URL'];
+const MULTI_SELECT_QUESTION_IDS = ['SUPPLIER', 'ALLERGEN', 'ALLOWED_UNIT', 'DIETARY_APPLICABILITY'];
 
 const stringifyError = err => {
   if (!err) return 'unknown';
@@ -130,6 +133,19 @@ const splitList = raw => {
     .filter(Boolean);
 };
 
+const toIsoDate = date => {
+  const y = date.getUTCFullYear();
+  const m = `${date.getUTCMonth() + 1}`.padStart(2, '0');
+  const d = `${date.getUTCDate()}`.padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const resolveSeedEffectiveStartDate = () => {
+  const raw = (process.env.INGREDIENTS_SEED_START_DATE || process.env.INGREDIENTS_GO_LIVE_DATE || '').toString().trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return toIsoDate(new Date());
+};
+
 const uniqSorted = values => {
   const seen = new Set();
   const out = [];
@@ -177,14 +193,23 @@ const loadConfigJson = filePath => JSON.parse(readText(filePath));
 
 const saveConfigJson = (filePath, config) => writeText(filePath, JSON.stringify(config, null, 2) + '\n');
 
-const updateQuestionOptions = (config, questionId, options) => {
+const updateQuestionOptions = (config, filePath, questionId, options) => {
   const q = (config.questions || []).find(entry => entry && entry.id === questionId);
   if (!q) {
-    throw new Error(`Missing question id "${questionId}" in ${path.relative(root, configPath)}`);
+    throw new Error(`Missing question id "${questionId}" in ${path.relative(root, filePath)}`);
   }
   q.options = options;
   q.optionsFr = options;
   q.optionsNl = options;
+};
+
+const enforceMultiSelectSelectorUi = (config, filePath, questionId) => {
+  const q = (config.questions || []).find(entry => entry && entry.id === questionId);
+  if (!q) {
+    throw new Error(`Missing question id "${questionId}" in ${path.relative(root, filePath)}`);
+  }
+  q.ui = (q.ui && typeof q.ui === 'object') ? { ...q.ui } : {};
+  q.ui.control = 'select';
 };
 
 const csvEscape = value => {
@@ -237,6 +262,7 @@ const buildSeed = (config, ingredientRows) => {
   const headers = ['Language', ...questionHeaders, ...META_HEADERS];
 
   const now = asNowIso();
+  const effectiveStartDate = resolveSeedEffectiveStartDate();
   const rows = ingredientRows
     .map(normalizeIngredientRow)
     .filter(r => r.optionEn)
@@ -251,10 +277,10 @@ const buildSeed = (config, ingredientRows) => {
         ALLERGEN: r.Allergens,
         ALLOWED_UNIT: r.allowedUnits,
         DIETARY_APPLICABILITY: r.dietaryApplicability,
-        EFFECTIVE_START_DATE: '',
+        EFFECTIVE_START_DATE: effectiveStartDate,
         EFFECTIVE_END_DATE: '9999-12-31',
         STATUS: 'Active',
-        LAST_CHANGED_BY: ''
+        LAST_CHANGED_BY: 'System Administrator'
       };
 
       const questionCells = questions.map(q => valuesById[q.id] !== undefined ? valuesById[q.id] : '');
@@ -287,11 +313,12 @@ const main = () => {
       const config = loadConfigJson(p);
       config.generatedAt = nowIso;
 
-      updateQuestionOptions(config, 'CATEGORY', optionSets.CATEGORY);
-      updateQuestionOptions(config, 'SUPPLIER', optionSets.SUPPLIER);
-      updateQuestionOptions(config, 'ALLERGEN', optionSets.ALLERGEN);
-      updateQuestionOptions(config, 'ALLOWED_UNIT', optionSets.ALLOWED_UNIT);
-      updateQuestionOptions(config, 'DIETARY_APPLICABILITY', optionSets.DIETARY_APPLICABILITY);
+      updateQuestionOptions(config, p, 'CATEGORY', optionSets.CATEGORY);
+      updateQuestionOptions(config, p, 'SUPPLIER', optionSets.SUPPLIER);
+      updateQuestionOptions(config, p, 'ALLERGEN', optionSets.ALLERGEN);
+      updateQuestionOptions(config, p, 'ALLOWED_UNIT', optionSets.ALLOWED_UNIT);
+      updateQuestionOptions(config, p, 'DIETARY_APPLICABILITY', optionSets.DIETARY_APPLICABILITY);
+      MULTI_SELECT_QUESTION_IDS.forEach(questionId => enforceMultiSelectSelectorUi(config, p, questionId));
 
       saveConfigJson(p, config);
       updatedPaths.push(p);

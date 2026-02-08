@@ -148,4 +148,147 @@ describe('DefinitionBuilder', () => {
     expect(def.submissionConfirmationConfirmLabel).toEqual({ en: 'Yes, submit' });
     expect(def.submissionConfirmationCancelLabel).toEqual({ en: 'Not yet' });
   });
+
+  test('buildDefinitionFromConfig tolerates bundled questions without options arrays', () => {
+    const form: any = {
+      title: 'Bundled Ingredients',
+      configSheet: 'Config: Ingredients Management',
+      destinationTab: 'Ingredients Data'
+    };
+    const questions: any[] = [
+      {
+        id: 'CREATED_BY',
+        type: 'TEXT',
+        qEn: 'Created by',
+        qFr: 'Cree par',
+        qNl: 'Gemaakt door',
+        required: true,
+        status: 'Active'
+      },
+      {
+        id: 'CATEGORY',
+        type: 'CHOICE',
+        qEn: 'Category',
+        qFr: 'Categorie',
+        qNl: 'Categorie',
+        options: ['Dairy'],
+        required: true,
+        status: 'Active'
+      }
+    ];
+
+    const def = builder.buildDefinitionFromConfig(form, questions, []);
+    expect(def.questions).toHaveLength(2);
+    expect(def.questions[0].options).toBeUndefined();
+    expect(def.questions[1].options).toEqual({
+      en: ['Dairy'],
+      fr: [],
+      nl: [],
+      raw: undefined
+    });
+  });
+
+  test('buildDefinitionFromConfig resolves optionMapRef dynamically for line item fields', () => {
+    const ingredientsSheet = ss.insertSheet('Ingredients Data');
+    ingredientsSheet.setMockData([
+      [
+        'Language',
+        'Ingredient name [INGREDIENT_NAME]',
+        'Category [CATEGORY]',
+        'Allowed unit [ALLOWED_UNIT]',
+        'Dietary applicability [DIETARY_APPLICABILITY]',
+        'Supplier [SUPPLIER]',
+        'Allergen [ALLERGEN]'
+      ],
+      ['EN', 'Tomato', 'Fresh vegetables', 'kg, gr', 'Vegan, Vegetarian', 'Freshmed', 'None'],
+      ['EN', 'Cheese', 'Dairy', 'kg, gr', 'Vegetarian', 'VDS', 'Milk']
+    ]);
+
+    const form: any = {
+      title: 'Bundled Recipes',
+      configSheet: 'Config: Recipes',
+      destinationTab: 'Recipes Data'
+    };
+    const questions: any[] = [
+      {
+        id: 'RCP_INGREDIENTS',
+        type: 'LINE_ITEM_GROUP',
+        qEn: 'Ingredients',
+        qFr: 'Ingrédients',
+        qNl: 'Ingrediënten',
+        required: false,
+        status: 'Active',
+        lineItemConfig: {
+          fields: [
+            {
+              id: 'ING',
+              type: 'CHOICE',
+              labelEn: 'Ingredient',
+              labelFr: 'Ingrédient',
+              labelNl: 'Ingrediënt',
+              required: true,
+              dataSource: {
+                id: 'Ingredients Data',
+                mode: 'options',
+                projection: ['INGREDIENT_NAME', 'DIETARY_APPLICABILITY'],
+                statusAllowList: ['Active']
+              },
+              optionFilter: {
+                dependsOn: 'DISH_TYPE',
+                optionMapRef: {
+                  ref: 'REF:Ingredients Data',
+                  keyColumn: 'DIETARY_APPLICABILITY',
+                  lookupColumn: 'INGREDIENT_NAME',
+                  splitKey: true
+                }
+              }
+            },
+            {
+              id: 'UNIT',
+              type: 'CHOICE',
+              labelEn: 'Unit',
+              labelFr: 'Unité',
+              labelNl: 'Eenheid',
+              required: true,
+              optionFilter: {
+                dependsOn: 'ING',
+                optionMapRef: {
+                  ref: 'REF:Ingredients Data',
+                  keyColumn: 'INGREDIENT_NAME',
+                  lookupColumn: 'ALLOWED_UNIT'
+                }
+              }
+            },
+            {
+              id: 'CAT',
+              type: 'TEXT',
+              labelEn: 'Category',
+              labelFr: 'Catégorie',
+              labelNl: 'Categorie',
+              required: false,
+              valueMap: {
+                dependsOn: 'ING',
+                optionMapRef: {
+                  ref: 'REF:Ingredients Data',
+                  keyColumn: 'INGREDIENT_NAME',
+                  lookupColumn: 'CATEGORY'
+                }
+              }
+            }
+          ]
+        }
+      }
+    ];
+
+    const def = builder.buildDefinitionFromConfig(form, questions, []);
+    const lineItemFields = (def.questions[0] as any).lineItemConfig?.fields || [];
+    const ingField = lineItemFields.find((f: any) => f.id === 'ING');
+    const unitField = lineItemFields.find((f: any) => f.id === 'UNIT');
+    const catField = lineItemFields.find((f: any) => f.id === 'CAT');
+
+    expect(ingField.optionFilter.optionMap.Vegan).toEqual(['Tomato']);
+    expect(ingField.optionFilter.optionMap.Vegetarian).toEqual(['Tomato', 'Cheese']);
+    expect(unitField.optionFilter.optionMap.Tomato).toEqual(['kg', 'gr']);
+    expect(catField.valueMap.optionMap.Cheese).toEqual(['Dairy']);
+  });
 });

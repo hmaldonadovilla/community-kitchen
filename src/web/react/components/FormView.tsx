@@ -77,6 +77,7 @@ import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectO
 import { InfoTooltip } from './form/InfoTooltip';
 import { DateInput } from './form/DateInput';
 import { SearchableSelect } from './form/SearchableSelect';
+import { SearchableMultiSelect } from './form/SearchableMultiSelect';
 import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
@@ -7719,26 +7720,22 @@ const FormView: React.FC<FormViewProps> = ({
               {q.required && <RequiredStar />}
             </label>
             {renderAsMultiSelect ? (
-              <select
-                multiple
+              <SearchableMultiSelect
                 value={selected}
+                options={opts.map(opt => ({
+                  value: opt.value,
+                  label: opt.label,
+                  searchText: opt.searchText
+                }))}
                 disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
+                placeholder="Select..."
                 aria-label={resolveLabel(q, language)}
-                onChange={e => {
+                onChange={next => {
                   if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
-                  const next = Array.from(e.currentTarget.selectedOptions)
-                    .map(opt => opt.value)
-                    .filter(Boolean);
                   onDiagnostic?.('ui.checkbox.select.change', { fieldPath: q.id, selectedCount: next.length });
                   handleFieldChange(q, next);
                 }}
-              >
-                {opts.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              />
             ) : (
               <div className="inline-options">
                 {opts.map(opt => (
