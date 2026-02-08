@@ -63,6 +63,7 @@
     },
     "listViewPageSize": 7,
     "listViewPaginationControlsEnabled": false,
+    "listViewHideHeaderRow": true,
     "listViewMetaColumns": [],
     "listViewColumns": [
       {
@@ -81,11 +82,21 @@
               "nl": "Bewerken"
             },
             "when": {
-              "fieldId": "status",
-              "notEquals": "Closed"
+              "all": [
+                {
+                  "fieldId": "status",
+                  "notEquals": "Closed"
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isToday": true
+                }
+              ]
             },
             "style": "link",
-            "icon": "edit"
+            "icon": "edit",
+            "hideText": true,
+            "openView": "form"
           },
           {
             "text": {
@@ -94,14 +105,85 @@
               "nl": "Bekijken"
             },
             "when": {
+              "all": [
+                {
+                  "fieldId": "status",
+                  "notEquals": "Closed"
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isNotToday": true
+                }
+              ]
+            },
+            "style": "link",
+            "icon": "view",
+            "hideText": true,
+            "openView": "summary"
+          },
+          {
+            "text": {
+              "en": "Actions",
+              "fr": "Actions",
+              "nl": "Acties"
+            },
+            "hideText": true,
+            "when": {
               "fieldId": "status",
               "equals": "Closed"
             },
-            "style": "link",
-            "icon": "check"
+            "actions": [
+              {
+                "text": {
+                  "en": "View",
+                  "fr": "Voir",
+                  "nl": "Bekijken"
+                },
+                "hideText": true,
+                "style": "link",
+                "icon": "view",
+                "openView": "summary"
+              },
+              {
+                "text": {
+                  "en": "Copy",
+                  "fr": "Copier",
+                  "nl": "Kopieren"
+                },
+                "hideText": true,
+                "style": "link",
+                "icon": "copy",
+                "openView": "copy"
+              }
+            ]
           }
-        ],
-        "openView": "auto"
+        ]
+      }
+    ],
+    "listViewLegend": [
+      {
+        "icon": "edit",
+        "text": {
+          "en": "Edit (not allowed for past records)",
+          "fr": "Modifier (non autorisé pour les enregistrements passés)",
+          "nl": "Bewerken (niet toegestaan voor eerdere records)"
+        }
+      },
+      {
+        "icon": "view",
+        "text": {
+          "en": "View",
+          "fr": "Voir",
+          "nl": "Bekijken"
+        }
+      },
+      {
+        "icon": "copy",
+        "text": {
+          "en": "Copy order information",
+          "fr": "Copier les informations de commande",
+          "nl": "Kopieer bestelinformatie"
+        }
       }
     ],
     "listViewSearch": {
@@ -417,7 +499,7 @@
         },
         {
           "helpText": {
-            "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish."
+            "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
           },
           "id": "deliveryForm",
           "contextHeader": {
@@ -1806,11 +1888,11 @@
             }
           ]
         },
-        "bypassFields": [
-        ],
+        "bypassFields": [],
         "unlockStatus": "In progress"
       }
-    ]
+    ],
+    "listViewRowClickEnabled": false
   },
   "questions": [
     {
@@ -2009,7 +2091,7 @@
       "qFr": "Cuisinier responsable",
       "qNl": "Verantwoordelijke kok",
       "required": true,
-      "listView": false,
+      "listView": true,
       "ui": {
         "labelLayout": "inline"
       },
@@ -4369,7 +4451,7 @@
           "nl": "Verantwoordelijke kok"
         },
         "required": true,
-        "listView": false,
+        "listView": true,
         "ui": {
           "labelLayout": "inline"
         },
@@ -6506,11 +6588,21 @@
                 "nl": "Bewerken"
               },
               "when": {
-                "fieldId": "status",
-                "notEquals": "Closed"
+                "all": [
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isToday": true
+                  }
+                ]
               },
               "style": "link",
-              "icon": "edit"
+              "icon": "edit",
+              "hideText": true,
+              "openView": "form"
             },
             {
               "text": {
@@ -6519,14 +6611,59 @@
                 "nl": "Bekijken"
               },
               "when": {
+                "all": [
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isNotToday": true
+                  }
+                ]
+              },
+              "style": "link",
+              "icon": "view",
+              "hideText": true,
+              "openView": "summary"
+            },
+            {
+              "text": {
+                "en": "Actions",
+                "fr": "Actions",
+                "nl": "Acties"
+              },
+              "hideText": true,
+              "when": {
                 "fieldId": "status",
                 "equals": "Closed"
               },
-              "style": "link",
-              "icon": "check"
+              "actions": [
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "view",
+                  "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Copy",
+                    "fr": "Copier",
+                    "nl": "Kopieren"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "copy",
+                  "openView": "copy"
+                }
+              ]
             }
-          ],
-          "openView": "auto"
+          ]
         },
         {
           "fieldId": "MP_DISTRIBUTOR",
@@ -6543,6 +6680,15 @@
             "en": "Service",
             "fr": "Service",
             "nl": "Dienst"
+          },
+          "kind": "question"
+        },
+        {
+          "fieldId": "MP_COOK_NAME",
+          "label": {
+            "en": "Responsible cook",
+            "fr": "Cuisinier responsable",
+            "nl": "Verantwoordelijke kok"
           },
           "kind": "question"
         },
@@ -6568,6 +6714,33 @@
       },
       "pageSize": 7,
       "paginationControlsEnabled": false,
+      "hideHeaderRow": true,
+      "legend": [
+        {
+          "icon": "edit",
+          "text": {
+            "en": "Edit (not allowed for past records)",
+            "fr": "Modifier (non autorisé pour les enregistrements passés)",
+            "nl": "Bewerken (niet toegestaan voor eerdere records)"
+          }
+        },
+        {
+          "icon": "view",
+          "text": {
+            "en": "View",
+            "fr": "Voir",
+            "nl": "Bekijken"
+          }
+        },
+        {
+          "icon": "copy",
+          "text": {
+            "en": "Copy order information",
+            "fr": "Copier les informations de commande",
+            "nl": "Kopieer bestelinformatie"
+          }
+        }
+      ],
       "search": {
         "mode": "date",
         "dateFieldId": "MP_PREP_DATE",
@@ -6576,7 +6749,8 @@
           "fr": "Rechercher par client:",
           "nl": "Zoeken op klant:"
         }
-      }
+      },
+      "rowClickEnabled": false
     },
     "dedupRules": [
       {
@@ -6926,7 +7100,7 @@
         },
         {
           "helpText": {
-            "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
+            "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
           },
           "id": "deliveryForm",
           "contextHeader": {
@@ -8327,8 +8501,7 @@
             }
           ]
         },
-        "bypassFields": [
-        ],
+        "bypassFields": [],
         "unlockStatus": "In progress"
       }
     ]

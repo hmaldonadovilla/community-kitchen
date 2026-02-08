@@ -294,6 +294,18 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       { "listView": { "headerSortEnabled": false } }
       ```
 
+      Optional: hide the table header row (for compact mobile list tables):
+
+      ```json
+      { "listView": { "hideHeaderRow": true } }
+      ```
+
+      Optional: disable row/card container click so only icons/buttons open records:
+
+      ```json
+      { "listView": { "rowClickEnabled": false } }
+      ```
+
     - Want to change the **list view title**? Set `listView.title`:
 
       ```json
@@ -486,8 +498,41 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       }
       ```
 
-      Supported icons: `warning`, `check`, `error`, `info`, `external`, `lock`, `edit`, `view`.
+      Supported icons: `warning`, `check`, `error`, `info`, `external`, `lock`, `edit`, `copy`, `view`.
       Pill tones: `default`, `muted`, `strong` (neutral palette).
+
+      Optional: set legend columns (for dense legends):
+
+      ```json
+      { "listView": { "legendColumns": 2 } }
+      ```
+
+      Optional: hide action labels (icon-only cells) and render multiple inline actions in a single rule cell:
+
+      ```json
+      {
+        "listView": {
+          "columns": [
+            {
+              "type": "rule",
+              "fieldId": "action",
+              "label": { "en": "Action" },
+              "cases": [
+                {
+                  "when": { "fieldId": "status", "equals": "Closed" },
+                  "text": "Actions",
+                  "hideText": true,
+                  "actions": [
+                    { "text": "View", "hideText": true, "icon": "view", "openView": "summary" },
+                    { "text": "Copy", "hideText": true, "icon": "copy", "openView": "copy" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+      ```
 
       Optional: show a column only in **table** or only in **cards** view via `showIn`:
 

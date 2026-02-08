@@ -2124,6 +2124,18 @@ export interface FormConfig {
    * Optional UI override to enable/disable interactive header sorting in the list view (recommended: `listView.headerSortEnabled`).
    */
   listViewHeaderSortEnabled?: boolean;
+  /**
+   * Optional UI override to hide the table header row in list view table mode (recommended: `listView.hideHeaderRow`).
+   */
+  listViewHideHeaderRow?: boolean;
+  /**
+   * Optional UI override to enable/disable opening records by clicking the row/card container
+   * (recommended: `listView.rowClickEnabled`).
+   *
+   * - When true/omitted (default), clicking a table row/card can open the record.
+   * - When false, only explicit action icons/buttons are clickable.
+   */
+  listViewRowClickEnabled?: boolean;
   listViewMetaColumns?: string[];
   /**
    * Optional list view columns defined at the dashboard level (in the “Follow-up Config (JSON)” column).
@@ -2139,6 +2151,10 @@ export interface FormConfig {
    * Use this to explain the meaning of icons used in rule-based columns (e.g., warning/check/error).
    */
   listViewLegend?: ListViewLegendItem[];
+  /**
+   * Optional legend layout columns for the list-view bottom legend (recommended: `listView.legendColumns`).
+   */
+  listViewLegendColumns?: number;
   /**
    * Optional override for the list view search UI/behavior (recommended: `listView.search`).
    */
@@ -3275,8 +3291,21 @@ export type ListViewOpenViewConfig =
 export interface ListViewRuleCase {
   when?: ListViewRuleWhen;
   text: LocalizedString;
+  /**
+   * When true, hide the case text and render only the icon/action affordance.
+   * The text value is still used for accessibility labels.
+   */
+  hideText?: boolean;
   style?: ListViewRuleCellStyle;
   icon?: ListViewRuleIcon;
+  /**
+   * Optional inline actions rendered side by side inside the same table cell.
+   * Useful for compact action columns (for example: view + copy icons in one column).
+   *
+   * When defined, each action is rendered as its own clickable affordance and the
+   * case-level text/icon can be hidden via `hideText: true`.
+   */
+  actions?: ListViewRuleAction[];
   /**
    * Optional field id containing a URL to open when the user clicks this cell.
    *
@@ -3292,6 +3321,31 @@ export interface ListViewRuleCase {
   /**
    * When `openView` resolves to `button`, the BUTTON field id (or encoded id via `__ckQIdx=`) to trigger.
    * When omitted, falls back to the column-level `openButtonId`.
+   */
+  openButtonId?: string;
+}
+
+export interface ListViewRuleAction {
+  text: LocalizedString;
+  /**
+   * When true, hide the action text and render only the icon/action affordance.
+   * The text value is still used for accessibility labels.
+   */
+  hideText?: boolean;
+  style?: ListViewRuleCellStyle;
+  icon?: ListViewRuleIcon;
+  /**
+   * Optional field id containing a URL to open when the user clicks this action.
+   */
+  hrefFieldId?: string;
+  /**
+   * Optional override for which view opens when clicking this action.
+   * When omitted, falls back to case-level `openView`, then column-level `openView`, then `auto`.
+   */
+  openView?: ListViewOpenViewConfig;
+  /**
+   * When `openView` resolves to `button`, the BUTTON field id (or encoded id via `__ckQIdx=`) to trigger.
+   * When omitted, falls back to case-level `openButtonId`, then column-level `openButtonId`.
    */
   openButtonId?: string;
 }
@@ -3441,6 +3495,20 @@ export interface ListViewConfig {
    */
   headerSortEnabled?: boolean;
   /**
+   * Optional UI setting: hide the table header row in list view table mode.
+   *
+   * - When true, the `<thead>` row is not rendered.
+   * - Sorting remains available only through configured/default sort (header click sorting is unavailable when hidden).
+   */
+  hideHeaderRow?: boolean;
+  /**
+   * Optional UI setting: enable/disable opening records by clicking the table row/card container.
+   *
+   * - When true/omitted (default), row/card container clicks can open the record.
+   * - When false, only explicit action icons/buttons are clickable.
+   */
+  rowClickEnabled?: boolean;
+  /**
    * Optional list search configuration (defaults to text search).
    */
   search?: ListViewSearchConfig;
@@ -3448,6 +3516,13 @@ export interface ListViewConfig {
    * Optional legend shown below the list view table to explain icons/visual indicators.
    */
   legend?: ListViewLegendItem[];
+  /**
+   * Optional legend layout columns for the list view bottom legend.
+   *
+   * - Default: 1
+   * - Typical use: set to 2 when the legend has many entries.
+   */
+  legendColumns?: number;
   defaultSort?: {
     fieldId: string;
     direction?: 'asc' | 'desc';

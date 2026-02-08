@@ -103,6 +103,55 @@ describe('listViewRuleColumns', () => {
     const submit = evaluateListViewRuleColumnCell(colSubmit, { status: 'Anything' } as any);
     expect(submit?.openView).toBe('submit');
   });
-});
 
+  it('supports inline actions rendered from a single rule case', () => {
+    const col: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      openView: 'summary',
+      cases: [
+        {
+          when: { fieldId: 'status', equals: 'Closed' },
+          text: 'Actions',
+          hideText: true,
+          actions: [
+            { text: 'View', hideText: true, icon: 'view', openView: 'summary' },
+            { text: 'Copy', hideText: true, icon: 'copy', openView: 'copy' }
+          ]
+        }
+      ]
+    };
+    const cell = evaluateListViewRuleColumnCell(col, { status: 'Closed' } as any);
+    expect(cell?.hideText).toBe(true);
+    expect(Array.isArray(cell?.actions)).toBe(true);
+    expect(cell?.actions?.length).toBe(2);
+    expect(cell?.actions?.[0]?.openView).toBe('summary');
+    expect(cell?.actions?.[1]?.openView).toBe('copy');
+    expect(cell?.actions?.[1]?.icon).toBe('copy');
+  });
+
+  it('collects href dependencies from inline actions', () => {
+    const col: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      cases: [
+        {
+          text: 'Actions',
+          actions: [
+            { text: 'View', icon: 'view', hrefFieldId: 'pdfUrl' },
+            { text: 'Copy', icon: 'copy' }
+          ]
+        }
+      ],
+      default: {
+        text: 'Fallback',
+        actions: [{ text: 'Open', icon: 'view', hrefFieldId: 'altUrl' }]
+      }
+    };
+    const deps = collectListViewRuleColumnDependencies(col);
+    expect(deps.sort()).toEqual(['pdfUrl', 'altUrl'].sort());
+  });
+});
 

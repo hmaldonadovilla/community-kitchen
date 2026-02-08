@@ -105,10 +105,13 @@ export class DefinitionBuilder {
       form.listViewMetaColumns,
       form.listViewColumns,
       form.listViewLegend,
+      form.listViewLegendColumns,
       form.listViewTitle,
       form.listViewDefaultSort,
       form.listViewPageSize,
       form.listViewPaginationControlsEnabled,
+      form.listViewHideHeaderRow,
+      form.listViewRowClickEnabled,
       form.listViewSearch
     );
     if (listView && form.listViewHeaderSortEnabled !== undefined) {
@@ -511,10 +514,13 @@ export class DefinitionBuilder {
     metaColumns?: string[],
     dashboardColumns?: ListViewConfig['columns'],
     legend?: ListViewConfig['legend'],
+    legendColumnsOverride?: ListViewConfig['legendColumns'],
     title?: ListViewConfig['title'],
     defaultSortOverride?: ListViewConfig['defaultSort'],
     pageSizeOverride?: ListViewConfig['pageSize'],
     paginationControlsEnabledOverride?: ListViewConfig['paginationControlsEnabled'],
+    hideHeaderRowOverride?: ListViewConfig['hideHeaderRow'],
+    rowClickEnabledOverride?: ListViewConfig['rowClickEnabled'],
     searchOverride?: ListViewConfig['search']
   ): ListViewConfig | undefined {
     const listQuestions = questions.filter(q => q.listView);
@@ -558,8 +564,14 @@ export class DefinitionBuilder {
     // Allow explicit empty title ("") to hide the list view title in the UI.
     if (title !== undefined) out.title = title;
     if (legend && Array.isArray(legend) && legend.length) out.legend = legend;
+    if (legendColumnsOverride !== undefined) {
+      const n = Number(legendColumnsOverride);
+      if (Number.isFinite(n) && n > 0) out.legendColumns = Math.max(1, Math.min(2, Math.round(n)));
+    }
     if (pageSizeOverride && Number.isFinite(pageSizeOverride)) out.pageSize = pageSizeOverride;
     if (paginationControlsEnabledOverride !== undefined) out.paginationControlsEnabled = Boolean(paginationControlsEnabledOverride);
+    if (hideHeaderRowOverride !== undefined) out.hideHeaderRow = Boolean(hideHeaderRowOverride);
+    if (rowClickEnabledOverride !== undefined) out.rowClickEnabled = Boolean(rowClickEnabledOverride);
     if (searchOverride) out.search = searchOverride;
     return out;
   }

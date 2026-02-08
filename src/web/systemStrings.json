@@ -245,7 +245,8 @@
       "external": { "en": "External link", "fr": "Lien externe", "nl": "Externe link" },
       "lock": { "en": "Locked", "fr": "Verrouillé", "nl": "Vergrendeld" },
       "edit": { "en": "Edit", "fr": "Modifier", "nl": "Bewerken" },
-      "view": { "en": "View", "fr": "Voir", "nl": "Bekijken" }
+      "view": { "en": "View", "fr": "Voir", "nl": "Bekijken" },
+      "copy": { "en": "Copy", "fr": "Copier", "nl": "Kopieren" }
     }
   },
   "overlay": {

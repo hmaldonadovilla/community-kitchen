@@ -2300,6 +2300,18 @@ components:
           description: Deprecated. Use `listView.legend`.
           items:
             $ref: '#/components/schemas/ListViewLegendItem'
+        listViewLegendColumns:
+          deprecated: true
+          type: integer
+          description: Deprecated. Use `listView.legendColumns`.
+        listViewHideHeaderRow:
+          deprecated: true
+          type: boolean
+          description: Deprecated. Use `listView.hideHeaderRow`.
+        listViewRowClickEnabled:
+          deprecated: true
+          type: boolean
+          description: Deprecated. Use `listView.rowClickEnabled`.
         autoSave:
           type: object
           description: |
@@ -3823,12 +3835,20 @@ components:
       properties:
         text:
           $ref: '#/components/schemas/LocalizedString'
+        hideText:
+          type: boolean
+          description: When true, hide the text label and render icon/action affordances only.
         style:
           type: string
           enum: [link, warning, muted, default]
         icon:
           type: string
           enum: [warning, check, error, info, external, lock, edit, copy, view]
+        actions:
+          type: array
+          description: Optional inline actions rendered side by side inside the same table cell.
+          items:
+            $ref: '#/components/schemas/ListViewRuleAction'
         hrefFieldId:
           type: string
           description: 'Optional URL field to open when `style: "link"`.'
@@ -3850,12 +3870,20 @@ components:
           description: Condition for the case; omitted means "always".
         text:
           $ref: '#/components/schemas/LocalizedString'
+        hideText:
+          type: boolean
+          description: When true, hide the text label and render icon/action affordances only.
         style:
           type: string
           enum: [link, warning, muted, default]
         icon:
           type: string
           enum: [warning, check, error, info, external, lock, edit, copy, view]
+        actions:
+          type: array
+          description: Optional inline actions rendered side by side inside the same table cell.
+          items:
+            $ref: '#/components/schemas/ListViewRuleAction'
         hrefFieldId:
           type: string
           description: |
@@ -3868,6 +3896,36 @@ components:
             Optional override for which view opens when clicking this case's computed cell.
 
             If `{ target, rowClick: true }`, then clicking **any cell** on the row uses the same open target (not just the computed cell).
+        openButtonId:
+          type: string
+          description: |
+            When `openView.target: "button"` (or `openView: "button"`), the BUTTON id (or encoded id via `__ckQIdx=`) to trigger.
+      required:
+        - text
+
+    ListViewRuleAction:
+      type: object
+      properties:
+        text:
+          $ref: '#/components/schemas/LocalizedString'
+        hideText:
+          type: boolean
+          description: When true, hide the action text and render only the icon/action affordance.
+        style:
+          type: string
+          enum: [link, warning, muted, default]
+        icon:
+          type: string
+          enum: [warning, check, error, info, external, lock, edit, copy, view]
+        hrefFieldId:
+          type: string
+          description: |
+            Optional URL field to open when `style: "link"`.
+        openView:
+          $ref: '#/components/schemas/ListViewOpenViewConfig'
+          description: |
+            Optional override for which view opens when clicking this action.
+            Falls back to case-level `openView`, then column-level `openView`.
         openButtonId:
           type: string
           description: |
@@ -4118,6 +4176,20 @@ components:
 
             - When `true` or omitted (default), sortable columns render as clickable headers that update the sort field/direction.
             - When `false`, headers are non-interactive (the list still uses `defaultSort`).
+        hideHeaderRow:
+          type: boolean
+          description: |
+            Optional UI setting: hide the table header row in list view table mode.
+
+            - When `true`, the `<thead>` row is not rendered.
+            - Header-click sorting is unavailable when headers are hidden (default sort still applies).
+        rowClickEnabled:
+          type: boolean
+          description: |
+            Optional UI setting: enable/disable opening records by clicking the row/card container.
+
+            - When `true` or omitted (default), clicking a table row/card can open the record.
+            - When `false`, only explicit action icons/buttons are clickable.
         pageSize:
           type: integer
           description: Max rows per page (default 10, capped at 50).
@@ -4129,6 +4201,13 @@ components:
             Notes:
             - Server list endpoints remain paginated for performance; this setting only controls the **UI** paging controls.
             - Default is true.
+        legendColumns:
+          type: integer
+          description: |
+            Optional legend layout columns for the bottom legend.
+
+            - Default: 1
+            - Set to 2 for dense legends with many entries.
       description: Configuration for list views showing saved submissions.
       example:
         columns:
@@ -4885,6 +4964,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ListViewLegendItem'
+        listViewLegendColumns:
+          type: integer
+        listViewHideHeaderRow:
+          type: boolean
+        listViewRowClickEnabled:
+          type: boolean
         listViewSearch:
           type: object
           description: List view search config (dashboard-level).

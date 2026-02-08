@@ -179,6 +179,63 @@ describe('Dashboard', () => {
     expect(forms[0].listViewView).toEqual({ mode: 'cards', toggleEnabled: true, defaultMode: 'cards' });
   });
 
+  test('getForms parses list view hideHeaderRow, rowClickEnabled and legendColumns from dashboard config (listView)', () => {
+    const configJson = JSON.stringify({
+      listView: { hideHeaderRow: true, rowClickEnabled: false, legendColumns: 2 }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0] as any).listViewHideHeaderRow).toBe(true);
+    expect((forms[0] as any).listViewRowClickEnabled).toBe(false);
+    expect((forms[0] as any).listViewLegendColumns).toBe(2);
+  });
+
+  test('getForms parses list view inline rule actions from dashboard config (listView.columns)', () => {
+    const configJson = JSON.stringify({
+      listView: {
+        columns: [
+          {
+            type: 'rule',
+            fieldId: 'action',
+            label: { EN: 'Action' },
+            cases: [
+              {
+                text: { EN: 'Actions' },
+                hideText: true,
+                actions: [
+                  { text: { EN: 'View' }, hideText: true, icon: 'view', openView: 'summary' },
+                  { text: { EN: 'Copy' }, hideText: true, icon: 'copy', openView: 'copy' }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    const cols = forms[0].listViewColumns || [];
+    const action = cols.find(c => (c as any).fieldId === 'action') as any;
+    expect(action?.cases?.[0]?.hideText).toBe(true);
+    expect(action?.cases?.[0]?.actions?.length).toBe(2);
+    expect(action?.cases?.[0]?.actions?.[0]?.icon).toBe('view');
+    expect(action?.cases?.[0]?.actions?.[1]?.icon).toBe('copy');
+  });
+
   test('getForms parses list view column showIn config from dashboard config (listView.columns)', () => {
     const configJson = JSON.stringify({
       listView: {
