@@ -63,6 +63,43 @@ const isDialogEmptyValue = (value: FieldValue): boolean => {
   return false;
 };
 
+export const shouldSuppressInitialDateChangeDialog = (args: {
+  scope: FieldChangeDialogScope;
+  fieldType?: string;
+  fieldPath: string;
+  fieldId: string;
+  prevValue: FieldValue;
+  nextValue: FieldValue;
+  baselineValues?: Record<string, FieldValue> | null;
+  initialEntryInProgressByFieldPath: Record<string, boolean>;
+  initialEntryCompletedByFieldPath: Record<string, boolean>;
+}): boolean => {
+  const fieldPath = normalizeId(args.fieldPath);
+  if (!fieldPath) return false;
+  const fieldType = normalizeId(args.fieldType).toUpperCase();
+  if (args.scope !== 'top' || fieldType !== 'DATE') return false;
+  if (args.initialEntryCompletedByFieldPath[fieldPath]) return false;
+  void args.baselineValues;
+  void args.fieldId;
+  if (isDialogEmptyValue(args.prevValue) && !isDialogEmptyValue(args.nextValue)) {
+    args.initialEntryInProgressByFieldPath[fieldPath] = true;
+  }
+  return args.initialEntryInProgressByFieldPath[fieldPath] === true;
+};
+
+export const finalizeInitialDateChangeDialogEntry = (args: {
+  fieldPath: string;
+  initialEntryInProgressByFieldPath: Record<string, boolean>;
+  initialEntryCompletedByFieldPath: Record<string, boolean>;
+}): boolean => {
+  const fieldPath = normalizeId(args.fieldPath);
+  if (!fieldPath) return false;
+  if (!args.initialEntryInProgressByFieldPath[fieldPath]) return false;
+  delete args.initialEntryInProgressByFieldPath[fieldPath];
+  args.initialEntryCompletedByFieldPath[fieldPath] = true;
+  return true;
+};
+
 const resolveLineItemFieldConfig = (
   definition: WebFormDefinition,
   groupId: string,
@@ -164,6 +201,34 @@ export const evaluateFieldChangeDialogWhen = (args: {
       resolveRowValue({ fieldId: fid, rowValues, parentValues, topValues: values, linePrefix: normalizedGroupId })
   };
   return matchesWhenClause(when, ctx, { rowId: normalizedRowId, linePrefix: normalizedGroupId });
+};
+
+export const evaluateFieldChangeDialogWhenWithFallback = (args: {
+  when: WhenClause | undefined;
+  scope: FieldChangeDialogScope;
+  fieldId: string;
+  groupId?: string;
+  rowId?: string;
+  nextValue: FieldValue;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  fallbackValues?: Record<string, FieldValue>;
+  fallbackLineItems?: LineItemState;
+}): { matches: boolean; matchedOn: 'current' | 'fallback' | null } => {
+  const { fallbackValues, fallbackLineItems, ...baseArgs } = args;
+  if (evaluateFieldChangeDialogWhen(baseArgs)) {
+    return { matches: true, matchedOn: 'current' };
+  }
+  if (!fallbackValues || !fallbackLineItems) {
+    return { matches: false, matchedOn: null };
+  }
+  const fallbackMatches = evaluateFieldChangeDialogWhen({
+    ...baseArgs,
+    values: fallbackValues,
+    lineItems: fallbackLineItems
+  });
+  if (!fallbackMatches) return { matches: false, matchedOn: null };
+  return { matches: true, matchedOn: 'fallback' };
 };
 
 const updateRowField = (

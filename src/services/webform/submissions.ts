@@ -1,5 +1,6 @@
 import {
   AutoIncrementConfig,
+  AuditLoggingConfig,
   DedupRule,
   FormConfig,
   QuestionConfig,
@@ -165,7 +166,14 @@ export class SubmissionService {
       existingRowIdx = rowIndex >= 2 ? rowIndex - 2 : -1;
     }
 
-    const valuesArray = new Array(headers.length).fill('');
+    const existingRowValues =
+      existingRowIdx >= 0
+        ? this.normalizeRowValues(
+            sheet.getRange(2 + existingRowIdx, 1, 1, headers.length).getValues()[0] || [],
+            headers.length
+          )
+        : undefined;
+    const valuesArray = existingRowValues ? [...existingRowValues] : new Array(headers.length).fill('');
     const setIf = (idx: number | undefined, value: any) => {
       if (!idx) return;
       valuesArray[idx - 1] = value ?? '';
@@ -177,8 +185,8 @@ export class SubmissionService {
 
     // Preserve createdAt if updating
     let createdAtVal: any = now;
-    if (existingRowIdx >= 0 && columns.createdAt) {
-      const existing = sheet.getRange(2 + existingRowIdx, columns.createdAt, 1, 1).getValues()[0][0];
+    if (existingRowValues && columns.createdAt) {
+      const existing = existingRowValues[columns.createdAt - 1];
       createdAtVal = existing || now;
     }
     const updatedAtVal = existingRowIdx >= 0 ? now : createdAtVal;
@@ -187,10 +195,10 @@ export class SubmissionService {
 
     // DataVersion: monotonic server-owned integer
     const previousVersion = (() => {
-      if (existingRowIdx < 0) return 0;
+      if (!existingRowValues) return 0;
       if (!columns.dataVersion) return 0;
       try {
-        const raw = sheet.getRange(2 + existingRowIdx, columns.dataVersion, 1, 1).getValues()[0][0];
+        const raw = existingRowValues[columns.dataVersion - 1];
         const n = Number(raw);
         return Number.isFinite(n) && n > 0 ? n : 0;
       } catch (_) {
@@ -213,9 +221,9 @@ export class SubmissionService {
         clientVersion < previousVersion
       ) {
         const existingUpdatedAt = (() => {
-          if (!columns.updatedAt) return undefined;
+          if (!columns.updatedAt || !existingRowValues) return undefined;
           try {
-            const raw = sheet.getRange(2 + existingRowIdx, columns.updatedAt, 1, 1).getValues()[0][0];
+            const raw = existingRowValues[columns.updatedAt - 1];
             return this.asIso(raw);
           } catch (_) {
             return undefined;
@@ -258,9 +266,9 @@ export class SubmissionService {
       const statusIdx = statusFieldIdx || metaStatusIdx;
 
       const readCellText = (colIdx?: number): string => {
-        if (!colIdx || existingRowIdx < 0) return '';
+        if (!colIdx || !existingRowValues) return '';
         try {
-          const raw = sheet.getRange(2 + existingRowIdx, colIdx, 1, 1).getValues()[0][0];
+          const raw = existingRowValues[colIdx - 1];
           return raw === undefined || raw === null ? '' : raw.toString();
         } catch (_) {
           return '';
@@ -465,7 +473,7 @@ export class SubmissionService {
 
     const destinationRowNumber = existingRowIdx >= 0 ? (2 + existingRowIdx) : (sheet.getLastRow() + 1);
     if (existingRowIdx >= 0) {
-      sheet.getRange(destinationRowNumber, 1, 1, headers.length).setValues([valuesArray]);
+      this.writeRowAtomicDelta(sheet, destinationRowNumber, existingRowValues || new Array(headers.length).fill(''), valuesArray);
     } else {
       sheet.appendRow(valuesArray);
     }
@@ -509,6 +517,24 @@ export class SubmissionService {
       });
     } catch (_) {
       // ignore
+    }
+
+    // Best-effort: write audit rows to the dedicated audit sheet when enabled for this form.
+    try {
+      this.writeAuditRows({
+        form,
+        questions,
+        columns,
+        destinationName,
+        recordId,
+        beforeRowValues: existingRowValues,
+        afterRowValues: valuesArray,
+        changedAt: now,
+        deviceInfo: (formObject as any).__ckDeviceInfo,
+        auditAction: (formObject as any).__ckAuditAction
+      });
+    } catch (_) {
+      // ignore audit logging failures so primary saves are not blocked
     }
 
     return { success: true, message: 'Saved to sheet', meta };
@@ -1255,6 +1281,334 @@ export class SubmissionService {
       return updated;
     }
     return null;
+  }
+
+  private writeRowAtomicDelta(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    rowNumber: number,
+    previousRowValues: any[],
+    nextRowValues: any[]
+  ): void {
+    const width = Math.max(nextRowValues.length, previousRowValues.length);
+    if (width <= 0) return;
+    const prev = this.normalizeRowValues(previousRowValues, width);
+    const next = this.normalizeRowValues(nextRowValues, width);
+    const changed: number[] = [];
+    for (let i = 0; i < width; i += 1) {
+      if (!this.cellValuesEqual(prev[i], next[i])) changed.push(i);
+    }
+    if (!changed.length) return;
+    const start = changed[0];
+    const end = changed[changed.length - 1];
+    const patch = prev.slice(start, end + 1);
+    changed.forEach(idx => {
+      patch[idx - start] = next[idx];
+    });
+    sheet.getRange(rowNumber, start + 1, 1, patch.length).setValues([patch]);
+  }
+
+  private writeAuditRows(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    columns: HeaderColumns;
+    destinationName: string;
+    recordId: string;
+    beforeRowValues?: any[];
+    afterRowValues: any[];
+    changedAt: Date;
+    deviceInfo?: any;
+    auditAction?: any;
+  }): void {
+    const { form, questions, columns, destinationName, recordId, beforeRowValues, afterRowValues, changedAt, deviceInfo, auditAction } = args;
+    const cfg = this.resolveAuditLoggingConfig(form.auditLogging);
+    if (!cfg) return;
+
+    const shouldWriteChangeRows = this.shouldWriteChangeAuditRows(cfg, form, columns, beforeRowValues, afterRowValues);
+    const auditRows: any[][] = [];
+    const normalizedDeviceInfo = this.normalizeDeviceInfo(deviceInfo);
+
+    if (shouldWriteChangeRows) {
+      const changes = this.collectAuditChanges(questions, columns, beforeRowValues, afterRowValues);
+      changes.forEach(change => {
+        auditRows.push([
+          changedAt,
+          recordId,
+          'change',
+          change.fieldPath,
+          this.serializeAuditValue(change.beforeValue),
+          this.serializeAuditValue(change.afterValue),
+          '',
+          normalizedDeviceInfo
+        ]);
+      });
+    }
+
+    const actionId = auditAction === undefined || auditAction === null ? '' : auditAction.toString().trim();
+    const snapshotButtonSet = new Set((cfg.snapshotButtons || []).map(v => v.toLowerCase()));
+    if (actionId && snapshotButtonSet.has(actionId.toLowerCase())) {
+      const snapshotRecord = this.buildSubmissionRecord(
+        form.configSheet,
+        questions,
+        columns,
+        this.normalizeRowValues(afterRowValues, Math.max(afterRowValues.length, 1)),
+        recordId
+      );
+      const snapshotValue = snapshotRecord ? this.serializeAuditValue(snapshotRecord) : this.serializeAuditValue({ id: recordId });
+      auditRows.push([
+        changedAt,
+        recordId,
+        'snapshot',
+        '',
+        '',
+        '',
+        snapshotValue,
+        normalizedDeviceInfo
+      ]);
+    }
+
+    if (!auditRows.length) return;
+    const auditSheet = this.ensureAuditSheet(destinationName, cfg.sheetName);
+    const startRow = Math.max(2, auditSheet.getLastRow() + 1);
+    const width = auditRows[0]?.length || 0;
+    if (!width) return;
+    auditSheet.getRange(startRow, 1, auditRows.length, width).setValues(auditRows);
+  }
+
+  private resolveAuditLoggingConfig(value?: AuditLoggingConfig): AuditLoggingConfig | undefined {
+    if (!value) return undefined;
+    if (value.enabled === false) return undefined;
+    const out: AuditLoggingConfig = {};
+    if (value.enabled !== undefined) out.enabled = Boolean(value.enabled);
+    if (value.sheetName && value.sheetName.toString().trim()) out.sheetName = value.sheetName.toString().trim();
+    if (Array.isArray(value.statuses) && value.statuses.length) {
+      const statuses = Array.from(
+        new Set(
+          value.statuses
+            .map(status => (status === undefined || status === null ? '' : status.toString().trim()))
+            .filter(Boolean)
+        )
+      );
+      if (statuses.length) out.statuses = statuses;
+    }
+    if (Array.isArray(value.snapshotButtons) && value.snapshotButtons.length) {
+      const snapshotButtons = Array.from(
+        new Set(
+          value.snapshotButtons
+            .map(buttonId => (buttonId === undefined || buttonId === null ? '' : buttonId.toString().trim()))
+            .filter(Boolean)
+        )
+      );
+      if (snapshotButtons.length) out.snapshotButtons = snapshotButtons;
+    }
+    return Object.keys(out).length ? out : { enabled: true };
+  }
+
+  private shouldWriteChangeAuditRows(
+    cfg: AuditLoggingConfig,
+    form: FormConfig,
+    columns: HeaderColumns,
+    beforeRowValues?: any[],
+    afterRowValues?: any[]
+  ): boolean {
+    const statuses = (cfg.statuses || [])
+      .map(status => (status === undefined || status === null ? '' : status.toString().trim().toLowerCase()))
+      .filter(Boolean);
+    if (!statuses.length) return true;
+    const allowed = new Set(statuses);
+    const before = this.readStatusValue(form, columns, beforeRowValues).toLowerCase();
+    const after = this.readStatusValue(form, columns, afterRowValues).toLowerCase();
+    if (before && allowed.has(before)) return true;
+    if (after && allowed.has(after)) return true;
+    return false;
+  }
+
+  private readStatusValue(form: FormConfig, columns: HeaderColumns, rowValues?: any[]): string {
+    if (!rowValues || !rowValues.length) return '';
+    const statusFieldId = form.followupConfig?.statusFieldId;
+    const statusFieldIdx =
+      statusFieldId && columns.fields[statusFieldId] ? (columns.fields[statusFieldId] as number) : undefined;
+    const fieldValue = statusFieldIdx ? rowValues[statusFieldIdx - 1] : undefined;
+    const metaValue = columns.status ? rowValues[columns.status - 1] : undefined;
+    const resolved = fieldValue !== undefined && fieldValue !== null && fieldValue !== '' ? fieldValue : metaValue;
+    return resolved === undefined || resolved === null ? '' : resolved.toString().trim();
+  }
+
+  private collectAuditChanges(
+    questions: QuestionConfig[],
+    columns: HeaderColumns,
+    beforeRowValues?: any[],
+    afterRowValues?: any[]
+  ): Array<{ fieldPath: string; beforeValue: any; afterValue: any }> {
+    const before = beforeRowValues ? this.normalizeRowValues(beforeRowValues, Math.max(beforeRowValues.length, afterRowValues?.length || 0)) : [];
+    const after = afterRowValues ? this.normalizeRowValues(afterRowValues, Math.max(afterRowValues.length, before.length)) : [];
+    const changes: Array<{ fieldPath: string; beforeValue: any; afterValue: any }> = [];
+
+    const activeQuestions = (questions || []).filter(q => q && q.type !== 'BUTTON');
+    activeQuestions.forEach(question => {
+      const colIdx = columns.fields[question.id];
+      if (!colIdx) return;
+      const previous = before[colIdx - 1];
+      const next = after[colIdx - 1];
+      if (question.type === 'LINE_ITEM_GROUP') {
+        const previousParsed = this.parseAuditJson(previous);
+        const nextParsed = this.parseAuditJson(next);
+        if (
+          (previousParsed.parsed || nextParsed.parsed) &&
+          !this.auditValuesEqual(previousParsed.value, nextParsed.value)
+        ) {
+          this.collectDeepAuditDiffs(question.id, previousParsed.value, nextParsed.value, changes);
+          return;
+        }
+      }
+      if (!this.cellValuesEqual(previous, next)) {
+        changes.push({ fieldPath: question.id, beforeValue: previous, afterValue: next });
+      }
+    });
+
+    return changes;
+  }
+
+  private collectDeepAuditDiffs(
+    path: string,
+    beforeValue: any,
+    afterValue: any,
+    out: Array<{ fieldPath: string; beforeValue: any; afterValue: any }>
+  ): void {
+    if (this.auditValuesEqual(beforeValue, afterValue)) return;
+
+    const beforeIsArray = Array.isArray(beforeValue);
+    const afterIsArray = Array.isArray(afterValue);
+    if (beforeIsArray || afterIsArray) {
+      const beforeArray = beforeIsArray ? (beforeValue as any[]) : [];
+      const afterArray = afterIsArray ? (afterValue as any[]) : [];
+      const max = Math.max(beforeArray.length, afterArray.length);
+      for (let i = 0; i < max; i += 1) {
+        this.collectDeepAuditDiffs(`${path}[${i}]`, beforeArray[i], afterArray[i], out);
+      }
+      return;
+    }
+
+    const beforeObj = this.isPlainAuditObject(beforeValue) ? (beforeValue as Record<string, any>) : null;
+    const afterObj = this.isPlainAuditObject(afterValue) ? (afterValue as Record<string, any>) : null;
+    if (beforeObj || afterObj) {
+      const keys = Array.from(
+        new Set([
+          ...Object.keys(beforeObj || {}),
+          ...Object.keys(afterObj || {})
+        ])
+      ).filter(key => key && !key.startsWith('__ck'));
+      keys.forEach(key => {
+        const nextPath = path ? `${path}.${key}` : key;
+        this.collectDeepAuditDiffs(nextPath, beforeObj ? beforeObj[key] : undefined, afterObj ? afterObj[key] : undefined, out);
+      });
+      return;
+    }
+
+    out.push({ fieldPath: path, beforeValue, afterValue });
+  }
+
+  private ensureAuditSheet(destinationName: string, configuredName?: string): GoogleAppsScript.Spreadsheet.Sheet {
+    const sheetName = (configuredName || `${destinationName} Audit`).toString().trim() || `${destinationName} Audit`;
+    let sheet = this.ss.getSheetByName(sheetName);
+    if (!sheet) {
+      sheet = this.ss.insertSheet(sheetName);
+    }
+    const headers = ['date_time', 'recordId', 'auditType', 'fieldPath', 'beforeValue', 'afterValue', 'snapshot', 'deviceInfo'];
+    const existing = this.normalizeRowValues(sheet.getRange(1, 1, 1, headers.length).getValues()[0] || [], headers.length).map(v =>
+      v === undefined || v === null ? '' : v.toString()
+    );
+    const needsHeader = headers.some((header, idx) => existing[idx] !== header);
+    if (needsHeader) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    }
+    return sheet;
+  }
+
+  private normalizeDeviceInfo(raw: any): string {
+    if (raw === undefined || raw === null || raw === '') return '';
+    if (typeof raw === 'string') return raw.toString().trim();
+    return this.serializeAuditValue(raw);
+  }
+
+  private parseAuditJson(value: any): { parsed: boolean; value: any } {
+    if (typeof value !== 'string') return { parsed: false, value };
+    const text = value.toString().trim();
+    if (!text) return { parsed: false, value };
+    if (!(text.startsWith('[') || text.startsWith('{'))) return { parsed: false, value };
+    try {
+      return { parsed: true, value: JSON.parse(text) };
+    } catch (_) {
+      return { parsed: false, value };
+    }
+  }
+
+  private serializeAuditValue(value: any): string {
+    if (value === undefined || value === null) return '';
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
+    const normalized = this.normalizeAuditValue(value);
+    try {
+      return JSON.stringify(normalized);
+    } catch (_) {
+      try {
+        return value.toString();
+      } catch (_) {
+        return '';
+      }
+    }
+  }
+
+  private normalizeAuditValue(value: any): any {
+    if (value === undefined || value === null) return value;
+    if (value instanceof Date) return value.toISOString();
+    if (Array.isArray(value)) return value.map(entry => this.normalizeAuditValue(entry));
+    if (this.isPlainAuditObject(value)) {
+      const out: Record<string, any> = {};
+      Object.keys(value)
+        .filter(key => key && !key.startsWith('__ck'))
+        .sort()
+        .forEach(key => {
+          out[key] = this.normalizeAuditValue((value as any)[key]);
+        });
+      return out;
+    }
+    return value;
+  }
+
+  private auditValuesEqual(a: any, b: any): boolean {
+    const left = this.serializeAuditValue(this.normalizeAuditValue(a));
+    const right = this.serializeAuditValue(this.normalizeAuditValue(b));
+    return left === right;
+  }
+
+  private isPlainAuditObject(value: any): boolean {
+    if (!value || typeof value !== 'object') return false;
+    if (Array.isArray(value)) return false;
+    if (value instanceof Date) return false;
+    return true;
+  }
+
+  private normalizeRowValues(rowValues: any[], width: number): any[] {
+    const normalized = Array.isArray(rowValues) ? [...rowValues] : [];
+    if (normalized.length < width) {
+      return normalized.concat(new Array(width - normalized.length).fill(''));
+    }
+    if (normalized.length > width) {
+      return normalized.slice(0, width);
+    }
+    return normalized;
+  }
+
+  private cellValuesEqual(a: any, b: any): boolean {
+    if (a === b) return true;
+    if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+    if (a instanceof Date || b instanceof Date) {
+      const aIso = this.asIso(a);
+      const bIso = this.asIso(b);
+      return aIso === bIso;
+    }
+    return this.serializeAuditValue(a) === this.serializeAuditValue(b);
   }
 
   private findHeader(headers: string[], labels: string[]): number | undefined {

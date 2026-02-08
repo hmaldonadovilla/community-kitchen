@@ -154,7 +154,13 @@ export interface LineItemGroupQuestionCtx {
   lineItems: LineItemState;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
 
+  /**
+   * True only while a save/submit operation is in flight.
+   * Keep separate from lock-state so bypass fields remain editable under a field disable rule.
+   */
+  isSubmitting?: boolean;
   submitting: boolean;
+  isFieldLockedByDedup?: (fieldId: string) => boolean;
 
   errors: FormErrors;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
@@ -293,7 +299,9 @@ export const LineItemGroupQuestion: React.FC<{
     setValues,
     lineItems,
     setLineItems,
+    isSubmitting: isSubmittingFromCtx,
     submitting,
+    isFieldLockedByDedup,
     errors,
     setErrors,
     warningByField,
@@ -362,6 +370,25 @@ export const LineItemGroupQuestion: React.FC<{
     groupHelperText && !submitting && q.readOnly !== true && q.ui?.renderAsLabel !== true
       ? <div className="ck-field-helper">{groupHelperText}</div>
       : null;
+  const isSubmittingNow = isSubmittingFromCtx === true;
+  const isLineFieldLockedByRule = React.useCallback(
+    (fieldId: string | undefined | null): boolean => {
+      if (isSubmittingNow) return true;
+      const id = fieldId !== undefined && fieldId !== null ? fieldId.toString().trim() : '';
+      if (!id) return submitting;
+      if (typeof isFieldLockedByDedup === 'function') return isFieldLockedByDedup(id);
+      return submitting;
+    },
+    [isFieldLockedByDedup, isSubmittingNow, submitting]
+  );
+  const isLineFieldInteractionBlocked = React.useCallback(
+    (field: any): boolean => isLineFieldLockedByRule(field?.id),
+    [isLineFieldLockedByRule]
+  );
+  const isLineFieldInputDisabled = React.useCallback(
+    (field: any): boolean => isLineFieldInteractionBlocked(field) || field?.readOnly === true,
+    [isLineFieldInteractionBlocked]
+  );
 
   const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
   // IMPORTANT: section selectors can commit their value on blur (e.g., SearchableSelect).
@@ -2579,8 +2606,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 
             const fieldPath = `${q.id}__${field.id}__${row.id}`;
             const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+            const fieldInteractionBlocked = isLineFieldInteractionBlocked(field);
+            const fieldInputDisabled = isLineFieldInputDisabled(field);
             const isEditableField =
-              !submitting &&
+              !fieldInteractionBlocked &&
               (field as any)?.readOnly !== true &&
               (field as any)?.ui?.renderAsLabel !== true &&
               (field as any)?.renderAsLabel !== true &&
@@ -2655,7 +2684,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     required: !!field.required,
                     searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
                     override: (field as any)?.ui?.control,
-                    disabled: submitting || (field as any)?.readOnly === true,
+                    disabled: fieldInputDisabled,
                     onChange: next => handleLineFieldChange(q, row.id, field, next)
                   })}
                   {warningFootnote}
@@ -2718,9 +2747,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         className="ck-line-item-table__consent-checkbox"
                         checked={!!row.values[field.id]}
                         aria-label={resolveFieldLabel(field, language, field.id)}
-                        disabled={submitting || (field as any)?.readOnly === true}
+                        disabled={fieldInputDisabled}
                         onChange={e => {
-                          if (submitting || (field as any)?.readOnly === true) return;
+                          if (fieldInputDisabled) return;
                           handleLineFieldChange(q, row.id, field, e.target.checked);
                         }}
                       />
@@ -2744,9 +2773,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     <select
                       multiple
                       value={selected}
-                      disabled={submitting || (field as any)?.readOnly === true}
+                      disabled={fieldInputDisabled}
                       onChange={e => {
-                        if (submitting || (field as any)?.readOnly === true) return;
+                        if (fieldInputDisabled) return;
                         const next = Array.from(e.currentTarget.selectedOptions)
                           .map(opt => opt.value)
                           .filter(Boolean);
@@ -2766,9 +2795,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <input
                             type="checkbox"
                             checked={selected.includes(opt.value)}
-                            disabled={submitting || (field as any)?.readOnly === true}
+                            disabled={fieldInputDisabled}
                             onChange={e => {
-                              if (submitting || (field as any)?.readOnly === true) return;
+                              if (fieldInputDisabled) return;
                               const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
                               handleLineFieldChange(q, row.id, field, next);
                             }}
@@ -2850,12 +2879,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     <button
                       type="button"
                       className="ck-upload-camera-btn"
-                      disabled={submitting}
-                      style={withDisabled(cameraStyleBase, submitting)}
+                      disabled={fieldInteractionBlocked}
+                      style={withDisabled(cameraStyleBase, fieldInteractionBlocked)}
                       aria-label={leftLabel}
                       title={leftLabel}
                       onClick={() => {
-                        if (submitting) return;
+                        if (fieldInteractionBlocked) return;
                         if (viewMode) {
                           onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                           openFileOverlay({
@@ -2878,14 +2907,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     <button
                       type="button"
                       className={`ck-progress-pill ck-upload-pill-btn ck-upload-pill-btn--table ${pillClass}`}
-                      aria-disabled={submitting ? 'true' : undefined}
+                      aria-disabled={fieldInteractionBlocked ? 'true' : undefined}
                       aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                         'files.title',
                         language,
                         'Photos'
                       )} ${pillText}`}
                       onClick={() => {
-                        if (submitting) return;
+                        if (fieldInteractionBlocked) return;
                         onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                         openFileOverlay({
                           scope: 'line',
@@ -2980,8 +3009,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 >
                   <NumberStepper
                     value={numberText}
-                    disabled={submitting}
-                    readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                    disabled={fieldInteractionBlocked}
+                    readOnly={!!field.valueMap || fieldInputDisabled}
                     ariaLabel={resolveFieldLabel(field, language, field.id)}
                     placeholder={placeholder}
                     onInvalidInput={({ reason, value }) => {
@@ -3014,7 +3043,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     className="ck-paragraph-input"
                     value={fieldValue}
                     onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                    readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                    readOnly={!!field.valueMap || fieldInputDisabled}
                     rows={(field as any)?.ui?.paragraphRows || 3}
                     placeholder={placeholder}
                   />
@@ -3034,7 +3063,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   <DateInput
                     value={fieldValue}
                     language={language}
-                    readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                    readOnly={!!field.valueMap || fieldInputDisabled}
                     ariaLabel={resolveFieldLabel(field, language, field.id)}
                     onChange={next => handleLineFieldChange(q, row.id, field, next)}
                   />
@@ -3054,7 +3083,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   type="text"
                   value={fieldValue}
                   onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                  readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                  readOnly={!!field.valueMap || fieldInputDisabled}
                   placeholder={placeholder}
                 />
                 {warningFootnote}
@@ -3110,8 +3139,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 const labelText = resolveFieldLabel(field, language, field.id);
                 const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
                 const isEditableField =
-                  !submitting &&
-                  (field as any)?.readOnly !== true &&
+                  !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
                   (field as any)?.ui?.renderAsLabel !== true &&
                   (field as any)?.renderAsLabel !== true &&
                   !!(field as any)?.valueMap === false;
@@ -3628,8 +3656,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           </label>
                           <NumberStepper
                             value={numberText}
-                            disabled={submitting}
-                            readOnly={field?.readOnly === true}
+                            disabled={isLineFieldInteractionBlocked(field)}
+                            readOnly={isLineFieldInputDisabled(field)}
                             ariaLabel={labelText}
                             ariaDescribedBy={helperId}
                             placeholder={placeholder}
@@ -4576,7 +4604,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               required: !!flatField.required,
                               searchEnabled: flatField.ui?.choiceSearchEnabled ?? targetChoiceSearchDefault,
                               override: flatField.ui?.control,
-                              disabled: submitting || flatField.readOnly === true,
+                              disabled: isLineFieldInputDisabled(flatField),
                               onChange: next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)
                             })
                           )}
@@ -4628,9 +4656,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             <input
                               type="checkbox"
                               checked={!!targetRow.values[flatField.id]}
-                              disabled={submitting || flatField.readOnly === true}
+                              disabled={isLineFieldInputDisabled(flatField)}
                               onChange={e => {
-                                if (submitting || flatField.readOnly === true) return;
+                                if (isLineFieldInputDisabled(flatField)) return;
                                 handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.checked);
                               }}
                             />
@@ -4663,9 +4691,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <select
                             multiple
                             value={selected}
-                            disabled={submitting || flatField.readOnly === true}
+                            disabled={isLineFieldInputDisabled(flatField)}
                             onChange={e => {
-                              if (submitting || flatField.readOnly === true) return;
+                              if (isLineFieldInputDisabled(flatField)) return;
                               const next = Array.from(e.currentTarget.selectedOptions).map(o => o.value);
                               handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next);
                             }}
@@ -4683,9 +4711,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 <input
                                   type="checkbox"
                                   checked={selected.includes(opt.value)}
-                                  disabled={submitting || flatField.readOnly === true}
+                                  disabled={isLineFieldInputDisabled(flatField)}
                                   onChange={e => {
-                                    if (submitting || flatField.readOnly === true) return;
+                                    if (isLineFieldInputDisabled(flatField)) return;
                                     const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
                                     handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next);
                                   }}
@@ -4779,14 +4807,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             className="ck-paragraph-input"
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
-                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             rows={(flatField as any)?.ui?.paragraphRows || 4}
                           />
                         ) : flatField.type === 'DATE' ? (
                           <DateInput
                             value={fieldValue}
                             language={language}
-                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
                             onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
                           />
@@ -4795,7 +4823,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             type={flatField.type === 'DATE' ? 'date' : 'text'}
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
-                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                           />
                         )}
                         {renderErrors()}
@@ -5780,7 +5808,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 required: !!flatField.required,
                                 searchEnabled: flatField.ui?.choiceSearchEnabled ?? targetChoiceSearchDefault,
                                 override: flatField.ui?.control,
-                                disabled: submitting || flatField.readOnly === true,
+                                disabled: isLineFieldInputDisabled(flatField),
                                 onChange: next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)
                               })
                             )}
@@ -5832,9 +5860,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               <input
                                 type="checkbox"
                                 checked={!!targetRow.values[flatField.id]}
-                                disabled={submitting || flatField.readOnly === true}
+                                disabled={isLineFieldInputDisabled(flatField)}
                                 onChange={e => {
-                                  if (submitting || flatField.readOnly === true) return;
+                                  if (isLineFieldInputDisabled(flatField)) return;
                                   handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.checked);
                                 }}
                               />
@@ -5867,9 +5895,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             <select
                               multiple
                               value={selected}
-                              disabled={submitting || flatField.readOnly === true}
+                              disabled={isLineFieldInputDisabled(flatField)}
                               onChange={e => {
-                                if (submitting || flatField.readOnly === true) return;
+                                if (isLineFieldInputDisabled(flatField)) return;
                                 const next = Array.from(e.currentTarget.selectedOptions).map(o => o.value);
                                 handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next);
                               }}
@@ -5887,9 +5915,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   <input
                                     type="checkbox"
                                     checked={selected.includes(opt.value)}
-                                    disabled={submitting || flatField.readOnly === true}
+                                    disabled={isLineFieldInputDisabled(flatField)}
                                     onChange={e => {
-                                      if (submitting || flatField.readOnly === true) return;
+                                      if (isLineFieldInputDisabled(flatField)) return;
                                       const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
                                       handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next);
                                     }}
@@ -5984,8 +6012,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         {flatField.type === 'NUMBER' ? (
                           <NumberStepper
                             value={numberText}
-                            disabled={submitting}
-                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            disabled={isLineFieldInteractionBlocked(flatField)}
+                            readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
                             ariaDescribedBy={helperId}
                             placeholder={placeholder}
@@ -6008,7 +6036,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             className="ck-paragraph-input"
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
-                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             rows={(flatField as any)?.ui?.paragraphRows || 4}
                             placeholder={placeholder}
                             aria-describedby={helperId}
@@ -6017,7 +6045,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <DateInput
                             value={fieldValue}
                             language={language}
-                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
                             ariaDescribedBy={helperId}
                             onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
@@ -6027,7 +6055,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             type={flatField.type === 'DATE' ? 'date' : 'text'}
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, e.target.value)}
-                            readOnly={!!flatField.valueMap || flatField.readOnly === true}
+                            readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             placeholder={placeholder}
                             aria-describedby={helperId}
                           />
@@ -6388,7 +6416,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             required: !!field.required,
                             searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
                             override: (field as any)?.ui?.control,
-                            disabled: submitting || (field as any)?.readOnly === true,
+                            disabled: isLineFieldInputDisabled(field),
                             onChange: next => handleLineFieldChange(q, row.id, field, next)
                           })}
                           {renderOverlayOpenInlineButton(display)}
@@ -6457,9 +6485,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             <input
                               type="checkbox"
                               checked={!!row.values[field.id]}
-                              disabled={submitting || (field as any)?.readOnly === true}
+                              disabled={isLineFieldInputDisabled(field)}
                               onChange={e => {
-                                if (submitting || (field as any)?.readOnly === true) return;
+                                if (isLineFieldInputDisabled(field)) return;
                                 handleLineFieldChange(q, row.id, field, e.target.checked);
                               }}
                             />
@@ -6496,9 +6524,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             <select
                               multiple
                               value={selected}
-                              disabled={submitting || (field as any)?.readOnly === true}
+                              disabled={isLineFieldInputDisabled(field)}
                               onChange={e => {
-                                if (submitting || (field as any)?.readOnly === true) return;
+                                if (isLineFieldInputDisabled(field)) return;
                                 const next = Array.from(e.target.selectedOptions).map(o => o.value);
                                 handleLineFieldChange(q, row.id, field, next);
                               }}
@@ -6537,9 +6565,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               <input
                                 type="checkbox"
                                 checked={selected.includes(opt.value)}
-                                disabled={submitting || (field as any)?.readOnly === true}
+                                disabled={isLineFieldInputDisabled(field)}
                                 onChange={e => {
-                                  if (submitting || (field as any)?.readOnly === true) return;
+                                  if (isLineFieldInputDisabled(field)) return;
                                   const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
                                   handleLineFieldChange(q, row.id, field, next);
                                 }}
@@ -6699,8 +6727,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     const effectivePlacement =
                       helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
                     const isEditableField =
-                      !submitting &&
-                      (field as any)?.readOnly !== true &&
+                      !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
                       (field as any)?.ui?.renderAsLabel !== true &&
                       (field as any)?.renderAsLabel !== true &&
                       !field.valueMap;
@@ -6739,8 +6766,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         {field.type === 'NUMBER' ? (
                           <NumberStepper
                             value={numberText}
-                            disabled={submitting}
-                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                            disabled={isLineFieldInteractionBlocked(field)}
+                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                             ariaDescribedBy={helperId}
                             placeholder={placeholder}
@@ -6767,7 +6794,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             className="ck-paragraph-input"
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                             rows={(field as any)?.ui?.paragraphRows || 4}
                             placeholder={placeholder}
                             aria-describedby={helperId}
@@ -6776,7 +6803,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <DateInput
                             value={fieldValue}
                             language={language}
-                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                             ariaDescribedBy={helperId}
                             onChange={next => handleLineFieldChange(q, row.id, field, next)}
@@ -6786,7 +6813,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             type={field.type === 'DATE' ? 'date' : 'text'}
                             value={fieldValue}
                             onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                             placeholder={placeholder}
                             aria-describedby={helperId}
                           />
@@ -6933,7 +6960,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         required: !!titleField.required,
                                         searchEnabled: titleField.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
                                         override: titleField.ui?.control,
-                                        disabled: submitting || (titleField as any)?.readOnly === true,
+                                        disabled: isLineFieldInputDisabled(titleField),
                                         onChange: next => handleLineFieldChange(q, row.id, titleField, next)
                                       })
                                     )}
@@ -7648,7 +7675,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   required: !!field.required,
                                   searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
                                   override: (field as any)?.ui?.control,
-                                  disabled: submitting || (field as any)?.readOnly === true,
+                                  disabled: isLineFieldInputDisabled(field),
                                   onChange: next => handleLineFieldChange(q, row.id, field, next)
                                 })}
                                 {renderOverlayOpenInlineButton(display)}
@@ -7716,9 +7743,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 <input
                                   type="checkbox"
                                   checked={!!row.values[field.id]}
-                                  disabled={submitting || (field as any)?.readOnly === true}
+                                  disabled={isLineFieldInputDisabled(field)}
                                   onChange={e => {
-                                    if (submitting || (field as any)?.readOnly === true) return;
+                                    if (isLineFieldInputDisabled(field)) return;
                                     handleLineFieldChange(q, row.id, field, e.target.checked);
                                   }}
                                 />
@@ -7752,10 +7779,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               <select
                                 multiple
                                 value={selected}
-                                disabled={submitting || (field as any)?.readOnly === true}
+                                disabled={isLineFieldInputDisabled(field)}
                                 aria-label={resolveFieldLabel(field, language, field.id)}
                                 onChange={e => {
-                                  if (submitting || (field as any)?.readOnly === true) return;
+                                  if (isLineFieldInputDisabled(field)) return;
                                   const next = Array.from(e.currentTarget.selectedOptions)
                                     .map(opt => opt.value)
                                     .filter(Boolean);
@@ -7776,9 +7803,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     <input
                                       type="checkbox"
                                       checked={selected.includes(opt.value)}
-                                      disabled={submitting || (field as any)?.readOnly === true}
+                                      disabled={isLineFieldInputDisabled(field)}
                                       onChange={e => {
-                                        if (submitting || (field as any)?.readOnly === true) return;
+                                        if (isLineFieldInputDisabled(field)) return;
                                         const next = e.target.checked
                                           ? [...selected, opt.value]
                                           : selected.filter(v => v !== opt.value);
@@ -7990,8 +8017,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         const effectivePlacement =
                           helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
                         const isEditableField =
-                          !submitting &&
-                          (field as any)?.readOnly !== true &&
+                          !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
                           (field as any)?.ui?.renderAsLabel !== true &&
                           (field as any)?.renderAsLabel !== true &&
                           !field.valueMap;
@@ -8030,8 +8056,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             {field.type === 'NUMBER' ? (
                               <NumberStepper
                                 value={numberText}
-                                disabled={submitting}
-                                readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                disabled={isLineFieldInteractionBlocked(field)}
+                                readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
                                 ariaDescribedBy={helperId}
                                 placeholder={placeholder}
@@ -8062,7 +8088,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 className="ck-paragraph-input"
                                 value={fieldValue}
                                 onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                                readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                 rows={(field as any)?.ui?.paragraphRows || 4}
                                 placeholder={placeholder}
                                 aria-describedby={helperId}
@@ -8071,7 +8097,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               <DateInput
                                 value={fieldValue}
                                 language={language}
-                                readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
                                 ariaDescribedBy={helperId}
                                 onChange={next => handleLineFieldChange(q, row.id, field, next)}
@@ -8081,7 +8107,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 type={field.type === 'DATE' ? 'date' : 'text'}
                                 value={fieldValue}
                                 onChange={e => handleLineFieldChange(q, row.id, field, e.target.value)}
-                                readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                 placeholder={placeholder}
                                 aria-describedby={helperId}
                               />
@@ -8741,7 +8767,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             required: !!field.required,
                                             searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? (subUi as any)?.choiceSearchEnabled,
                                             override: (field as any)?.ui?.control,
-                                            disabled: submitting || (field as any)?.readOnly === true,
+                                            disabled: isLineFieldInputDisabled(field),
                                             onChange: next => handleLineFieldChange(targetGroup, subRow.id, field, next)
                                           })}
                                           {renderErrors()}
@@ -8779,9 +8805,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             <select
                                               multiple
                                               value={selected}
-                                              disabled={submitting || (field as any)?.readOnly === true}
+                                              disabled={isLineFieldInputDisabled(field)}
                                               onChange={e => {
-                                                if (submitting || (field as any)?.readOnly === true) return;
+                                                if (isLineFieldInputDisabled(field)) return;
                                                 const next = Array.from(e.currentTarget.selectedOptions)
                                                   .map(opt => opt.value)
                                                   .filter(Boolean);
@@ -8801,9 +8827,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                   <input
                                                     type="checkbox"
                                                     checked={selected.includes(opt.value)}
-                                                    disabled={submitting || (field as any)?.readOnly === true}
+                                                    disabled={isLineFieldInputDisabled(field)}
                                                     onChange={e => {
-                                                      if (submitting || (field as any)?.readOnly === true) return;
+                                                      if (isLineFieldInputDisabled(field)) return;
                                                       const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
                                                       handleLineFieldChange(targetGroup, subRow.id, field, next);
                                                     }}
@@ -8895,8 +8921,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       );
                                     }
                                     const isEditableField =
-                                      !submitting &&
-                                      (field as any)?.readOnly !== true &&
+                                      !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
                                       (field as any)?.ui?.renderAsLabel !== true &&
                                       (field as any)?.renderAsLabel !== true &&
                                       !!(field as any)?.valueMap === false;
@@ -8910,8 +8935,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         <div className="ck-line-item-table__control" data-field-path={fieldPath}>
                                           <NumberStepper
                                             value={numberText}
-                                            disabled={submitting}
-                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                            disabled={isLineFieldInteractionBlocked(field)}
+                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             placeholder={placeholder}
                                             onInvalidInput={
@@ -8952,7 +8977,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             className="ck-paragraph-input"
                                             value={fieldValue}
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             rows={(field as any)?.ui?.paragraphRows || 3}
                                             placeholder={placeholder}
                                           />
@@ -8966,7 +8991,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           <DateInput
                                             value={fieldValue}
                                             language={language}
-                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
                                           />
@@ -8983,7 +9008,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           type="text"
                                           value={fieldValue}
                                           onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                          readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                          readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                           placeholder={placeholder}
                                         />
                                         {renderErrors()}
@@ -8998,8 +9023,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         const labelText = resolveFieldLabel(field, language, field.id);
                                         const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
                                         const isEditableField =
-                                          !submitting &&
-                                          (field as any)?.readOnly !== true &&
+                                          !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
                                           (field as any)?.ui?.renderAsLabel !== true &&
                                           (field as any)?.renderAsLabel !== true &&
                                           !!(field as any)?.valueMap === false;
@@ -9257,7 +9281,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                               (field as any)?.ui?.choiceSearchEnabled ??
                                               (((targetGroup as any)?.lineItemConfig?.ui as any)?.choiceSearchEnabled),
                                             override: (field as any)?.ui?.control,
-                                            disabled: submitting || (field as any)?.readOnly === true,
+                                            disabled: isLineFieldInputDisabled(field),
                                             onChange: next => handleLineFieldChange(targetGroup, subRow.id, field, next)
                                           })}
                                         {(() => {
@@ -9305,9 +9329,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                 <input
                                                   type="checkbox"
                                                   checked={!!subRow.values[field.id]}
-                                                  disabled={submitting || (field as any)?.readOnly === true}
+                                                  disabled={isLineFieldInputDisabled(field)}
                                                   onChange={e => {
-                                                    if (submitting || (field as any)?.readOnly === true) return;
+                                                    if (isLineFieldInputDisabled(field)) return;
                                                     handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked);
                                                   }}
                                                 />
@@ -9320,9 +9344,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                               <input
                                                 type="checkbox"
                                                 checked={selected.includes(opt.value)}
-                                                disabled={submitting || (field as any)?.readOnly === true}
+                                                disabled={isLineFieldInputDisabled(field)}
                                                 onChange={e => {
-                                                  if (submitting || (field as any)?.readOnly === true) return;
+                                                  if (isLineFieldInputDisabled(field)) return;
                                                   const next = e.target.checked
                                                     ? [...selected, opt.value]
                                                     : selected.filter(v => v !== opt.value);
@@ -9526,8 +9550,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       const effectivePlacement =
                                         helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
                                       const isEditableField =
-                                        !submitting &&
-                                        (field as any)?.readOnly !== true &&
+                                        !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
                                         (field as any)?.ui?.renderAsLabel !== true &&
                                         (field as any)?.renderAsLabel !== true &&
                                         !field.valueMap;
@@ -9560,8 +9583,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         {field.type === 'NUMBER' ? (
                                           <NumberStepper
                                             value={numberText}
-                                            disabled={submitting}
-                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                            disabled={isLineFieldInteractionBlocked(field)}
+                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             ariaDescribedBy={helperId}
                                             placeholder={placeholder}
@@ -9592,7 +9615,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             className="ck-paragraph-input"
                                             value={fieldValue}
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             rows={(field as any)?.ui?.paragraphRows || 4}
                                             placeholder={placeholder}
                                             aria-describedby={helperId}
@@ -9601,7 +9624,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           <DateInput
                                             value={fieldValue}
                                             language={language}
-                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             ariaDescribedBy={helperId}
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
@@ -9611,7 +9634,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             type={field.type === 'DATE' ? 'date' : 'text'}
                                             value={fieldValue}
                                             onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                            readOnly={!!field.valueMap || (field as any)?.readOnly === true}
+                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             placeholder={placeholder}
                                             aria-describedby={helperId}
                                           />

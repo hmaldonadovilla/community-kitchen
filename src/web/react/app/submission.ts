@@ -811,6 +811,25 @@ export const collectValidationWarnings = (args: {
   return { top, byField };
 };
 
+const getClientDeviceInfo = (): string => {
+  try {
+    const nav: any = typeof globalThis !== 'undefined' ? (globalThis as any).navigator : undefined;
+    if (!nav) return '';
+    const info = {
+      userAgent: nav.userAgent || '',
+      platform: nav.platform || '',
+      language: nav.language || '',
+      languages: Array.isArray(nav.languages) ? nav.languages : [],
+      vendor: nav.vendor || '',
+      maxTouchPoints:
+        nav.maxTouchPoints !== undefined && nav.maxTouchPoints !== null ? Number(nav.maxTouchPoints) : undefined
+    };
+    return JSON.stringify(info);
+  } catch (_) {
+    return '';
+  }
+};
+
 export const buildSubmissionPayload = async (args: {
   definition: WebFormDefinition;
   formKey: string;
@@ -913,6 +932,7 @@ export const buildSubmissionPayload = async (args: {
     values: payloadValues,
     ...payloadValues
   };
+  (submission as any).__ckDeviceInfo = getClientDeviceInfo();
 
   if (existingRecordId) {
     submission.id = existingRecordId;
@@ -1020,6 +1040,7 @@ export const buildDraftPayload = (args: {
     values: payloadValues,
     ...payloadValues
   };
+  (submission as any).__ckDeviceInfo = getClientDeviceInfo();
 
   if (existingRecordId) {
     submission.id = existingRecordId;

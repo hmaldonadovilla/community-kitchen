@@ -3,7 +3,7 @@ info:
   title: Community Kitchen Config Sheet Schema
   version: 1.0.0
   description: |
-    Schema definition for the Configuration Sheet used to generate forms. The React web template is the only supported experience for deployed web apps; the legacy iframe UI has been retired, so no sheet-level configuration or query parameters are required for toggling views.
+    Schema definition for the Configuration Sheet used to generate forms. The React web template is the only supported experience for deployed web apps; the legacy iframe UI has been retired, so no sheet-level configuration or query parameters are required for toggling views. Optional runtime query params may still be used by specific features (for example `?unlock=<record_id>` for guided lock overrides).
 paths: {}
 components:
   schemas:
@@ -224,6 +224,13 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+            tone:
+              type: string
+              enum: [primary, secondary]
+              description: |
+                Optional inline button tone override in the form view.
+                - `primary`: accent-filled button
+                - `secondary`: neutral/outline button
             folderId:
               type: string
               description: Optional Drive folder id to write generated PDFs to (defaults to follow-up folder / spreadsheet parent).
@@ -261,6 +268,13 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+            tone:
+              type: string
+              enum: [primary, secondary]
+              description: |
+                Optional inline button tone override in the form view.
+                - `primary`: accent-filled button
+                - `secondary`: neutral/outline button
           required: [action, templateId]
         - type: object
           properties:
@@ -296,6 +310,13 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+            tone:
+              type: string
+              enum: [primary, secondary]
+              description: |
+                Optional inline button tone override in the form view.
+                - `primary`: accent-filled button
+                - `secondary`: neutral/outline button
           required: [action, templateId]
         - type: object
           properties:
@@ -325,6 +346,13 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+            tone:
+              type: string
+              enum: [primary, secondary]
+              description: |
+                Optional inline button tone override in the form view.
+                - `primary`: accent-filled button
+                - `secondary`: neutral/outline button
           required: [action, presetValues]
 
         - type: object
@@ -354,6 +382,13 @@ components:
                     items:
                       type: string
               description: Advanced field filters (AND-ed together).
+            tone:
+              type: string
+              enum: [primary, secondary]
+              description: |
+                Optional inline button tone override in the form view.
+                - `primary`: accent-filled button
+                - `secondary`: neutral/outline button
           required: [action]
 
         - type: object
@@ -367,6 +402,8 @@ components:
                 Primary use case: **Re-open** a Closed record from the Summary view:
                 - set `set.status` to a value different from `"Closed"`
                 - set `navigateTo: "form"` so the user can resume editing.
+
+                Also supports lock transitions such as setting status to `"Ready for Production"` from a guided step button.
             set:
               type: object
               properties:
@@ -445,6 +482,13 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+            tone:
+              type: string
+              enum: [primary, secondary]
+              description: |
+                Optional inline button tone override in the form view.
+                - `primary`: accent-filled button
+                - `secondary`: neutral/outline button
           required: [action, set]
 
         - type: object
@@ -476,6 +520,13 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+            tone:
+              type: string
+              enum: [primary, secondary]
+              description: |
+                Optional inline button tone override in the form view.
+                - `primary`: accent-filled button
+                - `secondary`: neutral/outline button
           required: [action, fieldId]
 
     FileUploadConfig:
@@ -888,10 +939,11 @@ components:
             - For consent CHECKBOX fields (no options), the UI always renders a tick box.
         labelLayout:
           type: string
-          enum: [auto, stacked]
+          enum: [auto, inline, stacked]
           description: |
             Label/control layout hint.
-            - auto: default behavior (inline on full-width rows; stacked in 2-up grids)
+            - auto: default behavior
+            - inline: force label + control on one row
             - stacked: force label above control even for full-width rows
         hideLabel:
           type: boolean
@@ -2252,6 +2304,18 @@ components:
             status:
               type: string
               description: Status value written during autosave. Defaults to `statusTransitions.inProgress` (or "In progress").
+        auditLogging:
+          $ref: '#/components/schemas/AuditLoggingConfig'
+          description: |
+            Optional audit logging behavior for this form.
+
+            When enabled, changes are written to a dedicated audit sheet, including:
+            - `fieldPath`
+            - `beforeValue` / `afterValue`
+            - `date_time`
+            - `auditType` (`change` or `snapshot`)
+            - `snapshot` (full record JSON for snapshot actions)
+            - `deviceInfo`
         summaryViewEnabled:
           type: boolean
           description: |
@@ -2333,6 +2397,10 @@ components:
             Optional form-level field disable rules for the React edit (form) view.
 
             When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
+            Rules can reference guided virtual fields such as `__ckStep` to lock only specific steps.
+            You can also reference request params via `__ckRequestParam_<name>` in `when` clauses.
+            For the dedicated `ready-for-production-order-lock` rule, the UI supports an emergency override when the URL includes `?unlock=<record_id>` that matches the current record.
+            Set `unlockStatus` on that rule if unlocking should automatically move the record back to an editable status (for example `"In progress"`).
         dedupDeleteOnKeyChange:
           type: boolean
           description: |
@@ -2345,6 +2413,35 @@ components:
             Notes:
             - Uses the same dedup precheck/autosave gating behavior as create flow.
             - Intended for forms where dedup keys define immutable business identity.
+      additionalProperties: true
+
+    AuditLoggingConfig:
+      type: object
+      description: |
+        Optional per-form audit logging configuration.
+      properties:
+        enabled:
+          type: boolean
+          description: Enable/disable audit logging.
+        sheetName:
+          type: string
+          description: |
+            Optional audit destination sheet name.
+            When omitted, the app writes to `<destination tab> Audit`.
+        statuses:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of status values for which `auditType="change"` rows are written.
+            Matching is case-insensitive and checks both previous and next status values.
+        snapshotButtons:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional list of custom button ids that trigger snapshot rows.
+            Snapshot rows set `auditType="snapshot"` and store the full record JSON in `snapshot`.
       additionalProperties: true
 
     AppHeaderConfig:
@@ -3158,6 +3255,11 @@ components:
                 hideWhenActive:
                   type: boolean
                   description: When true, hide the Home button while on the List (home) view.
+                dedupIncompleteDialog:
+                  $ref: '#/components/schemas/DedupIncompleteHomeDialogConfig'
+                  description: |
+                    Optional Home-navigation guard dialog shown when reject-dedup keys are incomplete in the form view.
+                    On confirm, the app leaves the form and (by default) deletes the current persisted record before navigating Home.
             gates:
               $ref: '#/components/schemas/SystemActionGatesConfig'
               description: |
@@ -3168,6 +3270,7 @@ components:
                 - guided step virtual fields (e.g. `__ckStep`)
                 - system/meta fields (e.g. `status`, `STATUS`, `pdfUrl`)
                 - runtime UI virtual fields: `__ckView` (`list` | `form` | `summary`)
+                - request params: `__ckRequestParam_<name>` (for example `__ckRequestParam_admin`)
       additionalProperties: true
 
     SystemActionGatesConfig:
@@ -3265,6 +3368,57 @@ components:
         dismissOnBackdrop:
           type: boolean
           description: When false, clicking the backdrop does not dismiss the dialog. Default true.
+      additionalProperties: true
+
+    DedupIncompleteHomeDialogConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable this dialog when Home is pressed and reject-dedup keys are incomplete. Default true when object is present.
+        title:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        message:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Warning message shown before leaving form view.
+        confirmLabel:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Label for the confirm action (continue leaving form view).
+        cancelLabel:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Label for the cancel action (continue editing).
+        primaryAction:
+          type: string
+          enum: [confirm, cancel]
+          description: |
+            Controls which dialog action is visually primary / default.
+            - confirm (default): confirm button uses the primary accent style
+            - cancel: cancel button uses the primary accent style
+        showCancel:
+          type: boolean
+          description: When false, hides the cancel button. Default true.
+        showCloseButton:
+          type: boolean
+          description: When false, hides the close (×) button. Default true.
+        dismissOnBackdrop:
+          type: boolean
+          description: When false, clicking the backdrop does not dismiss the dialog. Default true.
+        deleteRecordOnConfirm:
+          type: boolean
+          description: When true (default), attempt to delete the current persisted record before navigating Home.
+        deleteFailedMessage:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Optional message shown when record deletion fails.
       additionalProperties: true
 
     CopyCurrentRecordProfile:
@@ -4331,6 +4485,14 @@ components:
             type: string
           description: |
             Optional list of field ids that remain editable while this rule is active.
+        unlockStatus:
+          type: string
+          description: |
+            Optional status to set when the emergency unlock override is used (`?unlock=<record_id>`).
+
+            Notes:
+            - This applies only to `id: "ready-for-production-order-lock"`.
+            - Useful to move locked records back to an editable status (for example `"In progress"`).
       additionalProperties: false
 
     VisibilityConfig:
@@ -4720,6 +4882,8 @@ components:
           type: object
           description: Draft autosave configuration (dashboard-level).
           additionalProperties: true
+        auditLogging:
+          $ref: '#/components/schemas/AuditLoggingConfig'
         summaryViewEnabled:
           type: boolean
         summaryHtmlTemplateId:
@@ -4785,6 +4949,8 @@ components:
             Optional form-level field disable rules for the React edit (form) view.
 
             When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
+            You can also reference request params via `__ckRequestParam_<name>` in `when` clauses.
+            Set `unlockStatus` on `id: "ready-for-production-order-lock"` to automatically set a status when `?unlock=<record_id>` is used.
         dedupDeleteOnKeyChange:
           type: boolean
           description: |

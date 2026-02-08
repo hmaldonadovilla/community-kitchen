@@ -70,11 +70,18 @@ import { detectDebug } from './app/utils';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import { hasIncompleteRejectDedupKeys } from './app/dedupKeyUtils';
 import {
+  resolveDedupIncompleteHomeDialogConfig,
+  resolveDedupIncompleteHomeDialogCopy
+} from './app/dedupIncompleteHomeDialog';
+import {
   applyFieldChangeDialogTargets,
   evaluateFieldChangeDialogWhen,
+  evaluateFieldChangeDialogWhenWithFallback,
+  finalizeInitialDateChangeDialogEntry,
   resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
   resolveTargetFieldConfig,
+  shouldSuppressInitialDateChangeDialog,
   type FieldChangeDialogTargetUpdate
 } from './app/fieldChangeDialog';
 import {
@@ -90,11 +97,12 @@ import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
-import { upsertListCacheRowPure } from './app/listCache';
+import { removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
+import { resolveReadyForProductionUnlockStatus, resolveUnlockRecordId } from './app/readyForProductionLock';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
@@ -568,6 +576,41 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     },
     [hasProgressStatus, matchesClosedStatus, statusTransitions]
   );
+  const readyForProductionUnlockResolution = useMemo(() => {
+    const globalAny = globalThis as any;
+    const locationSearch = (() => {
+      try {
+        return globalAny?.location?.search || '';
+      } catch (_) {
+        return '';
+      }
+    })();
+    const locationHash = (() => {
+      try {
+        return globalAny?.location?.hash || '';
+      } catch (_) {
+        return '';
+      }
+    })();
+    const locationHref = (() => {
+      try {
+        return globalAny?.location?.href || '';
+      } catch (_) {
+        return '';
+      }
+    })();
+    return resolveUnlockRecordId({
+      requestParams: globalAny?.__WEB_FORM_REQUEST_PARAMS__,
+      bootstrap: globalAny?.__WEB_FORM_BOOTSTRAP__,
+      search: locationSearch,
+      hash: locationHash,
+      href: locationHref
+    });
+  }, []);
+  const readyForProductionUnlockStatus = useMemo(
+    () => resolveReadyForProductionUnlockStatus((definition as any)?.fieldDisableRules),
+    [definition.fieldDisableRules]
+  );
 
   // Feature overlays (kept out of App.tsx as much as possible; App only wires them).
   const customConfirm = useConfirmDialog({ closeOnKey: view, eventPrefix: 'ui.customConfirm', onDiagnostic: logEvent });
@@ -720,6 +763,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
   const fieldChangePendingRef = useRef<Record<string, FieldChangePending>>({});
   const fieldChangeActiveRef = useRef<FieldChangePending | null>(null);
+  const fieldChangeDateInitialEntryInProgressRef = useRef<Record<string, boolean>>({});
+  const fieldChangeDateInitialEntryCompletedRef = useRef<Record<string, boolean>>({});
+  const pendingDeletedRecordIdsRef = useRef<string[]>([]);
+  const readyForProductionUnlockTransitionAttemptedRef = useRef<Set<string>>(new Set());
+  const [pendingDeletedRecordApplyTick, setPendingDeletedRecordApplyTick] = useState(0);
 
   const resolveOptionGroupKey = (args: {
     targetScope: 'top' | 'row' | 'parent' | 'effect';
@@ -883,6 +931,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       if (!dedupDeleteOnKeyChangeEnabledLocal) return false;
       if (submittingRef.current) return false;
       if (dedupDeleteOnKeyChangeInFlightRef.current) return false;
+      const extraMeta = extra ? { ...extra } : {};
+      const forceDelete = (extraMeta as any).force === true;
+      if ((extraMeta as any).force !== undefined) delete (extraMeta as any).force;
 
       const existingRecordId = resolveExistingRecordId({
         selectedRecordId: selectedRecordIdRef.current,
@@ -893,7 +944,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
       const currentFingerprint = computeDedupKeyFingerprint((definition as any)?.dedupRules, valuesRef.current as any);
       const baselineFingerprint = (dedupKeyFingerprintBaselineRef.current || '').toString();
-      if (!baselineFingerprint || baselineFingerprint === currentFingerprint) return false;
+      if (!forceDelete && (!baselineFingerprint || baselineFingerprint === currentFingerprint)) return false;
 
       const previousDedupHold = dedupHoldRef.current;
       dedupDeleteOnKeyChangeInFlightRef.current = true;
@@ -907,7 +958,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       logEvent('dedupDeleteOnKeyChange.delete.start', {
         source,
         recordId: existingRecordId,
-        ...extra
+        forceDelete,
+        ...extraMeta
       });
       try {
         const waitStartedAt = Date.now();
@@ -917,7 +969,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             recordId: existingRecordId,
             autosaveInFlight: autoSaveInFlightRef.current,
             uploadsInFlight: uploadQueueRef.current.size,
-            ...extra
+            forceDelete,
+            ...extraMeta
           });
         }
         while (autoSaveInFlightRef.current || uploadQueueRef.current.size > 0) {
@@ -928,7 +981,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               durationMs: Date.now() - waitStartedAt,
               autosaveInFlight: autoSaveInFlightRef.current,
               uploadsInFlight: uploadQueueRef.current.size,
-              ...extra
+              forceDelete,
+              ...extraMeta
             });
             return false;
           }
@@ -939,7 +993,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             source,
             recordId: existingRecordId,
             durationMs: Date.now() - waitStartedAt,
-            ...extra
+            forceDelete,
+            ...extraMeta
           });
         }
 
@@ -964,7 +1019,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             source,
             recordId: existingRecordId,
             message: (res?.message || 'Failed to delete previous record.').toString(),
-            ...extra
+            forceDelete,
+            ...extraMeta
           });
           return false;
         }
@@ -993,11 +1049,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           autoSaveTimerRef.current = null;
         }
         setDraftSave({ phase: 'idle' });
+        pendingDeletedRecordIdsRef.current.push(existingRecordId);
+        setPendingDeletedRecordApplyTick(tick => tick + 1);
 
         logEvent('dedupDeleteOnKeyChange.delete.success', {
           source,
           deletedRecordId: existingRecordId,
-          ...extra
+          forceDelete,
+          ...extraMeta
         });
         return true;
       } catch (err: any) {
@@ -1005,7 +1064,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           source,
           recordId: existingRecordId,
           message: resolveLogMessage(err, 'Failed to delete previous record.'),
-          ...extra
+          forceDelete,
+          ...extraMeta
         });
         return false;
       } finally {
@@ -1335,16 +1395,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             fieldId,
             groupId: args.groupId
           });
+          const changeType = (source?.question?.type || source?.field?.type || '').toString().toUpperCase();
           const prevValue =
             args.scope === 'line' && args.groupId && args.rowId
               ? (lineItemsRef.current[args.groupId] || []).find(row => row.id === args.rowId)?.values?.[fieldId]
               : valuesRef.current[fieldId];
+          const suppressInitialDateDialog = shouldSuppressInitialDateChangeDialog({
+            scope: args.scope,
+            fieldType: changeType,
+            fieldPath: fieldKey,
+            fieldId,
+            prevValue: prevValue as FieldValue,
+            nextValue: args.nextValue as FieldValue,
+            baselineValues: lastAutoSaveSeenRef.current?.values || null,
+            initialEntryInProgressByFieldPath: fieldChangeDateInitialEntryInProgressRef.current,
+            initialEntryCompletedByFieldPath: fieldChangeDateInitialEntryCompletedRef.current
+          });
           const hasNonEmptyChange =
             !isEmptyValue(prevValue as FieldValue) &&
             !isEmptyValue(args.nextValue as FieldValue) &&
             prevValue !== args.nextValue;
           const dialogCfg = source?.dialog;
-          if (dialogCfg?.when && hasNonEmptyChange) {
+          if (dialogCfg?.when && hasNonEmptyChange && !suppressInitialDateDialog) {
             const shouldTrigger = evaluateFieldChangeDialogWhen({
               when: dialogCfg.when,
               scope: args.scope,
@@ -1385,9 +1457,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
                 groupId: args.groupId || null,
                 rowId: args.rowId || null
               });
-              const changeType = (source?.question?.type || source?.field?.type || '').toString().toUpperCase();
               const openOnChange =
-                changeType === 'CHOICE' || changeType === 'CHECKBOX' || changeType === 'DATE' || changeType === 'FILE_UPLOAD';
+                changeType === 'CHOICE' || changeType === 'CHECKBOX' || changeType === 'FILE_UPLOAD';
               if (openOnChange) {
                 openFieldChangeDialog(pending);
               }
@@ -1401,9 +1472,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         }
 
         if (args?.event === 'blur' && fieldKey) {
+          const finalizedInitialDateEntry = finalizeInitialDateChangeDialogEntry({
+            fieldPath: fieldKey,
+            initialEntryInProgressByFieldPath: fieldChangeDateInitialEntryInProgressRef.current,
+            initialEntryCompletedByFieldPath: fieldChangeDateInitialEntryCompletedRef.current
+          });
+          if (finalizedInitialDateEntry && fieldChangePendingRef.current[fieldKey]) {
+            delete fieldChangePendingRef.current[fieldKey];
+            logEvent('fieldChangeDialog.pending.cleared', {
+              fieldPath: fieldKey,
+              fieldId,
+              reason: 'initialDateEntry.completed'
+            });
+            return;
+          }
           const pending = fieldChangePendingRef.current[fieldKey];
           if (pending) {
-            const stillValid = evaluateFieldChangeDialogWhen({
+            const validity = evaluateFieldChangeDialogWhenWithFallback({
               when: pending.dialog?.when,
               scope: pending.scope,
               fieldId: pending.fieldId,
@@ -1411,12 +1496,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               rowId: pending.rowId,
               nextValue: pending.nextValue,
               values: valuesRef.current,
-              lineItems: lineItemsRef.current
+              lineItems: lineItemsRef.current,
+              fallbackValues: pending.prevSnapshot.values,
+              fallbackLineItems: pending.prevSnapshot.lineItems
             });
-            if (!stillValid) {
+            if (!validity.matches) {
               delete fieldChangePendingRef.current[fieldKey];
               logEvent('fieldChangeDialog.pending.cleared', { fieldPath: fieldKey, fieldId });
               return;
+            }
+            if (validity.matchedOn === 'fallback') {
+              logEvent('fieldChangeDialog.pending.revalidatedFromSnapshot', {
+                fieldPath: fieldKey,
+                fieldId: pending.fieldId,
+                groupId: pending.groupId || null,
+                rowId: pending.rowId || null
+              });
             }
             openFieldChangeDialog(pending);
             return;
@@ -1929,6 +2024,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   }, [listCache.records]);
 
   useEffect(() => {
+    if (pendingDeletedRecordApplyTick <= 0) return;
+    const ids = Array.from(new Set((pendingDeletedRecordIdsRef.current || []).map(id => (id || '').toString().trim()).filter(Boolean)));
+    pendingDeletedRecordIdsRef.current = [];
+    if (!ids.length) return;
+    setListCache(prev =>
+      ids.reduce(
+        (state, recordId) =>
+          removeListCacheRowPure({
+            prev: state,
+            remove: { recordId }
+          }),
+        prev
+      )
+    );
+    logEvent('list.cache.remove.deletedRecord', { recordIds: ids, count: ids.length });
+  }, [logEvent, pendingDeletedRecordApplyTick]);
+
+  useEffect(() => {
     const key = `${formKey}::${language}`;
     if (dataSourcePrefetchKeyRef.current === key) return;
     dataSourcePrefetchKeyRef.current = key;
@@ -2259,6 +2372,101 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     },
     [definition, formKey, language]
   );
+
+  useEffect(() => {
+    const unlockRecordId = (readyForProductionUnlockResolution.unlockRecordId || '').toString().trim();
+    const targetStatus = (readyForProductionUnlockStatus || '').toString().trim();
+    if (!unlockRecordId || !targetStatus) return;
+    if (view !== 'form') return;
+    if (submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking) return;
+
+    const recordId =
+      resolveExistingRecordId({
+        selectedRecordId,
+        selectedRecordSnapshot,
+        lastSubmissionMetaId: lastSubmissionMeta?.id || null
+      }) || '';
+    if (!recordId || recordId !== unlockRecordId) return;
+
+    const currentStatusRaw = ((lastSubmissionMeta?.status || selectedRecordSnapshot?.status || '') as any).toString().trim();
+    if (currentStatusRaw && currentStatusRaw.toLowerCase() === targetStatus.toLowerCase()) return;
+
+    const attemptKey = `${recordId}::${targetStatus.toLowerCase()}`;
+    if (readyForProductionUnlockTransitionAttemptedRef.current.has(attemptKey)) return;
+    readyForProductionUnlockTransitionAttemptedRef.current.add(attemptKey);
+
+    logEvent('readyForProduction.unlock.statusTransition.start', {
+      recordId,
+      source: readyForProductionUnlockResolution.source,
+      fromStatus: currentStatusRaw || null,
+      toStatus: targetStatus
+    });
+
+    void runUpdateRecordAction(
+      {
+        definition,
+        formKey,
+        submit,
+        tSystem,
+        logEvent,
+        refs: {
+          languageRef,
+          valuesRef,
+          lineItemsRef,
+          selectedRecordIdRef,
+          selectedRecordSnapshotRef,
+          lastSubmissionMetaRef,
+          recordDataVersionRef,
+          recordRowNumberRef,
+          recordSessionRef,
+          uploadQueueRef,
+          autoSaveInFlightRef,
+          recordStaleRef
+        },
+        setDraftSave,
+        setStatus,
+        setStatusLevel,
+        setLastSubmissionMeta,
+        setSelectedRecordSnapshot,
+        setValues,
+        setView,
+        upsertListCacheRow,
+        busy: updateRecordBusy
+      } as any,
+      {
+        buttonId: 'ready-for-production-unlock',
+        buttonRef: 'ready-for-production-unlock',
+        navigateTo: 'form',
+        set: { status: targetStatus }
+      }
+    ).then(() => {
+      const nextStatusRaw = ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)
+        .toString()
+        .trim();
+      logEvent('readyForProduction.unlock.statusTransition.done', {
+        recordId,
+        targetStatus,
+        nextStatus: nextStatusRaw || null
+      });
+    });
+  }, [
+    definition,
+    formKey,
+    lastSubmissionMeta,
+    logEvent,
+    precreateDedupChecking,
+    readyForProductionUnlockResolution.source,
+    readyForProductionUnlockResolution.unlockRecordId,
+    readyForProductionUnlockStatus,
+    recordLoadingId,
+    selectedRecordId,
+    selectedRecordSnapshot,
+    submitting,
+    updateRecordBusy,
+    updateRecordBusyOpen,
+    upsertListCacheRow,
+    view
+  ]);
 
   const applyRecordSnapshot = useCallback(
     (snapshot: WebFormSubmission) => {
@@ -5138,8 +5346,66 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   );
 
   const handleGoHome = useCallback(() => {
+    const incompleteDedupKeys =
+      viewRef.current === 'form' && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesRef.current as any);
+    const homeDedupDialog = resolveDedupIncompleteHomeDialogConfig(definition.actionBars);
+    const homeDedupDialogEnabled = homeDedupDialog && homeDedupDialog.enabled !== false;
+    if (incompleteDedupKeys && homeDedupDialogEnabled) {
+      const copy = resolveDedupIncompleteHomeDialogCopy(homeDedupDialog, languageRef.current);
+      customConfirm.openConfirm({
+        title: copy.title,
+        message: copy.message,
+        confirmLabel: copy.confirmLabel,
+        cancelLabel: copy.cancelLabel,
+        primaryAction: copy.primaryAction,
+        showCancel: copy.showCancel,
+        showCloseButton: copy.showCloseButton,
+        dismissOnBackdrop: copy.dismissOnBackdrop,
+        kind: 'dedupIncompleteHome',
+        onCancel: () => {
+          logEvent('navigate.home.dedupIncomplete.cancel');
+        },
+        onConfirm: async () => {
+          const existingRecordId =
+            resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            }) || '';
+          const shouldDeleteCurrentRecord = homeDedupDialog.deleteRecordOnConfirm !== false;
+          if (shouldDeleteCurrentRecord && existingRecordId) {
+            const deleted = await triggerDedupDeleteOnKeyChange('navigate.home.dedupIncomplete.confirm', {
+              force: true,
+              recordId: existingRecordId
+            });
+            if (!deleted) {
+              setStatus(copy.deleteFailedMessage);
+              setStatusLevel('error');
+              logEvent('navigate.home.dedupIncomplete.delete.failed', { recordId: existingRecordId });
+              return;
+            }
+          } else {
+            dedupHoldRef.current = false;
+            autoSaveDirtyRef.current = false;
+            autoSaveQueuedRef.current = false;
+            if (autoSaveTimerRef.current) {
+              globalThis.clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            setDraftSave({ phase: 'idle' });
+          }
+          logEvent('navigate.home.dedupIncomplete.confirm', {
+            recordId: existingRecordId || null,
+            deletedRecord: shouldDeleteCurrentRecord && !!existingRecordId
+          });
+          await requestNavigateToList('navigate.home.dedupIncomplete.confirm');
+        }
+      });
+      logEvent('navigate.home.dedupIncomplete.dialog.open');
+      return;
+    }
     void requestNavigateToList('navigate.home');
-  }, [requestNavigateToList]);
+  }, [customConfirm, definition, logEvent, requestNavigateToList, setDraftSave, triggerDedupDeleteOnKeyChange]);
 
   const handleGoSummary = useCallback(() => {
     if (!summaryViewEnabled) return;
@@ -5790,6 +6056,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   useEffect(() => {
     // Avoid autosaving due to initial bootstrap hydration.
     autoSaveDirtyRef.current = false;
+    fieldChangeDateInitialEntryInProgressRef.current = {};
+    fieldChangeDateInitialEntryCompletedRef.current = {};
     if (autoSaveTimerRef.current) {
       globalThis.clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;
@@ -7646,10 +7914,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
       <ConfirmDialogOverlay
         open={customConfirm.state.open}
-        title={customConfirm.state.title || tSystem('common.confirm', language, 'Confirm')}
+        title={customConfirm.state.title}
         message={customConfirm.state.message || ''}
         confirmLabel={customConfirm.state.confirmLabel || tSystem('common.confirm', language, 'Confirm')}
         cancelLabel={customConfirm.state.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
+        primaryAction={customConfirm.state.primaryAction}
         showCancel={customConfirm.state.showCancel}
         showConfirm={customConfirm.state.showConfirm}
         dismissOnBackdrop={customConfirm.state.dismissOnBackdrop}

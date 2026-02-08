@@ -62,7 +62,8 @@ export function buildWebFormHtml(
   def: WebFormDefinition | null,
   formKey: string,
   bootstrap?: any,
-  bundleTarget?: string
+  bundleTarget?: string,
+  requestParams?: Record<string, string>
 ): string {
   const defJson = escapeJsonForScript(def || null);
   const keyJson = escapeJsonForScript(formKey || def?.title || '');
@@ -81,6 +82,9 @@ export function buildWebFormHtml(
     return { envTag: envTag || null };
   })();
   const bootstrapJson = escapeJsonForScript(bootstrapPayload);
+  const requestParamsPayload =
+    requestParams && typeof requestParams === 'object' ? { ...(requestParams as Record<string, string>) } : {};
+  const requestParamsJson = escapeJsonForScript(requestParamsPayload);
 
   return `<!DOCTYPE html>
 <html>
@@ -458,6 +462,28 @@ export function buildWebFormHtml(
       h2 { margin: 0 0 10px; font-size: var(--ck-font-group-title); font-weight: 600; }
       .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
       .field label { font-weight: 500; }
+      .field.inline-field.ck-label-inline:not(.ck-consent-field) {
+        display: grid;
+        grid-template-columns: minmax(0, var(--ck-inline-label-width, clamp(136px, 42vw, 220px))) minmax(0, 1fr);
+        column-gap: 12px;
+        row-gap: 6px;
+        align-items: center;
+      }
+      .field.inline-field.ck-label-inline:not(.ck-consent-field) > label {
+        grid-column: 1;
+        margin: 0;
+      }
+      .field.inline-field.ck-label-inline:not(.ck-consent-field) > :not(label) {
+        grid-column: 2;
+        min-width: 0;
+      }
+      .field.inline-field.ck-label-inline:not(.ck-consent-field) > .ck-field-helper,
+      .field.inline-field.ck-label-inline:not(.ck-consent-field) > .error,
+      .field.inline-field.ck-label-inline:not(.ck-consent-field) > .warning,
+      .field.inline-field.ck-label-inline:not(.ck-consent-field) > .muted {
+        grid-column: 2;
+        margin-left: 0;
+      }
       input, select, textarea, button {
         font-size: var(--ck-font-control);
         font-family: inherit;
@@ -487,6 +513,18 @@ export function buildWebFormHtml(
         min-width: 0;
         white-space: nowrap;
         text-align: left;
+      }
+      button.ck-dialog-action-button .ck-button-text,
+      button.ck-dialog-action-button .ck-bottom-label,
+      button.ck-dialog-action-button.ck-button-wrap-left .ck-button-text,
+      button.ck-dialog-action-button.ck-button-wrap-left .ck-bottom-label {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        text-align: center;
       }
       button:disabled { opacity: 0.6; cursor: not-allowed; }
       .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
@@ -1235,6 +1273,7 @@ export function buildWebFormHtml(
         window.__WEB_FORM_KEY__ = ${keyJson};
         window.__WEB_FORM_DEBUG__ = ${debugJson};
         window.__WEB_FORM_BOOTSTRAP__ = ${bootstrapJson};
+        window.__WEB_FORM_REQUEST_PARAMS__ = ${requestParamsJson};
         window.__CK_CACHE_VERSION__ = ${cacheVersionJson};
         window.__CK_ENV_TAG__ = ${envTagJson};
 

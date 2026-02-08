@@ -24,7 +24,7 @@ export type PresetValue = string | number | boolean | string[];
 
 export type ChoiceControl = 'auto' | 'select' | 'radio' | 'segmented' | 'switch';
 
-export type LabelLayout = 'auto' | 'stacked';
+export type LabelLayout = 'auto' | 'inline' | 'stacked';
 
 /**
  * Option ordering for CHOICE/CHECKBOX inputs in the web app.
@@ -129,11 +129,70 @@ export interface ActionBarViewConfig {
   primary?: ActionBarItemConfig[];
 }
 
+export interface DedupIncompleteHomeDialogConfig {
+  /**
+   * Enable this dialog when Home is pressed and reject-dedup fields are incomplete on the form view.
+   * Default: true when object is present.
+   */
+  enabled?: boolean;
+  /**
+   * Optional dialog title.
+   */
+  title?: LocalizedString | string;
+  /**
+   * Dialog message shown to the user.
+   */
+  message?: LocalizedString | string;
+  /**
+   * Label for the confirm action (continue leaving the form).
+   */
+  confirmLabel?: LocalizedString | string;
+  /**
+   * Label for the cancel action (continue editing).
+   */
+  cancelLabel?: LocalizedString | string;
+  /**
+   * Controls which action is visually primary / default.
+   * - confirm (default): confirm button uses the primary accent style
+   * - cancel: cancel button uses the primary accent style
+   */
+  primaryAction?: 'confirm' | 'cancel';
+  /**
+   * When false, hides the cancel button.
+   * Default: true
+   */
+  showCancel?: boolean;
+  /**
+   * When false, hides the close (×) button.
+   * Default: true
+   */
+  showCloseButton?: boolean;
+  /**
+   * When false, clicking the backdrop does not dismiss the dialog.
+   * Default: true
+   */
+  dismissOnBackdrop?: boolean;
+  /**
+   * When true (default), attempt to delete the current persisted record before navigating home.
+   */
+  deleteRecordOnConfirm?: boolean;
+  /**
+   * Optional localized message shown when record deletion fails.
+   */
+  deleteFailedMessage?: LocalizedString | string;
+}
+
 export interface ActionBarsConfig {
   top?: Partial<Record<ActionBarView, ActionBarViewConfig>> & { sticky?: boolean };
   bottom?: Partial<Record<ActionBarView, ActionBarViewConfig>>;
   system?: {
-    home?: { hideWhenActive?: boolean };
+    home?: {
+      hideWhenActive?: boolean;
+      /**
+       * Optional Home-navigation guard dialog shown when reject-dedup fields are incomplete.
+       */
+      dedupIncompleteDialog?: DedupIncompleteHomeDialogConfig;
+    };
     /**
      * Optional per-system-action gates for the web app (hide/disable + optional dialog).
      *
@@ -142,6 +201,7 @@ export interface ActionBarsConfig {
      * - guided step virtual fields (e.g. `__ckStep`)
      * - system/meta fields (e.g. `status`, `STATUS`)
      * - runtime UI virtual fields (e.g. `__ckView`)
+     * - request params via `__ckRequestParam_<name>` (e.g. `__ckRequestParam_admin`)
      */
     gates?: SystemActionGatesConfig;
   };
@@ -160,6 +220,7 @@ export type ButtonPlacement =
 export type ButtonOutput = 'pdf';
 
 export type ButtonPreviewMode = 'pdf' | 'live';
+export type ButtonTone = 'primary' | 'secondary';
 
 /**
  * UI-only button field.
@@ -283,6 +344,12 @@ export interface RenderDocTemplateButtonConfig {
    */
   placements?: ButtonPlacement[];
   /**
+   * Optional tone override for inline button rendering in the form view.
+   * - primary: accent-filled button
+   * - secondary: neutral/outline button
+   */
+  tone?: ButtonTone;
+  /**
    * Optional Drive folder to write generated PDFs to (defaults to follow-up folder / spreadsheet parent).
    */
   folderId?: string;
@@ -301,6 +368,10 @@ export interface RenderMarkdownTemplateButtonConfig {
    */
   templateId: TemplateIdMap;
   placements?: ButtonPlacement[];
+  /**
+   * Optional tone override for inline button rendering in the form view.
+   */
+  tone?: ButtonTone;
 }
 
 export interface RenderHtmlTemplateButtonConfig {
@@ -316,6 +387,10 @@ export interface RenderHtmlTemplateButtonConfig {
    */
   templateId: TemplateIdMap;
   placements?: ButtonPlacement[];
+  /**
+   * Optional tone override for inline button rendering in the form view.
+   */
+  tone?: ButtonTone;
 }
 
 export interface CreateRecordPresetButtonConfig {
@@ -328,6 +403,10 @@ export interface CreateRecordPresetButtonConfig {
    */
   presetValues: Record<string, DefaultValue>;
   placements?: ButtonPlacement[];
+  /**
+   * Optional tone override for inline button rendering in the form view.
+   */
+  tone?: ButtonTone;
 }
 
 export interface ListViewSearchPresetButtonConfig {
@@ -353,6 +432,10 @@ export interface ListViewSearchPresetButtonConfig {
    * Advanced field filters (AND-ed together).
    */
   fieldFilters?: Record<string, string | string[]>;
+  /**
+   * Optional tone override for inline button rendering in the form view.
+   */
+  tone?: ButtonTone;
 }
 
 export interface UpdateRecordButtonConfig {
@@ -384,6 +467,10 @@ export interface UpdateRecordButtonConfig {
    */
   navigateTo?: ButtonNavigateTo;
   placements?: ButtonPlacement[];
+  /**
+   * Optional tone override for inline button rendering in the form view.
+   */
+  tone?: ButtonTone;
 }
 
 export interface OpenUrlFieldButtonConfig {
@@ -398,6 +485,10 @@ export interface OpenUrlFieldButtonConfig {
    */
   fieldId: string;
   placements?: ButtonPlacement[];
+  /**
+   * Optional tone override for inline button rendering in the form view.
+   */
+  tone?: ButtonTone;
 }
 
 export type ButtonConfig =
@@ -931,6 +1022,13 @@ export interface FieldDisableRule {
    * Optional list of field ids that remain editable while this rule is active.
    */
   bypassFields?: string[];
+  /**
+   * Optional status to set when the `?unlock=<record_id>` bypass is used on
+   * the dedicated `ready-for-production-order-lock` rule.
+   *
+   * Example: "In progress" so admins can edit and re-lock the record.
+   */
+  unlockStatus?: string;
 }
 
 export interface VisibilityConfig {
@@ -1780,6 +1878,27 @@ export interface AutoSaveConfig {
   status?: string;
 }
 
+export interface AuditLoggingConfig {
+  /**
+   * Enable/disable audit logging for this form.
+   */
+  enabled?: boolean;
+  /**
+   * Optional explicit destination sheet name for audit rows.
+   * Defaults to "<destination tab> Audit" when omitted.
+   */
+  sheetName?: string;
+  /**
+   * Optional list of status values for which change-audit rows are written.
+   * Matching is case-insensitive.
+   */
+  statuses?: string[];
+  /**
+   * Optional list of custom button ids that trigger snapshot audits.
+   */
+  snapshotButtons?: string[];
+}
+
 export interface DataSourceConfig {
   id: string;
   ref?: string; // optional reference key used by backend
@@ -2037,6 +2156,11 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   autoSave?: AutoSaveConfig;
+  /**
+   * Optional audit logging behavior for this form.
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  auditLogging?: AuditLoggingConfig;
   /**
    * Enable/disable the Summary view in the React web app.
    * When false, list-row clicks always open the Form view

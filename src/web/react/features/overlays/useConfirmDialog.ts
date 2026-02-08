@@ -6,6 +6,7 @@ export type ConfirmDialogState = {
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  primaryAction?: 'confirm' | 'cancel';
   showCancel?: boolean;
   showConfirm?: boolean;
   dismissOnBackdrop?: boolean;
@@ -19,6 +20,7 @@ export type ConfirmDialogOpenArgs = {
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  primaryAction?: 'confirm' | 'cancel';
   showCancel?: boolean;
   showConfirm?: boolean;
   dismissOnBackdrop?: boolean;
@@ -52,6 +54,7 @@ export const useConfirmDialog = (opts?: {
     message: '',
     confirmLabel: '',
     cancelLabel: '',
+    primaryAction: 'confirm',
     showCancel: true,
     showConfirm: true,
     dismissOnBackdrop: true,
@@ -98,6 +101,7 @@ export const useConfirmDialog = (opts?: {
       const message = (args?.message || '').toString();
       const confirmLabel = (args?.confirmLabel || '').toString();
       const cancelLabel = (args?.cancelLabel || '').toString();
+      const primaryAction = args?.primaryAction === 'cancel' ? 'cancel' : 'confirm';
       const showCancel = args?.showCancel !== false;
       const showConfirm = args?.showConfirm !== false;
       const dismissOnBackdrop = args?.dismissOnBackdrop !== false;
@@ -113,6 +117,7 @@ export const useConfirmDialog = (opts?: {
         message,
         confirmLabel,
         cancelLabel,
+        primaryAction,
         showCancel,
         showConfirm,
         dismissOnBackdrop,

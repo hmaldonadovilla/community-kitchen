@@ -397,4 +397,121 @@ describe('WebFormService', () => {
     // Row 2 is the first record.
     expect((values[1][statusCol] || '').toString()).toBe('In progress');
   });
+
+  test('writes change and snapshot rows to dedicated audit sheet when audit logging is enabled', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
+    if (!dashboardSheet) throw new Error('Dashboard not created');
+
+    const followupJson = JSON.stringify({
+      auditLogging: {
+        enabled: true,
+        statuses: ['Ready for production'],
+        snapshotButtons: ['READY_PROD'],
+        sheetName: 'Delivery Audit'
+      }
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson]
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-AUDIT-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+
+    const updated = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-AUDIT-1',
+      Q1: 'Alice Updated',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Ready for production',
+      __ckAuditAction: 'READY_PROD',
+      __ckDeviceInfo: '{"userAgent":"Jest UA"}'
+    } as any);
+    expect(updated.success).toBe(true);
+
+    const auditSheet = ss.getSheetByName('Delivery Audit');
+    expect(auditSheet).toBeDefined();
+    const rows = auditSheet!.getValues();
+    const header = (rows[0] || []).map((v: any) => (v || '').toString());
+    const rowData = rows.slice(1).filter(r => r && r.some((cell: any) => cell !== ''));
+
+    const col = (name: string) => header.findIndex(h => h === name);
+    const auditTypeIdx = col('auditType');
+    const fieldPathIdx = col('fieldPath');
+    const beforeIdx = col('beforeValue');
+    const afterIdx = col('afterValue');
+    const snapshotIdx = col('snapshot');
+    const deviceInfoIdx = col('deviceInfo');
+    const recordIdIdx = col('recordId');
+
+    expect(auditTypeIdx).toBeGreaterThanOrEqual(0);
+    expect(fieldPathIdx).toBeGreaterThanOrEqual(0);
+    expect(col('auditStatus')).toBe(-1);
+    expect(deviceInfoIdx).toBeGreaterThanOrEqual(0);
+
+    const changeRows = rowData.filter(r => (r[auditTypeIdx] || '').toString() === 'change');
+    const snapshotRows = rowData.filter(r => (r[auditTypeIdx] || '').toString() === 'snapshot');
+    expect(changeRows.length).toBeGreaterThan(0);
+    expect(snapshotRows.length).toBe(1);
+
+    const q1Change = changeRows.find(r => (r[fieldPathIdx] || '').toString() === 'Q1');
+    expect(q1Change).toBeDefined();
+    expect((q1Change?.[beforeIdx] || '').toString()).toBe('Alice');
+    expect((q1Change?.[afterIdx] || '').toString()).toBe('Alice Updated');
+    expect((q1Change?.[deviceInfoIdx] || '').toString()).toContain('Jest UA');
+    expect((q1Change?.[recordIdIdx] || '').toString()).toBe('REC-AUDIT-1');
+
+    const snapshotRow = snapshotRows[0];
+    expect((snapshotRow[snapshotIdx] || '').toString()).toContain('REC-AUDIT-1');
+  });
+
+  test('updates preserve unmanaged destination columns', () => {
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-PRESERVE-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+    expect(created.success).toBe(true);
+
+    const sheet = ss.getSheetByName('Deliveries');
+    expect(sheet).toBeDefined();
+    const unmanagedCol = Math.max((sheet as any).getLastColumn(), 1) + 1;
+    (sheet as any).getRange(1, unmanagedCol, 1, 1).setValue('Manual Notes');
+    (sheet as any).getRange(2, unmanagedCol, 1, 1).setValue('Keep me');
+
+    const updated = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-PRESERVE-1',
+      Q1: 'Alice 2',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+    expect(updated.success).toBe(true);
+
+    const unmanagedValue = (sheet as any).getRange(2, unmanagedCol, 1, 1).getValues()[0][0];
+    expect((unmanagedValue || '').toString()).toBe('Keep me');
+  });
 });
