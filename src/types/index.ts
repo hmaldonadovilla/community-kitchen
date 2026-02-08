@@ -527,8 +527,23 @@ export interface QuestionUiConfig {
    * Optional helper text shown for this field.
    *
    * Use `helperPlacement` to control where it appears (below label vs inside the control).
+   * For dual helper text rendering, use `helperTextBelowLabel` + `helperTextPlaceholder`.
    */
   helperText?: LocalizedString;
+  /**
+   * Optional helper text rendered below the field label/control.
+   *
+   * When set, this renders in addition to `helperTextPlaceholder`.
+   * If omitted, legacy `helperText` + `helperPlacement` rules are used.
+   */
+  helperTextBelowLabel?: LocalizedString;
+  /**
+   * Optional helper text rendered inside the control as placeholder text (when supported).
+   *
+   * When set, this renders in addition to `helperTextBelowLabel`.
+   * If omitted, legacy `helperText` + `helperPlacement` rules are used.
+   */
+  helperTextPlaceholder?: LocalizedString;
   /**
    * Where to render `helperText`.
    * - belowLabel: render as supporting text below the control (default)
@@ -2374,6 +2389,14 @@ export interface SubmitValidationConfig {
    * When true, require users to complete required fields in order and keep Submit disabled until the form is valid.
    */
   enforceFieldOrder?: boolean;
+  /**
+   * When true, hide the top submit validation error banner (normally keyed by `validation.fixErrors`).
+   *
+   * Notes:
+   * - Field-level validation errors still appear inline.
+   * - Warning banners are still shown when present.
+   */
+  hideSubmitTopErrorMessage?: boolean;
   /**
    * Optional localized override for the top submit validation message.
    */

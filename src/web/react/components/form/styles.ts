@@ -1556,6 +1556,10 @@ export const FORM_VIEW_STYLES = `
           box-shadow: none;
           padding: 6px;
         }
+        .ck-searchable-select__menu--up {
+          top: auto;
+          bottom: calc(100% + 6px);
+        }
         .ck-searchable-select__option {
           width: 100%;
           text-align: left;
@@ -1694,7 +1698,7 @@ export const FORM_VIEW_STYLES = `
         .ck-group-card {
           padding: 0;
           outline: none;
-          overflow: hidden;
+          overflow: visible;
           /* stronger separation between grouped cards */
           box-shadow: none;
         }

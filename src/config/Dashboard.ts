@@ -970,11 +970,20 @@ export class Dashboard {
       submitValidationObj?.submitErrorMessage ??
       submitValidationObj?.topErrorMessage ??
       submitValidationObj?.errorMessage;
+    const submitValidationHideTopErrorRaw =
+      submitValidationObj?.hideSubmitTopErrorMessage ??
+      submitValidationObj?.hideTopErrorMessage ??
+      submitValidationObj?.hideSubmitTopError ??
+      submitValidationObj?.suppressTopErrorMessage;
+    const submitValidationHideTopError = normalizeBoolean(submitValidationHideTopErrorRaw);
     const submitValidation: SubmitValidationConfig | undefined =
-      submitValidationEnforceRaw === undefined && submitValidationMessageRaw === undefined
+      submitValidationEnforceRaw === undefined &&
+      submitValidationMessageRaw === undefined &&
+      submitValidationHideTopError === undefined
         ? undefined
         : {
             enforceFieldOrder: normalizeBoolean(submitValidationEnforceRaw),
+            hideSubmitTopErrorMessage: submitValidationHideTopError,
             submitTopErrorMessage: normalizeLocalized(submitValidationMessageRaw)
           };
     const submissionConfirmationRaw =

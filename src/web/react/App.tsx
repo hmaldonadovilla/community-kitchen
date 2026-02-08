@@ -103,6 +103,13 @@ import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/ac
 import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { resolveReadyForProductionUnlockStatus, resolveUnlockRecordId } from './app/readyForProductionLock';
+import {
+  applyIngredientActivationSystemFields,
+  getIngredientNameValidationMessage,
+  isIngredientCreateAutoSaveReady,
+  isIngredientNameFieldId,
+  isIngredientsManagementForm
+} from './app/ingredientsCreateRules';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
@@ -423,6 +430,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
     return mapped.lineItems;
   });
+  const ingredientsFormActive = isIngredientsManagementForm(formKey);
+  const ingredientCreateAutoSaveReady = ingredientsFormActive ? isIngredientCreateAutoSaveReady(values as any) : true;
   const [view, setView] = useState<View>('list');
   const [submitting, setSubmitting] = useState(false);
   const [reportOverlay, setReportOverlay] = useState<ReportOverlayState>({
@@ -511,6 +520,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const [isLandscape, setIsLandscape] = useState<boolean>(false);
   const [debugEnabled] = useState<boolean>(() => detectDebug());
   const [autoSaveNoticeOpen, setAutoSaveNoticeOpen] = useState<boolean>(false);
+  const [ingredientNameBlurredForAutoSave, setIngredientNameBlurredForAutoSave] = useState<boolean>(false);
   const autoSaveNoticeSeenRef = useRef<boolean>(false);
   const logEvent = useCallback(
     (event: string, payload?: Record<string, unknown>) => {
@@ -1471,7 +1481,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           }
         }
 
+        const isTopIngredientNameField =
+          ingredientsFormActive && args?.scope === 'top' && isIngredientNameFieldId(fieldId || fieldKey);
+
+        if (isTopIngredientNameField && args?.event === 'change') {
+          setIngredientNameBlurredForAutoSave(false);
+        }
+
         if (args?.event === 'blur' && fieldKey) {
+          if (isTopIngredientNameField) {
+            setIngredientNameBlurredForAutoSave(true);
+            const nextMessage = getIngredientNameValidationMessage((valuesRef.current as any)?.INGREDIENT_NAME);
+            setErrors(prev => {
+              const current = (prev || {})[fieldKey];
+              if (!nextMessage && !current) return prev;
+              if (nextMessage === current) return prev;
+              const next = { ...(prev || {}) };
+              if (nextMessage) next[fieldKey] = nextMessage;
+              else delete next[fieldKey];
+              return next;
+            });
+            if (nextMessage) {
+              logEvent('validation.ingredients.name.invalid', { message: nextMessage });
+            }
+          }
+
           const finalizedInitialDateEntry = finalizeInitialDateChangeDialogEntry({
             fieldPath: fieldKey,
             initialEntryInProgressByFieldPath: fieldChangeDateInitialEntryInProgressRef.current,
@@ -1586,7 +1620,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         // ignore
       }
     },
-    [dedupNotice, definition, logEvent, openFieldChangeDialog, triggerDedupDeleteOnKeyChange]
+    [
+      dedupNotice,
+      definition,
+      ingredientsFormActive,
+      logEvent,
+      openFieldChangeDialog,
+      setErrors,
+      triggerDedupDeleteOnKeyChange
+    ]
   );
 
   useEffect(() => {
@@ -4626,6 +4668,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       if (lastSubmissionMeta?.createdAt) vars.createdAt = lastSubmissionMeta.createdAt;
       if (lastSubmissionMeta?.updatedAt) vars.updatedAt = lastSubmissionMeta.updatedAt;
       if (lastSubmissionMeta?.status) vars.status = lastSubmissionMeta.status;
+      const locale = language.toLowerCase() === 'fr' ? 'fr-CA' : language.toLowerCase() === 'nl' ? 'nl-NL' : 'en-CA';
+      const todayDate = (() => {
+        try {
+          return new Intl.DateTimeFormat(locale, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }).format(new Date());
+        } catch (_) {
+          return new Date().toISOString().slice(0, 10);
+        }
+      })();
+      vars.today = todayDate;
+      vars.todayDate = todayDate;
+      vars.TODAY = todayDate;
+      vars.TODAY_DATE = todayDate;
 
       (definition.questions || []).forEach(q => {
         if (!q || !q.id) return;
@@ -4670,10 +4728,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   useEffect(() => {
     autoSaveNoticeSeenRef.current = false;
     setAutoSaveNoticeOpen(false);
+    setIngredientNameBlurredForAutoSave(false);
   }, [autoSaveNoticeStorageKey]);
 
   useEffect(() => {
     if (!autoSaveEnabled || view !== 'form') return;
+    if (ingredientsFormActive && createFlowRef.current) {
+      if (!ingredientCreateAutoSaveReady) return;
+      if (!ingredientNameBlurredForAutoSave) return;
+    }
     if (autoSaveNoticeSeenRef.current) return;
     let seen = false;
     try {
@@ -4691,7 +4754,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       formKey: formKey || null,
       mode: createFlowRef.current ? 'create' : 'edit'
     });
-  }, [autoSaveEnabled, autoSaveNoticeStorageKey, formKey, logEvent, view]);
+  }, [
+    autoSaveEnabled,
+    autoSaveNoticeStorageKey,
+    formKey,
+    ingredientCreateAutoSaveReady,
+    ingredientNameBlurredForAutoSave,
+    ingredientsFormActive,
+    logEvent,
+    view
+  ]);
 
   const dismissAutoSaveNotice = useCallback(
     (reason: 'confirm' | 'cancel') => {
@@ -4992,6 +5064,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       const lineItemsSnapshot = lineItemsRef.current;
       const languageSnapshot = languageRef.current;
 
+      if (isCreateFlow && ingredientsFormActive && !isIngredientCreateAutoSaveReady(valuesSnapshot as any)) {
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.ingredients.createRequirements', { reason, isCreateFlow: true });
+        return;
+      }
+
       const createFlowDedupKeysIncomplete =
         isCreateFlow && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesSnapshot as any);
       if (createFlowDedupKeysIncomplete) {
@@ -5250,6 +5328,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       definition,
       dedupDeleteOnKeyChangeEnabled,
       formKey,
+      ingredientsFormActive,
       language,
       loadRecordSnapshot,
       logEvent,
@@ -6455,7 +6534,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         definition,
         formKey,
         language: languageRef.current,
-        values: valuesRef.current,
+        values: ingredientsFormActive ? applyIngredientActivationSystemFields(valuesRef.current as any) : valuesRef.current,
         lineItems: lineItemsRef.current,
         existingRecordId,
         collapsedRows: submitUi?.collapsedRows,
@@ -7076,10 +7155,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     (items: DedupDialogItem[]) => {
       const intro = dedupDialogCopy.intro.trim();
       const outro = dedupDialogCopy.outro.trim();
+      const showKeyValues = !(ingredientsFormActive && createFlowRef.current);
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {intro ? <div>{intro}</div> : null}
-          {items.length ? (
+          {showKeyValues && items.length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {items.map(item => (
                 <div key={item.fieldId}>
@@ -7092,7 +7172,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         </div>
       );
     },
-    [dedupDialogCopy.intro, dedupDialogCopy.outro]
+    [dedupDialogCopy.intro, dedupDialogCopy.outro, ingredientsFormActive]
   );
 
   const dedupDialogMessage = useMemo(() => {
@@ -7200,6 +7280,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     setView
   ]);
 
+  const handleDedupCancelCreationToHome = useCallback(() => {
+    const conflict = dedupDialogConflict as any;
+    resetDedupState('dedup.dialog.cancelCreation');
+    createFlowRef.current = false;
+    createFlowUserEditedRef.current = false;
+    autoSaveUserEditedRef.current = false;
+    dedupHoldRef.current = false;
+    setView('list');
+    setStatus(null);
+    setStatusLevel(null);
+    logEvent('dedup.dialog.cancelCreation.home', {
+      ruleId: conflict?.ruleId || null,
+      existingRecordId: conflict?.existingRecordId || null
+    });
+  }, [dedupDialogConflict, logEvent, resetDedupState]);
+
   const handleDedupOpenExisting = useCallback(() => {
     const conflict = dedupDialogConflict as any;
     const id = (conflict?.existingRecordId || '').toString().trim();
@@ -7247,6 +7343,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       existingRowNumber: prompt.conflict.existingRowNumber ?? null
     });
   }, [listDedupPrompt, logEvent]);
+
+  const ingredientCreateDedupDialogMode = ingredientsFormActive && createFlowRef.current;
+  const dedupDialogConfirmLabel = ingredientCreateDedupDialogMode ? dedupDialogCopy.cancelLabel : dedupDialogCopy.openLabel;
+  const dedupDialogCancelLabel = dedupDialogCopy.changeLabel;
+  const handleDedupDialogConfirm = ingredientCreateDedupDialogMode ? handleDedupCancelCreationToHome : handleDedupOpenExisting;
+  const handleDedupDialogCancel = handleDedupChangeFields;
 
   useEffect(() => {
     if (!dedupDialogConflict) return;
@@ -7387,6 +7489,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   )
     .toString()
     .trim();
+  const hideSubmitTopErrorMessage = definition.submitValidation?.hideSubmitTopErrorMessage === true;
+  useEffect(() => {
+    if (!hideSubmitTopErrorMessage) return;
+    logEvent('validation.submitTopError.hidden', { enabled: true });
+  }, [hideSubmitTopErrorMessage, logEvent]);
   const validationTopNotice =
     view === 'form' &&
     validationAttempted &&
@@ -7396,6 +7503,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         language={language}
         errors={errors}
         warnings={validationWarnings.top}
+        hideErrorBanner={hideSubmitTopErrorMessage}
         errorMessageOverride={submitTopErrorMessage || undefined}
         onDismiss={dismissValidationNotice}
         onNavigateToField={navigateToFieldFromHeaderNotice}
@@ -7678,6 +7786,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
       {view === 'form' ? (
         <FormView
+          formKey={formKey}
           definition={definition}
           dedupKeyFieldIdMap={dedupKeyFieldIdMap}
           language={language}
@@ -7817,13 +7926,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         open={view === 'form' && !!dedupDialogConflict}
         title={dedupDialogCopy.title}
         message={dedupDialogMessage}
-        confirmLabel={dedupDialogCopy.openLabel}
-        cancelLabel={dedupDialogCopy.changeLabel}
+        confirmLabel={dedupDialogConfirmLabel}
+        cancelLabel={dedupDialogCancelLabel}
         dismissOnBackdrop={false}
         showCloseButton={false}
         zIndex={12018}
-        onCancel={handleDedupChangeFields}
-        onConfirm={handleDedupOpenExisting}
+        onCancel={handleDedupDialogCancel}
+        onConfirm={handleDedupDialogConfirm}
       />
 
       <ConfirmDialogOverlay

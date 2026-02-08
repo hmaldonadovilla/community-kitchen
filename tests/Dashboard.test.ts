@@ -502,6 +502,30 @@ describe('Dashboard', () => {
     expect(forms[0].submitButtonLabel).toEqual({ en: 'Send' });
   });
 
+  test('getForms parses submitValidation.hideSubmitTopErrorMessage from dashboard config', () => {
+    const configJson = JSON.stringify({
+      submitValidation: {
+        enforceFieldOrder: true,
+        hideSubmitTopErrorMessage: true,
+        submitTopErrorMessage: { EN: 'Fix required fields' }
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].submitValidation).toEqual({
+      enforceFieldOrder: true,
+      hideSubmitTopErrorMessage: true,
+      submitTopErrorMessage: { en: 'Fix required fields' }
+    });
+  });
+
   test('getForms parses autosave config from dashboard config', () => {
     const configJson = JSON.stringify({
       autoSave: { enabled: true, debounceMs: 1500, status: 'In progress' }

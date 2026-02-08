@@ -93,7 +93,7 @@ const BackIcon: React.FC = () => (
   </svg>
 );
 
-// System "Summary" button should use a checklist/summary icon (distinct from renderDocTemplate buttons).
+// System "Summary" button uses an eye icon to align with "View" semantics.
 const SummarySystemIcon: React.FC = () => (
   <svg
     viewBox="0 0 24 24"
@@ -104,11 +104,8 @@ const SummarySystemIcon: React.FC = () => (
     strokeLinecap="round"
     strokeLinejoin="round"
   >
-    <rect x="5" y="3" width="14" height="18" rx="2" />
-    <path d="M9 3V2.75A1.75 1.75 0 0 1 10.75 1h2.5A1.75 1.75 0 0 1 15 2.75V3" />
-    <path d="M8.5 8h7" />
-    <path d="M8.5 12h7" />
-    <path d="M14.5 15.5l.5-1 .5 1 1 .5-1 .5-.5 1-.5-1-1-.5z" fill="currentColor"/>
+    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+    <circle cx="12" cy="12" r="3" />
   </svg>
 );
 

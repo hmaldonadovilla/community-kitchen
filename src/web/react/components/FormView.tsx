@@ -117,6 +117,11 @@ import {
   seedSubgroupDefaults
 } from '../app/lineItems';
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
+import {
+  isIngredientNameFieldId,
+  isIngredientsManagementForm,
+  normalizeIngredientNameIfAllCaps
+} from '../app/ingredientsCreateRules';
 import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAncestors';
 import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app/bundledHtmlClientRenderer';
 import { resolveTemplateIdForRecord } from '../app/templateId';
@@ -550,6 +555,7 @@ const collectLineItemConfigEntries = (questions: WebQuestionDefinition[]) => {
 };
 
 interface FormViewProps {
+  formKey?: string;
   definition: WebFormDefinition;
   /**
    * Optional map of dedup key field ids (used to keep dedup keys editable even if valueMap is present).
@@ -676,6 +682,7 @@ interface FormViewProps {
 }
 
 const FormView: React.FC<FormViewProps> = ({
+  formKey,
   definition,
   dedupKeyFieldIdMap,
   guidedForwardNavigationBlocked,
@@ -724,6 +731,7 @@ const FormView: React.FC<FormViewProps> = ({
     return s === 'source' ? 'source' : 'alphabetical';
   };
   const orderedEntryEnabled = definition.submitValidation?.enforceFieldOrder === true;
+  const ingredientNameTransformEnabled = isIngredientsManagementForm(formKey);
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
     const list = key && warningByField ? (warningByField as any)[key] : undefined;
@@ -3212,12 +3220,13 @@ const FormView: React.FC<FormViewProps> = ({
       value: string;
       options: OptionLike[];
       required: boolean;
+      placeholder?: string;
       searchEnabled?: boolean;
       override?: string | null;
       disabled?: boolean;
       onChange: (next: string) => void;
     }) => {
-      const { fieldPath, value, options, required, searchEnabled, override, disabled, onChange } = args;
+      const { fieldPath, value, options, required, placeholder: placeholderOverride, searchEnabled, override, disabled, onChange } = args;
       const decision = computeChoiceControlVariant(options, required, override);
 
       const prev = choiceVariantLogRef.current[fieldPath];
@@ -3233,7 +3242,8 @@ const FormView: React.FC<FormViewProps> = ({
         });
       }
 
-      const placeholder = tSystem('common.selectPlaceholder', language, 'Select…');
+      const placeholder =
+        (placeholderOverride || '').toString().trim() || tSystem('common.selectPlaceholder', language, 'Select…');
       const shouldUseSearchableSelect = (() => {
         if (decision.variant !== 'select') return false;
         if (searchEnabled === true) return true;
@@ -6477,8 +6487,12 @@ const FormView: React.FC<FormViewProps> = ({
       });
       return;
     }
+    const nextValue =
+      ingredientNameTransformEnabled && isIngredientNameFieldId(q.id) && typeof value === 'string'
+        ? normalizeIngredientNameIfAllCaps(value)
+        : value;
     guidedLastUserEditAtRef.current = Date.now();
-    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue: value });
+    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue });
     clearOverlayOpenActionSuppression(q.id);
     if (onStatusClear) onStatusClear();
     const currentValues = valuesRef.current;
@@ -6486,15 +6500,15 @@ const FormView: React.FC<FormViewProps> = ({
     if (
       isClearOnChangeEnabled((q as any).clearOnChange) &&
       !isEmptyValue(currentValues[q.id]) &&
-      !isEmptyValue(value) &&
-      !areFieldValuesEqual(currentValues[q.id], value)
+      !isEmptyValue(nextValue) &&
+      !areFieldValuesEqual(currentValues[q.id], nextValue)
     ) {
       const cleared = applyClearOnChange({
         definition,
         values: currentValues,
         lineItems: currentLineItems,
         fieldId: q.id,
-        nextValue: value,
+        nextValue,
         orderedFieldIds: clearOnChangeOrderedFieldIds
       });
       onDiagnostic?.('field.clearOnChange', {
@@ -6508,11 +6522,11 @@ const FormView: React.FC<FormViewProps> = ({
       lineItemsRef.current = cleared.lineItems;
       setErrors({});
       if (onSelectionEffect) {
-        onSelectionEffect(q, value);
+        onSelectionEffect(q, nextValue);
       }
       return;
     }
-    const baseValues = { ...currentValues, [q.id]: value };
+    const baseValues = { ...currentValues, [q.id]: nextValue };
     const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(
       definition,
       baseValues,
@@ -6534,7 +6548,7 @@ const FormView: React.FC<FormViewProps> = ({
       return next;
     });
     if (onSelectionEffect) {
-      onSelectionEffect(q, value);
+      onSelectionEffect(q, nextValue);
     }
   };
 
@@ -7442,7 +7456,7 @@ const FormView: React.FC<FormViewProps> = ({
         const busyThis = !!reportBusy && reportBusyId === q.id;
         const disabled = submitting || isFieldLockedByDedup(q.id) || !onReportButton || !!reportBusy;
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperText = helperCfg.belowLabelText;
         const helperNode = helperText ? <div className="ck-field-helper">{helperText}</div> : null;
         const buttonLabelStyle = inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly;
         return (
@@ -7514,17 +7528,16 @@ const FormView: React.FC<FormViewProps> = ({
         const displayText =
           displayValue === undefined || displayValue === null ? '' : displayValue.toString();
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperTextBelowLabel = helperCfg.belowLabelText;
+        const helperTextPlaceholder = helperCfg.placeholderText;
         const supportsPlaceholder = q.type === 'TEXT' || q.type === 'PARAGRAPH' || q.type === 'NUMBER';
-        const helperPlacement =
-          helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
         const isEditableField =
           !renderAsLabel && !useValueMap && !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
-        const helperId = helperText && helperPlacement === 'belowLabel' && isEditableField ? `ck-field-helper-${q.id}` : undefined;
+        const helperId = helperTextBelowLabel && isEditableField ? `ck-field-helper-${q.id}` : undefined;
         const helperNode =
-          helperText && helperPlacement === 'belowLabel' && isEditableField ? (
+          helperTextBelowLabel && isEditableField ? (
             <div id={helperId} className="ck-field-helper">
-              {helperText}
+              {helperTextBelowLabel}
             </div>
           ) : null;
         if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
@@ -7534,7 +7547,7 @@ const FormView: React.FC<FormViewProps> = ({
           return renderReadOnly(displayValue || null, { stacked: forceStackedLabel, inline: forceInlineLabel });
         }
         if (q.type === 'NUMBER') {
-          const placeholder = helperText && helperPlacement === 'placeholder' && isEditableField ? helperText : undefined;
+          const placeholder = supportsPlaceholder && helperTextPlaceholder && isEditableField ? helperTextPlaceholder : undefined;
           const numericOnlyMessage = tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
           return (
             <div
@@ -7572,14 +7585,14 @@ const FormView: React.FC<FormViewProps> = ({
                 }
                 onChange={next => handleFieldChange(q, next)}
               />
-              {helperPlacement === 'belowLabel' ? helperNode : null}
+              {helperNode}
               {renderOverlayOpenInlineButton(displayText || null)}
               {errors[q.id] && <div className="error">{errors[q.id]}</div>}
               {renderWarnings(q.id)}
             </div>
           );
         }
-        const placeholder = helperText && helperPlacement === 'placeholder' && isEditableField ? helperText : undefined;
+        const placeholder = supportsPlaceholder && helperTextPlaceholder && isEditableField ? helperTextPlaceholder : undefined;
         return (
           <div
             key={q.id}
@@ -7653,7 +7666,7 @@ const FormView: React.FC<FormViewProps> = ({
                 aria-describedby={helperId}
               />
             )}
-            {helperPlacement === 'belowLabel' ? helperNode : null}
+            {helperNode}
             {renderOverlayOpenInlineButton(displayText || null)}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
             {renderWarnings(q.id)}
@@ -7666,8 +7679,9 @@ const FormView: React.FC<FormViewProps> = ({
         const selected = opts.find(opt => opt.value === choiceValue);
         const display = selected?.label || choiceValue || null;
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperText = helperCfg.belowLabelText;
         const isEditableField = !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
+        const placeholder = helperCfg.placeholderText && isEditableField ? helperCfg.placeholderText : undefined;
         const helperId = helperText && isEditableField ? `ck-field-helper-${q.id}` : undefined;
         const helperNode = helperText && isEditableField ? (
           <div id={helperId} className="ck-field-helper">
@@ -7697,6 +7711,7 @@ const FormView: React.FC<FormViewProps> = ({
               value: choiceValue || '',
               options: opts,
               required: !!q.required,
+              placeholder,
               searchEnabled: q.ui?.choiceSearchEnabled,
               override: q.ui?.control,
               disabled: submitting || q.readOnly === true || isFieldLockedByDedup(q.id),
@@ -7719,8 +7734,10 @@ const FormView: React.FC<FormViewProps> = ({
         const isConsentCheckbox = !q.dataSource && !hasAnyOption;
         const selected = Array.isArray(values[q.id]) ? (values[q.id] as string[]) : [];
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperText = helperCfg.belowLabelText;
         const isEditableField = !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
+        const placeholder =
+          helperCfg.placeholderText || tSystem('common.selectPlaceholder', language, 'Select…');
         const helperId = helperText && isEditableField ? `ck-field-helper-${q.id}` : undefined;
         const helperNode = helperText && isEditableField ? (
           <div id={helperId} className="ck-field-helper">
@@ -7802,7 +7819,7 @@ const FormView: React.FC<FormViewProps> = ({
                   searchText: opt.searchText
                 }))}
                 disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
-                placeholder="Select..."
+                placeholder={placeholder}
                 aria-label={resolveLabel(q, language)}
                 onChange={next => {
                   if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
@@ -7855,7 +7872,7 @@ const FormView: React.FC<FormViewProps> = ({
         const items = toUploadItems(values[q.id]);
         const uploadConfig = q.uploadConfig || {};
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperText = helperCfg.belowLabelText;
         const readOnly = q.readOnly === true;
         const locked = isFieldLockedByDedup(q.id);
         const isEditableField = !submitting && !readOnly && !locked;
@@ -8233,7 +8250,7 @@ const FormView: React.FC<FormViewProps> = ({
           })();
           const groupLabel = resolveLabel(q, language);
           const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-          const helperText = helperCfg.text;
+          const helperText = helperCfg.belowLabelText;
           const isEditableField = !locked && q.readOnly !== true && q.ui?.renderAsLabel !== true;
           const helperNode = helperText && isEditableField ? <div className="ck-field-helper">{helperText}</div> : null;
           const pillText = groupLabel;
@@ -13038,7 +13055,7 @@ const FormView: React.FC<FormViewProps> = ({
   return (
     <>
       <div className="ck-form-sections">
-        {recordStatusText ? (
+        {recordStatusText && !ingredientNameTransformEnabled ? (
           <div className="ck-record-status-row">
             <span className="ck-record-status-label">{tSystem('list.meta.status', language, 'Status')}</span>
             <span

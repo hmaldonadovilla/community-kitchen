@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { matchesQueryTokens } from './searchUtils';
 
@@ -31,11 +31,14 @@ export const SearchableMultiSelect: React.FC<{
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   onChange: (nextValues: string[]) => void;
 }> = ({ value, options, disabled, placeholder, emptyText, ariaLabel, onDiagnostic, onChange }) => {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuInteractingRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
+  const [menuPlacement, setMenuPlacement] = useState<'down' | 'up'>('down');
+  const [menuMaxHeight, setMenuMaxHeight] = useState<number>(320);
 
   const selectedValues = useMemo(() => normalizeList(value), [value]);
   const selectedSet = useMemo(() => new Set(selectedValues), [selectedValues]);
@@ -81,8 +84,49 @@ export const SearchableMultiSelect: React.FC<{
     }, 0);
   };
 
+  const recomputeMenuLayout = useCallback(() => {
+    if (!open) return;
+    const anchor = inputRef.current || rootRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const viewportTop = vv ? vv.offsetTop : 0;
+    const viewportBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const gap = 6;
+    const margin = 12;
+    const spaceBelow = Math.floor(viewportBottom - rect.bottom - gap - margin);
+    const spaceAbove = Math.floor(rect.top - viewportTop - gap - margin);
+    const placeUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+    const availableSpace = Math.max(placeUp ? spaceAbove : spaceBelow, 120);
+    const nextMaxHeight = Math.min(320, availableSpace);
+    setMenuPlacement(placeUp ? 'up' : 'down');
+    setMenuMaxHeight(nextMaxHeight);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const raf = window.requestAnimationFrame(() => {
+      recomputeMenuLayout();
+    });
+    const onViewportChange = () => {
+      recomputeMenuLayout();
+    };
+    const vv = window.visualViewport;
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('scroll', onViewportChange, true);
+    vv?.addEventListener('resize', onViewportChange);
+    vv?.addEventListener('scroll', onViewportChange);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('scroll', onViewportChange, true);
+      vv?.removeEventListener('resize', onViewportChange);
+      vv?.removeEventListener('scroll', onViewportChange);
+    };
+  }, [open, recomputeMenuLayout]);
+
   return (
-    <div className={`ck-searchable-select${disabled ? ' ck-searchable-select--disabled' : ''}`}>
+    <div ref={rootRef} className={`ck-searchable-select${disabled ? ' ck-searchable-select--disabled' : ''}`}>
       <input
         ref={inputRef}
         type="text"
@@ -158,9 +202,10 @@ export const SearchableMultiSelect: React.FC<{
 
       {open ? (
         <div
-          className="ck-searchable-select__menu"
+          className={`ck-searchable-select__menu${menuPlacement === 'up' ? ' ck-searchable-select__menu--up' : ''}`}
           role="listbox"
           aria-label={ariaLabel || 'Options'}
+          style={{ maxHeight: `${menuMaxHeight}px` }}
           onMouseDownCapture={markMenuInteracting}
           onTouchStartCapture={markMenuInteracting}
           onMouseUpCapture={clearMenuInteractingSoon}

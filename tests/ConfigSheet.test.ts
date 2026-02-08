@@ -82,6 +82,37 @@ describe('ConfigSheet', () => {
     expect(questions[0].ui).toEqual({ helperText: { en: 'Enter a name' }, helperPlacement: 'placeholder' });
   });
 
+  test('getQuestions preserves ui.helperTextBelowLabel and ui.helperTextPlaceholder', () => {
+    const sheet = mockSS.insertSheet('Config: DualHelperText');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q1',
+        'TEXT',
+        'Ingredient name',
+        'Ingredient name',
+        'Ingredient name',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"ui":{"helperTextBelowLabel":{"en":"Name must be minimum 2 characters"},"helperTextPlaceholder":{"en":"Enter the ingredient name"}}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: DualHelperText');
+    expect(questions.length).toBe(1);
+    expect(questions[0].ui).toEqual({
+      helperTextBelowLabel: { en: 'Name must be minimum 2 characters' },
+      helperTextPlaceholder: { en: 'Enter the ingredient name' }
+    });
+  });
+
   test('getQuestions parses changeDialog.cancelAction', () => {
     const sheet = mockSS.insertSheet('Config: ChangeDialogCancelAction');
     const exampleRows = [

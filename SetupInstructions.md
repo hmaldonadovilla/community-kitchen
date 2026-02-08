@@ -202,15 +202,19 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
         Works for both top-level questions and line-item fields. Note: custom **HTML Summary templates** control labels via the template HTML itself (this setting does not modify template markup).
 
-    - **Field helper text (localized)**: Add helper text to any top-level question or line-item field with `ui.helperText`.
-      - Default: helper text renders below the field control (`ui.helperPlacement: "belowLabel"`).
-      - To render it inside the control (when supported), set `ui.helperPlacement: "placeholder"`.
+    - **Field helper text (localized)**:
+      - Legacy single helper mode: add `ui.helperText` and place it with `ui.helperPlacement` (`belowLabel` or `placeholder`).
+      - Dual helper mode: set `ui.helperTextBelowLabel` and `ui.helperTextPlaceholder` to render both texts at once.
 
         ```json
         {
           "ui": {
-            "helperText": { "en": "Enter a name", "fr": "Entrez un nom", "nl": "Voer een naam in" },
-            "helperPlacement": "placeholder"
+            "helperTextBelowLabel": {
+              "en": "Name must be minimum 2 characters, no special characters allowed except dash"
+            },
+            "helperTextPlaceholder": {
+              "en": "Enter the name of the ingredient"
+            }
           }
         }
         ```
@@ -827,7 +831,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       ```
 
       - In guided steps, **Next** remains clickable once the step forward gate is satisfied.
-      - `submitTopErrorMessage` customizes the top error banner shown after a submit attempt (localized).
+      - `hideSubmitTopErrorMessage: true` hides the top submit-error banner in edit view (field-level inline errors still show).
+      - `submitTopErrorMessage` customizes the top error banner shown after a submit attempt (localized) and overrides system key `validation.fixErrors` for that form.
       - `lineItemGroupNeedsAttentionMessage` customizes the helper shown under line-item group pills when they still need attention (localized).
 
     - Want to **override the Summary button label**? Set `summaryButtonLabel` (localized). Useful when “Summary” should read like “Checklist”.

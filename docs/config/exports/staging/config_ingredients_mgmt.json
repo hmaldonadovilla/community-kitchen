@@ -315,6 +315,66 @@
       "en": "Activate",
       "fr": "Activer",
       "nl": "Activeren"
+    },
+    "submitValidation": {
+      "hideSubmitTopErrorMessage": true,
+      "submitTopErrorMessage": {
+        "en": "You are almost done. Some required checks are missing. Review the highlighted sections.",
+        "fr": "You are almost done. Some required checks are missing. Review the highlighted sections.",
+        "nl": "You are almost done. Some required checks are missing. Review the highlighted sections."
+      }
+    },
+    "submissionConfirmationTitle": {
+      "en": "Activate new ingredient?",
+      "fr": "Activate new ingredient?",
+      "nl": "Activate new ingredient?"
+    },
+    "submissionConfirmationMessage": {
+      "en": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?",
+      "fr": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?",
+      "nl": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?"
+    },
+    "submissionConfirmationConfirmLabel": {
+      "en": "Yes, activate.",
+      "fr": "Yes, activate.",
+      "nl": "Yes, activate."
+    },
+    "submissionConfirmationCancelLabel": {
+      "en": "No, continue editing draft ingredient",
+      "fr": "No, continue editing draft ingredient",
+      "nl": "No, continue editing draft ingredient"
+    },
+    "dedupDialog": {
+      "title": {
+        "en": "An ingredient with the same name already exists.",
+        "fr": "Un ingrédient portant le même nom existe déjà.",
+        "nl": "Er bestaat al een ingrediënt met dezelfde naam."
+      },
+      "intro": {
+        "en": "Do you want to change the name or cancel the creation?",
+        "fr": "Voulez-vous modifier le nom ou annuler la création ?",
+        "nl": "Wil je de naam wijzigen of de creatie annuleren?"
+      },
+      "outro": {
+        "en": "",
+        "fr": "",
+        "nl": ""
+      },
+      "changeLabel": {
+        "en": "Change name",
+        "fr": "Changer le nom",
+        "nl": "Naam wijzigen"
+      },
+      "cancelLabel": {
+        "en": "Cancel",
+        "fr": "Annuler",
+        "nl": "Annuleren"
+      },
+      "openLabel": {
+        "en": "Open existing ingredient",
+        "fr": "Ouvrir l’ingrédient existant",
+        "nl": "Bestaand ingrediënt openen"
+      }
     }
   },
   "questions": [
@@ -326,7 +386,15 @@
       "qNl": "Gemaakt door",
       "required": true,
       "listView": false,
-      "status": "Active"
+      "status": "Active",
+      "ui": {
+        "helperText": {
+          "en": "Enter your name.",
+          "fr": "Saisissez votre nom.",
+          "nl": "Voer je naam in."
+        },
+        "helperPlacement": "placeholder"
+      }
     },
     {
       "id": "INGREDIENT_NAME",
@@ -336,7 +404,20 @@
       "qNl": "Naam van ingrediënt",
       "required": true,
       "listView": true,
-      "status": "Active"
+      "status": "Active",
+      "ui": {
+        "helperTextBelowLabel": {
+          "en": "Name must be minimum 2 characters, no special characters allowed except dash",
+          "fr": "Name must be minimum 2 characters, no special characters allowed except dash",
+          "nl": "Name must be minimum 2 characters, no special characters allowed except dash"
+        },
+        "helperTextPlaceholder": {
+          "en": "Enter the name of the ingredient",
+          "fr": "Enter the name of the ingredient",
+          "nl": "Enter the name of the ingredient"
+        },
+        "labelLayout": "stacked"
+      }
     },
     {
       "id": "CATEGORY",
@@ -379,7 +460,14 @@
         "Tins/Pots",
         "Vegan protein"
       ],
-      "status": "Active"
+      "status": "Active",
+      "ui": {
+        "helperText": {
+          "en": "Select one category.",
+          "fr": "Sélectionnez une catégorie.",
+          "nl": "Selecteer één categorie."
+        }
+      }
     },
     {
       "id": "SUPPLIER",
@@ -415,7 +503,12 @@
       ],
       "status": "Active",
       "ui": {
-        "control": "select"
+        "control": "select",
+        "helperText": {
+          "en": "Select one or more suppliers.",
+          "fr": "Sélectionnez un ou plusieurs fournisseurs.",
+          "nl": "Selecteer één of meer leveranciers."
+        }
       }
     },
     {
@@ -481,7 +574,12 @@
       ],
       "status": "Active",
       "ui": {
-        "control": "select"
+        "control": "select",
+        "helperText": {
+          "en": "Select None or one or more allergens.",
+          "fr": "Sélectionnez Aucun ou un ou plusieurs allergènes.",
+          "nl": "Selecteer Geen of één of meer allergenen."
+        }
       }
     },
     {
@@ -551,7 +649,12 @@
       ],
       "status": "Active",
       "ui": {
-        "control": "select"
+        "control": "select",
+        "helperText": {
+          "en": "Select one or more allowed units.",
+          "fr": "Sélectionnez une ou plusieurs unités autorisées.",
+          "nl": "Selecteer één of meer toegestane eenheden."
+        }
       }
     },
     {
@@ -585,7 +688,12 @@
       ],
       "status": "Active",
       "ui": {
-        "control": "select"
+        "control": "select",
+        "helperText": {
+          "en": "Select one or more dietary applicability values.",
+          "fr": "Sélectionnez une ou plusieurs valeurs d’applicabilité diététique.",
+          "nl": "Selecteer één of meer dieettoepassingen."
+        }
       }
     },
     {
@@ -595,7 +703,17 @@
       "qFr": "Date de début d’effet",
       "qNl": "Ingangsdatum",
       "required": false,
+      "readOnly": true,
       "listView": false,
+      "visibility": {
+        "showWhen": {
+          "fieldId": "STATUS",
+          "equals": [
+            "Active",
+            "Disabled"
+          ]
+        }
+      },
       "status": "Active"
     },
     {
@@ -605,7 +723,17 @@
       "qFr": "Date de fin d’effet",
       "qNl": "Einddatum",
       "required": false,
+      "readOnly": true,
       "listView": false,
+      "visibility": {
+        "showWhen": {
+          "fieldId": "STATUS",
+          "equals": [
+            "Active",
+            "Disabled"
+          ]
+        }
+      },
       "status": "Active"
     },
     {
@@ -618,6 +746,16 @@
       "readOnly": true,
       "defaultValue": "Draft",
       "listView": true,
+      "visibility": {
+        "hideWhen": {
+          "fieldId": "STATUS",
+          "equals": [
+            "Draft",
+            "Active",
+            "Disabled"
+          ]
+        }
+      },
       "options": [
         "Draft",
         "Active",
@@ -633,7 +771,10 @@
         "Actief",
         "Uitgeschakeld"
       ],
-      "status": "Active"
+      "status": "Active",
+      "ui": {
+        "summaryVisibility": "never"
+      }
     },
     {
       "id": "LAST_CHANGED_BY",
@@ -644,6 +785,15 @@
       "required": false,
       "readOnly": true,
       "listView": false,
+      "visibility": {
+        "showWhen": {
+          "fieldId": "STATUS",
+          "equals": [
+            "Active",
+            "Disabled"
+          ]
+        }
+      },
       "status": "Active"
     }
   ],

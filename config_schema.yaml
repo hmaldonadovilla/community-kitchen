@@ -959,6 +959,21 @@ components:
 
             Use `helperPlacement` to choose whether it renders below the field label/control (default)
             or inside the control as a placeholder (when supported).
+            For dual helper text rendering, use `helperTextBelowLabel` + `helperTextPlaceholder`.
+        helperTextBelowLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional helper text rendered below the field label/control.
+
+            This can be used together with `helperTextPlaceholder` so both helper texts are shown.
+            When omitted, legacy `helperText` + `helperPlacement` behavior is used.
+        helperTextPlaceholder:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional helper text rendered inside the field control as placeholder text (when supported).
+
+            This can be used together with `helperTextBelowLabel` so both helper texts are shown.
+            When omitted, legacy `helperText` + `helperPlacement` behavior is used.
         helperPlacement:
           type: string
           enum: [belowLabel, placeholder]
@@ -2486,9 +2501,19 @@ components:
         enforceFieldOrder:
           type: boolean
           description: When true, require users to complete required fields in order and disable Submit until the form is valid.
+        hideSubmitTopErrorMessage:
+          type: boolean
+          description: |
+            When true, hide the top submit validation error banner in the edit view.
+
+            Notes:
+            - Field-level validation errors are still shown inline.
+            - Warning banners are still shown when present.
         submitTopErrorMessage:
           $ref: '#/components/schemas/LocalizedString'
-          description: Optional localized override for the top submit validation error banner.
+          description: |
+            Optional localized override for the top submit validation error banner.
+            This overrides the system string key `validation.fixErrors` for this form only.
         lineItemGroupNeedsAttentionMessage:
           $ref: '#/components/schemas/LocalizedString'
           description: Optional localized override for the "Needs attention" helper shown under line-item group pills.
