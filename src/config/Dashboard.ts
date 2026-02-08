@@ -132,9 +132,12 @@ export class Dashboard {
       const listViewPageSize = dashboardConfig?.listViewPageSize;
       const listViewPaginationControlsEnabled = dashboardConfig?.listViewPaginationControlsEnabled;
       const listViewHeaderSortEnabled = dashboardConfig?.listViewHeaderSortEnabled;
+      const listViewHideHeaderRow = dashboardConfig?.listViewHideHeaderRow;
+      const listViewRowClickEnabled = dashboardConfig?.listViewRowClickEnabled;
       const listViewMetaColumns = dashboardConfig?.listViewMetaColumns;
       const listViewColumns = dashboardConfig?.listViewColumns;
       const listViewLegend = dashboardConfig?.listViewLegend;
+      const listViewLegendColumns = dashboardConfig?.listViewLegendColumns;
       const listViewSearch = dashboardConfig?.listViewSearch;
       const listViewView = dashboardConfig?.listViewView;
       const autoSave = dashboardConfig?.autoSave;
@@ -183,9 +186,12 @@ export class Dashboard {
           listViewPageSize,
           listViewPaginationControlsEnabled,
           listViewHeaderSortEnabled,
+          listViewHideHeaderRow,
+          listViewRowClickEnabled,
           listViewMetaColumns,
           listViewColumns,
           listViewLegend,
+          listViewLegendColumns,
           listViewSearch,
           listViewView,
           autoSave,
@@ -252,9 +258,12 @@ export class Dashboard {
     listViewPageSize?: number;
     listViewPaginationControlsEnabled?: boolean;
     listViewHeaderSortEnabled?: boolean;
+    listViewHideHeaderRow?: boolean;
+    listViewRowClickEnabled?: boolean;
     listViewMetaColumns?: string[];
     listViewColumns?: ListViewColumnConfig[];
     listViewLegend?: ListViewLegendItem[];
+    listViewLegendColumns?: number;
     listViewSearch?: ListViewSearchConfig;
     listViewView?: ListViewViewConfig;
     autoSave?: AutoSaveConfig;
@@ -540,6 +549,33 @@ export class Dashboard {
               : undefined;
     const listViewHeaderSortEnabled = normalizeBoolean(listViewHeaderSortEnabledRaw);
 
+    const listViewHideHeaderRowRaw =
+      parsed.listViewHideHeaderRow !== undefined
+        ? parsed.listViewHideHeaderRow
+        : parsed.hideListViewHeaderRow !== undefined
+          ? parsed.hideListViewHeaderRow
+          : listViewObj && (listViewObj.hideHeaderRow !== undefined || (listViewObj as any).hideTableHeader !== undefined)
+            ? (listViewObj.hideHeaderRow ?? (listViewObj as any).hideTableHeader)
+            : listViewObj && (listViewObj as any).showHeaderRow !== undefined
+              ? !Boolean((listViewObj as any).showHeaderRow)
+              : undefined;
+    const listViewHideHeaderRow = normalizeBoolean(listViewHideHeaderRowRaw);
+
+    const listViewRowClickEnabledRaw =
+      parsed.listViewRowClickEnabled !== undefined
+        ? parsed.listViewRowClickEnabled
+        : parsed.disableListViewRowClick !== undefined
+          ? !Boolean(parsed.disableListViewRowClick)
+          : listViewObj &&
+              ((listViewObj as any).rowClickEnabled !== undefined ||
+                (listViewObj as any).rowClickable !== undefined ||
+                (listViewObj as any).disableRowClick !== undefined)
+            ? ((listViewObj as any).rowClickEnabled ??
+                (listViewObj as any).rowClickable ??
+                ((listViewObj as any).disableRowClick !== undefined ? !Boolean((listViewObj as any).disableRowClick) : undefined))
+            : undefined;
+    const listViewRowClickEnabled = normalizeBoolean(listViewRowClickEnabledRaw);
+
     const listViewDefaultSortRaw =
       parsed.listViewDefaultSort !== undefined
         ? parsed.listViewDefaultSort
@@ -593,6 +629,20 @@ export class Dashboard {
         ? (parsed.listView.legend ?? parsed.listView.listViewLegend)
         : undefined;
     const listViewLegend = this.normalizeListViewLegend(legendRaw);
+    const listViewLegendColumnsRaw =
+      parsed.listViewLegendColumns !== undefined
+        ? parsed.listViewLegendColumns
+        : parsed.legendColumns !== undefined
+          ? parsed.legendColumns
+          : parsed.listView !== undefined && parsed.listView !== null && typeof parsed.listView === 'object'
+            ? ((parsed.listView as any).legendColumns ?? (parsed.listView as any).legendCols)
+            : undefined;
+    const listViewLegendColumns = (() => {
+      if (listViewLegendColumnsRaw === undefined || listViewLegendColumnsRaw === null || listViewLegendColumnsRaw === '') return undefined;
+      const n = Number(listViewLegendColumnsRaw);
+      if (!Number.isFinite(n)) return undefined;
+      return Math.max(1, Math.min(2, Math.round(n)));
+    })();
 
     const listViewSearchRaw =
       parsed.listViewSearch !== undefined
@@ -1124,9 +1174,12 @@ export class Dashboard {
       listViewPageSize === undefined &&
       listViewPaginationControlsEnabled === undefined &&
       listViewHeaderSortEnabled === undefined &&
+      listViewHideHeaderRow === undefined &&
+      listViewRowClickEnabled === undefined &&
       !hasMetaSetting &&
       !listViewColumns?.length &&
       !listViewLegend?.length &&
+      listViewLegendColumns === undefined &&
       !listViewSearch &&
       !listViewView &&
       !autoSave &&
@@ -1170,9 +1223,12 @@ export class Dashboard {
       listViewPageSize,
       listViewPaginationControlsEnabled,
       listViewHeaderSortEnabled,
+      listViewHideHeaderRow,
+      listViewRowClickEnabled,
       listViewMetaColumns,
       listViewColumns,
       listViewLegend,
+      listViewLegendColumns,
       listViewSearch,
       listViewView,
       autoSave,
@@ -2116,17 +2172,53 @@ export class Dashboard {
       return out;
     };
 
-    const normalizeRuleCase = (entry: any): any | null => {
+    const normalizeRuleAction = (entry: any): any | null => {
       if (!entry || typeof entry !== 'object') return null;
       const text = normalizeLocalized((entry as any).text ?? (entry as any).value ?? (entry as any).label);
-      if (!text) return null;
+      if (text === undefined) return null;
       const out: any = { text };
-      const when = normalizeWhen((entry as any).when ?? (entry as any).if ?? (entry as any).condition);
-      if (when) out.when = when;
+      if ((entry as any).hideText !== undefined) out.hideText = Boolean((entry as any).hideText);
       const styleRaw = ((entry as any).style ?? (entry as any).variant ?? (entry as any).tone ?? '').toString().trim().toLowerCase();
       if (styleRaw && allowedRuleStyles.has(styleRaw)) out.style = styleRaw;
       const iconRaw = ((entry as any).icon ?? '').toString().trim().toLowerCase();
       if (iconRaw && allowedIcons.has(iconRaw)) out.icon = iconRaw;
+      const hrefRaw =
+        (entry as any).hrefFieldId !== undefined
+          ? (entry as any).hrefFieldId
+          : (entry as any).urlFieldId !== undefined
+          ? (entry as any).urlFieldId
+          : (entry as any).linkFieldId !== undefined
+          ? (entry as any).linkFieldId
+          : (entry as any).hrefField !== undefined
+          ? (entry as any).hrefField
+          : (entry as any).urlField !== undefined
+          ? (entry as any).urlField
+          : undefined;
+      const hrefFieldId = hrefRaw !== undefined && hrefRaw !== null ? hrefRaw.toString().trim() : '';
+      if (hrefFieldId) out.hrefFieldId = hrefFieldId;
+
+      const open = normalizeOpenViewConfig(entry);
+      if (open.openView !== undefined) out.openView = open.openView;
+      if (open.openButtonId) out.openButtonId = open.openButtonId;
+      return out;
+    };
+
+    const normalizeRuleCase = (entry: any): any | null => {
+      if (!entry || typeof entry !== 'object') return null;
+      const text = normalizeLocalized((entry as any).text ?? (entry as any).value ?? (entry as any).label);
+      const out: any = {};
+      if (text !== undefined) out.text = text;
+      else out.text = '';
+      const when = normalizeWhen((entry as any).when ?? (entry as any).if ?? (entry as any).condition);
+      if (when) out.when = when;
+      if ((entry as any).hideText !== undefined) out.hideText = Boolean((entry as any).hideText);
+      const styleRaw = ((entry as any).style ?? (entry as any).variant ?? (entry as any).tone ?? '').toString().trim().toLowerCase();
+      if (styleRaw && allowedRuleStyles.has(styleRaw)) out.style = styleRaw;
+      const iconRaw = ((entry as any).icon ?? '').toString().trim().toLowerCase();
+      if (iconRaw && allowedIcons.has(iconRaw)) out.icon = iconRaw;
+      const actionsRaw = Array.isArray((entry as any).actions) ? ((entry as any).actions as any[]) : [];
+      const actions = actionsRaw.map(normalizeRuleAction).filter(Boolean);
+      if (actions.length) out.actions = actions;
       const hrefRaw =
         (entry as any).hrefFieldId !== undefined
           ? (entry as any).hrefFieldId
@@ -2180,8 +2272,10 @@ export class Dashboard {
         if (def) {
           out.default = {
             text: def.text,
+            hideText: def.hideText,
             style: def.style,
             icon: def.icon,
+            actions: def.actions,
             hrefFieldId: def.hrefFieldId,
             openView: def.openView,
             openButtonId: def.openButtonId

@@ -83,6 +83,7 @@
     },
     "listViewPageSize": 7,
     "listViewPaginationControlsEnabled": false,
+    "listViewHideHeaderRow": true,
     "listViewMetaColumns": [],
     "listViewColumns": [
       {
@@ -108,25 +109,37 @@
                 },
                 {
                   "fieldId": "DATE",
+                  "isToday": true
+                }
+              ]
+            },
+            "style": "link",
+            "icon": "edit",
+            "hideText": true,
+            "openView": "form"
+          },
+          {
+            "text": {
+              "en": "Warning",
+              "fr": "Avertissement",
+              "nl": "Waarschuwing"
+            },
+            "when": {
+              "all": [
+                {
+                  "fieldId": "status",
+                  "notEquals": "Closed"
+                },
+                {
+                  "fieldId": "DATE",
                   "isNotToday": true
                 }
               ]
             },
             "style": "warning",
-            "icon": "warning"
-          },
-          {
-            "text": {
-              "en": "Edit",
-              "fr": "Modifier",
-              "nl": "Bewerken"
-            },
-            "when": {
-              "fieldId": "status",
-              "notEquals": "Closed"
-            },
-            "style": "link",
-            "icon": "edit"
+            "icon": "warning",
+            "hideText": true,
+            "openView": "summary"
           },
           {
             "text": {
@@ -139,13 +152,30 @@
               "equals": "Closed"
             },
             "style": "link",
-            "icon": "check"
+            "icon": "view",
+            "hideText": true,
+            "openView": "summary"
           }
-        ],
-        "openView": "auto"
+        ]
       }
     ],
     "listViewLegend": [
+      {
+        "icon": "edit",
+        "text": {
+          "en": "Edit (not allowed for past records)",
+          "fr": "Modifier (non autorisé pour les enregistrements passés)",
+          "nl": "Bewerken (niet toegestaan voor eerdere records)"
+        }
+      },
+      {
+        "icon": "view",
+        "text": {
+          "en": "View",
+          "fr": "Voir",
+          "nl": "Bekijken"
+        }
+      },
       {
         "icon": "warning",
         "text": {
@@ -338,7 +368,8 @@
       "NL"
     ],
     "defaultLanguage": "EN",
-    "languageSelectorEnabled": true
+    "languageSelectorEnabled": true,
+    "listViewRowClickEnabled": false
   },
   "questions": [
     {
@@ -6368,25 +6399,37 @@
                   },
                   {
                     "fieldId": "DATE",
+                    "isToday": true
+                  }
+                ]
+              },
+              "style": "link",
+              "icon": "edit",
+              "hideText": true,
+              "openView": "form"
+            },
+            {
+              "text": {
+                "en": "Warning",
+                "fr": "Avertissement",
+                "nl": "Waarschuwing"
+              },
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "fieldId": "DATE",
                     "isNotToday": true
                   }
                 ]
               },
               "style": "warning",
-              "icon": "warning"
-            },
-            {
-              "text": {
-                "en": "Edit",
-                "fr": "Modifier",
-                "nl": "Bewerken"
-              },
-              "when": {
-                "fieldId": "status",
-                "notEquals": "Closed"
-              },
-              "style": "link",
-              "icon": "edit"
+              "icon": "warning",
+              "hideText": true,
+              "openView": "summary"
             },
             {
               "text": {
@@ -6399,10 +6442,11 @@
                 "equals": "Closed"
               },
               "style": "link",
-              "icon": "check"
+              "icon": "view",
+              "hideText": true,
+              "openView": "summary"
             }
-          ],
-          "openView": "auto"
+          ]
         },
         {
           "fieldId": "CHECK_FREQ",
@@ -6444,6 +6488,22 @@
       },
       "legend": [
         {
+          "icon": "edit",
+          "text": {
+            "en": "Edit (not allowed for past records)",
+            "fr": "Modifier (non autorisé pour les enregistrements passés)",
+            "nl": "Bewerken (niet toegestaan voor eerdere records)"
+          }
+        },
+        {
+          "icon": "view",
+          "text": {
+            "en": "View",
+            "fr": "Voir",
+            "nl": "Bekijken"
+          }
+        },
+        {
           "icon": "warning",
           "text": {
             "en": "Past record incomplete or missing",
@@ -6454,10 +6514,12 @@
       ],
       "pageSize": 7,
       "paginationControlsEnabled": false,
+      "hideHeaderRow": true,
       "search": {
         "mode": "date",
         "dateFieldId": "DATE"
-      }
+      },
+      "rowClickEnabled": false
     },
     "dedupRules": [
       {

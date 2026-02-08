@@ -7419,6 +7419,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     const cols = ((definition.listView?.columns as any) || []) as any[];
     return buildListViewLegendItems(cols as any, definition.listView?.legend, language);
   }, [definition.listView?.columns, definition.listView?.legend, language]);
+  const listLegendColumns = useMemo(() => {
+    const raw = Number((definition.listView as any)?.legendColumns);
+    if (!Number.isFinite(raw) || raw <= 1) return 1;
+    return Math.max(1, Math.min(2, Math.round(raw)));
+  }, [definition.listView]);
 
   useEffect(() => {
     if (view !== 'list') return;
@@ -7436,7 +7441,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         {listLegendItems.length ? (
           <div className="ck-list-legend ck-list-legend--bottomBar" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
             <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
-            <ul className="ck-list-legend-list">
+            <ul className="ck-list-legend-list" data-columns={listLegendColumns > 1 ? '2' : '1'}>
               {listLegendItems.map((item, idx) => (
                 <li key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
                   {item.icon ? <ListViewIcon name={item.icon} /> : null}

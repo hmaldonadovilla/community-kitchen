@@ -46,12 +46,14 @@ const defaultLegendText = (icon: ListViewRuleIcon, language: LangCode): string =
       return tSystem('list.legend.edit', language, 'Edit');
     case 'view':
       return tSystem('list.legend.view', language, 'View');
+    case 'copy':
+      return tSystem('list.legend.copy', language, 'Copy');
     default:
       return '';
   }
 };
 
-const ICON_ORDER: ListViewRuleIcon[] = ['warning', 'error', 'check', 'info', 'external', 'lock', 'edit', 'view'];
+const ICON_ORDER: ListViewRuleIcon[] = ['warning', 'error', 'check', 'info', 'external', 'lock', 'edit', 'view', 'copy'];
 
 export const buildListViewLegendItems = (
   columns: ListViewColumnConfig[],
@@ -90,5 +92,4 @@ export const buildListViewLegendItems = (
 
   return out;
 };
-
 
