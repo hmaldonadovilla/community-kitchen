@@ -17,6 +17,9 @@ describe('DefinitionBuilder', () => {
       listView: {
         title: { en: 'Pantry Records' },
         headerSortEnabled: false,
+        hideHeaderRow: true,
+        rowClickEnabled: false,
+        legendColumns: 2,
         view: { mode: 'cards', toggleEnabled: true, defaultMode: 'cards' },
         search: { mode: 'advanced', fields: ['Q1', 'status'] },
         columns: [{ type: 'rule', fieldId: 'action', label: { en: 'Action' }, showIn: 'cards', cases: [{ text: 'Edit' }] }]
@@ -104,6 +107,9 @@ describe('DefinitionBuilder', () => {
     expect(def.listView?.legend).toEqual([{ icon: 'warning', text: { en: 'Needs attention' } }]);
     expect(def.listView?.title).toEqual({ en: 'Pantry Records' });
     expect(def.listView?.headerSortEnabled).toBe(false);
+    expect((def.listView as any)?.hideHeaderRow).toBe(true);
+    expect((def.listView as any)?.rowClickEnabled).toBe(false);
+    expect((def.listView as any)?.legendColumns).toBe(2);
     expect(def.listView?.view).toEqual({ mode: 'cards', toggleEnabled: true, defaultMode: 'cards' });
     expect(def.listView?.search).toEqual({ mode: 'advanced', fields: ['Q1', 'status'] });
     expect(def.fieldDisableRules).toEqual([

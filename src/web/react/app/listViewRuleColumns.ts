@@ -8,9 +8,11 @@ import type {
 } from '../../types';
 
 export type EvaluatedListViewRuleCell = {
-  text: LocalizedString;
+  text?: LocalizedString;
+  hideText?: boolean;
   style?: ListViewRuleCase['style'];
   icon?: ListViewRuleCase['icon'];
+  actions?: EvaluatedListViewRuleAction[];
   hrefFieldId?: string;
   /**
    * Resolved open target for this matched case (includes column-level fallbacks).
@@ -23,6 +25,17 @@ export type EvaluatedListViewRuleCell = {
   /**
    * When true, clicking anywhere on the row should use the same `openView` target.
    */
+  rowClick?: boolean;
+};
+
+export type EvaluatedListViewRuleAction = {
+  text: LocalizedString;
+  hideText?: boolean;
+  style?: ListViewRuleCase['style'];
+  icon?: ListViewRuleCase['icon'];
+  hrefFieldId?: string;
+  openView?: ListViewOpenViewTarget;
+  openButtonId?: string;
   rowClick?: boolean;
 };
 
@@ -75,14 +88,22 @@ type ResolvedOpenTarget = {
   rowClick?: boolean;
 };
 
-const resolveOpenTarget = (col: ListViewRuleColumnConfig, c?: Partial<ListViewRuleCase> | null): ResolvedOpenTarget => {
+const resolveOpenTarget = (
+  col: ListViewRuleColumnConfig,
+  c?: Partial<ListViewRuleCase> | null,
+  parent?: Partial<ListViewRuleCase> | null
+): ResolvedOpenTarget => {
   const colOpen = parseOpenViewConfig((col as any).openView);
+  const parentOpen = parseOpenViewConfig((parent as any)?.openView);
   const caseOpen = parseOpenViewConfig((c as any)?.openView);
 
-  const target = (caseOpen?.target ?? colOpen?.target ?? 'auto') as ListViewOpenViewTarget;
-  const rowClick = caseOpen?.rowClick ?? colOpen?.rowClick ?? undefined;
+  const target = (caseOpen?.target ?? parentOpen?.target ?? colOpen?.target ?? 'auto') as ListViewOpenViewTarget;
+  const rowClick = caseOpen?.rowClick ?? parentOpen?.rowClick ?? colOpen?.rowClick ?? undefined;
 
-  const openButtonId = normalizeOpenButtonId((c as any)?.openButtonId) || normalizeOpenButtonId((col as any).openButtonId);
+  const openButtonId =
+    normalizeOpenButtonId((c as any)?.openButtonId) ||
+    normalizeOpenButtonId((parent as any)?.openButtonId) ||
+    normalizeOpenButtonId((col as any).openButtonId);
   const openView = target === 'button' && !openButtonId ? ('auto' as const) : target;
   return {
     openView,
@@ -273,8 +294,20 @@ export const collectListViewRuleColumnDependencies = (col: ListViewRuleColumnCon
   (col.cases || []).forEach(c => {
     visitWhen((c as any)?.when);
     addHref((c as any)?.hrefFieldId);
+    if (Array.isArray((c as any)?.actions)) {
+      ((c as any).actions as any[]).forEach(action => {
+        if (!action || typeof action !== 'object') return;
+        addHref((action as any).hrefFieldId);
+      });
+    }
   });
   addHref((col as any)?.default?.hrefFieldId);
+  if (Array.isArray((col as any)?.default?.actions)) {
+    ((col as any).default.actions as any[]).forEach(action => {
+      if (!action || typeof action !== 'object') return;
+      addHref((action as any).hrefFieldId);
+    });
+  }
   return Array.from(ids);
 };
 
@@ -291,22 +324,77 @@ export const evaluateListViewRuleColumnCell = (
     if (!ok) continue;
     const hrefFieldId = (c.hrefFieldId || (col as any).hrefFieldId || '').toString().trim() || undefined;
     const open = resolveOpenTarget(col, c);
-    const cell: EvaluatedListViewRuleCell = { text: c.text, style: c.style, icon: c.icon, hrefFieldId, ...open };
+    const actionsRaw = Array.isArray((c as any).actions) ? ((c as any).actions as any[]) : [];
+    const actions: EvaluatedListViewRuleAction[] = actionsRaw
+      .map(action => {
+        if (!action || typeof action !== 'object') return null;
+        const actionText = (action as any).text;
+        if (actionText === undefined || actionText === null || actionText === '') return null;
+        const actionHrefFieldId =
+          ((action as any).hrefFieldId || (c as any).hrefFieldId || (col as any).hrefFieldId || '').toString().trim() || undefined;
+        const resolved = resolveOpenTarget(col, action as any, c as any);
+        return {
+          text: actionText,
+          hideText: Boolean((action as any).hideText),
+          style: (action as any).style,
+          icon: (action as any).icon,
+          hrefFieldId: actionHrefFieldId,
+          ...resolved
+        } as EvaluatedListViewRuleAction;
+      })
+      .filter(Boolean) as EvaluatedListViewRuleAction[];
+    const cell: EvaluatedListViewRuleCell = {
+      text: c.text,
+      hideText: Boolean((c as any).hideText),
+      style: c.style,
+      icon: c.icon,
+      actions: actions.length ? actions : undefined,
+      hrefFieldId,
+      ...open
+    };
     debugLog('match', {
       columnId: col.fieldId,
       style: c.style || null,
       icon: c.icon || null,
+      actionCount: actions.length,
       openView: open.openView,
       rowClick: !!open.rowClick
     });
     return cell;
   }
-  if (col.default && col.default.text) {
+  if (col.default && (col.default.text || Array.isArray((col.default as any).actions))) {
     const hrefFieldId = ((col.default as any).hrefFieldId || (col as any).hrefFieldId || '').toString().trim() || undefined;
     const open = resolveOpenTarget(col, col.default as any);
-    return { text: col.default.text, style: col.default.style, icon: col.default.icon, hrefFieldId, ...open };
+    const actionsRaw = Array.isArray((col.default as any).actions) ? (((col.default as any).actions as any[]) || []) : [];
+    const actions: EvaluatedListViewRuleAction[] = actionsRaw
+      .map(action => {
+        if (!action || typeof action !== 'object') return null;
+        const actionText = (action as any).text;
+        if (actionText === undefined || actionText === null || actionText === '') return null;
+        const actionHrefFieldId =
+          ((action as any).hrefFieldId || (col.default as any).hrefFieldId || (col as any).hrefFieldId || '')
+            .toString()
+            .trim() || undefined;
+        const resolved = resolveOpenTarget(col, action as any, col.default as any);
+        return {
+          text: actionText,
+          hideText: Boolean((action as any).hideText),
+          style: (action as any).style,
+          icon: (action as any).icon,
+          hrefFieldId: actionHrefFieldId,
+          ...resolved
+        } as EvaluatedListViewRuleAction;
+      })
+      .filter(Boolean) as EvaluatedListViewRuleAction[];
+    return {
+      text: col.default.text,
+      hideText: Boolean((col.default as any).hideText),
+      style: col.default.style,
+      icon: col.default.icon,
+      actions: actions.length ? actions : undefined,
+      hrefFieldId,
+      ...open
+    };
   }
   return null;
 };
-
-

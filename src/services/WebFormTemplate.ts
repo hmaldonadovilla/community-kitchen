@@ -748,6 +748,16 @@ export function buildWebFormHtml(
         color: var(--accent);
       }
       .truncate-link:hover { text-decoration: underline; }
+      .truncate-text {
+        display: inline-block;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--text);
+        text-decoration: none;
+        cursor: default;
+      }
       .inline-link {
         color: var(--accent);
         text-decoration: underline;
@@ -768,14 +778,33 @@ export function buildWebFormHtml(
         cursor: pointer;
         text-decoration: underline;
       }
+      .ck-list-nav-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: nowrap;
+      }
       .ck-list-nav:hover { text-decoration: underline; }
       .ck-list-nav:focus-visible {
         outline: 2px solid var(--text);
         outline-offset: 3px;
         border-radius: 10px;
       }
+      .ck-list-nav--iconOnly {
+        text-decoration: none;
+      }
+      .ck-list-nav--iconOnly:hover {
+        text-decoration: none;
+      }
+      .ck-list-nav--iconOnly .ck-list-icon {
+        width: 1.15em;
+        height: 1.15em;
+      }
       .ck-list-nav--warning { color: var(--text); }
       .ck-list-nav--muted { color: var(--muted); font-weight: 500; }
+      .ck-list-nav .ck-list-icon {
+        color: var(--accent);
+      }
       .ck-list-icon {
         width: 1.05em;
         height: 1.05em;
@@ -943,14 +972,15 @@ export function buildWebFormHtml(
         padding-top: 10px;
         border-top: 1px dashed var(--border);
       }
-      .ck-list-icon--warning { color: var(--text); }
-      .ck-list-icon--check { color: var(--text); }
-      .ck-list-icon--error { color: var(--danger); }
-      .ck-list-icon--info { color: var(--text); }
-      .ck-list-icon--external { color: var(--text); }
-      .ck-list-icon--lock { color: var(--muted); }
-      .ck-list-icon--edit { color: var(--text); }
-      .ck-list-icon--view { color: var(--text); }
+      .ck-list-icon--warning { color: var(--accent); }
+      .ck-list-icon--check { color: var(--accent); }
+      .ck-list-icon--error { color: var(--accent); }
+      .ck-list-icon--info { color: var(--accent); }
+      .ck-list-icon--external { color: var(--accent); }
+      .ck-list-icon--lock { color: var(--accent); }
+      .ck-list-icon--edit { color: var(--accent); }
+      .ck-list-icon--view { color: var(--accent); }
+      .ck-list-icon--copy { color: var(--accent); }
       .ck-list-legend {
         margin-top: 10px;
         display: flex;
@@ -976,6 +1006,12 @@ export function buildWebFormHtml(
         display: flex;
         flex-direction: column;
         gap: 6px;
+      }
+      .ck-list-legend-list[data-columns="2"] {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 16px;
+        row-gap: 6px;
       }
       .ck-list-legend-item {
         display: inline-flex;
@@ -1009,7 +1045,6 @@ export function buildWebFormHtml(
       }
       .ck-list-legend-text strong {
         font-weight: 600;
-      }
       }
       .required-star {
         color: currentColor;

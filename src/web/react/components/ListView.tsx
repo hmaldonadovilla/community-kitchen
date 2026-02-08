@@ -76,6 +76,8 @@ const ListView: React.FC<ListViewProps> = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
 
   const headerSortEnabled = definition.listView?.headerSortEnabled !== false;
+  const hideHeaderRow = definition.listView?.hideHeaderRow === true;
+  const rowClickEnabled = definition.listView?.rowClickEnabled !== false;
 
   const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date' | 'advanced';
   const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
@@ -930,72 +932,128 @@ const ListView: React.FC<ListViewProps> = ({
     }
   };
 
-  const renderRuleCell = (row: ListItem, col: ListViewRuleColumnConfig) => {
-    const cell = evaluateListViewRuleColumnCell(col, row);
-    if (!cell) return null;
-    const text = resolveLocalizedString(cell.text, language, EMPTY_DISPLAY);
-    const style = (cell?.style || 'link').toString();
-    const icon = cell?.icon ? <ListViewIcon name={cell.icon} /> : null;
-    const openButtonId = ((cell as any).openButtonId || '').toString().trim();
-    const openViewRaw = ((cell as any).openView || 'auto') as 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit';
+  const iconAriaLabel = (icon?: string): string => {
+    switch (icon) {
+      case 'warning':
+        return tSystem('list.legend.warning', language, 'Warning');
+      case 'check':
+        return tSystem('list.legend.check', language, 'OK');
+      case 'error':
+        return tSystem('list.legend.error', language, 'Error');
+      case 'info':
+        return tSystem('list.legend.info', language, 'Info');
+      case 'external':
+        return tSystem('list.legend.external', language, 'External link');
+      case 'lock':
+        return tSystem('list.legend.lock', language, 'Locked');
+      case 'edit':
+        return tSystem('list.legend.edit', language, 'Edit');
+      case 'view':
+        return tSystem('list.legend.view', language, 'View');
+      case 'copy':
+        return tSystem('list.legend.copy', language, 'Copy');
+      default:
+        return '';
+    }
+  };
+
+  const getRuleHref = (row: ListItem, hrefFieldIdRaw: any): string => {
+    const hrefFieldId = (hrefFieldIdRaw || '').toString().trim();
+    if (!hrefFieldId) return '';
+    const hrefRaw = (row as any)[hrefFieldId];
+    if (!hrefRaw) return '';
+    const str = Array.isArray(hrefRaw) ? hrefRaw.join(' ') : hrefRaw.toString();
+    const urls = splitUrlList(str).filter(u => /^https?:\/\//i.test(u));
+    return urls[0] || '';
+  };
+
+  const renderSingleRuleAction = (
+    row: ListItem,
+    col: ListViewRuleColumnConfig,
+    action: {
+      text?: any;
+      hideText?: boolean;
+      style?: any;
+      icon?: any;
+      hrefFieldId?: any;
+      openView?: any;
+      openButtonId?: any;
+    },
+    keySuffix?: string
+  ) => {
+    const text = resolveLocalizedString(action.text, language, '').toString().trim();
+    const style = (action?.style || 'link').toString();
+    const iconName = (action as any)?.icon;
+    const icon = iconName ? <ListViewIcon name={iconName} /> : null;
+    const hideText = Boolean((action as any)?.hideText);
+    const showText = Boolean(text) && (!hideText || !icon);
+    const ariaLabel = text || iconAriaLabel(iconName) || tSystem('actions.actions', language, 'Actions');
+    const openButtonId = ((action as any)?.openButtonId || '').toString().trim();
+    const openViewRaw = ((action as any)?.openView || 'auto') as 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit';
     const openView = openViewRaw === 'button' && !openButtonId ? 'auto' : openViewRaw;
-    const className =
+    const classNameBase =
       style === 'warning'
         ? 'ck-list-nav ck-list-nav--warning'
         : style === 'muted'
         ? 'ck-list-nav ck-list-nav--muted'
         : 'ck-list-nav';
+    const className = hideText && icon ? `${classNameBase} ck-list-nav--iconOnly` : classNameBase;
+    const hrefFieldId = ((action as any)?.hrefFieldId || '').toString().trim();
+    const href = getRuleHref(row, hrefFieldId);
 
     if (uiDisabled) {
       return (
-        <span className={className} aria-disabled="true" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
+        <span
+          key={`rule-action-disabled-${col.fieldId}-${keySuffix || 'base'}`}
+          className={className}
+          aria-disabled="true"
+          aria-label={ariaLabel}
+          style={{ opacity: 0.6, cursor: 'not-allowed' }}
+          title={ariaLabel}
+        >
           {icon}
-          <span>{text}</span>
+          {showText ? <span>{text}</span> : null}
         </span>
       );
     }
 
-    const hrefFieldId = (cell.hrefFieldId || '').toString().trim();
-    const hrefRaw = hrefFieldId ? (row as any)[hrefFieldId] : null;
-    const href = (() => {
-      if (!hrefRaw) return '';
-      const str = Array.isArray(hrefRaw) ? hrefRaw.join(' ') : hrefRaw.toString();
-      const urls = splitUrlList(str).filter(u => /^https?:\/\//i.test(u));
-      return urls[0] || '';
-    })();
-
     if (style === 'link' && hrefFieldId) {
-      // URL-driven link: open the URL stored in the target field (e.g. pdfUrl).
       if (!href) {
         onDiagnostic?.('list.ruleColumn.link.missingUrl', { columnId: col.fieldId, hrefFieldId });
         return (
-          <span className="ck-list-nav ck-list-nav--muted">
+          <span key={`rule-action-missing-${col.fieldId}-${keySuffix || 'base'}`} className="ck-list-nav ck-list-nav--muted">
             {icon}
-            <span>{text}</span>
+            {showText ? <span>{text || EMPTY_DISPLAY}</span> : null}
           </span>
         );
       }
       return (
         <a
+          key={`rule-action-link-${col.fieldId}-${keySuffix || 'base'}`}
           className={className}
           href={href}
           target="_blank"
           rel="noopener noreferrer"
+          aria-label={ariaLabel}
+          title={ariaLabel}
           onClick={e => {
             e.stopPropagation();
             onDiagnostic?.('list.ruleColumn.link.open', { columnId: col.fieldId, hrefFieldId, href });
           }}
         >
           {icon}
-          <span>{text}</span>
+          {showText ? <span>{text}</span> : null}
         </a>
       );
     }
 
     return (
       <button
+        key={`rule-action-btn-${col.fieldId}-${keySuffix || 'base'}`}
         type="button"
         className={className}
+        aria-label={ariaLabel}
+        title={ariaLabel}
         disabled={uiDisabled}
         onClick={e => {
           e.stopPropagation();
@@ -1003,7 +1061,7 @@ const ListView: React.FC<ListViewProps> = ({
             columnId: col.fieldId,
             openView,
             openButtonId: openView === 'button' ? openButtonId : null,
-            text
+            text: ariaLabel
           });
           onSelect(row, row?.id ? records[row.id] : undefined, {
             openView,
@@ -1012,8 +1070,36 @@ const ListView: React.FC<ListViewProps> = ({
         }}
       >
         {icon}
-        <span>{text}</span>
+        {showText ? <span>{text}</span> : null}
       </button>
+    );
+  };
+
+  const renderRuleCell = (row: ListItem, col: ListViewRuleColumnConfig) => {
+    const cell = evaluateListViewRuleColumnCell(col, row);
+    if (!cell) return null;
+
+    if (Array.isArray((cell as any).actions) && (cell as any).actions.length) {
+      return (
+        <span className="ck-list-nav-group">
+          {(cell as any).actions.map((action: any, idx: number) => renderSingleRuleAction(row, col, action, `${idx}`))}
+        </span>
+      );
+    }
+
+    return renderSingleRuleAction(
+      row,
+      col,
+      {
+        text: cell.text,
+        hideText: (cell as any).hideText,
+        style: cell.style,
+        icon: cell.icon,
+        hrefFieldId: cell.hrefFieldId,
+        openView: cell.openView,
+        openButtonId: cell.openButtonId
+      },
+      'single'
     );
   };
 
@@ -1051,9 +1137,26 @@ const ListView: React.FC<ListViewProps> = ({
       return `${value}`;
     })();
     const title = dateText ? `${raw}` : text;
+    const textClassName = rowClickEnabled ? 'truncate-link' : 'truncate-text';
     if (typeof value === 'string') {
       const urls = splitUrlList(value).filter(u => /^https?:\/\//i.test(u));
       if (urls.length > 1) {
+        if (!rowClickEnabled) {
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {urls.slice(0, 3).map((u, idx) => (
+                <span key={`${u}-${idx}`} className="truncate-text" title={u} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                  {u.split('/').pop() || u}
+                </span>
+              ))}
+              {urls.length > 3 && (
+                <span className="muted">
+                  {tSystem('common.more', language, '+{count} more', { count: urls.length - 3 })}
+                </span>
+              )}
+            </div>
+          );
+        }
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {urls.slice(0, 3).map((u, idx) => (
@@ -1079,6 +1182,13 @@ const ListView: React.FC<ListViewProps> = ({
       }
       if (urls.length === 1) {
         const href = urls[0];
+        if (!rowClickEnabled) {
+          return (
+            <span className="truncate-text" title={title} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+              {text}
+            </span>
+          );
+        }
         return (
           <a
             href={href}
@@ -1095,6 +1205,13 @@ const ListView: React.FC<ListViewProps> = ({
     }
     const isLink = typeof value === 'string' && /^https?:\/\//i.test(value);
     if (isLink) {
+      if (!rowClickEnabled) {
+        return (
+          <span className="truncate-text" title={title} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {text}
+          </span>
+        );
+      }
       return (
         <a
           href={value as string}
@@ -1109,7 +1226,7 @@ const ListView: React.FC<ListViewProps> = ({
       );
     }
     return (
-      <span className="truncate-link" title={title} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+      <span className={textClassName} title={title} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
         {text}
       </span>
     );
@@ -1117,6 +1234,10 @@ const ListView: React.FC<ListViewProps> = ({
 
   const handleRowClick = useCallback(
     (row: ListItem) => {
+      if (!rowClickEnabled) {
+        onDiagnostic?.('list.row.click.disabledByConfig', { recordId: row.id });
+        return;
+      }
       if (uiDisabled) {
         onDiagnostic?.('list.row.click.disabled', { recordId: row.id });
         return;
@@ -1149,7 +1270,7 @@ const ListView: React.FC<ListViewProps> = ({
         onSelect(row, record);
       }
     },
-    [onDiagnostic, onSelect, records, ruleColumns, uiDisabled]
+    [onDiagnostic, onSelect, records, rowClickEnabled, ruleColumns, uiDisabled]
   );
 
   const clearSearchInputOnly = useCallback(() => {
@@ -1667,59 +1788,61 @@ const ListView: React.FC<ListViewProps> = ({
         {viewMode === 'table' ? (
           <div className="list-table-wrapper">
             <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
-              <thead>
-                <tr>
-                  {columnsForTable.map(col => (
-                    <th
-                      key={col.fieldId}
-                      scope="col"
-                      aria-sort={
-                        sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
-                      }
-                      style={{
-                        maxWidth: 180,
-                        whiteSpace: 'normal',
-                        wordBreak: 'break-word',
-                        background: 'var(--card)',
-                        cursor: isSortableColumn(col) ? 'pointer' : 'default'
-                      }}
-                    >
-                      {isSortableColumn(col) ? (
-                        <button
-                          type="button"
-                          className="ck-list-sort-header"
-                          onClick={() => {
-                            const nextField = col.fieldId;
-                            if (sortField === nextField) {
-                              setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-                            } else {
-                              setSortField(nextField);
-                              setSortDirection(defaultDirectionForField(nextField));
-                            }
-                            setPageIndex(0);
-                          }}
-                        >
-                          <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
-                          {sortField === col.fieldId ? (
-                            <span className="ck-list-sort-indicator" aria-hidden="true">
-                              {sortDirection === 'asc' ? '▲' : '▼'}
-                            </span>
-                          ) : null}
-                        </button>
-                      ) : (
-                        resolveLocalizedString(col.label, language, col.fieldId)
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+              {!hideHeaderRow ? (
+                <thead>
+                  <tr>
+                    {columnsForTable.map(col => (
+                      <th
+                        key={col.fieldId}
+                        scope="col"
+                        aria-sort={
+                          sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+                        }
+                        style={{
+                          maxWidth: 180,
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                          background: 'var(--card)',
+                          cursor: isSortableColumn(col) ? 'pointer' : 'default'
+                        }}
+                      >
+                        {isSortableColumn(col) ? (
+                          <button
+                            type="button"
+                            className="ck-list-sort-header"
+                            onClick={() => {
+                              const nextField = col.fieldId;
+                              if (sortField === nextField) {
+                                setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+                              } else {
+                                setSortField(nextField);
+                                setSortDirection(defaultDirectionForField(nextField));
+                              }
+                              setPageIndex(0);
+                            }}
+                          >
+                            <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
+                            {sortField === col.fieldId ? (
+                              <span className="ck-list-sort-indicator" aria-hidden="true">
+                                {sortDirection === 'asc' ? '▲' : '▼'}
+                              </span>
+                            ) : null}
+                          </button>
+                        ) : (
+                          resolveLocalizedString(col.label, language, col.fieldId)
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              ) : null}
               <tbody>
                 {pagedItems.length ? (
                   pagedItems.map(row => (
                     <tr
                       key={row.id}
-                      onClick={() => handleRowClick(row)}
-                      style={{ cursor: uiDisabled ? 'default' : 'pointer' }}
+                      onClick={rowClickEnabled ? () => handleRowClick(row) : undefined}
+                      style={{ cursor: rowClickEnabled && !uiDisabled ? 'pointer' : 'default' }}
                       aria-disabled={uiDisabled}
                     >
                       {columnsForTable.map(col => (
@@ -1749,15 +1872,20 @@ const ListView: React.FC<ListViewProps> = ({
                 <div
                   key={row.id}
                   className="ck-list-card"
-                  role="button"
-                  tabIndex={uiDisabled ? -1 : 0}
-                  aria-disabled={uiDisabled}
-                  onClick={() => handleRowClick(row)}
-                  onKeyDown={e => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    e.preventDefault();
-                    handleRowClick(row);
-                  }}
+                  role={rowClickEnabled ? 'button' : undefined}
+                  tabIndex={rowClickEnabled ? (uiDisabled ? -1 : 0) : undefined}
+                  aria-disabled={rowClickEnabled ? uiDisabled : undefined}
+                  onClick={rowClickEnabled ? () => handleRowClick(row) : undefined}
+                  onKeyDown={
+                    rowClickEnabled
+                      ? e => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return;
+                          e.preventDefault();
+                          handleRowClick(row);
+                        }
+                      : undefined
+                  }
+                  style={{ cursor: rowClickEnabled && !uiDisabled ? 'pointer' : 'default' }}
                 >
                   <div className="ck-list-card-title-row">
                     <div className="ck-list-card-title">{renderCellValue(row, cardTitleFieldId)}</div>
