@@ -77,6 +77,7 @@ import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectO
 import { InfoTooltip } from './form/InfoTooltip';
 import { DateInput } from './form/DateInput';
 import { SearchableSelect } from './form/SearchableSelect';
+import { SearchableMultiSelect } from './form/SearchableMultiSelect';
 import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
@@ -90,7 +91,7 @@ import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, applyValueMapsToLineRow, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
-import { findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
+import { findFirstOrderedEntryIssue, findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
 import { resolveRowFlowSegmentActionIds } from '../features/steps/domain/rowFlow';
 import {
   buildLineContextId,
@@ -116,6 +117,15 @@ import {
   seedSubgroupDefaults
 } from '../app/lineItems';
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
+import {
+  collectIncompleteEntireLeftoverRowIds,
+  resolveIncompleteEntireLeftoverOverlayDialogCopy
+} from '../app/leftoverOverlayGuard';
+import {
+  isIngredientNameFieldId,
+  isIngredientsManagementForm,
+  normalizeIngredientNameIfAllCaps
+} from '../app/ingredientsCreateRules';
 import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAncestors';
 import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app/bundledHtmlClientRenderer';
 import { resolveTemplateIdForRecord } from '../app/templateId';
@@ -549,6 +559,7 @@ const collectLineItemConfigEntries = (questions: WebQuestionDefinition[]) => {
 };
 
 interface FormViewProps {
+  formKey?: string;
   definition: WebFormDefinition;
   /**
    * Optional map of dedup key field ids (used to keep dedup keys editable even if valueMap is present).
@@ -675,6 +686,7 @@ interface FormViewProps {
 }
 
 const FormView: React.FC<FormViewProps> = ({
+  formKey,
   definition,
   dedupKeyFieldIdMap,
   guidedForwardNavigationBlocked,
@@ -723,6 +735,7 @@ const FormView: React.FC<FormViewProps> = ({
     return s === 'source' ? 'source' : 'alphabetical';
   };
   const orderedEntryEnabled = definition.submitValidation?.enforceFieldOrder === true;
+  const ingredientNameTransformEnabled = isIngredientsManagementForm(formKey);
   const warningsFor = (fieldPath: string): string[] => {
     const key = (fieldPath || '').toString();
     const list = key && warningByField ? (warningByField as any)[key] : undefined;
@@ -798,6 +811,7 @@ const FormView: React.FC<FormViewProps> = ({
     lineItems: LineItemState;
   } | null>(null);
   const overlayDetailHeaderCompleteRef = useRef<Map<string, boolean>>(new Map());
+  const overlayDetailRenderSignatureRef = useRef<string>('');
   const [overlayDetailHtml, setOverlayDetailHtml] = useState('');
   const [overlayDetailHtmlError, setOverlayDetailHtmlError] = useState('');
   const [overlayDetailHtmlLoading, setOverlayDetailHtmlLoading] = useState(false);
@@ -824,6 +838,8 @@ const FormView: React.FC<FormViewProps> = ({
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
   const errorNavModeRef = useRef<'focus' | 'scroll'>('focus');
+  const errorNavAllowOverlayOpenRef = useRef(true);
+  const orderedEntryGuideFieldPathRef = useRef<string | null>(null);
   const overlayCloseValidateOnOpenRef = useRef<Record<string, boolean>>({});
   const choiceVariantLogRef = useRef<Record<string, string>>({});
   const choiceSearchLoggedRef = useRef<Set<string>>(new Set());
@@ -1393,6 +1409,7 @@ const FormView: React.FC<FormViewProps> = ({
         const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
         const presentation: 'groupEditor' | 'liftedRowFields' =
           presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
+        const parentFieldsScoped = (t as any).fields !== undefined && (t as any).fields !== null;
 
         const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
         const subIncludeRaw = subGroupsCfgPresent ? (t as any)?.subGroups?.include : undefined;
@@ -1404,8 +1421,9 @@ const FormView: React.FC<FormViewProps> = ({
         const filteredSubGroups = (() => {
           const subs = (lineCfg.subGroups || []) as any[];
           if (!subs.length) return subs;
-          // In guided steps, `liftedRowFields` should not validate subgroups unless explicitly configured.
-          if (!subGroupsCfgPresent && presentation === 'liftedRowFields') return [];
+          // In guided steps, subgroup validation should be explicit whenever the step scopes parent fields.
+          // This avoids blocking a step on subgroup fields that are not reachable from that step.
+          if (!subGroupsCfgPresent && (presentation === 'liftedRowFields' || parentFieldsScoped)) return [];
           const kept = allowedSubSet
             ? subs.filter(sub => {
                 const subId = resolveSubgroupKey(sub as any);
@@ -1878,6 +1896,7 @@ const FormView: React.FC<FormViewProps> = ({
             requiredMode: 'stepComplete'
           });
           if (errorCount) {
+            errorNavAllowOverlayOpenRef.current = true;
             errorNavRequestRef.current += 1;
             errorNavModeRef.current = 'focus';
             onDiagnostic?.('validation.navigate.request', {
@@ -1921,6 +1940,7 @@ const FormView: React.FC<FormViewProps> = ({
             errorCount: Object.keys(nextErrors).length,
             requiredMode: 'configured'
           });
+          errorNavAllowOverlayOpenRef.current = true;
           errorNavRequestRef.current += 1;
           errorNavModeRef.current = 'focus';
           onDiagnostic?.('validation.navigate.request', {
@@ -1956,6 +1976,7 @@ const FormView: React.FC<FormViewProps> = ({
       } catch (_) {
         // ignore
       }
+      errorNavAllowOverlayOpenRef.current = true;
       errorNavRequestRef.current += 1;
       errorNavModeRef.current = 'focus';
       onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, mode: errorNavModeRef.current });
@@ -3211,12 +3232,13 @@ const FormView: React.FC<FormViewProps> = ({
       value: string;
       options: OptionLike[];
       required: boolean;
+      placeholder?: string;
       searchEnabled?: boolean;
       override?: string | null;
       disabled?: boolean;
       onChange: (next: string) => void;
     }) => {
-      const { fieldPath, value, options, required, searchEnabled, override, disabled, onChange } = args;
+      const { fieldPath, value, options, required, placeholder: placeholderOverride, searchEnabled, override, disabled, onChange } = args;
       const decision = computeChoiceControlVariant(options, required, override);
 
       const prev = choiceVariantLogRef.current[fieldPath];
@@ -3232,7 +3254,8 @@ const FormView: React.FC<FormViewProps> = ({
         });
       }
 
-      const placeholder = tSystem('common.selectPlaceholder', language, 'Select…');
+      const placeholder =
+        (placeholderOverride || '').toString().trim() || tSystem('common.selectPlaceholder', language, 'Select…');
       const shouldUseSearchableSelect = (() => {
         if (decision.variant !== 'select') return false;
         if (searchEnabled === true) return true;
@@ -3453,6 +3476,7 @@ const FormView: React.FC<FormViewProps> = ({
         const v = ((row?.values || {}) as any)?.PREP_TYPE;
         return typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined && (!Array.isArray(v) || v.length > 0);
       });
+      const incompleteEntireLeftoverRowIds = collectIncompleteEntireLeftoverRowIds(rowsInOverlay as any[]);
       const removeLineRowByCascade = (groupId: string, rowId: string) => {
         if (!groupId || !rowId) return;
         const prevLineItems = lineItemsRef.current || {};
@@ -3597,6 +3621,77 @@ const FormView: React.FC<FormViewProps> = ({
           }
         });
         onDiagnostic?.('subgroup.overlay.close.confirm.open', { source, kind: 'leftoversOverlayDiscard' });
+        return;
+      }
+      if (source === 'button' && isLeftoversRoot && incompleteEntireLeftoverRowIds.length > 0 && openConfirmDialogResolved) {
+        const copy = resolveIncompleteEntireLeftoverOverlayDialogCopy(language);
+        openConfirmDialogResolved({
+          title: copy.title,
+          message: copy.message,
+          confirmLabel: copy.confirmLabel,
+          cancelLabel: copy.cancelLabel,
+          showCancel: copy.showCancel,
+          showCloseButton: copy.showCloseButton,
+          dismissOnBackdrop: copy.dismissOnBackdrop,
+          kind: 'leftoversOverlayIncompleteEntireQty',
+          refId: `${subgroupKey}::leftoversIncompleteEntireQty`,
+          onConfirm: () => {
+            const prevLineItems = lineItemsRef.current || {};
+            const cascade = cascadeRemoveLineItemRows({
+              lineItems: prevLineItems,
+              roots: incompleteEntireLeftoverRowIds.map(rowId => ({ groupId: subgroupKey, rowId }))
+            });
+            if (cascade.removedSubgroupKeys.length) {
+              setSubgroupSelectors(prevSel => {
+                const nextSel = { ...prevSel };
+                cascade.removedSubgroupKeys.forEach(key => {
+                  delete (nextSel as any)[key];
+                });
+                return nextSel;
+              });
+            }
+            const mapped = applyValueMapsToForm(
+              definition,
+              (valuesRef.current || {}) as Record<string, FieldValue>,
+              cascade.lineItems,
+              { mode: 'init' }
+            );
+            valuesRef.current = mapped.values;
+            lineItemsRef.current = mapped.lineItems;
+            setValues(mapped.values);
+            setLineItems(mapped.lineItems);
+            runSelectionEffectsForAncestorRows(subgroupKey, prevLineItems, mapped.lineItems, {
+              mode: 'init',
+              topValues: mapped.values
+            });
+
+            const remainingLeftoverRows = (mapped.lineItems[subgroupKey] || []).filter((row: any) => {
+              const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
+              return (prepType || '').toString().trim().toLowerCase() !== 'cook';
+            });
+
+            onDiagnostic?.('subgroup.overlay.close.leftovers.discard.incompleteEntireQty', {
+              source,
+              subgroupKey,
+              removedRows: incompleteEntireLeftoverRowIds.length,
+              remainingRows: remainingLeftoverRows.length
+            });
+
+            if (!remainingLeftoverRows.length) {
+              discardLeftoversAndReturn();
+              return;
+            }
+            closeSubgroupOverlay();
+          },
+          onCancel: () => {
+            // Stay in overlay so the user can enter a valid leftover quantity.
+          }
+        });
+        onDiagnostic?.('subgroup.overlay.close.confirm.open', {
+          source,
+          kind: 'leftoversOverlayIncompleteEntireQty',
+          rowCount: incompleteEntireLeftoverRowIds.length
+        });
         return;
       }
       const overlayCloseCtx: VisibilityContext = {
@@ -3973,6 +4068,7 @@ const FormView: React.FC<FormViewProps> = ({
     }
 
     setErrors(prev => mergeLineItemGroupErrors(prev, groupId, nextErrors));
+    errorNavAllowOverlayOpenRef.current = true;
     errorNavRequestRef.current += 1;
     errorNavModeRef.current = 'focus';
     onDiagnostic?.('validation.navigate.request', {
@@ -4534,12 +4630,14 @@ const FormView: React.FC<FormViewProps> = ({
           ? subgroupOverlay.subKey
           : '';
     if (!activeGroupKey) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlError('');
       setOverlayDetailHtmlLoading(false);
       return;
     }
     if (!overlayDetailSelection || overlayDetailSelection.mode !== 'view' || overlayDetailSelection.groupId !== activeGroupKey) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlError('');
       setOverlayDetailHtmlLoading(false);
@@ -4570,6 +4668,7 @@ const FormView: React.FC<FormViewProps> = ({
     })();
 
     if (!context || !context.groupId) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlError('');
       setOverlayDetailHtmlLoading(false);
@@ -4578,12 +4677,14 @@ const FormView: React.FC<FormViewProps> = ({
 
     const templateIdMap = context.overlayDetail?.body?.view?.templateId;
     if (!templateIdMap) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
       setOverlayDetailHtmlError(tSystem('overlay.detail.templateMissing', language, 'Template not configured.'));
       return;
     }
     if (context.type === 'sub' && Array.isArray(context.path) && context.path.length > 1) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
       setOverlayDetailHtmlError(tSystem('overlay.detail.pathUnsupported', language, 'Nested paths beyond one level are not supported yet.'));
@@ -4625,6 +4726,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     const resolvedTemplateId = resolveTemplateIdForRecord(templateIdMap, payload.values as any, language);
     if (!resolvedTemplateId || !isBundledHtmlTemplateId(resolvedTemplateId)) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
       setOverlayDetailHtmlError(
@@ -4632,6 +4734,22 @@ const FormView: React.FC<FormViewProps> = ({
       );
       return;
     }
+
+    let renderSignature = '';
+    try {
+      renderSignature = JSON.stringify({
+        groupId: context.groupId,
+        rowId: overlayDetailSelection.rowId,
+        templateId: resolvedTemplateId,
+        payload: (payload.values as any)[context.groupId]
+      });
+    } catch (_) {
+      renderSignature = `${context.groupId}::${overlayDetailSelection.rowId}::${resolvedTemplateId}`;
+    }
+    if (overlayDetailRenderSignatureRef.current === renderSignature) {
+      return;
+    }
+    overlayDetailRenderSignatureRef.current = renderSignature;
 
 	    setOverlayDetailHtmlLoading(true);
 	    setOverlayDetailHtmlError('');
@@ -6125,6 +6243,12 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [onDiagnostic, parentScopedVisibilityTargets]);
 
+  const orderedEntryValidationDefinition = useMemo(() => {
+    if (!orderedEntryEnabled) return definition;
+    if (!guidedEnabled) return definition;
+    return buildGuidedStepDefinition(activeGuidedStepId) || definition;
+  }, [activeGuidedStepId, buildGuidedStepDefinition, definition, guidedEnabled, orderedEntryEnabled]);
+
   const lineItemVisibilityState = useMemo<Record<string, boolean>>(() => {
     if (!lineItemVisibilityTargets.length) return {};
     const next: Record<string, boolean> = {};
@@ -6152,10 +6276,10 @@ const FormView: React.FC<FormViewProps> = ({
 
   const orderedEntryErrors = useMemo(() => {
     if (!orderedEntryEnabled) return null;
-    if (!definition?.questions?.length) return null;
+    if (!orderedEntryValidationDefinition?.questions?.length) return null;
     try {
       return validateForm({
-        definition,
+        definition: orderedEntryValidationDefinition,
         language,
         values,
         lineItems,
@@ -6167,12 +6291,47 @@ const FormView: React.FC<FormViewProps> = ({
       onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
       return null;
     }
-  }, [collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, orderedEntryEnabled, values]);
+  }, [
+    collapsedRows,
+    collapsedSubgroups,
+    language,
+    lineItems,
+    onDiagnostic,
+    orderedEntryEnabled,
+    orderedEntryValidationDefinition,
+    values
+  ]);
 
   const orderedEntryValid = useMemo(() => {
     if (!orderedEntryEnabled) return true;
     return !orderedEntryErrors || Object.keys(orderedEntryErrors).length === 0;
   }, [orderedEntryEnabled, orderedEntryErrors]);
+
+  const firstOrderedEntryIssue = useMemo(() => {
+    if (!orderedEntryEnabled) return null;
+    return findFirstOrderedEntryIssue({
+      definition: orderedEntryValidationDefinition,
+      language,
+      values,
+      lineItems,
+      errors: orderedEntryErrors,
+      collapsedRows,
+      resolveVisibilityValue,
+      getTopValue: getTopValueNoScan,
+      orderedQuestions: orderedEntryQuestions
+    });
+  }, [
+    collapsedRows,
+    getTopValueNoScan,
+    language,
+    lineItems,
+    orderedEntryEnabled,
+    orderedEntryErrors,
+    orderedEntryValidationDefinition,
+    orderedEntryQuestions,
+    resolveVisibilityValue,
+    values
+  ]);
 
   const buildOrderedEntryErrors = useCallback(
     (missingFieldPath: string, allErrors: FormErrors): FormErrors => {
@@ -6207,7 +6366,7 @@ const FormView: React.FC<FormViewProps> = ({
     (target: OrderedEntryTarget, targetGroup?: WebQuestionDefinition) => {
       if (!orderedEntryEnabled) return null;
       return findOrderedEntryBlock({
-        definition,
+        definition: orderedEntryValidationDefinition,
         language,
         values,
         lineItems,
@@ -6222,12 +6381,12 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [
       collapsedRows,
-      definition,
       getTopValueNoScan,
       language,
       lineItems,
       orderedEntryErrors,
       orderedEntryEnabled,
+      orderedEntryValidationDefinition,
       orderedEntryQuestions,
       resolveVisibilityValue,
       values
@@ -6238,12 +6397,12 @@ const FormView: React.FC<FormViewProps> = ({
     (
       target: OrderedEntryTarget,
       missingFieldPath: string,
-      options?: { navigate?: boolean; source?: string; scrollOnly?: boolean }
+      options?: { navigate?: boolean; source?: string; scrollOnly?: boolean; allowOverlayOpen?: boolean }
     ) => {
       let nextErrors: FormErrors = {};
       try {
         nextErrors = validateForm({
-          definition,
+          definition: orderedEntryValidationDefinition,
           language,
           values,
           lineItems,
@@ -6254,9 +6413,11 @@ const FormView: React.FC<FormViewProps> = ({
       } catch (err: any) {
         onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
       }
+      orderedEntryGuideFieldPathRef.current = missingFieldPath;
       setErrors(buildOrderedEntryErrors(missingFieldPath, nextErrors));
       const shouldNavigate = options?.navigate !== false || options?.scrollOnly === true;
       if (shouldNavigate) {
+        errorNavAllowOverlayOpenRef.current = options?.allowOverlayOpen !== false;
         errorNavRequestRef.current += 1;
         errorNavModeRef.current = options?.scrollOnly ? 'scroll' : 'focus';
         onDiagnostic?.('validation.navigate.request', {
@@ -6280,8 +6441,66 @@ const FormView: React.FC<FormViewProps> = ({
         missingFieldPath
       });
     },
-    [buildOrderedEntryErrors, collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, setErrors, values]
+    [
+      buildOrderedEntryErrors,
+      collapsedRows,
+      collapsedSubgroups,
+      language,
+      lineItems,
+      onDiagnostic,
+      orderedEntryValidationDefinition,
+      setErrors,
+      values
+    ]
   );
+
+  useEffect(() => {
+    if (!orderedEntryEnabled || submitting) return;
+    const missingFieldPath = firstOrderedEntryIssue?.missingFieldPath || '';
+    if (!missingFieldPath) {
+      orderedEntryGuideFieldPathRef.current = null;
+      return;
+    }
+
+    const currentGuidePath = orderedEntryGuideFieldPathRef.current;
+    const currentKeys = Object.keys(errors || {});
+    const hasNonGuidanceErrors = currentKeys.some(key => key !== currentGuidePath);
+    if (hasNonGuidanceErrors) return;
+
+    const nextErrors = buildOrderedEntryErrors(missingFieldPath, (orderedEntryErrors || {}) as FormErrors);
+    const nextKeys = Object.keys(nextErrors);
+    const sameErrors =
+      nextKeys.length === currentKeys.length &&
+      nextKeys.every(key => errors[key] === nextErrors[key]);
+
+    orderedEntryGuideFieldPathRef.current = missingFieldPath;
+    if (!sameErrors) {
+      setErrors(nextErrors);
+    }
+
+    if (currentGuidePath === missingFieldPath) return;
+    const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+    const activeTag = (activeEl?.tagName || '').toLowerCase();
+    const isTypingContext = activeTag === 'input' || activeTag === 'textarea';
+    if (isTypingContext) return;
+    errorNavAllowOverlayOpenRef.current = false;
+    errorNavRequestRef.current += 1;
+    errorNavModeRef.current = 'scroll';
+    onDiagnostic?.('validation.navigate.request', {
+      attempt: errorNavRequestRef.current,
+      scope: 'orderedEntryAuto',
+      mode: errorNavModeRef.current
+    });
+  }, [
+    buildOrderedEntryErrors,
+    errors,
+    firstOrderedEntryIssue,
+    onDiagnostic,
+    orderedEntryEnabled,
+    orderedEntryErrors,
+    setErrors,
+    submitting
+  ]);
 
   useEffect(() => {
     orderedEntryGateRef.current = ({ targetQuestionId }) => {
@@ -6470,14 +6689,16 @@ const FormView: React.FC<FormViewProps> = ({
     if (orderedBlock) {
       blurActiveElement('orderedEntry.blocked', { scope: 'top', fieldId: q.id });
       triggerOrderedEntryValidation({ scope: 'top', questionId: q.id }, orderedBlock.missingFieldPath, {
-        navigate: false,
-        scrollOnly: true,
         source: 'change'
       });
       return;
     }
+    const nextValue =
+      ingredientNameTransformEnabled && isIngredientNameFieldId(q.id) && typeof value === 'string'
+        ? normalizeIngredientNameIfAllCaps(value)
+        : value;
     guidedLastUserEditAtRef.current = Date.now();
-    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue: value });
+    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue });
     clearOverlayOpenActionSuppression(q.id);
     if (onStatusClear) onStatusClear();
     const currentValues = valuesRef.current;
@@ -6485,15 +6706,15 @@ const FormView: React.FC<FormViewProps> = ({
     if (
       isClearOnChangeEnabled((q as any).clearOnChange) &&
       !isEmptyValue(currentValues[q.id]) &&
-      !isEmptyValue(value) &&
-      !areFieldValuesEqual(currentValues[q.id], value)
+      !isEmptyValue(nextValue) &&
+      !areFieldValuesEqual(currentValues[q.id], nextValue)
     ) {
       const cleared = applyClearOnChange({
         definition,
         values: currentValues,
         lineItems: currentLineItems,
         fieldId: q.id,
-        nextValue: value,
+        nextValue,
         orderedFieldIds: clearOnChangeOrderedFieldIds
       });
       onDiagnostic?.('field.clearOnChange', {
@@ -6507,11 +6728,11 @@ const FormView: React.FC<FormViewProps> = ({
       lineItemsRef.current = cleared.lineItems;
       setErrors({});
       if (onSelectionEffect) {
-        onSelectionEffect(q, value);
+        onSelectionEffect(q, nextValue);
       }
       return;
     }
-    const baseValues = { ...currentValues, [q.id]: value };
+    const baseValues = { ...currentValues, [q.id]: nextValue };
     const { values: nextValues, lineItems: nextLineItems } = applyValueMapsToForm(
       definition,
       baseValues,
@@ -6533,7 +6754,7 @@ const FormView: React.FC<FormViewProps> = ({
       return next;
     });
     if (onSelectionEffect) {
-      onSelectionEffect(q, value);
+      onSelectionEffect(q, nextValue);
     }
   };
 
@@ -6594,7 +6815,7 @@ const FormView: React.FC<FormViewProps> = ({
           fieldId: (field?.id || '').toString()
         },
         orderedBlock.missingFieldPath,
-        { navigate: false, scrollOnly: true, source: 'change' }
+        { source: 'change' }
       );
       return;
     }
@@ -7441,7 +7662,7 @@ const FormView: React.FC<FormViewProps> = ({
         const busyThis = !!reportBusy && reportBusyId === q.id;
         const disabled = submitting || isFieldLockedByDedup(q.id) || !onReportButton || !!reportBusy;
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperText = helperCfg.belowLabelText;
         const helperNode = helperText ? <div className="ck-field-helper">{helperText}</div> : null;
         const buttonLabelStyle = inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly;
         return (
@@ -7513,17 +7734,16 @@ const FormView: React.FC<FormViewProps> = ({
         const displayText =
           displayValue === undefined || displayValue === null ? '' : displayValue.toString();
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperTextBelowLabel = helperCfg.belowLabelText;
+        const helperTextPlaceholder = helperCfg.placeholderText;
         const supportsPlaceholder = q.type === 'TEXT' || q.type === 'PARAGRAPH' || q.type === 'NUMBER';
-        const helperPlacement =
-          helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
         const isEditableField =
           !renderAsLabel && !useValueMap && !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
-        const helperId = helperText && helperPlacement === 'belowLabel' && isEditableField ? `ck-field-helper-${q.id}` : undefined;
+        const helperId = helperTextBelowLabel && isEditableField ? `ck-field-helper-${q.id}` : undefined;
         const helperNode =
-          helperText && helperPlacement === 'belowLabel' && isEditableField ? (
+          helperTextBelowLabel && isEditableField ? (
             <div id={helperId} className="ck-field-helper">
-              {helperText}
+              {helperTextBelowLabel}
             </div>
           ) : null;
         if (overlayOpenAction && overlayOpenRenderMode === 'replace') {
@@ -7533,7 +7753,7 @@ const FormView: React.FC<FormViewProps> = ({
           return renderReadOnly(displayValue || null, { stacked: forceStackedLabel, inline: forceInlineLabel });
         }
         if (q.type === 'NUMBER') {
-          const placeholder = helperText && helperPlacement === 'placeholder' && isEditableField ? helperText : undefined;
+          const placeholder = supportsPlaceholder && helperTextPlaceholder && isEditableField ? helperTextPlaceholder : undefined;
           const numericOnlyMessage = tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
           return (
             <div
@@ -7571,14 +7791,14 @@ const FormView: React.FC<FormViewProps> = ({
                 }
                 onChange={next => handleFieldChange(q, next)}
               />
-              {helperPlacement === 'belowLabel' ? helperNode : null}
+              {helperNode}
               {renderOverlayOpenInlineButton(displayText || null)}
               {errors[q.id] && <div className="error">{errors[q.id]}</div>}
               {renderWarnings(q.id)}
             </div>
           );
         }
-        const placeholder = helperText && helperPlacement === 'placeholder' && isEditableField ? helperText : undefined;
+        const placeholder = supportsPlaceholder && helperTextPlaceholder && isEditableField ? helperTextPlaceholder : undefined;
         return (
           <div
             key={q.id}
@@ -7652,7 +7872,7 @@ const FormView: React.FC<FormViewProps> = ({
                 aria-describedby={helperId}
               />
             )}
-            {helperPlacement === 'belowLabel' ? helperNode : null}
+            {helperNode}
             {renderOverlayOpenInlineButton(displayText || null)}
             {errors[q.id] && <div className="error">{errors[q.id]}</div>}
             {renderWarnings(q.id)}
@@ -7665,8 +7885,9 @@ const FormView: React.FC<FormViewProps> = ({
         const selected = opts.find(opt => opt.value === choiceValue);
         const display = selected?.label || choiceValue || null;
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperText = helperCfg.belowLabelText;
         const isEditableField = !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
+        const placeholder = helperCfg.placeholderText && isEditableField ? helperCfg.placeholderText : undefined;
         const helperId = helperText && isEditableField ? `ck-field-helper-${q.id}` : undefined;
         const helperNode = helperText && isEditableField ? (
           <div id={helperId} className="ck-field-helper">
@@ -7696,6 +7917,7 @@ const FormView: React.FC<FormViewProps> = ({
               value: choiceValue || '',
               options: opts,
               required: !!q.required,
+              placeholder,
               searchEnabled: q.ui?.choiceSearchEnabled,
               override: q.ui?.control,
               disabled: submitting || q.readOnly === true || isFieldLockedByDedup(q.id),
@@ -7718,8 +7940,10 @@ const FormView: React.FC<FormViewProps> = ({
         const isConsentCheckbox = !q.dataSource && !hasAnyOption;
         const selected = Array.isArray(values[q.id]) ? (values[q.id] as string[]) : [];
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperText = helperCfg.belowLabelText;
         const isEditableField = !submitting && q.readOnly !== true && !isFieldLockedByDedup(q.id);
+        const placeholder =
+          helperCfg.placeholderText || tSystem('common.selectPlaceholder', language, 'Select…');
         const helperId = helperText && isEditableField ? `ck-field-helper-${q.id}` : undefined;
         const helperNode = helperText && isEditableField ? (
           <div id={helperId} className="ck-field-helper">
@@ -7793,26 +8017,22 @@ const FormView: React.FC<FormViewProps> = ({
               {q.required && <RequiredStar />}
             </label>
             {renderAsMultiSelect ? (
-              <select
-                multiple
+              <SearchableMultiSelect
                 value={selected}
+                options={opts.map(opt => ({
+                  value: opt.value,
+                  label: opt.label,
+                  searchText: opt.searchText
+                }))}
                 disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
+                placeholder={placeholder}
                 aria-label={resolveLabel(q, language)}
-                onChange={e => {
+                onChange={next => {
                   if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
-                  const next = Array.from(e.currentTarget.selectedOptions)
-                    .map(opt => opt.value)
-                    .filter(Boolean);
                   onDiagnostic?.('ui.checkbox.select.change', { fieldPath: q.id, selectedCount: next.length });
                   handleFieldChange(q, next);
                 }}
-              >
-                {opts.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              />
             ) : (
               <div className="inline-options">
                 {opts.map(opt => (
@@ -7858,7 +8078,7 @@ const FormView: React.FC<FormViewProps> = ({
         const items = toUploadItems(values[q.id]);
         const uploadConfig = q.uploadConfig || {};
         const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.text;
+        const helperText = helperCfg.belowLabelText;
         const readOnly = q.readOnly === true;
         const locked = isFieldLockedByDedup(q.id);
         const isEditableField = !submitting && !readOnly && !locked;
@@ -8236,7 +8456,7 @@ const FormView: React.FC<FormViewProps> = ({
           })();
           const groupLabel = resolveLabel(q, language);
           const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-          const helperText = helperCfg.text;
+          const helperText = helperCfg.belowLabelText;
           const isEditableField = !locked && q.readOnly !== true && q.ui?.renderAsLabel !== true;
           const helperNode = helperText && isEditableField ? <div className="ck-field-helper">{helperText}</div> : null;
           const pillText = groupLabel;
@@ -8621,6 +8841,14 @@ const FormView: React.FC<FormViewProps> = ({
             const subgroupInfo = parseSubgroupKey(prefix);
             if (subgroupInfo) {
               if (subgroupInfo.rootGroupId !== groupId) continue;
+              const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
+              const presentation: 'groupEditor' | 'liftedRowFields' =
+                presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
+              const parentFieldsScoped = (t as any).fields !== undefined && (t as any).fields !== null;
+              const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
+              // Match guided-step scoped validation semantics:
+              // when a step scopes parent fields (or uses liftedRowFields), subgroups are opt-in.
+              if (!subGroupsCfgPresent && (presentation === 'liftedRowFields' || parentFieldsScoped)) continue;
 
               const subTargetModeRaw = ((t.subGroups as any)?.displayMode || 'inherit').toString().trim().toLowerCase();
               const subStepModeRaw = stepSubGroupsDefaultMode ? stepSubGroupsDefaultMode.toString().trim().toLowerCase() : '';
@@ -8727,6 +8955,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     const wasSame = firstErrorRef.current === firstKey;
     firstErrorRef.current = firstKey;
+    const allowOverlayOpen = errorNavAllowOverlayOpenRef.current !== false;
 
     const expandGroupForQuestionId = (questionId: string): boolean => {
       const groupKey = questionIdToGroupKey[questionId];
@@ -8754,7 +8983,7 @@ const FormView: React.FC<FormViewProps> = ({
         if (nestedKey) {
           setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
         }
-        if (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix) {
+        if (allowOverlayOpen && (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix)) {
           openSubgroupOverlay(prefix, { source: 'navigate' });
           onDiagnostic?.('validation.navigate.openSubgroup', { key: firstKey, subKey: prefix });
         }
@@ -8765,7 +8994,7 @@ const FormView: React.FC<FormViewProps> = ({
       const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
       const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
       const suppressOverlayForGuidedInline = guidedEnabled && guidedInlineLineGroupIds.has(prefix);
-        if (groupOverlayEnabled && !suppressOverlayForGuidedInline) {
+        if (allowOverlayOpen && groupOverlayEnabled && !suppressOverlayForGuidedInline) {
           if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
             openLineItemGroupOverlay(prefix, { source: 'navigate' });
           onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key: firstKey, groupId: prefix, source: 'submit' });
@@ -8809,6 +9038,7 @@ const FormView: React.FC<FormViewProps> = ({
         setTimeout(() => attempt(), 80);
       }
     });
+    errorNavAllowOverlayOpenRef.current = true;
     errorNavConsumedRef.current = errorNavRequestRef.current;
   }, [
     errors,
@@ -13041,7 +13271,7 @@ const FormView: React.FC<FormViewProps> = ({
   return (
     <>
       <div className="ck-form-sections">
-        {recordStatusText ? (
+        {recordStatusText && !ingredientNameTransformEnabled ? (
           <div className="ck-record-status-row">
             <span className="ck-record-status-label">{tSystem('list.meta.status', language, 'Status')}</span>
             <span

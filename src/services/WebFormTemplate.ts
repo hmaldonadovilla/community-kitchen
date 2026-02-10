@@ -515,9 +515,7 @@ export function buildWebFormHtml(
         text-align: left;
       }
       button.ck-dialog-action-button .ck-button-text,
-      button.ck-dialog-action-button .ck-bottom-label,
-      button.ck-dialog-action-button.ck-button-wrap-left .ck-button-text,
-      button.ck-dialog-action-button.ck-button-wrap-left .ck-bottom-label {
+      button.ck-dialog-action-button .ck-bottom-label {
         display: block !important;
         width: 100% !important;
         max-width: 100% !important;
@@ -526,22 +524,28 @@ export function buildWebFormHtml(
         word-break: break-word;
         text-align: center;
       }
+      button.ck-dialog-action-button.ck-button-wrap-left .ck-button-text,
+      button.ck-dialog-action-button.ck-button-wrap-left .ck-bottom-label {
+        text-align: left !important;
+      }
       button:disabled { opacity: 0.6; cursor: not-allowed; }
       .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
       .muted {
-        color: var(--text);
-        opacity: var(--ck-helper-opacity);
+        color: var(--muted);
+        opacity: 1;
         font-size: var(--ck-font-helper);
         font-weight: 400;
         line-height: 1.35;
+        text-align: left;
       }
       .ck-step-help-text {
         margin: 0 0 12px;
-        color: var(--text);
-        opacity: var(--ck-helper-opacity);
+        color: var(--muted);
+        opacity: 1;
         font-size: var(--ck-font-helper);
         line-height: 1.35;
         font-weight: 400;
+        text-align: left;
       }
       .status { margin-top: 8px; padding: 8px 10px; background: transparent; border: 1px solid var(--border); border-radius: 12px; color: var(--text); }
       .inline-options { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -781,7 +785,7 @@ export function buildWebFormHtml(
       .ck-list-nav-group {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
+        gap: 14px;
         flex-wrap: nowrap;
       }
       .ck-list-nav:hover { text-decoration: underline; }
@@ -792,6 +796,11 @@ export function buildWebFormHtml(
       }
       .ck-list-nav--iconOnly {
         text-decoration: none;
+        padding: 3px 6px;
+        min-width: 30px;
+        min-height: 30px;
+        justify-content: center;
+        border-radius: 8px;
       }
       .ck-list-nav--iconOnly:hover {
         text-decoration: none;
@@ -968,9 +977,13 @@ export function buildWebFormHtml(
       .ck-list-card-footer {
         display: flex;
         flex-wrap: wrap;
-        gap: 14px;
+        gap: 18px;
         padding-top: 10px;
         border-top: 1px dashed var(--border);
+      }
+      .ck-list-card-action {
+        display: inline-flex;
+        align-items: center;
       }
       .ck-list-icon--warning { color: var(--accent); }
       .ck-list-icon--check { color: var(--accent); }

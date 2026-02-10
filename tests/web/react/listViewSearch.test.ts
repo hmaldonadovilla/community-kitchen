@@ -1,4 +1,4 @@
-import { normalizeToIsoDateLocal } from '../../../src/web/react/app/listViewSearch';
+import { normalizeToIsoDateLocal, shouldClearAppliedQueryOnInputClear } from '../../../src/web/react/app/listViewSearch';
 
 describe('listViewSearch', () => {
   it('normalizes Date objects to local YYYY-MM-DD', () => {
@@ -22,6 +22,13 @@ describe('listViewSearch', () => {
     const expected = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
     expect(normalizeToIsoDateLocal(iso)).toBe(expected);
   });
-});
 
+  it('only clears applied query via clear-input in date mode', () => {
+    expect(shouldClearAppliedQueryOnInputClear('date')).toBe(true);
+    expect(shouldClearAppliedQueryOnInputClear('DATE')).toBe(true);
+    expect(shouldClearAppliedQueryOnInputClear('text')).toBe(false);
+    expect(shouldClearAppliedQueryOnInputClear('advanced')).toBe(false);
+    expect(shouldClearAppliedQueryOnInputClear(undefined)).toBe(false);
+  });
+});
 

@@ -119,30 +119,42 @@ interface RecipeSection {
   allergensText: string;
 }
 
+const MEAL_BLOCK_STYLES = {
+  table:
+    'width:100%;border-collapse:collapse;table-layout:fixed;border:0.5px solid #000000;background:#ffffff;',
+  title:
+    'padding:14px;border:0.5px solid #000000;background:#d8f0d2;background-color:#d8f0d2;font-style:normal;font-weight:400;font-size:20px;color:#000000;text-align:left;line-height:1.45;',
+  cell:
+    'padding:14px;vertical-align:middle;border:0.5px solid #000000;background:#ffffff;font-size:15px;font-weight:400;color:#000000;line-height:1.45;',
+  label: 'width:25%;text-align:left;',
+  value: 'width:75%;text-align:left;word-break:break-word;',
+  valuePortions: 'text-align:right;'
+} as const;
+
 const buildRecipeSection = (section: RecipeSection): string => {
   return `
-    <table class="ck-meal-table" role="table" aria-label="${escapeHtml(section.mealType || 'Meal')}">
+    <table class="ck-meal-table" style="${MEAL_BLOCK_STYLES.table}" role="table" aria-label="${escapeHtml(section.mealType || 'Meal')}">
       <thead>
         <tr>
-          <th class="ck-meal-table__title" scope="col" colspan="2">${escapeHtml(section.mealType || 'Meal')}</th>
+          <th class="ck-meal-table__title" style="${MEAL_BLOCK_STYLES.title}" scope="col" colspan="2">${escapeHtml(section.mealType || 'Meal')}</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td class="ck-meal-table__label">Portions</td>
-          <td class="ck-meal-table__value">${escapeHtml(section.portionCount)}</td>
+          <td class="ck-meal-table__label" style="${MEAL_BLOCK_STYLES.cell}${MEAL_BLOCK_STYLES.label}">Portions</td>
+          <td class="ck-meal-table__value" style="${MEAL_BLOCK_STYLES.cell}${MEAL_BLOCK_STYLES.value}${MEAL_BLOCK_STYLES.valuePortions}">${escapeHtml(section.portionCount)}</td>
         </tr>
         <tr>
-          <td class="ck-meal-table__label">Recipe</td>
-          <td class="ck-meal-table__value">${escapeHtml(section.recipeName || 'Recipe not set')}</td>
+          <td class="ck-meal-table__label" style="${MEAL_BLOCK_STYLES.cell}${MEAL_BLOCK_STYLES.label}">Recipe</td>
+          <td class="ck-meal-table__value" style="${MEAL_BLOCK_STYLES.cell}${MEAL_BLOCK_STYLES.value}">${escapeHtml(section.recipeName || 'Recipe not set')}</td>
         </tr>
         <tr>
-          <td class="ck-meal-table__label">Ingredients</td>
-          <td class="ck-meal-table__value">${escapeHtml(section.ingredientsText || 'None')}</td>
+          <td class="ck-meal-table__label" style="${MEAL_BLOCK_STYLES.cell}${MEAL_BLOCK_STYLES.label}">Ingredients</td>
+          <td class="ck-meal-table__value" style="${MEAL_BLOCK_STYLES.cell}${MEAL_BLOCK_STYLES.value}">${escapeHtml(section.ingredientsText || 'None')}</td>
         </tr>
         <tr>
-          <td class="ck-meal-table__label">Allergens</td>
-          <td class="ck-meal-table__value">${escapeHtml(section.allergensText || 'None')}</td>
+          <td class="ck-meal-table__label" style="${MEAL_BLOCK_STYLES.cell}${MEAL_BLOCK_STYLES.label}">Allergens</td>
+          <td class="ck-meal-table__value" style="${MEAL_BLOCK_STYLES.cell}${MEAL_BLOCK_STYLES.value}">${escapeHtml(section.allergensText || 'None')}</td>
         </tr>
       </tbody>
     </table>`;
@@ -201,22 +213,26 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
 
     const cookEntries = normalizedEntries.filter(entry => entry.prepType === 'cook');
     const entireEntries = normalizedEntries.filter(entry => entry.prepType === 'entire dish');
+    const entireZeroEntries = entireEntries.filter(entry => (entry.prepQty ?? 0) === 0);
+    const entireNonZeroEntries = entireEntries.filter(entry => (entry.prepQty ?? 0) !== 0);
     const partialEntries = normalizedEntries.filter(entry => entry.prepType === 'part dish');
     const otherEntries = normalizedEntries.filter(
       entry => entry.prepType !== 'cook' && entry.prepType !== 'entire dish' && entry.prepType !== 'part dish'
     );
 
-    const entireTotal = entireEntries.reduce((sum, entry) => sum + (entry.prepQty ?? 0), 0);
+    const entireTotal = entireNonZeroEntries.reduce((sum, entry) => sum + (entry.prepQty ?? 0), 0);
     const finalQtyNumber = parseNumber(meal.FINAL_QTY);
     const cookPortionsNumber = finalQtyNumber !== null ? Math.max(0, finalQtyNumber - entireTotal) : null;
 
     const cookBucketIngredients = uniqueList([
       ...(cookEntries[0]?.ingredients || []),
-      ...partialEntries.flatMap(entry => entry.ingredients)
+      ...partialEntries.flatMap(entry => entry.ingredients),
+      ...entireZeroEntries.flatMap(entry => entry.ingredients)
     ]);
     const cookBucketAllergens = uniqueList([
       ...(cookEntries[0]?.allergens || []),
-      ...partialEntries.flatMap(entry => entry.allergens)
+      ...partialEntries.flatMap(entry => entry.allergens),
+      ...entireZeroEntries.flatMap(entry => entry.allergens)
     ]);
 
     if (cookEntries.length || partialEntries.length) {
@@ -232,7 +248,7 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
       );
     }
 
-    entireEntries.forEach(entry => {
+    entireNonZeroEntries.forEach(entry => {
       blocks.push(
         buildRecipeSection({
           mealType: mealLabel,

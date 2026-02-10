@@ -20,6 +20,44 @@ function isBundledHtmlPdfTemplate(templateId: string | undefined | null): boolea
   return Boolean(key && key.toLowerCase().endsWith('.pdf.html'));
 }
 
+const wrapHtmlForPdf = (rawHtml: string): string => {
+  const input = (rawHtml || '').toString().trim();
+  if (!input) return '<!doctype html><html><head><meta charset="UTF-8"></head><body></body></html>';
+
+  const supportStyle =
+    '<style>' +
+    'html,body{margin:0;padding:0;}' +
+    '*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+    '</style>';
+
+  if (/<html[\s>]/i.test(input)) {
+    if (/<head[\s>]/i.test(input)) {
+      return input.replace(/<\/head>/i, `${supportStyle}</head>`);
+    }
+    return input.replace(/<html([^>]*)>/i, `<html$1><head><meta charset="UTF-8">${supportStyle}</head>`);
+  }
+
+  const leadingStyles: string[] = [];
+  const bodyHtml = input.replace(/^\s*(<style[\s\S]*?<\/style>\s*)+/i, styles => {
+    leadingStyles.push(styles);
+    return '';
+  });
+
+  return (
+    '<!doctype html>' +
+    '<html>' +
+    '<head>' +
+    '<meta charset="UTF-8">' +
+    supportStyle +
+    leadingStyles.join('') +
+    '</head>' +
+    '<body>' +
+    bodyHtml +
+    '</body>' +
+    '</html>'
+  );
+};
+
 function renderHtmlPdfArtifactFromTemplate(args: {
   ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   dataSources: DataSourceService;
@@ -45,7 +83,7 @@ function renderHtmlPdfArtifactFromTemplate(args: {
     if (!htmlResult.success || !htmlResult.html) {
       return { success: false, message: htmlResult.message || 'Failed to render template.' };
     }
-    const htmlOutput = HtmlService.createHtmlOutput(htmlResult.html);
+    const htmlOutput = HtmlService.createHtmlOutput(wrapHtmlForPdf(htmlResult.html));
     const pdfBlob = htmlOutput.getAs('application/pdf');
     const recordLabel = resolveRecordFileLabel(form, record);
     const copyName = `${namePrefix || form.title || 'Form'} - ${recordLabel || 'Record'}`;

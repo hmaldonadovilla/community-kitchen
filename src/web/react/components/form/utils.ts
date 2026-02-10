@@ -32,19 +32,62 @@ export const formatOptionFilterNonMatchWarning = (args: { language: LangCode; ke
 
 export type FieldHelperPlacement = 'belowLabel' | 'placeholder';
 
+const resolveHelperTextLocalized = (raw: unknown, language: LangCode): string =>
+  raw ? resolveLocalizedString(raw as any, language, '').toString().trim() : '';
+
 export const resolveFieldHelperText = (args: {
   ui?: any;
   language: LangCode;
-}): { text: string; placement: FieldHelperPlacement } => {
+}): {
+  belowLabelText: string;
+  placeholderText: string;
+  // Legacy aliases retained for compatibility with older callers.
+  text: string;
+  placement: FieldHelperPlacement;
+} => {
   const ui = args.ui || {};
   const raw = ui.helperText ?? ui.helpText ?? ui.supportingText ?? ui.helper ?? ui.hint;
-  const text = raw ? resolveLocalizedString(raw as any, args.language, '').toString().trim() : '';
+  const text = resolveHelperTextLocalized(raw, args.language);
   const placementRaw = (ui.helperPlacement ?? ui.helperPlacementMode ?? ui.helperPlacementLocation ?? '').toString().trim().toLowerCase();
   const placement: FieldHelperPlacement =
     placementRaw === 'placeholder' || placementRaw === 'control' || placementRaw === 'inside' || placementRaw === 'insidecontrol'
       ? 'placeholder'
       : 'belowLabel';
-  return { text, placement };
+  const helperByPlacement =
+    ui.helperTextByPlacement && typeof ui.helperTextByPlacement === 'object' ? ui.helperTextByPlacement : undefined;
+  const helperTextBelowLabelRaw =
+    ui.helperTextBelowLabel ??
+    ui.helperTextBelow ??
+    ui.belowLabelHelperText ??
+    helperByPlacement?.belowLabel ??
+    helperByPlacement?.below_label ??
+    helperByPlacement?.below;
+  const helperTextPlaceholderRaw =
+    ui.helperTextPlaceholder ??
+    ui.helperPlaceholder ??
+    ui.placeholderHelperText ??
+    helperByPlacement?.placeholder ??
+    helperByPlacement?.inside;
+
+  const explicitBelowLabel = resolveHelperTextLocalized(helperTextBelowLabelRaw, args.language);
+  const explicitPlaceholder = resolveHelperTextLocalized(helperTextPlaceholderRaw, args.language);
+
+  const legacyBelowLabel = placement === 'belowLabel' ? text : '';
+  const legacyPlaceholder = placement === 'placeholder' ? text : '';
+
+  const belowLabelText = explicitBelowLabel || legacyBelowLabel;
+  const placeholderText = explicitPlaceholder || legacyPlaceholder;
+
+  // Keep old single-helper shape available to avoid forcing wide refactors.
+  const preferredText = belowLabelText || placeholderText;
+  const preferredPlacement: FieldHelperPlacement = belowLabelText ? 'belowLabel' : placeholderText ? 'placeholder' : 'belowLabel';
+
+  return {
+    belowLabelText,
+    placeholderText,
+    text: preferredText,
+    placement: preferredPlacement
+  };
 };
 
 const toInlineDisplayText = (value: unknown, language: LangCode): string => {

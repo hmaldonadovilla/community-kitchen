@@ -130,6 +130,59 @@ describe('rowFlow domain', () => {
     ]);
   });
 
+  it('resolves deleteLineItems targetRef for leftovers including empty prep type rows', () => {
+    const lineItems: any = {
+      MEALS: [{ id: 'r1', values: { MP_IS_REHEAT: 'Yes' } }],
+      'MEALS::r1::TYPE': [
+        { id: 'tCook', values: { PREP_TYPE: 'Cook' } },
+        { id: 'tEmpty', values: { PREP_TYPE: '' } },
+        { id: 'tEntire', values: { PREP_TYPE: 'Entire dish' } }
+      ]
+    };
+
+    const rowFlow: any = {
+      references: {
+        leftoverRows: {
+          groupId: 'TYPE',
+          match: 'any',
+          rowFilter: {
+            includeWhen: {
+              any: [
+                { fieldId: 'PREP_TYPE', equals: ['Entire dish', 'Part dish'] },
+                { fieldId: 'PREP_TYPE', isEmpty: true }
+              ]
+            }
+          }
+        }
+      },
+      actions: [{ id: 'clearLeftovers', effects: [{ type: 'deleteLineItems', targetRef: 'leftoverRows' }] }]
+    };
+
+    const state = resolveRowFlowState({
+      config: rowFlow,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { MP_IS_REHEAT: 'Yes' },
+      lineItems,
+      subGroupIds: ['TYPE']
+    });
+
+    const plan = resolveRowFlowActionPlan({
+      actionId: 'clearLeftovers',
+      config: rowFlow,
+      state,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { MP_IS_REHEAT: 'Yes' },
+      lineItems,
+      subGroupIds: ['TYPE']
+    });
+
+    expect(plan?.effects).toEqual([
+      { type: 'deleteLineItems', groupKey: 'MEALS::r1::TYPE', rowIds: ['tEmpty', 'tEntire'] }
+    ]);
+  });
+
   it('resolves openOverlay effects with conditions and overrides', () => {
     const lineItems: any = {
       MEALS: [{ id: 'r1', values: { MP_IS_REHEAT: 'Yes', MEAL_TYPE: 'Veg' } }],

@@ -1841,6 +1841,7 @@ export class ConfigSheet {
     const fieldId = fieldIdRaw.toString();
     const condition: VisibilityCondition = { fieldId };
     if ((raw as any).equals !== undefined) condition.equals = (raw as any).equals;
+    if ((raw as any).notEquals !== undefined) condition.notEquals = (raw as any).notEquals;
     if ((raw as any).greaterThan !== undefined) condition.greaterThan = (raw as any).greaterThan;
     if ((raw as any).lessThan !== undefined) condition.lessThan = (raw as any).lessThan;
     if ((raw as any).notEmpty !== undefined) condition.notEmpty = Boolean((raw as any).notEmpty);
@@ -2333,23 +2334,62 @@ export class ConfigSheet {
       rawUi.supportingText ??
       rawUi.supporting_text ??
       rawUi.hint;
-    const helperTextObj = helperTextRaw && typeof helperTextRaw === 'object' ? helperTextRaw : null;
-    const helperTextStr = typeof helperTextRaw === 'string' ? helperTextRaw : '';
-    const hasHelperTextLangOverrides = !!(rawUi.helperTextEn || rawUi.helperTextFr || rawUi.helperTextNl);
-    const helperTextEn = rawUi.helperTextEn || (helperTextObj && helperTextObj.en) || helperTextStr || '';
-    const helperTextFr = rawUi.helperTextFr || (helperTextObj && helperTextObj.fr) || '';
-    const helperTextNl = rawUi.helperTextNl || (helperTextObj && helperTextObj.nl) || '';
-    const helperText: QuestionUiConfig['helperText'] =
-      helperTextObj ||
-      (hasHelperTextLangOverrides
-        ? ({
-            en: helperTextEn || undefined,
-            fr: helperTextFr || undefined,
-            nl: helperTextNl || undefined
-          } as any)
-        : helperTextStr
-          ? (helperTextStr as any)
-          : undefined);
+    const normalizeUiLocalized = (args: {
+      rawValue: any;
+      enOverride?: any;
+      frOverride?: any;
+      nlOverride?: any;
+    }): QuestionUiConfig['helperText'] => {
+      const rawObj = args.rawValue && typeof args.rawValue === 'object' ? args.rawValue : null;
+      const rawStr = typeof args.rawValue === 'string' ? args.rawValue : '';
+      const hasLangOverrides = !!(args.enOverride || args.frOverride || args.nlOverride);
+      const en = args.enOverride || (rawObj && (rawObj as any).en) || rawStr || '';
+      const fr = args.frOverride || (rawObj && (rawObj as any).fr) || '';
+      const nl = args.nlOverride || (rawObj && (rawObj as any).nl) || '';
+      return rawObj ||
+        (hasLangOverrides
+          ? ({
+              en: en || undefined,
+              fr: fr || undefined,
+              nl: nl || undefined
+            } as any)
+          : rawStr
+            ? (rawStr as any)
+            : undefined);
+    };
+
+    const helperText = normalizeUiLocalized({
+      rawValue: helperTextRaw,
+      enOverride: rawUi.helperTextEn,
+      frOverride: rawUi.helperTextFr,
+      nlOverride: rawUi.helperTextNl
+    });
+
+    const helperByPlacement =
+      rawUi.helperTextByPlacement && typeof rawUi.helperTextByPlacement === 'object' ? rawUi.helperTextByPlacement : undefined;
+    const helperTextBelowLabel = normalizeUiLocalized({
+      rawValue:
+        rawUi.helperTextBelowLabel ??
+        rawUi.helperTextBelow ??
+        rawUi.belowLabelHelperText ??
+        helperByPlacement?.belowLabel ??
+        helperByPlacement?.below_label ??
+        helperByPlacement?.below,
+      enOverride: rawUi.helperTextBelowLabelEn ?? rawUi.helperTextBelowEn,
+      frOverride: rawUi.helperTextBelowLabelFr ?? rawUi.helperTextBelowFr,
+      nlOverride: rawUi.helperTextBelowLabelNl ?? rawUi.helperTextBelowNl
+    });
+    const helperTextPlaceholder = normalizeUiLocalized({
+      rawValue:
+        rawUi.helperTextPlaceholder ??
+        rawUi.helperPlaceholder ??
+        rawUi.placeholderHelperText ??
+        helperByPlacement?.placeholder ??
+        helperByPlacement?.inside,
+      enOverride: rawUi.helperTextPlaceholderEn ?? rawUi.helperPlaceholderEn,
+      frOverride: rawUi.helperTextPlaceholderFr ?? rawUi.helperPlaceholderFr,
+      nlOverride: rawUi.helperTextPlaceholderNl ?? rawUi.helperPlaceholderNl
+    });
 
     const normalizeHelperPlacement = (raw: any): QuestionUiConfig['helperPlacement'] | undefined => {
       if (raw === undefined || raw === null) return undefined;
@@ -2460,6 +2500,8 @@ export class ConfigSheet {
     if (control) cfg.control = control;
     if (labelLayout && labelLayout !== 'auto') cfg.labelLayout = labelLayout;
     if (helperText !== undefined) (cfg as any).helperText = helperText;
+    if (helperTextBelowLabel !== undefined) (cfg as any).helperTextBelowLabel = helperTextBelowLabel;
+    if (helperTextPlaceholder !== undefined) (cfg as any).helperTextPlaceholder = helperTextPlaceholder;
     if (helperPlacement !== undefined) (cfg as any).helperPlacement = helperPlacement;
     if (hideLabel === true) cfg.hideLabel = true;
     if (summaryHideLabel !== undefined) cfg.summaryHideLabel = summaryHideLabel;

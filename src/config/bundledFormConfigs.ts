@@ -104,29 +104,6 @@ export const BUNDLED_FORM_CONFIGS = [
           "cases": [
             {
               "text": {
-                "en": "Edit",
-                "fr": "Modifier",
-                "nl": "Bewerken"
-              },
-              "when": {
-                "all": [
-                  {
-                    "fieldId": "status",
-                    "notEquals": "Closed"
-                  },
-                  {
-                    "fieldId": "DATE",
-                    "isToday": true
-                  }
-                ]
-              },
-              "style": "link",
-              "icon": "edit",
-              "hideText": true,
-              "openView": "form"
-            },
-            {
-              "text": {
                 "en": "Warning",
                 "fr": "Avertissement",
                 "nl": "Waarschuwing"
@@ -139,7 +116,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   {
                     "fieldId": "DATE",
-                    "isNotToday": true
+                    "isInPast": true
                   }
                 ]
               },
@@ -147,6 +124,58 @@ export const BUNDLED_FORM_CONFIGS = [
               "icon": "warning",
               "hideText": true,
               "openView": "summary"
+            },
+            {
+              "text": {
+                "en": "Actions",
+                "fr": "Actions",
+                "nl": "Acties"
+              },
+              "hideText": true,
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "any": [
+                      {
+                        "fieldId": "DATE",
+                        "isToday": true
+                      },
+                      {
+                        "fieldId": "DATE",
+                        "isInFuture": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "actions": [
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "view",
+                  "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Edit",
+                    "fr": "Modifier",
+                    "nl": "Bewerken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "edit",
+                  "openView": "form"
+                }
+              ]
             },
             {
               "text": {
@@ -310,6 +339,32 @@ export const BUNDLED_FORM_CONFIGS = [
         "system": {
           "home": {
             "hideWhenActive": true
+          },
+          "gates": {
+            "edit": [
+              {
+                "id": "checklist.summary.pastNotClosed.hideEdit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "fieldId": "DATE",
+                      "isInPast": true
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ]
           }
         }
       },
@@ -6394,29 +6449,6 @@ export const BUNDLED_FORM_CONFIGS = [
             "cases": [
               {
                 "text": {
-                  "en": "Edit",
-                  "fr": "Modifier",
-                  "nl": "Bewerken"
-                },
-                "when": {
-                  "all": [
-                    {
-                      "fieldId": "status",
-                      "notEquals": "Closed"
-                    },
-                    {
-                      "fieldId": "DATE",
-                      "isToday": true
-                    }
-                  ]
-                },
-                "style": "link",
-                "icon": "edit",
-                "hideText": true,
-                "openView": "form"
-              },
-              {
-                "text": {
                   "en": "Warning",
                   "fr": "Avertissement",
                   "nl": "Waarschuwing"
@@ -6429,7 +6461,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     {
                       "fieldId": "DATE",
-                      "isNotToday": true
+                      "isInPast": true
                     }
                   ]
                 },
@@ -6437,6 +6469,58 @@ export const BUNDLED_FORM_CONFIGS = [
                 "icon": "warning",
                 "hideText": true,
                 "openView": "summary"
+              },
+              {
+                "text": {
+                  "en": "Actions",
+                  "fr": "Actions",
+                  "nl": "Acties"
+                },
+                "hideText": true,
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "any": [
+                        {
+                          "fieldId": "DATE",
+                          "isToday": true
+                        },
+                        {
+                          "fieldId": "DATE",
+                          "isInFuture": true
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "actions": [
+                  {
+                    "text": {
+                      "en": "View",
+                      "fr": "Voir",
+                      "nl": "Bekijken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "view",
+                    "openView": "summary"
+                  },
+                  {
+                    "text": {
+                      "en": "Edit",
+                      "fr": "Modifier",
+                      "nl": "Bewerken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "edit",
+                    "openView": "form"
+                  }
+                ]
               },
               {
                 "text": {
@@ -6725,6 +6809,32 @@ export const BUNDLED_FORM_CONFIGS = [
         "system": {
           "home": {
             "hideWhenActive": true
+          },
+          "gates": {
+            "edit": [
+              {
+                "id": "checklist.summary.pastNotClosed.hideEdit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "fieldId": "DATE",
+                      "isInPast": true
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ]
           }
         }
       },
@@ -6785,6 +6895,902 @@ export const BUNDLED_FORM_CONFIGS = [
         "nl": "Conceptverslag"
       }
     },
+    "validationErrors": []
+  },
+  {
+    "formKey": "Config: Ingredients Management",
+    "generatedAt": "2026-02-07T16:42:43.964Z",
+    "form": {
+      "title": "Ingredients Management",
+      "configSheet": "Config: Ingredients Management",
+      "destinationTab": "Ingredients Data",
+      "description": "Manage the master list of ingredients and their attributes.",
+      "languages": [
+        "EN",
+        "FR",
+        "NL"
+      ],
+      "defaultLanguage": "EN",
+      "languageSelectorEnabled": true,
+      "autoSave": {
+        "enabled": true,
+        "debounceMs": 2000,
+        "status": "Draft",
+        "enableWhenFields": [
+          "INGREDIENT_NAME",
+          "CREATED_BY"
+        ],
+        "dedupTriggerFields": [
+          "INGREDIENT_NAME"
+        ],
+        "dedupCheckDialog": {
+          "enabled": true,
+          "checkingTitle": {
+            "en": "Checking ingredient name",
+            "fr": "Checking ingredient name",
+            "nl": "Checking ingredient name"
+          },
+          "checkingMessage": {
+            "en": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete.",
+            "fr": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete.",
+            "nl": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete."
+          },
+          "availableTitle": {
+            "en": "Ingredient name available",
+            "fr": "Ingredient name available",
+            "nl": "Ingredient name available"
+          },
+          "availableMessage": {
+            "en": "You can continue entering the ingredient details.",
+            "fr": "You can continue entering the ingredient details.",
+            "nl": "You can continue entering the ingredient details."
+          },
+          "duplicateTitle": {
+            "en": "Ingredient already exists",
+            "fr": "Ingredient already exists",
+            "nl": "Ingredient already exists"
+          },
+          "duplicateMessage": {
+            "en": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+            "fr": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+            "nl": "An ingredient with this name already exists.\nPlease change the name or cancel the creation."
+          },
+          "availableAutoCloseMs": 1300,
+          "duplicateAutoCloseMs": 900
+        }
+      },
+      "dedupDeleteOnKeyChange": true,
+      "summaryViewEnabled": true,
+      "summaryHtmlTemplateId": "bundle:ingredients.summary.html",
+      "copyCurrentRecordEnabled": true,
+      "createNewRecordEnabled": true,
+      "createRecordPresetButtonsEnabled": false,
+      "followupConfig": {
+        "statusTransitions": {
+          "inProgress": "Draft",
+          "onClose": "Active",
+          "reOpened": "Draft"
+        }
+      },
+      "listViewTitle": "",
+      "listViewMetaColumns": [],
+      "listViewDefaultSort": {
+        "fieldId": "INGREDIENT_NAME",
+        "direction": "asc"
+      },
+      "listViewPageSize": 50,
+      "listViewPaginationControlsEnabled": true,
+      "listViewHeaderSortEnabled": false,
+      "listViewView": {
+        "mode": "cards",
+        "toggleEnabled": false,
+        "defaultMode": "cards"
+      },
+      "listViewSearch": {
+        "mode": "text",
+        "placeholder": {
+          "en": "Search ingredient",
+          "fr": "Rechercher un ingrédient",
+          "nl": "Zoek ingrediënt"
+        }
+      },
+      "listViewColumns": [
+        {
+          "type": "rule",
+          "fieldId": "action_view",
+          "label": {
+            "en": "",
+            "fr": "",
+            "nl": ""
+          },
+          "showIn": "cards",
+          "cases": [
+            {
+              "text": {
+                "en": " ",
+                "fr": " ",
+                "nl": " "
+              },
+              "style": "link",
+              "icon": "view",
+              "openView": {
+                "target": "summary",
+                "rowClick": true
+              }
+            }
+          ]
+        },
+        {
+          "type": "rule",
+          "fieldId": "action_edit",
+          "label": {
+            "en": "",
+            "fr": "",
+            "nl": ""
+          },
+          "showIn": "cards",
+          "cases": [
+            {
+              "when": {
+                "fieldId": "status",
+                "equals": "Draft"
+              },
+              "text": {
+                "en": " ",
+                "fr": " ",
+                "nl": " "
+              },
+              "style": "link",
+              "icon": "edit",
+              "openView": "form"
+            },
+            {
+              "when": {
+                "fieldId": "status",
+                "equals": "Active"
+              },
+              "text": {
+                "en": " ",
+                "fr": " ",
+                "nl": " "
+              },
+              "style": "link",
+              "icon": "edit",
+              "openView": "form"
+            }
+          ]
+        },
+        {
+          "type": "rule",
+          "fieldId": "action_copy",
+          "label": {
+            "en": "",
+            "fr": "",
+            "nl": ""
+          },
+          "showIn": "cards",
+          "cases": [
+            {
+              "when": {
+                "fieldId": "status",
+                "equals": "Active"
+              },
+              "text": {
+                "en": " ",
+                "fr": " ",
+                "nl": " "
+              },
+              "style": "link",
+              "icon": "copy",
+              "openView": "copy"
+            }
+          ]
+        }
+      ],
+      "listViewLegend": [
+        {
+          "icon": "view",
+          "text": {
+            "en": "View ingredient",
+            "fr": "Voir l’ingrédient",
+            "nl": "Ingrediënt bekijken"
+          }
+        },
+        {
+          "icon": "edit",
+          "text": {
+            "en": "Edit ingredient (Draft, Active)",
+            "fr": "Modifier l’ingrédient (Brouillon, Actif)",
+            "nl": "Ingrediënt bewerken (Concept, Actief)"
+          }
+        },
+        {
+          "icon": "copy",
+          "text": {
+            "en": "Copy ingredient (Active only)",
+            "fr": "Copier l’ingrédient (Actif uniquement)",
+            "nl": "Ingrediënt kopiëren (alleen Actief)"
+          }
+        },
+        {
+          "pill": {
+            "text": {
+              "en": "Draft",
+              "fr": "Brouillon",
+              "nl": "Concept"
+            },
+            "tone": "muted"
+          },
+          "text": {
+            "en": "Not activated; not available in Recipe Management or Meal Production.",
+            "fr": "Non activé; non disponible dans Gestion des recettes ou Production des repas.",
+            "nl": "Niet geactiveerd; niet beschikbaar in Receptbeheer of Maaltijdproductie."
+          }
+        },
+        {
+          "pill": {
+            "text": {
+              "en": "Active",
+              "fr": "Actif",
+              "nl": "Actief"
+            },
+            "tone": "strong"
+          },
+          "text": {
+            "en": "Available in Recipe Management and Meal Production.",
+            "fr": "Disponible dans Gestion des recettes et Production des repas.",
+            "nl": "Beschikbaar in Receptbeheer en Maaltijdproductie."
+          }
+        },
+        {
+          "pill": {
+            "text": {
+              "en": "Disabled",
+              "fr": "Désactivé",
+              "nl": "Uitgeschakeld"
+            },
+            "tone": "default"
+          },
+          "text": {
+            "en": "Historical only; not available in Recipe Management or Meal Production.",
+            "fr": "Historique uniquement; non disponible dans Gestion des recettes ou Production des repas.",
+            "nl": "Alleen historisch; niet beschikbaar in Receptbeheer of Maaltijdproductie."
+          }
+        }
+      ],
+      "actionBars": {
+        "top": {
+          "list": {
+            "items": [
+              "create"
+            ]
+          }
+        },
+        "bottom": {
+          "list": {
+            "items": [
+              "home",
+              {
+                "type": "system",
+                "id": "actions",
+                "placements": [
+                  "listBar"
+                ],
+                "menuBehavior": "auto"
+              }
+            ]
+          },
+          "form": {
+            "items": [
+              "home",
+              {
+                "type": "system",
+                "id": "summary",
+                "summaryBehavior": "navigate"
+              }
+            ],
+            "primary": [
+              "submit"
+            ]
+          },
+          "summary": {
+            "items": [
+              "home",
+              "edit",
+              {
+                "type": "system",
+                "id": "actions",
+                "placements": [
+                  "summaryBar"
+                ],
+                "menuBehavior": "auto"
+              }
+            ]
+          }
+        },
+        "system": {
+          "home": {
+            "hideWhenActive": true,
+            "dedupIncompleteDialog": {
+              "enabled": true,
+              "title": {
+                "en": "Missing key information to create a draft ingredient record",
+                "fr": "Missing key information to create a draft ingredient record",
+                "nl": "Missing key information to create a draft ingredient record"
+              },
+              "message": {
+                "en": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone.",
+                "fr": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone.",
+                "nl": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone."
+              },
+              "confirmLabel": {
+                "en": "Continue, delete the record",
+                "fr": "Continue, delete the record",
+                "nl": "Continue, delete the record"
+              },
+              "cancelLabel": {
+                "en": "Cancel, continue editing",
+                "fr": "Cancel, continue editing",
+                "nl": "Cancel, continue editing"
+              },
+              "showCancel": true,
+              "showCloseButton": false,
+              "dismissOnBackdrop": false,
+              "deleteRecordOnConfirm": true,
+              "primaryAction": "cancel"
+            }
+          },
+          "gates": {
+            "edit": [
+              {
+                "id": "ingredients.edit.disabledHidden",
+                "when": {
+                  "fieldId": "status",
+                  "equals": [
+                    "Disabled"
+                  ]
+                },
+                "hide": true
+              }
+            ],
+            "copyCurrentRecord": [
+              {
+                "id": "ingredients.copy.onlyActiveSummary",
+                "when": {
+                  "any": [
+                    {
+                      "not": {
+                        "fieldId": "__ckView",
+                        "equals": [
+                          "summary"
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "fieldId": "status",
+                        "equals": [
+                          "Active"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ]
+          }
+        }
+      },
+      "submitButtonLabel": {
+        "en": "Activate",
+        "fr": "Activer",
+        "nl": "Activeren"
+      },
+      "summaryButtonLabel": {
+        "en": "View",
+        "fr": "View",
+        "nl": "View"
+      },
+      "submitValidation": {
+        "enforceFieldOrder": true,
+        "hideSubmitTopErrorMessage": true,
+        "submitTopErrorMessage": {
+          "en": "You are almost done. Some required checks are missing. Review the highlighted sections.",
+          "fr": "You are almost done. Some required checks are missing. Review the highlighted sections.",
+          "nl": "You are almost done. Some required checks are missing. Review the highlighted sections."
+        }
+      },
+      "submissionConfirmationTitle": {
+        "en": "Activate new ingredient?",
+        "fr": "Activate new ingredient?",
+        "nl": "Activate new ingredient?"
+      },
+      "submissionConfirmationMessage": {
+        "en": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?",
+        "fr": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?",
+        "nl": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?"
+      },
+      "submissionConfirmationConfirmLabel": {
+        "en": "Yes, activate.",
+        "fr": "Yes, activate.",
+        "nl": "Yes, activate."
+      },
+      "submissionConfirmationCancelLabel": {
+        "en": "No, continue editing draft ingredient",
+        "fr": "No, continue editing draft ingredient",
+        "nl": "No, continue editing draft ingredient"
+      },
+      "dedupDialog": {
+        "title": {
+          "en": "Ingredient already exists",
+          "fr": "Ingredient already exists",
+          "nl": "Ingredient already exists"
+        },
+        "intro": {
+          "en": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+          "fr": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+          "nl": "An ingredient with this name already exists.\nPlease change the name or cancel the creation."
+        },
+        "outro": {
+          "en": "",
+          "fr": "",
+          "nl": ""
+        },
+        "changeLabel": {
+          "en": "Change name",
+          "fr": "Changer le nom",
+          "nl": "Naam wijzigen"
+        },
+        "cancelLabel": {
+          "en": "Cancel",
+          "fr": "Annuler",
+          "nl": "Annuleren"
+        },
+        "openLabel": {
+          "en": "Open existing ingredient",
+          "fr": "Ouvrir l’ingrédient existant",
+          "nl": "Bestaand ingrediënt openen"
+        }
+      }
+    },
+    "questions": [
+      {
+        "id": "INGREDIENT_NAME",
+        "type": "TEXT",
+        "qEn": "Ingredient name",
+        "qFr": "Nom de l’ingrédient",
+        "qNl": "Naam van ingrediënt",
+        "required": true,
+        "listView": true,
+        "status": "Active",
+        "ui": {
+          "helperTextBelowLabel": {
+            "en": "Name must be minimum 2 characters, no special characters allowed except dash",
+            "fr": "Name must be minimum 2 characters, no special characters allowed except dash",
+            "nl": "Name must be minimum 2 characters, no special characters allowed except dash"
+          },
+          "helperTextPlaceholder": {
+            "en": "Enter the name of the ingredient",
+            "fr": "Enter the name of the ingredient",
+            "nl": "Enter the name of the ingredient"
+          },
+          "labelLayout": "stacked"
+        }
+      },
+      {
+        "id": "CREATED_BY",
+        "type": "TEXT",
+        "qEn": "Created by",
+        "qFr": "Créé par",
+        "qNl": "Gemaakt door",
+        "required": true,
+        "listView": false,
+        "status": "Active",
+        "ui": {
+          "helperText": {
+            "en": "Enter your name.",
+            "fr": "Saisissez votre nom.",
+            "nl": "Voer je naam in."
+          },
+          "helperPlacement": "placeholder"
+        }
+      },
+      {
+        "id": "CATEGORY",
+        "type": "CHOICE",
+        "qEn": "Category",
+        "qFr": "Catégorie",
+        "qNl": "Categorie",
+        "required": true,
+        "listView": false,
+        "options": [
+          "Animal protein",
+          "Animal protein Halal",
+          "Dairy",
+          "Dry carbohydrates",
+          "Fresh vegetables",
+          "Frozen vegetables",
+          "Herbs - spices - condiments",
+          "Tins/Pots",
+          "Vegan protein"
+        ],
+        "optionsFr": [
+          "Animal protein",
+          "Animal protein Halal",
+          "Dairy",
+          "Dry carbohydrates",
+          "Fresh vegetables",
+          "Frozen vegetables",
+          "Herbs - spices - condiments",
+          "Tins/Pots",
+          "Vegan protein"
+        ],
+        "optionsNl": [
+          "Animal protein",
+          "Animal protein Halal",
+          "Dairy",
+          "Dry carbohydrates",
+          "Fresh vegetables",
+          "Frozen vegetables",
+          "Herbs - spices - condiments",
+          "Tins/Pots",
+          "Vegan protein"
+        ],
+        "status": "Active",
+        "ui": {
+          "helperText": {
+            "en": "Select one category.",
+            "fr": "Sélectionnez une catégorie.",
+            "nl": "Selecteer één categorie."
+          }
+        }
+      },
+      {
+        "id": "SUPPLIER",
+        "type": "CHECKBOX",
+        "qEn": "Supplier",
+        "qFr": "Fournisseur",
+        "qNl": "Leverancier",
+        "required": true,
+        "listView": false,
+        "options": [
+          "Freshmed",
+          "Mabru",
+          "Ozfood",
+          "Red Cross",
+          "Solucious",
+          "VDS"
+        ],
+        "optionsFr": [
+          "Freshmed",
+          "Mabru",
+          "Ozfood",
+          "Red Cross",
+          "Solucious",
+          "VDS"
+        ],
+        "optionsNl": [
+          "Freshmed",
+          "Mabru",
+          "Ozfood",
+          "Red Cross",
+          "Solucious",
+          "VDS"
+        ],
+        "status": "Active",
+        "ui": {
+          "control": "select",
+          "helperText": {
+            "en": "Select one or more suppliers.",
+            "fr": "Sélectionnez un ou plusieurs fournisseurs.",
+            "nl": "Selecteer één of meer leveranciers."
+          }
+        }
+      },
+      {
+        "id": "ALLERGEN",
+        "type": "CHECKBOX",
+        "qEn": "Allergen",
+        "qFr": "Allergène",
+        "qNl": "Allergeen",
+        "required": true,
+        "listView": false,
+        "options": [
+          "Egg",
+          "Fish",
+          "Gluten",
+          "Milk",
+          "None",
+          "Peanuts",
+          "Soy"
+        ],
+        "optionsFr": [
+          "Egg",
+          "Fish",
+          "Gluten",
+          "Milk",
+          "None",
+          "Peanuts",
+          "Soy"
+        ],
+        "optionsNl": [
+          "Egg",
+          "Fish",
+          "Gluten",
+          "Milk",
+          "None",
+          "Peanuts",
+          "Soy"
+        ],
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "ALLERGEN",
+              "equals": [
+                "None"
+              ]
+            },
+            "then": {
+              "fieldId": "ALLERGEN",
+              "disallowed": [
+                "Egg",
+                "Fish",
+                "Gluten",
+                "Milk",
+                "Peanuts",
+                "Soy"
+              ]
+            },
+            "message": {
+              "en": "Select either None or allergens, not both.",
+              "fr": "Sélectionnez soit Aucun, soit des allergènes, pas les deux.",
+              "nl": "Selecteer ofwel Geen of allergenen, niet beide."
+            }
+          }
+        ],
+        "status": "Active",
+        "ui": {
+          "control": "select",
+          "helperText": {
+            "en": "Select None or one or more allergens.",
+            "fr": "Sélectionnez Aucun ou un ou plusieurs allergènes.",
+            "nl": "Selecteer Geen of één of meer allergenen."
+          }
+        }
+      },
+      {
+        "id": "ALLOWED_UNIT",
+        "type": "CHECKBOX",
+        "qEn": "Allowed unit",
+        "qFr": "Unité autorisée",
+        "qNl": "Toegestane eenheid",
+        "required": true,
+        "listView": false,
+        "options": [
+          "bag",
+          "bucket",
+          "cl",
+          "gr",
+          "kg",
+          "L",
+          "leaf",
+          "piece",
+          "Tbsp",
+          "tin-140gr",
+          "tin-220gr",
+          "tin-240gr",
+          "tin-2500gr",
+          "tin-2505gr",
+          "tin-2655gr",
+          "tin-5000gr",
+          "tin-530gr"
+        ],
+        "optionsFr": [
+          "bag",
+          "bucket",
+          "cl",
+          "gr",
+          "kg",
+          "L",
+          "leaf",
+          "piece",
+          "Tbsp",
+          "tin-140gr",
+          "tin-220gr",
+          "tin-240gr",
+          "tin-2500gr",
+          "tin-2505gr",
+          "tin-2655gr",
+          "tin-5000gr",
+          "tin-530gr"
+        ],
+        "optionsNl": [
+          "bag",
+          "bucket",
+          "cl",
+          "gr",
+          "kg",
+          "L",
+          "leaf",
+          "piece",
+          "Tbsp",
+          "tin-140gr",
+          "tin-220gr",
+          "tin-240gr",
+          "tin-2500gr",
+          "tin-2505gr",
+          "tin-2655gr",
+          "tin-5000gr",
+          "tin-530gr"
+        ],
+        "status": "Active",
+        "ui": {
+          "control": "select",
+          "helperText": {
+            "en": "Select one or more allowed units.",
+            "fr": "Sélectionnez une ou plusieurs unités autorisées.",
+            "nl": "Selecteer één of meer toegestane eenheden."
+          }
+        }
+      },
+      {
+        "id": "DIETARY_APPLICABILITY",
+        "type": "CHECKBOX",
+        "qEn": "Dietary applicability",
+        "qFr": "Applicabilité diététique",
+        "qNl": "Dieettoepassing",
+        "required": true,
+        "listView": false,
+        "options": [
+          "Diabetic",
+          "No-salt",
+          "Standard",
+          "Vegan",
+          "Vegetarian"
+        ],
+        "optionsFr": [
+          "Diabetic",
+          "No-salt",
+          "Standard",
+          "Vegan",
+          "Vegetarian"
+        ],
+        "optionsNl": [
+          "Diabetic",
+          "No-salt",
+          "Standard",
+          "Vegan",
+          "Vegetarian"
+        ],
+        "status": "Active",
+        "ui": {
+          "control": "select",
+          "helperText": {
+            "en": "Select one or more dietary applicability values.",
+            "fr": "Sélectionnez une ou plusieurs valeurs d’applicabilité diététique.",
+            "nl": "Selecteer één of meer dieettoepassingen."
+          }
+        }
+      },
+      {
+        "id": "EFFECTIVE_START_DATE",
+        "type": "DATE",
+        "qEn": "Effective start date",
+        "qFr": "Date de début d’effet",
+        "qNl": "Ingangsdatum",
+        "required": false,
+        "readOnly": true,
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "STATUS",
+            "equals": [
+              "Active",
+              "Disabled"
+            ]
+          }
+        },
+        "status": "Active"
+      },
+      {
+        "id": "EFFECTIVE_END_DATE",
+        "type": "DATE",
+        "qEn": "Effective end date",
+        "qFr": "Date de fin d’effet",
+        "qNl": "Einddatum",
+        "required": false,
+        "readOnly": true,
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "STATUS",
+            "equals": [
+              "Active",
+              "Disabled"
+            ]
+          }
+        },
+        "status": "Active"
+      },
+      {
+        "id": "STATUS",
+        "type": "CHOICE",
+        "qEn": "Status",
+        "qFr": "Statut",
+        "qNl": "Status",
+        "required": false,
+        "readOnly": true,
+        "defaultValue": "Draft",
+        "listView": true,
+        "visibility": {
+          "hideWhen": {
+            "fieldId": "STATUS",
+            "equals": [
+              "Draft",
+              "Active",
+              "Disabled"
+            ]
+          }
+        },
+        "options": [
+          "Draft",
+          "Active",
+          "Disabled"
+        ],
+        "optionsFr": [
+          "Brouillon",
+          "Actif",
+          "Désactivé"
+        ],
+        "optionsNl": [
+          "Concept",
+          "Actief",
+          "Uitgeschakeld"
+        ],
+        "status": "Active",
+        "ui": {
+          "summaryVisibility": "never"
+        }
+      },
+      {
+        "id": "LAST_CHANGED_BY",
+        "type": "TEXT",
+        "qEn": "Last changed by",
+        "qFr": "Dernière modification par",
+        "qNl": "Laatst gewijzigd door",
+        "required": false,
+        "readOnly": true,
+        "listView": false,
+        "visibility": {
+          "showWhen": {
+            "fieldId": "STATUS",
+            "equals": [
+              "Active",
+              "Disabled"
+            ]
+          }
+        },
+        "status": "Active"
+      }
+    ],
+    "dedupRules": [
+      {
+        "id": "uniqueIngredientName",
+        "scope": "form",
+        "keys": [
+          "INGREDIENT_NAME"
+        ],
+        "matchMode": "caseInsensitive",
+        "onConflict": "reject",
+        "message": {
+          "en": "An ingredient with the same name already exists.",
+          "fr": "Un ingrédient portant le même nom existe déjà.",
+          "nl": "Er bestaat al een ingrediënt met dezelfde naam."
+        }
+      }
+    ],
+    "definition": {},
     "validationErrors": []
   },
   {
@@ -6866,9 +7872,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "cases": [
             {
               "text": {
-                "en": "Edit",
-                "fr": "Modifier",
-                "nl": "Bewerken"
+                "en": "Warning",
+                "fr": "Avertissement",
+                "nl": "Waarschuwing"
               },
               "when": {
                 "all": [
@@ -6878,21 +7884,22 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   {
                     "fieldId": "MP_PREP_DATE",
-                    "isToday": true
+                    "isInPast": true
                   }
                 ]
               },
-              "style": "link",
-              "icon": "edit",
+              "style": "warning",
+              "icon": "warning",
               "hideText": true,
-              "openView": "form"
+              "openView": "summary"
             },
             {
               "text": {
-                "en": "View",
-                "fr": "Voir",
-                "nl": "Bekijken"
+                "en": "Actions",
+                "fr": "Actions",
+                "nl": "Acties"
               },
+              "hideText": true,
               "when": {
                 "all": [
                   {
@@ -6900,15 +7907,43 @@ export const BUNDLED_FORM_CONFIGS = [
                     "notEquals": "Closed"
                   },
                   {
-                    "fieldId": "MP_PREP_DATE",
-                    "isNotToday": true
+                    "any": [
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isToday": true
+                      },
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isInFuture": true
+                      }
+                    ]
                   }
                 ]
               },
-              "style": "link",
-              "icon": "view",
-              "hideText": true,
-              "openView": "summary"
+              "actions": [
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "view",
+                  "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Edit",
+                    "fr": "Modifier",
+                    "nl": "Bewerken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "edit",
+                  "openView": "form"
+                }
+              ]
             },
             {
               "text": {
@@ -6932,17 +7967,6 @@ export const BUNDLED_FORM_CONFIGS = [
                   "style": "link",
                   "icon": "view",
                   "openView": "summary"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
                 }
               ]
             }
@@ -6967,11 +7991,11 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         {
-          "icon": "copy",
+          "icon": "warning",
           "text": {
-            "en": "Copy order information",
-            "fr": "Copier les informations de commande",
-            "nl": "Kopieer bestelinformatie"
+            "en": "Past record incomplete or missing",
+            "fr": "Enregistrement passé incomplet ou manquant",
+            "nl": "Vorige record onvolledig of ontbrekend"
           }
         }
       ],
@@ -7100,13 +8124,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "en": "Cancel — Continue editing"
               },
               "showCancel": true,
-              "showCloseButton": true,
+              "showCloseButton": false,
               "dismissOnBackdrop": false,
               "deleteRecordOnConfirm": true,
               "primaryAction": "cancel"
             }
           },
           "gates": {
+            "edit": [
+              {
+                "id": "ck-70.summary.pastNotClosed.hideEdit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "fieldId": "MP_PREP_DATE",
+                      "isInPast": true
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ],
             "submit": [
               {
                 "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
@@ -7197,6 +8245,11 @@ export const BUNDLED_FORM_CONFIGS = [
             ]
           }
         }
+      },
+      "summaryButtonLabel": {
+        "en": "Summary",
+        "fr": "Summary",
+        "nl": "Summary"
       },
       "appHeader": {
         "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
@@ -7383,10 +8436,19 @@ export const BUNDLED_FORM_CONFIGS = [
                       "match": "any",
                       "rowFilter": {
                         "includeWhen": {
-                          "fieldId": "PREP_TYPE",
-                          "equals": [
-                            "Entire dish",
-                            "Part dish"
+                          "any": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Entire dish",
+                                "Part dish",
+                                ""
+                              ]
+                            },
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "isEmpty": true
+                            }
                           ]
                         }
                       }
@@ -8754,22 +9816,22 @@ export const BUNDLED_FORM_CONFIGS = [
             "notEmpty": true
           },
           "title": {
-            "en": "Incomplete meal production record",
+            "en": "Change Customer",
             "fr": "Changer de client?",
             "nl": "Klant wijzigen?"
           },
           "message": {
-            "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
+            "en": "Changing the customer will permanently delete production date and service as well as any data or photos you may have entered after service.\n\nA meal production record can only exist when customer, production date, and service are all filled in.\n\nIf you wish to proceed with the change, make sure you enter the production date and the service before leaving the page otherwise the record will be permanently deleted.\n\nThis action cannot be undone.",
             "fr": "Changer de client effacera toutes les informations d'ordre que vous avez entrées et toutes les données de production que vous avez entrées, voulez-vous continuer?",
             "nl": "Wijzigen van de klant zal alle orderinformatie die u hebt ingevoerd en alle productiedata die u hebt ingevoerd wissen, wilt u doorgaan?"
           },
           "confirmLabel": {
-            "en": "Continue — Delete the record",
+            "en": "Continue and delete subsequent data.",
             "fr": "Continuer et effacer les portions",
             "nl": "Doorgaan en klaren de porties"
           },
           "cancelLabel": {
-            "en": "Cancel — Continue editing",
+            "en": "Cancel and keep current customer",
             "fr": "Annuler",
             "nl": "Annuleren"
           }
@@ -8999,26 +10061,34 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "changeDialog": {
           "when": {
-            "fieldId": "MP_SERVICE",
-            "notEmpty": true
+            "all": [
+              {
+                "fieldId": "MP_SERVICE",
+                "notEmpty": true
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
+            ]
           },
           "title": {
-            "en": "Incomplete meal production record",
+            "en": "Change Production date",
             "fr": "Changer la date de production ?",
             "nl": "Productiedatum wijzigen?"
           },
           "message": {
-            "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
+            "en": "Changing the production date will permanently delete service as well as any data or photos entered after service.\n\nA meal production record can only exist when customer, production date, and service are all filled in.\n\nIf you wish to proceed with the change, make sure you enter the service before leaving the page otherwise the record will be permanently deleted.\n\nThis action cannot be undone.",
             "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
             "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
           },
           "confirmLabel": {
-            "en": "Continue — Delete the record",
+            "en": "Continue and delete subsequent data.",
             "fr": "Oui, supprimer définitivement les données déjà saisies",
             "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
           },
           "cancelLabel": {
-            "en": "Cancel — Continue editing",
+            "en": "Cancel and keep current production date",
             "fr": "Non, conserver la date de production actuelle",
             "nl": "Nee, behoud de huidige productiedatum"
           },
@@ -9838,7 +10908,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Add photo",
               "labelFr": "Ajouter une photo",
               "labelNl": "Foto toevoegen",
-              "required": false,
+              "required": true,
               "requiredMessage": {
                 "en": "Add one photo per cooking pot.",
                 "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -9882,7 +10952,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "uploadConfig": {
                 "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
                 "minFiles": 0,
-                "maxFiles": 5,
+                "maxFiles": 10,
                 "maxFileSizeMb": 10,
                 "allowedMimeTypes": [
                   "image/*"
@@ -10211,1934 +11281,32 @@ export const BUNDLED_FORM_CONFIGS = [
                         ]
                       },
                       "readOnly": true,
-                      "options": [
-                        "Chicken stripes",
-                        "Chicken cubes",
-                        "Chicken wings",
-                        "Chicken nuggets",
-                        "Chicken tenders",
-                        "Cordon bleu",
-                        "Fishsticks",
-                        "Greek yogurt",
-                        "Cheese",
-                        "Rice",
-                        "Brown rice",
-                        "Basmati rice",
-                        "Couscous",
-                        "Bulgur",
-                        "Orzo",
-                        "Pasta",
-                        "Whole wheat pasta",
-                        "Onion",
-                        "Potato",
-                        "Broccoli",
-                        "Aubergine",
-                        "Carrot",
-                        "Tomato",
-                        "Pepper",
-                        "Cauliflower",
-                        "Squash",
-                        "Sweet potato",
-                        "Butternut",
-                        "Pumpkin",
-                        "Pleurotte mushroom",
-                        "Spaghetti squash",
-                        "Courgette",
-                        "Leek",
-                        "Mushroom",
-                        "Parsnip",
-                        "Turnip",
-                        "Green beans - frozen",
-                        "Chinese mix",
-                        "Corn - frozen",
-                        "Leek - frozen",
-                        "Mushroom - frozen",
-                        "Carrot - frozen",
-                        "Couscous vegetables mix",
-                        "Ratatouille mix",
-                        "Courgette - frozen",
-                        "Pumpkin - frozen",
-                        "Pepper - frozen",
-                        "Spinach - frozen",
-                        "Red Beans - frozen",
-                        "Onion - frozen",
-                        "Green peas - frozen",
-                        "Cauliflower - frozen",
-                        "Broccoli - frozen",
-                        "Broccoli mix - frozen",
-                        "Parsley - fresh",
-                        "Basil - fresh",
-                        "Dill - fresh",
-                        "Bouillon powder",
-                        "Salt",
-                        "Sugar",
-                        "Curry madras",
-                        "Coriander powder",
-                        "Cayenne",
-                        "Turmeric",
-                        "Black pepper",
-                        "Paprika",
-                        "Cumin",
-                        "Cinnamon",
-                        "Mint - fresh",
-                        "Oregano -fresh",
-                        "Parsley - dried",
-                        "Dill - dried",
-                        "Mint - dried",
-                        "Oregano - dried",
-                        "Bay leaf",
-                        "Nutmeg",
-                        "Basil - dried",
-                        "Soy sauce",
-                        "Miso paste",
-                        "Sunflower oil",
-                        "Olive oil",
-                        "Vinegar",
-                        "Tomato pulp",
-                        "Tomato paste",
-                        "Diced tomatoes",
-                        "Garlic paste",
-                        "Ginger paste",
-                        "Cream",
-                        "Yellow curry",
-                        "Coconut milk",
-                        "Oat milk",
-                        "Peanut butter",
-                        "Green beans - tinned",
-                        "Carrots & peas - tinned",
-                        "Chickpeas - tinned",
-                        "Red beans - tinned",
-                        "White beans - tinned",
-                        "Falafel",
-                        "Mackerel - tinned",
-                        "Chickpeas - dry",
-                        "Red lentils",
-                        "Green lentils"
-                      ],
-                      "optionsFr": [
-                        "Lanières de poulet",
-                        "Dés de poulet",
-                        "Ailes de poulet",
-                        "Nuggets de poulet",
-                        "Aiguillettes de poulet",
-                        "Cordon bleu",
-                        "Bâtonnets de poisson",
-                        "Yaourt grec",
-                        "Cheese",
-                        "Riz",
-                        "Riz complet",
-                        "Riz basmati",
-                        "Couscous",
-                        "Boulgour",
-                        "Orzo",
-                        "Pâtes",
-                        "Pâtes complètes",
-                        "Oignon",
-                        "Pomme de terre",
-                        "Brocoli",
-                        "Aubergine",
-                        "Carotte",
-                        "Tomate",
-                        "Poivron",
-                        "Chou-fleur",
-                        "Courge",
-                        "Patate douce",
-                        "Butternut",
-                        "Potiron",
-                        "Pleurote",
-                        "Courge spaghetti",
-                        "Courgette",
-                        "Poireau",
-                        "Champignon",
-                        "Panais",
-                        "Navet",
-                        "Haricots verts surgelés",
-                        "Mélange chinois surgelé",
-                        "Maïs surgelé",
-                        "Poireau surgelé",
-                        "Champignon surgelé",
-                        "Carotte surgelée",
-                        "Mélange legumes couscous surgelé",
-                        "Mélange ratatouille surgelé",
-                        "Courgette surgelée",
-                        "Potiron surgelé",
-                        "Poivron surgelé",
-                        "Épinards surgelés",
-                        "Haricots rouges surgelés",
-                        "Oignon surgelé",
-                        "Petits pois surgelés",
-                        "Chou-fleur surgelé",
-                        "Brocoli surgelé",
-                        "Mélange de brocolis",
-                        "Persil frais",
-                        "Basilic frais",
-                        "Aneth frais",
-                        "Bouillon en poudre",
-                        "Sel",
-                        "Sucre",
-                        "Curry madras",
-                        "Coriandre en poudre",
-                        "Piment de Cayenne",
-                        "Curcuma",
-                        "Poivre noir",
-                        "Paprika",
-                        "Cumin",
-                        "Cannelle",
-                        "Menthe fraîche",
-                        "Origan frais",
-                        "Persil séché",
-                        "Aneth séché",
-                        "Menthe séchée",
-                        "Origan séché",
-                        "Feuille de laurier",
-                        "Noix de muscade",
-                        "Basilic séché",
-                        "Sauce soja",
-                        "Pâte miso",
-                        "Huile de tournesol",
-                        "Huile d’olive",
-                        "Vinaigre",
-                        "Pulpe de tomate",
-                        "Concentré de tomate",
-                        "Tomates concassées",
-                        "Purée d’ail",
-                        "Purée de gingembre",
-                        "Crème",
-                        "Curry jaune",
-                        "Lait de coco",
-                        "Lait d’avoine",
-                        "Beurre de cacahuète",
-                        "Haricots verts en conserve",
-                        "Carottes & petits pois en conserve",
-                        "Pois chiches en conserve",
-                        "Haricots rouges en conserve",
-                        "Haricots blancs en conserve",
-                        "Falafel",
-                        "Maquereau en conserve",
-                        "Pois chiches secs",
-                        "Lentilles corail",
-                        "Lentilles vertes"
-                      ],
-                      "optionsNl": [
-                        "Kipreepjes",
-                        "Kipblokjes",
-                        "Kip vleugels",
-                        "Kipnuggets",
-                        "Kiphaasjes",
-                        "Cordon bleu",
-                        "Vissticks",
-                        "Griekse yoghurt",
-                        "Cheese",
-                        "Rijst",
-                        "Volkorenrijst",
-                        "Basmati rijst",
-                        "Couscous",
-                        "Bulgur",
-                        "Orzo",
-                        "Pasta",
-                        "Volkoren pasta",
-                        "Ui",
-                        "Aardappel",
-                        "Broccoli",
-                        "Aubergine",
-                        "Wortel",
-                        "Tomaat",
-                        "Paprika",
-                        "Bloemkool",
-                        "Pompoen (squash)",
-                        "Zoete aardappel",
-                        "Butternut",
-                        "Pompoen",
-                        "Oesterzwam",
-                        "Spaghettipompoen",
-                        "Courgette",
-                        "Prei",
-                        "Champignon",
-                        "Pastinaak",
-                        "Raap",
-                        "Sperziebonen – diepvries",
-                        "Chinese mix – diepvries",
-                        "Maïs – diepvries",
-                        "Prei – diepvries",
-                        "Champignon – diepvries",
-                        "Wortel – diepvries",
-                        "Couscousmix – diepvries",
-                        "Ratatouillemix – diepvries",
-                        "Courgette – diepvries",
-                        "Pompoen – diepvries",
-                        "Paprika – diepvries",
-                        "Spinazie – diepvries",
-                        "Rode bonen – diepvries",
-                        "Ui – diepvries",
-                        "Erwten – diepvries",
-                        "Bloemkool – diepvries",
-                        "Broccoli – diepvries",
-                        "Broccoli mix",
-                        "Peterselie – vers",
-                        "Basilicum – vers",
-                        "Dille – vers",
-                        "Bouillonpoeder",
-                        "Zout",
-                        "Suiker",
-                        "Madras curry",
-                        "Korianderpoeder",
-                        "Cayennepeper",
-                        "Kurkuma",
-                        "Zwarte peper",
-                        "Paprika",
-                        "Komijn",
-                        "Kaneel",
-                        "Munt – vers",
-                        "Oregano – vers",
-                        "Peterselie – gedroogd",
-                        "Dille – gedroogd",
-                        "Munt – gedroogd",
-                        "Oregano – gedroogd",
-                        "Laurierblad",
-                        "Nootmuskaat",
-                        "Basilicum – gedroogd",
-                        "Sojasaus",
-                        "Miso pasta",
-                        "Zonnebloemolie",
-                        "Olijfolie",
-                        "Azijn",
-                        "Tomatenpulp",
-                        "Tomatenpuree",
-                        "Gehakte tomaten",
-                        "Knoflookpasta",
-                        "Gemberpasta",
-                        "Room",
-                        "Gele curry",
-                        "Kokosmelk",
-                        "Havermelk",
-                        "Pindakaas",
-                        "Sperziebonen – blik",
-                        "Wortelen & erwten – blik",
-                        "Kikkererwten – blik",
-                        "Rode bonen – blik",
-                        "Witte bonen – blik",
-                        "Falafel",
-                        "Makreel – blik",
-                        "Kikkererwten – droog",
-                        "Rode linzen",
-                        "Groene linzen"
-                      ],
-                      "optionsRaw": [
-                        {
-                          "optionEn": "Chicken stripes",
-                          "optionFr": "Lanières de poulet",
-                          "optionNl": "Kipreepjes",
-                          "Category": "Animal protein Halal",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Standard, No-salt",
-                          "__ckOptionValue": "Chicken stripes"
-                        },
-                        {
-                          "optionEn": "Chicken cubes",
-                          "optionFr": "Dés de poulet",
-                          "optionNl": "Kipblokjes",
-                          "Category": "Animal protein Halal",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Diabetic, Standard, No-salt",
-                          "__ckOptionValue": "Chicken cubes"
-                        },
-                        {
-                          "optionEn": "Chicken wings",
-                          "optionFr": "Ailes de poulet",
-                          "optionNl": "Kip vleugels",
-                          "Category": "Animal protein Halal",
-                          "Allergens": "Gluten",
-                          "Suppliers": "Ozfood",
-                          "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Standard, No-salt",
-                          "__ckOptionValue": "Chicken wings"
-                        },
-                        {
-                          "optionEn": "Chicken nuggets",
-                          "optionFr": "Nuggets de poulet",
-                          "optionNl": "Kipnuggets",
-                          "Category": "Animal protein Halal",
-                          "Allergens": "Gluten",
-                          "Suppliers": "Ozfood",
-                          "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Standard, No-salt",
-                          "__ckOptionValue": "Chicken nuggets"
-                        },
-                        {
-                          "optionEn": "Chicken tenders",
-                          "optionFr": "Aiguillettes de poulet",
-                          "optionNl": "Kiphaasjes",
-                          "Category": "Animal protein Halal",
-                          "Allergens": "Gluten",
-                          "Suppliers": "Ozfood",
-                          "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Standard, No-salt",
-                          "__ckOptionValue": "Chicken tenders"
-                        },
-                        {
-                          "optionEn": "Cordon bleu",
-                          "optionFr": "Cordon bleu",
-                          "optionNl": "Cordon bleu",
-                          "Category": "Animal protein Halal",
-                          "Allergens": "Gluten, Milk, Egg",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Standard, No-salt",
-                          "__ckOptionValue": "Cordon bleu"
-                        },
-                        {
-                          "optionEn": "Fishsticks",
-                          "optionFr": "Bâtonnets de poisson",
-                          "optionNl": "Vissticks",
-                          "Category": "Animal protein Halal",
-                          "Allergens": "Gluten, Fish",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Diabetic, Standard, No-salt",
-                          "__ckOptionValue": "Fishsticks"
-                        },
-                        {
-                          "optionEn": "Greek yogurt",
-                          "optionFr": "Yaourt grec",
-                          "optionNl": "Griekse yoghurt",
-                          "Category": "Dairy",
-                          "Allergens": "Milk",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Greek yogurt"
-                        },
-                        {
-                          "optionEn": "Cheese",
-                          "optionFr": "Fromage",
-                          "optionNl": "Kaas",
-                          "Category": "Dairy",
-                          "Allergens": "Milk",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Cheese"
-                        },
-                        {
-                          "optionEn": "Rice",
-                          "optionFr": "Riz",
-                          "optionNl": "Rijst",
-                          "Category": "Dry carbohydrates",
-                          "Allergens": "None",
-                          "Suppliers": "Red Cross",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Rice"
-                        },
-                        {
-                          "optionEn": "Brown rice",
-                          "optionFr": "Riz complet",
-                          "optionNl": "Volkorenrijst",
-                          "Category": "Dry carbohydrates",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Solucious;VDS",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Brown rice"
-                        },
-                        {
-                          "optionEn": "Basmati rice",
-                          "optionFr": "Riz basmati",
-                          "optionNl": "Basmati rijst",
-                          "Category": "Dry carbohydrates",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Solucious;VDS",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Basmati rice"
-                        },
-                        {
-                          "optionEn": "Couscous",
-                          "optionFr": "Couscous",
-                          "optionNl": "Couscous",
-                          "Category": "Dry carbohydrates",
-                          "Allergens": "Gluten",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Couscous"
-                        },
-                        {
-                          "optionEn": "Bulgur",
-                          "optionFr": "Boulgour",
-                          "optionNl": "Bulgur",
-                          "Category": "Dry carbohydrates",
-                          "Allergens": "Gluten",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Bulgur"
-                        },
-                        {
-                          "optionEn": "Orzo",
-                          "optionFr": "Orzo",
-                          "optionNl": "Orzo",
-                          "Category": "Dry carbohydrates",
-                          "Allergens": "Gluten",
-                          "Suppliers": "Freshmed;Solucious",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Orzo"
-                        },
-                        {
-                          "optionEn": "Pasta",
-                          "optionFr": "Pâtes",
-                          "optionNl": "Pasta",
-                          "Category": "Dry carbohydrates",
-                          "Allergens": "Gluten",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Pasta"
-                        },
-                        {
-                          "optionEn": "Whole wheat pasta",
-                          "optionFr": "Pâtes complètes",
-                          "optionNl": "Volkoren pasta",
-                          "Category": "Dry carbohydrates",
-                          "Allergens": "Gluten",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Whole wheat pasta"
-                        },
-                        {
-                          "optionEn": "Onion",
-                          "optionFr": "Oignon",
-                          "optionNl": "Ui",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Onion"
-                        },
-                        {
-                          "optionEn": "Potato",
-                          "optionFr": "Pomme de terre",
-                          "optionNl": "Aardappel",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Potato"
-                        },
-                        {
-                          "optionEn": "Broccoli",
-                          "optionFr": "Brocoli",
-                          "optionNl": "Broccoli",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Broccoli"
-                        },
-                        {
-                          "optionEn": "Aubergine",
-                          "optionFr": "Aubergine",
-                          "optionNl": "Aubergine",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Aubergine"
-                        },
-                        {
-                          "optionEn": "Carrot",
-                          "optionFr": "Carotte",
-                          "optionNl": "Wortel",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Carrot"
-                        },
-                        {
-                          "optionEn": "Tomato",
-                          "optionFr": "Tomate",
-                          "optionNl": "Tomaat",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Tomato"
-                        },
-                        {
-                          "optionEn": "Pepper",
-                          "optionFr": "Poivron",
-                          "optionNl": "Paprika",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Pepper"
-                        },
-                        {
-                          "optionEn": "Cauliflower",
-                          "optionFr": "Chou-fleur",
-                          "optionNl": "Bloemkool",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Cauliflower"
-                        },
-                        {
-                          "optionEn": "Squash",
-                          "optionFr": "Courge",
-                          "optionNl": "Pompoen (squash)",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Squash"
-                        },
-                        {
-                          "optionEn": "Sweet potato",
-                          "optionFr": "Patate douce",
-                          "optionNl": "Zoete aardappel",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Sweet potato"
-                        },
-                        {
-                          "optionEn": "Butternut",
-                          "optionFr": "Butternut",
-                          "optionNl": "Butternut",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Butternut"
-                        },
-                        {
-                          "optionEn": "Pumpkin",
-                          "optionFr": "Potiron",
-                          "optionNl": "Pompoen",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Pumpkin"
-                        },
-                        {
-                          "optionEn": "Pleurotte mushroom",
-                          "optionFr": "Pleurote",
-                          "optionNl": "Oesterzwam",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Pleurotte mushroom"
-                        },
-                        {
-                          "optionEn": "Spaghetti squash",
-                          "optionFr": "Courge spaghetti",
-                          "optionNl": "Spaghettipompoen",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Spaghetti squash"
-                        },
-                        {
-                          "optionEn": "Courgette",
-                          "optionFr": "Courgette",
-                          "optionNl": "Courgette",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Courgette"
-                        },
-                        {
-                          "optionEn": "Leek",
-                          "optionFr": "Poireau",
-                          "optionNl": "Prei",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Leek"
-                        },
-                        {
-                          "optionEn": "Mushroom",
-                          "optionFr": "Champignon",
-                          "optionNl": "Champignon",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Mushroom"
-                        },
-                        {
-                          "optionEn": "Parsnip",
-                          "optionFr": "Panais",
-                          "optionNl": "Pastinaak",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Parsnip"
-                        },
-                        {
-                          "optionEn": "Turnip",
-                          "optionFr": "Navet",
-                          "optionNl": "Raap",
-                          "Category": "Fresh vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr, bucket",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Turnip"
-                        },
-                        {
-                          "optionEn": "Green beans - frozen",
-                          "optionFr": "Haricots verts surgelés",
-                          "optionNl": "Sperziebonen – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Green beans - frozen"
-                        },
-                        {
-                          "optionEn": "Chinese mix",
-                          "optionFr": "Mélange chinois surgelé",
-                          "optionNl": "Chinese mix – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Chinese mix"
-                        },
-                        {
-                          "optionEn": "Corn - frozen",
-                          "optionFr": "Maïs surgelé",
-                          "optionNl": "Maïs – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Corn - frozen"
-                        },
-                        {
-                          "optionEn": "Leek - frozen",
-                          "optionFr": "Poireau surgelé",
-                          "optionNl": "Prei – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Leek - frozen"
-                        },
-                        {
-                          "optionEn": "Mushroom - frozen",
-                          "optionFr": "Champignon surgelé",
-                          "optionNl": "Champignon – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Mushroom - frozen"
-                        },
-                        {
-                          "optionEn": "Carrot - frozen",
-                          "optionFr": "Carotte surgelée",
-                          "optionNl": "Wortel – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Carrot - frozen"
-                        },
-                        {
-                          "optionEn": "Couscous vegetables mix",
-                          "optionFr": "Mélange legumes couscous surgelé",
-                          "optionNl": "Couscousmix – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Couscous vegetables mix"
-                        },
-                        {
-                          "optionEn": "Ratatouille mix",
-                          "optionFr": "Mélange ratatouille surgelé",
-                          "optionNl": "Ratatouillemix – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Ratatouille mix"
-                        },
-                        {
-                          "optionEn": "Courgette - frozen",
-                          "optionFr": "Courgette surgelée",
-                          "optionNl": "Courgette – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Courgette - frozen"
-                        },
-                        {
-                          "optionEn": "Pumpkin - frozen",
-                          "optionFr": "Potiron surgelé",
-                          "optionNl": "Pompoen – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Pumpkin - frozen"
-                        },
-                        {
-                          "optionEn": "Pepper - frozen",
-                          "optionFr": "Poivron surgelé",
-                          "optionNl": "Paprika – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Pepper - frozen"
-                        },
-                        {
-                          "optionEn": "Spinach - frozen",
-                          "optionFr": "Épinards surgelés",
-                          "optionNl": "Spinazie – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Spinach - frozen"
-                        },
-                        {
-                          "optionEn": "Red Beans - frozen",
-                          "optionFr": "Haricots rouges surgelés",
-                          "optionNl": "Rode bonen – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Red Beans - frozen"
-                        },
-                        {
-                          "optionEn": "Onion - frozen",
-                          "optionFr": "Oignon surgelé",
-                          "optionNl": "Ui – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Onion - frozen"
-                        },
-                        {
-                          "optionEn": "Green peas - frozen",
-                          "optionFr": "Petits pois surgelés",
-                          "optionNl": "Erwten – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Green peas - frozen"
-                        },
-                        {
-                          "optionEn": "Cauliflower - frozen",
-                          "optionFr": "Chou-fleur surgelé",
-                          "optionNl": "Bloemkool – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Cauliflower - frozen"
-                        },
-                        {
-                          "optionEn": "Broccoli - frozen",
-                          "optionFr": "Brocoli surgelé",
-                          "optionNl": "Broccoli – diepvries",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Broccoli - frozen"
-                        },
-                        {
-                          "optionEn": "Broccoli mix - frozen",
-                          "optionFr": "Mélange de brocolis",
-                          "optionNl": "Broccoli mix",
-                          "Category": "Frozen vegetables",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, bag",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Broccoli mix - frozen"
-                        },
-                        {
-                          "optionEn": "Parsley - fresh",
-                          "optionFr": "Persil frais",
-                          "optionNl": "Peterselie – vers",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Parsley - fresh"
-                        },
-                        {
-                          "optionEn": "Basil - fresh",
-                          "optionFr": "Basilic frais",
-                          "optionNl": "Basilicum – vers",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Basil - fresh"
-                        },
-                        {
-                          "optionEn": "Dill - fresh",
-                          "optionFr": "Aneth frais",
-                          "optionNl": "Dille – vers",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Mabru;VDS",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Dill - fresh"
-                        },
-                        {
-                          "optionEn": "Bouillon powder",
-                          "optionFr": "Bouillon en poudre",
-                          "optionNl": "Bouillonpoeder",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "Soy",
-                          "Suppliers": "Solucious;VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Bouillon powder"
-                        },
-                        {
-                          "optionEn": "Salt",
-                          "optionFr": "Sel",
-                          "optionNl": "Zout",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Solucious;VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard",
-                          "__ckOptionValue": "Salt"
-                        },
-                        {
-                          "optionEn": "Sugar",
-                          "optionFr": "Sucre",
-                          "optionNl": "Suiker",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;Solucious;VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Sugar"
-                        },
-                        {
-                          "optionEn": "Curry madras",
-                          "optionFr": "Curry madras",
-                          "optionNl": "Madras curry",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Curry madras"
-                        },
-                        {
-                          "optionEn": "Coriander powder",
-                          "optionFr": "Coriandre en poudre",
-                          "optionNl": "Korianderpoeder",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Coriander powder"
-                        },
-                        {
-                          "optionEn": "Cayenne",
-                          "optionFr": "Piment de Cayenne",
-                          "optionNl": "Cayennepeper",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Cayenne"
-                        },
-                        {
-                          "optionEn": "Turmeric",
-                          "optionFr": "Curcuma",
-                          "optionNl": "Kurkuma",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Turmeric"
-                        },
-                        {
-                          "optionEn": "Black pepper",
-                          "optionFr": "Poivre noir",
-                          "optionNl": "Zwarte peper",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Black pepper"
-                        },
-                        {
-                          "optionEn": "Paprika",
-                          "optionFr": "Paprika",
-                          "optionNl": "Paprika",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Paprika"
-                        },
-                        {
-                          "optionEn": "Cumin",
-                          "optionFr": "Cumin",
-                          "optionNl": "Komijn",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Cumin"
-                        },
-                        {
-                          "optionEn": "Cinnamon",
-                          "optionFr": "Cannelle",
-                          "optionNl": "Kaneel",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Cinnamon"
-                        },
-                        {
-                          "optionEn": "Mint - fresh",
-                          "optionFr": "Menthe fraîche",
-                          "optionNl": "Munt – vers",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Mint - fresh"
-                        },
-                        {
-                          "optionEn": "Oregano -fresh",
-                          "optionFr": "Origan frais",
-                          "optionNl": "Oregano – vers",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Oregano -fresh"
-                        },
-                        {
-                          "optionEn": "Parsley - dried",
-                          "optionFr": "Persil séché",
-                          "optionNl": "Peterselie – gedroogd",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Parsley - dried"
-                        },
-                        {
-                          "optionEn": "Dill - dried",
-                          "optionFr": "Aneth séché",
-                          "optionNl": "Dille – gedroogd",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Dill - dried"
-                        },
-                        {
-                          "optionEn": "Mint - dried",
-                          "optionFr": "Menthe séchée",
-                          "optionNl": "Munt – gedroogd",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Mint - dried"
-                        },
-                        {
-                          "optionEn": "Oregano - dried",
-                          "optionFr": "Origan séché",
-                          "optionNl": "Oregano – gedroogd",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Oregano - dried"
-                        },
-                        {
-                          "optionEn": "Bay leaf",
-                          "optionFr": "Feuille de laurier",
-                          "optionNl": "Laurierblad",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;VDS",
-                          "allowedUnits": "leaf",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Bay leaf"
-                        },
-                        {
-                          "optionEn": "Nutmeg",
-                          "optionFr": "Noix de muscade",
-                          "optionNl": "Nootmuskaat",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Nutmeg"
-                        },
-                        {
-                          "optionEn": "Basil - dried",
-                          "optionFr": "Basilic séché",
-                          "optionNl": "Basilicum – gedroogd",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed;VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Basil - dried"
-                        },
-                        {
-                          "optionEn": "Soy sauce",
-                          "optionFr": "Sauce soja",
-                          "optionNl": "Sojasaus",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "Soy",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "cl",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Soy sauce"
-                        },
-                        {
-                          "optionEn": "Miso paste",
-                          "optionFr": "Pâte miso",
-                          "optionNl": "Miso pasta",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "Soy",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Miso paste"
-                        },
-                        {
-                          "optionEn": "Sunflower oil",
-                          "optionFr": "Huile de tournesol",
-                          "optionNl": "Zonnebloemolie",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "Red Cross",
-                          "allowedUnits": "cl",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Sunflower oil"
-                        },
-                        {
-                          "optionEn": "Olive oil",
-                          "optionFr": "Huile d’olive",
-                          "optionNl": "Olijfolie",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "cl",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Olive oil"
-                        },
-                        {
-                          "optionEn": "Vinegar",
-                          "optionFr": "Vinaigre",
-                          "optionNl": "Azijn",
-                          "Category": "Herbs - spices - condiments",
-                          "Allergens": "None",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "cl",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Vinegar"
-                        },
-                        {
-                          "optionEn": "Tomato pulp",
-                          "optionFr": "Pulpe de tomate",
-                          "optionNl": "Tomatenpulp",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, tin-240gr, tin-5000gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Tomato pulp"
-                        },
-                        {
-                          "optionEn": "Tomato paste",
-                          "optionFr": "Concentré de tomate",
-                          "optionNl": "Tomatenpuree",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, tin-140gr, tin-2500gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Tomato paste"
-                        },
-                        {
-                          "optionEn": "Diced tomatoes",
-                          "optionFr": "Tomates concassées",
-                          "optionNl": "Gehakte tomaten",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "Red Cross",
-                          "allowedUnits": "kg, gr, tin-240gr, tin-5000gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Diced tomatoes"
-                        },
-                        {
-                          "optionEn": "Garlic paste",
-                          "optionFr": "Purée d’ail",
-                          "optionNl": "Knoflookpasta",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "kg, gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Garlic paste"
-                        },
-                        {
-                          "optionEn": "Ginger paste",
-                          "optionFr": "Purée de gingembre",
-                          "optionNl": "Gemberpasta",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "kg, gr, Tbsp",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Ginger paste"
-                        },
-                        {
-                          "optionEn": "Cream",
-                          "optionFr": "Crème",
-                          "optionNl": "Room",
-                          "Category": "Tins/Pots",
-                          "Allergens": "Milk",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "L, cl",
-                          "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Cream"
-                        },
-                        {
-                          "optionEn": "Yellow curry",
-                          "optionFr": "Curry jaune",
-                          "optionNl": "Gele curry",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, Tbsp",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Yellow curry"
-                        },
-                        {
-                          "optionEn": "Coconut milk",
-                          "optionFr": "Lait de coco",
-                          "optionNl": "Kokosmelk",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "L, cl",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Coconut milk"
-                        },
-                        {
-                          "optionEn": "Oat milk",
-                          "optionFr": "Lait d’avoine",
-                          "optionNl": "Havermelk",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "Solucious",
-                          "allowedUnits": "L, cl",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Oat milk"
-                        },
-                        {
-                          "optionEn": "Peanut butter",
-                          "optionFr": "Beurre de cacahuète",
-                          "optionNl": "Pindakaas",
-                          "Category": "Tins/Pots",
-                          "Allergens": "Peanuts",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "kg, gr, Tbsp",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Peanut butter"
-                        },
-                        {
-                          "optionEn": "Green beans - tinned",
-                          "optionFr": "Haricots verts en conserve",
-                          "optionNl": "Sperziebonen – blik",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "Red Cross",
-                          "allowedUnits": "kg, gr, tin-220gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Green beans - tinned"
-                        },
-                        {
-                          "optionEn": "Carrots & peas - tinned",
-                          "optionFr": "Carottes & petits pois en conserve",
-                          "optionNl": "Wortelen & erwten – blik",
-                          "Category": "Tins/Pots",
-                          "Allergens": "None",
-                          "Suppliers": "Red Cross",
-                          "allowedUnits": "kg, gr, tin-530gr",
-                          "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Carrots & peas - tinned"
-                        },
-                        {
-                          "optionEn": "Chickpeas - tinned",
-                          "optionFr": "Pois chiches en conserve",
-                          "optionNl": "Kikkererwten – blik",
-                          "Category": "Vegan protein",
-                          "Allergens": "None",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr, tin-2655gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Chickpeas - tinned"
-                        },
-                        {
-                          "optionEn": "Red beans - tinned",
-                          "optionFr": "Haricots rouges en conserve",
-                          "optionNl": "Rode bonen – blik",
-                          "Category": "Vegan protein",
-                          "Allergens": "None",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr, tin-2505gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Red beans - tinned"
-                        },
-                        {
-                          "optionEn": "White beans - tinned",
-                          "optionFr": "Haricots blancs en conserve",
-                          "optionNl": "Witte bonen – blik",
-                          "Category": "Vegan protein",
-                          "Allergens": "None",
-                          "Suppliers": "VDS;Solucious",
-                          "allowedUnits": "kg, gr, tin-2505gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "White beans - tinned"
-                        },
-                        {
-                          "optionEn": "Falafel",
-                          "optionFr": "Falafel",
-                          "optionNl": "Falafel",
-                          "Category": "Vegan protein",
-                          "Allergens": "None",
-                          "Suppliers": "VDS",
-                          "allowedUnits": "kg, gr, piece",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Falafel"
-                        },
-                        {
-                          "optionEn": "Mackerel - tinned",
-                          "optionFr": "Maquereau en conserve",
-                          "optionNl": "Makreel – blik",
-                          "Category": "Animal protein",
-                          "Allergens": "Fish",
-                          "Suppliers": "Solucious",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Standard, No-salt",
-                          "__ckOptionValue": "Mackerel - tinned"
-                        },
-                        {
-                          "optionEn": "Chickpeas - dry",
-                          "optionFr": "Pois chiches secs",
-                          "optionNl": "Kikkererwten – droog",
-                          "Category": "Vegan protein",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Chickpeas - dry"
-                        },
-                        {
-                          "optionEn": "Red lentils",
-                          "optionFr": "Lentilles corail",
-                          "optionNl": "Rode linzen",
-                          "Category": "Vegan protein",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Red lentils"
-                        },
-                        {
-                          "optionEn": "Green lentils",
-                          "optionFr": "Lentilles vertes",
-                          "optionNl": "Groene linzen",
-                          "Category": "Vegan protein",
-                          "Allergens": "None",
-                          "Suppliers": "Freshmed",
-                          "allowedUnits": "kg, gr",
-                          "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                          "__ckOptionValue": "Green lentils"
-                        }
-                      ],
                       "optionFilter": {
                         "dependsOn": "MEAL_TYPE",
                         "optionMapRef": {
-                          "ref": "REF:IngredientsOptions",
-                          "keyColumn": "dietaryApplicability",
-                          "lookupColumn": "optionEn",
+                          "ref": "REF:Ingredients Data",
+                          "keyColumn": "DIETARY_APPLICABILITY",
+                          "lookupColumn": "INGREDIENT_NAME",
                           "splitKey": true
                         },
-                        "optionMap": {
-                          "Diabetic": [
-                            "Chicken stripes",
-                            "Chicken cubes",
-                            "Fishsticks",
-                            "Greek yogurt",
-                            "Cheese",
-                            "Brown rice",
-                            "Basmati rice",
-                            "Whole wheat pasta",
-                            "Onion",
-                            "Potato",
-                            "Broccoli",
-                            "Aubergine",
-                            "Tomato",
-                            "Pepper",
-                            "Cauliflower",
-                            "Squash",
-                            "Butternut",
-                            "Pumpkin",
-                            "Pleurotte mushroom",
-                            "Spaghetti squash",
-                            "Courgette",
-                            "Leek",
-                            "Mushroom",
-                            "Parsnip",
-                            "Turnip",
-                            "Green beans - frozen",
-                            "Chinese mix",
-                            "Leek - frozen",
-                            "Mushroom - frozen",
-                            "Couscous vegetables mix",
-                            "Ratatouille mix",
-                            "Courgette - frozen",
-                            "Pumpkin - frozen",
-                            "Pepper - frozen",
-                            "Spinach - frozen",
-                            "Red Beans - frozen",
-                            "Onion - frozen",
-                            "Green peas - frozen",
-                            "Cauliflower - frozen",
-                            "Broccoli - frozen",
-                            "Broccoli mix - frozen",
-                            "Parsley - fresh",
-                            "Basil - fresh",
-                            "Dill - fresh",
-                            "Salt",
-                            "Curry madras",
-                            "Coriander powder",
-                            "Cayenne",
-                            "Turmeric",
-                            "Black pepper",
-                            "Paprika",
-                            "Cumin",
-                            "Cinnamon",
-                            "Mint - fresh",
-                            "Oregano -fresh",
-                            "Parsley - dried",
-                            "Dill - dried",
-                            "Mint - dried",
-                            "Oregano - dried",
-                            "Bay leaf",
-                            "Nutmeg",
-                            "Basil - dried",
-                            "Soy sauce",
-                            "Miso paste",
-                            "Sunflower oil",
-                            "Olive oil",
-                            "Vinegar",
-                            "Tomato pulp",
-                            "Tomato paste",
-                            "Diced tomatoes",
-                            "Garlic paste",
-                            "Ginger paste",
-                            "Cream",
-                            "Coconut milk",
-                            "Oat milk",
-                            "Green beans - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Falafel",
-                            "Mackerel - tinned",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ],
-                          "Standard": [
-                            "Chicken stripes",
-                            "Chicken cubes",
-                            "Chicken wings",
-                            "Chicken nuggets",
-                            "Chicken tenders",
-                            "Cordon bleu",
-                            "Fishsticks",
-                            "Greek yogurt",
-                            "Cheese",
-                            "Rice",
-                            "Brown rice",
-                            "Basmati rice",
-                            "Couscous",
-                            "Bulgur",
-                            "Orzo",
-                            "Pasta",
-                            "Whole wheat pasta",
-                            "Onion",
-                            "Potato",
-                            "Broccoli",
-                            "Aubergine",
-                            "Carrot",
-                            "Tomato",
-                            "Pepper",
-                            "Cauliflower",
-                            "Squash",
-                            "Sweet potato",
-                            "Butternut",
-                            "Pumpkin",
-                            "Pleurotte mushroom",
-                            "Spaghetti squash",
-                            "Courgette",
-                            "Leek",
-                            "Mushroom",
-                            "Parsnip",
-                            "Turnip",
-                            "Green beans - frozen",
-                            "Chinese mix",
-                            "Corn - frozen",
-                            "Leek - frozen",
-                            "Mushroom - frozen",
-                            "Carrot - frozen",
-                            "Couscous vegetables mix",
-                            "Ratatouille mix",
-                            "Courgette - frozen",
-                            "Pumpkin - frozen",
-                            "Pepper - frozen",
-                            "Spinach - frozen",
-                            "Red Beans - frozen",
-                            "Onion - frozen",
-                            "Green peas - frozen",
-                            "Cauliflower - frozen",
-                            "Broccoli - frozen",
-                            "Broccoli mix - frozen",
-                            "Parsley - fresh",
-                            "Basil - fresh",
-                            "Dill - fresh",
-                            "Bouillon powder",
-                            "Salt",
-                            "Sugar",
-                            "Curry madras",
-                            "Coriander powder",
-                            "Cayenne",
-                            "Turmeric",
-                            "Black pepper",
-                            "Paprika",
-                            "Cumin",
-                            "Cinnamon",
-                            "Mint - fresh",
-                            "Oregano -fresh",
-                            "Parsley - dried",
-                            "Dill - dried",
-                            "Mint - dried",
-                            "Oregano - dried",
-                            "Bay leaf",
-                            "Nutmeg",
-                            "Basil - dried",
-                            "Soy sauce",
-                            "Miso paste",
-                            "Sunflower oil",
-                            "Olive oil",
-                            "Vinegar",
-                            "Tomato pulp",
-                            "Tomato paste",
-                            "Diced tomatoes",
-                            "Garlic paste",
-                            "Ginger paste",
-                            "Cream",
-                            "Yellow curry",
-                            "Coconut milk",
-                            "Oat milk",
-                            "Peanut butter",
-                            "Green beans - tinned",
-                            "Carrots & peas - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Falafel",
-                            "Mackerel - tinned",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ],
-                          "No-salt": [
-                            "Chicken stripes",
-                            "Chicken cubes",
-                            "Chicken wings",
-                            "Chicken nuggets",
-                            "Chicken tenders",
-                            "Cordon bleu",
-                            "Fishsticks",
-                            "Greek yogurt",
-                            "Cheese",
-                            "Rice",
-                            "Brown rice",
-                            "Basmati rice",
-                            "Couscous",
-                            "Bulgur",
-                            "Orzo",
-                            "Pasta",
-                            "Whole wheat pasta",
-                            "Onion",
-                            "Potato",
-                            "Broccoli",
-                            "Aubergine",
-                            "Carrot",
-                            "Tomato",
-                            "Pepper",
-                            "Cauliflower",
-                            "Squash",
-                            "Sweet potato",
-                            "Butternut",
-                            "Pumpkin",
-                            "Pleurotte mushroom",
-                            "Spaghetti squash",
-                            "Courgette",
-                            "Leek",
-                            "Mushroom",
-                            "Parsnip",
-                            "Turnip",
-                            "Green beans - frozen",
-                            "Chinese mix",
-                            "Corn - frozen",
-                            "Leek - frozen",
-                            "Mushroom - frozen",
-                            "Carrot - frozen",
-                            "Couscous vegetables mix",
-                            "Ratatouille mix",
-                            "Courgette - frozen",
-                            "Pumpkin - frozen",
-                            "Pepper - frozen",
-                            "Spinach - frozen",
-                            "Red Beans - frozen",
-                            "Onion - frozen",
-                            "Green peas - frozen",
-                            "Cauliflower - frozen",
-                            "Broccoli - frozen",
-                            "Broccoli mix - frozen",
-                            "Parsley - fresh",
-                            "Basil - fresh",
-                            "Dill - fresh",
-                            "Bouillon powder",
-                            "Sugar",
-                            "Curry madras",
-                            "Coriander powder",
-                            "Cayenne",
-                            "Turmeric",
-                            "Black pepper",
-                            "Paprika",
-                            "Cumin",
-                            "Cinnamon",
-                            "Mint - fresh",
-                            "Oregano -fresh",
-                            "Parsley - dried",
-                            "Dill - dried",
-                            "Mint - dried",
-                            "Oregano - dried",
-                            "Bay leaf",
-                            "Nutmeg",
-                            "Basil - dried",
-                            "Soy sauce",
-                            "Miso paste",
-                            "Sunflower oil",
-                            "Olive oil",
-                            "Vinegar",
-                            "Tomato pulp",
-                            "Tomato paste",
-                            "Diced tomatoes",
-                            "Garlic paste",
-                            "Ginger paste",
-                            "Cream",
-                            "Yellow curry",
-                            "Coconut milk",
-                            "Oat milk",
-                            "Peanut butter",
-                            "Green beans - tinned",
-                            "Carrots & peas - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Falafel",
-                            "Mackerel - tinned",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ],
-                          "Vegetarian": [
-                            "Greek yogurt",
-                            "Cheese",
-                            "Rice",
-                            "Brown rice",
-                            "Basmati rice",
-                            "Couscous",
-                            "Bulgur",
-                            "Orzo",
-                            "Pasta",
-                            "Whole wheat pasta",
-                            "Onion",
-                            "Potato",
-                            "Broccoli",
-                            "Aubergine",
-                            "Carrot",
-                            "Tomato",
-                            "Pepper",
-                            "Cauliflower",
-                            "Squash",
-                            "Sweet potato",
-                            "Butternut",
-                            "Pumpkin",
-                            "Pleurotte mushroom",
-                            "Spaghetti squash",
-                            "Courgette",
-                            "Leek",
-                            "Mushroom",
-                            "Parsnip",
-                            "Turnip",
-                            "Green beans - frozen",
-                            "Chinese mix",
-                            "Corn - frozen",
-                            "Leek - frozen",
-                            "Mushroom - frozen",
-                            "Carrot - frozen",
-                            "Couscous vegetables mix",
-                            "Ratatouille mix",
-                            "Courgette - frozen",
-                            "Pumpkin - frozen",
-                            "Pepper - frozen",
-                            "Spinach - frozen",
-                            "Red Beans - frozen",
-                            "Onion - frozen",
-                            "Green peas - frozen",
-                            "Cauliflower - frozen",
-                            "Broccoli - frozen",
-                            "Broccoli mix - frozen",
-                            "Parsley - fresh",
-                            "Basil - fresh",
-                            "Dill - fresh",
-                            "Bouillon powder",
-                            "Salt",
-                            "Sugar",
-                            "Curry madras",
-                            "Coriander powder",
-                            "Cayenne",
-                            "Turmeric",
-                            "Black pepper",
-                            "Paprika",
-                            "Cumin",
-                            "Cinnamon",
-                            "Mint - fresh",
-                            "Oregano -fresh",
-                            "Parsley - dried",
-                            "Dill - dried",
-                            "Mint - dried",
-                            "Oregano - dried",
-                            "Bay leaf",
-                            "Nutmeg",
-                            "Basil - dried",
-                            "Soy sauce",
-                            "Miso paste",
-                            "Sunflower oil",
-                            "Olive oil",
-                            "Vinegar",
-                            "Tomato pulp",
-                            "Tomato paste",
-                            "Diced tomatoes",
-                            "Garlic paste",
-                            "Ginger paste",
-                            "Cream",
-                            "Yellow curry",
-                            "Coconut milk",
-                            "Oat milk",
-                            "Peanut butter",
-                            "Green beans - tinned",
-                            "Carrots & peas - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Falafel",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ],
-                          "Vegan": [
-                            "Rice",
-                            "Brown rice",
-                            "Basmati rice",
-                            "Couscous",
-                            "Bulgur",
-                            "Orzo",
-                            "Pasta",
-                            "Whole wheat pasta",
-                            "Onion",
-                            "Potato",
-                            "Broccoli",
-                            "Aubergine",
-                            "Carrot",
-                            "Tomato",
-                            "Pepper",
-                            "Cauliflower",
-                            "Squash",
-                            "Sweet potato",
-                            "Butternut",
-                            "Pumpkin",
-                            "Pleurotte mushroom",
-                            "Spaghetti squash",
-                            "Courgette",
-                            "Leek",
-                            "Mushroom",
-                            "Parsnip",
-                            "Turnip",
-                            "Green beans - frozen",
-                            "Chinese mix",
-                            "Corn - frozen",
-                            "Leek - frozen",
-                            "Mushroom - frozen",
-                            "Carrot - frozen",
-                            "Couscous vegetables mix",
-                            "Ratatouille mix",
-                            "Courgette - frozen",
-                            "Pumpkin - frozen",
-                            "Pepper - frozen",
-                            "Spinach - frozen",
-                            "Red Beans - frozen",
-                            "Onion - frozen",
-                            "Green peas - frozen",
-                            "Cauliflower - frozen",
-                            "Broccoli - frozen",
-                            "Broccoli mix - frozen",
-                            "Parsley - fresh",
-                            "Basil - fresh",
-                            "Dill - fresh",
-                            "Bouillon powder",
-                            "Salt",
-                            "Sugar",
-                            "Curry madras",
-                            "Coriander powder",
-                            "Cayenne",
-                            "Turmeric",
-                            "Black pepper",
-                            "Paprika",
-                            "Cumin",
-                            "Cinnamon",
-                            "Mint - fresh",
-                            "Oregano -fresh",
-                            "Parsley - dried",
-                            "Dill - dried",
-                            "Mint - dried",
-                            "Oregano - dried",
-                            "Bay leaf",
-                            "Nutmeg",
-                            "Basil - dried",
-                            "Soy sauce",
-                            "Miso paste",
-                            "Sunflower oil",
-                            "Olive oil",
-                            "Vinegar",
-                            "Tomato pulp",
-                            "Tomato paste",
-                            "Diced tomatoes",
-                            "Garlic paste",
-                            "Ginger paste",
-                            "Yellow curry",
-                            "Coconut milk",
-                            "Oat milk",
-                            "Peanut butter",
-                            "Green beans - tinned",
-                            "Carrots & peas - tinned",
-                            "Chickpeas - tinned",
-                            "Red beans - tinned",
-                            "White beans - tinned",
-                            "Falafel",
-                            "Chickpeas - dry",
-                            "Red lentils",
-                            "Green lentils"
-                          ]
-                        }
+                        "dataSourceField": "DIETARY_APPLICABILITY",
+                        "dataSourceDelimiter": ","
+                      },
+                      "dataSource": {
+                        "id": "Ingredients Data",
+                        "mode": "options",
+                        "statusAllowList": [
+                          "Active"
+                        ],
+                        "projection": [
+                          "INGREDIENT_NAME",
+                          "SUPPLIER",
+                          "DIETARY_APPLICABILITY",
+                          "ALLOWED_UNIT",
+                          "CATEGORY",
+                          "ALLERGEN",
+                          "STATUS"
+                        ]
                       }
                     },
                     {
@@ -12183,701 +11351,12 @@ export const BUNDLED_FORM_CONFIGS = [
                       "ui": {
                         "control": "select"
                       },
-                      "options": [
-                        "kg",
-                        "gr",
-                        "piece",
-                        "bag",
-                        "box",
-                        "crate",
-                        "sack",
-                        "bucket",
-                        "other",
-                        "Tsp",
-                        "Tbsp",
-                        "Ladle",
-                        "L",
-                        "ml",
-                        "cl",
-                        "Leaves",
-                        "Tin-240gr",
-                        "Tin-220gr",
-                        "Tin-2.5kg",
-                        "Tin-5kg",
-                        "Tin-530gr",
-                        "Tin-140gr",
-                        "Tin-250gr",
-                        "Tin-265gr"
-                      ],
-                      "optionsFr": [
-                        "kg",
-                        "gr",
-                        "pièce",
-                        "sac",
-                        "boîte",
-                        "caisse",
-                        "sac",
-                        "seau",
-                        "autre",
-                        "c.à.c",
-                        "c.à.s",
-                        "louche",
-                        "L",
-                        "ml",
-                        "cl",
-                        "feuilles",
-                        "Tin-240gr",
-                        "Tin-220gr",
-                        "Tin-2.5kg",
-                        "Tin-5kg",
-                        "Tin-530gr",
-                        "Tin-140gr",
-                        "Tin-250gr",
-                        "Tin-265gr"
-                      ],
-                      "optionsNl": [
-                        "kg",
-                        "gr",
-                        "stuk",
-                        "zak",
-                        "doos",
-                        "krat",
-                        "zak",
-                        "emmer",
-                        "anders",
-                        "tl",
-                        "el",
-                        "pollepel",
-                        "L",
-                        "ml",
-                        "cl",
-                        "bladeren",
-                        "Tin-240gr",
-                        "Tin-220gr",
-                        "Tin-2.5kg",
-                        "Tin-5kg",
-                        "Tin-530gr",
-                        "Tin-140gr",
-                        "Tin-250gr",
-                        "Tin-265gr"
-                      ],
-                      "optionsRaw": [
-                        {
-                          "optionEn": "kg",
-                          "optionFr": "kg",
-                          "optionNl": "kg",
-                          "__ckOptionValue": "kg"
-                        },
-                        {
-                          "optionEn": "gr",
-                          "optionFr": "gr",
-                          "optionNl": "gr",
-                          "__ckOptionValue": "gr"
-                        },
-                        {
-                          "optionEn": "piece",
-                          "optionFr": "pièce",
-                          "optionNl": "stuk",
-                          "__ckOptionValue": "piece"
-                        },
-                        {
-                          "optionEn": "bag",
-                          "optionFr": "sac",
-                          "optionNl": "zak",
-                          "__ckOptionValue": "bag"
-                        },
-                        {
-                          "optionEn": "box",
-                          "optionFr": "boîte",
-                          "optionNl": "doos",
-                          "__ckOptionValue": "box"
-                        },
-                        {
-                          "optionEn": "crate",
-                          "optionFr": "caisse",
-                          "optionNl": "krat",
-                          "__ckOptionValue": "crate"
-                        },
-                        {
-                          "optionEn": "sack",
-                          "optionFr": "sac",
-                          "optionNl": "zak",
-                          "__ckOptionValue": "sack"
-                        },
-                        {
-                          "optionEn": "bucket",
-                          "optionFr": "seau",
-                          "optionNl": "emmer",
-                          "__ckOptionValue": "bucket"
-                        },
-                        {
-                          "optionEn": "other",
-                          "optionFr": "autre",
-                          "optionNl": "anders",
-                          "__ckOptionValue": "other"
-                        },
-                        {
-                          "optionEn": "Tsp",
-                          "optionFr": "c.à.c",
-                          "optionNl": "tl",
-                          "__ckOptionValue": "Tsp"
-                        },
-                        {
-                          "optionEn": "Tbsp",
-                          "optionFr": "c.à.s",
-                          "optionNl": "el",
-                          "__ckOptionValue": "Tbsp"
-                        },
-                        {
-                          "optionEn": "Ladle",
-                          "optionFr": "louche",
-                          "optionNl": "pollepel",
-                          "__ckOptionValue": "Ladle"
-                        },
-                        {
-                          "optionEn": "L",
-                          "optionFr": "L",
-                          "optionNl": "L",
-                          "__ckOptionValue": "L"
-                        },
-                        {
-                          "optionEn": "ml",
-                          "optionFr": "ml",
-                          "optionNl": "ml",
-                          "__ckOptionValue": "ml"
-                        },
-                        {
-                          "optionEn": "cl",
-                          "optionFr": "cl",
-                          "optionNl": "cl",
-                          "__ckOptionValue": "cl"
-                        },
-                        {
-                          "optionEn": "Leaves",
-                          "optionFr": "feuilles",
-                          "optionNl": "bladeren",
-                          "__ckOptionValue": "Leaves"
-                        },
-                        {
-                          "optionEn": "Tin-240gr",
-                          "optionFr": "Tin-240gr",
-                          "optionNl": "Tin-240gr",
-                          "__ckOptionValue": "Tin-240gr"
-                        },
-                        {
-                          "optionEn": "Tin-220gr",
-                          "optionFr": "Tin-220gr",
-                          "optionNl": "Tin-220gr",
-                          "__ckOptionValue": "Tin-220gr"
-                        },
-                        {
-                          "optionEn": "Tin-2.5kg",
-                          "optionFr": "Tin-2.5kg",
-                          "optionNl": "Tin-2.5kg",
-                          "__ckOptionValue": "Tin-2.5kg"
-                        },
-                        {
-                          "optionEn": "Tin-5kg",
-                          "optionFr": "Tin-5kg",
-                          "optionNl": "Tin-5kg",
-                          "__ckOptionValue": "Tin-5kg"
-                        },
-                        {
-                          "optionEn": "Tin-530gr",
-                          "optionFr": "Tin-530gr",
-                          "optionNl": "Tin-530gr",
-                          "__ckOptionValue": "Tin-530gr"
-                        },
-                        {
-                          "optionEn": "Tin-140gr",
-                          "optionFr": "Tin-140gr",
-                          "optionNl": "Tin-140gr",
-                          "__ckOptionValue": "Tin-140gr"
-                        },
-                        {
-                          "optionEn": "Tin-250gr",
-                          "optionFr": "Tin-250gr",
-                          "optionNl": "Tin-250gr",
-                          "__ckOptionValue": "Tin-250gr"
-                        },
-                        {
-                          "optionEn": "Tin-265gr",
-                          "optionFr": "Tin-265gr",
-                          "optionNl": "Tin-265gr",
-                          "__ckOptionValue": "Tin-265gr"
-                        }
-                      ],
                       "optionFilter": {
                         "dependsOn": "ING",
                         "optionMapRef": {
-                          "ref": "REF:IngredientsOptions",
-                          "keyColumn": "optionEn",
-                          "lookupColumn": "allowedUnits"
-                        },
-                        "optionMap": {
-                          "Chicken stripes": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Chicken cubes": [
-                            "kg",
-                            "gr",
-                            "piece"
-                          ],
-                          "Chicken wings": [
-                            "kg",
-                            "gr",
-                            "piece"
-                          ],
-                          "Chicken nuggets": [
-                            "kg",
-                            "gr",
-                            "piece"
-                          ],
-                          "Chicken tenders": [
-                            "kg",
-                            "gr",
-                            "piece"
-                          ],
-                          "Cordon bleu": [
-                            "kg",
-                            "gr",
-                            "piece"
-                          ],
-                          "Fishsticks": [
-                            "kg",
-                            "gr",
-                            "piece"
-                          ],
-                          "Greek yogurt": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Cheese": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Rice": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Brown rice": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Basmati rice": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Couscous": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Bulgur": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Orzo": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Pasta": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Whole wheat pasta": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Onion": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Potato": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Broccoli": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Aubergine": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Carrot": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Tomato": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Pepper": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Cauliflower": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Squash": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Sweet potato": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Butternut": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Pumpkin": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Pleurotte mushroom": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Spaghetti squash": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Courgette": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Leek": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Mushroom": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Parsnip": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Turnip": [
-                            "kg",
-                            "gr",
-                            "bucket"
-                          ],
-                          "Green beans - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Chinese mix": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Corn - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Leek - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Mushroom - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Carrot - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Couscous vegetables mix": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Ratatouille mix": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Courgette - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Pumpkin - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Pepper - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Spinach - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Red Beans - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Onion - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Green peas - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Cauliflower - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Broccoli - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Broccoli mix - frozen": [
-                            "kg",
-                            "gr",
-                            "bag"
-                          ],
-                          "Parsley - fresh": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Basil - fresh": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Dill - fresh": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Bouillon powder": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Salt": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Sugar": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Curry madras": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Coriander powder": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Cayenne": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Turmeric": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Black pepper": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Paprika": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Cumin": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Cinnamon": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Mint - fresh": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Oregano -fresh": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Parsley - dried": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Dill - dried": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Mint - dried": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Oregano - dried": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Bay leaf": [
-                            "leaf"
-                          ],
-                          "Nutmeg": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Basil - dried": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Soy sauce": [
-                            "cl"
-                          ],
-                          "Miso paste": [
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Sunflower oil": [
-                            "cl"
-                          ],
-                          "Olive oil": [
-                            "cl"
-                          ],
-                          "Vinegar": [
-                            "cl"
-                          ],
-                          "Tomato pulp": [
-                            "kg",
-                            "gr",
-                            "tin-240gr",
-                            "tin-5000gr"
-                          ],
-                          "Tomato paste": [
-                            "kg",
-                            "gr",
-                            "tin-140gr",
-                            "tin-2500gr",
-                            "Tbsp"
-                          ],
-                          "Diced tomatoes": [
-                            "kg",
-                            "gr",
-                            "tin-240gr",
-                            "tin-5000gr"
-                          ],
-                          "Garlic paste": [
-                            "kg",
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Ginger paste": [
-                            "kg",
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Cream": [
-                            "L",
-                            "cl"
-                          ],
-                          "Yellow curry": [
-                            "kg",
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Coconut milk": [
-                            "L",
-                            "cl"
-                          ],
-                          "Oat milk": [
-                            "L",
-                            "cl"
-                          ],
-                          "Peanut butter": [
-                            "kg",
-                            "gr",
-                            "Tbsp"
-                          ],
-                          "Green beans - tinned": [
-                            "kg",
-                            "gr",
-                            "tin-220gr"
-                          ],
-                          "Carrots & peas - tinned": [
-                            "kg",
-                            "gr",
-                            "tin-530gr"
-                          ],
-                          "Chickpeas - tinned": [
-                            "kg",
-                            "gr",
-                            "tin-2655gr"
-                          ],
-                          "Red beans - tinned": [
-                            "kg",
-                            "gr",
-                            "tin-2505gr"
-                          ],
-                          "White beans - tinned": [
-                            "kg",
-                            "gr",
-                            "tin-2505gr"
-                          ],
-                          "Falafel": [
-                            "kg",
-                            "gr",
-                            "piece"
-                          ],
-                          "Mackerel - tinned": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Chickpeas - dry": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Red lentils": [
-                            "kg",
-                            "gr"
-                          ],
-                          "Green lentils": [
-                            "kg",
-                            "gr"
-                          ]
+                          "ref": "REF:Ingredients Data",
+                          "keyColumn": "INGREDIENT_NAME",
+                          "lookupColumn": "ALLOWED_UNIT"
                         }
                       },
                       "validationRules": [
@@ -12909,409 +11388,12 @@ export const BUNDLED_FORM_CONFIGS = [
                       "required": false,
                       "pair": "cat_all",
                       "readOnly": true,
-                      "options": [
-                        "Fresh vegetables",
-                        "Dry carbohydrates",
-                        "Vegan protein",
-                        "Tins/Pots",
-                        "Dairy",
-                        "Animal protein Halal",
-                        "Frozen vegetables",
-                        "Spices",
-                        "Oils"
-                      ],
-                      "optionsFr": [
-                        "Légumes frais",
-                        "Féculents secs",
-                        "Protéines végétales",
-                        "Conserves / bocaux",
-                        "Produits laitiers",
-                        "Protéines animales Halal",
-                        "Légumes surgelés",
-                        "Épices",
-                        "Huiles"
-                      ],
-                      "optionsNl": [
-                        "Verse groenten",
-                        "Droge zetmeelproducten",
-                        "Plantaardige eiwitten",
-                        "Blik / potten",
-                        "Zuivel",
-                        "Dierlijke eiwitten Halal",
-                        "Diepvriesgroenten",
-                        "Kruiden",
-                        "Oliën"
-                      ],
-                      "optionsRaw": [
-                        {
-                          "en": "Fresh vegetables",
-                          "fr": "Légumes frais",
-                          "nl": "Verse groenten",
-                          "__ckOptionValue": "Fresh vegetables"
-                        },
-                        {
-                          "en": "Dry carbohydrates",
-                          "fr": "Féculents secs",
-                          "nl": "Droge zetmeelproducten",
-                          "__ckOptionValue": "Dry carbohydrates"
-                        },
-                        {
-                          "en": "Vegan protein",
-                          "fr": "Protéines végétales",
-                          "nl": "Plantaardige eiwitten",
-                          "__ckOptionValue": "Vegan protein"
-                        },
-                        {
-                          "en": "Tins/Pots",
-                          "fr": "Conserves / bocaux",
-                          "nl": "Blik / potten",
-                          "__ckOptionValue": "Tins/Pots"
-                        },
-                        {
-                          "en": "Dairy",
-                          "fr": "Produits laitiers",
-                          "nl": "Zuivel",
-                          "__ckOptionValue": "Dairy"
-                        },
-                        {
-                          "en": "Animal protein Halal",
-                          "fr": "Protéines animales Halal",
-                          "nl": "Dierlijke eiwitten Halal",
-                          "__ckOptionValue": "Animal protein Halal"
-                        },
-                        {
-                          "en": "Frozen vegetables",
-                          "fr": "Légumes surgelés",
-                          "nl": "Diepvriesgroenten",
-                          "__ckOptionValue": "Frozen vegetables"
-                        },
-                        {
-                          "en": "Spices",
-                          "fr": "Épices",
-                          "nl": "Kruiden",
-                          "__ckOptionValue": "Spices"
-                        },
-                        {
-                          "en": "Oils",
-                          "fr": "Huiles",
-                          "nl": "Oliën",
-                          "__ckOptionValue": "Oils"
-                        }
-                      ],
                       "valueMap": {
                         "dependsOn": "ING",
-                        "optionMap": {
-                          "Chicken stripes": [
-                            "Animal protein Halal"
-                          ],
-                          "Chicken cubes": [
-                            "Animal protein Halal"
-                          ],
-                          "Chicken wings": [
-                            "Animal protein Halal"
-                          ],
-                          "Chicken nuggets": [
-                            "Animal protein Halal"
-                          ],
-                          "Chicken tenders": [
-                            "Animal protein Halal"
-                          ],
-                          "Cordon bleu": [
-                            "Animal protein Halal"
-                          ],
-                          "Fishsticks": [
-                            "Animal protein Halal"
-                          ],
-                          "Greek yogurt": [
-                            "Dairy"
-                          ],
-                          "Cheese": [
-                            "Dairy"
-                          ],
-                          "Rice": [
-                            "Dry carbohydrates"
-                          ],
-                          "Brown rice": [
-                            "Dry carbohydrates"
-                          ],
-                          "Basmati rice": [
-                            "Dry carbohydrates"
-                          ],
-                          "Couscous": [
-                            "Dry carbohydrates"
-                          ],
-                          "Bulgur": [
-                            "Dry carbohydrates"
-                          ],
-                          "Orzo": [
-                            "Dry carbohydrates"
-                          ],
-                          "Pasta": [
-                            "Dry carbohydrates"
-                          ],
-                          "Whole wheat pasta": [
-                            "Dry carbohydrates"
-                          ],
-                          "Onion": [
-                            "Fresh vegetables"
-                          ],
-                          "Potato": [
-                            "Fresh vegetables"
-                          ],
-                          "Broccoli": [
-                            "Fresh vegetables"
-                          ],
-                          "Aubergine": [
-                            "Fresh vegetables"
-                          ],
-                          "Carrot": [
-                            "Fresh vegetables"
-                          ],
-                          "Tomato": [
-                            "Fresh vegetables"
-                          ],
-                          "Pepper": [
-                            "Fresh vegetables"
-                          ],
-                          "Cauliflower": [
-                            "Fresh vegetables"
-                          ],
-                          "Squash": [
-                            "Fresh vegetables"
-                          ],
-                          "Sweet potato": [
-                            "Fresh vegetables"
-                          ],
-                          "Butternut": [
-                            "Fresh vegetables"
-                          ],
-                          "Pumpkin": [
-                            "Fresh vegetables"
-                          ],
-                          "Pleurotte mushroom": [
-                            "Fresh vegetables"
-                          ],
-                          "Spaghetti squash": [
-                            "Fresh vegetables"
-                          ],
-                          "Courgette": [
-                            "Fresh vegetables"
-                          ],
-                          "Leek": [
-                            "Fresh vegetables"
-                          ],
-                          "Mushroom": [
-                            "Fresh vegetables"
-                          ],
-                          "Parsnip": [
-                            "Fresh vegetables"
-                          ],
-                          "Turnip": [
-                            "Fresh vegetables"
-                          ],
-                          "Green beans - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Chinese mix": [
-                            "Frozen vegetables"
-                          ],
-                          "Corn - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Leek - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Mushroom - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Carrot - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Couscous vegetables mix": [
-                            "Frozen vegetables"
-                          ],
-                          "Ratatouille mix": [
-                            "Frozen vegetables"
-                          ],
-                          "Courgette - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Pumpkin - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Pepper - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Spinach - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Red Beans - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Onion - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Green peas - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Cauliflower - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Broccoli - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Broccoli mix - frozen": [
-                            "Frozen vegetables"
-                          ],
-                          "Parsley - fresh": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Basil - fresh": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Dill - fresh": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Bouillon powder": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Salt": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Sugar": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Curry madras": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Coriander powder": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Cayenne": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Turmeric": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Black pepper": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Paprika": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Cumin": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Cinnamon": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Mint - fresh": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Oregano -fresh": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Parsley - dried": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Dill - dried": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Mint - dried": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Oregano - dried": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Bay leaf": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Nutmeg": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Basil - dried": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Soy sauce": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Miso paste": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Sunflower oil": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Olive oil": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Vinegar": [
-                            "Herbs - spices - condiments"
-                          ],
-                          "Tomato pulp": [
-                            "Tins/Pots"
-                          ],
-                          "Tomato paste": [
-                            "Tins/Pots"
-                          ],
-                          "Diced tomatoes": [
-                            "Tins/Pots"
-                          ],
-                          "Garlic paste": [
-                            "Tins/Pots"
-                          ],
-                          "Ginger paste": [
-                            "Tins/Pots"
-                          ],
-                          "Cream": [
-                            "Tins/Pots"
-                          ],
-                          "Yellow curry": [
-                            "Tins/Pots"
-                          ],
-                          "Coconut milk": [
-                            "Tins/Pots"
-                          ],
-                          "Oat milk": [
-                            "Tins/Pots"
-                          ],
-                          "Peanut butter": [
-                            "Tins/Pots"
-                          ],
-                          "Green beans - tinned": [
-                            "Tins/Pots"
-                          ],
-                          "Carrots & peas - tinned": [
-                            "Tins/Pots"
-                          ],
-                          "Chickpeas - tinned": [
-                            "Vegan protein"
-                          ],
-                          "Red beans - tinned": [
-                            "Vegan protein"
-                          ],
-                          "White beans - tinned": [
-                            "Vegan protein"
-                          ],
-                          "Falafel": [
-                            "Vegan protein"
-                          ],
-                          "Mackerel - tinned": [
-                            "Animal protein"
-                          ],
-                          "Chickpeas - dry": [
-                            "Vegan protein"
-                          ],
-                          "Red lentils": [
-                            "Vegan protein"
-                          ],
-                          "Green lentils": [
-                            "Vegan protein"
-                          ]
-                        },
                         "optionMapRef": {
-                          "ref": "REF:IngredientsOptions",
-                          "keyColumn": "optionEn",
-                          "lookupColumn": "Category"
+                          "ref": "REF:Ingredients Data",
+                          "keyColumn": "INGREDIENT_NAME",
+                          "lookupColumn": "CATEGORY"
                         }
                       }
                     },
@@ -13324,376 +11406,12 @@ export const BUNDLED_FORM_CONFIGS = [
                       "required": false,
                       "pair": "cat_all",
                       "readOnly": true,
-                      "options": [
-                        "None",
-                        "Gluten",
-                        "Milk",
-                        "Peanuts",
-                        "Soy"
-                      ],
-                      "optionsFr": [
-                        "Aucun allergène",
-                        "Gluten_fr",
-                        "Lait",
-                        "Arachides",
-                        "Soja"
-                      ],
-                      "optionsNl": [
-                        "Geen allergeen",
-                        "Gluten_nl",
-                        "Melk",
-                        "Pinda's",
-                        "Soja"
-                      ],
-                      "optionsRaw": [
-                        {
-                          "optionEn": "None",
-                          "optionFr": "Aucun allergène",
-                          "optionNl": "Geen allergeen",
-                          "__ckOptionValue": "None"
-                        },
-                        {
-                          "optionEn": "Gluten",
-                          "optionFr": "Gluten_fr",
-                          "optionNl": "Gluten_nl",
-                          "__ckOptionValue": "Gluten"
-                        },
-                        {
-                          "optionEn": "Milk",
-                          "optionFr": "Lait",
-                          "optionNl": "Melk",
-                          "__ckOptionValue": "Milk"
-                        },
-                        {
-                          "optionEn": "Peanuts",
-                          "optionFr": "Arachides",
-                          "optionNl": "Pinda's",
-                          "__ckOptionValue": "Peanuts"
-                        },
-                        {
-                          "optionEn": "Soy",
-                          "optionFr": "Soja",
-                          "optionNl": "Soja",
-                          "__ckOptionValue": "Soy"
-                        }
-                      ],
                       "valueMap": {
                         "dependsOn": "ING",
-                        "optionMap": {
-                          "Chicken stripes": [
-                            "None"
-                          ],
-                          "Chicken cubes": [
-                            "None"
-                          ],
-                          "Chicken wings": [
-                            "Gluten"
-                          ],
-                          "Chicken nuggets": [
-                            "Gluten"
-                          ],
-                          "Chicken tenders": [
-                            "Gluten"
-                          ],
-                          "Cordon bleu": [
-                            "Gluten",
-                            "Milk",
-                            "Egg"
-                          ],
-                          "Fishsticks": [
-                            "Gluten",
-                            "Fish"
-                          ],
-                          "Greek yogurt": [
-                            "Milk"
-                          ],
-                          "Cheese": [
-                            "Milk"
-                          ],
-                          "Rice": [
-                            "None"
-                          ],
-                          "Brown rice": [
-                            "None"
-                          ],
-                          "Basmati rice": [
-                            "None"
-                          ],
-                          "Couscous": [
-                            "Gluten"
-                          ],
-                          "Bulgur": [
-                            "Gluten"
-                          ],
-                          "Orzo": [
-                            "Gluten"
-                          ],
-                          "Pasta": [
-                            "Gluten"
-                          ],
-                          "Whole wheat pasta": [
-                            "Gluten"
-                          ],
-                          "Onion": [
-                            "None"
-                          ],
-                          "Potato": [
-                            "None"
-                          ],
-                          "Broccoli": [
-                            "None"
-                          ],
-                          "Aubergine": [
-                            "None"
-                          ],
-                          "Carrot": [
-                            "None"
-                          ],
-                          "Tomato": [
-                            "None"
-                          ],
-                          "Pepper": [
-                            "None"
-                          ],
-                          "Cauliflower": [
-                            "None"
-                          ],
-                          "Squash": [
-                            "None"
-                          ],
-                          "Sweet potato": [
-                            "None"
-                          ],
-                          "Butternut": [
-                            "None"
-                          ],
-                          "Pumpkin": [
-                            "None"
-                          ],
-                          "Pleurotte mushroom": [
-                            "None"
-                          ],
-                          "Spaghetti squash": [
-                            "None"
-                          ],
-                          "Courgette": [
-                            "None"
-                          ],
-                          "Leek": [
-                            "None"
-                          ],
-                          "Mushroom": [
-                            "None"
-                          ],
-                          "Parsnip": [
-                            "None"
-                          ],
-                          "Turnip": [
-                            "None"
-                          ],
-                          "Green beans - frozen": [
-                            "None"
-                          ],
-                          "Chinese mix": [
-                            "None"
-                          ],
-                          "Corn - frozen": [
-                            "None"
-                          ],
-                          "Leek - frozen": [
-                            "None"
-                          ],
-                          "Mushroom - frozen": [
-                            "None"
-                          ],
-                          "Carrot - frozen": [
-                            "None"
-                          ],
-                          "Couscous vegetables mix": [
-                            "None"
-                          ],
-                          "Ratatouille mix": [
-                            "None"
-                          ],
-                          "Courgette - frozen": [
-                            "None"
-                          ],
-                          "Pumpkin - frozen": [
-                            "None"
-                          ],
-                          "Pepper - frozen": [
-                            "None"
-                          ],
-                          "Spinach - frozen": [
-                            "None"
-                          ],
-                          "Red Beans - frozen": [
-                            "None"
-                          ],
-                          "Onion - frozen": [
-                            "None"
-                          ],
-                          "Green peas - frozen": [
-                            "None"
-                          ],
-                          "Cauliflower - frozen": [
-                            "None"
-                          ],
-                          "Broccoli - frozen": [
-                            "None"
-                          ],
-                          "Broccoli mix - frozen": [
-                            "None"
-                          ],
-                          "Parsley - fresh": [
-                            "None"
-                          ],
-                          "Basil - fresh": [
-                            "None"
-                          ],
-                          "Dill - fresh": [
-                            "None"
-                          ],
-                          "Bouillon powder": [
-                            "Soy"
-                          ],
-                          "Salt": [
-                            "None"
-                          ],
-                          "Sugar": [
-                            "None"
-                          ],
-                          "Curry madras": [
-                            "None"
-                          ],
-                          "Coriander powder": [
-                            "None"
-                          ],
-                          "Cayenne": [
-                            "None"
-                          ],
-                          "Turmeric": [
-                            "None"
-                          ],
-                          "Black pepper": [
-                            "None"
-                          ],
-                          "Paprika": [
-                            "None"
-                          ],
-                          "Cumin": [
-                            "None"
-                          ],
-                          "Cinnamon": [
-                            "None"
-                          ],
-                          "Mint - fresh": [
-                            "None"
-                          ],
-                          "Oregano -fresh": [
-                            "None"
-                          ],
-                          "Parsley - dried": [
-                            "None"
-                          ],
-                          "Dill - dried": [
-                            "None"
-                          ],
-                          "Mint - dried": [
-                            "None"
-                          ],
-                          "Oregano - dried": [
-                            "None"
-                          ],
-                          "Bay leaf": [
-                            "None"
-                          ],
-                          "Nutmeg": [
-                            "None"
-                          ],
-                          "Basil - dried": [
-                            "None"
-                          ],
-                          "Soy sauce": [
-                            "Soy"
-                          ],
-                          "Miso paste": [
-                            "Soy"
-                          ],
-                          "Sunflower oil": [
-                            "None"
-                          ],
-                          "Olive oil": [
-                            "None"
-                          ],
-                          "Vinegar": [
-                            "None"
-                          ],
-                          "Tomato pulp": [
-                            "None"
-                          ],
-                          "Tomato paste": [
-                            "None"
-                          ],
-                          "Diced tomatoes": [
-                            "None"
-                          ],
-                          "Garlic paste": [
-                            "None"
-                          ],
-                          "Ginger paste": [
-                            "None"
-                          ],
-                          "Cream": [
-                            "Milk"
-                          ],
-                          "Yellow curry": [
-                            "None"
-                          ],
-                          "Coconut milk": [
-                            "None"
-                          ],
-                          "Oat milk": [
-                            "None"
-                          ],
-                          "Peanut butter": [
-                            "Peanuts"
-                          ],
-                          "Green beans - tinned": [
-                            "None"
-                          ],
-                          "Carrots & peas - tinned": [
-                            "None"
-                          ],
-                          "Chickpeas - tinned": [
-                            "None"
-                          ],
-                          "Red beans - tinned": [
-                            "None"
-                          ],
-                          "White beans - tinned": [
-                            "None"
-                          ],
-                          "Falafel": [
-                            "None"
-                          ],
-                          "Mackerel - tinned": [
-                            "Fish"
-                          ],
-                          "Chickpeas - dry": [
-                            "None"
-                          ],
-                          "Red lentils": [
-                            "None"
-                          ],
-                          "Green lentils": [
-                            "None"
-                          ]
-                        },
                         "optionMapRef": {
-                          "ref": "REF:IngredientsOptions",
-                          "keyColumn": "optionEn",
-                          "lookupColumn": "Allergens"
+                          "ref": "REF:Ingredients Data",
+                          "keyColumn": "INGREDIENT_NAME",
+                          "lookupColumn": "ALLERGEN"
                         }
                       }
                     }
@@ -14462,22 +12180,22 @@ export const BUNDLED_FORM_CONFIGS = [
               "notEmpty": true
             },
             "title": {
-              "en": "Incomplete meal production record",
+              "en": "Change Customer",
               "fr": "Changer de client?",
               "nl": "Klant wijzigen?"
             },
             "message": {
-              "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
+              "en": "Changing the customer will permanently delete production date and service as well as any data or photos you may have entered after service.\n\nA meal production record can only exist when customer, production date, and service are all filled in.\n\nIf you wish to proceed with the change, make sure you enter the production date and the service before leaving the page otherwise the record will be permanently deleted.\n\nThis action cannot be undone.",
               "fr": "Changer de client effacera toutes les informations d'ordre que vous avez entrées et toutes les données de production que vous avez entrées, voulez-vous continuer?",
               "nl": "Wijzigen van de klant zal alle orderinformatie die u hebt ingevoerd en alle productiedata die u hebt ingevoerd wissen, wilt u doorgaan?"
             },
             "confirmLabel": {
-              "en": "Continue — Delete the record",
+              "en": "Continue and delete subsequent data.",
               "fr": "Continuer et effacer les portions",
               "nl": "Doorgaan en klaren de porties"
             },
             "cancelLabel": {
-              "en": "Cancel — Continue editing",
+              "en": "Cancel and keep current customer",
               "fr": "Annuler",
               "nl": "Annuleren"
             }
@@ -14708,26 +12426,34 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           "changeDialog": {
             "when": {
-              "fieldId": "MP_SERVICE",
-              "notEmpty": true
+              "all": [
+                {
+                  "fieldId": "MP_SERVICE",
+                  "notEmpty": true
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isInFuture": true
+                }
+              ]
             },
             "title": {
-              "en": "Incomplete meal production record",
+              "en": "Change Production date",
               "fr": "Changer la date de production ?",
               "nl": "Productiedatum wijzigen?"
             },
             "message": {
-              "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
+              "en": "Changing the production date will permanently delete service as well as any data or photos entered after service.\n\nA meal production record can only exist when customer, production date, and service are all filled in.\n\nIf you wish to proceed with the change, make sure you enter the service before leaving the page otherwise the record will be permanently deleted.\n\nThis action cannot be undone.",
               "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
               "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
             },
             "confirmLabel": {
-              "en": "Continue — Delete the record",
+              "en": "Continue and delete subsequent data.",
               "fr": "Oui, supprimer définitivement les données déjà saisies",
               "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
             },
             "cancelLabel": {
-              "en": "Cancel — Continue editing",
+              "en": "Cancel and keep current production date",
               "fr": "Non, conserver la date de production actuelle",
               "nl": "Nee, behoud de huidige productiedatum"
             },
@@ -15553,7 +13279,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelEn": "Add photo",
                 "labelFr": "Ajouter une photo",
                 "labelNl": "Foto toevoegen",
-                "required": false,
+                "required": true,
                 "requiredMessage": {
                   "en": "Add one photo per cooking pot.",
                   "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -15597,7 +13323,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "uploadConfig": {
                   "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
                   "minFiles": 0,
-                  "maxFiles": 5,
+                  "maxFiles": 10,
                   "maxFileSizeMb": 10,
                   "allowedMimeTypes": [
                     "image/*"
@@ -15926,1934 +13652,32 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "readOnly": true,
-                        "options": [
-                          "Chicken stripes",
-                          "Chicken cubes",
-                          "Chicken wings",
-                          "Chicken nuggets",
-                          "Chicken tenders",
-                          "Cordon bleu",
-                          "Fishsticks",
-                          "Greek yogurt",
-                          "Cheese",
-                          "Rice",
-                          "Brown rice",
-                          "Basmati rice",
-                          "Couscous",
-                          "Bulgur",
-                          "Orzo",
-                          "Pasta",
-                          "Whole wheat pasta",
-                          "Onion",
-                          "Potato",
-                          "Broccoli",
-                          "Aubergine",
-                          "Carrot",
-                          "Tomato",
-                          "Pepper",
-                          "Cauliflower",
-                          "Squash",
-                          "Sweet potato",
-                          "Butternut",
-                          "Pumpkin",
-                          "Pleurotte mushroom",
-                          "Spaghetti squash",
-                          "Courgette",
-                          "Leek",
-                          "Mushroom",
-                          "Parsnip",
-                          "Turnip",
-                          "Green beans - frozen",
-                          "Chinese mix",
-                          "Corn - frozen",
-                          "Leek - frozen",
-                          "Mushroom - frozen",
-                          "Carrot - frozen",
-                          "Couscous vegetables mix",
-                          "Ratatouille mix",
-                          "Courgette - frozen",
-                          "Pumpkin - frozen",
-                          "Pepper - frozen",
-                          "Spinach - frozen",
-                          "Red Beans - frozen",
-                          "Onion - frozen",
-                          "Green peas - frozen",
-                          "Cauliflower - frozen",
-                          "Broccoli - frozen",
-                          "Broccoli mix - frozen",
-                          "Parsley - fresh",
-                          "Basil - fresh",
-                          "Dill - fresh",
-                          "Bouillon powder",
-                          "Salt",
-                          "Sugar",
-                          "Curry madras",
-                          "Coriander powder",
-                          "Cayenne",
-                          "Turmeric",
-                          "Black pepper",
-                          "Paprika",
-                          "Cumin",
-                          "Cinnamon",
-                          "Mint - fresh",
-                          "Oregano -fresh",
-                          "Parsley - dried",
-                          "Dill - dried",
-                          "Mint - dried",
-                          "Oregano - dried",
-                          "Bay leaf",
-                          "Nutmeg",
-                          "Basil - dried",
-                          "Soy sauce",
-                          "Miso paste",
-                          "Sunflower oil",
-                          "Olive oil",
-                          "Vinegar",
-                          "Tomato pulp",
-                          "Tomato paste",
-                          "Diced tomatoes",
-                          "Garlic paste",
-                          "Ginger paste",
-                          "Cream",
-                          "Yellow curry",
-                          "Coconut milk",
-                          "Oat milk",
-                          "Peanut butter",
-                          "Green beans - tinned",
-                          "Carrots & peas - tinned",
-                          "Chickpeas - tinned",
-                          "Red beans - tinned",
-                          "White beans - tinned",
-                          "Falafel",
-                          "Mackerel - tinned",
-                          "Chickpeas - dry",
-                          "Red lentils",
-                          "Green lentils"
-                        ],
-                        "optionsFr": [
-                          "Lanières de poulet",
-                          "Dés de poulet",
-                          "Ailes de poulet",
-                          "Nuggets de poulet",
-                          "Aiguillettes de poulet",
-                          "Cordon bleu",
-                          "Bâtonnets de poisson",
-                          "Yaourt grec",
-                          "Cheese",
-                          "Riz",
-                          "Riz complet",
-                          "Riz basmati",
-                          "Couscous",
-                          "Boulgour",
-                          "Orzo",
-                          "Pâtes",
-                          "Pâtes complètes",
-                          "Oignon",
-                          "Pomme de terre",
-                          "Brocoli",
-                          "Aubergine",
-                          "Carotte",
-                          "Tomate",
-                          "Poivron",
-                          "Chou-fleur",
-                          "Courge",
-                          "Patate douce",
-                          "Butternut",
-                          "Potiron",
-                          "Pleurote",
-                          "Courge spaghetti",
-                          "Courgette",
-                          "Poireau",
-                          "Champignon",
-                          "Panais",
-                          "Navet",
-                          "Haricots verts surgelés",
-                          "Mélange chinois surgelé",
-                          "Maïs surgelé",
-                          "Poireau surgelé",
-                          "Champignon surgelé",
-                          "Carotte surgelée",
-                          "Mélange legumes couscous surgelé",
-                          "Mélange ratatouille surgelé",
-                          "Courgette surgelée",
-                          "Potiron surgelé",
-                          "Poivron surgelé",
-                          "Épinards surgelés",
-                          "Haricots rouges surgelés",
-                          "Oignon surgelé",
-                          "Petits pois surgelés",
-                          "Chou-fleur surgelé",
-                          "Brocoli surgelé",
-                          "Mélange de brocolis",
-                          "Persil frais",
-                          "Basilic frais",
-                          "Aneth frais",
-                          "Bouillon en poudre",
-                          "Sel",
-                          "Sucre",
-                          "Curry madras",
-                          "Coriandre en poudre",
-                          "Piment de Cayenne",
-                          "Curcuma",
-                          "Poivre noir",
-                          "Paprika",
-                          "Cumin",
-                          "Cannelle",
-                          "Menthe fraîche",
-                          "Origan frais",
-                          "Persil séché",
-                          "Aneth séché",
-                          "Menthe séchée",
-                          "Origan séché",
-                          "Feuille de laurier",
-                          "Noix de muscade",
-                          "Basilic séché",
-                          "Sauce soja",
-                          "Pâte miso",
-                          "Huile de tournesol",
-                          "Huile d’olive",
-                          "Vinaigre",
-                          "Pulpe de tomate",
-                          "Concentré de tomate",
-                          "Tomates concassées",
-                          "Purée d’ail",
-                          "Purée de gingembre",
-                          "Crème",
-                          "Curry jaune",
-                          "Lait de coco",
-                          "Lait d’avoine",
-                          "Beurre de cacahuète",
-                          "Haricots verts en conserve",
-                          "Carottes & petits pois en conserve",
-                          "Pois chiches en conserve",
-                          "Haricots rouges en conserve",
-                          "Haricots blancs en conserve",
-                          "Falafel",
-                          "Maquereau en conserve",
-                          "Pois chiches secs",
-                          "Lentilles corail",
-                          "Lentilles vertes"
-                        ],
-                        "optionsNl": [
-                          "Kipreepjes",
-                          "Kipblokjes",
-                          "Kip vleugels",
-                          "Kipnuggets",
-                          "Kiphaasjes",
-                          "Cordon bleu",
-                          "Vissticks",
-                          "Griekse yoghurt",
-                          "Cheese",
-                          "Rijst",
-                          "Volkorenrijst",
-                          "Basmati rijst",
-                          "Couscous",
-                          "Bulgur",
-                          "Orzo",
-                          "Pasta",
-                          "Volkoren pasta",
-                          "Ui",
-                          "Aardappel",
-                          "Broccoli",
-                          "Aubergine",
-                          "Wortel",
-                          "Tomaat",
-                          "Paprika",
-                          "Bloemkool",
-                          "Pompoen (squash)",
-                          "Zoete aardappel",
-                          "Butternut",
-                          "Pompoen",
-                          "Oesterzwam",
-                          "Spaghettipompoen",
-                          "Courgette",
-                          "Prei",
-                          "Champignon",
-                          "Pastinaak",
-                          "Raap",
-                          "Sperziebonen – diepvries",
-                          "Chinese mix – diepvries",
-                          "Maïs – diepvries",
-                          "Prei – diepvries",
-                          "Champignon – diepvries",
-                          "Wortel – diepvries",
-                          "Couscousmix – diepvries",
-                          "Ratatouillemix – diepvries",
-                          "Courgette – diepvries",
-                          "Pompoen – diepvries",
-                          "Paprika – diepvries",
-                          "Spinazie – diepvries",
-                          "Rode bonen – diepvries",
-                          "Ui – diepvries",
-                          "Erwten – diepvries",
-                          "Bloemkool – diepvries",
-                          "Broccoli – diepvries",
-                          "Broccoli mix",
-                          "Peterselie – vers",
-                          "Basilicum – vers",
-                          "Dille – vers",
-                          "Bouillonpoeder",
-                          "Zout",
-                          "Suiker",
-                          "Madras curry",
-                          "Korianderpoeder",
-                          "Cayennepeper",
-                          "Kurkuma",
-                          "Zwarte peper",
-                          "Paprika",
-                          "Komijn",
-                          "Kaneel",
-                          "Munt – vers",
-                          "Oregano – vers",
-                          "Peterselie – gedroogd",
-                          "Dille – gedroogd",
-                          "Munt – gedroogd",
-                          "Oregano – gedroogd",
-                          "Laurierblad",
-                          "Nootmuskaat",
-                          "Basilicum – gedroogd",
-                          "Sojasaus",
-                          "Miso pasta",
-                          "Zonnebloemolie",
-                          "Olijfolie",
-                          "Azijn",
-                          "Tomatenpulp",
-                          "Tomatenpuree",
-                          "Gehakte tomaten",
-                          "Knoflookpasta",
-                          "Gemberpasta",
-                          "Room",
-                          "Gele curry",
-                          "Kokosmelk",
-                          "Havermelk",
-                          "Pindakaas",
-                          "Sperziebonen – blik",
-                          "Wortelen & erwten – blik",
-                          "Kikkererwten – blik",
-                          "Rode bonen – blik",
-                          "Witte bonen – blik",
-                          "Falafel",
-                          "Makreel – blik",
-                          "Kikkererwten – droog",
-                          "Rode linzen",
-                          "Groene linzen"
-                        ],
-                        "optionsRaw": [
-                          {
-                            "optionEn": "Chicken stripes",
-                            "optionFr": "Lanières de poulet",
-                            "optionNl": "Kipreepjes",
-                            "Category": "Animal protein Halal",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Standard, No-salt",
-                            "__ckOptionValue": "Chicken stripes"
-                          },
-                          {
-                            "optionEn": "Chicken cubes",
-                            "optionFr": "Dés de poulet",
-                            "optionNl": "Kipblokjes",
-                            "Category": "Animal protein Halal",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Diabetic, Standard, No-salt",
-                            "__ckOptionValue": "Chicken cubes"
-                          },
-                          {
-                            "optionEn": "Chicken wings",
-                            "optionFr": "Ailes de poulet",
-                            "optionNl": "Kip vleugels",
-                            "Category": "Animal protein Halal",
-                            "Allergens": "Gluten",
-                            "Suppliers": "Ozfood",
-                            "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Standard, No-salt",
-                            "__ckOptionValue": "Chicken wings"
-                          },
-                          {
-                            "optionEn": "Chicken nuggets",
-                            "optionFr": "Nuggets de poulet",
-                            "optionNl": "Kipnuggets",
-                            "Category": "Animal protein Halal",
-                            "Allergens": "Gluten",
-                            "Suppliers": "Ozfood",
-                            "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Standard, No-salt",
-                            "__ckOptionValue": "Chicken nuggets"
-                          },
-                          {
-                            "optionEn": "Chicken tenders",
-                            "optionFr": "Aiguillettes de poulet",
-                            "optionNl": "Kiphaasjes",
-                            "Category": "Animal protein Halal",
-                            "Allergens": "Gluten",
-                            "Suppliers": "Ozfood",
-                            "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Standard, No-salt",
-                            "__ckOptionValue": "Chicken tenders"
-                          },
-                          {
-                            "optionEn": "Cordon bleu",
-                            "optionFr": "Cordon bleu",
-                            "optionNl": "Cordon bleu",
-                            "Category": "Animal protein Halal",
-                            "Allergens": "Gluten, Milk, Egg",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Standard, No-salt",
-                            "__ckOptionValue": "Cordon bleu"
-                          },
-                          {
-                            "optionEn": "Fishsticks",
-                            "optionFr": "Bâtonnets de poisson",
-                            "optionNl": "Vissticks",
-                            "Category": "Animal protein Halal",
-                            "Allergens": "Gluten, Fish",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Diabetic, Standard, No-salt",
-                            "__ckOptionValue": "Fishsticks"
-                          },
-                          {
-                            "optionEn": "Greek yogurt",
-                            "optionFr": "Yaourt grec",
-                            "optionNl": "Griekse yoghurt",
-                            "Category": "Dairy",
-                            "Allergens": "Milk",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Greek yogurt"
-                          },
-                          {
-                            "optionEn": "Cheese",
-                            "optionFr": "Fromage",
-                            "optionNl": "Kaas",
-                            "Category": "Dairy",
-                            "Allergens": "Milk",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Cheese"
-                          },
-                          {
-                            "optionEn": "Rice",
-                            "optionFr": "Riz",
-                            "optionNl": "Rijst",
-                            "Category": "Dry carbohydrates",
-                            "Allergens": "None",
-                            "Suppliers": "Red Cross",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Rice"
-                          },
-                          {
-                            "optionEn": "Brown rice",
-                            "optionFr": "Riz complet",
-                            "optionNl": "Volkorenrijst",
-                            "Category": "Dry carbohydrates",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Solucious;VDS",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Brown rice"
-                          },
-                          {
-                            "optionEn": "Basmati rice",
-                            "optionFr": "Riz basmati",
-                            "optionNl": "Basmati rijst",
-                            "Category": "Dry carbohydrates",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Solucious;VDS",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Basmati rice"
-                          },
-                          {
-                            "optionEn": "Couscous",
-                            "optionFr": "Couscous",
-                            "optionNl": "Couscous",
-                            "Category": "Dry carbohydrates",
-                            "Allergens": "Gluten",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Couscous"
-                          },
-                          {
-                            "optionEn": "Bulgur",
-                            "optionFr": "Boulgour",
-                            "optionNl": "Bulgur",
-                            "Category": "Dry carbohydrates",
-                            "Allergens": "Gluten",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Bulgur"
-                          },
-                          {
-                            "optionEn": "Orzo",
-                            "optionFr": "Orzo",
-                            "optionNl": "Orzo",
-                            "Category": "Dry carbohydrates",
-                            "Allergens": "Gluten",
-                            "Suppliers": "Freshmed;Solucious",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Orzo"
-                          },
-                          {
-                            "optionEn": "Pasta",
-                            "optionFr": "Pâtes",
-                            "optionNl": "Pasta",
-                            "Category": "Dry carbohydrates",
-                            "Allergens": "Gluten",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Pasta"
-                          },
-                          {
-                            "optionEn": "Whole wheat pasta",
-                            "optionFr": "Pâtes complètes",
-                            "optionNl": "Volkoren pasta",
-                            "Category": "Dry carbohydrates",
-                            "Allergens": "Gluten",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Whole wheat pasta"
-                          },
-                          {
-                            "optionEn": "Onion",
-                            "optionFr": "Oignon",
-                            "optionNl": "Ui",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Onion"
-                          },
-                          {
-                            "optionEn": "Potato",
-                            "optionFr": "Pomme de terre",
-                            "optionNl": "Aardappel",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Potato"
-                          },
-                          {
-                            "optionEn": "Broccoli",
-                            "optionFr": "Brocoli",
-                            "optionNl": "Broccoli",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Broccoli"
-                          },
-                          {
-                            "optionEn": "Aubergine",
-                            "optionFr": "Aubergine",
-                            "optionNl": "Aubergine",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Aubergine"
-                          },
-                          {
-                            "optionEn": "Carrot",
-                            "optionFr": "Carotte",
-                            "optionNl": "Wortel",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Carrot"
-                          },
-                          {
-                            "optionEn": "Tomato",
-                            "optionFr": "Tomate",
-                            "optionNl": "Tomaat",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Tomato"
-                          },
-                          {
-                            "optionEn": "Pepper",
-                            "optionFr": "Poivron",
-                            "optionNl": "Paprika",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Pepper"
-                          },
-                          {
-                            "optionEn": "Cauliflower",
-                            "optionFr": "Chou-fleur",
-                            "optionNl": "Bloemkool",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Cauliflower"
-                          },
-                          {
-                            "optionEn": "Squash",
-                            "optionFr": "Courge",
-                            "optionNl": "Pompoen (squash)",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Squash"
-                          },
-                          {
-                            "optionEn": "Sweet potato",
-                            "optionFr": "Patate douce",
-                            "optionNl": "Zoete aardappel",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Sweet potato"
-                          },
-                          {
-                            "optionEn": "Butternut",
-                            "optionFr": "Butternut",
-                            "optionNl": "Butternut",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Butternut"
-                          },
-                          {
-                            "optionEn": "Pumpkin",
-                            "optionFr": "Potiron",
-                            "optionNl": "Pompoen",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Pumpkin"
-                          },
-                          {
-                            "optionEn": "Pleurotte mushroom",
-                            "optionFr": "Pleurote",
-                            "optionNl": "Oesterzwam",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Pleurotte mushroom"
-                          },
-                          {
-                            "optionEn": "Spaghetti squash",
-                            "optionFr": "Courge spaghetti",
-                            "optionNl": "Spaghettipompoen",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Spaghetti squash"
-                          },
-                          {
-                            "optionEn": "Courgette",
-                            "optionFr": "Courgette",
-                            "optionNl": "Courgette",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Courgette"
-                          },
-                          {
-                            "optionEn": "Leek",
-                            "optionFr": "Poireau",
-                            "optionNl": "Prei",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Leek"
-                          },
-                          {
-                            "optionEn": "Mushroom",
-                            "optionFr": "Champignon",
-                            "optionNl": "Champignon",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Mushroom"
-                          },
-                          {
-                            "optionEn": "Parsnip",
-                            "optionFr": "Panais",
-                            "optionNl": "Pastinaak",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Parsnip"
-                          },
-                          {
-                            "optionEn": "Turnip",
-                            "optionFr": "Navet",
-                            "optionNl": "Raap",
-                            "Category": "Fresh vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr, bucket",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Turnip"
-                          },
-                          {
-                            "optionEn": "Green beans - frozen",
-                            "optionFr": "Haricots verts surgelés",
-                            "optionNl": "Sperziebonen – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Green beans - frozen"
-                          },
-                          {
-                            "optionEn": "Chinese mix",
-                            "optionFr": "Mélange chinois surgelé",
-                            "optionNl": "Chinese mix – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Chinese mix"
-                          },
-                          {
-                            "optionEn": "Corn - frozen",
-                            "optionFr": "Maïs surgelé",
-                            "optionNl": "Maïs – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Corn - frozen"
-                          },
-                          {
-                            "optionEn": "Leek - frozen",
-                            "optionFr": "Poireau surgelé",
-                            "optionNl": "Prei – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Leek - frozen"
-                          },
-                          {
-                            "optionEn": "Mushroom - frozen",
-                            "optionFr": "Champignon surgelé",
-                            "optionNl": "Champignon – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Mushroom - frozen"
-                          },
-                          {
-                            "optionEn": "Carrot - frozen",
-                            "optionFr": "Carotte surgelée",
-                            "optionNl": "Wortel – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Carrot - frozen"
-                          },
-                          {
-                            "optionEn": "Couscous vegetables mix",
-                            "optionFr": "Mélange legumes couscous surgelé",
-                            "optionNl": "Couscousmix – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Couscous vegetables mix"
-                          },
-                          {
-                            "optionEn": "Ratatouille mix",
-                            "optionFr": "Mélange ratatouille surgelé",
-                            "optionNl": "Ratatouillemix – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Ratatouille mix"
-                          },
-                          {
-                            "optionEn": "Courgette - frozen",
-                            "optionFr": "Courgette surgelée",
-                            "optionNl": "Courgette – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Courgette - frozen"
-                          },
-                          {
-                            "optionEn": "Pumpkin - frozen",
-                            "optionFr": "Potiron surgelé",
-                            "optionNl": "Pompoen – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Pumpkin - frozen"
-                          },
-                          {
-                            "optionEn": "Pepper - frozen",
-                            "optionFr": "Poivron surgelé",
-                            "optionNl": "Paprika – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Pepper - frozen"
-                          },
-                          {
-                            "optionEn": "Spinach - frozen",
-                            "optionFr": "Épinards surgelés",
-                            "optionNl": "Spinazie – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Spinach - frozen"
-                          },
-                          {
-                            "optionEn": "Red Beans - frozen",
-                            "optionFr": "Haricots rouges surgelés",
-                            "optionNl": "Rode bonen – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Red Beans - frozen"
-                          },
-                          {
-                            "optionEn": "Onion - frozen",
-                            "optionFr": "Oignon surgelé",
-                            "optionNl": "Ui – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Onion - frozen"
-                          },
-                          {
-                            "optionEn": "Green peas - frozen",
-                            "optionFr": "Petits pois surgelés",
-                            "optionNl": "Erwten – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Green peas - frozen"
-                          },
-                          {
-                            "optionEn": "Cauliflower - frozen",
-                            "optionFr": "Chou-fleur surgelé",
-                            "optionNl": "Bloemkool – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Cauliflower - frozen"
-                          },
-                          {
-                            "optionEn": "Broccoli - frozen",
-                            "optionFr": "Brocoli surgelé",
-                            "optionNl": "Broccoli – diepvries",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Broccoli - frozen"
-                          },
-                          {
-                            "optionEn": "Broccoli mix - frozen",
-                            "optionFr": "Mélange de brocolis",
-                            "optionNl": "Broccoli mix",
-                            "Category": "Frozen vegetables",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, bag",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Broccoli mix - frozen"
-                          },
-                          {
-                            "optionEn": "Parsley - fresh",
-                            "optionFr": "Persil frais",
-                            "optionNl": "Peterselie – vers",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Parsley - fresh"
-                          },
-                          {
-                            "optionEn": "Basil - fresh",
-                            "optionFr": "Basilic frais",
-                            "optionNl": "Basilicum – vers",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Basil - fresh"
-                          },
-                          {
-                            "optionEn": "Dill - fresh",
-                            "optionFr": "Aneth frais",
-                            "optionNl": "Dille – vers",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Mabru;VDS",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Dill - fresh"
-                          },
-                          {
-                            "optionEn": "Bouillon powder",
-                            "optionFr": "Bouillon en poudre",
-                            "optionNl": "Bouillonpoeder",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "Soy",
-                            "Suppliers": "Solucious;VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Bouillon powder"
-                          },
-                          {
-                            "optionEn": "Salt",
-                            "optionFr": "Sel",
-                            "optionNl": "Zout",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Solucious;VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard",
-                            "__ckOptionValue": "Salt"
-                          },
-                          {
-                            "optionEn": "Sugar",
-                            "optionFr": "Sucre",
-                            "optionNl": "Suiker",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;Solucious;VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Sugar"
-                          },
-                          {
-                            "optionEn": "Curry madras",
-                            "optionFr": "Curry madras",
-                            "optionNl": "Madras curry",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Curry madras"
-                          },
-                          {
-                            "optionEn": "Coriander powder",
-                            "optionFr": "Coriandre en poudre",
-                            "optionNl": "Korianderpoeder",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Coriander powder"
-                          },
-                          {
-                            "optionEn": "Cayenne",
-                            "optionFr": "Piment de Cayenne",
-                            "optionNl": "Cayennepeper",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Cayenne"
-                          },
-                          {
-                            "optionEn": "Turmeric",
-                            "optionFr": "Curcuma",
-                            "optionNl": "Kurkuma",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Turmeric"
-                          },
-                          {
-                            "optionEn": "Black pepper",
-                            "optionFr": "Poivre noir",
-                            "optionNl": "Zwarte peper",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Black pepper"
-                          },
-                          {
-                            "optionEn": "Paprika",
-                            "optionFr": "Paprika",
-                            "optionNl": "Paprika",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Paprika"
-                          },
-                          {
-                            "optionEn": "Cumin",
-                            "optionFr": "Cumin",
-                            "optionNl": "Komijn",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Cumin"
-                          },
-                          {
-                            "optionEn": "Cinnamon",
-                            "optionFr": "Cannelle",
-                            "optionNl": "Kaneel",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Cinnamon"
-                          },
-                          {
-                            "optionEn": "Mint - fresh",
-                            "optionFr": "Menthe fraîche",
-                            "optionNl": "Munt – vers",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Mint - fresh"
-                          },
-                          {
-                            "optionEn": "Oregano -fresh",
-                            "optionFr": "Origan frais",
-                            "optionNl": "Oregano – vers",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Oregano -fresh"
-                          },
-                          {
-                            "optionEn": "Parsley - dried",
-                            "optionFr": "Persil séché",
-                            "optionNl": "Peterselie – gedroogd",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Parsley - dried"
-                          },
-                          {
-                            "optionEn": "Dill - dried",
-                            "optionFr": "Aneth séché",
-                            "optionNl": "Dille – gedroogd",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Dill - dried"
-                          },
-                          {
-                            "optionEn": "Mint - dried",
-                            "optionFr": "Menthe séchée",
-                            "optionNl": "Munt – gedroogd",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Mint - dried"
-                          },
-                          {
-                            "optionEn": "Oregano - dried",
-                            "optionFr": "Origan séché",
-                            "optionNl": "Oregano – gedroogd",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Oregano - dried"
-                          },
-                          {
-                            "optionEn": "Bay leaf",
-                            "optionFr": "Feuille de laurier",
-                            "optionNl": "Laurierblad",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;VDS",
-                            "allowedUnits": "leaf",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Bay leaf"
-                          },
-                          {
-                            "optionEn": "Nutmeg",
-                            "optionFr": "Noix de muscade",
-                            "optionNl": "Nootmuskaat",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Nutmeg"
-                          },
-                          {
-                            "optionEn": "Basil - dried",
-                            "optionFr": "Basilic séché",
-                            "optionNl": "Basilicum – gedroogd",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed;VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Basil - dried"
-                          },
-                          {
-                            "optionEn": "Soy sauce",
-                            "optionFr": "Sauce soja",
-                            "optionNl": "Sojasaus",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "Soy",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "cl",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Soy sauce"
-                          },
-                          {
-                            "optionEn": "Miso paste",
-                            "optionFr": "Pâte miso",
-                            "optionNl": "Miso pasta",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "Soy",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Miso paste"
-                          },
-                          {
-                            "optionEn": "Sunflower oil",
-                            "optionFr": "Huile de tournesol",
-                            "optionNl": "Zonnebloemolie",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "Red Cross",
-                            "allowedUnits": "cl",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Sunflower oil"
-                          },
-                          {
-                            "optionEn": "Olive oil",
-                            "optionFr": "Huile d’olive",
-                            "optionNl": "Olijfolie",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "cl",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Olive oil"
-                          },
-                          {
-                            "optionEn": "Vinegar",
-                            "optionFr": "Vinaigre",
-                            "optionNl": "Azijn",
-                            "Category": "Herbs - spices - condiments",
-                            "Allergens": "None",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "cl",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Vinegar"
-                          },
-                          {
-                            "optionEn": "Tomato pulp",
-                            "optionFr": "Pulpe de tomate",
-                            "optionNl": "Tomatenpulp",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, tin-240gr, tin-5000gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Tomato pulp"
-                          },
-                          {
-                            "optionEn": "Tomato paste",
-                            "optionFr": "Concentré de tomate",
-                            "optionNl": "Tomatenpuree",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, tin-140gr, tin-2500gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Tomato paste"
-                          },
-                          {
-                            "optionEn": "Diced tomatoes",
-                            "optionFr": "Tomates concassées",
-                            "optionNl": "Gehakte tomaten",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "Red Cross",
-                            "allowedUnits": "kg, gr, tin-240gr, tin-5000gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Diced tomatoes"
-                          },
-                          {
-                            "optionEn": "Garlic paste",
-                            "optionFr": "Purée d’ail",
-                            "optionNl": "Knoflookpasta",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "kg, gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Garlic paste"
-                          },
-                          {
-                            "optionEn": "Ginger paste",
-                            "optionFr": "Purée de gingembre",
-                            "optionNl": "Gemberpasta",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "kg, gr, Tbsp",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Ginger paste"
-                          },
-                          {
-                            "optionEn": "Cream",
-                            "optionFr": "Crème",
-                            "optionNl": "Room",
-                            "Category": "Tins/Pots",
-                            "Allergens": "Milk",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "L, cl",
-                            "dietaryApplicability": "Diabetic, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Cream"
-                          },
-                          {
-                            "optionEn": "Yellow curry",
-                            "optionFr": "Curry jaune",
-                            "optionNl": "Gele curry",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, Tbsp",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Yellow curry"
-                          },
-                          {
-                            "optionEn": "Coconut milk",
-                            "optionFr": "Lait de coco",
-                            "optionNl": "Kokosmelk",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "L, cl",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Coconut milk"
-                          },
-                          {
-                            "optionEn": "Oat milk",
-                            "optionFr": "Lait d’avoine",
-                            "optionNl": "Havermelk",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "Solucious",
-                            "allowedUnits": "L, cl",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Oat milk"
-                          },
-                          {
-                            "optionEn": "Peanut butter",
-                            "optionFr": "Beurre de cacahuète",
-                            "optionNl": "Pindakaas",
-                            "Category": "Tins/Pots",
-                            "Allergens": "Peanuts",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "kg, gr, Tbsp",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Peanut butter"
-                          },
-                          {
-                            "optionEn": "Green beans - tinned",
-                            "optionFr": "Haricots verts en conserve",
-                            "optionNl": "Sperziebonen – blik",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "Red Cross",
-                            "allowedUnits": "kg, gr, tin-220gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Green beans - tinned"
-                          },
-                          {
-                            "optionEn": "Carrots & peas - tinned",
-                            "optionFr": "Carottes & petits pois en conserve",
-                            "optionNl": "Wortelen & erwten – blik",
-                            "Category": "Tins/Pots",
-                            "Allergens": "None",
-                            "Suppliers": "Red Cross",
-                            "allowedUnits": "kg, gr, tin-530gr",
-                            "dietaryApplicability": "Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Carrots & peas - tinned"
-                          },
-                          {
-                            "optionEn": "Chickpeas - tinned",
-                            "optionFr": "Pois chiches en conserve",
-                            "optionNl": "Kikkererwten – blik",
-                            "Category": "Vegan protein",
-                            "Allergens": "None",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr, tin-2655gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Chickpeas - tinned"
-                          },
-                          {
-                            "optionEn": "Red beans - tinned",
-                            "optionFr": "Haricots rouges en conserve",
-                            "optionNl": "Rode bonen – blik",
-                            "Category": "Vegan protein",
-                            "Allergens": "None",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr, tin-2505gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Red beans - tinned"
-                          },
-                          {
-                            "optionEn": "White beans - tinned",
-                            "optionFr": "Haricots blancs en conserve",
-                            "optionNl": "Witte bonen – blik",
-                            "Category": "Vegan protein",
-                            "Allergens": "None",
-                            "Suppliers": "VDS;Solucious",
-                            "allowedUnits": "kg, gr, tin-2505gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "White beans - tinned"
-                          },
-                          {
-                            "optionEn": "Falafel",
-                            "optionFr": "Falafel",
-                            "optionNl": "Falafel",
-                            "Category": "Vegan protein",
-                            "Allergens": "None",
-                            "Suppliers": "VDS",
-                            "allowedUnits": "kg, gr, piece",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Falafel"
-                          },
-                          {
-                            "optionEn": "Mackerel - tinned",
-                            "optionFr": "Maquereau en conserve",
-                            "optionNl": "Makreel – blik",
-                            "Category": "Animal protein",
-                            "Allergens": "Fish",
-                            "Suppliers": "Solucious",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Standard, No-salt",
-                            "__ckOptionValue": "Mackerel - tinned"
-                          },
-                          {
-                            "optionEn": "Chickpeas - dry",
-                            "optionFr": "Pois chiches secs",
-                            "optionNl": "Kikkererwten – droog",
-                            "Category": "Vegan protein",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Chickpeas - dry"
-                          },
-                          {
-                            "optionEn": "Red lentils",
-                            "optionFr": "Lentilles corail",
-                            "optionNl": "Rode linzen",
-                            "Category": "Vegan protein",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Red lentils"
-                          },
-                          {
-                            "optionEn": "Green lentils",
-                            "optionFr": "Lentilles vertes",
-                            "optionNl": "Groene linzen",
-                            "Category": "Vegan protein",
-                            "Allergens": "None",
-                            "Suppliers": "Freshmed",
-                            "allowedUnits": "kg, gr",
-                            "dietaryApplicability": "Diabetic, Vegan, Vegetarian, Standard, No-salt",
-                            "__ckOptionValue": "Green lentils"
-                          }
-                        ],
                         "optionFilter": {
                           "dependsOn": "MEAL_TYPE",
                           "optionMapRef": {
-                            "ref": "REF:IngredientsOptions",
-                            "keyColumn": "dietaryApplicability",
-                            "lookupColumn": "optionEn",
+                            "ref": "REF:Ingredients Data",
+                            "keyColumn": "DIETARY_APPLICABILITY",
+                            "lookupColumn": "INGREDIENT_NAME",
                             "splitKey": true
                           },
-                          "optionMap": {
-                            "Diabetic": [
-                              "Chicken stripes",
-                              "Chicken cubes",
-                              "Fishsticks",
-                              "Greek yogurt",
-                              "Cheese",
-                              "Brown rice",
-                              "Basmati rice",
-                              "Whole wheat pasta",
-                              "Onion",
-                              "Potato",
-                              "Broccoli",
-                              "Aubergine",
-                              "Tomato",
-                              "Pepper",
-                              "Cauliflower",
-                              "Squash",
-                              "Butternut",
-                              "Pumpkin",
-                              "Pleurotte mushroom",
-                              "Spaghetti squash",
-                              "Courgette",
-                              "Leek",
-                              "Mushroom",
-                              "Parsnip",
-                              "Turnip",
-                              "Green beans - frozen",
-                              "Chinese mix",
-                              "Leek - frozen",
-                              "Mushroom - frozen",
-                              "Couscous vegetables mix",
-                              "Ratatouille mix",
-                              "Courgette - frozen",
-                              "Pumpkin - frozen",
-                              "Pepper - frozen",
-                              "Spinach - frozen",
-                              "Red Beans - frozen",
-                              "Onion - frozen",
-                              "Green peas - frozen",
-                              "Cauliflower - frozen",
-                              "Broccoli - frozen",
-                              "Broccoli mix - frozen",
-                              "Parsley - fresh",
-                              "Basil - fresh",
-                              "Dill - fresh",
-                              "Salt",
-                              "Curry madras",
-                              "Coriander powder",
-                              "Cayenne",
-                              "Turmeric",
-                              "Black pepper",
-                              "Paprika",
-                              "Cumin",
-                              "Cinnamon",
-                              "Mint - fresh",
-                              "Oregano -fresh",
-                              "Parsley - dried",
-                              "Dill - dried",
-                              "Mint - dried",
-                              "Oregano - dried",
-                              "Bay leaf",
-                              "Nutmeg",
-                              "Basil - dried",
-                              "Soy sauce",
-                              "Miso paste",
-                              "Sunflower oil",
-                              "Olive oil",
-                              "Vinegar",
-                              "Tomato pulp",
-                              "Tomato paste",
-                              "Diced tomatoes",
-                              "Garlic paste",
-                              "Ginger paste",
-                              "Cream",
-                              "Coconut milk",
-                              "Oat milk",
-                              "Green beans - tinned",
-                              "Chickpeas - tinned",
-                              "Red beans - tinned",
-                              "White beans - tinned",
-                              "Falafel",
-                              "Mackerel - tinned",
-                              "Chickpeas - dry",
-                              "Red lentils",
-                              "Green lentils"
-                            ],
-                            "Standard": [
-                              "Chicken stripes",
-                              "Chicken cubes",
-                              "Chicken wings",
-                              "Chicken nuggets",
-                              "Chicken tenders",
-                              "Cordon bleu",
-                              "Fishsticks",
-                              "Greek yogurt",
-                              "Cheese",
-                              "Rice",
-                              "Brown rice",
-                              "Basmati rice",
-                              "Couscous",
-                              "Bulgur",
-                              "Orzo",
-                              "Pasta",
-                              "Whole wheat pasta",
-                              "Onion",
-                              "Potato",
-                              "Broccoli",
-                              "Aubergine",
-                              "Carrot",
-                              "Tomato",
-                              "Pepper",
-                              "Cauliflower",
-                              "Squash",
-                              "Sweet potato",
-                              "Butternut",
-                              "Pumpkin",
-                              "Pleurotte mushroom",
-                              "Spaghetti squash",
-                              "Courgette",
-                              "Leek",
-                              "Mushroom",
-                              "Parsnip",
-                              "Turnip",
-                              "Green beans - frozen",
-                              "Chinese mix",
-                              "Corn - frozen",
-                              "Leek - frozen",
-                              "Mushroom - frozen",
-                              "Carrot - frozen",
-                              "Couscous vegetables mix",
-                              "Ratatouille mix",
-                              "Courgette - frozen",
-                              "Pumpkin - frozen",
-                              "Pepper - frozen",
-                              "Spinach - frozen",
-                              "Red Beans - frozen",
-                              "Onion - frozen",
-                              "Green peas - frozen",
-                              "Cauliflower - frozen",
-                              "Broccoli - frozen",
-                              "Broccoli mix - frozen",
-                              "Parsley - fresh",
-                              "Basil - fresh",
-                              "Dill - fresh",
-                              "Bouillon powder",
-                              "Salt",
-                              "Sugar",
-                              "Curry madras",
-                              "Coriander powder",
-                              "Cayenne",
-                              "Turmeric",
-                              "Black pepper",
-                              "Paprika",
-                              "Cumin",
-                              "Cinnamon",
-                              "Mint - fresh",
-                              "Oregano -fresh",
-                              "Parsley - dried",
-                              "Dill - dried",
-                              "Mint - dried",
-                              "Oregano - dried",
-                              "Bay leaf",
-                              "Nutmeg",
-                              "Basil - dried",
-                              "Soy sauce",
-                              "Miso paste",
-                              "Sunflower oil",
-                              "Olive oil",
-                              "Vinegar",
-                              "Tomato pulp",
-                              "Tomato paste",
-                              "Diced tomatoes",
-                              "Garlic paste",
-                              "Ginger paste",
-                              "Cream",
-                              "Yellow curry",
-                              "Coconut milk",
-                              "Oat milk",
-                              "Peanut butter",
-                              "Green beans - tinned",
-                              "Carrots & peas - tinned",
-                              "Chickpeas - tinned",
-                              "Red beans - tinned",
-                              "White beans - tinned",
-                              "Falafel",
-                              "Mackerel - tinned",
-                              "Chickpeas - dry",
-                              "Red lentils",
-                              "Green lentils"
-                            ],
-                            "No-salt": [
-                              "Chicken stripes",
-                              "Chicken cubes",
-                              "Chicken wings",
-                              "Chicken nuggets",
-                              "Chicken tenders",
-                              "Cordon bleu",
-                              "Fishsticks",
-                              "Greek yogurt",
-                              "Cheese",
-                              "Rice",
-                              "Brown rice",
-                              "Basmati rice",
-                              "Couscous",
-                              "Bulgur",
-                              "Orzo",
-                              "Pasta",
-                              "Whole wheat pasta",
-                              "Onion",
-                              "Potato",
-                              "Broccoli",
-                              "Aubergine",
-                              "Carrot",
-                              "Tomato",
-                              "Pepper",
-                              "Cauliflower",
-                              "Squash",
-                              "Sweet potato",
-                              "Butternut",
-                              "Pumpkin",
-                              "Pleurotte mushroom",
-                              "Spaghetti squash",
-                              "Courgette",
-                              "Leek",
-                              "Mushroom",
-                              "Parsnip",
-                              "Turnip",
-                              "Green beans - frozen",
-                              "Chinese mix",
-                              "Corn - frozen",
-                              "Leek - frozen",
-                              "Mushroom - frozen",
-                              "Carrot - frozen",
-                              "Couscous vegetables mix",
-                              "Ratatouille mix",
-                              "Courgette - frozen",
-                              "Pumpkin - frozen",
-                              "Pepper - frozen",
-                              "Spinach - frozen",
-                              "Red Beans - frozen",
-                              "Onion - frozen",
-                              "Green peas - frozen",
-                              "Cauliflower - frozen",
-                              "Broccoli - frozen",
-                              "Broccoli mix - frozen",
-                              "Parsley - fresh",
-                              "Basil - fresh",
-                              "Dill - fresh",
-                              "Bouillon powder",
-                              "Sugar",
-                              "Curry madras",
-                              "Coriander powder",
-                              "Cayenne",
-                              "Turmeric",
-                              "Black pepper",
-                              "Paprika",
-                              "Cumin",
-                              "Cinnamon",
-                              "Mint - fresh",
-                              "Oregano -fresh",
-                              "Parsley - dried",
-                              "Dill - dried",
-                              "Mint - dried",
-                              "Oregano - dried",
-                              "Bay leaf",
-                              "Nutmeg",
-                              "Basil - dried",
-                              "Soy sauce",
-                              "Miso paste",
-                              "Sunflower oil",
-                              "Olive oil",
-                              "Vinegar",
-                              "Tomato pulp",
-                              "Tomato paste",
-                              "Diced tomatoes",
-                              "Garlic paste",
-                              "Ginger paste",
-                              "Cream",
-                              "Yellow curry",
-                              "Coconut milk",
-                              "Oat milk",
-                              "Peanut butter",
-                              "Green beans - tinned",
-                              "Carrots & peas - tinned",
-                              "Chickpeas - tinned",
-                              "Red beans - tinned",
-                              "White beans - tinned",
-                              "Falafel",
-                              "Mackerel - tinned",
-                              "Chickpeas - dry",
-                              "Red lentils",
-                              "Green lentils"
-                            ],
-                            "Vegetarian": [
-                              "Greek yogurt",
-                              "Cheese",
-                              "Rice",
-                              "Brown rice",
-                              "Basmati rice",
-                              "Couscous",
-                              "Bulgur",
-                              "Orzo",
-                              "Pasta",
-                              "Whole wheat pasta",
-                              "Onion",
-                              "Potato",
-                              "Broccoli",
-                              "Aubergine",
-                              "Carrot",
-                              "Tomato",
-                              "Pepper",
-                              "Cauliflower",
-                              "Squash",
-                              "Sweet potato",
-                              "Butternut",
-                              "Pumpkin",
-                              "Pleurotte mushroom",
-                              "Spaghetti squash",
-                              "Courgette",
-                              "Leek",
-                              "Mushroom",
-                              "Parsnip",
-                              "Turnip",
-                              "Green beans - frozen",
-                              "Chinese mix",
-                              "Corn - frozen",
-                              "Leek - frozen",
-                              "Mushroom - frozen",
-                              "Carrot - frozen",
-                              "Couscous vegetables mix",
-                              "Ratatouille mix",
-                              "Courgette - frozen",
-                              "Pumpkin - frozen",
-                              "Pepper - frozen",
-                              "Spinach - frozen",
-                              "Red Beans - frozen",
-                              "Onion - frozen",
-                              "Green peas - frozen",
-                              "Cauliflower - frozen",
-                              "Broccoli - frozen",
-                              "Broccoli mix - frozen",
-                              "Parsley - fresh",
-                              "Basil - fresh",
-                              "Dill - fresh",
-                              "Bouillon powder",
-                              "Salt",
-                              "Sugar",
-                              "Curry madras",
-                              "Coriander powder",
-                              "Cayenne",
-                              "Turmeric",
-                              "Black pepper",
-                              "Paprika",
-                              "Cumin",
-                              "Cinnamon",
-                              "Mint - fresh",
-                              "Oregano -fresh",
-                              "Parsley - dried",
-                              "Dill - dried",
-                              "Mint - dried",
-                              "Oregano - dried",
-                              "Bay leaf",
-                              "Nutmeg",
-                              "Basil - dried",
-                              "Soy sauce",
-                              "Miso paste",
-                              "Sunflower oil",
-                              "Olive oil",
-                              "Vinegar",
-                              "Tomato pulp",
-                              "Tomato paste",
-                              "Diced tomatoes",
-                              "Garlic paste",
-                              "Ginger paste",
-                              "Cream",
-                              "Yellow curry",
-                              "Coconut milk",
-                              "Oat milk",
-                              "Peanut butter",
-                              "Green beans - tinned",
-                              "Carrots & peas - tinned",
-                              "Chickpeas - tinned",
-                              "Red beans - tinned",
-                              "White beans - tinned",
-                              "Falafel",
-                              "Chickpeas - dry",
-                              "Red lentils",
-                              "Green lentils"
-                            ],
-                            "Vegan": [
-                              "Rice",
-                              "Brown rice",
-                              "Basmati rice",
-                              "Couscous",
-                              "Bulgur",
-                              "Orzo",
-                              "Pasta",
-                              "Whole wheat pasta",
-                              "Onion",
-                              "Potato",
-                              "Broccoli",
-                              "Aubergine",
-                              "Carrot",
-                              "Tomato",
-                              "Pepper",
-                              "Cauliflower",
-                              "Squash",
-                              "Sweet potato",
-                              "Butternut",
-                              "Pumpkin",
-                              "Pleurotte mushroom",
-                              "Spaghetti squash",
-                              "Courgette",
-                              "Leek",
-                              "Mushroom",
-                              "Parsnip",
-                              "Turnip",
-                              "Green beans - frozen",
-                              "Chinese mix",
-                              "Corn - frozen",
-                              "Leek - frozen",
-                              "Mushroom - frozen",
-                              "Carrot - frozen",
-                              "Couscous vegetables mix",
-                              "Ratatouille mix",
-                              "Courgette - frozen",
-                              "Pumpkin - frozen",
-                              "Pepper - frozen",
-                              "Spinach - frozen",
-                              "Red Beans - frozen",
-                              "Onion - frozen",
-                              "Green peas - frozen",
-                              "Cauliflower - frozen",
-                              "Broccoli - frozen",
-                              "Broccoli mix - frozen",
-                              "Parsley - fresh",
-                              "Basil - fresh",
-                              "Dill - fresh",
-                              "Bouillon powder",
-                              "Salt",
-                              "Sugar",
-                              "Curry madras",
-                              "Coriander powder",
-                              "Cayenne",
-                              "Turmeric",
-                              "Black pepper",
-                              "Paprika",
-                              "Cumin",
-                              "Cinnamon",
-                              "Mint - fresh",
-                              "Oregano -fresh",
-                              "Parsley - dried",
-                              "Dill - dried",
-                              "Mint - dried",
-                              "Oregano - dried",
-                              "Bay leaf",
-                              "Nutmeg",
-                              "Basil - dried",
-                              "Soy sauce",
-                              "Miso paste",
-                              "Sunflower oil",
-                              "Olive oil",
-                              "Vinegar",
-                              "Tomato pulp",
-                              "Tomato paste",
-                              "Diced tomatoes",
-                              "Garlic paste",
-                              "Ginger paste",
-                              "Yellow curry",
-                              "Coconut milk",
-                              "Oat milk",
-                              "Peanut butter",
-                              "Green beans - tinned",
-                              "Carrots & peas - tinned",
-                              "Chickpeas - tinned",
-                              "Red beans - tinned",
-                              "White beans - tinned",
-                              "Falafel",
-                              "Chickpeas - dry",
-                              "Red lentils",
-                              "Green lentils"
-                            ]
-                          }
+                          "dataSourceField": "DIETARY_APPLICABILITY",
+                          "dataSourceDelimiter": ","
+                        },
+                        "dataSource": {
+                          "id": "Ingredients Data",
+                          "mode": "options",
+                          "statusAllowList": [
+                            "Active"
+                          ],
+                          "projection": [
+                            "INGREDIENT_NAME",
+                            "SUPPLIER",
+                            "DIETARY_APPLICABILITY",
+                            "ALLOWED_UNIT",
+                            "CATEGORY",
+                            "ALLERGEN",
+                            "STATUS"
+                          ]
                         }
                       },
                       {
@@ -17898,701 +13722,12 @@ export const BUNDLED_FORM_CONFIGS = [
                         "ui": {
                           "control": "select"
                         },
-                        "options": [
-                          "kg",
-                          "gr",
-                          "piece",
-                          "bag",
-                          "box",
-                          "crate",
-                          "sack",
-                          "bucket",
-                          "other",
-                          "Tsp",
-                          "Tbsp",
-                          "Ladle",
-                          "L",
-                          "ml",
-                          "cl",
-                          "Leaves",
-                          "Tin-240gr",
-                          "Tin-220gr",
-                          "Tin-2.5kg",
-                          "Tin-5kg",
-                          "Tin-530gr",
-                          "Tin-140gr",
-                          "Tin-250gr",
-                          "Tin-265gr"
-                        ],
-                        "optionsFr": [
-                          "kg",
-                          "gr",
-                          "pièce",
-                          "sac",
-                          "boîte",
-                          "caisse",
-                          "sac",
-                          "seau",
-                          "autre",
-                          "c.à.c",
-                          "c.à.s",
-                          "louche",
-                          "L",
-                          "ml",
-                          "cl",
-                          "feuilles",
-                          "Tin-240gr",
-                          "Tin-220gr",
-                          "Tin-2.5kg",
-                          "Tin-5kg",
-                          "Tin-530gr",
-                          "Tin-140gr",
-                          "Tin-250gr",
-                          "Tin-265gr"
-                        ],
-                        "optionsNl": [
-                          "kg",
-                          "gr",
-                          "stuk",
-                          "zak",
-                          "doos",
-                          "krat",
-                          "zak",
-                          "emmer",
-                          "anders",
-                          "tl",
-                          "el",
-                          "pollepel",
-                          "L",
-                          "ml",
-                          "cl",
-                          "bladeren",
-                          "Tin-240gr",
-                          "Tin-220gr",
-                          "Tin-2.5kg",
-                          "Tin-5kg",
-                          "Tin-530gr",
-                          "Tin-140gr",
-                          "Tin-250gr",
-                          "Tin-265gr"
-                        ],
-                        "optionsRaw": [
-                          {
-                            "optionEn": "kg",
-                            "optionFr": "kg",
-                            "optionNl": "kg",
-                            "__ckOptionValue": "kg"
-                          },
-                          {
-                            "optionEn": "gr",
-                            "optionFr": "gr",
-                            "optionNl": "gr",
-                            "__ckOptionValue": "gr"
-                          },
-                          {
-                            "optionEn": "piece",
-                            "optionFr": "pièce",
-                            "optionNl": "stuk",
-                            "__ckOptionValue": "piece"
-                          },
-                          {
-                            "optionEn": "bag",
-                            "optionFr": "sac",
-                            "optionNl": "zak",
-                            "__ckOptionValue": "bag"
-                          },
-                          {
-                            "optionEn": "box",
-                            "optionFr": "boîte",
-                            "optionNl": "doos",
-                            "__ckOptionValue": "box"
-                          },
-                          {
-                            "optionEn": "crate",
-                            "optionFr": "caisse",
-                            "optionNl": "krat",
-                            "__ckOptionValue": "crate"
-                          },
-                          {
-                            "optionEn": "sack",
-                            "optionFr": "sac",
-                            "optionNl": "zak",
-                            "__ckOptionValue": "sack"
-                          },
-                          {
-                            "optionEn": "bucket",
-                            "optionFr": "seau",
-                            "optionNl": "emmer",
-                            "__ckOptionValue": "bucket"
-                          },
-                          {
-                            "optionEn": "other",
-                            "optionFr": "autre",
-                            "optionNl": "anders",
-                            "__ckOptionValue": "other"
-                          },
-                          {
-                            "optionEn": "Tsp",
-                            "optionFr": "c.à.c",
-                            "optionNl": "tl",
-                            "__ckOptionValue": "Tsp"
-                          },
-                          {
-                            "optionEn": "Tbsp",
-                            "optionFr": "c.à.s",
-                            "optionNl": "el",
-                            "__ckOptionValue": "Tbsp"
-                          },
-                          {
-                            "optionEn": "Ladle",
-                            "optionFr": "louche",
-                            "optionNl": "pollepel",
-                            "__ckOptionValue": "Ladle"
-                          },
-                          {
-                            "optionEn": "L",
-                            "optionFr": "L",
-                            "optionNl": "L",
-                            "__ckOptionValue": "L"
-                          },
-                          {
-                            "optionEn": "ml",
-                            "optionFr": "ml",
-                            "optionNl": "ml",
-                            "__ckOptionValue": "ml"
-                          },
-                          {
-                            "optionEn": "cl",
-                            "optionFr": "cl",
-                            "optionNl": "cl",
-                            "__ckOptionValue": "cl"
-                          },
-                          {
-                            "optionEn": "Leaves",
-                            "optionFr": "feuilles",
-                            "optionNl": "bladeren",
-                            "__ckOptionValue": "Leaves"
-                          },
-                          {
-                            "optionEn": "Tin-240gr",
-                            "optionFr": "Tin-240gr",
-                            "optionNl": "Tin-240gr",
-                            "__ckOptionValue": "Tin-240gr"
-                          },
-                          {
-                            "optionEn": "Tin-220gr",
-                            "optionFr": "Tin-220gr",
-                            "optionNl": "Tin-220gr",
-                            "__ckOptionValue": "Tin-220gr"
-                          },
-                          {
-                            "optionEn": "Tin-2.5kg",
-                            "optionFr": "Tin-2.5kg",
-                            "optionNl": "Tin-2.5kg",
-                            "__ckOptionValue": "Tin-2.5kg"
-                          },
-                          {
-                            "optionEn": "Tin-5kg",
-                            "optionFr": "Tin-5kg",
-                            "optionNl": "Tin-5kg",
-                            "__ckOptionValue": "Tin-5kg"
-                          },
-                          {
-                            "optionEn": "Tin-530gr",
-                            "optionFr": "Tin-530gr",
-                            "optionNl": "Tin-530gr",
-                            "__ckOptionValue": "Tin-530gr"
-                          },
-                          {
-                            "optionEn": "Tin-140gr",
-                            "optionFr": "Tin-140gr",
-                            "optionNl": "Tin-140gr",
-                            "__ckOptionValue": "Tin-140gr"
-                          },
-                          {
-                            "optionEn": "Tin-250gr",
-                            "optionFr": "Tin-250gr",
-                            "optionNl": "Tin-250gr",
-                            "__ckOptionValue": "Tin-250gr"
-                          },
-                          {
-                            "optionEn": "Tin-265gr",
-                            "optionFr": "Tin-265gr",
-                            "optionNl": "Tin-265gr",
-                            "__ckOptionValue": "Tin-265gr"
-                          }
-                        ],
                         "optionFilter": {
                           "dependsOn": "ING",
                           "optionMapRef": {
-                            "ref": "REF:IngredientsOptions",
-                            "keyColumn": "optionEn",
-                            "lookupColumn": "allowedUnits"
-                          },
-                          "optionMap": {
-                            "Chicken stripes": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Chicken cubes": [
-                              "kg",
-                              "gr",
-                              "piece"
-                            ],
-                            "Chicken wings": [
-                              "kg",
-                              "gr",
-                              "piece"
-                            ],
-                            "Chicken nuggets": [
-                              "kg",
-                              "gr",
-                              "piece"
-                            ],
-                            "Chicken tenders": [
-                              "kg",
-                              "gr",
-                              "piece"
-                            ],
-                            "Cordon bleu": [
-                              "kg",
-                              "gr",
-                              "piece"
-                            ],
-                            "Fishsticks": [
-                              "kg",
-                              "gr",
-                              "piece"
-                            ],
-                            "Greek yogurt": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Cheese": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Rice": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Brown rice": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Basmati rice": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Couscous": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Bulgur": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Orzo": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Pasta": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Whole wheat pasta": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Onion": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Potato": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Broccoli": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Aubergine": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Carrot": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Tomato": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Pepper": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Cauliflower": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Squash": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Sweet potato": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Butternut": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Pumpkin": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Pleurotte mushroom": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Spaghetti squash": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Courgette": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Leek": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Mushroom": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Parsnip": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Turnip": [
-                              "kg",
-                              "gr",
-                              "bucket"
-                            ],
-                            "Green beans - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Chinese mix": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Corn - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Leek - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Mushroom - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Carrot - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Couscous vegetables mix": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Ratatouille mix": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Courgette - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Pumpkin - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Pepper - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Spinach - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Red Beans - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Onion - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Green peas - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Cauliflower - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Broccoli - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Broccoli mix - frozen": [
-                              "kg",
-                              "gr",
-                              "bag"
-                            ],
-                            "Parsley - fresh": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Basil - fresh": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Dill - fresh": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Bouillon powder": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Salt": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Sugar": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Curry madras": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Coriander powder": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Cayenne": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Turmeric": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Black pepper": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Paprika": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Cumin": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Cinnamon": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Mint - fresh": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Oregano -fresh": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Parsley - dried": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Dill - dried": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Mint - dried": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Oregano - dried": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Bay leaf": [
-                              "leaf"
-                            ],
-                            "Nutmeg": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Basil - dried": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Soy sauce": [
-                              "cl"
-                            ],
-                            "Miso paste": [
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Sunflower oil": [
-                              "cl"
-                            ],
-                            "Olive oil": [
-                              "cl"
-                            ],
-                            "Vinegar": [
-                              "cl"
-                            ],
-                            "Tomato pulp": [
-                              "kg",
-                              "gr",
-                              "tin-240gr",
-                              "tin-5000gr"
-                            ],
-                            "Tomato paste": [
-                              "kg",
-                              "gr",
-                              "tin-140gr",
-                              "tin-2500gr",
-                              "Tbsp"
-                            ],
-                            "Diced tomatoes": [
-                              "kg",
-                              "gr",
-                              "tin-240gr",
-                              "tin-5000gr"
-                            ],
-                            "Garlic paste": [
-                              "kg",
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Ginger paste": [
-                              "kg",
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Cream": [
-                              "L",
-                              "cl"
-                            ],
-                            "Yellow curry": [
-                              "kg",
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Coconut milk": [
-                              "L",
-                              "cl"
-                            ],
-                            "Oat milk": [
-                              "L",
-                              "cl"
-                            ],
-                            "Peanut butter": [
-                              "kg",
-                              "gr",
-                              "Tbsp"
-                            ],
-                            "Green beans - tinned": [
-                              "kg",
-                              "gr",
-                              "tin-220gr"
-                            ],
-                            "Carrots & peas - tinned": [
-                              "kg",
-                              "gr",
-                              "tin-530gr"
-                            ],
-                            "Chickpeas - tinned": [
-                              "kg",
-                              "gr",
-                              "tin-2655gr"
-                            ],
-                            "Red beans - tinned": [
-                              "kg",
-                              "gr",
-                              "tin-2505gr"
-                            ],
-                            "White beans - tinned": [
-                              "kg",
-                              "gr",
-                              "tin-2505gr"
-                            ],
-                            "Falafel": [
-                              "kg",
-                              "gr",
-                              "piece"
-                            ],
-                            "Mackerel - tinned": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Chickpeas - dry": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Red lentils": [
-                              "kg",
-                              "gr"
-                            ],
-                            "Green lentils": [
-                              "kg",
-                              "gr"
-                            ]
+                            "ref": "REF:Ingredients Data",
+                            "keyColumn": "INGREDIENT_NAME",
+                            "lookupColumn": "ALLOWED_UNIT"
                           }
                         },
                         "validationRules": [
@@ -18624,409 +13759,12 @@ export const BUNDLED_FORM_CONFIGS = [
                         "required": false,
                         "pair": "cat_all",
                         "readOnly": true,
-                        "options": [
-                          "Fresh vegetables",
-                          "Dry carbohydrates",
-                          "Vegan protein",
-                          "Tins/Pots",
-                          "Dairy",
-                          "Animal protein Halal",
-                          "Frozen vegetables",
-                          "Spices",
-                          "Oils"
-                        ],
-                        "optionsFr": [
-                          "Légumes frais",
-                          "Féculents secs",
-                          "Protéines végétales",
-                          "Conserves / bocaux",
-                          "Produits laitiers",
-                          "Protéines animales Halal",
-                          "Légumes surgelés",
-                          "Épices",
-                          "Huiles"
-                        ],
-                        "optionsNl": [
-                          "Verse groenten",
-                          "Droge zetmeelproducten",
-                          "Plantaardige eiwitten",
-                          "Blik / potten",
-                          "Zuivel",
-                          "Dierlijke eiwitten Halal",
-                          "Diepvriesgroenten",
-                          "Kruiden",
-                          "Oliën"
-                        ],
-                        "optionsRaw": [
-                          {
-                            "en": "Fresh vegetables",
-                            "fr": "Légumes frais",
-                            "nl": "Verse groenten",
-                            "__ckOptionValue": "Fresh vegetables"
-                          },
-                          {
-                            "en": "Dry carbohydrates",
-                            "fr": "Féculents secs",
-                            "nl": "Droge zetmeelproducten",
-                            "__ckOptionValue": "Dry carbohydrates"
-                          },
-                          {
-                            "en": "Vegan protein",
-                            "fr": "Protéines végétales",
-                            "nl": "Plantaardige eiwitten",
-                            "__ckOptionValue": "Vegan protein"
-                          },
-                          {
-                            "en": "Tins/Pots",
-                            "fr": "Conserves / bocaux",
-                            "nl": "Blik / potten",
-                            "__ckOptionValue": "Tins/Pots"
-                          },
-                          {
-                            "en": "Dairy",
-                            "fr": "Produits laitiers",
-                            "nl": "Zuivel",
-                            "__ckOptionValue": "Dairy"
-                          },
-                          {
-                            "en": "Animal protein Halal",
-                            "fr": "Protéines animales Halal",
-                            "nl": "Dierlijke eiwitten Halal",
-                            "__ckOptionValue": "Animal protein Halal"
-                          },
-                          {
-                            "en": "Frozen vegetables",
-                            "fr": "Légumes surgelés",
-                            "nl": "Diepvriesgroenten",
-                            "__ckOptionValue": "Frozen vegetables"
-                          },
-                          {
-                            "en": "Spices",
-                            "fr": "Épices",
-                            "nl": "Kruiden",
-                            "__ckOptionValue": "Spices"
-                          },
-                          {
-                            "en": "Oils",
-                            "fr": "Huiles",
-                            "nl": "Oliën",
-                            "__ckOptionValue": "Oils"
-                          }
-                        ],
                         "valueMap": {
                           "dependsOn": "ING",
-                          "optionMap": {
-                            "Chicken stripes": [
-                              "Animal protein Halal"
-                            ],
-                            "Chicken cubes": [
-                              "Animal protein Halal"
-                            ],
-                            "Chicken wings": [
-                              "Animal protein Halal"
-                            ],
-                            "Chicken nuggets": [
-                              "Animal protein Halal"
-                            ],
-                            "Chicken tenders": [
-                              "Animal protein Halal"
-                            ],
-                            "Cordon bleu": [
-                              "Animal protein Halal"
-                            ],
-                            "Fishsticks": [
-                              "Animal protein Halal"
-                            ],
-                            "Greek yogurt": [
-                              "Dairy"
-                            ],
-                            "Cheese": [
-                              "Dairy"
-                            ],
-                            "Rice": [
-                              "Dry carbohydrates"
-                            ],
-                            "Brown rice": [
-                              "Dry carbohydrates"
-                            ],
-                            "Basmati rice": [
-                              "Dry carbohydrates"
-                            ],
-                            "Couscous": [
-                              "Dry carbohydrates"
-                            ],
-                            "Bulgur": [
-                              "Dry carbohydrates"
-                            ],
-                            "Orzo": [
-                              "Dry carbohydrates"
-                            ],
-                            "Pasta": [
-                              "Dry carbohydrates"
-                            ],
-                            "Whole wheat pasta": [
-                              "Dry carbohydrates"
-                            ],
-                            "Onion": [
-                              "Fresh vegetables"
-                            ],
-                            "Potato": [
-                              "Fresh vegetables"
-                            ],
-                            "Broccoli": [
-                              "Fresh vegetables"
-                            ],
-                            "Aubergine": [
-                              "Fresh vegetables"
-                            ],
-                            "Carrot": [
-                              "Fresh vegetables"
-                            ],
-                            "Tomato": [
-                              "Fresh vegetables"
-                            ],
-                            "Pepper": [
-                              "Fresh vegetables"
-                            ],
-                            "Cauliflower": [
-                              "Fresh vegetables"
-                            ],
-                            "Squash": [
-                              "Fresh vegetables"
-                            ],
-                            "Sweet potato": [
-                              "Fresh vegetables"
-                            ],
-                            "Butternut": [
-                              "Fresh vegetables"
-                            ],
-                            "Pumpkin": [
-                              "Fresh vegetables"
-                            ],
-                            "Pleurotte mushroom": [
-                              "Fresh vegetables"
-                            ],
-                            "Spaghetti squash": [
-                              "Fresh vegetables"
-                            ],
-                            "Courgette": [
-                              "Fresh vegetables"
-                            ],
-                            "Leek": [
-                              "Fresh vegetables"
-                            ],
-                            "Mushroom": [
-                              "Fresh vegetables"
-                            ],
-                            "Parsnip": [
-                              "Fresh vegetables"
-                            ],
-                            "Turnip": [
-                              "Fresh vegetables"
-                            ],
-                            "Green beans - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Chinese mix": [
-                              "Frozen vegetables"
-                            ],
-                            "Corn - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Leek - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Mushroom - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Carrot - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Couscous vegetables mix": [
-                              "Frozen vegetables"
-                            ],
-                            "Ratatouille mix": [
-                              "Frozen vegetables"
-                            ],
-                            "Courgette - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Pumpkin - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Pepper - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Spinach - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Red Beans - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Onion - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Green peas - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Cauliflower - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Broccoli - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Broccoli mix - frozen": [
-                              "Frozen vegetables"
-                            ],
-                            "Parsley - fresh": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Basil - fresh": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Dill - fresh": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Bouillon powder": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Salt": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Sugar": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Curry madras": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Coriander powder": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Cayenne": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Turmeric": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Black pepper": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Paprika": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Cumin": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Cinnamon": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Mint - fresh": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Oregano -fresh": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Parsley - dried": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Dill - dried": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Mint - dried": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Oregano - dried": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Bay leaf": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Nutmeg": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Basil - dried": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Soy sauce": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Miso paste": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Sunflower oil": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Olive oil": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Vinegar": [
-                              "Herbs - spices - condiments"
-                            ],
-                            "Tomato pulp": [
-                              "Tins/Pots"
-                            ],
-                            "Tomato paste": [
-                              "Tins/Pots"
-                            ],
-                            "Diced tomatoes": [
-                              "Tins/Pots"
-                            ],
-                            "Garlic paste": [
-                              "Tins/Pots"
-                            ],
-                            "Ginger paste": [
-                              "Tins/Pots"
-                            ],
-                            "Cream": [
-                              "Tins/Pots"
-                            ],
-                            "Yellow curry": [
-                              "Tins/Pots"
-                            ],
-                            "Coconut milk": [
-                              "Tins/Pots"
-                            ],
-                            "Oat milk": [
-                              "Tins/Pots"
-                            ],
-                            "Peanut butter": [
-                              "Tins/Pots"
-                            ],
-                            "Green beans - tinned": [
-                              "Tins/Pots"
-                            ],
-                            "Carrots & peas - tinned": [
-                              "Tins/Pots"
-                            ],
-                            "Chickpeas - tinned": [
-                              "Vegan protein"
-                            ],
-                            "Red beans - tinned": [
-                              "Vegan protein"
-                            ],
-                            "White beans - tinned": [
-                              "Vegan protein"
-                            ],
-                            "Falafel": [
-                              "Vegan protein"
-                            ],
-                            "Mackerel - tinned": [
-                              "Animal protein"
-                            ],
-                            "Chickpeas - dry": [
-                              "Vegan protein"
-                            ],
-                            "Red lentils": [
-                              "Vegan protein"
-                            ],
-                            "Green lentils": [
-                              "Vegan protein"
-                            ]
-                          },
                           "optionMapRef": {
-                            "ref": "REF:IngredientsOptions",
-                            "keyColumn": "optionEn",
-                            "lookupColumn": "Category"
+                            "ref": "REF:Ingredients Data",
+                            "keyColumn": "INGREDIENT_NAME",
+                            "lookupColumn": "CATEGORY"
                           }
                         }
                       },
@@ -19039,376 +13777,12 @@ export const BUNDLED_FORM_CONFIGS = [
                         "required": false,
                         "pair": "cat_all",
                         "readOnly": true,
-                        "options": [
-                          "None",
-                          "Gluten",
-                          "Milk",
-                          "Peanuts",
-                          "Soy"
-                        ],
-                        "optionsFr": [
-                          "Aucun allergène",
-                          "Gluten_fr",
-                          "Lait",
-                          "Arachides",
-                          "Soja"
-                        ],
-                        "optionsNl": [
-                          "Geen allergeen",
-                          "Gluten_nl",
-                          "Melk",
-                          "Pinda's",
-                          "Soja"
-                        ],
-                        "optionsRaw": [
-                          {
-                            "optionEn": "None",
-                            "optionFr": "Aucun allergène",
-                            "optionNl": "Geen allergeen",
-                            "__ckOptionValue": "None"
-                          },
-                          {
-                            "optionEn": "Gluten",
-                            "optionFr": "Gluten_fr",
-                            "optionNl": "Gluten_nl",
-                            "__ckOptionValue": "Gluten"
-                          },
-                          {
-                            "optionEn": "Milk",
-                            "optionFr": "Lait",
-                            "optionNl": "Melk",
-                            "__ckOptionValue": "Milk"
-                          },
-                          {
-                            "optionEn": "Peanuts",
-                            "optionFr": "Arachides",
-                            "optionNl": "Pinda's",
-                            "__ckOptionValue": "Peanuts"
-                          },
-                          {
-                            "optionEn": "Soy",
-                            "optionFr": "Soja",
-                            "optionNl": "Soja",
-                            "__ckOptionValue": "Soy"
-                          }
-                        ],
                         "valueMap": {
                           "dependsOn": "ING",
-                          "optionMap": {
-                            "Chicken stripes": [
-                              "None"
-                            ],
-                            "Chicken cubes": [
-                              "None"
-                            ],
-                            "Chicken wings": [
-                              "Gluten"
-                            ],
-                            "Chicken nuggets": [
-                              "Gluten"
-                            ],
-                            "Chicken tenders": [
-                              "Gluten"
-                            ],
-                            "Cordon bleu": [
-                              "Gluten",
-                              "Milk",
-                              "Egg"
-                            ],
-                            "Fishsticks": [
-                              "Gluten",
-                              "Fish"
-                            ],
-                            "Greek yogurt": [
-                              "Milk"
-                            ],
-                            "Cheese": [
-                              "Milk"
-                            ],
-                            "Rice": [
-                              "None"
-                            ],
-                            "Brown rice": [
-                              "None"
-                            ],
-                            "Basmati rice": [
-                              "None"
-                            ],
-                            "Couscous": [
-                              "Gluten"
-                            ],
-                            "Bulgur": [
-                              "Gluten"
-                            ],
-                            "Orzo": [
-                              "Gluten"
-                            ],
-                            "Pasta": [
-                              "Gluten"
-                            ],
-                            "Whole wheat pasta": [
-                              "Gluten"
-                            ],
-                            "Onion": [
-                              "None"
-                            ],
-                            "Potato": [
-                              "None"
-                            ],
-                            "Broccoli": [
-                              "None"
-                            ],
-                            "Aubergine": [
-                              "None"
-                            ],
-                            "Carrot": [
-                              "None"
-                            ],
-                            "Tomato": [
-                              "None"
-                            ],
-                            "Pepper": [
-                              "None"
-                            ],
-                            "Cauliflower": [
-                              "None"
-                            ],
-                            "Squash": [
-                              "None"
-                            ],
-                            "Sweet potato": [
-                              "None"
-                            ],
-                            "Butternut": [
-                              "None"
-                            ],
-                            "Pumpkin": [
-                              "None"
-                            ],
-                            "Pleurotte mushroom": [
-                              "None"
-                            ],
-                            "Spaghetti squash": [
-                              "None"
-                            ],
-                            "Courgette": [
-                              "None"
-                            ],
-                            "Leek": [
-                              "None"
-                            ],
-                            "Mushroom": [
-                              "None"
-                            ],
-                            "Parsnip": [
-                              "None"
-                            ],
-                            "Turnip": [
-                              "None"
-                            ],
-                            "Green beans - frozen": [
-                              "None"
-                            ],
-                            "Chinese mix": [
-                              "None"
-                            ],
-                            "Corn - frozen": [
-                              "None"
-                            ],
-                            "Leek - frozen": [
-                              "None"
-                            ],
-                            "Mushroom - frozen": [
-                              "None"
-                            ],
-                            "Carrot - frozen": [
-                              "None"
-                            ],
-                            "Couscous vegetables mix": [
-                              "None"
-                            ],
-                            "Ratatouille mix": [
-                              "None"
-                            ],
-                            "Courgette - frozen": [
-                              "None"
-                            ],
-                            "Pumpkin - frozen": [
-                              "None"
-                            ],
-                            "Pepper - frozen": [
-                              "None"
-                            ],
-                            "Spinach - frozen": [
-                              "None"
-                            ],
-                            "Red Beans - frozen": [
-                              "None"
-                            ],
-                            "Onion - frozen": [
-                              "None"
-                            ],
-                            "Green peas - frozen": [
-                              "None"
-                            ],
-                            "Cauliflower - frozen": [
-                              "None"
-                            ],
-                            "Broccoli - frozen": [
-                              "None"
-                            ],
-                            "Broccoli mix - frozen": [
-                              "None"
-                            ],
-                            "Parsley - fresh": [
-                              "None"
-                            ],
-                            "Basil - fresh": [
-                              "None"
-                            ],
-                            "Dill - fresh": [
-                              "None"
-                            ],
-                            "Bouillon powder": [
-                              "Soy"
-                            ],
-                            "Salt": [
-                              "None"
-                            ],
-                            "Sugar": [
-                              "None"
-                            ],
-                            "Curry madras": [
-                              "None"
-                            ],
-                            "Coriander powder": [
-                              "None"
-                            ],
-                            "Cayenne": [
-                              "None"
-                            ],
-                            "Turmeric": [
-                              "None"
-                            ],
-                            "Black pepper": [
-                              "None"
-                            ],
-                            "Paprika": [
-                              "None"
-                            ],
-                            "Cumin": [
-                              "None"
-                            ],
-                            "Cinnamon": [
-                              "None"
-                            ],
-                            "Mint - fresh": [
-                              "None"
-                            ],
-                            "Oregano -fresh": [
-                              "None"
-                            ],
-                            "Parsley - dried": [
-                              "None"
-                            ],
-                            "Dill - dried": [
-                              "None"
-                            ],
-                            "Mint - dried": [
-                              "None"
-                            ],
-                            "Oregano - dried": [
-                              "None"
-                            ],
-                            "Bay leaf": [
-                              "None"
-                            ],
-                            "Nutmeg": [
-                              "None"
-                            ],
-                            "Basil - dried": [
-                              "None"
-                            ],
-                            "Soy sauce": [
-                              "Soy"
-                            ],
-                            "Miso paste": [
-                              "Soy"
-                            ],
-                            "Sunflower oil": [
-                              "None"
-                            ],
-                            "Olive oil": [
-                              "None"
-                            ],
-                            "Vinegar": [
-                              "None"
-                            ],
-                            "Tomato pulp": [
-                              "None"
-                            ],
-                            "Tomato paste": [
-                              "None"
-                            ],
-                            "Diced tomatoes": [
-                              "None"
-                            ],
-                            "Garlic paste": [
-                              "None"
-                            ],
-                            "Ginger paste": [
-                              "None"
-                            ],
-                            "Cream": [
-                              "Milk"
-                            ],
-                            "Yellow curry": [
-                              "None"
-                            ],
-                            "Coconut milk": [
-                              "None"
-                            ],
-                            "Oat milk": [
-                              "None"
-                            ],
-                            "Peanut butter": [
-                              "Peanuts"
-                            ],
-                            "Green beans - tinned": [
-                              "None"
-                            ],
-                            "Carrots & peas - tinned": [
-                              "None"
-                            ],
-                            "Chickpeas - tinned": [
-                              "None"
-                            ],
-                            "Red beans - tinned": [
-                              "None"
-                            ],
-                            "White beans - tinned": [
-                              "None"
-                            ],
-                            "Falafel": [
-                              "None"
-                            ],
-                            "Mackerel - tinned": [
-                              "Fish"
-                            ],
-                            "Chickpeas - dry": [
-                              "None"
-                            ],
-                            "Red lentils": [
-                              "None"
-                            ],
-                            "Green lentils": [
-                              "None"
-                            ]
-                          },
                           "optionMapRef": {
-                            "ref": "REF:IngredientsOptions",
-                            "keyColumn": "optionEn",
-                            "lookupColumn": "Allergens"
+                            "ref": "REF:Ingredients Data",
+                            "keyColumn": "INGREDIENT_NAME",
+                            "lookupColumn": "ALLERGEN"
                           }
                         }
                       }
@@ -20076,9 +14450,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "cases": [
               {
                 "text": {
-                  "en": "Edit",
-                  "fr": "Modifier",
-                  "nl": "Bewerken"
+                  "en": "Warning",
+                  "fr": "Avertissement",
+                  "nl": "Waarschuwing"
                 },
                 "when": {
                   "all": [
@@ -20088,21 +14462,22 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     {
                       "fieldId": "MP_PREP_DATE",
-                      "isToday": true
+                      "isInPast": true
                     }
                   ]
                 },
-                "style": "link",
-                "icon": "edit",
+                "style": "warning",
+                "icon": "warning",
                 "hideText": true,
-                "openView": "form"
+                "openView": "summary"
               },
               {
                 "text": {
-                  "en": "View",
-                  "fr": "Voir",
-                  "nl": "Bekijken"
+                  "en": "Actions",
+                  "fr": "Actions",
+                  "nl": "Acties"
                 },
+                "hideText": true,
                 "when": {
                   "all": [
                     {
@@ -20110,15 +14485,43 @@ export const BUNDLED_FORM_CONFIGS = [
                       "notEquals": "Closed"
                     },
                     {
-                      "fieldId": "MP_PREP_DATE",
-                      "isNotToday": true
+                      "any": [
+                        {
+                          "fieldId": "MP_PREP_DATE",
+                          "isToday": true
+                        },
+                        {
+                          "fieldId": "MP_PREP_DATE",
+                          "isInFuture": true
+                        }
+                      ]
                     }
                   ]
                 },
-                "style": "link",
-                "icon": "view",
-                "hideText": true,
-                "openView": "summary"
+                "actions": [
+                  {
+                    "text": {
+                      "en": "View",
+                      "fr": "Voir",
+                      "nl": "Bekijken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "view",
+                    "openView": "summary"
+                  },
+                  {
+                    "text": {
+                      "en": "Edit",
+                      "fr": "Modifier",
+                      "nl": "Bewerken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "edit",
+                    "openView": "form"
+                  }
+                ]
               },
               {
                 "text": {
@@ -20142,17 +14545,6 @@ export const BUNDLED_FORM_CONFIGS = [
                     "style": "link",
                     "icon": "view",
                     "openView": "summary"
-                  },
-                  {
-                    "text": {
-                      "en": "Copy",
-                      "fr": "Copier",
-                      "nl": "Kopieren"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "copy",
-                    "openView": "copy"
                   }
                 ]
               }
@@ -20226,11 +14618,11 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
-            "icon": "copy",
+            "icon": "warning",
             "text": {
-              "en": "Copy order information",
-              "fr": "Copier les informations de commande",
-              "nl": "Kopieer bestelinformatie"
+              "en": "Past record incomplete or missing",
+              "fr": "Enregistrement passé incomplet ou manquant",
+              "nl": "Vorige record onvolledig of ontbrekend"
             }
           }
         ],
@@ -20425,13 +14817,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "en": "Cancel — Continue editing"
               },
               "showCancel": true,
-              "showCloseButton": true,
+              "showCloseButton": false,
               "dismissOnBackdrop": false,
               "deleteRecordOnConfirm": true,
               "primaryAction": "cancel"
             }
           },
           "gates": {
+            "edit": [
+              {
+                "id": "ck-70.summary.pastNotClosed.hideEdit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "fieldId": "MP_PREP_DATE",
+                      "isInPast": true
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ],
             "submit": [
               {
                 "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
@@ -20522,6 +14938,11 @@ export const BUNDLED_FORM_CONFIGS = [
             ]
           }
         }
+      },
+      "summaryButtonLabel": {
+        "en": "Summary",
+        "fr": "Summary",
+        "nl": "Summary"
       },
       "appHeader": {
         "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
@@ -20688,10 +15109,19 @@ export const BUNDLED_FORM_CONFIGS = [
                       "match": "any",
                       "rowFilter": {
                         "includeWhen": {
-                          "fieldId": "PREP_TYPE",
-                          "equals": [
-                            "Entire dish",
-                            "Part dish"
+                          "any": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Entire dish",
+                                "Part dish",
+                                ""
+                              ]
+                            },
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "isEmpty": true
+                            }
                           ]
                         }
                       }
@@ -22040,7 +16470,6 @@ export const BUNDLED_FORM_CONFIGS = [
       "listViewPageSize": 5,
       "listViewPaginationControlsEnabled": true,
       "listViewHeaderSortEnabled": false,
-      "listViewHideHeaderRow": false,
       "listViewMetaColumns": [],
       "listViewColumns": [
         {
@@ -22054,75 +16483,31 @@ export const BUNDLED_FORM_CONFIGS = [
           "cases": [
             {
               "text": {
-                "en": "Actions",
-                "fr": "Actions",
-                "nl": "Acties"
+                "en": "Edit",
+                "fr": "Modifier",
+                "nl": "Bewerken"
               },
-              "hideText": true,
               "when": {
                 "fieldId": "status",
                 "notEquals": "Active"
               },
-              "actions": [
-                {
-                  "text": {
-                    "en": "Edit",
-                    "fr": "Modifier",
-                    "nl": "Bewerken"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "edit",
-                  "openView": "form"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
-                }
-              ]
+              "style": "link",
+              "icon": "edit",
+              "hideText": true
             },
             {
               "text": {
-                "en": "Actions",
-                "fr": "Actions",
-                "nl": "Acties"
+                "en": "View",
+                "fr": "Voir",
+                "nl": "Bekijken"
               },
-              "hideText": true,
               "when": {
                 "fieldId": "status",
                 "equals": "Active"
               },
-              "actions": [
-                {
-                  "text": {
-                    "en": "View",
-                    "fr": "Voir",
-                    "nl": "Bekijken"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "view",
-                  "openView": "summary"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
-                }
-              ]
+              "style": "link",
+              "icon": "view",
+              "hideText": true
             }
           ]
         },
@@ -22145,14 +16530,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "all": [
                   {
                     "fieldId": "status",
-                    "equals": "__never__"
+                    "notEquals": "fish"
                   }
                 ]
               },
               "style": "link",
               "icon": "copy",
-              "openView": "copy",
-              "hideText": true
+              "hideText": true,
+              "openView": "copy"
             }
           ],
           "showIn": [
@@ -22179,7 +16564,6 @@ export const BUNDLED_FORM_CONFIGS = [
                 "notEquals": "Active"
               },
               "style": "link",
-              "icon": "lock",
               "openView": "submit"
             }
           ],
@@ -22207,7 +16591,6 @@ export const BUNDLED_FORM_CONFIGS = [
                 "equals": "Active"
               },
               "style": "link",
-              "icon": "edit",
               "openView": "button",
               "openButtonId": "RE_OPEN"
             }
@@ -22217,7 +16600,6 @@ export const BUNDLED_FORM_CONFIGS = [
           ]
         }
       ],
-      "listViewLegendColumns": 2,
       "listViewLegend": [
         {
           "icon": "edit",
@@ -22225,22 +16607,6 @@ export const BUNDLED_FORM_CONFIGS = [
             "en": "Edit",
             "fr": "Modifier",
             "nl": "Bewerken"
-          }
-        },
-        {
-          "icon": "view",
-          "text": {
-            "en": "View",
-            "fr": "Voir",
-            "nl": "Bekijken"
-          }
-        },
-        {
-          "icon": "copy",
-          "text": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
           }
         },
         {
@@ -22259,6 +16625,14 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         {
+          "icon": "view",
+          "text": {
+            "en": "View",
+            "fr": "Voir",
+            "nl": "Bekijken"
+          }
+        },
+        {
           "text": {
             "en": "usable for meal production",
             "fr": "utilisable pour la production de repas",
@@ -22271,6 +16645,14 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Actief"
             },
             "tone": "muted"
+          }
+        },
+        {
+          "icon": "copy",
+          "text": {
+            "en": "Copy",
+            "fr": "Copier",
+            "nl": "Kopieren"
           }
         },
         {
@@ -22289,6 +16671,12 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         }
       ],
+      "listViewLegendColumns": 2,
+      "listViewLegendColumnWidths": [
+        15,
+        85
+      ],
+      "listViewRowClickEnabled": false,
       "listViewSearch": {
         "mode": "text",
         "placeholder": {
@@ -22430,8 +16818,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "NL"
       ],
       "defaultLanguage": "EN",
-      "languageSelectorEnabled": true,
-      "listViewRowClickEnabled": false
+      "languageSelectorEnabled": true
     },
     "questions": [
       {
@@ -22819,6 +17206,11 @@ export const BUNDLED_FORM_CONFIGS = [
             "labelEn": "Search ingredients",
             "labelFr": "Rechercher des ingrédients",
             "labelNl": "Zoek ingrediënten",
+            "helperText": {
+              "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+              "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+              "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+            },
             "placeholder": {
               "en": "Search name, category, dietary, supplier or allergen",
               "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
@@ -23577,6 +17969,11 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Search ingredients",
               "labelFr": "Rechercher des ingrédients",
               "labelNl": "Zoek ingrediënten",
+              "helperText": {
+                "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+              },
               "placeholder": {
                 "en": "Search name, category, dietary, supplier or allergen",
                 "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
@@ -23928,75 +18325,31 @@ export const BUNDLED_FORM_CONFIGS = [
             "cases": [
               {
                 "text": {
-                  "en": "Actions",
-                  "fr": "Actions",
-                  "nl": "Acties"
+                  "en": "Edit",
+                  "fr": "Modifier",
+                  "nl": "Bewerken"
                 },
-                "hideText": true,
                 "when": {
                   "fieldId": "status",
                   "notEquals": "Active"
                 },
-                "actions": [
-                  {
-                    "text": {
-                      "en": "Edit",
-                      "fr": "Modifier",
-                      "nl": "Bewerken"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "edit",
-                    "openView": "form"
-                  },
-                  {
-                    "text": {
-                      "en": "Copy",
-                      "fr": "Copier",
-                      "nl": "Kopieren"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "copy",
-                    "openView": "copy"
-                  }
-                ]
+                "style": "link",
+                "icon": "edit",
+                "hideText": true
               },
               {
                 "text": {
-                  "en": "Actions",
-                  "fr": "Actions",
-                  "nl": "Acties"
+                  "en": "View",
+                  "fr": "Voir",
+                  "nl": "Bekijken"
                 },
-                "hideText": true,
                 "when": {
                   "fieldId": "status",
                   "equals": "Active"
                 },
-                "actions": [
-                  {
-                    "text": {
-                      "en": "View",
-                      "fr": "Voir",
-                      "nl": "Bekijken"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "view",
-                    "openView": "summary"
-                  },
-                  {
-                    "text": {
-                      "en": "Copy",
-                      "fr": "Copier",
-                      "nl": "Kopieren"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "copy",
-                    "openView": "copy"
-                  }
-                ]
+                "style": "link",
+                "icon": "view",
+                "hideText": true
               }
             ]
           },
@@ -24019,14 +18372,14 @@ export const BUNDLED_FORM_CONFIGS = [
                   "all": [
                     {
                       "fieldId": "status",
-                      "equals": "__never__"
+                      "notEquals": "fish"
                     }
                   ]
                 },
                 "style": "link",
                 "icon": "copy",
-                "openView": "copy",
-                "hideText": true
+                "hideText": true,
+                "openView": "copy"
               }
             ],
             "showIn": [
@@ -24053,7 +18406,6 @@ export const BUNDLED_FORM_CONFIGS = [
                   "notEquals": "Active"
                 },
                 "style": "link",
-                "icon": "lock",
                 "openView": "submit"
               }
             ],
@@ -24081,7 +18433,6 @@ export const BUNDLED_FORM_CONFIGS = [
                   "equals": "Active"
                 },
                 "style": "link",
-                "icon": "edit",
                 "openView": "button",
                 "openButtonId": "RE_OPEN"
               }
@@ -24125,22 +18476,6 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
-            "icon": "view",
-            "text": {
-              "en": "View",
-              "fr": "Voir",
-              "nl": "Bekijken"
-            }
-          },
-          {
-            "icon": "copy",
-            "text": {
-              "en": "Copy",
-              "fr": "Copier",
-              "nl": "Kopieren"
-            }
-          },
-          {
             "text": {
               "en": "being written, not usable",
               "fr": "en cours d'écriture, non utilisable",
@@ -24156,6 +18491,14 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
+            "icon": "view",
+            "text": {
+              "en": "View",
+              "fr": "Voir",
+              "nl": "Bekijken"
+            }
+          },
+          {
             "text": {
               "en": "usable for meal production",
               "fr": "utilisable pour la production de repas",
@@ -24168,6 +18511,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "nl": "Actief"
               },
               "tone": "muted"
+            }
+          },
+          {
+            "icon": "copy",
+            "text": {
+              "en": "Copy",
+              "fr": "Copier",
+              "nl": "Kopieren"
             }
           },
           {
@@ -24189,6 +18540,11 @@ export const BUNDLED_FORM_CONFIGS = [
         "pageSize": 5,
         "paginationControlsEnabled": true,
         "legendColumns": 2,
+        "legendColumnWidths": [
+          25,
+          75
+        ],
+        "rowClickEnabled": false,
         "search": {
           "mode": "text",
           "placeholder": {
@@ -24203,11 +18559,9 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         "headerSortEnabled": false,
-        "hideHeaderRow": false,
         "view": {
           "mode": "cards"
-        },
-        "rowClickEnabled": false
+        }
       },
       "dedupRules": [
         {

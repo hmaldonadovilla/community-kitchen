@@ -42,9 +42,14 @@ describe('when clause date comparisons', () => {
     expect(matchesWhenClause({ fieldId: 'D', isInPast: true } as any, ctx({ D: '2025-12-19T23:59:59' }))).toBe(true);
   });
 
+  it('parses DD/MM/YYYY values for comparisons', () => {
+    expect(matchesWhenClause({ fieldId: 'D', isInPast: true } as any, ctx({ D: '19/12/2025' }))).toBe(true);
+    expect(matchesWhenClause({ fieldId: 'D', isToday: true } as any, ctx({ D: '20/12/2025' }))).toBe(true);
+    expect(matchesWhenClause({ fieldId: 'D', isInFuture: true } as any, ctx({ D: '21/12/2025' }))).toBe(true);
+  });
+
   it('keeps date operators when normalizing when clauses from sheet JSON', () => {
     const normalized = (ConfigSheet as any).normalizeWhenClause({ fieldId: 'MP_PREP_DATE', isInFuture: true });
     expect(normalized).toEqual({ fieldId: 'MP_PREP_DATE', isInFuture: true });
   });
 });
-

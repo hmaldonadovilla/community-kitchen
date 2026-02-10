@@ -138,6 +138,7 @@ export class Dashboard {
       const listViewColumns = dashboardConfig?.listViewColumns;
       const listViewLegend = dashboardConfig?.listViewLegend;
       const listViewLegendColumns = dashboardConfig?.listViewLegendColumns;
+      const listViewLegendColumnWidths = dashboardConfig?.listViewLegendColumnWidths;
       const listViewSearch = dashboardConfig?.listViewSearch;
       const listViewView = dashboardConfig?.listViewView;
       const autoSave = dashboardConfig?.autoSave;
@@ -192,6 +193,7 @@ export class Dashboard {
           listViewColumns,
           listViewLegend,
           listViewLegendColumns,
+          listViewLegendColumnWidths,
           listViewSearch,
           listViewView,
           autoSave,
@@ -264,6 +266,7 @@ export class Dashboard {
     listViewColumns?: ListViewColumnConfig[];
     listViewLegend?: ListViewLegendItem[];
     listViewLegendColumns?: number;
+    listViewLegendColumnWidths?: [number, number];
     listViewSearch?: ListViewSearchConfig;
     listViewView?: ListViewViewConfig;
     autoSave?: AutoSaveConfig;
@@ -643,6 +646,15 @@ export class Dashboard {
       if (!Number.isFinite(n)) return undefined;
       return Math.max(1, Math.min(2, Math.round(n)));
     })();
+    const listViewLegendColumnWidthsRaw =
+      (parsed as any).listViewLegendColumnWidths !== undefined
+        ? (parsed as any).listViewLegendColumnWidths
+        : (parsed as any).legendColumnWidths !== undefined
+          ? (parsed as any).legendColumnWidths
+          : parsed.listView !== undefined && parsed.listView !== null && typeof parsed.listView === 'object'
+            ? ((parsed.listView as any).legendColumnWidths ?? (parsed.listView as any).legendWidths)
+            : undefined;
+    const listViewLegendColumnWidths = this.normalizeListViewLegendColumnWidths(listViewLegendColumnWidthsRaw);
 
     const listViewSearchRaw =
       parsed.listViewSearch !== undefined
@@ -1020,11 +1032,20 @@ export class Dashboard {
       submitValidationObj?.submitErrorMessage ??
       submitValidationObj?.topErrorMessage ??
       submitValidationObj?.errorMessage;
+    const submitValidationHideTopErrorRaw =
+      submitValidationObj?.hideSubmitTopErrorMessage ??
+      submitValidationObj?.hideTopErrorMessage ??
+      submitValidationObj?.hideSubmitTopError ??
+      submitValidationObj?.suppressTopErrorMessage;
+    const submitValidationHideTopError = normalizeBoolean(submitValidationHideTopErrorRaw);
     const submitValidation: SubmitValidationConfig | undefined =
-      submitValidationEnforceRaw === undefined && submitValidationMessageRaw === undefined
+      submitValidationEnforceRaw === undefined &&
+      submitValidationMessageRaw === undefined &&
+      submitValidationHideTopError === undefined
         ? undefined
         : {
             enforceFieldOrder: normalizeBoolean(submitValidationEnforceRaw),
+            hideSubmitTopErrorMessage: submitValidationHideTopError,
             submitTopErrorMessage: normalizeLocalized(submitValidationMessageRaw)
           };
     const submissionConfirmationRaw =
@@ -1180,6 +1201,7 @@ export class Dashboard {
       !listViewColumns?.length &&
       !listViewLegend?.length &&
       listViewLegendColumns === undefined &&
+      listViewLegendColumnWidths === undefined &&
       !listViewSearch &&
       !listViewView &&
       !autoSave &&
@@ -1229,6 +1251,7 @@ export class Dashboard {
       listViewColumns,
       listViewLegend,
       listViewLegendColumns,
+      listViewLegendColumnWidths,
       listViewSearch,
       listViewView,
       autoSave,
@@ -1856,6 +1879,36 @@ export class Dashboard {
     if (typeof value === 'boolean') return { enabled: value };
     if (typeof value !== 'object') return undefined;
     const cfg: AutoSaveConfig = {};
+    const normalizeStringList = (raw: any): string[] | undefined => {
+      if (raw === undefined || raw === null || raw === '') return undefined;
+      const list = Array.isArray(raw)
+        ? raw
+        : raw
+            .toString()
+            .split(',')
+            .map((entry: string) => entry.trim());
+      const items = list
+        .map((entry: any) => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+        .filter(Boolean);
+      if (!items.length) return undefined;
+      return Array.from(new Set(items));
+    };
+    const normalizeLocalized = (raw: any): LocalizedString | string | undefined => {
+      if (raw === undefined || raw === null) return undefined;
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof raw !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(raw).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        const trimmed = v.trim();
+        if (!trimmed) return;
+        out[k.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? (out as LocalizedString) : undefined;
+    };
     if ((value as any).enabled !== undefined) cfg.enabled = Boolean((value as any).enabled);
     if ((value as any).debounceMs !== undefined && (value as any).debounceMs !== null) {
       const n = Number((value as any).debounceMs);
@@ -1866,6 +1919,55 @@ export class Dashboard {
     if ((value as any).status !== undefined && (value as any).status !== null) {
       const s = (value as any).status.toString().trim();
       if (s) cfg.status = s;
+    }
+    const enableWhenFields = normalizeStringList(
+      (value as any).enableWhenFields !== undefined ? (value as any).enableWhenFields : (value as any).enableFields
+    );
+    if (enableWhenFields?.length) cfg.enableWhenFields = enableWhenFields;
+
+    const dedupTriggerFields = normalizeStringList(
+      (value as any).dedupTriggerFields !== undefined ? (value as any).dedupTriggerFields : (value as any).dedupFields
+    );
+    if (dedupTriggerFields?.length) cfg.dedupTriggerFields = dedupTriggerFields;
+
+    const dedupCheckDialogRaw =
+      (value as any).dedupCheckDialog !== undefined
+        ? (value as any).dedupCheckDialog
+        : (value as any).dedupProgressDialog !== undefined
+          ? (value as any).dedupProgressDialog
+          : undefined;
+    if (dedupCheckDialogRaw && typeof dedupCheckDialogRaw === 'object') {
+      const dialog: any = {};
+      if ((dedupCheckDialogRaw as any).enabled !== undefined) dialog.enabled = Boolean((dedupCheckDialogRaw as any).enabled);
+      const checkingTitle = normalizeLocalized((dedupCheckDialogRaw as any).checkingTitle);
+      const checkingMessage = normalizeLocalized((dedupCheckDialogRaw as any).checkingMessage);
+      const availableTitle = normalizeLocalized((dedupCheckDialogRaw as any).availableTitle);
+      const availableMessage = normalizeLocalized((dedupCheckDialogRaw as any).availableMessage);
+      const duplicateTitle = normalizeLocalized((dedupCheckDialogRaw as any).duplicateTitle);
+      const duplicateMessage = normalizeLocalized((dedupCheckDialogRaw as any).duplicateMessage);
+      if (checkingTitle !== undefined) dialog.checkingTitle = checkingTitle;
+      if (checkingMessage !== undefined) dialog.checkingMessage = checkingMessage;
+      if (availableTitle !== undefined) dialog.availableTitle = availableTitle;
+      if (availableMessage !== undefined) dialog.availableMessage = availableMessage;
+      if (duplicateTitle !== undefined) dialog.duplicateTitle = duplicateTitle;
+      if (duplicateMessage !== undefined) dialog.duplicateMessage = duplicateMessage;
+      const availableAutoCloseMsRaw =
+        (dedupCheckDialogRaw as any).availableAutoCloseMs !== undefined
+          ? (dedupCheckDialogRaw as any).availableAutoCloseMs
+          : (dedupCheckDialogRaw as any).successAutoCloseMs;
+      if (availableAutoCloseMsRaw !== undefined && availableAutoCloseMsRaw !== null) {
+        const n = Number(availableAutoCloseMsRaw);
+        if (Number.isFinite(n)) dialog.availableAutoCloseMs = Math.max(0, Math.min(15000, Math.floor(n)));
+      }
+      const duplicateAutoCloseMsRaw =
+        (dedupCheckDialogRaw as any).duplicateAutoCloseMs !== undefined
+          ? (dedupCheckDialogRaw as any).duplicateAutoCloseMs
+          : (dedupCheckDialogRaw as any).errorAutoCloseMs;
+      if (duplicateAutoCloseMsRaw !== undefined && duplicateAutoCloseMsRaw !== null) {
+        const n = Number(duplicateAutoCloseMsRaw);
+        if (Number.isFinite(n)) dialog.duplicateAutoCloseMs = Math.max(0, Math.min(15000, Math.floor(n)));
+      }
+      if (Object.keys(dialog).length) cfg.dedupCheckDialog = dialog;
     }
     return Object.keys(cfg).length ? cfg : undefined;
   }
@@ -2169,6 +2271,8 @@ export class Dashboard {
       if ((when as any).notEmpty !== undefined) out.notEmpty = Boolean((when as any).notEmpty);
       if ((when as any).isToday !== undefined) out.isToday = Boolean((when as any).isToday);
       if ((when as any).isNotToday !== undefined) out.isNotToday = Boolean((when as any).isNotToday);
+      if ((when as any).isInPast !== undefined) out.isInPast = Boolean((when as any).isInPast);
+      if ((when as any).isInFuture !== undefined) out.isInFuture = Boolean((when as any).isInFuture);
       return out;
     };
 
@@ -2378,6 +2482,47 @@ export class Dashboard {
       );
     });
     return items.length ? items : undefined;
+  }
+
+  private normalizeListViewLegendColumnWidths(value: any): [number, number] | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+
+    const toNumber = (raw: any): number | null => {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return n;
+    };
+
+    let firstRaw: any;
+    let secondRaw: any;
+
+    if (Array.isArray(value)) {
+      if (value.length < 2) return undefined;
+      [firstRaw, secondRaw] = value;
+    } else if (typeof value === 'string') {
+      const parts = value
+        .split(/[,:/|]/g)
+        .map(part => part.trim())
+        .filter(Boolean);
+      if (parts.length < 2) return undefined;
+      [firstRaw, secondRaw] = [parts[0], parts[1]];
+    } else if (typeof value === 'object') {
+      firstRaw = (value as any).first ?? (value as any).left ?? (value as any).col1 ?? (value as any).column1;
+      secondRaw = (value as any).second ?? (value as any).right ?? (value as any).col2 ?? (value as any).column2;
+      if (firstRaw === undefined || secondRaw === undefined) return undefined;
+    } else {
+      return undefined;
+    }
+
+    const first = toNumber(firstRaw);
+    const second = toNumber(secondRaw);
+    if (first === null || second === null) return undefined;
+    const total = first + second;
+    if (!(total > 0)) return undefined;
+
+    const normalizedFirst = Math.max(1, Math.min(99, Number(((first / total) * 100).toFixed(2))));
+    const normalizedSecond = Number((100 - normalizedFirst).toFixed(2));
+    return [normalizedFirst, normalizedSecond];
   }
 
   private normalizeListViewSearch(value: any): ListViewSearchConfig | undefined {

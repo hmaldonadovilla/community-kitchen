@@ -3,7 +3,7 @@ import React from 'react';
 /**
  * ConfirmDialogOverlay
  * --------------------
- * A reusable confirm/cancel modal dialog (backdrop can optionally dismiss).
+ * A reusable confirm/cancel modal dialog.
  *
  * Owner: WebForm UI (React)
  */
@@ -30,8 +30,8 @@ export const ConfirmDialogOverlay: React.FC<{
   primaryAction: primaryActionProp,
   showCancel = true,
   showConfirm = true,
-  dismissOnBackdrop = true,
-  showCloseButton = true,
+  dismissOnBackdrop = false,
+  showCloseButton = false,
   zIndex = 12020,
   onCancel,
   onConfirm
@@ -44,7 +44,7 @@ export const ConfirmDialogOverlay: React.FC<{
     overflowWrap: 'anywhere',
     wordBreak: 'break-word',
     textOverflow: 'clip',
-    textAlign: 'center',
+    textAlign: 'left',
     maxWidth: '100%',
     minWidth: 0,
     flex: '1 1 220px'
@@ -112,23 +112,33 @@ export const ConfirmDialogOverlay: React.FC<{
         boxSizing: 'border-box'
       }}
     >
-      <button
-        type="button"
-        aria-label="Close dialog"
-        title="Close"
-        onClick={dismissOnBackdrop && !busy ? () => void runGuarded(onCancel) : undefined}
-        aria-disabled={!dismissOnBackdrop || busy}
-        disabled={busy}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          border: 0,
-          padding: 0,
-          margin: 0,
-          background: 'transparent',
-          cursor: dismissOnBackdrop && !busy ? 'pointer' : 'default'
-        }}
-      />
+      {dismissOnBackdrop ? (
+        <button
+          type="button"
+          aria-label="Close dialog"
+          title="Close"
+          onClick={!busy ? () => void runGuarded(onCancel) : undefined}
+          disabled={busy}
+          aria-disabled={busy}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            border: 0,
+            padding: 0,
+            margin: 0,
+            background: 'transparent',
+            cursor: busy ? 'default' : 'pointer'
+          }}
+        />
+      ) : (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0
+          }}
+        />
+      )}
       <dialog
         open
         aria-label={title || 'Confirmation dialog'}

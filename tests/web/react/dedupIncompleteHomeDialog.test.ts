@@ -46,8 +46,8 @@ describe('dedupIncompleteHomeDialog', () => {
     expect(copy.cancelLabel).toBe('Cancel and continue editing');
     expect(copy.primaryAction).toBe('confirm');
     expect(copy.showCancel).toBe(true);
-    expect(copy.showCloseButton).toBe(true);
-    expect(copy.dismissOnBackdrop).toBe(true);
+    expect(copy.showCloseButton).toBe(false);
+    expect(copy.dismissOnBackdrop).toBe(false);
     expect(copy.deleteFailedMessage).toBe('Could not delete the current record. Please try again.');
   });
 

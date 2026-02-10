@@ -7,12 +7,13 @@ export const ValidationHeaderNotice: React.FC<{
   language: LangCode;
   errors: FormErrors;
   warnings: Array<{ message: string; fieldPath: string }>;
+  hideErrorBanner?: boolean;
   errorMessageOverride?: string;
   onDismiss: () => void;
   onNavigateToField: (fieldPath: string) => void;
-}> = ({ language, errors, warnings, errorMessageOverride, onDismiss, onNavigateToField }) => {
+}> = ({ language, errors, warnings, hideErrorBanner, errorMessageOverride, onDismiss, onNavigateToField }) => {
   const errorKeys = useMemo(() => Object.keys(errors || {}), [errors]);
-  const errorCount = errorKeys.length;
+  const errorCount = hideErrorBanner ? 0 : errorKeys.length;
   const warningCount = Array.isArray(warnings) ? warnings.length : 0;
 
   if (!errorCount && !warningCount) return null;
@@ -78,5 +79,4 @@ export const ValidationHeaderNotice: React.FC<{
     </div>
   );
 };
-
 

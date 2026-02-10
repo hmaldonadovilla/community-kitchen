@@ -88,6 +88,6 @@ describe('runSelectionEffectsForAncestors (blur-derived)', () => {
     expect(calls[0].value).toBe(7);
     expect(calls[0].opts?.lineItem?.groupId).toBe('MP_MEALS_REQUEST');
     expect(calls[0].opts?.lineItem?.rowId).toBe(rowId);
+    expect(calls[0].opts?.forceContextReset).not.toBe(true);
   });
 });
-
