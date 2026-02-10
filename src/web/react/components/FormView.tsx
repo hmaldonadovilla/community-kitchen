@@ -1409,6 +1409,7 @@ const FormView: React.FC<FormViewProps> = ({
         const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
         const presentation: 'groupEditor' | 'liftedRowFields' =
           presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
+        const parentFieldsScoped = (t as any).fields !== undefined && (t as any).fields !== null;
 
         const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
         const subIncludeRaw = subGroupsCfgPresent ? (t as any)?.subGroups?.include : undefined;
@@ -1420,8 +1421,9 @@ const FormView: React.FC<FormViewProps> = ({
         const filteredSubGroups = (() => {
           const subs = (lineCfg.subGroups || []) as any[];
           if (!subs.length) return subs;
-          // In guided steps, `liftedRowFields` should not validate subgroups unless explicitly configured.
-          if (!subGroupsCfgPresent && presentation === 'liftedRowFields') return [];
+          // In guided steps, subgroup validation should be explicit whenever the step scopes parent fields.
+          // This avoids blocking a step on subgroup fields that are not reachable from that step.
+          if (!subGroupsCfgPresent && (presentation === 'liftedRowFields' || parentFieldsScoped)) return [];
           const kept = allowedSubSet
             ? subs.filter(sub => {
                 const subId = resolveSubgroupKey(sub as any);
@@ -6241,6 +6243,12 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [onDiagnostic, parentScopedVisibilityTargets]);
 
+  const orderedEntryValidationDefinition = useMemo(() => {
+    if (!orderedEntryEnabled) return definition;
+    if (!guidedEnabled) return definition;
+    return buildGuidedStepDefinition(activeGuidedStepId) || definition;
+  }, [activeGuidedStepId, buildGuidedStepDefinition, definition, guidedEnabled, orderedEntryEnabled]);
+
   const lineItemVisibilityState = useMemo<Record<string, boolean>>(() => {
     if (!lineItemVisibilityTargets.length) return {};
     const next: Record<string, boolean> = {};
@@ -6268,10 +6276,10 @@ const FormView: React.FC<FormViewProps> = ({
 
   const orderedEntryErrors = useMemo(() => {
     if (!orderedEntryEnabled) return null;
-    if (!definition?.questions?.length) return null;
+    if (!orderedEntryValidationDefinition?.questions?.length) return null;
     try {
       return validateForm({
-        definition,
+        definition: orderedEntryValidationDefinition,
         language,
         values,
         lineItems,
@@ -6283,7 +6291,16 @@ const FormView: React.FC<FormViewProps> = ({
       onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
       return null;
     }
-  }, [collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, orderedEntryEnabled, values]);
+  }, [
+    collapsedRows,
+    collapsedSubgroups,
+    language,
+    lineItems,
+    onDiagnostic,
+    orderedEntryEnabled,
+    orderedEntryValidationDefinition,
+    values
+  ]);
 
   const orderedEntryValid = useMemo(() => {
     if (!orderedEntryEnabled) return true;
@@ -6293,7 +6310,7 @@ const FormView: React.FC<FormViewProps> = ({
   const firstOrderedEntryIssue = useMemo(() => {
     if (!orderedEntryEnabled) return null;
     return findFirstOrderedEntryIssue({
-      definition,
+      definition: orderedEntryValidationDefinition,
       language,
       values,
       lineItems,
@@ -6305,12 +6322,12 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [
     collapsedRows,
-    definition,
     getTopValueNoScan,
     language,
     lineItems,
     orderedEntryEnabled,
     orderedEntryErrors,
+    orderedEntryValidationDefinition,
     orderedEntryQuestions,
     resolveVisibilityValue,
     values
@@ -6349,7 +6366,7 @@ const FormView: React.FC<FormViewProps> = ({
     (target: OrderedEntryTarget, targetGroup?: WebQuestionDefinition) => {
       if (!orderedEntryEnabled) return null;
       return findOrderedEntryBlock({
-        definition,
+        definition: orderedEntryValidationDefinition,
         language,
         values,
         lineItems,
@@ -6364,12 +6381,12 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [
       collapsedRows,
-      definition,
       getTopValueNoScan,
       language,
       lineItems,
       orderedEntryErrors,
       orderedEntryEnabled,
+      orderedEntryValidationDefinition,
       orderedEntryQuestions,
       resolveVisibilityValue,
       values
@@ -6385,7 +6402,7 @@ const FormView: React.FC<FormViewProps> = ({
       let nextErrors: FormErrors = {};
       try {
         nextErrors = validateForm({
-          definition,
+          definition: orderedEntryValidationDefinition,
           language,
           values,
           lineItems,
@@ -6424,7 +6441,17 @@ const FormView: React.FC<FormViewProps> = ({
         missingFieldPath
       });
     },
-    [buildOrderedEntryErrors, collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, setErrors, values]
+    [
+      buildOrderedEntryErrors,
+      collapsedRows,
+      collapsedSubgroups,
+      language,
+      lineItems,
+      onDiagnostic,
+      orderedEntryValidationDefinition,
+      setErrors,
+      values
+    ]
   );
 
   useEffect(() => {
@@ -8814,6 +8841,14 @@ const FormView: React.FC<FormViewProps> = ({
             const subgroupInfo = parseSubgroupKey(prefix);
             if (subgroupInfo) {
               if (subgroupInfo.rootGroupId !== groupId) continue;
+              const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
+              const presentation: 'groupEditor' | 'liftedRowFields' =
+                presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
+              const parentFieldsScoped = (t as any).fields !== undefined && (t as any).fields !== null;
+              const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
+              // Match guided-step scoped validation semantics:
+              // when a step scopes parent fields (or uses liftedRowFields), subgroups are opt-in.
+              if (!subGroupsCfgPresent && (presentation === 'liftedRowFields' || parentFieldsScoped)) continue;
 
               const subTargetModeRaw = ((t.subGroups as any)?.displayMode || 'inherit').toString().trim().toLowerCase();
               const subStepModeRaw = stepSubGroupsDefaultMode ? stepSubGroupsDefaultMode.toString().trim().toLowerCase() : '';
