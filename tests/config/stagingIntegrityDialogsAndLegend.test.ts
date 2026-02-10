@@ -39,6 +39,8 @@ describe('staging integrity dialogs and list legend config', () => {
     expect(formColumnsRaw).toBeLessThanOrEqual(2);
     expect(defColumnsRaw).toBeGreaterThanOrEqual(1);
     expect(defColumnsRaw).toBeLessThanOrEqual(2);
+    expect(cfg.form?.listViewLegendColumnWidths).toEqual([25, 75]);
+    expect(cfg.definition?.listView?.legendColumnWidths).toEqual([25, 75]);
 
     const formActionCases = cfg.form?.listViewColumns?.find((col: any) => col?.fieldId === 'action')?.cases || [];
     const defActionCases = cfg.definition?.listView?.columns?.find((col: any) => col?.fieldId === 'action')?.cases || [];

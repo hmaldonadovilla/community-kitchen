@@ -138,6 +138,7 @@ export class Dashboard {
       const listViewColumns = dashboardConfig?.listViewColumns;
       const listViewLegend = dashboardConfig?.listViewLegend;
       const listViewLegendColumns = dashboardConfig?.listViewLegendColumns;
+      const listViewLegendColumnWidths = dashboardConfig?.listViewLegendColumnWidths;
       const listViewSearch = dashboardConfig?.listViewSearch;
       const listViewView = dashboardConfig?.listViewView;
       const autoSave = dashboardConfig?.autoSave;
@@ -192,6 +193,7 @@ export class Dashboard {
           listViewColumns,
           listViewLegend,
           listViewLegendColumns,
+          listViewLegendColumnWidths,
           listViewSearch,
           listViewView,
           autoSave,
@@ -264,6 +266,7 @@ export class Dashboard {
     listViewColumns?: ListViewColumnConfig[];
     listViewLegend?: ListViewLegendItem[];
     listViewLegendColumns?: number;
+    listViewLegendColumnWidths?: [number, number];
     listViewSearch?: ListViewSearchConfig;
     listViewView?: ListViewViewConfig;
     autoSave?: AutoSaveConfig;
@@ -643,6 +646,15 @@ export class Dashboard {
       if (!Number.isFinite(n)) return undefined;
       return Math.max(1, Math.min(2, Math.round(n)));
     })();
+    const listViewLegendColumnWidthsRaw =
+      (parsed as any).listViewLegendColumnWidths !== undefined
+        ? (parsed as any).listViewLegendColumnWidths
+        : (parsed as any).legendColumnWidths !== undefined
+          ? (parsed as any).legendColumnWidths
+          : parsed.listView !== undefined && parsed.listView !== null && typeof parsed.listView === 'object'
+            ? ((parsed.listView as any).legendColumnWidths ?? (parsed.listView as any).legendWidths)
+            : undefined;
+    const listViewLegendColumnWidths = this.normalizeListViewLegendColumnWidths(listViewLegendColumnWidthsRaw);
 
     const listViewSearchRaw =
       parsed.listViewSearch !== undefined
@@ -1189,6 +1201,7 @@ export class Dashboard {
       !listViewColumns?.length &&
       !listViewLegend?.length &&
       listViewLegendColumns === undefined &&
+      listViewLegendColumnWidths === undefined &&
       !listViewSearch &&
       !listViewView &&
       !autoSave &&
@@ -1238,6 +1251,7 @@ export class Dashboard {
       listViewColumns,
       listViewLegend,
       listViewLegendColumns,
+      listViewLegendColumnWidths,
       listViewSearch,
       listViewView,
       autoSave,
@@ -2468,6 +2482,47 @@ export class Dashboard {
       );
     });
     return items.length ? items : undefined;
+  }
+
+  private normalizeListViewLegendColumnWidths(value: any): [number, number] | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+
+    const toNumber = (raw: any): number | null => {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return n;
+    };
+
+    let firstRaw: any;
+    let secondRaw: any;
+
+    if (Array.isArray(value)) {
+      if (value.length < 2) return undefined;
+      [firstRaw, secondRaw] = value;
+    } else if (typeof value === 'string') {
+      const parts = value
+        .split(/[,:/|]/g)
+        .map(part => part.trim())
+        .filter(Boolean);
+      if (parts.length < 2) return undefined;
+      [firstRaw, secondRaw] = [parts[0], parts[1]];
+    } else if (typeof value === 'object') {
+      firstRaw = (value as any).first ?? (value as any).left ?? (value as any).col1 ?? (value as any).column1;
+      secondRaw = (value as any).second ?? (value as any).right ?? (value as any).col2 ?? (value as any).column2;
+      if (firstRaw === undefined || secondRaw === undefined) return undefined;
+    } else {
+      return undefined;
+    }
+
+    const first = toNumber(firstRaw);
+    const second = toNumber(secondRaw);
+    if (first === null || second === null) return undefined;
+    const total = first + second;
+    if (!(total > 0)) return undefined;
+
+    const normalizedFirst = Math.max(1, Math.min(99, Number(((first / total) * 100).toFixed(2))));
+    const normalizedSecond = Number((100 - normalizedFirst).toFixed(2));
+    return [normalizedFirst, normalizedSecond];
   }
 
   private normalizeListViewSearch(value: any): ListViewSearchConfig | undefined {

@@ -16610,22 +16610,6 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         {
-          "icon": "view",
-          "text": {
-            "en": "View",
-            "fr": "Voir",
-            "nl": "Bekijken"
-          }
-        },
-        {
-          "icon": "copy",
-          "text": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
-          }
-        },
-        {
           "text": {
             "en": "being written, not usable",
             "fr": "en cours d'écriture, non utilisable",
@@ -16641,6 +16625,14 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         {
+          "icon": "view",
+          "text": {
+            "en": "View",
+            "fr": "Voir",
+            "nl": "Bekijken"
+          }
+        },
+        {
           "text": {
             "en": "usable for meal production",
             "fr": "utilisable pour la production de repas",
@@ -16653,6 +16645,14 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Actief"
             },
             "tone": "muted"
+          }
+        },
+        {
+          "icon": "copy",
+          "text": {
+            "en": "Copy",
+            "fr": "Copier",
+            "nl": "Kopieren"
           }
         },
         {
@@ -16672,6 +16672,10 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       ],
       "listViewLegendColumns": 2,
+      "listViewLegendColumnWidths": [
+        25,
+        75
+      ],
       "listViewRowClickEnabled": false,
       "listViewSearch": {
         "mode": "text",
@@ -18472,22 +18476,6 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
-            "icon": "view",
-            "text": {
-              "en": "View",
-              "fr": "Voir",
-              "nl": "Bekijken"
-            }
-          },
-          {
-            "icon": "copy",
-            "text": {
-              "en": "Copy",
-              "fr": "Copier",
-              "nl": "Kopieren"
-            }
-          },
-          {
             "text": {
               "en": "being written, not usable",
               "fr": "en cours d'écriture, non utilisable",
@@ -18503,6 +18491,14 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
+            "icon": "view",
+            "text": {
+              "en": "View",
+              "fr": "Voir",
+              "nl": "Bekijken"
+            }
+          },
+          {
             "text": {
               "en": "usable for meal production",
               "fr": "utilisable pour la production de repas",
@@ -18515,6 +18511,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "nl": "Actief"
               },
               "tone": "muted"
+            }
+          },
+          {
+            "icon": "copy",
+            "text": {
+              "en": "Copy",
+              "fr": "Copier",
+              "nl": "Kopieren"
             }
           },
           {
@@ -18536,6 +18540,10 @@ export const BUNDLED_FORM_CONFIGS = [
         "pageSize": 5,
         "paginationControlsEnabled": true,
         "legendColumns": 2,
+        "legendColumnWidths": [
+          25,
+          75
+        ],
         "rowClickEnabled": false,
         "search": {
           "mode": "text",

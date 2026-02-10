@@ -106,6 +106,7 @@ export class DefinitionBuilder {
       form.listViewColumns,
       form.listViewLegend,
       form.listViewLegendColumns,
+      form.listViewLegendColumnWidths,
       form.listViewTitle,
       form.listViewDefaultSort,
       form.listViewPageSize,
@@ -515,6 +516,7 @@ export class DefinitionBuilder {
     dashboardColumns?: ListViewConfig['columns'],
     legend?: ListViewConfig['legend'],
     legendColumnsOverride?: ListViewConfig['legendColumns'],
+    legendColumnWidthsOverride?: ListViewConfig['legendColumnWidths'],
     title?: ListViewConfig['title'],
     defaultSortOverride?: ListViewConfig['defaultSort'],
     pageSizeOverride?: ListViewConfig['pageSize'],
@@ -567,6 +569,16 @@ export class DefinitionBuilder {
     if (legendColumnsOverride !== undefined) {
       const n = Number(legendColumnsOverride);
       if (Number.isFinite(n) && n > 0) out.legendColumns = Math.max(1, Math.min(2, Math.round(n)));
+    }
+    if (legendColumnWidthsOverride && Array.isArray(legendColumnWidthsOverride) && legendColumnWidthsOverride.length >= 2) {
+      const first = Number(legendColumnWidthsOverride[0]);
+      const second = Number(legendColumnWidthsOverride[1]);
+      if (Number.isFinite(first) && Number.isFinite(second) && first > 0 && second > 0) {
+        const total = first + second;
+        const normalizedFirst = Number(((first / total) * 100).toFixed(2));
+        const normalizedSecond = Number((100 - normalizedFirst).toFixed(2));
+        out.legendColumnWidths = [normalizedFirst, normalizedSecond] as [number, number];
+      }
     }
     if (pageSizeOverride && Number.isFinite(pageSizeOverride)) out.pageSize = pageSizeOverride;
     if (paginationControlsEnabledOverride !== undefined) out.paginationControlsEnabled = Boolean(paginationControlsEnabledOverride);

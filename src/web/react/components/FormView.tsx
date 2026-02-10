@@ -91,7 +91,7 @@ import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, applyValueMapsToLineRow, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
-import { findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
+import { findFirstOrderedEntryIssue, findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
 import { resolveRowFlowSegmentActionIds } from '../features/steps/domain/rowFlow';
 import {
   buildLineContextId,
@@ -838,6 +838,8 @@ const FormView: React.FC<FormViewProps> = ({
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
   const errorNavModeRef = useRef<'focus' | 'scroll'>('focus');
+  const errorNavAllowOverlayOpenRef = useRef(true);
+  const orderedEntryGuideFieldPathRef = useRef<string | null>(null);
   const overlayCloseValidateOnOpenRef = useRef<Record<string, boolean>>({});
   const choiceVariantLogRef = useRef<Record<string, string>>({});
   const choiceSearchLoggedRef = useRef<Set<string>>(new Set());
@@ -1892,6 +1894,7 @@ const FormView: React.FC<FormViewProps> = ({
             requiredMode: 'stepComplete'
           });
           if (errorCount) {
+            errorNavAllowOverlayOpenRef.current = true;
             errorNavRequestRef.current += 1;
             errorNavModeRef.current = 'focus';
             onDiagnostic?.('validation.navigate.request', {
@@ -1935,6 +1938,7 @@ const FormView: React.FC<FormViewProps> = ({
             errorCount: Object.keys(nextErrors).length,
             requiredMode: 'configured'
           });
+          errorNavAllowOverlayOpenRef.current = true;
           errorNavRequestRef.current += 1;
           errorNavModeRef.current = 'focus';
           onDiagnostic?.('validation.navigate.request', {
@@ -1970,6 +1974,7 @@ const FormView: React.FC<FormViewProps> = ({
       } catch (_) {
         // ignore
       }
+      errorNavAllowOverlayOpenRef.current = true;
       errorNavRequestRef.current += 1;
       errorNavModeRef.current = 'focus';
       onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, mode: errorNavModeRef.current });
@@ -4061,6 +4066,7 @@ const FormView: React.FC<FormViewProps> = ({
     }
 
     setErrors(prev => mergeLineItemGroupErrors(prev, groupId, nextErrors));
+    errorNavAllowOverlayOpenRef.current = true;
     errorNavRequestRef.current += 1;
     errorNavModeRef.current = 'focus';
     onDiagnostic?.('validation.navigate.request', {
@@ -6284,6 +6290,32 @@ const FormView: React.FC<FormViewProps> = ({
     return !orderedEntryErrors || Object.keys(orderedEntryErrors).length === 0;
   }, [orderedEntryEnabled, orderedEntryErrors]);
 
+  const firstOrderedEntryIssue = useMemo(() => {
+    if (!orderedEntryEnabled) return null;
+    return findFirstOrderedEntryIssue({
+      definition,
+      language,
+      values,
+      lineItems,
+      errors: orderedEntryErrors,
+      collapsedRows,
+      resolveVisibilityValue,
+      getTopValue: getTopValueNoScan,
+      orderedQuestions: orderedEntryQuestions
+    });
+  }, [
+    collapsedRows,
+    definition,
+    getTopValueNoScan,
+    language,
+    lineItems,
+    orderedEntryEnabled,
+    orderedEntryErrors,
+    orderedEntryQuestions,
+    resolveVisibilityValue,
+    values
+  ]);
+
   const buildOrderedEntryErrors = useCallback(
     (missingFieldPath: string, allErrors: FormErrors): FormErrors => {
       if (!missingFieldPath) return allErrors || {};
@@ -6348,7 +6380,7 @@ const FormView: React.FC<FormViewProps> = ({
     (
       target: OrderedEntryTarget,
       missingFieldPath: string,
-      options?: { navigate?: boolean; source?: string; scrollOnly?: boolean }
+      options?: { navigate?: boolean; source?: string; scrollOnly?: boolean; allowOverlayOpen?: boolean }
     ) => {
       let nextErrors: FormErrors = {};
       try {
@@ -6364,9 +6396,11 @@ const FormView: React.FC<FormViewProps> = ({
       } catch (err: any) {
         onDiagnostic?.('validation.ordered.error', { message: err?.message || err || 'unknown' });
       }
+      orderedEntryGuideFieldPathRef.current = missingFieldPath;
       setErrors(buildOrderedEntryErrors(missingFieldPath, nextErrors));
       const shouldNavigate = options?.navigate !== false || options?.scrollOnly === true;
       if (shouldNavigate) {
+        errorNavAllowOverlayOpenRef.current = options?.allowOverlayOpen !== false;
         errorNavRequestRef.current += 1;
         errorNavModeRef.current = options?.scrollOnly ? 'scroll' : 'focus';
         onDiagnostic?.('validation.navigate.request', {
@@ -6392,6 +6426,54 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [buildOrderedEntryErrors, collapsedRows, collapsedSubgroups, definition, language, lineItems, onDiagnostic, setErrors, values]
   );
+
+  useEffect(() => {
+    if (!orderedEntryEnabled || submitting) return;
+    const missingFieldPath = firstOrderedEntryIssue?.missingFieldPath || '';
+    if (!missingFieldPath) {
+      orderedEntryGuideFieldPathRef.current = null;
+      return;
+    }
+
+    const currentGuidePath = orderedEntryGuideFieldPathRef.current;
+    const currentKeys = Object.keys(errors || {});
+    const hasNonGuidanceErrors = currentKeys.some(key => key !== currentGuidePath);
+    if (hasNonGuidanceErrors) return;
+
+    const nextErrors = buildOrderedEntryErrors(missingFieldPath, (orderedEntryErrors || {}) as FormErrors);
+    const nextKeys = Object.keys(nextErrors);
+    const sameErrors =
+      nextKeys.length === currentKeys.length &&
+      nextKeys.every(key => errors[key] === nextErrors[key]);
+
+    orderedEntryGuideFieldPathRef.current = missingFieldPath;
+    if (!sameErrors) {
+      setErrors(nextErrors);
+    }
+
+    if (currentGuidePath === missingFieldPath) return;
+    const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+    const activeTag = (activeEl?.tagName || '').toLowerCase();
+    const isTypingContext = activeTag === 'input' || activeTag === 'textarea';
+    if (isTypingContext) return;
+    errorNavAllowOverlayOpenRef.current = false;
+    errorNavRequestRef.current += 1;
+    errorNavModeRef.current = 'scroll';
+    onDiagnostic?.('validation.navigate.request', {
+      attempt: errorNavRequestRef.current,
+      scope: 'orderedEntryAuto',
+      mode: errorNavModeRef.current
+    });
+  }, [
+    buildOrderedEntryErrors,
+    errors,
+    firstOrderedEntryIssue,
+    onDiagnostic,
+    orderedEntryEnabled,
+    orderedEntryErrors,
+    setErrors,
+    submitting
+  ]);
 
   useEffect(() => {
     orderedEntryGateRef.current = ({ targetQuestionId }) => {
@@ -6580,8 +6662,6 @@ const FormView: React.FC<FormViewProps> = ({
     if (orderedBlock) {
       blurActiveElement('orderedEntry.blocked', { scope: 'top', fieldId: q.id });
       triggerOrderedEntryValidation({ scope: 'top', questionId: q.id }, orderedBlock.missingFieldPath, {
-        navigate: false,
-        scrollOnly: true,
         source: 'change'
       });
       return;
@@ -6708,7 +6788,7 @@ const FormView: React.FC<FormViewProps> = ({
           fieldId: (field?.id || '').toString()
         },
         orderedBlock.missingFieldPath,
-        { navigate: false, scrollOnly: true, source: 'change' }
+        { source: 'change' }
       );
       return;
     }
@@ -8840,6 +8920,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     const wasSame = firstErrorRef.current === firstKey;
     firstErrorRef.current = firstKey;
+    const allowOverlayOpen = errorNavAllowOverlayOpenRef.current !== false;
 
     const expandGroupForQuestionId = (questionId: string): boolean => {
       const groupKey = questionIdToGroupKey[questionId];
@@ -8867,7 +8948,7 @@ const FormView: React.FC<FormViewProps> = ({
         if (nestedKey) {
           setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
         }
-        if (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix) {
+        if (allowOverlayOpen && (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix)) {
           openSubgroupOverlay(prefix, { source: 'navigate' });
           onDiagnostic?.('validation.navigate.openSubgroup', { key: firstKey, subKey: prefix });
         }
@@ -8878,7 +8959,7 @@ const FormView: React.FC<FormViewProps> = ({
       const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
       const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
       const suppressOverlayForGuidedInline = guidedEnabled && guidedInlineLineGroupIds.has(prefix);
-        if (groupOverlayEnabled && !suppressOverlayForGuidedInline) {
+        if (allowOverlayOpen && groupOverlayEnabled && !suppressOverlayForGuidedInline) {
           if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
             openLineItemGroupOverlay(prefix, { source: 'navigate' });
           onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key: firstKey, groupId: prefix, source: 'submit' });
@@ -8922,6 +9003,7 @@ const FormView: React.FC<FormViewProps> = ({
         setTimeout(() => attempt(), 80);
       }
     });
+    errorNavAllowOverlayOpenRef.current = true;
     errorNavConsumedRef.current = errorNavRequestRef.current;
   }, [
     errors,

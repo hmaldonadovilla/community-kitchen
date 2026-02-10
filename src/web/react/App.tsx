@@ -7727,6 +7727,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     if (!Number.isFinite(raw) || raw <= 1) return 1;
     return Math.max(1, Math.min(2, Math.round(raw)));
   }, [definition, definition.listView]);
+  const listLegendColumnWidths = useMemo(() => {
+    const raw = (definition.listView as any)?.legendColumnWidths ?? (definition as any)?.listViewLegendColumnWidths;
+    if (!Array.isArray(raw) || raw.length < 2) return null;
+    const first = Number(raw[0]);
+    const second = Number(raw[1]);
+    if (!Number.isFinite(first) || !Number.isFinite(second) || first <= 0 || second <= 0) return null;
+    const total = first + second;
+    if (!(total > 0)) return null;
+    const normalizedFirst = Number(((first / total) * 100).toFixed(2));
+    const normalizedSecond = Number((100 - normalizedFirst).toFixed(2));
+    return [normalizedFirst, normalizedSecond] as [number, number];
+  }, [definition, definition.listView]);
 
   useEffect(() => {
     if (view !== 'list') return;
@@ -7744,7 +7756,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         {listLegendItems.length ? (
           <div className="ck-list-legend ck-list-legend--bottomBar" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
             <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
-            <ul className="ck-list-legend-list" data-columns={listLegendColumns > 1 ? '2' : '1'}>
+            <ul
+              className="ck-list-legend-list"
+              data-columns={listLegendColumns > 1 ? '2' : '1'}
+              style={
+                listLegendColumns > 1 && listLegendColumnWidths
+                  ? { gridTemplateColumns: `${listLegendColumnWidths[0]}% ${listLegendColumnWidths[1]}%` }
+                  : undefined
+              }
+            >
               {listLegendItems.map((item, idx) => (
                 <li key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
                   {item.icon ? <ListViewIcon name={item.icon} /> : null}

@@ -177,22 +177,6 @@
         }
       },
       {
-        "icon": "view",
-        "text": {
-          "en": "View",
-          "fr": "Voir",
-          "nl": "Bekijken"
-        }
-      },
-      {
-        "icon": "copy",
-        "text": {
-          "en": "Copy",
-          "fr": "Copier",
-          "nl": "Kopieren"
-        }
-      },
-      {
         "text": {
           "en": "being written, not usable",
           "fr": "en cours d'écriture, non utilisable",
@@ -208,6 +192,14 @@
         }
       },
       {
+        "icon": "view",
+        "text": {
+          "en": "View",
+          "fr": "Voir",
+          "nl": "Bekijken"
+        }
+      },
+      {
         "text": {
           "en": "usable for meal production",
           "fr": "utilisable pour la production de repas",
@@ -220,6 +212,14 @@
             "nl": "Actief"
           },
           "tone": "muted"
+        }
+      },
+      {
+        "icon": "copy",
+        "text": {
+          "en": "Copy",
+          "fr": "Copier",
+          "nl": "Kopieren"
         }
       },
       {
@@ -239,6 +239,10 @@
       }
     ],
     "listViewLegendColumns": 2,
+    "listViewLegendColumnWidths": [
+      15,
+      85
+    ],
     "listViewRowClickEnabled": false,
     "listViewSearch": {
       "mode": "text",
@@ -2039,22 +2043,6 @@
           }
         },
         {
-          "icon": "view",
-          "text": {
-            "en": "View",
-            "fr": "Voir",
-            "nl": "Bekijken"
-          }
-        },
-        {
-          "icon": "copy",
-          "text": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
-          }
-        },
-        {
           "text": {
             "en": "being written, not usable",
             "fr": "en cours d'écriture, non utilisable",
@@ -2070,6 +2058,14 @@
           }
         },
         {
+          "icon": "view",
+          "text": {
+            "en": "View",
+            "fr": "Voir",
+            "nl": "Bekijken"
+          }
+        },
+        {
           "text": {
             "en": "usable for meal production",
             "fr": "utilisable pour la production de repas",
@@ -2082,6 +2078,14 @@
               "nl": "Actief"
             },
             "tone": "muted"
+          }
+        },
+        {
+          "icon": "copy",
+          "text": {
+            "en": "Copy",
+            "fr": "Copier",
+            "nl": "Kopieren"
           }
         },
         {
@@ -2103,6 +2107,10 @@
       "pageSize": 5,
       "paginationControlsEnabled": true,
       "legendColumns": 2,
+      "legendColumnWidths": [
+        25,
+        75
+      ],
       "rowClickEnabled": false,
       "search": {
         "mode": "text",

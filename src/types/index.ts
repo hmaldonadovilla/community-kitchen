@@ -2212,6 +2212,12 @@ export interface FormConfig {
    */
   listViewLegendColumns?: number;
   /**
+   * Optional legend column width percentages for 2-column legend layout (recommended: `listView.legendColumnWidths`).
+   *
+   * Example: `[25, 75]`.
+   */
+  listViewLegendColumnWidths?: [number, number];
+  /**
    * Optional override for the list view search UI/behavior (recommended: `listView.search`).
    */
   listViewSearch?: ListViewConfig['search'];
@@ -3587,6 +3593,12 @@ export interface ListViewConfig {
    * - Typical use: set to 2 when the legend has many entries.
    */
   legendColumns?: number;
+  /**
+   * Optional legend column width percentages used when `legendColumns` is `2`.
+   *
+   * Example: `[25, 75]`.
+   */
+  legendColumnWidths?: [number, number];
   defaultSort?: {
     fieldId: string;
     direction?: 'asc' | 'desc';

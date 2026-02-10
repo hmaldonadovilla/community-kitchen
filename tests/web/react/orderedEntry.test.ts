@@ -1,7 +1,71 @@
-import { findOrderedEntryBlock } from '../../../src/web/react/components/form/orderedEntry';
+import { findFirstOrderedEntryIssue, findOrderedEntryBlock } from '../../../src/web/react/components/form/orderedEntry';
 import { buildSubgroupKey } from '../../../src/web/react/app/lineItems';
 
 describe('ordered entry blocking', () => {
+  test('finds first missing required field from the start of the ordered sequence', () => {
+    const definition: any = {
+      title: 'Test',
+      destinationTab: 'Tab',
+      languages: ['EN'],
+      questions: [{ id: 'FIRST', type: 'TEXT', required: true, options: [], optionsFr: [], optionsNl: [] }]
+    };
+    const issue = findFirstOrderedEntryIssue({
+      definition,
+      language: 'EN',
+      values: {},
+      lineItems: {},
+      errors: {},
+      resolveVisibilityValue: () => undefined,
+      getTopValue: () => undefined,
+      orderedQuestions: definition.questions
+    });
+    expect(issue).toEqual({
+      missingFieldPath: 'FIRST',
+      scope: 'top',
+      reason: 'missingRequired'
+    });
+  });
+
+  test('advances first ordered issue to the next required field after filling the current one', () => {
+    const definition: any = {
+      title: 'Test',
+      destinationTab: 'Tab',
+      languages: ['EN'],
+      questions: [
+        { id: 'FIRST', type: 'TEXT', required: true, options: [], optionsFr: [], optionsNl: [] },
+        { id: 'SECOND', type: 'TEXT', required: true, options: [], optionsFr: [], optionsNl: [] }
+      ]
+    };
+
+    const firstIssue = findFirstOrderedEntryIssue({
+      definition,
+      language: 'EN',
+      values: {},
+      lineItems: {},
+      errors: {},
+      resolveVisibilityValue: () => undefined,
+      getTopValue: () => undefined,
+      orderedQuestions: definition.questions
+    });
+    expect(firstIssue?.missingFieldPath).toBe('FIRST');
+
+    const secondIssue = findFirstOrderedEntryIssue({
+      definition,
+      language: 'EN',
+      values: { FIRST: 'ok' },
+      lineItems: {},
+      errors: {},
+      resolveVisibilityValue: (fieldId: string) => ({ FIRST: 'ok' } as any)[fieldId],
+      getTopValue: (fieldId: string) => ({ FIRST: 'ok' } as any)[fieldId],
+      orderedQuestions: definition.questions
+    });
+    expect(secondIssue).toEqual({
+      missingFieldPath: 'SECOND',
+      scope: 'top',
+      reason: 'missingRequired'
+    });
+  });
+
   test('blocks edits when a required earlier field is missing', () => {
     const definition: any = {
       title: 'Test',
@@ -230,5 +294,84 @@ describe('ordered entry blocking', () => {
       scope: 'line',
       reason: 'invalid'
     });
+  });
+
+  test('returns first missing line-item field path when an earlier line group is incomplete', () => {
+    const group: any = {
+      id: 'LINES',
+      type: 'LINE_ITEM_GROUP',
+      required: true,
+      lineItemConfig: {
+        fields: [
+          { id: 'A', type: 'TEXT', required: true, options: [], optionsFr: [], optionsNl: [] },
+          { id: 'B', type: 'TEXT', required: false, options: [], optionsFr: [], optionsNl: [] }
+        ]
+      }
+    };
+    const definition: any = {
+      title: 'Test',
+      destinationTab: 'Tab',
+      languages: ['EN'],
+      questions: [group, { id: 'NOTES', type: 'TEXT', required: false, options: [], optionsFr: [], optionsNl: [] }]
+    };
+    const lineItems: any = { LINES: [{ id: 'row1', values: { B: 'later' } }] };
+    const errors = { LINES__A__row1: 'A is required.' };
+    const block = findOrderedEntryBlock({
+      definition,
+      language: 'EN',
+      values: {},
+      lineItems,
+      errors,
+      resolveVisibilityValue: () => undefined,
+      getTopValue: () => undefined,
+      orderedQuestions: definition.questions,
+      target: { scope: 'top', questionId: 'NOTES' }
+    });
+
+    expect(block).toEqual({
+      missingFieldPath: 'LINES__A__row1',
+      scope: 'top',
+      reason: 'missingRequired'
+    });
+  });
+
+  test('does not block on excluded guided-step rows when no in-scope errors exist', () => {
+    const scopedGroup: any = {
+      id: 'LINES',
+      type: 'LINE_ITEM_GROUP',
+      required: true,
+      lineItemConfig: {
+        fields: [
+          { id: 'A', type: 'TEXT', required: true, options: [], optionsFr: [], optionsNl: [] },
+          { id: 'TYPE', type: 'TEXT', required: false, options: [], optionsFr: [], optionsNl: [] }
+        ],
+        _guidedRowFilter: { fieldId: 'TYPE', equals: ['INCLUDED'] }
+      }
+    };
+    const definition: any = {
+      title: 'Test',
+      destinationTab: 'Tab',
+      languages: ['EN'],
+      questions: [scopedGroup, { id: 'NEXT', type: 'TEXT', required: false, options: [], optionsFr: [], optionsNl: [] }]
+    };
+    const lineItems: any = {
+      LINES: [
+        { id: 'row1', values: { TYPE: 'INCLUDED', A: 'ok' } },
+        { id: 'row2', values: { TYPE: 'EXCLUDED', A: '' } }
+      ]
+    };
+    const block = findOrderedEntryBlock({
+      definition,
+      language: 'EN',
+      values: {},
+      lineItems,
+      errors: {},
+      resolveVisibilityValue: () => undefined,
+      getTopValue: () => undefined,
+      orderedQuestions: definition.questions,
+      target: { scope: 'top', questionId: 'NEXT' }
+    });
+
+    expect(block).toBeNull();
   });
 });

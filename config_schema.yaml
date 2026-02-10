@@ -2304,6 +2304,14 @@ components:
           deprecated: true
           type: integer
           description: Deprecated. Use `listView.legendColumns`.
+        listViewLegendColumnWidths:
+          deprecated: true
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+          description: Deprecated. Use `listView.legendColumnWidths`.
         listViewHideHeaderRow:
           deprecated: true
           type: boolean
@@ -4276,6 +4284,16 @@ components:
 
             - Default: 1
             - Set to 2 for dense legends with many entries.
+        legendColumnWidths:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+          description: |
+            Optional legend column width percentages used when `legendColumns` is `2`.
+
+            Example: `[25, 75]`.
       description: Configuration for list views showing saved submissions.
       example:
         columns:
@@ -5034,6 +5052,12 @@ components:
             $ref: '#/components/schemas/ListViewLegendItem'
         listViewLegendColumns:
           type: integer
+        listViewLegendColumnWidths:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
         listViewHideHeaderRow:
           type: boolean
         listViewRowClickEnabled:

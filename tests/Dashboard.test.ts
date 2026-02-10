@@ -181,7 +181,7 @@ describe('Dashboard', () => {
 
   test('getForms parses list view hideHeaderRow, rowClickEnabled and legendColumns from dashboard config (listView)', () => {
     const configJson = JSON.stringify({
-      listView: { hideHeaderRow: true, rowClickEnabled: false, legendColumns: 2 }
+      listView: { hideHeaderRow: true, rowClickEnabled: false, legendColumns: 2, legendColumnWidths: [25, 75] }
     });
     const mockData = [
       [],
@@ -195,6 +195,7 @@ describe('Dashboard', () => {
     expect((forms[0] as any).listViewHideHeaderRow).toBe(true);
     expect((forms[0] as any).listViewRowClickEnabled).toBe(false);
     expect((forms[0] as any).listViewLegendColumns).toBe(2);
+    expect((forms[0] as any).listViewLegendColumnWidths).toEqual([25, 75]);
   });
 
   test('getForms parses list view inline rule actions from dashboard config (listView.columns)', () => {
