@@ -1,0 +1,899 @@
+{
+  "formKey": "Config: Ingredients Management",
+  "generatedAt": "2026-02-07T16:42:43.964Z",
+  "form": {
+    "title": "Ingredients Management",
+    "configSheet": "Config: Ingredients Management",
+    "destinationTab": "Ingredients Data",
+    "description": "Manage the master list of ingredients and their attributes.",
+    "languages": [
+      "EN",
+      "FR",
+      "NL"
+    ],
+    "defaultLanguage": "EN",
+    "languageSelectorEnabled": true,
+    "autoSave": {
+      "enabled": true,
+      "debounceMs": 2000,
+      "status": "Draft",
+      "enableWhenFields": [
+        "INGREDIENT_NAME",
+        "CREATED_BY"
+      ],
+      "dedupTriggerFields": [
+        "INGREDIENT_NAME"
+      ],
+      "dedupCheckDialog": {
+        "enabled": true,
+        "checkingTitle": {
+          "en": "Checking ingredient name",
+          "fr": "Checking ingredient name",
+          "nl": "Checking ingredient name"
+        },
+        "checkingMessage": {
+          "en": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete.",
+          "fr": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete.",
+          "nl": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete."
+        },
+        "availableTitle": {
+          "en": "Ingredient name available",
+          "fr": "Ingredient name available",
+          "nl": "Ingredient name available"
+        },
+        "availableMessage": {
+          "en": "You can continue entering the ingredient details.",
+          "fr": "You can continue entering the ingredient details.",
+          "nl": "You can continue entering the ingredient details."
+        },
+        "duplicateTitle": {
+          "en": "Ingredient already exists",
+          "fr": "Ingredient already exists",
+          "nl": "Ingredient already exists"
+        },
+        "duplicateMessage": {
+          "en": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+          "fr": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+          "nl": "An ingredient with this name already exists.\nPlease change the name or cancel the creation."
+        },
+        "availableAutoCloseMs": 1300,
+        "duplicateAutoCloseMs": 900
+      }
+    },
+    "dedupDeleteOnKeyChange": true,
+    "summaryViewEnabled": true,
+    "summaryHtmlTemplateId": "bundle:ingredients.summary.html",
+    "copyCurrentRecordEnabled": true,
+    "createNewRecordEnabled": true,
+    "createRecordPresetButtonsEnabled": false,
+    "followupConfig": {
+      "statusTransitions": {
+        "inProgress": "Draft",
+        "onClose": "Active",
+        "reOpened": "Draft"
+      }
+    },
+    "listViewTitle": "",
+    "listViewMetaColumns": [],
+    "listViewDefaultSort": {
+      "fieldId": "INGREDIENT_NAME",
+      "direction": "asc"
+    },
+    "listViewPageSize": 50,
+    "listViewPaginationControlsEnabled": true,
+    "listViewHeaderSortEnabled": false,
+    "listViewView": {
+      "mode": "cards",
+      "toggleEnabled": false,
+      "defaultMode": "cards"
+    },
+    "listViewSearch": {
+      "mode": "text",
+      "placeholder": {
+        "en": "Search ingredient",
+        "fr": "Rechercher un ingrédient",
+        "nl": "Zoek ingrediënt"
+      }
+    },
+    "listViewColumns": [
+      {
+        "type": "rule",
+        "fieldId": "action_view",
+        "label": {
+          "en": "",
+          "fr": "",
+          "nl": ""
+        },
+        "showIn": "cards",
+        "cases": [
+          {
+            "text": {
+              "en": " ",
+              "fr": " ",
+              "nl": " "
+            },
+            "style": "link",
+            "icon": "view",
+            "openView": {
+              "target": "summary",
+              "rowClick": true
+            }
+          }
+        ]
+      },
+      {
+        "type": "rule",
+        "fieldId": "action_edit",
+        "label": {
+          "en": "",
+          "fr": "",
+          "nl": ""
+        },
+        "showIn": "cards",
+        "cases": [
+          {
+            "when": {
+              "fieldId": "status",
+              "equals": "Draft"
+            },
+            "text": {
+              "en": " ",
+              "fr": " ",
+              "nl": " "
+            },
+            "style": "link",
+            "icon": "edit",
+            "openView": "form"
+          },
+          {
+            "when": {
+              "fieldId": "status",
+              "equals": "Active"
+            },
+            "text": {
+              "en": " ",
+              "fr": " ",
+              "nl": " "
+            },
+            "style": "link",
+            "icon": "edit",
+            "openView": "form"
+          }
+        ]
+      },
+      {
+        "type": "rule",
+        "fieldId": "action_copy",
+        "label": {
+          "en": "",
+          "fr": "",
+          "nl": ""
+        },
+        "showIn": "cards",
+        "cases": [
+          {
+            "when": {
+              "fieldId": "status",
+              "equals": "Active"
+            },
+            "text": {
+              "en": " ",
+              "fr": " ",
+              "nl": " "
+            },
+            "style": "link",
+            "icon": "copy",
+            "openView": "copy"
+          }
+        ]
+      }
+    ],
+    "listViewLegend": [
+      {
+        "icon": "view",
+        "text": {
+          "en": "View ingredient",
+          "fr": "Voir l’ingrédient",
+          "nl": "Ingrediënt bekijken"
+        }
+      },
+      {
+        "icon": "edit",
+        "text": {
+          "en": "Edit ingredient (Draft, Active)",
+          "fr": "Modifier l’ingrédient (Brouillon, Actif)",
+          "nl": "Ingrediënt bewerken (Concept, Actief)"
+        }
+      },
+      {
+        "icon": "copy",
+        "text": {
+          "en": "Copy ingredient (Active only)",
+          "fr": "Copier l’ingrédient (Actif uniquement)",
+          "nl": "Ingrediënt kopiëren (alleen Actief)"
+        }
+      },
+      {
+        "pill": {
+          "text": {
+            "en": "Draft",
+            "fr": "Brouillon",
+            "nl": "Concept"
+          },
+          "tone": "muted"
+        },
+        "text": {
+          "en": "Not activated; not available in Recipe Management or Meal Production.",
+          "fr": "Non activé; non disponible dans Gestion des recettes ou Production des repas.",
+          "nl": "Niet geactiveerd; niet beschikbaar in Receptbeheer of Maaltijdproductie."
+        }
+      },
+      {
+        "pill": {
+          "text": {
+            "en": "Active",
+            "fr": "Actif",
+            "nl": "Actief"
+          },
+          "tone": "strong"
+        },
+        "text": {
+          "en": "Available in Recipe Management and Meal Production.",
+          "fr": "Disponible dans Gestion des recettes et Production des repas.",
+          "nl": "Beschikbaar in Receptbeheer en Maaltijdproductie."
+        }
+      },
+      {
+        "pill": {
+          "text": {
+            "en": "Disabled",
+            "fr": "Désactivé",
+            "nl": "Uitgeschakeld"
+          },
+          "tone": "default"
+        },
+        "text": {
+          "en": "Historical only; not available in Recipe Management or Meal Production.",
+          "fr": "Historique uniquement; non disponible dans Gestion des recettes ou Production des repas.",
+          "nl": "Alleen historisch; niet beschikbaar in Receptbeheer of Maaltijdproductie."
+        }
+      }
+    ],
+    "actionBars": {
+      "top": {
+        "list": {
+          "items": [
+            "create"
+          ]
+        }
+      },
+      "bottom": {
+        "list": {
+          "items": [
+            "home",
+            {
+              "type": "system",
+              "id": "actions",
+              "placements": [
+                "listBar"
+              ],
+              "menuBehavior": "auto"
+            }
+          ]
+        },
+        "form": {
+          "items": [
+            "home",
+            {
+              "type": "system",
+              "id": "summary",
+              "summaryBehavior": "navigate"
+            }
+          ],
+          "primary": [
+            "submit"
+          ]
+        },
+        "summary": {
+          "items": [
+            "home",
+            "edit",
+            {
+              "type": "system",
+              "id": "actions",
+              "placements": [
+                "summaryBar"
+              ],
+              "menuBehavior": "auto"
+            }
+          ]
+        }
+      },
+      "system": {
+        "home": {
+          "hideWhenActive": true,
+          "dedupIncompleteDialog": {
+            "enabled": true,
+            "title": {
+              "en": "Missing key information to create a draft ingredient record",
+              "fr": "Missing key information to create a draft ingredient record",
+              "nl": "Missing key information to create a draft ingredient record"
+            },
+            "message": {
+              "en": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone.",
+              "fr": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone.",
+              "nl": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone."
+            },
+            "confirmLabel": {
+              "en": "Continue, delete the record",
+              "fr": "Continue, delete the record",
+              "nl": "Continue, delete the record"
+            },
+            "cancelLabel": {
+              "en": "Cancel, continue editing",
+              "fr": "Cancel, continue editing",
+              "nl": "Cancel, continue editing"
+            },
+            "showCancel": true,
+            "showCloseButton": false,
+            "dismissOnBackdrop": false,
+            "deleteRecordOnConfirm": true,
+            "primaryAction": "cancel"
+          }
+        },
+        "gates": {
+          "edit": [
+            {
+              "id": "ingredients.edit.disabledHidden",
+              "when": {
+                "fieldId": "status",
+                "equals": [
+                  "Disabled"
+                ]
+              },
+              "hide": true
+            }
+          ],
+          "copyCurrentRecord": [
+            {
+              "id": "ingredients.copy.onlyActiveSummary",
+              "when": {
+                "any": [
+                  {
+                    "not": {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "fieldId": "status",
+                      "equals": [
+                        "Active"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "hide": true
+            }
+          ]
+        }
+      }
+    },
+    "submitButtonLabel": {
+      "en": "Activate",
+      "fr": "Activer",
+      "nl": "Activeren"
+    },
+    "summaryButtonLabel": {
+      "en": "View",
+      "fr": "View",
+      "nl": "View"
+    },
+    "appHeader": {
+      "logoUrl": "https://drive.google.com/uc?export=view&id=1JUaqKbQbGwYIpOmpg1CBNJcOrFJv3EHr"
+    },
+    "submitValidation": {
+      "enforceFieldOrder": true,
+      "hideSubmitTopErrorMessage": true,
+      "submitTopErrorMessage": {
+        "en": "You are almost done. Some required checks are missing. Review the highlighted sections.",
+        "fr": "You are almost done. Some required checks are missing. Review the highlighted sections.",
+        "nl": "You are almost done. Some required checks are missing. Review the highlighted sections."
+      }
+    },
+    "submissionConfirmationTitle": {
+      "en": "Activate new ingredient?",
+      "fr": "Activate new ingredient?",
+      "nl": "Activate new ingredient?"
+    },
+    "submissionConfirmationMessage": {
+      "en": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?",
+      "fr": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?",
+      "nl": "Ingredient {INGREDIENT_NAME} will become active and selectable in Recipe management and Meal production on {todayDate}. Do you want to continue?"
+    },
+    "submissionConfirmationConfirmLabel": {
+      "en": "Yes, activate.",
+      "fr": "Yes, activate.",
+      "nl": "Yes, activate."
+    },
+    "submissionConfirmationCancelLabel": {
+      "en": "No, continue editing draft ingredient",
+      "fr": "No, continue editing draft ingredient",
+      "nl": "No, continue editing draft ingredient"
+    },
+    "dedupDialog": {
+      "title": {
+        "en": "Ingredient already exists",
+        "fr": "Ingredient already exists",
+        "nl": "Ingredient already exists"
+      },
+      "intro": {
+        "en": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+        "fr": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+        "nl": "An ingredient with this name already exists.\nPlease change the name or cancel the creation."
+      },
+      "outro": {
+        "en": "",
+        "fr": "",
+        "nl": ""
+      },
+      "changeLabel": {
+        "en": "Change name",
+        "fr": "Changer le nom",
+        "nl": "Naam wijzigen"
+      },
+      "cancelLabel": {
+        "en": "Cancel",
+        "fr": "Annuler",
+        "nl": "Annuleren"
+      },
+      "openLabel": {
+        "en": "Open existing ingredient",
+        "fr": "Ouvrir l’ingrédient existant",
+        "nl": "Bestaand ingrediënt openen"
+      }
+    }
+  },
+  "questions": [
+    {
+      "id": "INGREDIENT_NAME",
+      "type": "TEXT",
+      "qEn": "Ingredient name",
+      "qFr": "Nom de l’ingrédient",
+      "qNl": "Naam van ingrediënt",
+      "required": true,
+      "listView": true,
+      "status": "Active",
+      "ui": {
+        "helperTextBelowLabel": {
+          "en": "Name must be minimum 2 characters, no special characters allowed except dash",
+          "fr": "Name must be minimum 2 characters, no special characters allowed except dash",
+          "nl": "Name must be minimum 2 characters, no special characters allowed except dash"
+        },
+        "helperTextPlaceholder": {
+          "en": "Enter the name of the ingredient",
+          "fr": "Enter the name of the ingredient",
+          "nl": "Enter the name of the ingredient"
+        },
+        "labelLayout": "stacked"
+      }
+    },
+    {
+      "id": "CREATED_BY",
+      "type": "TEXT",
+      "qEn": "Created by",
+      "qFr": "Créé par",
+      "qNl": "Gemaakt door",
+      "required": true,
+      "listView": false,
+      "status": "Active",
+      "ui": {
+        "helperText": {
+          "en": "Enter your name.",
+          "fr": "Saisissez votre nom.",
+          "nl": "Voer je naam in."
+        },
+        "helperPlacement": "placeholder"
+      }
+    },
+    {
+      "id": "CATEGORY",
+      "type": "CHOICE",
+      "qEn": "Category",
+      "qFr": "Catégorie",
+      "qNl": "Categorie",
+      "required": true,
+      "listView": false,
+      "options": [
+        "Animal protein",
+        "Animal protein Halal",
+        "Dairy",
+        "Dry carbohydrates",
+        "Fresh vegetables",
+        "Frozen vegetables",
+        "Herbs - spices - condiments",
+        "Tins/Pots",
+        "Vegan protein"
+      ],
+      "optionsFr": [
+        "Animal protein",
+        "Animal protein Halal",
+        "Dairy",
+        "Dry carbohydrates",
+        "Fresh vegetables",
+        "Frozen vegetables",
+        "Herbs - spices - condiments",
+        "Tins/Pots",
+        "Vegan protein"
+      ],
+      "optionsNl": [
+        "Animal protein",
+        "Animal protein Halal",
+        "Dairy",
+        "Dry carbohydrates",
+        "Fresh vegetables",
+        "Frozen vegetables",
+        "Herbs - spices - condiments",
+        "Tins/Pots",
+        "Vegan protein"
+      ],
+      "status": "Active",
+      "ui": {
+        "helperText": {
+          "en": "Select one category.",
+          "fr": "Sélectionnez une catégorie.",
+          "nl": "Selecteer één categorie."
+        }
+      }
+    },
+    {
+      "id": "SUPPLIER",
+      "type": "CHECKBOX",
+      "qEn": "Supplier",
+      "qFr": "Fournisseur",
+      "qNl": "Leverancier",
+      "required": true,
+      "listView": false,
+      "options": [
+        "Freshmed",
+        "Mabru",
+        "Ozfood",
+        "Red Cross",
+        "Solucious",
+        "VDS"
+      ],
+      "optionsFr": [
+        "Freshmed",
+        "Mabru",
+        "Ozfood",
+        "Red Cross",
+        "Solucious",
+        "VDS"
+      ],
+      "optionsNl": [
+        "Freshmed",
+        "Mabru",
+        "Ozfood",
+        "Red Cross",
+        "Solucious",
+        "VDS"
+      ],
+      "status": "Active",
+      "ui": {
+        "control": "select",
+        "helperText": {
+          "en": "Select one or more suppliers.",
+          "fr": "Sélectionnez un ou plusieurs fournisseurs.",
+          "nl": "Selecteer één of meer leveranciers."
+        }
+      }
+    },
+    {
+      "id": "ALLERGEN",
+      "type": "CHECKBOX",
+      "qEn": "Allergen",
+      "qFr": "Allergène",
+      "qNl": "Allergeen",
+      "required": true,
+      "listView": false,
+      "options": [
+        "Egg",
+        "Fish",
+        "Gluten",
+        "Milk",
+        "None",
+        "Peanuts",
+        "Soy"
+      ],
+      "optionsFr": [
+        "Egg",
+        "Fish",
+        "Gluten",
+        "Milk",
+        "None",
+        "Peanuts",
+        "Soy"
+      ],
+      "optionsNl": [
+        "Egg",
+        "Fish",
+        "Gluten",
+        "Milk",
+        "None",
+        "Peanuts",
+        "Soy"
+      ],
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "ALLERGEN",
+            "equals": [
+              "None"
+            ]
+          },
+          "then": {
+            "fieldId": "ALLERGEN",
+            "disallowed": [
+              "Egg",
+              "Fish",
+              "Gluten",
+              "Milk",
+              "Peanuts",
+              "Soy"
+            ]
+          },
+          "message": {
+            "en": "Select either None or allergens, not both.",
+            "fr": "Sélectionnez soit Aucun, soit des allergènes, pas les deux.",
+            "nl": "Selecteer ofwel Geen of allergenen, niet beide."
+          }
+        }
+      ],
+      "status": "Active",
+      "ui": {
+        "control": "select",
+        "helperText": {
+          "en": "Select None or one or more allergens.",
+          "fr": "Sélectionnez Aucun ou un ou plusieurs allergènes.",
+          "nl": "Selecteer Geen of één of meer allergenen."
+        }
+      }
+    },
+    {
+      "id": "ALLOWED_UNIT",
+      "type": "CHECKBOX",
+      "qEn": "Allowed unit",
+      "qFr": "Unité autorisée",
+      "qNl": "Toegestane eenheid",
+      "required": true,
+      "listView": false,
+      "options": [
+        "bag",
+        "bucket",
+        "cl",
+        "gr",
+        "kg",
+        "L",
+        "leaf",
+        "piece",
+        "Tbsp",
+        "tin-140gr",
+        "tin-220gr",
+        "tin-240gr",
+        "tin-2500gr",
+        "tin-2505gr",
+        "tin-2655gr",
+        "tin-5000gr",
+        "tin-530gr"
+      ],
+      "optionsFr": [
+        "bag",
+        "bucket",
+        "cl",
+        "gr",
+        "kg",
+        "L",
+        "leaf",
+        "piece",
+        "Tbsp",
+        "tin-140gr",
+        "tin-220gr",
+        "tin-240gr",
+        "tin-2500gr",
+        "tin-2505gr",
+        "tin-2655gr",
+        "tin-5000gr",
+        "tin-530gr"
+      ],
+      "optionsNl": [
+        "bag",
+        "bucket",
+        "cl",
+        "gr",
+        "kg",
+        "L",
+        "leaf",
+        "piece",
+        "Tbsp",
+        "tin-140gr",
+        "tin-220gr",
+        "tin-240gr",
+        "tin-2500gr",
+        "tin-2505gr",
+        "tin-2655gr",
+        "tin-5000gr",
+        "tin-530gr"
+      ],
+      "status": "Active",
+      "ui": {
+        "control": "select",
+        "helperText": {
+          "en": "Select one or more allowed units.",
+          "fr": "Sélectionnez une ou plusieurs unités autorisées.",
+          "nl": "Selecteer één of meer toegestane eenheden."
+        }
+      }
+    },
+    {
+      "id": "DIETARY_APPLICABILITY",
+      "type": "CHECKBOX",
+      "qEn": "Dietary applicability",
+      "qFr": "Applicabilité diététique",
+      "qNl": "Dieettoepassing",
+      "required": true,
+      "listView": false,
+      "options": [
+        "Diabetic",
+        "No-salt",
+        "Standard",
+        "Vegan",
+        "Vegetarian"
+      ],
+      "optionsFr": [
+        "Diabetic",
+        "No-salt",
+        "Standard",
+        "Vegan",
+        "Vegetarian"
+      ],
+      "optionsNl": [
+        "Diabetic",
+        "No-salt",
+        "Standard",
+        "Vegan",
+        "Vegetarian"
+      ],
+      "status": "Active",
+      "ui": {
+        "control": "select",
+        "helperText": {
+          "en": "Select one or more dietary applicability values.",
+          "fr": "Sélectionnez une ou plusieurs valeurs d’applicabilité diététique.",
+          "nl": "Selecteer één of meer dieettoepassingen."
+        }
+      }
+    },
+    {
+      "id": "EFFECTIVE_START_DATE",
+      "type": "DATE",
+      "qEn": "Effective start date",
+      "qFr": "Date de début d’effet",
+      "qNl": "Ingangsdatum",
+      "required": false,
+      "readOnly": true,
+      "listView": false,
+      "visibility": {
+        "showWhen": {
+          "fieldId": "STATUS",
+          "equals": [
+            "Active",
+            "Disabled"
+          ]
+        }
+      },
+      "status": "Active"
+    },
+    {
+      "id": "EFFECTIVE_END_DATE",
+      "type": "DATE",
+      "qEn": "Effective end date",
+      "qFr": "Date de fin d’effet",
+      "qNl": "Einddatum",
+      "required": false,
+      "readOnly": true,
+      "listView": false,
+      "visibility": {
+        "showWhen": {
+          "fieldId": "STATUS",
+          "equals": [
+            "Active",
+            "Disabled"
+          ]
+        }
+      },
+      "status": "Active"
+    },
+    {
+      "id": "STATUS",
+      "type": "CHOICE",
+      "qEn": "Status",
+      "qFr": "Statut",
+      "qNl": "Status",
+      "required": false,
+      "readOnly": true,
+      "defaultValue": "Draft",
+      "listView": true,
+      "visibility": {
+        "hideWhen": {
+          "fieldId": "STATUS",
+          "equals": [
+            "Draft",
+            "Active",
+            "Disabled"
+          ]
+        }
+      },
+      "options": [
+        "Draft",
+        "Active",
+        "Disabled"
+      ],
+      "optionsFr": [
+        "Brouillon",
+        "Actif",
+        "Désactivé"
+      ],
+      "optionsNl": [
+        "Concept",
+        "Actief",
+        "Uitgeschakeld"
+      ],
+      "status": "Active",
+      "ui": {
+        "summaryVisibility": "never"
+      }
+    },
+    {
+      "id": "LAST_CHANGED_BY",
+      "type": "TEXT",
+      "qEn": "Last changed by",
+      "qFr": "Dernière modification par",
+      "qNl": "Laatst gewijzigd door",
+      "required": false,
+      "readOnly": true,
+      "listView": false,
+      "visibility": {
+        "showWhen": {
+          "fieldId": "STATUS",
+          "equals": [
+            "Active",
+            "Disabled"
+          ]
+        }
+      },
+      "status": "Active"
+    }
+  ],
+  "dedupRules": [
+    {
+      "id": "uniqueIngredientName",
+      "scope": "form",
+      "keys": [
+        "INGREDIENT_NAME"
+      ],
+      "matchMode": "caseInsensitive",
+      "onConflict": "reject",
+      "message": {
+        "en": "An ingredient with the same name already exists.",
+        "fr": "Un ingrédient portant le même nom existe déjà.",
+        "nl": "Er bestaat al een ingrediënt met dezelfde naam."
+      }
+    }
+  ],
+  "definition": {},
+  "validationErrors": []
+}
