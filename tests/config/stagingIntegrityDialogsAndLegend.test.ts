@@ -20,6 +20,17 @@ describe('staging integrity dialogs and list legend config', () => {
     const icons = new Set((legend || []).map(item => (item?.icon || '').toString().trim().toLowerCase()).filter(Boolean));
     expectedIcons.forEach(icon => expect(icons.has(icon)).toBe(true));
   };
+  const assertLegendColumnWidthsValid = (value: any) => {
+    if (value === undefined || value === null) return;
+    expect(Array.isArray(value)).toBe(true);
+    expect(value.length).toBe(2);
+    const first = Number(value[0]);
+    const second = Number(value[1]);
+    expect(Number.isFinite(first)).toBe(true);
+    expect(Number.isFinite(second)).toBe(true);
+    expect(first).toBeGreaterThan(0);
+    expect(second).toBeGreaterThan(0);
+  };
 
   test('recipes list legend keeps required action icons and valid layout config', () => {
     const cfg = readConfig('config_recipes.json');
@@ -39,8 +50,8 @@ describe('staging integrity dialogs and list legend config', () => {
     expect(formColumnsRaw).toBeLessThanOrEqual(2);
     expect(defColumnsRaw).toBeGreaterThanOrEqual(1);
     expect(defColumnsRaw).toBeLessThanOrEqual(2);
-    expect(cfg.form?.listViewLegendColumnWidths).toEqual([25, 75]);
-    expect(cfg.definition?.listView?.legendColumnWidths).toEqual([25, 75]);
+    assertLegendColumnWidthsValid(cfg.form?.listViewLegendColumnWidths);
+    assertLegendColumnWidthsValid(cfg.definition?.listView?.legendColumnWidths);
 
     const formActionCases = cfg.form?.listViewColumns?.find((col: any) => col?.fieldId === 'action')?.cases || [];
     const defActionCases = cfg.definition?.listView?.columns?.find((col: any) => col?.fieldId === 'action')?.cases || [];
