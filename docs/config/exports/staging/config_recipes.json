@@ -171,48 +171,27 @@
     ],
     "listViewLegend": [
       {
+        "icon": "edit",
         "text": {
-          "en": "being written, not usable",
-          "fr": "en cours d'écriture, non utilisable",
-          "nl": "wordt geschreven, niet bruikbaar"
-        },
-        "pill": {
-          "text": {
-            "en": "Draft",
-            "fr": "Brouillon",
-            "nl": "Conceptverslag"
-          },
-          "tone": "default"
+          "en": "Edit",
+          "fr": "Modifier",
+          "nl": "Bewerken"
         }
       },
       {
+        "icon": "view",
         "text": {
-          "en": "usable for meal production",
-          "fr": "utilisable pour la production de repas",
-          "nl": "bruikbaar voor maaltijdproductie"
-        },
-        "pill": {
-          "text": {
-            "en": "Active",
-            "fr": "Actif",
-            "nl": "Actief"
-          },
-          "tone": "muted"
+          "en": "View",
+          "fr": "Voir",
+          "nl": "Bekijken"
         }
       },
       {
+        "icon": "copy",
         "text": {
-          "en": "no longer usable for meal production",
-          "fr": "non plus utilisable pour la production de repas",
-          "nl": "niet langer bruikbaar voor maaltijdproductie"
-        },
-        "pill": {
-          "text": {
-            "en": "Disabled",
-            "fr": "Désactivé",
-            "nl": "Uitgeschakeld"
-          },
-          "tone": "strong"
+          "en": "Copy",
+          "fr": "Copier",
+          "nl": "Kopieren"
         }
       }
     ],
@@ -1879,7 +1858,7 @@
                 "equals": "Active"
               },
               "style": "link",
-              "icon": "check",
+              "icon": "view",
               "hideText": true
             }
           ]
@@ -1999,48 +1978,27 @@
       "title": "",
       "legend": [
         {
+          "icon": "edit",
           "text": {
-            "en": "being written, not usable",
-            "fr": "en cours d'écriture, non utilisable",
-            "nl": "wordt geschreven, niet bruikbaar"
-          },
-          "pill": {
-            "text": {
-              "en": "Draft",
-              "fr": "Brouillon",
-              "nl": "Conceptverslag"
-            },
-            "tone": "default"
+            "en": "Edit",
+            "fr": "Modifier",
+            "nl": "Bewerken"
           }
         },
         {
+          "icon": "view",
           "text": {
-            "en": "usable for meal production",
-            "fr": "utilisable pour la production de repas",
-            "nl": "bruikbaar voor maaltijdproductie"
-          },
-          "pill": {
-            "text": {
-              "en": "Active",
-              "fr": "Actif",
-              "nl": "Actief"
-            },
-            "tone": "muted"
+            "en": "View",
+            "fr": "Voir",
+            "nl": "Bekijken"
           }
         },
         {
+          "icon": "copy",
           "text": {
-            "en": "no longer usable for meal production",
-            "fr": "non plus utilisable pour la production de repas",
-            "nl": "niet langer bruikbaar voor maaltijdproductie"
-          },
-          "pill": {
-            "text": {
-              "en": "Disabled",
-              "fr": "Désactivé",
-              "nl": "Uitgeschakeld"
-            },
-            "tone": "strong"
+            "en": "Copy",
+            "fr": "Copier",
+            "nl": "Kopieren"
           }
         }
       ],

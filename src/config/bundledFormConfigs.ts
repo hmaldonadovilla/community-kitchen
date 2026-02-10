@@ -9807,22 +9807,22 @@ export const BUNDLED_FORM_CONFIGS = [
             "notEmpty": true
           },
           "title": {
-            "en": "Incomplete meal production record",
+            "en": "Change Customer",
             "fr": "Changer de client?",
             "nl": "Klant wijzigen?"
           },
           "message": {
-            "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
+            "en": "Changing the customer will permanently delete production date and service as well as any data or photos you may have entered after service.\n\nA meal production record can only exist when customer, production date, and service are all filled in.\n\nIf you wish to proceed with the change, make sure you enter the production date and the service before leaving the page otherwise the record will be permanently deleted.\n\nThis action cannot be undone.",
             "fr": "Changer de client effacera toutes les informations d'ordre que vous avez entrées et toutes les données de production que vous avez entrées, voulez-vous continuer?",
             "nl": "Wijzigen van de klant zal alle orderinformatie die u hebt ingevoerd en alle productiedata die u hebt ingevoerd wissen, wilt u doorgaan?"
           },
           "confirmLabel": {
-            "en": "Continue — Delete the record",
+            "en": "Continue and delete subsequent data.",
             "fr": "Continuer et effacer les portions",
             "nl": "Doorgaan en klaren de porties"
           },
           "cancelLabel": {
-            "en": "Cancel — Continue editing",
+            "en": "Cancel and keep current customer",
             "fr": "Annuler",
             "nl": "Annuleren"
           }
@@ -10052,26 +10052,34 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "changeDialog": {
           "when": {
-            "fieldId": "MP_SERVICE",
-            "notEmpty": true
+            "all": [
+              {
+                "fieldId": "MP_SERVICE",
+                "notEmpty": true
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
+            ]
           },
           "title": {
-            "en": "Incomplete meal production record",
+            "en": "Change Production date",
             "fr": "Changer la date de production ?",
             "nl": "Productiedatum wijzigen?"
           },
           "message": {
-            "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
+            "en": "Changing the production date will permanently delete service as well as any data or photos entered after service.\n\nA meal production record can only exist when customer, production date, and service are all filled in.\n\nIf you wish to proceed with the change, make sure you enter the service before leaving the page otherwise the record will be permanently deleted.\n\nThis action cannot be undone.",
             "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
             "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
           },
           "confirmLabel": {
-            "en": "Continue — Delete the record",
+            "en": "Continue and delete subsequent data.",
             "fr": "Oui, supprimer définitivement les données déjà saisies",
             "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
           },
           "cancelLabel": {
-            "en": "Cancel — Continue editing",
+            "en": "Cancel and keep current production date",
             "fr": "Non, conserver la date de production actuelle",
             "nl": "Nee, behoud de huidige productiedatum"
           },
@@ -12163,22 +12171,22 @@ export const BUNDLED_FORM_CONFIGS = [
               "notEmpty": true
             },
             "title": {
-              "en": "Incomplete meal production record",
+              "en": "Change Customer",
               "fr": "Changer de client?",
               "nl": "Klant wijzigen?"
             },
             "message": {
-              "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
+              "en": "Changing the customer will permanently delete production date and service as well as any data or photos you may have entered after service.\n\nA meal production record can only exist when customer, production date, and service are all filled in.\n\nIf you wish to proceed with the change, make sure you enter the production date and the service before leaving the page otherwise the record will be permanently deleted.\n\nThis action cannot be undone.",
               "fr": "Changer de client effacera toutes les informations d'ordre que vous avez entrées et toutes les données de production que vous avez entrées, voulez-vous continuer?",
               "nl": "Wijzigen van de klant zal alle orderinformatie die u hebt ingevoerd en alle productiedata die u hebt ingevoerd wissen, wilt u doorgaan?"
             },
             "confirmLabel": {
-              "en": "Continue — Delete the record",
+              "en": "Continue and delete subsequent data.",
               "fr": "Continuer et effacer les portions",
               "nl": "Doorgaan en klaren de porties"
             },
             "cancelLabel": {
-              "en": "Cancel — Continue editing",
+              "en": "Cancel and keep current customer",
               "fr": "Annuler",
               "nl": "Annuleren"
             }
@@ -12409,26 +12417,34 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           "changeDialog": {
             "when": {
-              "fieldId": "MP_SERVICE",
-              "notEmpty": true
+              "all": [
+                {
+                  "fieldId": "MP_SERVICE",
+                  "notEmpty": true
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isInFuture": true
+                }
+              ]
             },
             "title": {
-              "en": "Incomplete meal production record",
+              "en": "Change Production date",
               "fr": "Changer la date de production ?",
               "nl": "Productiedatum wijzigen?"
             },
             "message": {
-              "en": "A meal production record can only exist when customer, production date, and service are all filled in.\n\nLeaving this page now will permanently delete this record and all data and photos already entered.\n\nThis action cannot be undone.",
+              "en": "Changing the production date will permanently delete service as well as any data or photos entered after service.\n\nA meal production record can only exist when customer, production date, and service are all filled in.\n\nIf you wish to proceed with the change, make sure you enter the service before leaving the page otherwise the record will be permanently deleted.\n\nThis action cannot be undone.",
               "fr": "Changer la date de production d'une production de repas en cours supprimera définitivement toutes les données de service déjà enregistrées. Voulez-vous continuer ?",
               "nl": "Als u de productiedatum van een lopende maaltijdproductie wijzigt, worden alle eerder opgeslagen servicegegevens definitief verwijderd. Wilt u doorgaan?"
             },
             "confirmLabel": {
-              "en": "Continue — Delete the record",
+              "en": "Continue and delete subsequent data.",
               "fr": "Oui, supprimer définitivement les données déjà saisies",
               "nl": "Ja, verwijder de eerder ingevoerde gegevens definitief"
             },
             "cancelLabel": {
-              "en": "Cancel — Continue editing",
+              "en": "Cancel and keep current production date",
               "fr": "Non, conserver la date de production actuelle",
               "nl": "Nee, behoud de huidige productiedatum"
             },
@@ -16570,48 +16586,27 @@ export const BUNDLED_FORM_CONFIGS = [
       ],
       "listViewLegend": [
         {
+          "icon": "edit",
           "text": {
-            "en": "being written, not usable",
-            "fr": "en cours d'écriture, non utilisable",
-            "nl": "wordt geschreven, niet bruikbaar"
-          },
-          "pill": {
-            "text": {
-              "en": "Draft",
-              "fr": "Brouillon",
-              "nl": "Conceptverslag"
-            },
-            "tone": "default"
+            "en": "Edit",
+            "fr": "Modifier",
+            "nl": "Bewerken"
           }
         },
         {
+          "icon": "view",
           "text": {
-            "en": "usable for meal production",
-            "fr": "utilisable pour la production de repas",
-            "nl": "bruikbaar voor maaltijdproductie"
-          },
-          "pill": {
-            "text": {
-              "en": "Active",
-              "fr": "Actif",
-              "nl": "Actief"
-            },
-            "tone": "muted"
+            "en": "View",
+            "fr": "Voir",
+            "nl": "Bekijken"
           }
         },
         {
+          "icon": "copy",
           "text": {
-            "en": "no longer usable for meal production",
-            "fr": "non plus utilisable pour la production de repas",
-            "nl": "niet langer bruikbaar voor maaltijdproductie"
-          },
-          "pill": {
-            "text": {
-              "en": "Disabled",
-              "fr": "Désactivé",
-              "nl": "Uitgeschakeld"
-            },
-            "tone": "strong"
+            "en": "Copy",
+            "fr": "Copier",
+            "nl": "Kopieren"
           }
         }
       ],
@@ -18278,7 +18273,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   "equals": "Active"
                 },
                 "style": "link",
-                "icon": "check",
+                "icon": "view",
                 "hideText": true
               }
             ]
@@ -18398,48 +18393,27 @@ export const BUNDLED_FORM_CONFIGS = [
         "title": "",
         "legend": [
           {
+            "icon": "edit",
             "text": {
-              "en": "being written, not usable",
-              "fr": "en cours d'écriture, non utilisable",
-              "nl": "wordt geschreven, niet bruikbaar"
-            },
-            "pill": {
-              "text": {
-                "en": "Draft",
-                "fr": "Brouillon",
-                "nl": "Conceptverslag"
-              },
-              "tone": "default"
+              "en": "Edit",
+              "fr": "Modifier",
+              "nl": "Bewerken"
             }
           },
           {
+            "icon": "view",
             "text": {
-              "en": "usable for meal production",
-              "fr": "utilisable pour la production de repas",
-              "nl": "bruikbaar voor maaltijdproductie"
-            },
-            "pill": {
-              "text": {
-                "en": "Active",
-                "fr": "Actif",
-                "nl": "Actief"
-              },
-              "tone": "muted"
+              "en": "View",
+              "fr": "Voir",
+              "nl": "Bekijken"
             }
           },
           {
+            "icon": "copy",
             "text": {
-              "en": "no longer usable for meal production",
-              "fr": "non plus utilisable pour la production de repas",
-              "nl": "niet langer bruikbaar voor maaltijdproductie"
-            },
-            "pill": {
-              "text": {
-                "en": "Disabled",
-                "fr": "Désactivé",
-                "nl": "Uitgeschakeld"
-              },
-              "tone": "strong"
+              "en": "Copy",
+              "fr": "Copier",
+              "nl": "Kopieren"
             }
           }
         ],
