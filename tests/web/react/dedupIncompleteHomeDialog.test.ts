@@ -39,6 +39,43 @@ describe('dedupIncompleteHomeDialog', () => {
     });
   });
 
+  it('resolves incompleteFieldsDialog with fieldIds criteria by default', () => {
+    const config = resolveDedupIncompleteHomeDialogConfig({
+      system: {
+        home: {
+          incompleteFieldsDialog: {
+            enabled: true,
+            fields: [' INGREDIENT_NAME ', 'CREATED_BY', 'ingredient_name'],
+            message: { en: 'Missing required fields.' }
+          }
+        }
+      }
+    } as any);
+
+    expect(config).toEqual({
+      enabled: true,
+      criteria: 'fieldIds',
+      fieldIds: ['INGREDIENT_NAME', 'CREATED_BY'],
+      message: { en: 'Missing required fields.' }
+    });
+  });
+
+  it('respects explicit criteria aliases', () => {
+    const config = resolveDedupIncompleteHomeDialogConfig({
+      system: {
+        home: {
+          incompleteFieldsDialog: {
+            trigger: 'any',
+            fieldIds: ['INGREDIENT_NAME']
+          }
+        }
+      }
+    } as any);
+
+    expect(config?.criteria).toBe('either');
+    expect(config?.fieldIds).toEqual(['INGREDIENT_NAME']);
+  });
+
   it('falls back to defaults for missing dialog copy', () => {
     const copy = resolveDedupIncompleteHomeDialogCopy(undefined, 'EN');
     expect(copy.title).toBe('Incomplete record');

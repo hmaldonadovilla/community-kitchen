@@ -791,6 +791,36 @@ describe('Dashboard', () => {
     expect((forms[0].actionBars as any)?.top?.list?.items?.length).toBeGreaterThan(0);
   });
 
+  test('getForms parses actionBars home incompleteFieldsDialog with normalized field ids', () => {
+    const configJson = JSON.stringify({
+      actionBars: {
+        system: {
+          home: {
+            incompleteFieldsDialog: {
+              enabled: true,
+              fields: [' INGREDIENT_NAME ', 'CREATED_BY', 'ingredient_name'],
+              trigger: 'fields'
+            }
+          }
+        }
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0].actionBars as any)?.system?.home?.dedupIncompleteDialog).toEqual({
+      enabled: true,
+      criteria: 'fieldIds',
+      fieldIds: ['INGREDIENT_NAME', 'CREATED_BY']
+    });
+  });
+
   test('getForms parses appHeader logo and normalizes Drive share URLs', () => {
     const driveId = '1AbcDEF_fakeDriveId_xyz';
     const configJson = JSON.stringify({

@@ -56,6 +56,49 @@ export const hasIncompleteConfiguredFields = (fieldIds: string[], valuesRaw: Rec
   return fieldIds.some(fieldId => isEmptyValue(getValueByFieldId(valuesRaw || {}, fieldId) as FieldValue));
 };
 
+export const shouldForceAutoSaveOnConfiguredBlur = (args: {
+  autoSaveEnabled: boolean;
+  isCreateFlow: boolean;
+  scope: 'top' | 'line';
+  event?: 'change' | 'blur';
+  fieldPath?: string;
+  fieldId?: string;
+  enableWhenFieldIds: string[];
+  values: Record<string, any>;
+  dedupSignature: string;
+  lastDedupCheckedSignature: string;
+  dedupChecking: boolean;
+  dedupConflict: boolean;
+  dedupHold: boolean;
+}): boolean => {
+  if (!args.autoSaveEnabled) return false;
+  if (!args.isCreateFlow) return false;
+  if (args.scope !== 'top') return false;
+  if (args.event !== 'blur') return false;
+
+  const enableWhenFieldIds = normalizeFieldIdList(args.enableWhenFieldIds);
+  if (!enableWhenFieldIds.length) return false;
+
+  const fieldId = normalizeStringId(args.fieldId);
+  const fieldPath = normalizeStringId(args.fieldPath);
+  const enableMap = buildFieldIdMap(enableWhenFieldIds);
+  const isEnableField =
+    Boolean(fieldId && (enableMap[fieldId] || enableMap[fieldId.toLowerCase()])) ||
+    Boolean(fieldPath && (enableMap[fieldPath] || enableMap[fieldPath.toLowerCase()]));
+  if (!isEnableField) return false;
+
+  if (hasIncompleteConfiguredFields(enableWhenFieldIds, args.values || {})) return false;
+  if (args.dedupChecking || args.dedupConflict) return false;
+
+  const dedupSignature = normalizeStringId(args.dedupSignature);
+  if (!dedupSignature) return true;
+  const dedupSettled = normalizeStringId(args.lastDedupCheckedSignature) === dedupSignature;
+  if (!dedupSettled) return false;
+  // `dedupHold` can be stale after blur-only transitions with no new signature check.
+  // If signature is settled and no check/conflict is active, allow immediate autosave.
+  return true;
+};
+
 export const filterDedupRulesForPrecheck = (rulesRaw: any, triggerFieldIds: string[]): any[] => {
   const rules = Array.isArray(rulesRaw) ? rulesRaw : [];
   const triggers = normalizeFieldIdList(triggerFieldIds);

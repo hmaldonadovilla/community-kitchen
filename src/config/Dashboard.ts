@@ -1446,6 +1446,39 @@ export class Dashboard {
     if (systemRaw && typeof systemRaw === 'object') {
       const homeRaw = (systemRaw as any).home;
       if (homeRaw && typeof homeRaw === 'object') {
+        const normalizeStringList = (raw: any): string[] | undefined => {
+          if (raw === undefined || raw === null || raw === '') return undefined;
+          const list = Array.isArray(raw)
+            ? raw
+            : raw
+                .toString()
+                .split(',')
+                .map((entry: string) => entry.trim());
+          const items = list
+            .map((entry: any) => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+            .filter(Boolean);
+          if (!items.length) return undefined;
+          const out: string[] = [];
+          const seen = new Set<string>();
+          items.forEach((item: string) => {
+            const key = item.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            out.push(item);
+          });
+          return out.length ? out : undefined;
+        };
+        const resolveCriteriaValue = (
+          rawCriteria: any,
+          fallback: 'dedupKeys' | 'fieldIds'
+        ): 'dedupKeys' | 'fieldIds' | 'either' => {
+          const normalized = (rawCriteria === undefined || rawCriteria === null ? '' : rawCriteria.toString().trim().toLowerCase());
+          if (!normalized) return fallback;
+          if (normalized === 'dedupkeys' || normalized === 'dedup') return 'dedupKeys';
+          if (normalized === 'fieldids' || normalized === 'fields') return 'fieldIds';
+          if (normalized === 'either' || normalized === 'any') return 'either';
+          return fallback;
+        };
         const homeCfg: {
           hideWhenActive?: boolean;
           dedupIncompleteDialog?: DedupIncompleteHomeDialogConfig;
@@ -1453,13 +1486,18 @@ export class Dashboard {
         if ((homeRaw as any).hideWhenActive !== undefined) {
           homeCfg.hideWhenActive = Boolean((homeRaw as any).hideWhenActive);
         }
+        const fieldsIncompleteDialogRaw =
+          (homeRaw as any).incompleteFieldsDialog ??
+          (homeRaw as any).missingFieldsDialog ??
+          (homeRaw as any).homeIncompleteDialog;
         const dedupIncompleteDialogRaw =
           (homeRaw as any).dedupIncompleteDialog ??
           (homeRaw as any).incompleteDedupDialog ??
           (homeRaw as any).missingDedupDialog;
-        if (dedupIncompleteDialogRaw && typeof dedupIncompleteDialogRaw === 'object') {
-          const rawDialog = dedupIncompleteDialogRaw as any;
-          const dialog: DedupIncompleteHomeDialogConfig = { ...rawDialog };
+        const homeGuardDialogRaw = fieldsIncompleteDialogRaw ?? dedupIncompleteDialogRaw;
+        if (homeGuardDialogRaw && typeof homeGuardDialogRaw === 'object') {
+          const rawDialog = homeGuardDialogRaw as any;
+          const dialog: DedupIncompleteHomeDialogConfig = {};
           const title = normalizeLocalized(rawDialog.title);
           const message = normalizeLocalized(rawDialog.message);
           const confirmLabel = normalizeLocalized(rawDialog.confirmLabel);
@@ -1479,6 +1517,14 @@ export class Dashboard {
           }
           if (rawDialog.deleteRecordOnConfirm !== undefined) {
             dialog.deleteRecordOnConfirm = Boolean(rawDialog.deleteRecordOnConfirm);
+          }
+          const fieldIds = normalizeStringList(rawDialog.fieldIds !== undefined ? rawDialog.fieldIds : rawDialog.fields);
+          if (fieldIds?.length) dialog.fieldIds = fieldIds;
+          if (rawDialog.criteria !== undefined || rawDialog.trigger !== undefined || fieldsIncompleteDialogRaw) {
+            dialog.criteria = resolveCriteriaValue(
+              rawDialog.criteria !== undefined ? rawDialog.criteria : rawDialog.trigger,
+              fieldsIncompleteDialogRaw ? 'fieldIds' : 'dedupKeys'
+            );
           }
           homeCfg.dedupIncompleteDialog = dialog;
         }

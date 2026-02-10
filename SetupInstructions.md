@@ -896,16 +896,21 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - Optional decoupling: use `autoSave.enableWhenFields` for autosave enablement gates and `autoSave.dedupTriggerFields` for dedup trigger fields.
       - Optional dedup popup copy: use `autoSave.dedupCheckDialog` to configure the checking/available/duplicate modal text and auto-close timings.
     - Want dedup-key edits to delete the current record instead of mutating it? Add `"dedupDeleteOnKeyChange": true` in the same dashboard JSON column. When enabled, if a user changes a top-level field that participates in a reject dedup rule, the current record is deleted immediately (after confirm/blur + selection effects). Then standard create-flow dedup/autosave rules apply.
-    - Want a confirmation dialog when users press **Home** with incomplete dedup keys? Add `actionBars.system.home.dedupIncompleteDialog`. On confirm, the app leaves the form and (by default) deletes the current persisted record first.
+    - Want a confirmation dialog when users press **Home** with incomplete required data? Add:
+      - `actionBars.system.home.dedupIncompleteDialog` for legacy dedup-key guards, or
+      - `actionBars.system.home.incompleteFieldsDialog` for flexible field-based guards.
+      On confirm, the app leaves the form and (by default) deletes the current persisted record first.
 
       ```json
       {
         "actionBars": {
           "system": {
             "home": {
-              "dedupIncompleteDialog": {
+              "incompleteFieldsDialog": {
+                "criteria": "fieldIds",
+                "fieldIds": ["INGREDIENT_NAME", "CREATED_BY"],
                 "message": {
-                  "en": "A record can only exist when all dedup fields are filled in."
+                  "en": "A record can only exist when all required fields are filled in."
                 },
                 "confirmLabel": {
                   "en": "Continue and delete the record"
@@ -921,7 +926,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         }
       }
       ```
-      - Set `dedupIncompleteDialog.title` to an empty string to remove the dialog title line.
+      - `criteria` supports `dedupKeys` (default for legacy key), `fieldIds`, or `either`.
+      - Set `title` to an empty string to remove the dialog title line.
     - Want to conditionally disable editing for most fields? Add `fieldDisableRules` in the same dashboard JSON column. When a rule matches, all fields become read-only except ids in `bypassFields`.
 
       ```json

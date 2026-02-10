@@ -6911,6 +6911,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "NL"
       ],
       "defaultLanguage": "EN",
+      "listViewRowClickEnabled": false,
       "languageSelectorEnabled": true,
       "autoSave": {
         "enabled": true,
@@ -6962,9 +6963,14 @@ export const BUNDLED_FORM_CONFIGS = [
       "dedupDeleteOnKeyChange": true,
       "summaryViewEnabled": true,
       "summaryHtmlTemplateId": "bundle:ingredients.summary.html",
-      "copyCurrentRecordEnabled": true,
+      "copyCurrentRecordEnabled": false,
       "createNewRecordEnabled": true,
       "createRecordPresetButtonsEnabled": false,
+      "createButtonLabel": {
+        "en": "new ingredient",
+        "fr": "new ingredient",
+        "nl": "new ingredient"
+      },
       "followupConfig": {
         "statusTransitions": {
           "inProgress": "Draft",
@@ -7043,46 +7049,6 @@ export const BUNDLED_FORM_CONFIGS = [
               "style": "link",
               "icon": "edit",
               "openView": "form"
-            },
-            {
-              "when": {
-                "fieldId": "status",
-                "equals": "Active"
-              },
-              "text": {
-                "en": " ",
-                "fr": " ",
-                "nl": " "
-              },
-              "style": "link",
-              "icon": "edit",
-              "openView": "form"
-            }
-          ]
-        },
-        {
-          "type": "rule",
-          "fieldId": "action_copy",
-          "label": {
-            "en": "",
-            "fr": "",
-            "nl": ""
-          },
-          "showIn": "cards",
-          "cases": [
-            {
-              "when": {
-                "fieldId": "status",
-                "equals": "Active"
-              },
-              "text": {
-                "en": " ",
-                "fr": " ",
-                "nl": " "
-              },
-              "style": "link",
-              "icon": "copy",
-              "openView": "copy"
             }
           ]
         }
@@ -7091,25 +7057,17 @@ export const BUNDLED_FORM_CONFIGS = [
         {
           "icon": "view",
           "text": {
-            "en": "View ingredient",
-            "fr": "Voir l’ingrédient",
-            "nl": "Ingrediënt bekijken"
+            "en": "View draft or active ingredient",
+            "fr": "View draft or active ingredient",
+            "nl": "View draft or active ingredient"
           }
         },
         {
           "icon": "edit",
           "text": {
-            "en": "Edit ingredient (Draft, Active)",
-            "fr": "Modifier l’ingrédient (Brouillon, Actif)",
-            "nl": "Ingrediënt bewerken (Concept, Actief)"
-          }
-        },
-        {
-          "icon": "copy",
-          "text": {
-            "en": "Copy ingredient (Active only)",
-            "fr": "Copier l’ingrédient (Actif uniquement)",
-            "nl": "Ingrediënt kopiëren (alleen Actief)"
+            "en": "Edit draft ingredient",
+            "fr": "Edit draft ingredient",
+            "nl": "Edit draft ingredient"
           }
         },
         {
@@ -7122,9 +7080,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "tone": "muted"
           },
           "text": {
-            "en": "Not activated; not available in Recipe Management or Meal Production.",
-            "fr": "Non activé; non disponible dans Gestion des recettes ou Production des repas.",
-            "nl": "Niet geactiveerd; niet beschikbaar in Receptbeheer of Maaltijdproductie."
+            "en": "creation in progress, not available selectable in Recipe Management and Meal Production",
+            "fr": "creation in progress, not available selectable in Recipe Management and Meal Production",
+            "nl": "creation in progress, not available selectable in Recipe Management and Meal Production"
           }
         },
         {
@@ -7137,24 +7095,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "tone": "strong"
           },
           "text": {
-            "en": "Available in Recipe Management and Meal Production.",
-            "fr": "Disponible dans Gestion des recettes et Production des repas.",
-            "nl": "Beschikbaar in Receptbeheer en Maaltijdproductie."
-          }
-        },
-        {
-          "pill": {
-            "text": {
-              "en": "Disabled",
-              "fr": "Désactivé",
-              "nl": "Uitgeschakeld"
-            },
-            "tone": "default"
-          },
-          "text": {
-            "en": "Historical only; not available in Recipe Management or Meal Production.",
-            "fr": "Historique uniquement; non disponible dans Gestion des recettes ou Production des repas.",
-            "nl": "Alleen historisch; niet beschikbaar in Receptbeheer of Maaltijdproductie."
+            "en": "Available in Recipe Management and Meal Production",
+            "fr": "Available in Recipe Management and Meal Production",
+            "nl": "Available in Recipe Management and Meal Production"
           }
         }
       ],
@@ -7211,8 +7154,13 @@ export const BUNDLED_FORM_CONFIGS = [
         "system": {
           "home": {
             "hideWhenActive": true,
-            "dedupIncompleteDialog": {
+            "incompleteFieldsDialog": {
               "enabled": true,
+              "criteria": "fieldIds",
+              "fieldIds": [
+                "INGREDIENT_NAME",
+                "CREATED_BY"
+              ],
               "title": {
                 "en": "Missing key information to create a draft ingredient record",
                 "fr": "Missing key information to create a draft ingredient record",
@@ -7243,38 +7191,14 @@ export const BUNDLED_FORM_CONFIGS = [
           "gates": {
             "edit": [
               {
-                "id": "ingredients.edit.disabledHidden",
+                "id": "ingredients.edit.draftOnly",
                 "when": {
-                  "fieldId": "status",
-                  "equals": [
-                    "Disabled"
-                  ]
-                },
-                "hide": true
-              }
-            ],
-            "copyCurrentRecord": [
-              {
-                "id": "ingredients.copy.onlyActiveSummary",
-                "when": {
-                  "any": [
-                    {
-                      "not": {
-                        "fieldId": "__ckView",
-                        "equals": [
-                          "summary"
-                        ]
-                      }
-                    },
-                    {
-                      "not": {
-                        "fieldId": "status",
-                        "equals": [
-                          "Active"
-                        ]
-                      }
-                    }
-                  ]
+                  "not": {
+                    "fieldId": "status",
+                    "equals": [
+                      "Draft"
+                    ]
+                  }
                 },
                 "hide": true
               }
@@ -7691,7 +7615,10 @@ export const BUNDLED_FORM_CONFIGS = [
             ]
           }
         },
-        "status": "Active"
+        "status": "Active",
+        "ui": {
+          "summaryVisibility": "never"
+        }
       },
       {
         "id": "EFFECTIVE_END_DATE",
@@ -7711,7 +7638,10 @@ export const BUNDLED_FORM_CONFIGS = [
             ]
           }
         },
-        "status": "Active"
+        "status": "Active",
+        "ui": {
+          "summaryVisibility": "never"
+        }
       },
       {
         "id": "STATUS",
