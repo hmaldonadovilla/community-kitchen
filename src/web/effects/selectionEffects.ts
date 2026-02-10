@@ -8,7 +8,13 @@ interface EffectContext {
   addLineItemRow: (
     groupId: string,
     preset?: Record<string, PresetValue>,
-    meta?: { effectContextId?: string; auto?: boolean; effectId?: string; hideRemoveButton?: boolean }
+    meta?: {
+      effectContextId?: string;
+      auto?: boolean;
+      effectId?: string;
+      hideRemoveButton?: boolean;
+      replaceExistingByEffectId?: boolean;
+    }
   ) => void;
   clearLineItems?: (groupId: string, contextId?: string, meta?: { preserveManualRows?: boolean }) => void;
   updateAutoLineItems?: (
@@ -121,9 +127,12 @@ export function handleSelectionEffects(
 ): void {
   if (!question?.selectionEffects || !question.selectionEffects.length) return;
   const debug = isDebug();
-  const contextId = options?.contextId || '__global__';
+  const explicitContextId = (options?.contextId || '').toString().trim();
+  const hasExplicitContext = explicitContextId.length > 0;
+  const contextId = hasExplicitContext ? explicitContextId : DEFAULT_CONTEXT_ID;
   const normalizedSelections = normalizeSelectionValues(value);
   const diffPreview = previewSelectionDiff(question, contextId, normalizedSelections, options?.forceContextReset);
+  const selectionChanged = hasExplicitContext ? hasSelectionSignatureChanged(question, contextId, normalizedSelections) : true;
   const whenCtx = buildEffectWhenContext(options);
   const resolveEffectTargetGroupId = (effect: SelectionEffect): string | undefined => {
     const rawPath = (effect as any)?.targetPath;
@@ -149,10 +158,44 @@ export function handleSelectionEffects(
       removedSelections: diffPreview.removedSelections
     });
   }
-  question.selectionEffects.forEach(effect => {
+  if (!options?.forceContextReset && !selectionChanged) {
+    if (debug && typeof console !== 'undefined') {
+      console.info('[SelectionEffects] skipped (unchanged selection)', {
+        questionId: question.id,
+        contextId,
+        rowId: options?.lineItem?.rowId
+      });
+    }
+    return;
+  }
+  const evaluatedEffects = question.selectionEffects.map(effect => {
     const targetGroupId = resolveEffectTargetGroupId(effect);
     const match = applies(effect, value);
     const whenMatch = effect.when ? matchesWhenClause(effect.when as any, whenCtx) : true;
+    return { effect, targetGroupId, match, whenMatch };
+  });
+  const findMatchingAddEffectById = (targetGroupId: string | undefined, effectId: string): SelectionEffect | null => {
+    if (!targetGroupId || !effectId) return null;
+    for (const entry of evaluatedEffects) {
+      if (!entry.match || !entry.whenMatch) continue;
+      if (entry.effect.type !== 'addLineItems') continue;
+      if (entry.targetGroupId !== targetGroupId) continue;
+      if (normalizeEffectId(entry.effect) !== effectId) continue;
+      return entry.effect;
+    }
+    return null;
+  };
+  const hasMatchingDeleteEffectForAdd = (targetGroupId: string | undefined, effectId: string): boolean => {
+    if (!targetGroupId || !effectId) return false;
+    return evaluatedEffects.some(entry => {
+      if (!entry.match || !entry.whenMatch) return false;
+      if (entry.effect.type !== 'deleteLineItems') return false;
+      if (entry.targetGroupId !== targetGroupId) return false;
+      const targetId = normalizeString((entry.effect as any)?.targetEffectId) || normalizeEffectId(entry.effect);
+      return targetId === effectId;
+    });
+  };
+  evaluatedEffects.forEach(({ effect, targetGroupId, match, whenMatch }) => {
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] effect check', {
         questionId: question.id,
@@ -191,9 +234,14 @@ export function handleSelectionEffects(
       const mergedPreset = mergePresetOverrides(resolvedPreset as any, override);
       const effectId = normalizeEffectId(effect);
       const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
+      const replaceExistingByEffectId = !!effectId && hasMatchingDeleteEffectForAdd(targetGroupId, effectId);
       const meta =
-        effectId || hideRemoveButton
-          ? { ...(effectId ? { effectId } : {}), ...(hideRemoveButton ? { hideRemoveButton: true } : {}) }
+        effectId || hideRemoveButton || replaceExistingByEffectId
+          ? {
+              ...(effectId ? { effectId } : {}),
+              ...(hideRemoveButton ? { hideRemoveButton: true } : {}),
+              ...(replaceExistingByEffectId ? { replaceExistingByEffectId: true } : {})
+            }
           : undefined;
       // Apply target field optionFilters to selectionEffects-created rows:
       // if the preset sets a value that's not allowed by the target field's optionFilter in the current context,
@@ -231,6 +279,16 @@ export function handleSelectionEffects(
       if (!ctx.deleteLineItemRows) return;
       if (!targetGroupId) return;
       const effectId = normalizeString((effect as any)?.targetEffectId) || normalizeEffectId(effect);
+      if (effectId && findMatchingAddEffectById(targetGroupId, effectId)) {
+        if (debug && typeof console !== 'undefined') {
+          console.info('[SelectionEffects] deleteLineItems skipped (upsert pair)', {
+            questionId: question.id,
+            groupId: targetGroupId,
+            effectId
+          });
+        }
+        return;
+      }
       ctx.deleteLineItemRows(targetGroupId, {
         effectId: effectId || undefined,
         parentGroupId: options?.lineItem?.groupId,
@@ -293,6 +351,9 @@ export function handleSelectionEffects(
       });
     }
   });
+  if (hasExplicitContext) {
+    commitSelectionSignature(question, contextId, normalizedSelections);
+  }
 }
 
 interface DataDrivenEffectParams {
@@ -335,12 +396,26 @@ interface SelectionDiffPreview {
 }
 
 const selectionEffectState = new Map<string, SelectionEffectCache>();
+const selectionEffectSelectionSignatures = new Map<string, Map<string, string>>();
 const ROW_CONTEXT_PREFIX = '$row.';
 const TOP_CONTEXT_PREFIX = '$top.';
 const ROW_CONTEXT_KEY = '__ckRowContext';
+const DEFAULT_CONTEXT_ID = '__global__';
 
 function getStateKey(question: WebQuestionDefinition): string {
   return question.id;
+}
+
+function getSelectionEffectsFingerprint(question: WebQuestionDefinition): string {
+  try {
+    return JSON.stringify(question?.selectionEffects || []);
+  } catch (_) {
+    return '';
+  }
+}
+
+function getSelectionSignatureStateKey(question: WebQuestionDefinition): string {
+  return `${getStateKey(question)}::${getSelectionEffectsFingerprint(question)}`;
 }
 
 function getOrCreateCache(question: WebQuestionDefinition): SelectionEffectCache {
@@ -356,12 +431,47 @@ function getContextMap(
   contextId: string,
   create = false
 ): Map<string, SelectionCacheEntry> | undefined {
-  const key = contextId || '__global__';
+  const key = contextId || DEFAULT_CONTEXT_ID;
   if (!cache.contexts.has(key)) {
     if (!create) return undefined;
     cache.contexts.set(key, new Map());
   }
   return cache.contexts.get(key);
+}
+
+function getSelectionSignatureMap(question: WebQuestionDefinition, create = false): Map<string, string> | undefined {
+  const stateKey = getSelectionSignatureStateKey(question);
+  if (!selectionEffectSelectionSignatures.has(stateKey)) {
+    if (!create) return undefined;
+    selectionEffectSelectionSignatures.set(stateKey, new Map());
+  }
+  return selectionEffectSelectionSignatures.get(stateKey);
+}
+
+function buildSelectionSignature(normalizedSelections: string[]): string {
+  if (!normalizedSelections.length) return '';
+  return normalizedSelections.join('\u001f');
+}
+
+function hasSelectionSignatureChanged(
+  question: WebQuestionDefinition,
+  contextId: string,
+  normalizedSelections: string[]
+): boolean {
+  const map = getSelectionSignatureMap(question);
+  if (!map) return true;
+  const key = contextId || DEFAULT_CONTEXT_ID;
+  return map.get(key) !== buildSelectionSignature(normalizedSelections);
+}
+
+function commitSelectionSignature(
+  question: WebQuestionDefinition,
+  contextId: string,
+  normalizedSelections: string[]
+): void {
+  const map = getSelectionSignatureMap(question, true)!;
+  const key = contextId || DEFAULT_CONTEXT_ID;
+  map.set(key, buildSelectionSignature(normalizedSelections));
 }
 
 function normalizeString(val: any): string {

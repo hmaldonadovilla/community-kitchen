@@ -37,7 +37,6 @@
     "listViewPageSize": 5,
     "listViewPaginationControlsEnabled": true,
     "listViewHeaderSortEnabled": false,
-    "listViewHideHeaderRow": false,
     "listViewMetaColumns": [],
     "listViewColumns": [
       {
@@ -51,75 +50,31 @@
         "cases": [
           {
             "text": {
-              "en": "Actions",
-              "fr": "Actions",
-              "nl": "Acties"
+              "en": "Edit",
+              "fr": "Modifier",
+              "nl": "Bewerken"
             },
-            "hideText": true,
             "when": {
               "fieldId": "status",
               "notEquals": "Active"
             },
-            "actions": [
-              {
-                "text": {
-                  "en": "Edit",
-                  "fr": "Modifier",
-                  "nl": "Bewerken"
-                },
-                "hideText": true,
-                "style": "link",
-                "icon": "edit",
-                "openView": "form"
-              },
-              {
-                "text": {
-                  "en": "Copy",
-                  "fr": "Copier",
-                  "nl": "Kopieren"
-                },
-                "hideText": true,
-                "style": "link",
-                "icon": "copy",
-                "openView": "copy"
-              }
-            ]
+            "style": "link",
+            "icon": "edit",
+            "hideText": true
           },
           {
             "text": {
-              "en": "Actions",
-              "fr": "Actions",
-              "nl": "Acties"
+              "en": "View",
+              "fr": "Voir",
+              "nl": "Bekijken"
             },
-            "hideText": true,
             "when": {
               "fieldId": "status",
               "equals": "Active"
             },
-            "actions": [
-              {
-                "text": {
-                  "en": "View",
-                  "fr": "Voir",
-                  "nl": "Bekijken"
-                },
-                "hideText": true,
-                "style": "link",
-                "icon": "view",
-                "openView": "summary"
-              },
-              {
-                "text": {
-                  "en": "Copy",
-                  "fr": "Copier",
-                  "nl": "Kopieren"
-                },
-                "hideText": true,
-                "style": "link",
-                "icon": "copy",
-                "openView": "copy"
-              }
-            ]
+            "style": "link",
+            "icon": "view",
+            "hideText": true
           }
         ]
       },
@@ -142,14 +97,14 @@
               "all": [
                 {
                   "fieldId": "status",
-                  "equals": "__never__"
+                  "notEquals": "fish"
                 }
               ]
             },
             "style": "link",
             "icon": "copy",
-            "openView": "copy",
-            "hideText": true
+            "hideText": true,
+            "openView": "copy"
           }
         ],
         "showIn": [
@@ -176,7 +131,6 @@
               "notEquals": "Active"
             },
             "style": "link",
-            "icon": "lock",
             "openView": "submit"
           }
         ],
@@ -204,7 +158,6 @@
               "equals": "Active"
             },
             "style": "link",
-            "icon": "edit",
             "openView": "button",
             "openButtonId": "RE_OPEN"
           }
@@ -214,7 +167,6 @@
         ]
       }
     ],
-    "listViewLegendColumns": 2,
     "listViewLegend": [
       {
         "icon": "edit",
@@ -222,22 +174,6 @@
           "en": "Edit",
           "fr": "Modifier",
           "nl": "Bewerken"
-        }
-      },
-      {
-        "icon": "view",
-        "text": {
-          "en": "View",
-          "fr": "Voir",
-          "nl": "Bekijken"
-        }
-      },
-      {
-        "icon": "copy",
-        "text": {
-          "en": "Copy",
-          "fr": "Copier",
-          "nl": "Kopieren"
         }
       },
       {
@@ -256,6 +192,14 @@
         }
       },
       {
+        "icon": "view",
+        "text": {
+          "en": "View",
+          "fr": "Voir",
+          "nl": "Bekijken"
+        }
+      },
+      {
         "text": {
           "en": "usable for meal production",
           "fr": "utilisable pour la production de repas",
@@ -268,6 +212,14 @@
             "nl": "Actief"
           },
           "tone": "muted"
+        }
+      },
+      {
+        "icon": "copy",
+        "text": {
+          "en": "Copy",
+          "fr": "Copier",
+          "nl": "Kopieren"
         }
       },
       {
@@ -286,6 +238,12 @@
         }
       }
     ],
+    "listViewLegendColumns": 2,
+    "listViewLegendColumnWidths": [
+      15,
+      85
+    ],
+    "listViewRowClickEnabled": false,
     "listViewSearch": {
       "mode": "text",
       "placeholder": {
@@ -427,8 +385,7 @@
       "NL"
     ],
     "defaultLanguage": "EN",
-    "languageSelectorEnabled": true,
-    "listViewRowClickEnabled": false
+    "languageSelectorEnabled": true
   },
   "questions": [
     {
@@ -816,6 +773,11 @@
           "labelEn": "Search ingredients",
           "labelFr": "Rechercher des ingrédients",
           "labelNl": "Zoek ingrediënten",
+          "helperText": {
+            "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+            "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+            "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+          },
           "placeholder": {
             "en": "Search name, category, dietary, supplier or allergen",
             "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
@@ -1574,6 +1536,11 @@
             "labelEn": "Search ingredients",
             "labelFr": "Rechercher des ingrédients",
             "labelNl": "Zoek ingrediënten",
+            "helperText": {
+              "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+              "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+              "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+            },
             "placeholder": {
               "en": "Search name, category, dietary, supplier or allergen",
               "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
@@ -1925,75 +1892,31 @@
           "cases": [
             {
               "text": {
-                "en": "Actions",
-                "fr": "Actions",
-                "nl": "Acties"
+                "en": "Edit",
+                "fr": "Modifier",
+                "nl": "Bewerken"
               },
-              "hideText": true,
               "when": {
                 "fieldId": "status",
                 "notEquals": "Active"
               },
-              "actions": [
-                {
-                  "text": {
-                    "en": "Edit",
-                    "fr": "Modifier",
-                    "nl": "Bewerken"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "edit",
-                  "openView": "form"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
-                }
-              ]
+              "style": "link",
+              "icon": "edit",
+              "hideText": true
             },
             {
               "text": {
-                "en": "Actions",
-                "fr": "Actions",
-                "nl": "Acties"
+                "en": "View",
+                "fr": "Voir",
+                "nl": "Bekijken"
               },
-              "hideText": true,
               "when": {
                 "fieldId": "status",
                 "equals": "Active"
               },
-              "actions": [
-                {
-                  "text": {
-                    "en": "View",
-                    "fr": "Voir",
-                    "nl": "Bekijken"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "view",
-                  "openView": "summary"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
-                }
-              ]
+              "style": "link",
+              "icon": "view",
+              "hideText": true
             }
           ]
         },
@@ -2016,14 +1939,14 @@
                 "all": [
                   {
                     "fieldId": "status",
-                    "equals": "__never__"
+                    "notEquals": "fish"
                   }
                 ]
               },
               "style": "link",
               "icon": "copy",
-              "openView": "copy",
-              "hideText": true
+              "hideText": true,
+              "openView": "copy"
             }
           ],
           "showIn": [
@@ -2050,7 +1973,6 @@
                 "notEquals": "Active"
               },
               "style": "link",
-              "icon": "lock",
               "openView": "submit"
             }
           ],
@@ -2078,7 +2000,6 @@
                 "equals": "Active"
               },
               "style": "link",
-              "icon": "edit",
               "openView": "button",
               "openButtonId": "RE_OPEN"
             }
@@ -2122,22 +2043,6 @@
           }
         },
         {
-          "icon": "view",
-          "text": {
-            "en": "View",
-            "fr": "Voir",
-            "nl": "Bekijken"
-          }
-        },
-        {
-          "icon": "copy",
-          "text": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
-          }
-        },
-        {
           "text": {
             "en": "being written, not usable",
             "fr": "en cours d'écriture, non utilisable",
@@ -2153,6 +2058,14 @@
           }
         },
         {
+          "icon": "view",
+          "text": {
+            "en": "View",
+            "fr": "Voir",
+            "nl": "Bekijken"
+          }
+        },
+        {
           "text": {
             "en": "usable for meal production",
             "fr": "utilisable pour la production de repas",
@@ -2165,6 +2078,14 @@
               "nl": "Actief"
             },
             "tone": "muted"
+          }
+        },
+        {
+          "icon": "copy",
+          "text": {
+            "en": "Copy",
+            "fr": "Copier",
+            "nl": "Kopieren"
           }
         },
         {
@@ -2186,6 +2107,11 @@
       "pageSize": 5,
       "paginationControlsEnabled": true,
       "legendColumns": 2,
+      "legendColumnWidths": [
+        25,
+        75
+      ],
+      "rowClickEnabled": false,
       "search": {
         "mode": "text",
         "placeholder": {
@@ -2200,11 +2126,9 @@
         }
       },
       "headerSortEnabled": false,
-      "hideHeaderRow": false,
       "view": {
         "mode": "cards"
-      },
-      "rowClickEnabled": false
+      }
     },
     "dedupRules": [
       {

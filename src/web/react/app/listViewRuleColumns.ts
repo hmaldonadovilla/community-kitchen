@@ -188,16 +188,25 @@ const matchesPredicate = (pred: ListViewRulePredicate, row: Record<string, any>,
     comparisons.push(pred.notEmpty ? !isEmpty(raw) : isEmpty(raw));
   }
 
-  if (pred.isToday || pred.isNotToday) {
+  const wantsIsToday = pred.isToday === true;
+  const wantsIsNotToday = pred.isNotToday === true;
+  const wantsIsInPast = (pred as any).isInPast === true;
+  const wantsIsInFuture = (pred as any).isInFuture === true;
+
+  if (wantsIsToday || wantsIsNotToday || wantsIsInPast || wantsIsInFuture) {
     const parsed = parseDateValue(raw);
     const today = formatLocalYmd(now);
     const candidate = parsed ? formatLocalYmd(parsed) : '';
     const same = Boolean(candidate) && candidate === today;
-    if (pred.isToday) comparisons.push(same);
-    if (pred.isNotToday) {
+    const past = Boolean(candidate) && candidate < today;
+    const future = Boolean(candidate) && candidate > today;
+    if (wantsIsToday) comparisons.push(same);
+    if (wantsIsNotToday) {
       // Treat empty/invalid as "not today".
       comparisons.push(!same);
     }
+    if (wantsIsInPast) comparisons.push(past);
+    if (wantsIsInFuture) comparisons.push(future);
   }
 
   if (pred.equals !== undefined) {

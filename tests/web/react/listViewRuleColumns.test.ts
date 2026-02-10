@@ -42,6 +42,23 @@ describe('listViewRuleColumns', () => {
     expect(cell?.hrefFieldId).toBe('pdfUrl');
   });
 
+  it('supports isInPast and isInFuture date operators', () => {
+    const col: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      cases: [
+        { when: { fieldId: 'DATE', isInPast: true }, text: 'Past', style: 'warning' },
+        { when: { fieldId: 'DATE', isInFuture: true }, text: 'Future', style: 'link' },
+        { text: 'Today', style: 'link' }
+      ]
+    };
+    const now = new Date(2025, 11, 30); // 2025-12-30
+    expect(evaluateListViewRuleColumnCell(col, { DATE: '2025-12-29' } as any, { now })?.text).toBe('Past');
+    expect(evaluateListViewRuleColumnCell(col, { DATE: '2025-12-31' } as any, { now })?.text).toBe('Future');
+    expect(evaluateListViewRuleColumnCell(col, { DATE: '2025-12-30' } as any, { now })?.text).toBe('Today');
+  });
+
   it('returns View when status is closed (case-insensitive)', () => {
     const now = new Date(2025, 11, 30); // 2025-12-30 (local)
     const row = { status: 'CLOSED', DATE: '2025-12-29' };
@@ -154,4 +171,3 @@ describe('listViewRuleColumns', () => {
     expect(deps.sort()).toEqual(['pdfUrl', 'altUrl'].sort());
   });
 });
-

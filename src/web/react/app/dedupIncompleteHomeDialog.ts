@@ -85,8 +85,8 @@ export const resolveDedupIncompleteHomeDialogCopy = (
     cancelLabel: resolveRequiredText(config?.cancelLabel, language, 'Cancel and continue editing'),
     primaryAction: config?.primaryAction === 'cancel' ? 'cancel' : 'confirm',
     showCancel: config?.showCancel !== false,
-    showCloseButton: config?.showCloseButton !== false,
-    dismissOnBackdrop: config?.dismissOnBackdrop !== false,
+    showCloseButton: config?.showCloseButton === true,
+    dismissOnBackdrop: config?.dismissOnBackdrop === true,
     deleteFailedMessage: resolveRequiredText(
       config?.deleteFailedMessage,
       language,

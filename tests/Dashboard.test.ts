@@ -181,7 +181,7 @@ describe('Dashboard', () => {
 
   test('getForms parses list view hideHeaderRow, rowClickEnabled and legendColumns from dashboard config (listView)', () => {
     const configJson = JSON.stringify({
-      listView: { hideHeaderRow: true, rowClickEnabled: false, legendColumns: 2 }
+      listView: { hideHeaderRow: true, rowClickEnabled: false, legendColumns: 2, legendColumnWidths: [25, 75] }
     });
     const mockData = [
       [],
@@ -195,6 +195,7 @@ describe('Dashboard', () => {
     expect((forms[0] as any).listViewHideHeaderRow).toBe(true);
     expect((forms[0] as any).listViewRowClickEnabled).toBe(false);
     expect((forms[0] as any).listViewLegendColumns).toBe(2);
+    expect((forms[0] as any).listViewLegendColumnWidths).toEqual([25, 75]);
   });
 
   test('getForms parses list view inline rule actions from dashboard config (listView.columns)', () => {
@@ -559,9 +560,49 @@ describe('Dashboard', () => {
     expect(forms[0].submitButtonLabel).toEqual({ en: 'Send' });
   });
 
+  test('getForms parses submitValidation.hideSubmitTopErrorMessage from dashboard config', () => {
+    const configJson = JSON.stringify({
+      submitValidation: {
+        enforceFieldOrder: true,
+        hideSubmitTopErrorMessage: true,
+        submitTopErrorMessage: { EN: 'Fix required fields' }
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].submitValidation).toEqual({
+      enforceFieldOrder: true,
+      hideSubmitTopErrorMessage: true,
+      submitTopErrorMessage: { en: 'Fix required fields' }
+    });
+  });
+
   test('getForms parses autosave config from dashboard config', () => {
     const configJson = JSON.stringify({
-      autoSave: { enabled: true, debounceMs: 1500, status: 'In progress' }
+      autoSave: {
+        enabled: true,
+        debounceMs: 1500,
+        status: 'In progress',
+        enableWhenFields: ['CREATED_BY'],
+        dedupTriggerFields: ['INGREDIENT_NAME'],
+        dedupCheckDialog: {
+          checkingTitle: { EN: 'Checking ingredient name' },
+          checkingMessage: { EN: 'Please wait...' },
+          availableTitle: { EN: 'Ingredient name available' },
+          availableMessage: { EN: 'Continue.' },
+          duplicateTitle: { EN: 'Ingredient already exists' },
+          duplicateMessage: { EN: 'Pick a different name.' },
+          availableAutoCloseMs: 1300,
+          duplicateAutoCloseMs: 900
+        }
+      }
     });
     const mockData = [
       [],
@@ -583,6 +624,18 @@ describe('Dashboard', () => {
     expect(forms[0].autoSave?.enabled).toBe(true);
     expect(forms[0].autoSave?.debounceMs).toBe(1500);
     expect(forms[0].autoSave?.status).toBe('In progress');
+    expect(forms[0].autoSave?.enableWhenFields).toEqual(['CREATED_BY']);
+    expect(forms[0].autoSave?.dedupTriggerFields).toEqual(['INGREDIENT_NAME']);
+    expect(forms[0].autoSave?.dedupCheckDialog).toEqual({
+      checkingTitle: { en: 'Checking ingredient name' },
+      checkingMessage: { en: 'Please wait...' },
+      availableTitle: { en: 'Ingredient name available' },
+      availableMessage: { en: 'Continue.' },
+      duplicateTitle: { en: 'Ingredient already exists' },
+      duplicateMessage: { en: 'Pick a different name.' },
+      availableAutoCloseMs: 1300,
+      duplicateAutoCloseMs: 900
+    });
   });
 
   test('getForms parses dedup delete-on-key-change setting from dashboard config aliases', () => {

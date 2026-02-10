@@ -86,7 +86,7 @@
     "home": { "en": "Home", "fr": "Accueil", "nl": "Start" },
     "create": { "en": "Create", "fr": "Créer", "nl": "Aanmaken" },
     "edit": { "en": "Edit", "fr": "Modifier", "nl": "Bewerken" },
-    "summary": { "en": "Summary", "fr": "Résumé", "nl": "Samenvatting" },
+    "summary": { "en": "View", "fr": "Voir", "nl": "Bekijken" },
     "reports": { "en": "Reports", "fr": "Rapports", "nl": "Rapporten" },
     "submit": { "en": "Submit", "fr": "Envoyer", "nl": "Verzenden" },
     "submitting": { "en": "Submitting…", "fr": "Envoi…", "nl": "Verzenden…" },

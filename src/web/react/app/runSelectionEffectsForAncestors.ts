@@ -26,8 +26,21 @@ type RunSelectionEffectsForAncestorsArgs = {
 const hasSelectionEffects = (field: any): boolean =>
   Array.isArray(field?.selectionEffects) && field.selectionEffects.length > 0;
 
+const coerceComparableNumber = (value: FieldValue): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const areFieldValuesEqual = (a: FieldValue, b: FieldValue): boolean => {
   if (a === b) return true;
+  const numA = coerceComparableNumber(a);
+  const numB = coerceComparableNumber(b);
+  if (numA !== null && numB !== null) return numA === numB;
   if (Array.isArray(a) || Array.isArray(b)) {
     const arrA = Array.isArray(a) ? a : [];
     const arrB = Array.isArray(b) ? b : [];
@@ -148,8 +161,7 @@ export const runSelectionEffectsForAncestors = (args: RunSelectionEffectsForAnce
       const effectQuestion = effectField as unknown as WebQuestionDefinition;
       onSelectionEffect(effectQuestion, nextValue ?? null, {
         contextId,
-        lineItem: { groupId: groupKey, rowId: targetRowId, rowValues },
-        forceContextReset: true
+        lineItem: { groupId: groupKey, rowId: targetRowId, rowValues }
       });
     });
   };
@@ -169,6 +181,6 @@ export const runSelectionEffectsForAncestors = (args: RunSelectionEffectsForAnce
 };
 
 export const __test__ = {
-  resolveAncestorDiffModes
+  resolveAncestorDiffModes,
+  areFieldValuesEqual
 };
-

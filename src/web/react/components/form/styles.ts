@@ -958,8 +958,9 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-helper);
           font-weight: 400;
           line-height: 1.35;
-          color: var(--text);
-          opacity: var(--ck-helper-opacity);
+          color: var(--muted);
+          opacity: 1;
+          text-align: left;
         }
         .form-card .field.inline-field > .ck-field-helper,
         .webform-overlay .field.inline-field > .ck-field-helper {
@@ -973,8 +974,9 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-helper);
           font-weight: 400;
           line-height: 1.35;
-          color: var(--text);
-          opacity: var(--ck-helper-opacity);
+          color: var(--muted);
+          opacity: 1;
+          text-align: left;
         }
         .ck-line-item-table__header-wrap {
           display: flex;
@@ -985,9 +987,10 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-helper);
           font-weight: 400;
           line-height: 1.35;
-          color: var(--text);
-          opacity: var(--ck-helper-opacity);
+          color: var(--muted);
+          opacity: 1;
           white-space: normal;
+          text-align: left;
         }
         /* Per-field override: force *label* above the rest even for 1-up/full-width rows.
            Important: we only stack the label; the control and any action buttons (subgroup/info) should stay inline. */
@@ -1489,7 +1492,20 @@ export const FORM_VIEW_STYLES = `
         .webform-overlay .ck-line-item-multiadd__empty {
           padding: 8px 10px;
           color: var(--muted);
-          font-weight: 600;
+          font-weight: 400;
+          font-size: var(--ck-font-helper);
+          line-height: 1.35;
+          text-align: left;
+        }
+        .ck-line-item-multiadd__helper,
+        .form-card .ck-line-item-multiadd__helper,
+        .webform-overlay .ck-line-item-multiadd__helper {
+          margin: 4px 0 0;
+          color: var(--muted);
+          font-size: var(--ck-font-helper);
+          font-weight: 400;
+          line-height: 1.35;
+          text-align: left;
         }
         .ck-line-item-multiadd__footer,
         .form-card .ck-line-item-multiadd__footer,
@@ -1556,6 +1572,10 @@ export const FORM_VIEW_STYLES = `
           box-shadow: none;
           padding: 6px;
         }
+        .ck-searchable-select__menu--up {
+          top: auto;
+          bottom: calc(100% + 6px);
+        }
         .ck-searchable-select__option {
           width: 100%;
           text-align: left;
@@ -1579,6 +1599,44 @@ export const FORM_VIEW_STYLES = `
           background: transparent;
           color: var(--text);
           -webkit-text-fill-color: var(--text);
+        }
+        .ck-searchable-multiselect__option {
+          width: 100%;
+          text-align: left;
+          padding: 10px 12px;
+          border: 0;
+          background: transparent;
+          border-radius: 12px;
+          font-size: var(--ck-font-control);
+          font-weight: 500;
+          color: var(--text);
+          -webkit-text-fill-color: var(--text);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          box-sizing: border-box;
+        }
+        .ck-searchable-multiselect__option:hover,
+        .ck-searchable-multiselect__option.is-selected {
+          background: transparent;
+          color: var(--text);
+          -webkit-text-fill-color: var(--text);
+        }
+        .ck-searchable-multiselect__option input {
+          width: 18px;
+          height: 18px;
+          margin: 0;
+          flex: 0 0 auto;
+        }
+        .ck-searchable-multiselect__option span {
+          flex: 1 1 auto;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .ck-searchable-multiselect__option:focus-visible {
+          outline: 2px solid var(--text);
+          outline-offset: 2px;
         }
         .ck-searchable-select__empty {
           padding: 10px 12px;
@@ -1656,7 +1714,7 @@ export const FORM_VIEW_STYLES = `
         .ck-group-card {
           padding: 0;
           outline: none;
-          overflow: hidden;
+          overflow: visible;
           /* stronger separation between grouped cards */
           box-shadow: none;
         }

@@ -15,7 +15,7 @@ import { collectValidationWarnings } from './validation';
 import { resolveLocalizedStringValue, resolveRecipients, resolveTemplateId } from './recipients';
 import { resolveStatusTransitionValue } from '../../../domain/statusTransitions';
 import { fetchDriveFileBlob, findDriveFileByNameInFolder } from '../driveApi';
-import { resolveOutputTarget, resolveRecordFileLabel } from './docRenderer.copy';
+import { resolveOutputTarget, resolveRecordFileLabel, trashFileById } from './docRenderer.copy';
 
 const extractDriveFileId = (value: string): string => {
   const text = (value || '').toString().trim();
@@ -33,6 +33,17 @@ const resolveExpectedPdfFileName = (form: FormConfig, record: WebFormSubmission)
   const recordLabel = resolveRecordFileLabel(form, record);
   if (!recordLabel) return '';
   return `${namePrefix} - ${recordLabel}.pdf`;
+};
+
+const isBundledHtmlPdfTemplate = (templateId: string | undefined | null): boolean => {
+  const normalized = (templateId || '').toString().trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.startsWith('bundle:') && normalized.endsWith('.pdf.html');
+};
+
+const shouldReuseExistingPdf = (followup: FollowupConfig, record: WebFormSubmission): boolean => {
+  const templateId = resolveTemplateId(followup.pdfTemplateId, record);
+  return !isBundledHtmlPdfTemplate(templateId);
 };
 
 const resolveExistingPdfFile = (
@@ -77,8 +88,9 @@ export const handleCreatePdfAction = (args: {
   if (!ctx || !ctx.record) {
     return { success: false, message: 'Record not found.' };
   }
+  const allowReuse = shouldReuseExistingPdf(followup, ctx.record);
   const existing = resolveExistingPdfFile(form, followup, ctx);
-  if (existing?.fileId) {
+  if (allowReuse && existing?.fileId) {
     if (ctx.columns.pdfUrl && existing.url) {
       ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(existing.url);
     }
@@ -98,6 +110,12 @@ export const handleCreatePdfAction = (args: {
       updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
     };
   }
+  if (!allowReuse) {
+    debugLog('followup.pdf.reuseSkippedForHtmlTemplate', {
+      recordId: ctx.record.id || '',
+      existingFileId: existing?.fileId || ''
+    });
+  }
   const pdfArtifact = generatePdfArtifact(form, questions, ctx.record, followup);
   if (!pdfArtifact.success) {
     return { success: false, message: pdfArtifact.message || 'Failed to generate PDF.' };
@@ -111,6 +129,11 @@ export const handleCreatePdfAction = (args: {
     : null;
   if (!updatedAt) {
     updatedAt = submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
+  }
+  // For bundled HTML PDF templates we intentionally regenerate to pick up template/style updates.
+  // Cleanup the prior artifact to avoid accumulating stale copies with the same logical record.
+  if (!allowReuse && existing?.fileId && existing.fileId !== pdfArtifact.fileId) {
+    trashFileById(existing.fileId);
   }
   submissionService.refreshRecordCache(form.configSheet, questions, ctx);
   return {
@@ -155,8 +178,9 @@ export const handleSendEmailAction = (args: {
   addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));
 
   let pdfArtifact: { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob } | null = null;
+  const allowReuse = shouldReuseExistingPdf(followup, ctx.record);
   if (followup.pdfTemplateId) {
-    const existing = resolveExistingPdfFile(form, followup, ctx);
+    const existing = allowReuse ? resolveExistingPdfFile(form, followup, ctx) : null;
     if (existing?.fileId) {
       const blob = fetchDriveFileBlob(existing.fileId, 'followup.email.existingPdf');
       if (blob) {
