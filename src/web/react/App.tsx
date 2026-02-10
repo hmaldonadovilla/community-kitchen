@@ -7716,13 +7716,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
   const listLegendItems = useMemo(() => {
     const cols = ((definition.listView?.columns as any) || []) as any[];
-    return buildListViewLegendItems(cols as any, definition.listView?.legend, language);
-  }, [definition.listView?.columns, definition.listView?.legend, language]);
+    const configuredLegend =
+      (Array.isArray(definition.listView?.legend) && definition.listView?.legend.length
+        ? definition.listView?.legend
+        : ((definition as any)?.listViewLegend as any[] | undefined)) || [];
+    return buildListViewLegendItems(cols as any, configuredLegend as any, language);
+  }, [definition, definition.listView?.columns, definition.listView?.legend, language]);
   const listLegendColumns = useMemo(() => {
-    const raw = Number((definition.listView as any)?.legendColumns);
+    const raw = Number((definition.listView as any)?.legendColumns ?? (definition as any)?.listViewLegendColumns);
     if (!Number.isFinite(raw) || raw <= 1) return 1;
     return Math.max(1, Math.min(2, Math.round(raw)));
-  }, [definition.listView]);
+  }, [definition, definition.listView]);
 
   useEffect(() => {
     if (view !== 'list') return;

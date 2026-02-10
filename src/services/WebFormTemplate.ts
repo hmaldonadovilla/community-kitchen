@@ -531,19 +531,21 @@ export function buildWebFormHtml(
       button:disabled { opacity: 0.6; cursor: not-allowed; }
       .actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
       .muted {
-        color: var(--text);
-        opacity: var(--ck-helper-opacity);
+        color: var(--muted);
+        opacity: 1;
         font-size: var(--ck-font-helper);
         font-weight: 400;
         line-height: 1.35;
+        text-align: left;
       }
       .ck-step-help-text {
         margin: 0 0 12px;
-        color: var(--text);
-        opacity: var(--ck-helper-opacity);
+        color: var(--muted);
+        opacity: 1;
         font-size: var(--ck-font-helper);
         line-height: 1.35;
         font-weight: 400;
+        text-align: left;
       }
       .status { margin-top: 8px; padding: 8px 10px; background: transparent; border: 1px solid var(--border); border-radius: 12px; color: var(--text); }
       .inline-options { display: flex; gap: 10px; flex-wrap: wrap; }

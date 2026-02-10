@@ -803,7 +803,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           effectCount: plan.effects.length
         });
       };
-      const applyEffects = () => {
+        const applyEffects = () => {
         const deleteRoots: Array<{ groupId: string; rowId: string }> = [];
         const setEffects = plan.effects.filter(effect => effect.type === 'setValue');
         const deleteEffects = plan.effects.filter(effect => effect.type === 'deleteLineItems');
@@ -965,7 +965,32 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           const leftoversGroupKey = isLeftoversGroupKey(q.id)
             ? q.id
             : deleteRoots.map(root => root.groupId).find(groupKey => isLeftoversGroupKey(groupKey)) || '';
-          if (leftoversGroupKey) {
+          const isClearLeftoversAction = (plan.action.id || '').toString().trim() === 'clearLeftovers';
+          const resetsLeftoverChoice = setEffects.some(effect => {
+            if (effect.groupKey !== q.id || effect.rowId !== row.id) return false;
+            return (effect.fieldId || '').toString().trim() === 'MP_IS_REHEAT';
+          });
+          if (leftoversGroupKey && resetsLeftoverChoice) {
+            const rowsBeforeReset = (next[leftoversGroupKey] || []) as LineItemRowState[];
+            const rowsAfterReset = rowsBeforeReset.filter(row => {
+              const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
+              return (prepType || '').toString().trim().toLowerCase() === 'cook';
+            });
+            if (rowsAfterReset.length !== rowsBeforeReset.length) {
+              next = {
+                ...next,
+                [leftoversGroupKey]: rowsAfterReset
+              };
+              changed = true;
+              onDiagnostic?.('lineItems.leftovers.reset.purge', {
+                groupId: q.id,
+                rowId: row.id,
+                targetKey: leftoversGroupKey,
+                removedCount: rowsBeforeReset.length - rowsAfterReset.length
+              });
+            }
+          }
+          if (leftoversGroupKey && !isClearLeftoversAction && !resetsLeftoverChoice) {
             const existingRows = (next[leftoversGroupKey] || []) as LineItemRowState[];
             const hasNonCookRow = existingRows.some(row => {
               const prepType = ((row?.values || {}) as any)?.PREP_TYPE;

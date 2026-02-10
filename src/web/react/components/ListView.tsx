@@ -8,7 +8,7 @@ import { fetchBatch, fetchList, ListItem, ListResponse, resolveUserFacingErrorMe
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
 import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/listViewAdvancedSearch';
-import { normalizeToIsoDateLocal } from '../app/listViewSearch';
+import { normalizeToIsoDateLocal, shouldClearAppliedQueryOnInputClear } from '../app/listViewSearch';
 import { paginateItemsForListViewUi } from '../app/listViewPagination';
 import { resolveListViewUiState } from '../app/listViewUiState';
 import { ListViewIcon } from './ListViewIcon';
@@ -1275,6 +1275,9 @@ const ListView: React.FC<ListViewProps> = ({
 
   const clearSearchInputOnly = useCallback(() => {
     setSearchInputValue('');
+    if (shouldClearAppliedQueryOnInputClear(listSearchMode)) {
+      setSearchQueryValue('');
+    }
     onDiagnostic?.('list.search.clearInput', { mode: listSearchMode });
   }, [listSearchMode, onDiagnostic]);
 

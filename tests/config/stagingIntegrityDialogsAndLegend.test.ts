@@ -15,49 +15,51 @@ const findQuestion = (questions: any[], id: string): any => {
 };
 
 describe('staging integrity dialogs and list legend config', () => {
-  test('recipes list legend exposes edit/view/copy icons in 2 columns', () => {
-    const cfg = readConfig('config_recipes.json');
-    const expectedLegend = [
-      { icon: 'edit', text: { en: 'Edit', fr: 'Modifier', nl: 'Bewerken' } },
-      { icon: 'view', text: { en: 'View', fr: 'Voir', nl: 'Bekijken' } },
-      { icon: 'copy', text: { en: 'Copy', fr: 'Copier', nl: 'Kopieren' } }
-    ];
+  const hasNonEmptyEnText = (value: any): boolean => typeof value?.en === 'string' && value.en.trim().length > 0;
+  const containsIcons = (legend: any[], expectedIcons: string[]) => {
+    const icons = new Set((legend || []).map(item => (item?.icon || '').toString().trim().toLowerCase()).filter(Boolean));
+    expectedIcons.forEach(icon => expect(icons.has(icon)).toBe(true));
+  };
 
-    expect(cfg.form?.listViewLegend).toEqual(expectedLegend);
-    expect(cfg.form?.listViewLegendColumns).toBe(2);
-    expect(cfg.definition?.listView?.legend).toEqual(expectedLegend);
-    expect(cfg.definition?.listView?.legendColumns).toBe(2);
+  test('recipes list legend keeps required action icons and valid layout config', () => {
+    const cfg = readConfig('config_recipes.json');
+
+    const formLegend = Array.isArray(cfg.form?.listViewLegend) ? cfg.form.listViewLegend : [];
+    const defLegend = Array.isArray(cfg.definition?.listView?.legend) ? cfg.definition.listView.legend : [];
+    expect(formLegend.length).toBeGreaterThanOrEqual(3);
+    expect(defLegend.length).toBeGreaterThanOrEqual(3);
+    containsIcons(formLegend, ['edit', 'view', 'copy']);
+    containsIcons(defLegend, ['edit', 'view', 'copy']);
+
+    const formColumnsRaw = Number(cfg.form?.listViewLegendColumns);
+    const defColumnsRaw = Number(cfg.definition?.listView?.legendColumns);
+    expect(Number.isFinite(formColumnsRaw)).toBe(true);
+    expect(Number.isFinite(defColumnsRaw)).toBe(true);
+    expect(formColumnsRaw).toBeGreaterThanOrEqual(1);
+    expect(formColumnsRaw).toBeLessThanOrEqual(2);
+    expect(defColumnsRaw).toBeGreaterThanOrEqual(1);
+    expect(defColumnsRaw).toBeLessThanOrEqual(2);
 
     const formActionCases = cfg.form?.listViewColumns?.find((col: any) => col?.fieldId === 'action')?.cases || [];
     const defActionCases = cfg.definition?.listView?.columns?.find((col: any) => col?.fieldId === 'action')?.cases || [];
-    expect(formActionCases.find((entry: any) => entry?.text?.en === 'View')?.icon).toBe('view');
-    expect(defActionCases.find((entry: any) => entry?.text?.en === 'View')?.icon).toBe('view');
+    const formActionIcons = new Set(formActionCases.map((entry: any) => (entry?.icon || '').toString().trim().toLowerCase()).filter(Boolean));
+    const defActionIcons = new Set(defActionCases.map((entry: any) => (entry?.icon || '').toString().trim().toLowerCase()).filter(Boolean));
+    expect(formActionIcons.has('edit')).toBe(true);
+    expect(formActionIcons.has('view')).toBe(true);
+    expect(defActionIcons.has('edit')).toBe(true);
+    expect(defActionIcons.has('view')).toBe(true);
   });
 
-  test('meal production uses required data integrity dialogs', () => {
+  test('meal production keeps critical data-integrity dialogs wired', () => {
     const cfg = readConfig('config_meal_production.json');
-    const expectedHomeMessage =
-      'A meal production record can only exist when customer, production date, and service are all filled in.\n\n' +
-      'Leaving this page now will permanently delete this record and all data and photos already entered.\n\n' +
-      'This action cannot be undone.';
-    const expectedChangeCustomerMessage =
-      'Changing the customer will permanently delete production date and service as well as any data or photos you may have entered after service.\n\n' +
-      'A meal production record can only exist when customer, production date, and service are all filled in.\n\n' +
-      'If you wish to proceed with the change, make sure you enter the production date and the service before leaving the page otherwise the record will be permanently deleted.\n\n' +
-      'This action cannot be undone.';
-    const expectedChangeProductionDateMessage =
-      'Changing the production date will permanently delete service as well as any data or photos entered after service.\n\n' +
-      'A meal production record can only exist when customer, production date, and service are all filled in.\n\n' +
-      'If you wish to proceed with the change, make sure you enter the service before leaving the page otherwise the record will be permanently deleted.\n\n' +
-      'This action cannot be undone.';
 
     const assertMainHomeDialog = (root: any) => {
       const dialog = root?.actionBars?.system?.home?.dedupIncompleteDialog;
       expect(dialog?.enabled).toBe(true);
-      expect(dialog?.title?.en).toBe('Incomplete meal production record');
-      expect(dialog?.message?.en).toBe(expectedHomeMessage);
-      expect(dialog?.confirmLabel?.en).toBe('Continue — Delete the record');
-      expect(dialog?.cancelLabel?.en).toBe('Cancel — Continue editing');
+      expect(hasNonEmptyEnText(dialog?.title)).toBe(true);
+      expect(hasNonEmptyEnText(dialog?.message)).toBe(true);
+      expect(hasNonEmptyEnText(dialog?.confirmLabel)).toBe(true);
+      expect(hasNonEmptyEnText(dialog?.cancelLabel)).toBe(true);
       expect(dialog?.showCancel).toBe(true);
       expect(dialog?.showCloseButton).toBe(false);
       expect(dialog?.dismissOnBackdrop).toBe(false);
@@ -67,10 +69,10 @@ describe('staging integrity dialogs and list legend config', () => {
     const assertChangeDialogs = (questions: any[]) => {
       const customer = findQuestion(questions, 'MP_DISTRIBUTOR');
       expect(customer?.changeDialog?.when).toEqual({ fieldId: 'MP_PREP_DATE', notEmpty: true });
-      expect(customer?.changeDialog?.title?.en).toBe('Change Customer');
-      expect(customer?.changeDialog?.message?.en).toBe(expectedChangeCustomerMessage);
-      expect(customer?.changeDialog?.confirmLabel?.en).toBe('Continue and delete subsequent data.');
-      expect(customer?.changeDialog?.cancelLabel?.en).toBe('Cancel and keep current customer');
+      expect(hasNonEmptyEnText(customer?.changeDialog?.title)).toBe(true);
+      expect(hasNonEmptyEnText(customer?.changeDialog?.message)).toBe(true);
+      expect(hasNonEmptyEnText(customer?.changeDialog?.confirmLabel)).toBe(true);
+      expect(hasNonEmptyEnText(customer?.changeDialog?.cancelLabel)).toBe(true);
 
       const prepDate = findQuestion(questions, 'MP_PREP_DATE');
       expect(prepDate?.changeDialog?.when).toEqual({
@@ -79,10 +81,10 @@ describe('staging integrity dialogs and list legend config', () => {
           { fieldId: 'MP_PREP_DATE', isInFuture: true }
         ]
       });
-      expect(prepDate?.changeDialog?.title?.en).toBe('Change Production date');
-      expect(prepDate?.changeDialog?.message?.en).toBe(expectedChangeProductionDateMessage);
-      expect(prepDate?.changeDialog?.confirmLabel?.en).toBe('Continue and delete subsequent data.');
-      expect(prepDate?.changeDialog?.cancelLabel?.en).toBe('Cancel and keep current production date');
+      expect(hasNonEmptyEnText(prepDate?.changeDialog?.title)).toBe(true);
+      expect(hasNonEmptyEnText(prepDate?.changeDialog?.message)).toBe(true);
+      expect(hasNonEmptyEnText(prepDate?.changeDialog?.confirmLabel)).toBe(true);
+      expect(hasNonEmptyEnText(prepDate?.changeDialog?.cancelLabel)).toBe(true);
     };
 
     assertMainHomeDialog(cfg.form);

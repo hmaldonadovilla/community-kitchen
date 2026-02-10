@@ -31,4 +31,11 @@ export const normalizeToIsoDateLocal = (value: any): string | null => {
   return `${year}-${month}-${day}`;
 };
 
+/**
+ * The list search clear icon is used to clear text entry only in text/advanced modes.
+ * For date mode, it must also clear the applied filter so the list resets immediately.
+ */
+export const shouldClearAppliedQueryOnInputClear = (mode: string | null | undefined): boolean => {
+  return (mode || '').toString().trim().toLowerCase() === 'date';
+};
 

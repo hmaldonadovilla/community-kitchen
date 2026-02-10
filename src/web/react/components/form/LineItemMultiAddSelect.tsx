@@ -219,6 +219,7 @@ export const LineItemMultiAddSelect: React.FC<{
           </button>
         ) : null}
       </div>
+      {resolvedHelperText ? <div className="ck-line-item-multiadd__helper">{resolvedHelperText}</div> : null}
       {open ? (
         <div
           className={`ck-line-item-multiadd__menu${menuLayout ? ' ck-line-item-multiadd__menu--modal' : ''}`}
@@ -251,9 +252,7 @@ export const LineItemMultiAddSelect: React.FC<{
               })
             ) : (
               <div className="ck-line-item-multiadd__empty">
-                {hasQuery
-                  ? emptyText || tSystem('lineItems.noOptionsAvailable', language, 'No options available.')
-                  : resolvedHelperText || null}
+                {hasQuery ? emptyText || tSystem('lineItems.noOptionsAvailable', language, 'No options available.') : null}
               </div>
             )}
           </div>

@@ -8,7 +8,13 @@ interface EffectContext {
   addLineItemRow: (
     groupId: string,
     preset?: Record<string, PresetValue>,
-    meta?: { effectContextId?: string; auto?: boolean; effectId?: string; hideRemoveButton?: boolean }
+    meta?: {
+      effectContextId?: string;
+      auto?: boolean;
+      effectId?: string;
+      hideRemoveButton?: boolean;
+      replaceExistingByEffectId?: boolean;
+    }
   ) => void;
   clearLineItems?: (groupId: string, contextId?: string, meta?: { preserveManualRows?: boolean }) => void;
   updateAutoLineItems?: (
@@ -162,10 +168,34 @@ export function handleSelectionEffects(
     }
     return;
   }
-  question.selectionEffects.forEach(effect => {
+  const evaluatedEffects = question.selectionEffects.map(effect => {
     const targetGroupId = resolveEffectTargetGroupId(effect);
     const match = applies(effect, value);
     const whenMatch = effect.when ? matchesWhenClause(effect.when as any, whenCtx) : true;
+    return { effect, targetGroupId, match, whenMatch };
+  });
+  const findMatchingAddEffectById = (targetGroupId: string | undefined, effectId: string): SelectionEffect | null => {
+    if (!targetGroupId || !effectId) return null;
+    for (const entry of evaluatedEffects) {
+      if (!entry.match || !entry.whenMatch) continue;
+      if (entry.effect.type !== 'addLineItems') continue;
+      if (entry.targetGroupId !== targetGroupId) continue;
+      if (normalizeEffectId(entry.effect) !== effectId) continue;
+      return entry.effect;
+    }
+    return null;
+  };
+  const hasMatchingDeleteEffectForAdd = (targetGroupId: string | undefined, effectId: string): boolean => {
+    if (!targetGroupId || !effectId) return false;
+    return evaluatedEffects.some(entry => {
+      if (!entry.match || !entry.whenMatch) return false;
+      if (entry.effect.type !== 'deleteLineItems') return false;
+      if (entry.targetGroupId !== targetGroupId) return false;
+      const targetId = normalizeString((entry.effect as any)?.targetEffectId) || normalizeEffectId(entry.effect);
+      return targetId === effectId;
+    });
+  };
+  evaluatedEffects.forEach(({ effect, targetGroupId, match, whenMatch }) => {
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] effect check', {
         questionId: question.id,
@@ -204,9 +234,14 @@ export function handleSelectionEffects(
       const mergedPreset = mergePresetOverrides(resolvedPreset as any, override);
       const effectId = normalizeEffectId(effect);
       const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
+      const replaceExistingByEffectId = !!effectId && hasMatchingDeleteEffectForAdd(targetGroupId, effectId);
       const meta =
-        effectId || hideRemoveButton
-          ? { ...(effectId ? { effectId } : {}), ...(hideRemoveButton ? { hideRemoveButton: true } : {}) }
+        effectId || hideRemoveButton || replaceExistingByEffectId
+          ? {
+              ...(effectId ? { effectId } : {}),
+              ...(hideRemoveButton ? { hideRemoveButton: true } : {}),
+              ...(replaceExistingByEffectId ? { replaceExistingByEffectId: true } : {})
+            }
           : undefined;
       // Apply target field optionFilters to selectionEffects-created rows:
       // if the preset sets a value that's not allowed by the target field's optionFilter in the current context,
@@ -244,6 +279,16 @@ export function handleSelectionEffects(
       if (!ctx.deleteLineItemRows) return;
       if (!targetGroupId) return;
       const effectId = normalizeString((effect as any)?.targetEffectId) || normalizeEffectId(effect);
+      if (effectId && findMatchingAddEffectById(targetGroupId, effectId)) {
+        if (debug && typeof console !== 'undefined') {
+          console.info('[SelectionEffects] deleteLineItems skipped (upsert pair)', {
+            questionId: question.id,
+            groupId: targetGroupId,
+            effectId
+          });
+        }
+        return;
+      }
       ctx.deleteLineItemRows(targetGroupId, {
         effectId: effectId || undefined,
         parentGroupId: options?.lineItem?.groupId,

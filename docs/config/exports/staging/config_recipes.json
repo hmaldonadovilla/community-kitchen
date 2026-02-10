@@ -131,7 +131,6 @@
               "notEquals": "Active"
             },
             "style": "link",
-            "icon": "lock",
             "openView": "submit"
           }
         ],
@@ -159,7 +158,6 @@
               "equals": "Active"
             },
             "style": "link",
-            "icon": "edit",
             "openView": "button",
             "openButtonId": "RE_OPEN"
           }
@@ -192,6 +190,51 @@
           "en": "Copy",
           "fr": "Copier",
           "nl": "Kopieren"
+        }
+      },
+      {
+        "text": {
+          "en": "being written, not usable",
+          "fr": "en cours d'écriture, non utilisable",
+          "nl": "wordt geschreven, niet bruikbaar"
+        },
+        "pill": {
+          "text": {
+            "en": "Draft",
+            "fr": "Brouillon",
+            "nl": "Conceptverslag"
+          },
+          "tone": "default"
+        }
+      },
+      {
+        "text": {
+          "en": "usable for meal production",
+          "fr": "utilisable pour la production de repas",
+          "nl": "bruikbaar voor maaltijdproductie"
+        },
+        "pill": {
+          "text": {
+            "en": "Active",
+            "fr": "Actif",
+            "nl": "Actief"
+          },
+          "tone": "muted"
+        }
+      },
+      {
+        "text": {
+          "en": "no longer usable for meal production",
+          "fr": "non plus utilisable pour la production de repas",
+          "nl": "niet langer bruikbaar voor maaltijdproductie"
+        },
+        "pill": {
+          "text": {
+            "en": "Disabled",
+            "fr": "Désactivé",
+            "nl": "Uitgeschakeld"
+          },
+          "tone": "strong"
         }
       }
     ],
@@ -726,6 +769,11 @@
           "labelEn": "Search ingredients",
           "labelFr": "Rechercher des ingrédients",
           "labelNl": "Zoek ingrediënten",
+          "helperText": {
+            "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+            "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+            "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+          },
           "placeholder": {
             "en": "Search name, category, dietary, supplier or allergen",
             "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
@@ -1484,6 +1532,11 @@
             "labelEn": "Search ingredients",
             "labelFr": "Rechercher des ingrédients",
             "labelNl": "Zoek ingrediënten",
+            "helperText": {
+              "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+              "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+              "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+            },
             "placeholder": {
               "en": "Search name, category, dietary, supplier or allergen",
               "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
@@ -1999,6 +2052,51 @@
             "en": "Copy",
             "fr": "Copier",
             "nl": "Kopieren"
+          }
+        },
+        {
+          "text": {
+            "en": "being written, not usable",
+            "fr": "en cours d'écriture, non utilisable",
+            "nl": "wordt geschreven, niet bruikbaar"
+          },
+          "pill": {
+            "text": {
+              "en": "Draft",
+              "fr": "Brouillon",
+              "nl": "Conceptverslag"
+            },
+            "tone": "default"
+          }
+        },
+        {
+          "text": {
+            "en": "usable for meal production",
+            "fr": "utilisable pour la production de repas",
+            "nl": "bruikbaar voor maaltijdproductie"
+          },
+          "pill": {
+            "text": {
+              "en": "Active",
+              "fr": "Actif",
+              "nl": "Actief"
+            },
+            "tone": "muted"
+          }
+        },
+        {
+          "text": {
+            "en": "no longer usable for meal production",
+            "fr": "non plus utilisable pour la production de repas",
+            "nl": "niet langer bruikbaar voor maaltijdproductie"
+          },
+          "pill": {
+            "text": {
+              "en": "Disabled",
+              "fr": "Désactivé",
+              "nl": "Uitgeschakeld"
+            },
+            "tone": "strong"
           }
         }
       ],

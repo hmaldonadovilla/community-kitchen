@@ -8436,10 +8436,19 @@ export const BUNDLED_FORM_CONFIGS = [
                       "match": "any",
                       "rowFilter": {
                         "includeWhen": {
-                          "fieldId": "PREP_TYPE",
-                          "equals": [
-                            "Entire dish",
-                            "Part dish"
+                          "any": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Entire dish",
+                                "Part dish",
+                                ""
+                              ]
+                            },
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "isEmpty": true
+                            }
                           ]
                         }
                       }
@@ -10899,7 +10908,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Add photo",
               "labelFr": "Ajouter une photo",
               "labelNl": "Foto toevoegen",
-              "required": false,
+              "required": true,
               "requiredMessage": {
                 "en": "Add one photo per cooking pot.",
                 "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -10943,7 +10952,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "uploadConfig": {
                 "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
                 "minFiles": 0,
-                "maxFiles": 5,
+                "maxFiles": 10,
                 "maxFileSizeMb": 10,
                 "allowedMimeTypes": [
                   "image/*"
@@ -13270,7 +13279,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelEn": "Add photo",
                 "labelFr": "Ajouter une photo",
                 "labelNl": "Foto toevoegen",
-                "required": false,
+                "required": true,
                 "requiredMessage": {
                   "en": "Add one photo per cooking pot.",
                   "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -13314,7 +13323,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "uploadConfig": {
                   "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
                   "minFiles": 0,
-                  "maxFiles": 5,
+                  "maxFiles": 10,
                   "maxFileSizeMb": 10,
                   "allowedMimeTypes": [
                     "image/*"
@@ -15100,10 +15109,19 @@ export const BUNDLED_FORM_CONFIGS = [
                       "match": "any",
                       "rowFilter": {
                         "includeWhen": {
-                          "fieldId": "PREP_TYPE",
-                          "equals": [
-                            "Entire dish",
-                            "Part dish"
+                          "any": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Entire dish",
+                                "Part dish",
+                                ""
+                              ]
+                            },
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "isEmpty": true
+                            }
                           ]
                         }
                       }
@@ -16546,7 +16564,6 @@ export const BUNDLED_FORM_CONFIGS = [
                 "notEquals": "Active"
               },
               "style": "link",
-              "icon": "lock",
               "openView": "submit"
             }
           ],
@@ -16574,7 +16591,6 @@ export const BUNDLED_FORM_CONFIGS = [
                 "equals": "Active"
               },
               "style": "link",
-              "icon": "edit",
               "openView": "button",
               "openButtonId": "RE_OPEN"
             }
@@ -16607,6 +16623,51 @@ export const BUNDLED_FORM_CONFIGS = [
             "en": "Copy",
             "fr": "Copier",
             "nl": "Kopieren"
+          }
+        },
+        {
+          "text": {
+            "en": "being written, not usable",
+            "fr": "en cours d'écriture, non utilisable",
+            "nl": "wordt geschreven, niet bruikbaar"
+          },
+          "pill": {
+            "text": {
+              "en": "Draft",
+              "fr": "Brouillon",
+              "nl": "Conceptverslag"
+            },
+            "tone": "default"
+          }
+        },
+        {
+          "text": {
+            "en": "usable for meal production",
+            "fr": "utilisable pour la production de repas",
+            "nl": "bruikbaar voor maaltijdproductie"
+          },
+          "pill": {
+            "text": {
+              "en": "Active",
+              "fr": "Actif",
+              "nl": "Actief"
+            },
+            "tone": "muted"
+          }
+        },
+        {
+          "text": {
+            "en": "no longer usable for meal production",
+            "fr": "non plus utilisable pour la production de repas",
+            "nl": "niet langer bruikbaar voor maaltijdproductie"
+          },
+          "pill": {
+            "text": {
+              "en": "Disabled",
+              "fr": "Désactivé",
+              "nl": "Uitgeschakeld"
+            },
+            "tone": "strong"
           }
         }
       ],
@@ -17141,6 +17202,11 @@ export const BUNDLED_FORM_CONFIGS = [
             "labelEn": "Search ingredients",
             "labelFr": "Rechercher des ingrédients",
             "labelNl": "Zoek ingrediënten",
+            "helperText": {
+              "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+              "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+              "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+            },
             "placeholder": {
               "en": "Search name, category, dietary, supplier or allergen",
               "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
@@ -17899,6 +17965,11 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Search ingredients",
               "labelFr": "Rechercher des ingrédients",
               "labelNl": "Zoek ingrediënten",
+              "helperText": {
+                "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
+                "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+              },
               "placeholder": {
                 "en": "Search name, category, dietary, supplier or allergen",
                 "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
@@ -18414,6 +18485,51 @@ export const BUNDLED_FORM_CONFIGS = [
               "en": "Copy",
               "fr": "Copier",
               "nl": "Kopieren"
+            }
+          },
+          {
+            "text": {
+              "en": "being written, not usable",
+              "fr": "en cours d'écriture, non utilisable",
+              "nl": "wordt geschreven, niet bruikbaar"
+            },
+            "pill": {
+              "text": {
+                "en": "Draft",
+                "fr": "Brouillon",
+                "nl": "Conceptverslag"
+              },
+              "tone": "default"
+            }
+          },
+          {
+            "text": {
+              "en": "usable for meal production",
+              "fr": "utilisable pour la production de repas",
+              "nl": "bruikbaar voor maaltijdproductie"
+            },
+            "pill": {
+              "text": {
+                "en": "Active",
+                "fr": "Actif",
+                "nl": "Actief"
+              },
+              "tone": "muted"
+            }
+          },
+          {
+            "text": {
+              "en": "no longer usable for meal production",
+              "fr": "non plus utilisable pour la production de repas",
+              "nl": "niet langer bruikbaar voor maaltijdproductie"
+            },
+            "pill": {
+              "text": {
+                "en": "Disabled",
+                "fr": "Désactivé",
+                "nl": "Uitgeschakeld"
+              },
+              "tone": "strong"
             }
           }
         ],

@@ -641,10 +641,19 @@
                     "match": "any",
                     "rowFilter": {
                       "includeWhen": {
-                        "fieldId": "PREP_TYPE",
-                        "equals": [
-                          "Entire dish",
-                          "Part dish"
+                        "any": [
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Entire dish",
+                              "Part dish",
+                              ""
+                            ]
+                          },
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "isEmpty": true
+                          }
                         ]
                       }
                     }
@@ -3104,7 +3113,7 @@
             "labelEn": "Add photo",
             "labelFr": "Ajouter une photo",
             "labelNl": "Foto toevoegen",
-            "required": false,
+            "required": true,
             "requiredMessage": {
               "en": "Add one photo per cooking pot.",
               "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -3148,7 +3157,7 @@
             "uploadConfig": {
               "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
               "minFiles": 0,
-              "maxFiles": 5,
+              "maxFiles": 10,
               "maxFileSizeMb": 10,
               "allowedMimeTypes": [
                 "image/*"
@@ -5475,7 +5484,7 @@
               "labelEn": "Add photo",
               "labelFr": "Ajouter une photo",
               "labelNl": "Foto toevoegen",
-              "required": false,
+              "required": true,
               "requiredMessage": {
                 "en": "Add one photo per cooking pot.",
                 "fr": "Ajoutez une photo par marmite de cuisson.",
@@ -5519,7 +5528,7 @@
               "uploadConfig": {
                 "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
                 "minFiles": 0,
-                "maxFiles": 5,
+                "maxFiles": 10,
                 "maxFileSizeMb": 10,
                 "allowedMimeTypes": [
                   "image/*"
@@ -7305,10 +7314,19 @@
                     "match": "any",
                     "rowFilter": {
                       "includeWhen": {
-                        "fieldId": "PREP_TYPE",
-                        "equals": [
-                          "Entire dish",
-                          "Part dish"
+                        "any": [
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Entire dish",
+                              "Part dish",
+                              ""
+                            ]
+                          },
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "isEmpty": true
+                          }
                         ]
                       }
                     }
