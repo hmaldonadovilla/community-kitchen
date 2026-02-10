@@ -194,6 +194,12 @@ export function fetchSubmissionByRowNumber(formKey: string, rowNumber: number): 
   return service.fetchSubmissionByRowNumber(formKey, rowNumber);
 }
 
+export function fetchSubmissionsByRowNumbers(formKey: string, rowNumbers: number[]): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchSubmissionsByRowNumbers(formKey, rowNumbers);
+}
+
 export function getRecordVersion(formKey: string, recordId: string, rowNumberHint?: number): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

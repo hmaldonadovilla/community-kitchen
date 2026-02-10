@@ -722,6 +722,11 @@ export class WebFormService {
     return this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber);
   }
 
+  public fetchSubmissionsByRowNumbers(formKey: string, rowNumbers: number[]): Record<string, WebFormSubmission> {
+    const { form, questions } = this.getFormContextLite(formKey);
+    return this.listing.fetchSubmissionsByRowNumbers(form, questions, rowNumbers);
+  }
+
   /**
    * Cheap record version check used by the React client to validate cached records.
    */

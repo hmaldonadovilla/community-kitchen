@@ -34,6 +34,7 @@ import {
   ListItem,
   fetchRecordById,
   fetchRecordByRowNumber,
+  fetchRecordsByRowNumbers,
   getRecordVersionApi,
   resolveUserFacingErrorMessage
 } from './api';
@@ -558,7 +559,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     uploadConfig?: any;
   }>({ open: false, items: [] });
   const reportPdfSeqRef = useRef<number>(0);
-  const templatePrefetchFormKeyRef = useRef<string | null>(null);
+  const templatePrefetchDoneFormKeyRef = useRef<string | null>(null);
+  const templatePrefetchInFlightFormKeyRef = useRef<string | null>(null);
+  const templatePrefetchRetryCountRef = useRef<Record<string, number>>({});
+  const [homeFirstDataReadyAtMs, setHomeFirstDataReadyAtMs] = useState<number>(0);
   const [errors, setErrors] = useState<FormErrors>({});
   const formNavigateToFieldRef = useRef<((fieldKey: string) => void) | null>(null);
   const [validationAttempted, setValidationAttempted] = useState(false);
@@ -1902,43 +1906,102 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     });
   }, [blockLandscape, isLandscape, isMobile, logEvent, portraitOnlyEnabled]);
 
-  // Prefetch Drive/HTML templates in the background so report/summary rendering can skip
-  // "first read" latency, but never block the initial list view.
+  const hasTemplateRenderTargets = useMemo(() => {
+    if (definition.summaryViewEnabled !== false && !!definition.summaryHtmlTemplateId) return true;
+    return (definition.questions || []).some(q => {
+      if (!q || q.type !== 'BUTTON') return false;
+      const action = ((((q as any)?.button || {}) as any).action || '').toString().trim();
+      return action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate';
+    });
+  }, [definition.questions, definition.summaryHtmlTemplateId, definition.summaryViewEnabled]);
+
+  // Prefetch Drive/HTML templates in the background as early as possible (including Home/list),
+  // so report + summary renders can reuse warmed templates when users open records/actions.
   useEffect(() => {
-    // Only relevant once the user is in a form/summary context.
-    if (view !== 'form' && view !== 'summary') return;
     const key = (formKey || '').toString().trim();
     if (!key) return;
-    if (templatePrefetchFormKeyRef.current === key) return;
-    templatePrefetchFormKeyRef.current = key;
+    if (!hasTemplateRenderTargets) return;
+    const shouldWaitForHomeData = view === 'list';
+    if (shouldWaitForHomeData && homeFirstDataReadyAtMs <= 0) return;
+    if (templatePrefetchDoneFormKeyRef.current === key) return;
+    if (templatePrefetchInFlightFormKeyRef.current === key) return;
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+    let idleHandle: number | null = null;
 
     const run = () => {
-      logEvent('templates.prefetch.start', { formKey: key, view });
+      if (cancelled) return;
+      if (templatePrefetchDoneFormKeyRef.current === key) return;
+      if (templatePrefetchInFlightFormKeyRef.current === key) return;
+      templatePrefetchInFlightFormKeyRef.current = key;
+      const startedAt = Date.now();
+      logEvent('templates.prefetch.start', {
+        formKey: key,
+        view,
+        homeFirstDataReadyAtMs: homeFirstDataReadyAtMs || null,
+        startedAfterHomeDataMs:
+          homeFirstDataReadyAtMs > 0 ? Math.max(0, Date.now() - homeFirstDataReadyAtMs) : null
+      });
       prefetchTemplatesApi(key)
         .then(res => {
+          if (cancelled) return;
+          if (templatePrefetchInFlightFormKeyRef.current === key) {
+            templatePrefetchInFlightFormKeyRef.current = null;
+          }
+          templatePrefetchDoneFormKeyRef.current = key;
+          delete templatePrefetchRetryCountRef.current[key];
           logEvent('templates.prefetch.ok', {
+            formKey: key,
             success: Boolean(res?.success),
             message: (res as any)?.message || null,
-            counts: (res as any)?.counts || null
+            counts: (res as any)?.counts || null,
+            durationMs: Date.now() - startedAt
           });
         })
         .catch(err => {
+          if (templatePrefetchInFlightFormKeyRef.current === key) {
+            templatePrefetchInFlightFormKeyRef.current = null;
+          }
+          const retries = (templatePrefetchRetryCountRef.current[key] || 0) + 1;
+          templatePrefetchRetryCountRef.current[key] = retries;
           const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to prefetch templates.';
-          logEvent('templates.prefetch.failed', { formKey: key, message: msg });
+          logEvent('templates.prefetch.failed', {
+            formKey: key,
+            message: msg,
+            retries,
+            durationMs: Date.now() - startedAt
+          });
+          if (cancelled || retries >= 5) return;
+          const delayMs = Math.min(5000, 800 + retries * 600);
+          retryTimer = globalThis.setTimeout(() => {
+            retryTimer = null;
+            run();
+          }, delayMs);
         });
     };
 
     try {
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        (window as any).requestIdleCallback(run, { timeout: 3000 });
+        idleHandle = (window as any).requestIdleCallback(run, { timeout: 2000 }) as number;
       } else {
-        // Defer slightly to avoid competing with the first paint.
-        setTimeout(run, 1500);
+        // Defer a bit to avoid clashing with immediate post-render input work.
+        retryTimer = globalThis.setTimeout(() => {
+          retryTimer = null;
+          run();
+        }, 600);
       }
     } catch (_) {
       run();
     }
-  }, [formKey, view, logEvent]);
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) globalThis.clearTimeout(retryTimer);
+      if (idleHandle !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleHandle);
+      }
+    };
+  }, [formKey, hasTemplateRenderTargets, homeFirstDataReadyAtMs, view, logEvent]);
 
   useEffect(() => {
     // Enforce language config changes from the definition.
@@ -2307,6 +2370,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const listPrefetchKeyRef = useRef<string>('');
   const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
   const dataSourcePrefetchKeyRef = useRef<string>('');
+  const listRecordSnapshotPrefetchKeyRef = useRef<string>('');
+  const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, Promise<Record<string, WebFormSubmission>>>>(new Map());
 
   useEffect(() => {
     if (initialHomeListSource !== 'localStorage') return;
@@ -2343,13 +2408,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     const firstCount = listCache.response?.items?.length || 0;
     if (firstCount <= 0) return;
     homeTimeToDataMeasuredRef.current = true;
+    const measuredAtMs = Date.now();
+    setHomeFirstDataReadyAtMs(prev => (prev > 0 ? prev : measuredAtMs));
     const startMark = `ck.home.timeToData.start.${formKey}.${language}`;
     const endMark = `ck.home.timeToData.end.${formKey}.${language}`;
     perfMark(endMark);
     perfMeasure('ck.home.timeToData', startMark, endMark, {
       formKey,
       language,
-      elapsedMs: Date.now() - homeLoadStartedAtRef.current,
+      elapsedMs: measuredAtMs - homeLoadStartedAtRef.current,
       firstItemCount: firstCount
     });
   }, [formKey, language, listCache.response?.items?.length, perfMark, perfMeasure]);
@@ -2411,6 +2478,192 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       globalThis.clearTimeout(timer);
     };
   }, [definition, formKey, language, listCache.response?.items?.length, logEvent]);
+
+  useEffect(() => {
+    if (!hasTemplateRenderTargets) return;
+    if (view !== 'list') return;
+    if (homeFirstDataReadyAtMs <= 0) return;
+    const items = (listCache.response?.items || []) as ListItem[];
+    if (!items.length) return;
+
+    const topCount = Math.min(8, items.length);
+    const topRows = items.slice(0, topCount);
+    const missingTopRows = topRows.filter(row => {
+      const id = ((row as any)?.id || '').toString().trim();
+      return !!id && !listRecordsRef.current[id];
+    });
+
+    const etag = (listCache.response?.etag || '').toString().trim();
+    const key = `${formKey}::${etag || `rows:${items.length}`}::top:${topCount}`;
+    if (listRecordSnapshotPrefetchKeyRef.current === key) return;
+    listRecordSnapshotPrefetchKeyRef.current = key;
+
+    if (!missingTopRows.length) {
+      logEvent('list.records.prefetch.skip', {
+        formKey,
+        topCount,
+        reason: 'alreadyCached',
+        etag: etag || null
+      });
+      return;
+    }
+
+    const rowHints = Array.from(
+      new Set(
+        missingTopRows
+          .map(row => Number((row as any)?.__rowNumber))
+          .filter(v => Number.isFinite(v) && v >= 2)
+          .map(v => Math.floor(v))
+      )
+    );
+    if (!rowHints.length) {
+      logEvent('list.records.prefetch.skip', {
+        formKey,
+        topCount,
+        missingCount: missingTopRows.length,
+        reason: 'missingRowHints',
+        etag: etag || null
+      });
+      return;
+    }
+
+    const primeRowHints = rowHints.slice(0, 1);
+    const restRowHints = rowHints.slice(1);
+
+    let cancelled = false;
+    let primeTimerHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
+    let restTimerHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
+    let restIdleHandle: number | null = null;
+
+    const runPrefetch = async (
+      phase: 'prime' | 'rest',
+      hints: number[],
+      metricName: string
+    ) => {
+      if (cancelled || !hints.length) return;
+      const startedAt = Date.now();
+      const startMark = `${metricName}.start.${startedAt}`;
+      const endMark = `${metricName}.end.${startedAt}`;
+      logEvent('list.records.prefetch.start', {
+        formKey,
+        phase,
+        topCount,
+        missingCount: missingTopRows.length,
+        rowHintCount: hints.length,
+        etag: etag || null
+      });
+      perfMark(startMark);
+      try {
+        // Fetch by row numbers so we avoid re-running expensive sorted list assembly.
+        const requestPromise = fetchRecordsByRowNumbers(formKey, hints);
+        hints.forEach(rowNumber => {
+          listRecordSnapshotPrefetchByRowRef.current.set(rowNumber, requestPromise);
+        });
+        const prefetchedRecords = await requestPromise;
+        if (cancelled) return;
+        perfMark(endMark);
+        const receivedIds = prefetchedRecords ? Object.keys(prefetchedRecords) : [];
+        if (receivedIds.length) {
+          setListCache(prev => ({
+            response: prev.response,
+            records: { ...(prev.records || {}), ...prefetchedRecords }
+          }));
+        }
+        perfMeasure(metricName, startMark, endMark, {
+          formKey,
+          phase,
+          requested: topCount,
+          requestedRows: hints.length,
+          missing: missingTopRows.length,
+          received: receivedIds.length
+        });
+        logEvent('list.records.prefetch.ok', {
+          formKey,
+          phase,
+          requested: topCount,
+          requestedRows: hints.length,
+          missing: missingTopRows.length,
+          received: receivedIds.length,
+          durationMs: Date.now() - startedAt
+        });
+      } catch (err: any) {
+        perfMark(endMark);
+        perfMeasure(metricName, startMark, endMark, {
+          formKey,
+          phase,
+          requested: topCount,
+          requestedRows: hints.length,
+          missing: missingTopRows.length,
+          failed: true
+        });
+        const msg = (err?.message || err?.toString?.() || 'failed').toString();
+        logEvent('list.records.prefetch.error', {
+          formKey,
+          phase,
+          requested: topCount,
+          requestedRows: hints.length,
+          missing: missingTopRows.length,
+          message: msg,
+          durationMs: Date.now() - startedAt
+        });
+      } finally {
+        hints.forEach(rowNumber => {
+          const inFlight = listRecordSnapshotPrefetchByRowRef.current.get(rowNumber);
+          if (inFlight) {
+            listRecordSnapshotPrefetchByRowRef.current.delete(rowNumber);
+          }
+        });
+      }
+    };
+
+    const scheduleRestPrefetch = () => {
+      if (cancelled || !restRowHints.length) return;
+      try {
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          restIdleHandle = (window as any).requestIdleCallback(
+            () => {
+              restIdleHandle = null;
+              void runPrefetch('rest', restRowHints, 'ck.list.records.prefetch.rest.rpc');
+            },
+            { timeout: 2500 }
+          ) as number;
+          return;
+        }
+      } catch (_) {
+        // fall through to timeout path
+      }
+      restTimerHandle = globalThis.setTimeout(() => {
+        restTimerHandle = null;
+        void runPrefetch('rest', restRowHints, 'ck.list.records.prefetch.rest.rpc');
+      }, 650);
+    };
+
+    primeTimerHandle = globalThis.setTimeout(() => {
+      primeTimerHandle = null;
+      void runPrefetch('prime', primeRowHints, 'ck.list.records.prefetch.rpc').finally(() => {
+        scheduleRestPrefetch();
+      });
+    }, 120);
+
+    return () => {
+      cancelled = true;
+      if (primeTimerHandle !== null) globalThis.clearTimeout(primeTimerHandle);
+      if (restTimerHandle !== null) globalThis.clearTimeout(restTimerHandle);
+      if (restIdleHandle !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(restIdleHandle);
+      }
+    };
+  }, [
+    formKey,
+    hasTemplateRenderTargets,
+    homeFirstDataReadyAtMs,
+    listCache.response?.etag,
+    listCache.response?.items,
+    perfMark,
+    perfMeasure,
+    view,
+    logEvent
+  ]);
 
   const listViewProjection = useMemo(() => {
     const cols = (definition.listView?.columns || []) as any[];
@@ -7613,7 +7866,44 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         updatedAt: row.updatedAt,
         status: row.status ? row.status.toString() : null
       });
-      loadRecordSnapshot(row.id, hintedRow).then(ok => {
+      const hydrateFromInFlightPrefetch = async (): Promise<boolean> => {
+        if (!hintedRow || hintedRow < 2) return false;
+        const pending = listRecordSnapshotPrefetchByRowRef.current.get(hintedRow);
+        if (!pending) return false;
+        const awaited = await Promise.race([
+          pending.then(res => res || null).catch(() => null),
+          new Promise<null>(resolve => {
+            globalThis.setTimeout(() => resolve(null), 2200);
+          })
+        ]);
+        if (!awaited) return false;
+        if (selectedRecordIdRef.current !== row.id) return true;
+        const prefetchedRecord = awaited[row.id];
+        if (!prefetchedRecord) return false;
+        setListCache(prev => ({
+          response: prev.response,
+          records: { ...(prev.records || {}), [row.id]: prefetchedRecord }
+        }));
+        applyRecordSnapshot(prefetchedRecord);
+        if (shouldCopy) {
+          logEvent('list.openView.copy', { recordId: row.id, source: 'prefetched' });
+          handleDuplicateCurrent();
+          return true;
+        }
+        if (shouldSubmit) {
+          logEvent('list.openView.submit', { recordId: row.id, source: 'prefetched' });
+          setView('form');
+          scheduleListOpenSubmit({ recordId: row.id, source: 'prefetched' });
+          return true;
+        }
+        triggerOpenButtonIfNeeded();
+        return true;
+      };
+
+      void (async () => {
+        const resolvedFromPrefetch = await hydrateFromInFlightPrefetch();
+        if (resolvedFromPrefetch) return;
+        const ok = await loadRecordSnapshot(row.id, hintedRow);
         if (!ok) return;
         if (selectedRecordIdRef.current !== row.id) return;
         if (shouldCopy) {
@@ -7628,7 +7918,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           return;
         }
         triggerOpenButtonIfNeeded();
-      });
+      })();
     }
 
     const statusRaw = ((sourceRecord?.status || row.status || '') as any)?.toString?.() || '';

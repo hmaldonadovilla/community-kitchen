@@ -532,6 +532,93 @@ export class ListingService {
     return record;
   }
 
+  fetchSubmissionsByRowNumbers(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    rowNumbers: number[]
+  ): Record<string, WebFormSubmission> {
+    const startedAt = Date.now();
+    const uniqueRows = Array.from(
+      new Set(
+        (Array.isArray(rowNumbers) ? rowNumbers : [])
+          .map(v => Number(v))
+          .filter(v => Number.isFinite(v) && v >= 2)
+          .map(v => Math.floor(v))
+      )
+    ).sort((a, b) => a - b);
+    const out: Record<string, WebFormSubmission> = {};
+    if (!uniqueRows.length) return out;
+
+    const { sheet, columns } = this.submissionService.ensureDestination(
+      form.destinationTab || `${form.title} Responses`,
+      questions
+    );
+    const etag = this.cacheManager.getSheetEtag(sheet, columns);
+    const lastRow = sheet.getLastRow();
+    const validRows = uniqueRows.filter(rowNumber => rowNumber <= lastRow);
+    if (!validRows.length) return out;
+
+    const colSet = new Set<number>();
+    const add = (idx: number | undefined) => {
+      if (!idx || idx <= 0) return;
+      colSet.add(idx);
+    };
+
+    add(columns.timestamp);
+    add(columns.language);
+    add(columns.recordId);
+    add(columns.dataVersion);
+    add(columns.createdAt);
+    add(columns.updatedAt);
+    add(columns.status);
+    add(columns.pdfUrl);
+    questions.forEach(q => add(columns.fields[q.id]));
+
+    const cols = Array.from(colSet).sort((a, b) => a - b);
+    const maxCol = cols.length ? Math.max(...cols) : 1;
+    const minRow = validRows[0];
+    const maxRow = validRows[validRows.length - 1];
+    const rowCount = maxRow - minRow + 1;
+    const read = this.readColumnsForRows(sheet, minRow, rowCount, cols);
+
+    validRows.forEach(rowNumber => {
+      const offset = rowNumber - minRow;
+      const rowValues = new Array(maxCol).fill(undefined);
+      cols.forEach(col => {
+        const values = read.valuesByColumn[col];
+        rowValues[col - 1] = values && offset >= 0 && offset < values.length ? values[offset] : undefined;
+      });
+
+      const recordId = columns.recordId ? (rowValues[columns.recordId - 1] || '').toString() : '';
+      if (!recordId) {
+        // Preserve legacy behavior for rows missing record ids.
+        const fallback = this.fetchSubmissionByRowNumber(form, questions, rowNumber);
+        if (fallback?.id) out[fallback.id] = fallback;
+        return;
+      }
+
+      const cached = this.cacheManager.getCachedRecord(form.configSheet, etag, recordId);
+      if (cached?.id) {
+        out[cached.id] = cached;
+        return;
+      }
+
+      const record = this.submissionService.buildSubmissionRecord(form.configSheet, questions, columns, rowValues, recordId);
+      if (!record?.id) return;
+      out[record.id] = record;
+      this.cacheManager.cacheRecord(form.configSheet, etag, record);
+    });
+
+    debugLog('listing.fetchSubmissionsByRowNumbers.done', {
+      formKey: form.configSheet,
+      requestedRows: uniqueRows.length,
+      validRows: validRows.length,
+      returnedRecords: Object.keys(out).length,
+      durationMs: Date.now() - startedAt
+    });
+    return out;
+  }
+
   private readRowForRecord(
     sheet: GoogleAppsScript.Spreadsheet.Sheet,
     rowNumber: number,

@@ -5,10 +5,18 @@ import { debugLog } from './debug';
 
 const DATA_SOURCE_MAX_TOTAL_ROWS = 10000;
 const DATA_SOURCE_MAX_PAGE_SIZE = 500;
+const SHARED_DATA_SOURCE_CACHE_TTL_MS = 60 * 1000;
+const SHARED_DATA_SOURCE_CACHE_MAX_ENTRIES = 80;
+
+type SharedDataSourceCacheEntry = {
+  expiresAtMs: number;
+  value: PaginatedResult<any>;
+};
 
 export class DataSourceService {
   private readonly ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private dataSourceCache: Record<string, PaginatedResult<any>>;
+  private static sharedDataSourceCache = new Map<string, SharedDataSourceCacheEntry>();
 
   private stringify(value: any): string {
     if (value === undefined || value === null) return '';
@@ -69,6 +77,73 @@ export class DataSourceService {
     this.dataSourceCache = {};
   }
 
+  private static pruneSharedDataSourceCache(nowMs: number): void {
+    if (!DataSourceService.sharedDataSourceCache.size) return;
+    for (const [key, entry] of DataSourceService.sharedDataSourceCache.entries()) {
+      if (!entry || !Number.isFinite(entry.expiresAtMs) || entry.expiresAtMs <= nowMs) {
+        DataSourceService.sharedDataSourceCache.delete(key);
+      }
+    }
+    if (DataSourceService.sharedDataSourceCache.size <= SHARED_DATA_SOURCE_CACHE_MAX_ENTRIES) return;
+    const toEvict = DataSourceService.sharedDataSourceCache.size - SHARED_DATA_SOURCE_CACHE_MAX_ENTRIES;
+    let evicted = 0;
+    for (const key of DataSourceService.sharedDataSourceCache.keys()) {
+      DataSourceService.sharedDataSourceCache.delete(key);
+      evicted += 1;
+      if (evicted >= toEvict) break;
+    }
+  }
+
+  private buildSharedDataSourceCacheKey(args: {
+    dataSourceId: string;
+    config: any;
+    locale?: string;
+    projection?: string[];
+    limit?: number;
+    pageToken?: string;
+  }): string {
+    const projection = Array.isArray(args.config?.projection)
+      ? args.config.projection
+      : Array.isArray(args.projection)
+        ? args.projection
+        : [];
+    const limitRaw = args.limit ?? args.config?.limit ?? null;
+    const limit = Number.isFinite(Number(limitRaw)) ? Number(limitRaw) : null;
+    return JSON.stringify({
+      id: args.dataSourceId,
+      sheetId: (args.config?.sheetId || '').toString(),
+      tabName: (args.config?.tabName || '').toString(),
+      locale: (args.locale || '').toString().toUpperCase(),
+      localeKey: (args.config?.localeKey || '').toString(),
+      projection: projection.map((v: any) => (v || '').toString()),
+      mapping: args.config?.mapping || null,
+      mode: (args.config?.mode || '').toString(),
+      statusAllowList: Array.isArray(args.config?.statusAllowList) ? args.config.statusAllowList : null,
+      pageToken: (args.pageToken || '').toString(),
+      limit
+    });
+  }
+
+  private readSharedDataSourceCache(key: string, nowMs: number): PaginatedResult<any> | null {
+    if (!key) return null;
+    DataSourceService.pruneSharedDataSourceCache(nowMs);
+    const entry = DataSourceService.sharedDataSourceCache.get(key);
+    if (!entry || !entry.value || entry.expiresAtMs <= nowMs) {
+      if (entry) DataSourceService.sharedDataSourceCache.delete(key);
+      return null;
+    }
+    return entry.value;
+  }
+
+  private writeSharedDataSourceCache(key: string, value: PaginatedResult<any>, nowMs: number): void {
+    if (!key || !value) return;
+    DataSourceService.sharedDataSourceCache.set(key, {
+      value,
+      expiresAtMs: nowMs + SHARED_DATA_SOURCE_CACHE_TTL_MS
+    });
+    DataSourceService.pruneSharedDataSourceCache(nowMs);
+  }
+
   fetchDataSource(
     source: any,
     locale?: string,
@@ -79,6 +154,20 @@ export class DataSourceService {
     const config = typeof source === 'string' ? { id: source, projection } : (source || {});
     const dataSourceId = config.id || source;
     if (!dataSourceId) return { items: [], nextPageToken: undefined, totalCount: 0 };
+    const sharedCacheKey = this.buildSharedDataSourceCacheKey({
+      dataSourceId,
+      config,
+      locale,
+      projection,
+      limit,
+      pageToken
+    });
+    const nowMs = Date.now();
+    const sharedCached = this.readSharedDataSourceCache(sharedCacheKey, nowMs);
+    if (sharedCached) {
+      debugLog('dataSources.sharedCache.hit', { id: dataSourceId, key: sharedCacheKey.slice(0, 120) });
+      return sharedCached;
+    }
 
     const { sheetId, tabName } = this.parseDataSourceId(dataSourceId, config.tabName, config.sheetId);
     const sheet = sheetId
@@ -119,7 +208,11 @@ export class DataSourceService {
     const offset = decodePageToken(pageToken);
     const maxRows = Math.max(0, sheet.getLastRow() - 1);
     const cappedTotal = Math.min(maxRows, DATA_SOURCE_MAX_TOTAL_ROWS);
-    if (offset >= cappedTotal) return { items: [], totalCount: cappedTotal };
+    if (offset >= cappedTotal) {
+      const emptyRes = { items: [], totalCount: cappedTotal };
+      this.writeSharedDataSourceCache(sharedCacheKey, emptyRes, nowMs);
+      return emptyRes;
+    }
 
     const mode = (config.mode || '').toString().trim().toLowerCase();
     const defaultPageSize = mode === 'options' ? 250 : 50;
@@ -195,7 +288,9 @@ export class DataSourceService {
     const hasMore = nextOffset < cappedTotal;
     const nextPageToken = hasMore ? encodePageToken(nextOffset) : undefined;
 
-    return { items, nextPageToken, totalCount: cappedTotal };
+    const result = { items, nextPageToken, totalCount: cappedTotal };
+    this.writeSharedDataSourceCache(sharedCacheKey, result, nowMs);
+    return result;
   }
 
   lookupDataSourceDetails(

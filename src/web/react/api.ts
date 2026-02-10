@@ -498,6 +498,12 @@ export const fetchRecordById = (formKey: string, id: string): Promise<WebFormSub
 export const fetchRecordByRowNumber = (formKey: string, rowNumber: number): Promise<WebFormSubmission | null> =>
   runAppsScript<WebFormSubmission | null>('fetchSubmissionByRowNumber', formKey, rowNumber);
 
+export const fetchRecordsByRowNumbers = (
+  formKey: string,
+  rowNumbers: number[]
+): Promise<Record<string, WebFormSubmission>> =>
+  runAppsScript<Record<string, WebFormSubmission>>('fetchSubmissionsByRowNumbers', formKey, rowNumbers);
+
 export const getRecordVersionApi = (formKey: string, recordId: string, rowNumberHint?: number | null): Promise<RecordVersionResult> =>
   runAppsScript<RecordVersionResult>('getRecordVersion', formKey, recordId, rowNumberHint ?? null);
 

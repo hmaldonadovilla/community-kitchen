@@ -236,6 +236,38 @@ function hasLogEvent(events, name) {
   });
 }
 
+function findReactEventPayload(events, name, mode = 'last') {
+  const matches = [];
+  for (let i = 0; i < events.length; i += 1) {
+    const ev = events[i];
+    const a0 = ev.args?.[0];
+    const a1 = ev.args?.[1];
+    const a2 = ev.args?.[2];
+    if (a0 === '[ReactForm]' && a1 === name) {
+      matches.push({
+        ts: ev.ts,
+        payload: a2 && typeof a2 === 'object' ? a2 : null
+      });
+    }
+  }
+  if (!matches.length) return null;
+  return mode === 'first' ? matches[0] : matches[matches.length - 1];
+}
+
+function findPerfEventTs(events, name, mode = 'last') {
+  const matches = [];
+  for (let i = 0; i < events.length; i += 1) {
+    const ev = events[i];
+    const a0 = ev.args?.[0];
+    const a1 = ev.args?.[1];
+    if (a0 === '[ReactForm][perf]' && a1 === name) {
+      matches.push(ev.ts);
+    }
+  }
+  if (!matches.length) return null;
+  return mode === 'first' ? matches[0] : matches[matches.length - 1];
+}
+
 async function waitForAnySelector(frame, selectors, timeoutMs = 12000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -896,6 +928,7 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
     const homeTimeToDataRaw = findPerfDuration(consoleEvents, 'ck.home.timeToData');
     const homeBootstrapRpcMs = findPerfDurationFirst(consoleEvents, 'ck.home.bootstrap.rpc');
     const listFetchRpcMs = findPerfDurationFirst(consoleEvents, 'ck.list.fetch.rpc');
+    const listRecordsPrefetchRpcMs = findPerfDurationFirst(consoleEvents, 'ck.list.records.prefetch.rpc');
     const recordFetchRpcMs = findRpcDuration(consoleEvents, 'fetchSubmissionByRowNumber', 'last');
     const homeTimeToDataMs =
       typeof homeTimeToDataRaw === 'number' && homeTimeToDataRaw > 0
@@ -906,11 +939,24 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
       hasLogEvent(consoleEvents, 'submit.begin') ||
       hasLogEvent(consoleEvents, 'summary.submit.fire') ||
       hasLogEvent(consoleEvents, 'list.openView.submit.fire');
+    const homeReadyPerfTs = findPerfEventTs(consoleEvents, 'ck.home.timeToData', 'first');
+    const templatePrefetchStart = findReactEventPayload(consoleEvents, 'templates.prefetch.start', 'first');
+    const templatePrefetchDone = findReactEventPayload(consoleEvents, 'templates.prefetch.ok', 'last');
+    const templatePrefetchFailed = findReactEventPayload(consoleEvents, 'templates.prefetch.failed', 'last');
+    const templatePrefetchStartAfterHomeDataMs =
+      templatePrefetchStart && typeof templatePrefetchStart.payload?.startedAfterHomeDataMs === 'number'
+        ? Number(templatePrefetchStart.payload.startedAfterHomeDataMs)
+        : homeReadyPerfTs && templatePrefetchStart?.ts
+          ? templatePrefetchStart.ts - homeReadyPerfTs
+          : null;
+    const templatePrefetchOverlapHomeLoad =
+      typeof templatePrefetchStartAfterHomeDataMs === 'number' ? templatePrefetchStartAfterHomeDataMs < 0 : null;
     console.log('[scenario] collect metrics');
     const metrics = {
       homeTimeToDataMs,
       homeBootstrapRpcMs,
       listFetchRpcMs,
+      listRecordsPrefetchRpcMs,
       recordFetchRpcMs,
       navOpenRecordMs: findPerfDuration(consoleEvents, 'ck.nav.openRecord'),
       navBackToHomeMs: findPerfDuration(consoleEvents, 'ck.nav.backToHome'),
@@ -921,6 +967,17 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
       submitAttempted: submitAttemptedResolved,
       submitBlockedDisabled,
       autoFilledFields,
+      templatePrefetchStarted: Boolean(templatePrefetchStart),
+      templatePrefetchCompleted: Boolean(templatePrefetchDone),
+      templatePrefetchFailed: Boolean(templatePrefetchFailed),
+      templatePrefetchDurationMs:
+        typeof templatePrefetchDone?.payload?.durationMs === 'number' ? Number(templatePrefetchDone.payload.durationMs) : null,
+      templatePrefetchStartAfterHomeDataMs,
+      templatePrefetchOverlapHomeLoad,
+      templatePrefetchStartView:
+        templatePrefetchStart?.payload && templatePrefetchStart.payload.view !== undefined
+          ? String(templatePrefetchStart.payload.view)
+          : null,
       openedViaHook,
       switchedToForm,
       openedView: (() => {
@@ -957,6 +1014,7 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
         homeTimeToDataMs: findPerfDuration(consoleEvents, 'ck.home.timeToData'),
         homeBootstrapRpcMs: findPerfDurationFirst(consoleEvents, 'ck.home.bootstrap.rpc'),
         listFetchRpcMs: findPerfDurationFirst(consoleEvents, 'ck.list.fetch.rpc'),
+        listRecordsPrefetchRpcMs: findPerfDurationFirst(consoleEvents, 'ck.list.records.prefetch.rpc'),
         recordFetchRpcMs: findRpcDuration(consoleEvents, 'fetchSubmissionByRowNumber', 'last'),
         navOpenRecordMs: findPerfDuration(consoleEvents, 'ck.nav.openRecord'),
         navBackToHomeMs: findPerfDuration(consoleEvents, 'ck.nav.backToHome'),
@@ -971,6 +1029,13 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
           hasLogEvent(consoleEvents, 'list.openView.submit.fire'),
         submitBlockedDisabled: false,
         autoFilledFields: 0,
+        templatePrefetchStarted: Boolean(findReactEventPayload(consoleEvents, 'templates.prefetch.start', 'first')),
+        templatePrefetchCompleted: Boolean(findReactEventPayload(consoleEvents, 'templates.prefetch.ok', 'last')),
+        templatePrefetchFailed: Boolean(findReactEventPayload(consoleEvents, 'templates.prefetch.failed', 'last')),
+        templatePrefetchDurationMs: null,
+        templatePrefetchStartAfterHomeDataMs: null,
+        templatePrefetchOverlapHomeLoad: null,
+        templatePrefetchStartView: null,
         openedViaHook: false,
         switchedToForm: false,
         openedView: null,
@@ -1013,6 +1078,7 @@ function summarizeRuns(runs) {
     'homeTimeToDataMs',
     'homeBootstrapRpcMs',
     'listFetchRpcMs',
+    'listRecordsPrefetchRpcMs',
     'recordFetchRpcMs',
     'navOpenRecordMs',
     'navBackToHomeMs',
@@ -1020,7 +1086,9 @@ function summarizeRuns(runs) {
     'submitPipelineMs',
     'submitRpcMs',
     'submitFollowupRpcMs',
-    'autoFilledFields'
+    'autoFilledFields',
+    'templatePrefetchDurationMs',
+    'templatePrefetchStartAfterHomeDataMs'
   ];
   const summary = {};
   for (const key of metricKeys) {
@@ -1045,6 +1113,18 @@ function summarizeRuns(runs) {
     : null;
   summary.submitSuccessRate = runs.length
     ? runs.filter(r => r.metrics?.submitSuccess).length / runs.length
+    : null;
+  summary.templatePrefetchStartedRate = runs.length
+    ? runs.filter(r => r.metrics?.templatePrefetchStarted).length / runs.length
+    : null;
+  summary.templatePrefetchCompletedRate = runs.length
+    ? runs.filter(r => r.metrics?.templatePrefetchCompleted).length / runs.length
+    : null;
+  summary.templatePrefetchFailedRate = runs.length
+    ? runs.filter(r => r.metrics?.templatePrefetchFailed).length / runs.length
+    : null;
+  summary.templatePrefetchOverlapHomeLoadRate = runs.length
+    ? runs.filter(r => r.metrics?.templatePrefetchOverlapHomeLoad).length / runs.length
     : null;
   summary.openedViaHookRate = runs.length
     ? runs.filter(r => r.metrics?.openedViaHook).length / runs.length
@@ -1106,11 +1186,18 @@ async function main() {
     console.log(`ok=${res.ok}`);
     if (!res.ok) console.log(`error=${res.error}`);
     console.log(`homeTimeToDataMs=${res.metrics?.homeTimeToDataMs}`);
+    console.log(`homeBootstrapRpcMs=${res.metrics?.homeBootstrapRpcMs}`);
+    console.log(`listFetchRpcMs=${res.metrics?.listFetchRpcMs}`);
+    console.log(`listRecordsPrefetchRpcMs=${res.metrics?.listRecordsPrefetchRpcMs}`);
+    console.log(`recordFetchRpcMs=${res.metrics?.recordFetchRpcMs}`);
     console.log(`navOpenRecordMs=${res.metrics?.navOpenRecordMs}`);
     console.log(`navBackToHomeMs=${res.metrics?.navBackToHomeMs}`);
     console.log(`submitPipelineMs=${res.metrics?.submitPipelineMs}`);
     console.log(`submitRpcMs=${res.metrics?.submitRpcMs}`);
     console.log(`submitFollowupRpcMs=${res.metrics?.submitFollowupRpcMs}`);
+    console.log(`templatePrefetchDurationMs=${res.metrics?.templatePrefetchDurationMs}`);
+    console.log(`templatePrefetchStartAfterHomeDataMs=${res.metrics?.templatePrefetchStartAfterHomeDataMs}`);
+    console.log(`templatePrefetchOverlapHomeLoad=${res.metrics?.templatePrefetchOverlapHomeLoad}`);
     console.log(`submitAttempted=${res.metrics?.submitAttempted}`);
     console.log(`submitSuccess=${res.metrics?.submitSuccess}`);
   }
