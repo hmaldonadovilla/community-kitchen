@@ -163,13 +163,13 @@ export interface DedupIncompleteHomeDialogConfig {
    */
   showCancel?: boolean;
   /**
-   * When false, hides the close (×) button.
-   * Default: true
+   * When true, shows the close (×) button.
+   * Default: false
    */
   showCloseButton?: boolean;
   /**
-   * When false, clicking the backdrop does not dismiss the dialog.
-   * Default: true
+   * When true, clicking the backdrop dismisses the dialog.
+   * Default: false
    */
   dismissOnBackdrop?: boolean;
   /**
@@ -269,13 +269,13 @@ export interface SystemActionGateDialogConfig extends ButtonConfirmConfig {
    */
   showCancel?: boolean;
   /**
-   * When false, hides the close (×) button.
-   * Default: true
+   * When true, shows the close (×) button.
+   * Default: false
    */
   showCloseButton?: boolean;
   /**
-   * When false, clicking the backdrop does not dismiss the dialog.
-   * Default: true
+   * When true, clicking the backdrop dismisses the dialog.
+   * Default: false
    */
   dismissOnBackdrop?: boolean;
 }
@@ -910,6 +910,7 @@ export interface ValueMapConfig {
 export interface VisibilityCondition {
   fieldId: string;
   equals?: string | string[];
+  notEquals?: string | string[];
   greaterThan?: number | string;
   lessThan?: number | string;
   /**
@@ -1891,6 +1892,61 @@ export interface AutoSaveConfig {
    * When omitted, the app falls back to `statusTransitions.inProgress` if configured.
    */
   status?: string;
+  /**
+   * Optional top-level field ids that must be non-empty before create-flow autosave is allowed.
+   *
+   * When omitted, existing autosave gating behavior is preserved.
+   */
+  enableWhenFields?: string[];
+  /**
+   * Optional top-level field ids that trigger create-flow dedup prechecks.
+   *
+   * When omitted, reject dedup-rule keys are used.
+   */
+  dedupTriggerFields?: string[];
+  /**
+   * Optional config for the transient dedup progress popup shown while dedup checks run.
+   */
+  dedupCheckDialog?: DedupCheckDialogConfig;
+}
+
+export interface DedupCheckDialogConfig {
+  /**
+   * Enable/disable the dedup check popup (when object is present). Default: true.
+   */
+  enabled?: boolean;
+  /**
+   * Title shown while dedup check is running.
+   */
+  checkingTitle?: LocalizedString | string;
+  /**
+   * Message shown while dedup check is running.
+   */
+  checkingMessage?: LocalizedString | string;
+  /**
+   * Title shown when dedup check completes without conflict.
+   */
+  availableTitle?: LocalizedString | string;
+  /**
+   * Message shown when dedup check completes without conflict.
+   */
+  availableMessage?: LocalizedString | string;
+  /**
+   * Title shown when dedup check finds a conflict.
+   */
+  duplicateTitle?: LocalizedString | string;
+  /**
+   * Message shown when dedup check finds a conflict.
+   */
+  duplicateMessage?: LocalizedString | string;
+  /**
+   * Auto-close delay (ms) for the "available" state. Default 1200.
+   */
+  availableAutoCloseMs?: number;
+  /**
+   * Auto-close delay (ms) for the "duplicate" state. Default 900.
+   */
+  duplicateAutoCloseMs?: number;
 }
 
 export interface AuditLoggingConfig {
@@ -3255,6 +3311,14 @@ export interface ListViewRulePredicate {
    * Date-only mismatch against the user's local "today" (empty/invalid dates are treated as "not today").
    */
   isNotToday?: boolean;
+  /**
+   * Date-only match against dates before the user's local "today".
+   */
+  isInPast?: boolean;
+  /**
+   * Date-only match against dates after the user's local "today".
+   */
+  isInFuture?: boolean;
 }
 
 export type ListViewRuleWhen =

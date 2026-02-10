@@ -55,6 +55,17 @@ const parseDateLike = (raw: unknown): Date | null => {
       return isNaN(local.getTime()) ? null : local;
     }
   }
+  // Common display/storage fallback: DD/MM/YYYY
+  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) {
+    const d = Number(dmy[1]);
+    const m = Number(dmy[2]);
+    const y = Number(dmy[3]);
+    if (!Number.isNaN(y) && !Number.isNaN(m) && !Number.isNaN(d)) {
+      const local = new Date(y, m - 1, d, 0, 0, 0, 0);
+      return isNaN(local.getTime()) ? null : local;
+    }
+  }
   const parsed = new Date(s);
   return isNaN(parsed.getTime()) ? null : parsed;
 };
@@ -134,6 +145,18 @@ export function matchesWhen(value: unknown, when?: VisibilityCondition | any): b
       return expected.includes(vNorm as never) || expectedStr.includes(vStr);
     });
     if (!hasMatch) return false;
+  }
+
+  if ((when as any).notEquals !== undefined) {
+    const disallowedRaw = Array.isArray((when as any).notEquals) ? (when as any).notEquals : [(when as any).notEquals];
+    const disallowed = disallowedRaw.map(normalizeVal);
+    const disallowedStr = disallowedRaw.map(normalizeStr);
+    const hasDisallowedMatch = candidates.some(v => {
+      const vNorm = normalizeVal(v);
+      const vStr = normalizeStr(v);
+      return disallowed.includes(vNorm as never) || disallowedStr.includes(vStr);
+    });
+    if (hasDisallowedMatch) return false;
   }
 
   const numericVals = candidates

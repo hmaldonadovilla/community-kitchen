@@ -16,9 +16,53 @@
     "autoSave": {
       "enabled": true,
       "debounceMs": 2000,
-      "status": "Draft"
+      "status": "Draft",
+      "enableWhenFields": [
+        "INGREDIENT_NAME",
+        "CREATED_BY"
+      ],
+      "dedupTriggerFields": [
+        "INGREDIENT_NAME"
+      ],
+      "dedupCheckDialog": {
+        "enabled": true,
+        "checkingTitle": {
+          "en": "Checking ingredient name",
+          "fr": "Checking ingredient name",
+          "nl": "Checking ingredient name"
+        },
+        "checkingMessage": {
+          "en": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete.",
+          "fr": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete.",
+          "nl": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete."
+        },
+        "availableTitle": {
+          "en": "Ingredient name available",
+          "fr": "Ingredient name available",
+          "nl": "Ingredient name available"
+        },
+        "availableMessage": {
+          "en": "You can continue entering the ingredient details.",
+          "fr": "You can continue entering the ingredient details.",
+          "nl": "You can continue entering the ingredient details."
+        },
+        "duplicateTitle": {
+          "en": "Ingredient already exists",
+          "fr": "Ingredient already exists",
+          "nl": "Ingredient already exists"
+        },
+        "duplicateMessage": {
+          "en": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+          "fr": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+          "nl": "An ingredient with this name already exists.\nPlease change the name or cancel the creation."
+        },
+        "availableAutoCloseMs": 1300,
+        "duplicateAutoCloseMs": 900
+      }
     },
+    "dedupDeleteOnKeyChange": true,
     "summaryViewEnabled": true,
+    "summaryHtmlTemplateId": "bundle:ingredients.summary.html",
     "copyCurrentRecordEnabled": true,
     "createNewRecordEnabled": true,
     "createRecordPresetButtonsEnabled": false,
@@ -267,7 +311,35 @@
       },
       "system": {
         "home": {
-          "hideWhenActive": true
+          "hideWhenActive": true,
+          "dedupIncompleteDialog": {
+            "enabled": true,
+            "title": {
+              "en": "Missing key information to create a draft ingredient record",
+              "fr": "Missing key information to create a draft ingredient record",
+              "nl": "Missing key information to create a draft ingredient record"
+            },
+            "message": {
+              "en": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone.",
+              "fr": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone.",
+              "nl": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone."
+            },
+            "confirmLabel": {
+              "en": "Continue, delete the record",
+              "fr": "Continue, delete the record",
+              "nl": "Continue, delete the record"
+            },
+            "cancelLabel": {
+              "en": "Cancel, continue editing",
+              "fr": "Cancel, continue editing",
+              "nl": "Cancel, continue editing"
+            },
+            "showCancel": true,
+            "showCloseButton": false,
+            "dismissOnBackdrop": false,
+            "deleteRecordOnConfirm": true,
+            "primaryAction": "cancel"
+          }
         },
         "gates": {
           "edit": [
@@ -316,7 +388,13 @@
       "fr": "Activer",
       "nl": "Activeren"
     },
+    "summaryButtonLabel": {
+      "en": "View",
+      "fr": "View",
+      "nl": "View"
+    },
     "submitValidation": {
+      "enforceFieldOrder": true,
       "hideSubmitTopErrorMessage": true,
       "submitTopErrorMessage": {
         "en": "You are almost done. Some required checks are missing. Review the highlighted sections.",
@@ -346,14 +424,14 @@
     },
     "dedupDialog": {
       "title": {
-        "en": "An ingredient with the same name already exists.",
-        "fr": "Un ingrédient portant le même nom existe déjà.",
-        "nl": "Er bestaat al een ingrediënt met dezelfde naam."
+        "en": "Ingredient already exists",
+        "fr": "Ingredient already exists",
+        "nl": "Ingredient already exists"
       },
       "intro": {
-        "en": "Do you want to change the name or cancel the creation?",
-        "fr": "Voulez-vous modifier le nom ou annuler la création ?",
-        "nl": "Wil je de naam wijzigen of de creatie annuleren?"
+        "en": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+        "fr": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+        "nl": "An ingredient with this name already exists.\nPlease change the name or cancel the creation."
       },
       "outro": {
         "en": "",
@@ -379,24 +457,6 @@
   },
   "questions": [
     {
-      "id": "CREATED_BY",
-      "type": "TEXT",
-      "qEn": "Created by",
-      "qFr": "Créé par",
-      "qNl": "Gemaakt door",
-      "required": true,
-      "listView": false,
-      "status": "Active",
-      "ui": {
-        "helperText": {
-          "en": "Enter your name.",
-          "fr": "Saisissez votre nom.",
-          "nl": "Voer je naam in."
-        },
-        "helperPlacement": "placeholder"
-      }
-    },
-    {
       "id": "INGREDIENT_NAME",
       "type": "TEXT",
       "qEn": "Ingredient name",
@@ -417,6 +477,24 @@
           "nl": "Enter the name of the ingredient"
         },
         "labelLayout": "stacked"
+      }
+    },
+    {
+      "id": "CREATED_BY",
+      "type": "TEXT",
+      "qEn": "Created by",
+      "qFr": "Créé par",
+      "qNl": "Gemaakt door",
+      "required": true,
+      "listView": false,
+      "status": "Active",
+      "ui": {
+        "helperText": {
+          "en": "Enter your name.",
+          "fr": "Saisissez votre nom.",
+          "nl": "Voer je naam in."
+        },
+        "helperPlacement": "placeholder"
       }
     },
     {

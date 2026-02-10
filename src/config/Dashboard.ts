@@ -1865,6 +1865,36 @@ export class Dashboard {
     if (typeof value === 'boolean') return { enabled: value };
     if (typeof value !== 'object') return undefined;
     const cfg: AutoSaveConfig = {};
+    const normalizeStringList = (raw: any): string[] | undefined => {
+      if (raw === undefined || raw === null || raw === '') return undefined;
+      const list = Array.isArray(raw)
+        ? raw
+        : raw
+            .toString()
+            .split(',')
+            .map((entry: string) => entry.trim());
+      const items = list
+        .map((entry: any) => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+        .filter(Boolean);
+      if (!items.length) return undefined;
+      return Array.from(new Set(items));
+    };
+    const normalizeLocalized = (raw: any): LocalizedString | string | undefined => {
+      if (raw === undefined || raw === null) return undefined;
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof raw !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(raw).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        const trimmed = v.trim();
+        if (!trimmed) return;
+        out[k.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? (out as LocalizedString) : undefined;
+    };
     if ((value as any).enabled !== undefined) cfg.enabled = Boolean((value as any).enabled);
     if ((value as any).debounceMs !== undefined && (value as any).debounceMs !== null) {
       const n = Number((value as any).debounceMs);
@@ -1875,6 +1905,55 @@ export class Dashboard {
     if ((value as any).status !== undefined && (value as any).status !== null) {
       const s = (value as any).status.toString().trim();
       if (s) cfg.status = s;
+    }
+    const enableWhenFields = normalizeStringList(
+      (value as any).enableWhenFields !== undefined ? (value as any).enableWhenFields : (value as any).enableFields
+    );
+    if (enableWhenFields?.length) cfg.enableWhenFields = enableWhenFields;
+
+    const dedupTriggerFields = normalizeStringList(
+      (value as any).dedupTriggerFields !== undefined ? (value as any).dedupTriggerFields : (value as any).dedupFields
+    );
+    if (dedupTriggerFields?.length) cfg.dedupTriggerFields = dedupTriggerFields;
+
+    const dedupCheckDialogRaw =
+      (value as any).dedupCheckDialog !== undefined
+        ? (value as any).dedupCheckDialog
+        : (value as any).dedupProgressDialog !== undefined
+          ? (value as any).dedupProgressDialog
+          : undefined;
+    if (dedupCheckDialogRaw && typeof dedupCheckDialogRaw === 'object') {
+      const dialog: any = {};
+      if ((dedupCheckDialogRaw as any).enabled !== undefined) dialog.enabled = Boolean((dedupCheckDialogRaw as any).enabled);
+      const checkingTitle = normalizeLocalized((dedupCheckDialogRaw as any).checkingTitle);
+      const checkingMessage = normalizeLocalized((dedupCheckDialogRaw as any).checkingMessage);
+      const availableTitle = normalizeLocalized((dedupCheckDialogRaw as any).availableTitle);
+      const availableMessage = normalizeLocalized((dedupCheckDialogRaw as any).availableMessage);
+      const duplicateTitle = normalizeLocalized((dedupCheckDialogRaw as any).duplicateTitle);
+      const duplicateMessage = normalizeLocalized((dedupCheckDialogRaw as any).duplicateMessage);
+      if (checkingTitle !== undefined) dialog.checkingTitle = checkingTitle;
+      if (checkingMessage !== undefined) dialog.checkingMessage = checkingMessage;
+      if (availableTitle !== undefined) dialog.availableTitle = availableTitle;
+      if (availableMessage !== undefined) dialog.availableMessage = availableMessage;
+      if (duplicateTitle !== undefined) dialog.duplicateTitle = duplicateTitle;
+      if (duplicateMessage !== undefined) dialog.duplicateMessage = duplicateMessage;
+      const availableAutoCloseMsRaw =
+        (dedupCheckDialogRaw as any).availableAutoCloseMs !== undefined
+          ? (dedupCheckDialogRaw as any).availableAutoCloseMs
+          : (dedupCheckDialogRaw as any).successAutoCloseMs;
+      if (availableAutoCloseMsRaw !== undefined && availableAutoCloseMsRaw !== null) {
+        const n = Number(availableAutoCloseMsRaw);
+        if (Number.isFinite(n)) dialog.availableAutoCloseMs = Math.max(0, Math.min(15000, Math.floor(n)));
+      }
+      const duplicateAutoCloseMsRaw =
+        (dedupCheckDialogRaw as any).duplicateAutoCloseMs !== undefined
+          ? (dedupCheckDialogRaw as any).duplicateAutoCloseMs
+          : (dedupCheckDialogRaw as any).errorAutoCloseMs;
+      if (duplicateAutoCloseMsRaw !== undefined && duplicateAutoCloseMsRaw !== null) {
+        const n = Number(duplicateAutoCloseMsRaw);
+        if (Number.isFinite(n)) dialog.duplicateAutoCloseMs = Math.max(0, Math.min(15000, Math.floor(n)));
+      }
+      if (Object.keys(dialog).length) cfg.dedupCheckDialog = dialog;
     }
     return Object.keys(cfg).length ? cfg : undefined;
   }
@@ -2178,6 +2257,8 @@ export class Dashboard {
       if ((when as any).notEmpty !== undefined) out.notEmpty = Boolean((when as any).notEmpty);
       if ((when as any).isToday !== undefined) out.isToday = Boolean((when as any).isToday);
       if ((when as any).isNotToday !== undefined) out.isNotToday = Boolean((when as any).isNotToday);
+      if ((when as any).isInPast !== undefined) out.isInPast = Boolean((when as any).isInPast);
+      if ((when as any).isInFuture !== undefined) out.isInFuture = Boolean((when as any).isInFuture);
       return out;
     };
 

@@ -190,5 +190,95 @@ describe('selectionEffects.addLineItems preset references', () => {
       parentRowId: 'r1'
     });
   });
-});
 
+  it('does not re-dispatch unchanged non-forced selection effects for the same context', () => {
+    const question: any = {
+      id: 'UNCHANGED_DELETE',
+      selectionEffects: [
+        {
+          id: 'delete_sync',
+          type: 'deleteLineItems',
+          groupId: 'MP_LINES',
+          triggerValues: ['Yes']
+        }
+      ]
+    };
+
+    const ctx = {
+      addLineItemRow: jest.fn(),
+      deleteLineItemRows: jest.fn()
+    };
+
+    handleSelectionEffects(
+      { questions: [] } as any,
+      question as any,
+      'Yes' as any,
+      'EN' as any,
+      ctx as any,
+      {
+        contextId: 'ctx-1',
+        lineItem: { groupId: 'MP_LINES', rowId: 'r1', rowValues: {} }
+      } as any
+    );
+
+    handleSelectionEffects(
+      { questions: [] } as any,
+      question as any,
+      'Yes' as any,
+      'EN' as any,
+      ctx as any,
+      {
+        contextId: 'ctx-1',
+        lineItem: { groupId: 'MP_LINES', rowId: 'r1', rowValues: {} }
+      } as any
+    );
+
+    expect(ctx.deleteLineItemRows).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-dispatches unchanged selection effects when forceContextReset is true', () => {
+    const question: any = {
+      id: 'FORCED_DELETE',
+      selectionEffects: [
+        {
+          id: 'delete_sync',
+          type: 'deleteLineItems',
+          groupId: 'MP_LINES',
+          triggerValues: ['Yes']
+        }
+      ]
+    };
+
+    const ctx = {
+      addLineItemRow: jest.fn(),
+      deleteLineItemRows: jest.fn()
+    };
+
+    handleSelectionEffects(
+      { questions: [] } as any,
+      question as any,
+      'Yes' as any,
+      'EN' as any,
+      ctx as any,
+      {
+        contextId: 'ctx-2',
+        lineItem: { groupId: 'MP_LINES', rowId: 'r1', rowValues: {} }
+      } as any
+    );
+
+    handleSelectionEffects(
+      { questions: [] } as any,
+      question as any,
+      'Yes' as any,
+      'EN' as any,
+      ctx as any,
+      {
+        contextId: 'ctx-2',
+        forceContextReset: true,
+        lineItem: { groupId: 'MP_LINES', rowId: 'r1', rowValues: {} }
+      } as any
+    );
+
+    expect(ctx.deleteLineItemRows).toHaveBeenCalledTimes(2);
+  });
+});

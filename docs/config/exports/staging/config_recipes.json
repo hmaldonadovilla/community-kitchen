@@ -59,7 +59,8 @@
               "notEquals": "Active"
             },
             "style": "link",
-            "icon": "edit"
+            "icon": "edit",
+            "hideText": true
           },
           {
             "text": {
@@ -72,7 +73,8 @@
               "equals": "Active"
             },
             "style": "link",
-            "icon": "check"
+            "icon": "view",
+            "hideText": true
           }
         ]
       },
@@ -101,6 +103,7 @@
             },
             "style": "link",
             "icon": "copy",
+            "hideText": true,
             "openView": "copy"
           }
         ],
@@ -213,6 +216,8 @@
         }
       }
     ],
+    "listViewLegendColumns": 2,
+    "listViewRowClickEnabled": false,
     "listViewSearch": {
       "mode": "text",
       "placeholder": {
@@ -1860,7 +1865,8 @@
                 "notEquals": "Active"
               },
               "style": "link",
-              "icon": "edit"
+              "icon": "edit",
+              "hideText": true
             },
             {
               "text": {
@@ -1873,7 +1879,8 @@
                 "equals": "Active"
               },
               "style": "link",
-              "icon": "check"
+              "icon": "check",
+              "hideText": true
             }
           ]
         },
@@ -1902,6 +1909,7 @@
               },
               "style": "link",
               "icon": "copy",
+              "hideText": true,
               "openView": "copy"
             }
           ],
@@ -1929,7 +1937,6 @@
                 "notEquals": "Active"
               },
               "style": "link",
-              "icon": "lock",
               "openView": "submit"
             }
           ],
@@ -1957,7 +1964,6 @@
                 "equals": "Active"
               },
               "style": "link",
-              "icon": "edit",
               "openView": "button",
               "openButtonId": "RE_OPEN"
             }
@@ -2040,6 +2046,8 @@
       ],
       "pageSize": 5,
       "paginationControlsEnabled": true,
+      "legendColumns": 2,
+      "rowClickEnabled": false,
       "search": {
         "mode": "text",
         "placeholder": {

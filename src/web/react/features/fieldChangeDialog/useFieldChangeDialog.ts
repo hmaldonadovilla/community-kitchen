@@ -140,19 +140,6 @@ export const useFieldChangeDialog = (opts?: {
   useEffect(() => {
     if (!state.open) return;
     if (state.busy) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        opts?.onDiagnostic?.(`${eventPrefix}.escape`, { kind: state.kind || null, refId: state.refId || null });
-        cancel();
-      }
-    };
-    globalThis.addEventListener?.('keydown', onKeyDown as any);
-    return () => globalThis.removeEventListener?.('keydown', onKeyDown as any);
-  }, [cancel, eventPrefix, opts, state.busy, state.kind, state.open, state.refId]);
-
-  useEffect(() => {
-    if (!state.open) return;
-    if (state.busy) return;
     if (openedOnKeyRef.current === undefined) return;
     if (opts?.closeOnKey === openedOnKeyRef.current) return;
     opts?.onDiagnostic?.(`${eventPrefix}.autoClose`, { kind: state.kind || null, refId: state.refId || null });

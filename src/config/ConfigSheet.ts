@@ -1841,6 +1841,7 @@ export class ConfigSheet {
     const fieldId = fieldIdRaw.toString();
     const condition: VisibilityCondition = { fieldId };
     if ((raw as any).equals !== undefined) condition.equals = (raw as any).equals;
+    if ((raw as any).notEquals !== undefined) condition.notEquals = (raw as any).notEquals;
     if ((raw as any).greaterThan !== undefined) condition.greaterThan = (raw as any).greaterThan;
     if ((raw as any).lessThan !== undefined) condition.lessThan = (raw as any).lessThan;
     if ((raw as any).notEmpty !== undefined) condition.notEmpty = Boolean((raw as any).notEmpty);

@@ -25,6 +25,36 @@ type SelectionEffectOpts = {
   forceContextReset?: boolean;
 };
 
+const areFieldValuesEqual = (a: FieldValue, b: FieldValue): boolean => {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    if (arrA.length !== arrB.length) return false;
+    for (let i = 0; i < arrA.length; i += 1) {
+      if (arrA[i] !== arrB[i]) return false;
+    }
+    return true;
+  }
+  if (typeof a === 'object' || typeof b === 'object') {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch (_) {
+      return false;
+    }
+  }
+  return false;
+};
+
+const areValueMapsEqual = (a: Record<string, FieldValue>, b: Record<string, FieldValue>): boolean => {
+  if (a === b) return true;
+  const keys = Array.from(new Set([...Object.keys(a || {}), ...Object.keys(b || {})]));
+  for (const key of keys) {
+    if (!areFieldValuesEqual((a as any)[key], (b as any)[key])) return false;
+  }
+  return true;
+};
+
 export const runSelectionEffects = (args: {
   definition: WebFormDefinition;
   question: WebQuestionDefinition;
@@ -41,8 +71,25 @@ export const runSelectionEffects = (args: {
 }) => {
   const { definition, question, value, language, values, lineItems, setValues, setLineItems, logEvent, onRowAppended, opts, effectOverrides } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
+  let latestValuesSnapshot: Record<string, FieldValue> = values;
+  const emittedLogKeys = new Set<string>();
+  const setValuesIfChanged = (nextValues: Record<string, FieldValue>) => {
+    if (areValueMapsEqual(latestValuesSnapshot, nextValues)) return;
+    latestValuesSnapshot = nextValues;
+    setValues(nextValues);
+  };
+  const logEventOnce = (onceKey: string, event: string, payload?: Record<string, unknown>) => {
+    if (!logEvent) return;
+    if (!onceKey) {
+      logEvent(event, payload);
+      return;
+    }
+    if (emittedLogKeys.has(onceKey)) return;
+    emittedLogKeys.add(onceKey);
+    logEvent(event, payload);
+  };
   const applyValueMapsWithBlurDerived = (nextLineItems: LineItemState) =>
-    applyValueMapsToForm(definition, values, nextLineItems, { mode: 'change' });
+    applyValueMapsToForm(definition, latestValuesSnapshot, nextLineItems, { mode: 'change' });
 
   const applyValueMapsWithBlurDerivedForValues = (
     nextValues: Record<string, FieldValue>,
@@ -243,7 +290,7 @@ export const runSelectionEffects = (args: {
           // Important: do NOT auto-seed subgroup default rows for selection-effect-created rows.
           // Selection effects should only create what they explicitly preset; otherwise it produces "phantom" empty rows.
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
-          setValues(nextValues);
+          setValuesIfChanged(nextValues);
           if (appended) {
             const anchor = `${targetKey}__${newRow.id}`;
             onRowAppended?.({
@@ -352,15 +399,19 @@ export const runSelectionEffects = (args: {
 
           const next: LineItemState = { ...prev, [targetKey]: [...keepRows, ...rebuiltAuto] };
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
-          setValues(nextValues);
+          setValuesIfChanged(nextValues);
           if (removedManualCount || removedUnmarkedCount) {
-            logEvent?.('selectionEffects.updateAutoLineItems.manualCleared', {
-              groupId,
-              targetKey,
-              removedManualCount,
-              removedUnmarkedCount,
-              effectContextId: meta.effectContextId
-            });
+            logEventOnce(
+              `selectionEffects.updateAutoLineItems.manualCleared::${targetKey}::${meta.effectContextId}`,
+              'selectionEffects.updateAutoLineItems.manualCleared',
+              {
+                groupId,
+                targetKey,
+                removedManualCount,
+                removedUnmarkedCount,
+                effectContextId: meta.effectContextId
+              }
+            );
           }
           return recomputed;
         });
@@ -408,15 +459,19 @@ export const runSelectionEffects = (args: {
 
           const cascade = cascadeRemoveLineItemRows({ lineItems: prev, roots });
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(cascade.lineItems);
-          setValues(nextValues);
-          logEvent?.('selectionEffects.deleteLineItems', {
-            groupId,
-            targetKey,
-            removedCount: cascade.removed.length,
-            effectId: effectId || null,
-            parentGroupId: parentGroupId || null,
-            parentRowId: parentRowId || null
-          });
+          setValuesIfChanged(nextValues);
+          logEventOnce(
+            `selectionEffects.deleteLineItems::${targetKey}::${effectId || ''}::${parentGroupId || ''}::${parentRowId || ''}`,
+            'selectionEffects.deleteLineItems',
+            {
+              groupId,
+              targetKey,
+              removedCount: cascade.removed.length,
+              effectId: effectId || null,
+              parentGroupId: parentGroupId || null,
+              parentRowId: parentRowId || null
+            }
+          );
           return recomputed;
         });
       },
@@ -434,7 +489,7 @@ export const runSelectionEffects = (args: {
             nextRows[idx] = { ...baseRow, values: nextRowValues };
             const nextLineItems = { ...prev, [groupKey]: nextRows };
             const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
-            setValues(nextValues);
+            setValuesIfChanged(nextValues);
             return recomputed;
           });
           return;
@@ -474,10 +529,10 @@ export const runSelectionEffects = (args: {
             });
           }
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
-          setValues(nextValues);
+          setValuesIfChanged(nextValues);
           return recomputed;
         });
-        logEvent?.('lineItems.cleared', { groupId });
+        logEventOnce(`lineItems.cleared::${groupId}::${contextId || ''}`, 'lineItems.cleared', { groupId });
       }
     },
     opts

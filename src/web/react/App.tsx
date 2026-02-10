@@ -87,6 +87,7 @@ import {
 import {
   buildInitialLineItems,
   buildSubgroupKey,
+  cascadeRemoveLineItemRows,
   clearAutoIncrementFields,
   parseSubgroupKey,
   parseRowNonMatchOptions,
@@ -102,6 +103,15 @@ import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
+import {
+  buildFieldIdMap,
+  filterDedupRulesForPrecheck,
+  hasEnteredLineItemValues,
+  hasEnteredTopLevelValues,
+  hasIncompleteConfiguredFields,
+  normalizeFieldIdList,
+  resolveDedupCheckDialogCopy
+} from './app/autoSaveDedup';
 import { resolveReadyForProductionUnlockStatus, resolveUnlockRecordId } from './app/readyForProductionLock';
 import {
   applyIngredientActivationSystemFields,
@@ -464,9 +474,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
   type DedupConflictInfo = { ruleId: string; message: string; existingRecordId?: string; existingRowNumber?: number };
+  type DedupProgressState = {
+    open: boolean;
+    phase: 'checking' | 'available' | 'duplicate';
+    title: string;
+    message: string;
+  };
   const [dedupChecking, setDedupChecking] = useState<boolean>(false);
   const [dedupConflict, setDedupConflict] = useState<DedupConflictInfo | null>(null);
   const [dedupNotice, setDedupNotice] = useState<DedupConflictInfo | null>(null);
+  const [dedupProgress, setDedupProgress] = useState<DedupProgressState>({
+    open: false,
+    phase: 'checking',
+    title: '',
+    message: ''
+  });
   type ListDedupPromptState = {
     conflict: DedupConflictInfo;
     source: string;
@@ -478,6 +500,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const [precreateDedupChecking, setPrecreateDedupChecking] = useState<boolean>(false);
   const dedupCheckingRef = useRef<boolean>(false);
   const dedupConflictRef = useRef<DedupConflictInfo | null>(null);
+  const dedupProgressTimerRef = useRef<number | null>(null);
   const dedupSignatureRef = useRef<string>('');
   const dedupCheckSeqRef = useRef<number>(0);
   const dedupCheckTimerRef = useRef<number | null>(null);
@@ -621,6 +644,41 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     () => resolveReadyForProductionUnlockStatus((definition as any)?.fieldDisableRules),
     [definition.fieldDisableRules]
   );
+  const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
+  const autoSaveEnableFieldIds = useMemo(
+    () => normalizeFieldIdList((definition.autoSave as any)?.enableWhenFields ?? (definition.autoSave as any)?.enableFields),
+    [definition.autoSave]
+  );
+  const dedupTriggerFieldIds = useMemo(
+    () => normalizeFieldIdList((definition.autoSave as any)?.dedupTriggerFields ?? (definition.autoSave as any)?.dedupFields),
+    [definition.autoSave]
+  );
+  const dedupPrecheckRules = useMemo(
+    () => filterDedupRulesForPrecheck((definition as any)?.dedupRules, dedupTriggerFieldIds),
+    [definition, dedupTriggerFieldIds]
+  );
+  const dedupTriggerFieldIdMap = useMemo(
+    () =>
+      dedupTriggerFieldIds.length ? buildFieldIdMap(dedupTriggerFieldIds) : computeDedupKeyFieldIdMap((definition as any)?.dedupRules),
+    [dedupTriggerFieldIds, definition]
+  );
+  const dedupIdentityFieldIdMap = useMemo(
+    () => computeDedupKeyFieldIdMap((definition as any)?.dedupRules),
+    [definition]
+  );
+  const dedupCheckDialogCopy = useMemo(
+    () =>
+      resolveDedupCheckDialogCopy((definition.autoSave as any)?.dedupCheckDialog, language, {
+        checkingTitle: 'Checking duplicates',
+        checkingMessage: 'Please wait while the system checks whether this record already exists.',
+        availableTitle: 'Value available',
+        availableMessage: 'You can continue entering details.',
+        duplicateTitle: 'Duplicate found',
+        duplicateMessage: tSystem('dedup.duplicate', language, 'Duplicate record.')
+      }),
+    [definition.autoSave, language]
+  );
+  const dedupCheckDialogEnabled = dedupTriggerFieldIds.length > 0 && dedupCheckDialogCopy.enabled;
 
   // Feature overlays (kept out of App.tsx as much as possible; App only wires them).
   const customConfirm = useConfirmDialog({ closeOnKey: view, eventPrefix: 'ui.customConfirm', onDiagnostic: logEvent });
@@ -677,8 +735,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     confirmLabel: '',
     cancelLabel: '',
     showCancel: false,
-    dismissOnBackdrop: true,
-    showCloseButton: true,
+    dismissOnBackdrop: false,
+    showCloseButton: false,
     actionId: null,
     ruleId: null,
     trigger: null
@@ -742,8 +800,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         tSystem('common.cancel', language, 'Cancel')
       ).toString();
       const showCancel = args.showCancel !== false;
-      const showCloseButton = args.showCloseButton !== false;
-      const dismissOnBackdrop = args.dismissOnBackdrop !== false;
+      const showCloseButton = args.showCloseButton === true;
+      const dismissOnBackdrop = args.dismissOnBackdrop === true;
 
       setSystemActionGateDialog({
         open: true,
@@ -1128,7 +1186,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       const topFieldId = pending.scope === 'top' ? (pending.fieldId || '').toString() : '';
       const isTopDedupKeyChange = Boolean(
         topFieldId &&
-          (dedupKeyFieldIdsRef.current[topFieldId] || dedupKeyFieldIdsRef.current[topFieldId.toLowerCase()]) &&
+          (dedupIdentityFieldIdsRef.current[topFieldId] || dedupIdentityFieldIdsRef.current[topFieldId.toLowerCase()]) &&
           dedupDeleteEnabled
       );
 
@@ -1137,12 +1195,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         if (update.target.scope !== 'top') return false;
         const fid = (update.target.fieldId || '').toString();
         if (!fid) return false;
-        return Boolean(dedupKeyFieldIdsRef.current[fid] || dedupKeyFieldIdsRef.current[fid.toLowerCase()]);
+        return Boolean(dedupTriggerFieldIdsRef.current[fid] || dedupTriggerFieldIdsRef.current[fid.toLowerCase()]);
       });
       const shouldRunFieldDedup = dedupMode === 'always' || (dedupMode === 'auto' && hasDedupKeyUpdate);
 
       if (shouldRunFieldDedup) {
-        const signature = computeDedupSignatureFromValues((definition as any)?.dedupRules, mapped.values as any);
+        const signature = computeDedupSignatureFromValues(dedupPrecheckRules, mapped.values as any);
         if (signature) {
           const startedAt = Date.now();
           setDedupChecking(true);
@@ -1266,6 +1324,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       }
     },
     [
+      dedupPrecheckRules,
       definition,
       destructiveChangeBusy,
       formKey,
@@ -1393,9 +1452,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         // even if the debounced autosave effect hasn't run yet.
         autoSaveDirtyRef.current = true;
 
-        // For top-level dedup keys (reject rules): hold autosave; run dedup check on blur only.
-        const isDedupKey =
-          (fieldId && dedupKeyFieldIdsRef.current[fieldId]) || (fieldPath && dedupKeyFieldIdsRef.current[fieldPath]);
+        // For top-level dedup trigger fields: hold autosave while dedup precheck settles.
+        const isDedupTriggerKey =
+          (fieldId && dedupTriggerFieldIdsRef.current[fieldId]) || (fieldPath && dedupTriggerFieldIdsRef.current[fieldPath]);
+        const isDedupIdentityKey =
+          (fieldId && dedupIdentityFieldIdsRef.current[fieldId]) || (fieldPath && dedupIdentityFieldIdsRef.current[fieldPath]);
 
         // Field-level guarded change dialog (ck-47)
         if (args?.event === 'change' && fieldKey && args.nextValue !== undefined) {
@@ -1557,27 +1618,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           return;
         }
 
-        if (args?.scope === 'top' && isDedupKey) {
-          if (dedupConflictRef.current) {
-            dedupConflictRef.current = null;
-            setDedupConflict(null);
-          }
-          if (!dedupHoldRef.current) {
-            // Hold autosave while dedup-key edits settle; precheck runs once keys are complete.
-            dedupHoldRef.current = true;
-            autoSaveDirtyRef.current = true;
-            if (autoSaveTimerRef.current) {
-              globalThis.clearTimeout(autoSaveTimerRef.current);
-              autoSaveTimerRef.current = null;
+        if (args?.scope === 'top' && (isDedupTriggerKey || isDedupIdentityKey)) {
+          if (isDedupTriggerKey) {
+            if (dedupConflictRef.current) {
+              dedupConflictRef.current = null;
+              setDedupConflict(null);
             }
-            setDraftSave({ phase: 'idle' });
-            logEvent('autosave.hold.dedupKeyChange', {
-              fieldId: fieldId || fieldPath || null,
-              fieldPath: fieldPath || fieldId || null,
-              event: args?.event || null
-            });
+            if (!dedupHoldRef.current) {
+              // Hold autosave while dedup-key edits settle; precheck runs once keys are complete.
+              dedupHoldRef.current = true;
+              autoSaveDirtyRef.current = true;
+              if (autoSaveTimerRef.current) {
+                globalThis.clearTimeout(autoSaveTimerRef.current);
+                autoSaveTimerRef.current = null;
+              }
+              setDraftSave({ phase: 'idle' });
+              logEvent('autosave.hold.dedupKeyChange', {
+                fieldId: fieldId || fieldPath || null,
+                fieldPath: fieldPath || fieldId || null,
+                event: args?.event || null
+              });
+            }
           }
-          if (args?.event === 'blur') {
+          if (args?.event === 'blur' && isDedupIdentityKey) {
             void triggerDedupDeleteOnKeyChange('dedupKey.blur', {
               fieldId: fieldId || null,
               fieldPath: fieldPath || null
@@ -1845,7 +1908,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const createFlowUserEditedRef = useRef<boolean>(false);
   const dedupHoldRef = useRef<boolean>(false);
   // Initialize immediately so the very first user interaction can be dedup-held (before effects run).
-  const dedupKeyFieldIdsRef = useRef<Record<string, true>>(computeDedupKeyFieldIdMap((definition as any)?.dedupRules));
+  const dedupTriggerFieldIdsRef = useRef<Record<string, true>>(computeDedupKeyFieldIdMap((definition as any)?.dedupRules));
+  const dedupIdentityFieldIdsRef = useRef<Record<string, true>>(computeDedupKeyFieldIdMap((definition as any)?.dedupRules));
   // Baseline dedup identity of the currently loaded record (used by optional delete-on-key-change flow).
   const dedupBaselineSignatureRef = useRef<string>('');
   const dedupKeyFingerprintBaselineRef = useRef<string>('');
@@ -2557,7 +2621,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       // Treat the loaded snapshot's dedup signature as "already checked" so we don't spam dedup checks
       // on every record navigation. Subsequent edits of dedup-key fields will force a re-check.
       try {
-        const baseline = computeDedupSignatureFromValues((definition as any)?.dedupRules, mapped.values as any);
+        const baseline = computeDedupSignatureFromValues(dedupPrecheckRules, mapped.values as any);
         lastDedupCheckedSignatureRef.current = (baseline || '').toString();
         dedupSignatureRef.current = lastDedupCheckedSignatureRef.current;
         dedupBaselineSignatureRef.current = lastDedupCheckedSignatureRef.current;
@@ -2692,7 +2756,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         }
       }
     },
-    [definition, formKey, logEvent, upsertListCacheRow]
+    [dedupPrecheckRules, definition, formKey, logEvent, upsertListCacheRow]
   );
 
   const markRecordStale = useCallback(
@@ -3410,7 +3474,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       source: string;
       onDuplicate?: (conflict: DedupConflictInfo) => Promise<boolean | void> | boolean | void;
     }): Promise<boolean> => {
-      const signature = computeDedupSignatureFromValues((definition as any)?.dedupRules, args.values as any);
+      const signature = computeDedupSignatureFromValues(dedupPrecheckRules, args.values as any);
       if (!signature) return false;
       const startedAt = Date.now();
       setPrecreateDedupChecking(true);
@@ -3466,7 +3530,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         logEvent('dedup.precreate.check.end', { source: args.source, durationMs: Date.now() - startedAt });
       }
     },
-    [definition, formKey, logEvent, openExistingRecordFromDedup]
+    [dedupPrecheckRules, definition, formKey, logEvent, openExistingRecordFromDedup]
   );
 
   const handleSubmitAnother = useCallback(() => {
@@ -4608,7 +4672,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     [definition.questions, logEvent]
   );
 
-  const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
   const summaryViewEnabled = definition.summaryViewEnabled !== false;
   const copyCurrentRecordEnabled = definition.copyCurrentRecordEnabled !== false;
   const autoSaveNoticeTitle = tSystem('autosaveNotice.title', language, 'Autosave is on');
@@ -4841,23 +4904,70 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     return matchesStatusTransition(raw, statusTransitions, 'onClose', { includeDefaultOnClose: true });
   })();
 
-  const dedupSignature = useMemo(
-    () => computeDedupSignatureFromValues((definition as any)?.dedupRules, values as any),
-    [definition, values]
-  );
-
-  const dedupKeyFieldIdMap = useMemo(
-    () => computeDedupKeyFieldIdMap((definition as any)?.dedupRules),
-    [definition]
-  );
+  const dedupSignature = useMemo(() => computeDedupSignatureFromValues(dedupPrecheckRules, values as any), [dedupPrecheckRules, values]);
 
   useEffect(() => {
-    dedupKeyFieldIdsRef.current = dedupKeyFieldIdMap;
-  }, [dedupKeyFieldIdMap]);
+    dedupTriggerFieldIdsRef.current = dedupTriggerFieldIdMap;
+  }, [dedupTriggerFieldIdMap]);
+
+  useEffect(() => {
+    dedupIdentityFieldIdsRef.current = dedupIdentityFieldIdMap;
+  }, [dedupIdentityFieldIdMap]);
 
   useEffect(() => {
     dedupSignatureRef.current = dedupSignature;
   }, [dedupSignature]);
+
+  const hideDedupProgressDialog = useCallback(() => {
+    if (dedupProgressTimerRef.current) {
+      globalThis.clearTimeout(dedupProgressTimerRef.current);
+      dedupProgressTimerRef.current = null;
+    }
+    setDedupProgress(prev => (prev.open ? { ...prev, open: false } : prev));
+  }, []);
+
+  const showDedupProgressDialog = useCallback(
+    (args: { phase: 'checking' | 'available' | 'duplicate'; title: string; message: string; autoCloseMs?: number }) => {
+      if (dedupProgressTimerRef.current) {
+        globalThis.clearTimeout(dedupProgressTimerRef.current);
+        dedupProgressTimerRef.current = null;
+      }
+      setDedupProgress({
+        open: true,
+        phase: args.phase,
+        title: args.title,
+        message: args.message
+      });
+      if (args.autoCloseMs !== undefined && args.autoCloseMs >= 0) {
+        dedupProgressTimerRef.current = globalThis.setTimeout(() => {
+          setDedupProgress(prev => (prev.open ? { ...prev, open: false } : prev));
+          dedupProgressTimerRef.current = null;
+        }, args.autoCloseMs) as any;
+      }
+    },
+    []
+  );
+
+  useEffect(
+    () => () => {
+      if (!dedupProgressTimerRef.current) return;
+      globalThis.clearTimeout(dedupProgressTimerRef.current);
+      dedupProgressTimerRef.current = null;
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (view === 'form' && dedupCheckDialogEnabled) return;
+    hideDedupProgressDialog();
+  }, [dedupCheckDialogEnabled, hideDedupProgressDialog, view]);
+
+  useEffect(() => {
+    if (!dedupProgress.open) return;
+    if (dedupProgress.phase !== 'checking') return;
+    if (dedupChecking) return;
+    hideDedupProgressDialog();
+  }, [dedupChecking, dedupProgress.open, dedupProgress.phase, hideDedupProgressDialog]);
 
   const dedupSignatureValue = (dedupSignature || '').toString();
   const dedupNavigationBlocked =
@@ -4878,6 +4988,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       lastSubmissionMetaId: lastSubmissionMeta?.id || null
     });
     const candidateId = existingRecordId ? existingRecordId.toString() : '';
+    const showDedupProgress = dedupCheckDialogEnabled && createFlowRef.current;
     // Only de-duplicate by signature; the candidate id can change after draft creation and should not force a re-check.
     const checkKey = signature;
 
@@ -4888,6 +4999,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
 
     if (!signature) {
+      hideDedupProgressDialog();
       lastDedupCheckedSignatureRef.current = '';
       dedupCheckSeqRef.current += 1;
       dedupCheckingRef.current = false;
@@ -4904,6 +5016,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     dedupConflictRef.current = null;
     setDedupChecking(true);
     setDedupConflict(null);
+    if (showDedupProgress) {
+      showDedupProgressDialog({
+        phase: 'checking',
+        title: dedupCheckDialogCopy.checkingTitle,
+        message: dedupCheckDialogCopy.checkingMessage
+      });
+    }
     const seq = ++dedupCheckSeqRef.current;
     logEvent('dedup.check.start', { recordId: candidateId || null, signatureLen: signature.length });
 
@@ -4927,6 +5046,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           if (!res?.success) {
             const msg = (res?.message || 'Failed to check duplicates.').toString();
             logEvent('dedup.check.failed', { recordId: candidateId || null, message: msg });
+            if (showDedupProgress) {
+              showDedupProgressDialog({
+                phase: 'duplicate',
+                title: dedupCheckDialogCopy.duplicateTitle,
+                message: dedupCheckDialogCopy.duplicateMessage,
+                autoCloseMs: dedupCheckDialogCopy.duplicateAutoCloseMs
+              });
+            }
             // Fail closed only for new record creation (so we don't create duplicates on autosave).
             if (!candidateId) {
               const conflictObj = { ruleId: 'dedupCheckFailed', message: msg };
@@ -4961,12 +5088,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               ruleId: (conflict.ruleId || '').toString(),
               existingRecordId: conflict.existingRecordId ? conflict.existingRecordId.toString() : null
             });
+            if (showDedupProgress) {
+              showDedupProgressDialog({
+                phase: 'duplicate',
+                title: dedupCheckDialogCopy.duplicateTitle,
+                message: dedupCheckDialogCopy.duplicateMessage,
+                autoCloseMs: dedupCheckDialogCopy.duplicateAutoCloseMs
+              });
+            }
             return;
           }
 
           dedupConflictRef.current = null;
           setDedupConflict(null);
           logEvent('dedup.ok', { recordId: candidateId || null });
+          if (showDedupProgress) {
+            showDedupProgressDialog({
+              phase: 'available',
+              title: dedupCheckDialogCopy.availableTitle,
+              message: dedupCheckDialogCopy.availableMessage,
+              autoCloseMs: dedupCheckDialogCopy.availableAutoCloseMs
+            });
+          } else {
+            hideDedupProgressDialog();
+          }
         })
         .catch(err => {
           if (seq !== dedupCheckSeqRef.current) return;
@@ -4982,6 +5127,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               setDedupConflict({ ruleId: 'dedupCheckFailed', message: uiMessage });
             }
           }
+          if (showDedupProgress) {
+            showDedupProgressDialog({
+              phase: 'duplicate',
+              title: dedupCheckDialogCopy.duplicateTitle,
+              message: dedupCheckDialogCopy.duplicateMessage,
+              autoCloseMs: dedupCheckDialogCopy.duplicateAutoCloseMs
+            });
+          } else {
+            hideDedupProgressDialog();
+          }
         });
     }, 350) as any;
 
@@ -4992,13 +5147,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       }
     };
   }, [
+    dedupCheckDialogCopy.availableAutoCloseMs,
+    dedupCheckDialogCopy.availableMessage,
+    dedupCheckDialogCopy.availableTitle,
+    dedupCheckDialogCopy.duplicateAutoCloseMs,
+    dedupCheckDialogCopy.duplicateMessage,
+    dedupCheckDialogCopy.duplicateTitle,
+    dedupCheckDialogCopy.checkingMessage,
+    dedupCheckDialogCopy.checkingTitle,
+    dedupCheckDialogEnabled,
     dedupSignature,
     definition,
     formKey,
+    hideDedupProgressDialog,
     loadRecordSnapshot,
     logEvent,
     selectedRecordId,
     selectedRecordSnapshot,
+    showDedupProgressDialog,
     lastSubmissionMeta?.id,
     view
   ]);
@@ -5063,15 +5229,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       const valuesSnapshot = valuesRef.current;
       const lineItemsSnapshot = lineItemsRef.current;
       const languageSnapshot = languageRef.current;
+      const hasConfiguredAutoSaveGate = autoSaveEnableFieldIds.length > 0;
 
-      if (isCreateFlow && ingredientsFormActive && !isIngredientCreateAutoSaveReady(valuesSnapshot as any)) {
+      if (isCreateFlow && hasConfiguredAutoSaveGate && hasIncompleteConfiguredFields(autoSaveEnableFieldIds, valuesSnapshot as any)) {
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.configuredFieldsIncomplete', {
+          reason,
+          isCreateFlow: true,
+          fields: autoSaveEnableFieldIds
+        });
+        return;
+      }
+
+      if (isCreateFlow && ingredientsFormActive && !hasConfiguredAutoSaveGate && !isIngredientCreateAutoSaveReady(valuesSnapshot as any)) {
         autoSaveDirtyRef.current = true;
         logEvent('autosave.blocked.ingredients.createRequirements', { reason, isCreateFlow: true });
         return;
       }
 
       const createFlowDedupKeysIncomplete =
-        isCreateFlow && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesSnapshot as any);
+        isCreateFlow && !hasConfiguredAutoSaveGate && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesSnapshot as any);
       if (createFlowDedupKeysIncomplete) {
         autoSaveDirtyRef.current = true;
         logEvent('autosave.blocked.dedup.keysIncomplete', { reason, isCreateFlow: true });
@@ -5079,7 +5256,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       }
 
       // If this is a CREATE flow and dedup keys are populated, avoid saving drafts until the precheck completes.
-      const currentDedupSignature = computeDedupSignatureFromValues((definition as any)?.dedupRules, valuesSnapshot as any);
+      const currentDedupSignature = computeDedupSignatureFromValues(dedupPrecheckRules, valuesSnapshot as any);
       const currentDedupFingerprint = dedupDeleteOnKeyChangeEnabled
         ? computeDedupKeyFingerprint((definition as any)?.dedupRules, valuesSnapshot as any)
         : '';
@@ -5323,6 +5500,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     [
       autoSaveDebounceMs,
       autoSaveEnabled,
+      autoSaveEnableFieldIds,
+      dedupPrecheckRules,
       resolveAutoSaveStatus,
       closedStatusLabel,
       definition,
@@ -5429,7 +5608,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       viewRef.current === 'form' && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesRef.current as any);
     const homeDedupDialog = resolveDedupIncompleteHomeDialogConfig(definition.actionBars);
     const homeDedupDialogEnabled = homeDedupDialog && homeDedupDialog.enabled !== false;
-    if (incompleteDedupKeys && homeDedupDialogEnabled) {
+    const hasEnteredData =
+      hasEnteredTopLevelValues(definition.questions || [], valuesRef.current as any) ||
+      hasEnteredLineItemValues(lineItemsRef.current || {});
+    const allowLeaveUntouchedCreate = createFlowRef.current && !hasEnteredData;
+    if (incompleteDedupKeys && homeDedupDialogEnabled && !allowLeaveUntouchedCreate) {
       const copy = resolveDedupIncompleteHomeDialogCopy(homeDedupDialog, languageRef.current);
       customConfirm.openConfirm({
         title: copy.title,
@@ -5484,7 +5667,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       return;
     }
     void requestNavigateToList('navigate.home');
-  }, [customConfirm, definition, logEvent, requestNavigateToList, setDraftSave, triggerDedupDeleteOnKeyChange]);
+  }, [
+    customConfirm,
+    definition,
+    logEvent,
+    requestNavigateToList,
+    triggerDedupDeleteOnKeyChange
+  ]);
 
   const handleGoSummary = useCallback(() => {
     if (!summaryViewEnabled) return;
@@ -6151,7 +6340,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         initialLineItems
       );
       lastAutoSaveSeenRef.current = { values: mappedValues, lineItems: mappedLineItems };
-      dedupBaselineSignatureRef.current = computeDedupSignatureFromValues((definition as any)?.dedupRules, mappedValues as any);
+      dedupBaselineSignatureRef.current = computeDedupSignatureFromValues(dedupPrecheckRules, mappedValues as any);
       dedupKeyFingerprintBaselineRef.current = computeDedupKeyFingerprint((definition as any)?.dedupRules, mappedValues as any);
       setValues(mappedValues);
       setLineItems(mappedLineItems);
@@ -7086,7 +7275,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         ? rule.keys.map((key: any) => (key ?? '').toString().trim()).filter(Boolean)
         : [];
       const fallbackKeys = (() => {
-        const keys = Object.keys(dedupKeyFieldIdMap || {});
+        const keys = Object.keys(dedupIdentityFieldIdMap || {});
         const list: string[] = [];
         const seen = new Set<string>();
         keys.forEach(key => {
@@ -7138,7 +7327,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       });
       return { keys: ordered.map(item => item.fieldId), items: ordered };
     },
-    [dedupKeyFieldIdMap, definition, language, optionState]
+    [dedupIdentityFieldIdMap, definition, language, optionState]
   );
 
   const dedupDialogDetails = useMemo(() => {
@@ -7194,6 +7383,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
   const resetDedupState = useCallback(
     (reason: string) => {
+      hideDedupProgressDialog();
       if (dedupCheckTimerRef.current) {
         globalThis.clearTimeout(dedupCheckTimerRef.current);
         dedupCheckTimerRef.current = null;
@@ -7214,7 +7404,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       setDraftSave({ phase: 'idle' });
       logEvent('dedup.state.reset', { reason });
     },
-    [logEvent]
+    [hideDedupProgressDialog, logEvent]
   );
 
   const handleDedupChangeFields = useCallback(() => {
@@ -7226,7 +7416,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       : (() => {
           const list: string[] = [];
           const seen = new Set<string>();
-          Object.keys(dedupKeyFieldIdMap || {}).forEach(key => {
+          Object.keys(dedupIdentityFieldIdMap || {}).forEach(key => {
             const trimmed = (key || '').toString().trim();
             if (!trimmed) return;
             const lower = trimmed.toLowerCase();
@@ -7270,7 +7460,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   }, [
     dedupDialogConflict,
     dedupDialogDetails,
-    dedupKeyFieldIdMap,
+    dedupIdentityFieldIdMap,
     definition,
     logEvent,
     resetDedupState,
@@ -7448,8 +7638,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       </div>
     ) : null;
 
+  const showInlineDedupCheckingNotice = precreateDedupChecking || (dedupChecking && !(view === 'form' && dedupCheckDialogEnabled));
   const dedupCheckingNotice =
-    precreateDedupChecking || dedupChecking ? (
+    showInlineDedupCheckingNotice ? (
       <div
         role="status"
         aria-live="polite"
@@ -7793,7 +7984,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         <FormView
           formKey={formKey}
           definition={definition}
-          dedupKeyFieldIdMap={dedupKeyFieldIdMap}
+          dedupKeyFieldIdMap={dedupTriggerFieldIdMap}
           language={language}
           values={values}
           setValues={setValues}
@@ -7877,6 +8068,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           onSelect={handleRecordSelect}
         />
       )}
+
+      <BlockingOverlay
+        open={dedupProgress.open}
+        title={dedupProgress.title}
+        message={dedupProgress.message}
+        mode={dedupProgress.phase === 'checking' ? 'loading' : dedupProgress.phase === 'available' ? 'success' : 'error'}
+        zIndex={12019}
+      />
 
       <ConfirmDialogOverlay
         open={(view === 'form' || view === 'summary') && Boolean(recordStale)}

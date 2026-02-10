@@ -97,29 +97,6 @@
         "cases": [
           {
             "text": {
-              "en": "Edit",
-              "fr": "Modifier",
-              "nl": "Bewerken"
-            },
-            "when": {
-              "all": [
-                {
-                  "fieldId": "status",
-                  "notEquals": "Closed"
-                },
-                {
-                  "fieldId": "DATE",
-                  "isToday": true
-                }
-              ]
-            },
-            "style": "link",
-            "icon": "edit",
-            "hideText": true,
-            "openView": "form"
-          },
-          {
-            "text": {
               "en": "Warning",
               "fr": "Avertissement",
               "nl": "Waarschuwing"
@@ -132,7 +109,7 @@
                 },
                 {
                   "fieldId": "DATE",
-                  "isNotToday": true
+                  "isInPast": true
                 }
               ]
             },
@@ -140,6 +117,58 @@
             "icon": "warning",
             "hideText": true,
             "openView": "summary"
+          },
+          {
+            "text": {
+              "en": "Actions",
+              "fr": "Actions",
+              "nl": "Acties"
+            },
+            "hideText": true,
+            "when": {
+              "all": [
+                {
+                  "fieldId": "status",
+                  "notEquals": "Closed"
+                },
+                {
+                  "any": [
+                    {
+                      "fieldId": "DATE",
+                      "isToday": true
+                    },
+                    {
+                      "fieldId": "DATE",
+                      "isInFuture": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "actions": [
+              {
+                "text": {
+                  "en": "View",
+                  "fr": "Voir",
+                  "nl": "Bekijken"
+                },
+                "hideText": true,
+                "style": "link",
+                "icon": "view",
+                "openView": "summary"
+              },
+              {
+                "text": {
+                  "en": "Edit",
+                  "fr": "Modifier",
+                  "nl": "Bewerken"
+                },
+                "hideText": true,
+                "style": "link",
+                "icon": "edit",
+                "openView": "form"
+              }
+            ]
           },
           {
             "text": {
@@ -303,6 +332,32 @@
       "system": {
         "home": {
           "hideWhenActive": true
+        },
+        "gates": {
+          "edit": [
+            {
+              "id": "checklist.summary.pastNotClosed.hideEdit",
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "__ckView",
+                    "equals": [
+                      "summary"
+                    ]
+                  },
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "fieldId": "DATE",
+                    "isInPast": true
+                  }
+                ]
+              },
+              "hide": true
+            }
+          ]
         }
       }
     },
@@ -6387,29 +6442,6 @@
           "cases": [
             {
               "text": {
-                "en": "Edit",
-                "fr": "Modifier",
-                "nl": "Bewerken"
-              },
-              "when": {
-                "all": [
-                  {
-                    "fieldId": "status",
-                    "notEquals": "Closed"
-                  },
-                  {
-                    "fieldId": "DATE",
-                    "isToday": true
-                  }
-                ]
-              },
-              "style": "link",
-              "icon": "edit",
-              "hideText": true,
-              "openView": "form"
-            },
-            {
-              "text": {
                 "en": "Warning",
                 "fr": "Avertissement",
                 "nl": "Waarschuwing"
@@ -6422,7 +6454,7 @@
                   },
                   {
                     "fieldId": "DATE",
-                    "isNotToday": true
+                    "isInPast": true
                   }
                 ]
               },
@@ -6430,6 +6462,58 @@
               "icon": "warning",
               "hideText": true,
               "openView": "summary"
+            },
+            {
+              "text": {
+                "en": "Actions",
+                "fr": "Actions",
+                "nl": "Acties"
+              },
+              "hideText": true,
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "any": [
+                      {
+                        "fieldId": "DATE",
+                        "isToday": true
+                      },
+                      {
+                        "fieldId": "DATE",
+                        "isInFuture": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "actions": [
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "view",
+                  "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Edit",
+                    "fr": "Modifier",
+                    "nl": "Bewerken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "edit",
+                  "openView": "form"
+                }
+              ]
             },
             {
               "text": {
@@ -6718,6 +6802,32 @@
       "system": {
         "home": {
           "hideWhenActive": true
+        },
+        "gates": {
+          "edit": [
+            {
+              "id": "checklist.summary.pastNotClosed.hideEdit",
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "__ckView",
+                    "equals": [
+                      "summary"
+                    ]
+                  },
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "fieldId": "DATE",
+                    "isInPast": true
+                  }
+                ]
+              },
+              "hide": true
+            }
+          ]
         }
       }
     },

@@ -38,7 +38,7 @@ export type ConfirmDialogOpenArgs = {
  *
  * - Stores the confirm callback in a ref to avoid stale closure issues.
  * - Supports auto-close when `closeOnKey` changes (e.g., navigation/view changes).
- * - Supports Escape-to-close.
+ * - Supports Escape-to-close only when dismiss-on-backdrop is explicitly enabled.
  *
  * Owner: WebForm UI (React)
  */
@@ -57,8 +57,8 @@ export const useConfirmDialog = (opts?: {
     primaryAction: 'confirm',
     showCancel: true,
     showConfirm: true,
-    dismissOnBackdrop: true,
-    showCloseButton: true,
+    dismissOnBackdrop: false,
+    showCloseButton: false,
     kind: undefined,
     refId: undefined
   });
@@ -104,8 +104,8 @@ export const useConfirmDialog = (opts?: {
       const primaryAction = args?.primaryAction === 'cancel' ? 'cancel' : 'confirm';
       const showCancel = args?.showCancel !== false;
       const showConfirm = args?.showConfirm !== false;
-      const dismissOnBackdrop = args?.dismissOnBackdrop !== false;
-      const showCloseButton = args?.showCloseButton !== false;
+      const dismissOnBackdrop = args?.dismissOnBackdrop === true;
+      const showCloseButton = args?.showCloseButton === true;
       const kind = (args?.kind || '').toString() || undefined;
       const refId = (args?.refId || '').toString() || undefined;
       confirmRef.current = args?.onConfirm || null;
@@ -130,9 +130,10 @@ export const useConfirmDialog = (opts?: {
     [eventPrefix, opts]
   );
 
-  // Escape closes the dialog.
+  // Escape closes the dialog only when backdrop-dismiss is explicitly enabled.
   useEffect(() => {
     if (!state.open) return;
+    if (!state.dismissOnBackdrop) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         opts?.onDiagnostic?.(`${eventPrefix}.escape`, { kind: state.kind || null, refId: state.refId || null });
@@ -141,7 +142,7 @@ export const useConfirmDialog = (opts?: {
     };
     globalThis.addEventListener?.('keydown', onKeyDown as any);
     return () => globalThis.removeEventListener?.('keydown', onKeyDown as any);
-  }, [cancel, eventPrefix, opts, state.kind, state.open, state.refId]);
+  }, [cancel, eventPrefix, opts, state.dismissOnBackdrop, state.kind, state.open, state.refId]);
 
   // Auto-close when the key changes (e.g., view navigation).
   useEffect(() => {

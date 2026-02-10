@@ -104,29 +104,6 @@ export const BUNDLED_FORM_CONFIGS = [
           "cases": [
             {
               "text": {
-                "en": "Edit",
-                "fr": "Modifier",
-                "nl": "Bewerken"
-              },
-              "when": {
-                "all": [
-                  {
-                    "fieldId": "status",
-                    "notEquals": "Closed"
-                  },
-                  {
-                    "fieldId": "DATE",
-                    "isToday": true
-                  }
-                ]
-              },
-              "style": "link",
-              "icon": "edit",
-              "hideText": true,
-              "openView": "form"
-            },
-            {
-              "text": {
                 "en": "Warning",
                 "fr": "Avertissement",
                 "nl": "Waarschuwing"
@@ -139,7 +116,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   {
                     "fieldId": "DATE",
-                    "isNotToday": true
+                    "isInPast": true
                   }
                 ]
               },
@@ -147,6 +124,58 @@ export const BUNDLED_FORM_CONFIGS = [
               "icon": "warning",
               "hideText": true,
               "openView": "summary"
+            },
+            {
+              "text": {
+                "en": "Actions",
+                "fr": "Actions",
+                "nl": "Acties"
+              },
+              "hideText": true,
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "any": [
+                      {
+                        "fieldId": "DATE",
+                        "isToday": true
+                      },
+                      {
+                        "fieldId": "DATE",
+                        "isInFuture": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "actions": [
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "view",
+                  "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Edit",
+                    "fr": "Modifier",
+                    "nl": "Bewerken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "edit",
+                  "openView": "form"
+                }
+              ]
             },
             {
               "text": {
@@ -310,6 +339,32 @@ export const BUNDLED_FORM_CONFIGS = [
         "system": {
           "home": {
             "hideWhenActive": true
+          },
+          "gates": {
+            "edit": [
+              {
+                "id": "checklist.summary.pastNotClosed.hideEdit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "fieldId": "DATE",
+                      "isInPast": true
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ]
           }
         }
       },
@@ -6394,29 +6449,6 @@ export const BUNDLED_FORM_CONFIGS = [
             "cases": [
               {
                 "text": {
-                  "en": "Edit",
-                  "fr": "Modifier",
-                  "nl": "Bewerken"
-                },
-                "when": {
-                  "all": [
-                    {
-                      "fieldId": "status",
-                      "notEquals": "Closed"
-                    },
-                    {
-                      "fieldId": "DATE",
-                      "isToday": true
-                    }
-                  ]
-                },
-                "style": "link",
-                "icon": "edit",
-                "hideText": true,
-                "openView": "form"
-              },
-              {
-                "text": {
                   "en": "Warning",
                   "fr": "Avertissement",
                   "nl": "Waarschuwing"
@@ -6429,7 +6461,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     {
                       "fieldId": "DATE",
-                      "isNotToday": true
+                      "isInPast": true
                     }
                   ]
                 },
@@ -6437,6 +6469,58 @@ export const BUNDLED_FORM_CONFIGS = [
                 "icon": "warning",
                 "hideText": true,
                 "openView": "summary"
+              },
+              {
+                "text": {
+                  "en": "Actions",
+                  "fr": "Actions",
+                  "nl": "Acties"
+                },
+                "hideText": true,
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "any": [
+                        {
+                          "fieldId": "DATE",
+                          "isToday": true
+                        },
+                        {
+                          "fieldId": "DATE",
+                          "isInFuture": true
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "actions": [
+                  {
+                    "text": {
+                      "en": "View",
+                      "fr": "Voir",
+                      "nl": "Bekijken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "view",
+                    "openView": "summary"
+                  },
+                  {
+                    "text": {
+                      "en": "Edit",
+                      "fr": "Modifier",
+                      "nl": "Bewerken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "edit",
+                    "openView": "form"
+                  }
+                ]
               },
               {
                 "text": {
@@ -6725,6 +6809,32 @@ export const BUNDLED_FORM_CONFIGS = [
         "system": {
           "home": {
             "hideWhenActive": true
+          },
+          "gates": {
+            "edit": [
+              {
+                "id": "checklist.summary.pastNotClosed.hideEdit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "fieldId": "DATE",
+                      "isInPast": true
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ]
           }
         }
       },
@@ -6805,9 +6915,53 @@ export const BUNDLED_FORM_CONFIGS = [
       "autoSave": {
         "enabled": true,
         "debounceMs": 2000,
-        "status": "Draft"
+        "status": "Draft",
+        "enableWhenFields": [
+          "INGREDIENT_NAME",
+          "CREATED_BY"
+        ],
+        "dedupTriggerFields": [
+          "INGREDIENT_NAME"
+        ],
+        "dedupCheckDialog": {
+          "enabled": true,
+          "checkingTitle": {
+            "en": "Checking ingredient name",
+            "fr": "Checking ingredient name",
+            "nl": "Checking ingredient name"
+          },
+          "checkingMessage": {
+            "en": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete.",
+            "fr": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete.",
+            "nl": "Please wait while the system checks whether this ingredient already exists.\nDo not leave this page until the check is complete."
+          },
+          "availableTitle": {
+            "en": "Ingredient name available",
+            "fr": "Ingredient name available",
+            "nl": "Ingredient name available"
+          },
+          "availableMessage": {
+            "en": "You can continue entering the ingredient details.",
+            "fr": "You can continue entering the ingredient details.",
+            "nl": "You can continue entering the ingredient details."
+          },
+          "duplicateTitle": {
+            "en": "Ingredient already exists",
+            "fr": "Ingredient already exists",
+            "nl": "Ingredient already exists"
+          },
+          "duplicateMessage": {
+            "en": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+            "fr": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+            "nl": "An ingredient with this name already exists.\nPlease change the name or cancel the creation."
+          },
+          "availableAutoCloseMs": 1300,
+          "duplicateAutoCloseMs": 900
+        }
       },
+      "dedupDeleteOnKeyChange": true,
       "summaryViewEnabled": true,
+      "summaryHtmlTemplateId": "bundle:ingredients.summary.html",
       "copyCurrentRecordEnabled": true,
       "createNewRecordEnabled": true,
       "createRecordPresetButtonsEnabled": false,
@@ -7056,7 +7210,35 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "system": {
           "home": {
-            "hideWhenActive": true
+            "hideWhenActive": true,
+            "dedupIncompleteDialog": {
+              "enabled": true,
+              "title": {
+                "en": "Missing key information to create a draft ingredient record",
+                "fr": "Missing key information to create a draft ingredient record",
+                "nl": "Missing key information to create a draft ingredient record"
+              },
+              "message": {
+                "en": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone.",
+                "fr": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone.",
+                "nl": "A draft ingredient record can only exist when created by and ingredient name are all filled in.\n\nLeaving this page now will permanently delete this record and all data already entered.\n\nThis action cannot be undone."
+              },
+              "confirmLabel": {
+                "en": "Continue, delete the record",
+                "fr": "Continue, delete the record",
+                "nl": "Continue, delete the record"
+              },
+              "cancelLabel": {
+                "en": "Cancel, continue editing",
+                "fr": "Cancel, continue editing",
+                "nl": "Cancel, continue editing"
+              },
+              "showCancel": true,
+              "showCloseButton": false,
+              "dismissOnBackdrop": false,
+              "deleteRecordOnConfirm": true,
+              "primaryAction": "cancel"
+            }
           },
           "gates": {
             "edit": [
@@ -7105,7 +7287,13 @@ export const BUNDLED_FORM_CONFIGS = [
         "fr": "Activer",
         "nl": "Activeren"
       },
+      "summaryButtonLabel": {
+        "en": "View",
+        "fr": "View",
+        "nl": "View"
+      },
       "submitValidation": {
+        "enforceFieldOrder": true,
         "hideSubmitTopErrorMessage": true,
         "submitTopErrorMessage": {
           "en": "You are almost done. Some required checks are missing. Review the highlighted sections.",
@@ -7135,14 +7323,14 @@ export const BUNDLED_FORM_CONFIGS = [
       },
       "dedupDialog": {
         "title": {
-          "en": "An ingredient with the same name already exists.",
-          "fr": "Un ingrédient portant le même nom existe déjà.",
-          "nl": "Er bestaat al een ingrediënt met dezelfde naam."
+          "en": "Ingredient already exists",
+          "fr": "Ingredient already exists",
+          "nl": "Ingredient already exists"
         },
         "intro": {
-          "en": "Do you want to change the name or cancel the creation?",
-          "fr": "Voulez-vous modifier le nom ou annuler la création ?",
-          "nl": "Wil je de naam wijzigen of de creatie annuleren?"
+          "en": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+          "fr": "An ingredient with this name already exists.\nPlease change the name or cancel the creation.",
+          "nl": "An ingredient with this name already exists.\nPlease change the name or cancel the creation."
         },
         "outro": {
           "en": "",
@@ -7168,24 +7356,6 @@ export const BUNDLED_FORM_CONFIGS = [
     },
     "questions": [
       {
-        "id": "CREATED_BY",
-        "type": "TEXT",
-        "qEn": "Created by",
-        "qFr": "Créé par",
-        "qNl": "Gemaakt door",
-        "required": true,
-        "listView": false,
-        "status": "Active",
-        "ui": {
-          "helperText": {
-            "en": "Enter your name.",
-            "fr": "Saisissez votre nom.",
-            "nl": "Voer je naam in."
-          },
-          "helperPlacement": "placeholder"
-        }
-      },
-      {
         "id": "INGREDIENT_NAME",
         "type": "TEXT",
         "qEn": "Ingredient name",
@@ -7206,6 +7376,24 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Enter the name of the ingredient"
           },
           "labelLayout": "stacked"
+        }
+      },
+      {
+        "id": "CREATED_BY",
+        "type": "TEXT",
+        "qEn": "Created by",
+        "qFr": "Créé par",
+        "qNl": "Gemaakt door",
+        "required": true,
+        "listView": false,
+        "status": "Active",
+        "ui": {
+          "helperText": {
+            "en": "Enter your name.",
+            "fr": "Saisissez votre nom.",
+            "nl": "Voer je naam in."
+          },
+          "helperPlacement": "placeholder"
         }
       },
       {
@@ -7684,9 +7872,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "cases": [
             {
               "text": {
-                "en": "Edit",
-                "fr": "Modifier",
-                "nl": "Bewerken"
+                "en": "Warning",
+                "fr": "Avertissement",
+                "nl": "Waarschuwing"
               },
               "when": {
                 "all": [
@@ -7696,21 +7884,22 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   {
                     "fieldId": "MP_PREP_DATE",
-                    "isToday": true
+                    "isInPast": true
                   }
                 ]
               },
-              "style": "link",
-              "icon": "edit",
+              "style": "warning",
+              "icon": "warning",
               "hideText": true,
-              "openView": "form"
+              "openView": "summary"
             },
             {
               "text": {
-                "en": "View",
-                "fr": "Voir",
-                "nl": "Bekijken"
+                "en": "Actions",
+                "fr": "Actions",
+                "nl": "Acties"
               },
+              "hideText": true,
               "when": {
                 "all": [
                   {
@@ -7718,15 +7907,43 @@ export const BUNDLED_FORM_CONFIGS = [
                     "notEquals": "Closed"
                   },
                   {
-                    "fieldId": "MP_PREP_DATE",
-                    "isNotToday": true
+                    "any": [
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isToday": true
+                      },
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isInFuture": true
+                      }
+                    ]
                   }
                 ]
               },
-              "style": "link",
-              "icon": "view",
-              "hideText": true,
-              "openView": "summary"
+              "actions": [
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "view",
+                  "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Edit",
+                    "fr": "Modifier",
+                    "nl": "Bewerken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "edit",
+                  "openView": "form"
+                }
+              ]
             },
             {
               "text": {
@@ -7750,17 +7967,6 @@ export const BUNDLED_FORM_CONFIGS = [
                   "style": "link",
                   "icon": "view",
                   "openView": "summary"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
                 }
               ]
             }
@@ -7785,11 +7991,11 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         {
-          "icon": "copy",
+          "icon": "warning",
           "text": {
-            "en": "Copy order information",
-            "fr": "Copier les informations de commande",
-            "nl": "Kopieer bestelinformatie"
+            "en": "Past record incomplete or missing",
+            "fr": "Enregistrement passé incomplet ou manquant",
+            "nl": "Vorige record onvolledig of ontbrekend"
           }
         }
       ],
@@ -7918,13 +8124,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "en": "Cancel — Continue editing"
               },
               "showCancel": true,
-              "showCloseButton": true,
+              "showCloseButton": false,
               "dismissOnBackdrop": false,
               "deleteRecordOnConfirm": true,
               "primaryAction": "cancel"
             }
           },
           "gates": {
+            "edit": [
+              {
+                "id": "ck-70.summary.pastNotClosed.hideEdit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "fieldId": "MP_PREP_DATE",
+                      "isInPast": true
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ],
             "submit": [
               {
                 "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
@@ -8015,6 +8245,11 @@ export const BUNDLED_FORM_CONFIGS = [
             ]
           }
         }
+      },
+      "summaryButtonLabel": {
+        "en": "Summary",
+        "fr": "Summary",
+        "nl": "Summary"
       },
       "appHeader": {
         "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
@@ -14190,9 +14425,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "cases": [
               {
                 "text": {
-                  "en": "Edit",
-                  "fr": "Modifier",
-                  "nl": "Bewerken"
+                  "en": "Warning",
+                  "fr": "Avertissement",
+                  "nl": "Waarschuwing"
                 },
                 "when": {
                   "all": [
@@ -14202,21 +14437,22 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     {
                       "fieldId": "MP_PREP_DATE",
-                      "isToday": true
+                      "isInPast": true
                     }
                   ]
                 },
-                "style": "link",
-                "icon": "edit",
+                "style": "warning",
+                "icon": "warning",
                 "hideText": true,
-                "openView": "form"
+                "openView": "summary"
               },
               {
                 "text": {
-                  "en": "View",
-                  "fr": "Voir",
-                  "nl": "Bekijken"
+                  "en": "Actions",
+                  "fr": "Actions",
+                  "nl": "Acties"
                 },
+                "hideText": true,
                 "when": {
                   "all": [
                     {
@@ -14224,15 +14460,43 @@ export const BUNDLED_FORM_CONFIGS = [
                       "notEquals": "Closed"
                     },
                     {
-                      "fieldId": "MP_PREP_DATE",
-                      "isNotToday": true
+                      "any": [
+                        {
+                          "fieldId": "MP_PREP_DATE",
+                          "isToday": true
+                        },
+                        {
+                          "fieldId": "MP_PREP_DATE",
+                          "isInFuture": true
+                        }
+                      ]
                     }
                   ]
                 },
-                "style": "link",
-                "icon": "view",
-                "hideText": true,
-                "openView": "summary"
+                "actions": [
+                  {
+                    "text": {
+                      "en": "View",
+                      "fr": "Voir",
+                      "nl": "Bekijken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "view",
+                    "openView": "summary"
+                  },
+                  {
+                    "text": {
+                      "en": "Edit",
+                      "fr": "Modifier",
+                      "nl": "Bewerken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "edit",
+                    "openView": "form"
+                  }
+                ]
               },
               {
                 "text": {
@@ -14256,17 +14520,6 @@ export const BUNDLED_FORM_CONFIGS = [
                     "style": "link",
                     "icon": "view",
                     "openView": "summary"
-                  },
-                  {
-                    "text": {
-                      "en": "Copy",
-                      "fr": "Copier",
-                      "nl": "Kopieren"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "copy",
-                    "openView": "copy"
                   }
                 ]
               }
@@ -14340,11 +14593,11 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
-            "icon": "copy",
+            "icon": "warning",
             "text": {
-              "en": "Copy order information",
-              "fr": "Copier les informations de commande",
-              "nl": "Kopieer bestelinformatie"
+              "en": "Past record incomplete or missing",
+              "fr": "Enregistrement passé incomplet ou manquant",
+              "nl": "Vorige record onvolledig of ontbrekend"
             }
           }
         ],
@@ -14539,13 +14792,37 @@ export const BUNDLED_FORM_CONFIGS = [
                 "en": "Cancel — Continue editing"
               },
               "showCancel": true,
-              "showCloseButton": true,
+              "showCloseButton": false,
               "dismissOnBackdrop": false,
               "deleteRecordOnConfirm": true,
               "primaryAction": "cancel"
             }
           },
           "gates": {
+            "edit": [
+              {
+                "id": "ck-70.summary.pastNotClosed.hideEdit",
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckView",
+                      "equals": [
+                        "summary"
+                      ]
+                    },
+                    {
+                      "fieldId": "status",
+                      "notEquals": "Closed"
+                    },
+                    {
+                      "fieldId": "MP_PREP_DATE",
+                      "isInPast": true
+                    }
+                  ]
+                },
+                "hide": true
+              }
+            ],
             "submit": [
               {
                 "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
@@ -14636,6 +14913,11 @@ export const BUNDLED_FORM_CONFIGS = [
             ]
           }
         }
+      },
+      "summaryButtonLabel": {
+        "en": "Summary",
+        "fr": "Summary",
+        "nl": "Summary"
       },
       "appHeader": {
         "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
@@ -16154,7 +16436,6 @@ export const BUNDLED_FORM_CONFIGS = [
       "listViewPageSize": 5,
       "listViewPaginationControlsEnabled": true,
       "listViewHeaderSortEnabled": false,
-      "listViewHideHeaderRow": false,
       "listViewMetaColumns": [],
       "listViewColumns": [
         {
@@ -16168,75 +16449,31 @@ export const BUNDLED_FORM_CONFIGS = [
           "cases": [
             {
               "text": {
-                "en": "Actions",
-                "fr": "Actions",
-                "nl": "Acties"
+                "en": "Edit",
+                "fr": "Modifier",
+                "nl": "Bewerken"
               },
-              "hideText": true,
               "when": {
                 "fieldId": "status",
                 "notEquals": "Active"
               },
-              "actions": [
-                {
-                  "text": {
-                    "en": "Edit",
-                    "fr": "Modifier",
-                    "nl": "Bewerken"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "edit",
-                  "openView": "form"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
-                }
-              ]
+              "style": "link",
+              "icon": "edit",
+              "hideText": true
             },
             {
               "text": {
-                "en": "Actions",
-                "fr": "Actions",
-                "nl": "Acties"
+                "en": "View",
+                "fr": "Voir",
+                "nl": "Bekijken"
               },
-              "hideText": true,
               "when": {
                 "fieldId": "status",
                 "equals": "Active"
               },
-              "actions": [
-                {
-                  "text": {
-                    "en": "View",
-                    "fr": "Voir",
-                    "nl": "Bekijken"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "view",
-                  "openView": "summary"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
-                }
-              ]
+              "style": "link",
+              "icon": "view",
+              "hideText": true
             }
           ]
         },
@@ -16259,14 +16496,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "all": [
                   {
                     "fieldId": "status",
-                    "equals": "__never__"
+                    "notEquals": "fish"
                   }
                 ]
               },
               "style": "link",
               "icon": "copy",
-              "openView": "copy",
-              "hideText": true
+              "hideText": true,
+              "openView": "copy"
             }
           ],
           "showIn": [
@@ -16331,32 +16568,7 @@ export const BUNDLED_FORM_CONFIGS = [
           ]
         }
       ],
-      "listViewLegendColumns": 2,
       "listViewLegend": [
-        {
-          "icon": "edit",
-          "text": {
-            "en": "Edit",
-            "fr": "Modifier",
-            "nl": "Bewerken"
-          }
-        },
-        {
-          "icon": "view",
-          "text": {
-            "en": "View",
-            "fr": "Voir",
-            "nl": "Bekijken"
-          }
-        },
-        {
-          "icon": "copy",
-          "text": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
-          }
-        },
         {
           "text": {
             "en": "being written, not usable",
@@ -16403,6 +16615,8 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         }
       ],
+      "listViewLegendColumns": 2,
+      "listViewRowClickEnabled": false,
       "listViewSearch": {
         "mode": "text",
         "placeholder": {
@@ -16544,8 +16758,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "NL"
       ],
       "defaultLanguage": "EN",
-      "languageSelectorEnabled": true,
-      "listViewRowClickEnabled": false
+      "languageSelectorEnabled": true
     },
     "questions": [
       {
@@ -18042,75 +18255,31 @@ export const BUNDLED_FORM_CONFIGS = [
             "cases": [
               {
                 "text": {
-                  "en": "Actions",
-                  "fr": "Actions",
-                  "nl": "Acties"
+                  "en": "Edit",
+                  "fr": "Modifier",
+                  "nl": "Bewerken"
                 },
-                "hideText": true,
                 "when": {
                   "fieldId": "status",
                   "notEquals": "Active"
                 },
-                "actions": [
-                  {
-                    "text": {
-                      "en": "Edit",
-                      "fr": "Modifier",
-                      "nl": "Bewerken"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "edit",
-                    "openView": "form"
-                  },
-                  {
-                    "text": {
-                      "en": "Copy",
-                      "fr": "Copier",
-                      "nl": "Kopieren"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "copy",
-                    "openView": "copy"
-                  }
-                ]
+                "style": "link",
+                "icon": "edit",
+                "hideText": true
               },
               {
                 "text": {
-                  "en": "Actions",
-                  "fr": "Actions",
-                  "nl": "Acties"
+                  "en": "View",
+                  "fr": "Voir",
+                  "nl": "Bekijken"
                 },
-                "hideText": true,
                 "when": {
                   "fieldId": "status",
                   "equals": "Active"
                 },
-                "actions": [
-                  {
-                    "text": {
-                      "en": "View",
-                      "fr": "Voir",
-                      "nl": "Bekijken"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "view",
-                    "openView": "summary"
-                  },
-                  {
-                    "text": {
-                      "en": "Copy",
-                      "fr": "Copier",
-                      "nl": "Kopieren"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "copy",
-                    "openView": "copy"
-                  }
-                ]
+                "style": "link",
+                "icon": "check",
+                "hideText": true
               }
             ]
           },
@@ -18133,14 +18302,14 @@ export const BUNDLED_FORM_CONFIGS = [
                   "all": [
                     {
                       "fieldId": "status",
-                      "equals": "__never__"
+                      "notEquals": "fish"
                     }
                   ]
                 },
                 "style": "link",
                 "icon": "copy",
-                "openView": "copy",
-                "hideText": true
+                "hideText": true,
+                "openView": "copy"
               }
             ],
             "showIn": [
@@ -18167,7 +18336,6 @@ export const BUNDLED_FORM_CONFIGS = [
                   "notEquals": "Active"
                 },
                 "style": "link",
-                "icon": "lock",
                 "openView": "submit"
               }
             ],
@@ -18195,7 +18363,6 @@ export const BUNDLED_FORM_CONFIGS = [
                   "equals": "Active"
                 },
                 "style": "link",
-                "icon": "edit",
                 "openView": "button",
                 "openButtonId": "RE_OPEN"
               }
@@ -18230,30 +18397,6 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "title": "",
         "legend": [
-          {
-            "icon": "edit",
-            "text": {
-              "en": "Edit",
-              "fr": "Modifier",
-              "nl": "Bewerken"
-            }
-          },
-          {
-            "icon": "view",
-            "text": {
-              "en": "View",
-              "fr": "Voir",
-              "nl": "Bekijken"
-            }
-          },
-          {
-            "icon": "copy",
-            "text": {
-              "en": "Copy",
-              "fr": "Copier",
-              "nl": "Kopieren"
-            }
-          },
           {
             "text": {
               "en": "being written, not usable",
@@ -18303,6 +18446,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "pageSize": 5,
         "paginationControlsEnabled": true,
         "legendColumns": 2,
+        "rowClickEnabled": false,
         "search": {
           "mode": "text",
           "placeholder": {
@@ -18317,11 +18461,9 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         "headerSortEnabled": false,
-        "hideHeaderRow": false,
         "view": {
           "mode": "cards"
-        },
-        "rowClickEnabled": false
+        }
       },
       "dedupRules": [
         {

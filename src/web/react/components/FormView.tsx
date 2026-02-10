@@ -118,6 +118,10 @@ import {
 } from '../app/lineItems';
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
 import {
+  collectIncompleteEntireLeftoverRowIds,
+  resolveIncompleteEntireLeftoverOverlayDialogCopy
+} from '../app/leftoverOverlayGuard';
+import {
   isIngredientNameFieldId,
   isIngredientsManagementForm,
   normalizeIngredientNameIfAllCaps
@@ -807,6 +811,7 @@ const FormView: React.FC<FormViewProps> = ({
     lineItems: LineItemState;
   } | null>(null);
   const overlayDetailHeaderCompleteRef = useRef<Map<string, boolean>>(new Map());
+  const overlayDetailRenderSignatureRef = useRef<string>('');
   const [overlayDetailHtml, setOverlayDetailHtml] = useState('');
   const [overlayDetailHtmlError, setOverlayDetailHtmlError] = useState('');
   const [overlayDetailHtmlLoading, setOverlayDetailHtmlLoading] = useState(false);
@@ -3464,6 +3469,7 @@ const FormView: React.FC<FormViewProps> = ({
         const v = ((row?.values || {}) as any)?.PREP_TYPE;
         return typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined && (!Array.isArray(v) || v.length > 0);
       });
+      const incompleteEntireLeftoverRowIds = collectIncompleteEntireLeftoverRowIds(rowsInOverlay as any[]);
       const removeLineRowByCascade = (groupId: string, rowId: string) => {
         if (!groupId || !rowId) return;
         const prevLineItems = lineItemsRef.current || {};
@@ -3608,6 +3614,77 @@ const FormView: React.FC<FormViewProps> = ({
           }
         });
         onDiagnostic?.('subgroup.overlay.close.confirm.open', { source, kind: 'leftoversOverlayDiscard' });
+        return;
+      }
+      if (source === 'button' && isLeftoversRoot && incompleteEntireLeftoverRowIds.length > 0 && openConfirmDialogResolved) {
+        const copy = resolveIncompleteEntireLeftoverOverlayDialogCopy(language);
+        openConfirmDialogResolved({
+          title: copy.title,
+          message: copy.message,
+          confirmLabel: copy.confirmLabel,
+          cancelLabel: copy.cancelLabel,
+          showCancel: copy.showCancel,
+          showCloseButton: copy.showCloseButton,
+          dismissOnBackdrop: copy.dismissOnBackdrop,
+          kind: 'leftoversOverlayIncompleteEntireQty',
+          refId: `${subgroupKey}::leftoversIncompleteEntireQty`,
+          onConfirm: () => {
+            const prevLineItems = lineItemsRef.current || {};
+            const cascade = cascadeRemoveLineItemRows({
+              lineItems: prevLineItems,
+              roots: incompleteEntireLeftoverRowIds.map(rowId => ({ groupId: subgroupKey, rowId }))
+            });
+            if (cascade.removedSubgroupKeys.length) {
+              setSubgroupSelectors(prevSel => {
+                const nextSel = { ...prevSel };
+                cascade.removedSubgroupKeys.forEach(key => {
+                  delete (nextSel as any)[key];
+                });
+                return nextSel;
+              });
+            }
+            const mapped = applyValueMapsToForm(
+              definition,
+              (valuesRef.current || {}) as Record<string, FieldValue>,
+              cascade.lineItems,
+              { mode: 'init' }
+            );
+            valuesRef.current = mapped.values;
+            lineItemsRef.current = mapped.lineItems;
+            setValues(mapped.values);
+            setLineItems(mapped.lineItems);
+            runSelectionEffectsForAncestorRows(subgroupKey, prevLineItems, mapped.lineItems, {
+              mode: 'init',
+              topValues: mapped.values
+            });
+
+            const remainingLeftoverRows = (mapped.lineItems[subgroupKey] || []).filter((row: any) => {
+              const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
+              return (prepType || '').toString().trim().toLowerCase() !== 'cook';
+            });
+
+            onDiagnostic?.('subgroup.overlay.close.leftovers.discard.incompleteEntireQty', {
+              source,
+              subgroupKey,
+              removedRows: incompleteEntireLeftoverRowIds.length,
+              remainingRows: remainingLeftoverRows.length
+            });
+
+            if (!remainingLeftoverRows.length) {
+              discardLeftoversAndReturn();
+              return;
+            }
+            closeSubgroupOverlay();
+          },
+          onCancel: () => {
+            // Stay in overlay so the user can enter a valid leftover quantity.
+          }
+        });
+        onDiagnostic?.('subgroup.overlay.close.confirm.open', {
+          source,
+          kind: 'leftoversOverlayIncompleteEntireQty',
+          rowCount: incompleteEntireLeftoverRowIds.length
+        });
         return;
       }
       const overlayCloseCtx: VisibilityContext = {
@@ -4545,12 +4622,14 @@ const FormView: React.FC<FormViewProps> = ({
           ? subgroupOverlay.subKey
           : '';
     if (!activeGroupKey) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlError('');
       setOverlayDetailHtmlLoading(false);
       return;
     }
     if (!overlayDetailSelection || overlayDetailSelection.mode !== 'view' || overlayDetailSelection.groupId !== activeGroupKey) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlError('');
       setOverlayDetailHtmlLoading(false);
@@ -4581,6 +4660,7 @@ const FormView: React.FC<FormViewProps> = ({
     })();
 
     if (!context || !context.groupId) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlError('');
       setOverlayDetailHtmlLoading(false);
@@ -4589,12 +4669,14 @@ const FormView: React.FC<FormViewProps> = ({
 
     const templateIdMap = context.overlayDetail?.body?.view?.templateId;
     if (!templateIdMap) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
       setOverlayDetailHtmlError(tSystem('overlay.detail.templateMissing', language, 'Template not configured.'));
       return;
     }
     if (context.type === 'sub' && Array.isArray(context.path) && context.path.length > 1) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
       setOverlayDetailHtmlError(tSystem('overlay.detail.pathUnsupported', language, 'Nested paths beyond one level are not supported yet.'));
@@ -4636,6 +4718,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     const resolvedTemplateId = resolveTemplateIdForRecord(templateIdMap, payload.values as any, language);
     if (!resolvedTemplateId || !isBundledHtmlTemplateId(resolvedTemplateId)) {
+      overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
       setOverlayDetailHtmlError(
@@ -4643,6 +4726,22 @@ const FormView: React.FC<FormViewProps> = ({
       );
       return;
     }
+
+    let renderSignature = '';
+    try {
+      renderSignature = JSON.stringify({
+        groupId: context.groupId,
+        rowId: overlayDetailSelection.rowId,
+        templateId: resolvedTemplateId,
+        payload: (payload.values as any)[context.groupId]
+      });
+    } catch (_) {
+      renderSignature = `${context.groupId}::${overlayDetailSelection.rowId}::${resolvedTemplateId}`;
+    }
+    if (overlayDetailRenderSignatureRef.current === renderSignature) {
+      return;
+    }
+    overlayDetailRenderSignatureRef.current = renderSignature;
 
 	    setOverlayDetailHtmlLoading(true);
 	    setOverlayDetailHtmlError('');

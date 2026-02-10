@@ -585,7 +585,23 @@ describe('Dashboard', () => {
 
   test('getForms parses autosave config from dashboard config', () => {
     const configJson = JSON.stringify({
-      autoSave: { enabled: true, debounceMs: 1500, status: 'In progress' }
+      autoSave: {
+        enabled: true,
+        debounceMs: 1500,
+        status: 'In progress',
+        enableWhenFields: ['CREATED_BY'],
+        dedupTriggerFields: ['INGREDIENT_NAME'],
+        dedupCheckDialog: {
+          checkingTitle: { EN: 'Checking ingredient name' },
+          checkingMessage: { EN: 'Please wait...' },
+          availableTitle: { EN: 'Ingredient name available' },
+          availableMessage: { EN: 'Continue.' },
+          duplicateTitle: { EN: 'Ingredient already exists' },
+          duplicateMessage: { EN: 'Pick a different name.' },
+          availableAutoCloseMs: 1300,
+          duplicateAutoCloseMs: 900
+        }
+      }
     });
     const mockData = [
       [],
@@ -607,6 +623,18 @@ describe('Dashboard', () => {
     expect(forms[0].autoSave?.enabled).toBe(true);
     expect(forms[0].autoSave?.debounceMs).toBe(1500);
     expect(forms[0].autoSave?.status).toBe('In progress');
+    expect(forms[0].autoSave?.enableWhenFields).toEqual(['CREATED_BY']);
+    expect(forms[0].autoSave?.dedupTriggerFields).toEqual(['INGREDIENT_NAME']);
+    expect(forms[0].autoSave?.dedupCheckDialog).toEqual({
+      checkingTitle: { en: 'Checking ingredient name' },
+      checkingMessage: { en: 'Please wait...' },
+      availableTitle: { en: 'Ingredient name available' },
+      availableMessage: { en: 'Continue.' },
+      duplicateTitle: { en: 'Ingredient already exists' },
+      duplicateMessage: { en: 'Pick a different name.' },
+      availableAutoCloseMs: 1300,
+      duplicateAutoCloseMs: 900
+    });
   });
 
   test('getForms parses dedup delete-on-key-change setting from dashboard config aliases', () => {

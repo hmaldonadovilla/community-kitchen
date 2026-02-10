@@ -121,9 +121,12 @@ export function handleSelectionEffects(
 ): void {
   if (!question?.selectionEffects || !question.selectionEffects.length) return;
   const debug = isDebug();
-  const contextId = options?.contextId || '__global__';
+  const explicitContextId = (options?.contextId || '').toString().trim();
+  const hasExplicitContext = explicitContextId.length > 0;
+  const contextId = hasExplicitContext ? explicitContextId : DEFAULT_CONTEXT_ID;
   const normalizedSelections = normalizeSelectionValues(value);
   const diffPreview = previewSelectionDiff(question, contextId, normalizedSelections, options?.forceContextReset);
+  const selectionChanged = hasExplicitContext ? hasSelectionSignatureChanged(question, contextId, normalizedSelections) : true;
   const whenCtx = buildEffectWhenContext(options);
   const resolveEffectTargetGroupId = (effect: SelectionEffect): string | undefined => {
     const rawPath = (effect as any)?.targetPath;
@@ -148,6 +151,16 @@ export function handleSelectionEffects(
       newlySelected: diffPreview.newlySelected,
       removedSelections: diffPreview.removedSelections
     });
+  }
+  if (!options?.forceContextReset && !selectionChanged) {
+    if (debug && typeof console !== 'undefined') {
+      console.info('[SelectionEffects] skipped (unchanged selection)', {
+        questionId: question.id,
+        contextId,
+        rowId: options?.lineItem?.rowId
+      });
+    }
+    return;
   }
   question.selectionEffects.forEach(effect => {
     const targetGroupId = resolveEffectTargetGroupId(effect);
@@ -293,6 +306,9 @@ export function handleSelectionEffects(
       });
     }
   });
+  if (hasExplicitContext) {
+    commitSelectionSignature(question, contextId, normalizedSelections);
+  }
 }
 
 interface DataDrivenEffectParams {
@@ -335,12 +351,26 @@ interface SelectionDiffPreview {
 }
 
 const selectionEffectState = new Map<string, SelectionEffectCache>();
+const selectionEffectSelectionSignatures = new Map<string, Map<string, string>>();
 const ROW_CONTEXT_PREFIX = '$row.';
 const TOP_CONTEXT_PREFIX = '$top.';
 const ROW_CONTEXT_KEY = '__ckRowContext';
+const DEFAULT_CONTEXT_ID = '__global__';
 
 function getStateKey(question: WebQuestionDefinition): string {
   return question.id;
+}
+
+function getSelectionEffectsFingerprint(question: WebQuestionDefinition): string {
+  try {
+    return JSON.stringify(question?.selectionEffects || []);
+  } catch (_) {
+    return '';
+  }
+}
+
+function getSelectionSignatureStateKey(question: WebQuestionDefinition): string {
+  return `${getStateKey(question)}::${getSelectionEffectsFingerprint(question)}`;
 }
 
 function getOrCreateCache(question: WebQuestionDefinition): SelectionEffectCache {
@@ -356,12 +386,47 @@ function getContextMap(
   contextId: string,
   create = false
 ): Map<string, SelectionCacheEntry> | undefined {
-  const key = contextId || '__global__';
+  const key = contextId || DEFAULT_CONTEXT_ID;
   if (!cache.contexts.has(key)) {
     if (!create) return undefined;
     cache.contexts.set(key, new Map());
   }
   return cache.contexts.get(key);
+}
+
+function getSelectionSignatureMap(question: WebQuestionDefinition, create = false): Map<string, string> | undefined {
+  const stateKey = getSelectionSignatureStateKey(question);
+  if (!selectionEffectSelectionSignatures.has(stateKey)) {
+    if (!create) return undefined;
+    selectionEffectSelectionSignatures.set(stateKey, new Map());
+  }
+  return selectionEffectSelectionSignatures.get(stateKey);
+}
+
+function buildSelectionSignature(normalizedSelections: string[]): string {
+  if (!normalizedSelections.length) return '';
+  return normalizedSelections.join('\u001f');
+}
+
+function hasSelectionSignatureChanged(
+  question: WebQuestionDefinition,
+  contextId: string,
+  normalizedSelections: string[]
+): boolean {
+  const map = getSelectionSignatureMap(question);
+  if (!map) return true;
+  const key = contextId || DEFAULT_CONTEXT_ID;
+  return map.get(key) !== buildSelectionSignature(normalizedSelections);
+}
+
+function commitSelectionSignature(
+  question: WebQuestionDefinition,
+  contextId: string,
+  normalizedSelections: string[]
+): void {
+  const map = getSelectionSignatureMap(question, true)!;
+  const key = contextId || DEFAULT_CONTEXT_ID;
+  map.set(key, buildSelectionSignature(normalizedSelections));
 }
 
 function normalizeString(val: any): string {

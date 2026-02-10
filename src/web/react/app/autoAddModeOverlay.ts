@@ -2,7 +2,14 @@ import { buildLocalizedOptions, computeAllowedOptions, optionKey, toDependencyVa
 import { FieldValue, LangCode, OptionSet, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LineItemState, OptionState } from '../types';
 import { applyValueMapsToForm } from './valueMaps';
-import { buildSubgroupKey, parseRowSource, resolveSubgroupKey, ROW_SOURCE_AUTO, ROW_SOURCE_KEY } from './lineItems';
+import {
+  buildSubgroupKey,
+  parseRowSource,
+  resolveSubgroupKey,
+  ROW_SOURCE_AUTO,
+  ROW_SOURCE_KEY,
+  ROW_SELECTION_EFFECT_ID_KEY
+} from './lineItems';
 
 const AUTO_CONTEXT_PREFIX = '__autoAddMode__';
 
@@ -94,8 +101,16 @@ const reconcileAutoRows = (args: {
   const nextRows: any[] = [];
   currentRows.forEach(row => {
     const rowSource = parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]);
-    const isAutoContext =
-      (typeof row.effectContextId === 'string' && row.effectContextId.startsWith(autoPrefix)) || rowSource === 'auto';
+    const rowEffectContextId =
+      row.effectContextId !== undefined && row.effectContextId !== null ? row.effectContextId.toString() : '';
+    const selectionEffectId =
+      (row.values as any)?.[ROW_SELECTION_EFFECT_ID_KEY] !== undefined &&
+      (row.values as any)?.[ROW_SELECTION_EFFECT_ID_KEY] !== null
+        ? (row.values as any)[ROW_SELECTION_EFFECT_ID_KEY].toString().trim()
+        : '';
+    const isOverlayAutoContext = rowEffectContextId.startsWith(autoPrefix);
+    const isLegacyOverlayAuto = !rowEffectContextId && rowSource === 'auto' && !selectionEffectId;
+    const isAutoContext = isOverlayAutoContext || isLegacyOverlayAuto;
     if (!isAutoContext) {
       nextRows.push(row);
       return;
@@ -330,4 +345,3 @@ export const reconcileOverlayAutoAddModeSubgroups = (args: {
   const recomputed = applyValueMapsToForm(definition, values, next, { mode: 'change' });
   return { changed: true, values: recomputed.values, lineItems: recomputed.lineItems, specCount, changedCount };
 };
-

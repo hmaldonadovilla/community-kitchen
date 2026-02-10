@@ -77,9 +77,9 @@
         "cases": [
           {
             "text": {
-              "en": "Edit",
-              "fr": "Modifier",
-              "nl": "Bewerken"
+              "en": "Warning",
+              "fr": "Avertissement",
+              "nl": "Waarschuwing"
             },
             "when": {
               "all": [
@@ -89,21 +89,22 @@
                 },
                 {
                   "fieldId": "MP_PREP_DATE",
-                  "isToday": true
+                  "isInPast": true
                 }
               ]
             },
-            "style": "link",
-            "icon": "edit",
+            "style": "warning",
+            "icon": "warning",
             "hideText": true,
-            "openView": "form"
+            "openView": "summary"
           },
           {
             "text": {
-              "en": "View",
-              "fr": "Voir",
-              "nl": "Bekijken"
+              "en": "Actions",
+              "fr": "Actions",
+              "nl": "Acties"
             },
+            "hideText": true,
             "when": {
               "all": [
                 {
@@ -111,15 +112,43 @@
                   "notEquals": "Closed"
                 },
                 {
-                  "fieldId": "MP_PREP_DATE",
-                  "isNotToday": true
+                  "any": [
+                    {
+                      "fieldId": "MP_PREP_DATE",
+                      "isToday": true
+                    },
+                    {
+                      "fieldId": "MP_PREP_DATE",
+                      "isInFuture": true
+                    }
+                  ]
                 }
               ]
             },
-            "style": "link",
-            "icon": "view",
-            "hideText": true,
-            "openView": "summary"
+            "actions": [
+              {
+                "text": {
+                  "en": "View",
+                  "fr": "Voir",
+                  "nl": "Bekijken"
+                },
+                "hideText": true,
+                "style": "link",
+                "icon": "view",
+                "openView": "summary"
+              },
+              {
+                "text": {
+                  "en": "Edit",
+                  "fr": "Modifier",
+                  "nl": "Bewerken"
+                },
+                "hideText": true,
+                "style": "link",
+                "icon": "edit",
+                "openView": "form"
+              }
+            ]
           },
           {
             "text": {
@@ -143,17 +172,6 @@
                 "style": "link",
                 "icon": "view",
                 "openView": "summary"
-              },
-              {
-                "text": {
-                  "en": "Copy",
-                  "fr": "Copier",
-                  "nl": "Kopieren"
-                },
-                "hideText": true,
-                "style": "link",
-                "icon": "copy",
-                "openView": "copy"
               }
             ]
           }
@@ -178,11 +196,11 @@
         }
       },
       {
-        "icon": "copy",
+        "icon": "warning",
         "text": {
-          "en": "Copy order information",
-          "fr": "Copier les informations de commande",
-          "nl": "Kopieer bestelinformatie"
+          "en": "Past record incomplete or missing",
+          "fr": "Enregistrement passé incomplet ou manquant",
+          "nl": "Vorige record onvolledig of ontbrekend"
         }
       }
     ],
@@ -311,13 +329,37 @@
               "en": "Cancel — Continue editing"
             },
             "showCancel": true,
-            "showCloseButton": true,
+            "showCloseButton": false,
             "dismissOnBackdrop": false,
             "deleteRecordOnConfirm": true,
             "primaryAction": "cancel"
           }
         },
         "gates": {
+          "edit": [
+            {
+              "id": "ck-70.summary.pastNotClosed.hideEdit",
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "__ckView",
+                    "equals": [
+                      "summary"
+                    ]
+                  },
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isInPast": true
+                  }
+                ]
+              },
+              "hide": true
+            }
+          ],
           "submit": [
             {
               "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
@@ -408,6 +450,11 @@
           ]
         }
       }
+    },
+    "summaryButtonLabel": {
+      "en": "Summary",
+      "fr": "Summary",
+      "nl": "Summary"
     },
     "appHeader": {
       "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
@@ -6583,9 +6630,9 @@
           "cases": [
             {
               "text": {
-                "en": "Edit",
-                "fr": "Modifier",
-                "nl": "Bewerken"
+                "en": "Warning",
+                "fr": "Avertissement",
+                "nl": "Waarschuwing"
               },
               "when": {
                 "all": [
@@ -6595,21 +6642,22 @@
                   },
                   {
                     "fieldId": "MP_PREP_DATE",
-                    "isToday": true
+                    "isInPast": true
                   }
                 ]
               },
-              "style": "link",
-              "icon": "edit",
+              "style": "warning",
+              "icon": "warning",
               "hideText": true,
-              "openView": "form"
+              "openView": "summary"
             },
             {
               "text": {
-                "en": "View",
-                "fr": "Voir",
-                "nl": "Bekijken"
+                "en": "Actions",
+                "fr": "Actions",
+                "nl": "Acties"
               },
+              "hideText": true,
               "when": {
                 "all": [
                   {
@@ -6617,15 +6665,43 @@
                     "notEquals": "Closed"
                   },
                   {
-                    "fieldId": "MP_PREP_DATE",
-                    "isNotToday": true
+                    "any": [
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isToday": true
+                      },
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "isInFuture": true
+                      }
+                    ]
                   }
                 ]
               },
-              "style": "link",
-              "icon": "view",
-              "hideText": true,
-              "openView": "summary"
+              "actions": [
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "view",
+                  "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Edit",
+                    "fr": "Modifier",
+                    "nl": "Bewerken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "edit",
+                  "openView": "form"
+                }
+              ]
             },
             {
               "text": {
@@ -6649,17 +6725,6 @@
                   "style": "link",
                   "icon": "view",
                   "openView": "summary"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
                 }
               ]
             }
@@ -6733,11 +6798,11 @@
           }
         },
         {
-          "icon": "copy",
+          "icon": "warning",
           "text": {
-            "en": "Copy order information",
-            "fr": "Copier les informations de commande",
-            "nl": "Kopieer bestelinformatie"
+            "en": "Past record incomplete or missing",
+            "fr": "Enregistrement passé incomplet ou manquant",
+            "nl": "Vorige record onvolledig of ontbrekend"
           }
         }
       ],
@@ -6932,13 +6997,37 @@
               "en": "Cancel — Continue editing"
             },
             "showCancel": true,
-            "showCloseButton": true,
+            "showCloseButton": false,
             "dismissOnBackdrop": false,
             "deleteRecordOnConfirm": true,
             "primaryAction": "cancel"
           }
         },
         "gates": {
+          "edit": [
+            {
+              "id": "ck-70.summary.pastNotClosed.hideEdit",
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "__ckView",
+                    "equals": [
+                      "summary"
+                    ]
+                  },
+                  {
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isInPast": true
+                  }
+                ]
+              },
+              "hide": true
+            }
+          ],
           "submit": [
             {
               "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
@@ -7029,6 +7118,11 @@
           ]
         }
       }
+    },
+    "summaryButtonLabel": {
+      "en": "Summary",
+      "fr": "Summary",
+      "nl": "Summary"
     },
     "appHeader": {
       "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"

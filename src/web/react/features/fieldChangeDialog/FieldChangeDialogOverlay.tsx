@@ -193,7 +193,6 @@ export const FieldChangeDialogOverlay: React.FC<{
     overflowWrap: 'anywhere',
     wordBreak: 'break-word',
     textOverflow: 'clip',
-    textAlign: 'center',
     maxWidth: '100%',
     minWidth: 0,
     flex: '1 1 220px'
@@ -241,21 +240,12 @@ export const FieldChangeDialogOverlay: React.FC<{
         boxSizing: 'border-box'
       }}
     >
-      <button
-        type="button"
-        aria-label="Close dialog"
-        title="Close"
-        onClick={busy ? undefined : onCancel}
-        disabled={busy}
-        aria-disabled={busy}
+      <div
+        aria-hidden="true"
         style={{
           position: 'absolute',
           inset: 0,
-          border: 0,
-          padding: 0,
-          margin: 0,
-          background: 'transparent',
-          cursor: busy ? 'default' : 'pointer'
+          background: 'transparent'
         }}
       />
       <dialog

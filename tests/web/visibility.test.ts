@@ -34,6 +34,12 @@ describe('shouldHideField', () => {
     expect(matchesWhen(0, { fieldId: 'dep', lessThan: 63 } as any)).toBe(true);
   });
 
+  it('supports notEquals matching', () => {
+    expect(matchesWhen('Closed', { fieldId: 'status', notEquals: 'Closed' } as any)).toBe(false);
+    expect(matchesWhen('In progress', { fieldId: 'status', notEquals: 'Closed' } as any)).toBe(true);
+    expect(matchesWhen(' Closed ', { fieldId: 'status', notEquals: ['Closed'] } as any)).toBe(false);
+  });
+
   it('supports compound when clauses (all/any/not)', () => {
     const ctx2: any = {
       getValue: (id: string) => (id === 'a' ? 'yes' : id === 'b' ? 'ok' : '')

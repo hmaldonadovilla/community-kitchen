@@ -2331,6 +2331,30 @@ components:
             status:
               type: string
               description: Status value written during autosave. Defaults to `statusTransitions.inProgress` (or "In progress").
+            enableWhenFields:
+              type: array
+              description: |
+                Optional top-level field ids that must be non-empty before **create-flow** autosave is allowed.
+
+                This lets autosave enablement be configured independently from dedup key fields.
+              items:
+                type: string
+            dedupTriggerFields:
+              type: array
+              description: |
+                Optional top-level field ids that trigger create-flow dedup prechecks.
+
+                When omitted, reject dedup-rule keys are used.
+              items:
+                type: string
+            dedupCheckDialog:
+              $ref: '#/components/schemas/DedupCheckDialogConfig'
+              description: |
+                Optional non-dismissible popup copy for dedup precheck progress in the form view.
+
+                Notes:
+                - Shows a blocking "checking" state while dedup runs.
+                - Then transitions in-place to `available` or `duplicate` and auto-closes after the configured delay.
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'
           description: |
@@ -3401,10 +3425,10 @@ components:
           description: When false, hides the cancel button (single-action message dialog). Default true.
         showCloseButton:
           type: boolean
-          description: When false, hides the close (×) button. Default true.
+          description: When true, shows the close (×) button. Default false.
         dismissOnBackdrop:
           type: boolean
-          description: When false, clicking the backdrop does not dismiss the dialog. Default true.
+          description: When true, clicking the backdrop dismisses the dialog. Default false.
       additionalProperties: true
 
     DedupIncompleteHomeDialogConfig:
@@ -3444,10 +3468,10 @@ components:
           description: When false, hides the cancel button. Default true.
         showCloseButton:
           type: boolean
-          description: When false, hides the close (×) button. Default true.
+          description: When true, shows the close (×) button. Default false.
         dismissOnBackdrop:
           type: boolean
-          description: When false, clicking the backdrop does not dismiss the dialog. Default true.
+          description: When true, clicking the backdrop dismisses the dialog. Default false.
         deleteRecordOnConfirm:
           type: boolean
           description: When true (default), attempt to delete the current persisted record before navigating Home.
@@ -3456,6 +3480,50 @@ components:
             - $ref: '#/components/schemas/LocalizedString'
             - type: string
           description: Optional message shown when record deletion fails.
+      additionalProperties: true
+
+    DedupCheckDialogConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable this popup when create-flow dedup checks run. Default true when object is present.
+        checkingTitle:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Title shown while dedup check is running.
+        checkingMessage:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Message shown while dedup check is running.
+        availableTitle:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Title shown when dedup check completes without conflict.
+        availableMessage:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Message shown when dedup check completes without conflict.
+        duplicateTitle:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Title shown when dedup check finds a conflict.
+        duplicateMessage:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+          description: Message shown when dedup check finds a conflict.
+        availableAutoCloseMs:
+          type: number
+          description: Auto-close delay (ms) for the available state. Default 1200.
+        duplicateAutoCloseMs:
+          type: number
+          description: Auto-close delay (ms) for the duplicate state. Default 900.
       additionalProperties: true
 
     CopyCurrentRecordProfile:
@@ -4991,6 +5059,23 @@ components:
         autoSave:
           type: object
           description: Draft autosave configuration (dashboard-level).
+          properties:
+            enabled:
+              type: boolean
+            debounceMs:
+              type: number
+            status:
+              type: string
+            enableWhenFields:
+              type: array
+              items:
+                type: string
+            dedupTriggerFields:
+              type: array
+              items:
+                type: string
+            dedupCheckDialog:
+              $ref: '#/components/schemas/DedupCheckDialogConfig'
           additionalProperties: true
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'
